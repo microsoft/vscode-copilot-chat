@@ -78,7 +78,11 @@ describe('RunInTerminalTool', () => {
 	 * Sets up the configuration with allow and deny lists
 	 */
 	function setupConfiguration(allowList: string[] = [], denyList: string[] = []) {
-		configurationService.setConfig(ConfigKey.TerminalAllowList, allowList);
+		const allowListObject: { [key: string]: boolean } = {};
+		for (const entry of allowList) {
+			allowListObject[entry] = true;
+		}
+		configurationService.setConfig(ConfigKey.TerminalAllowList, allowListObject);
 		configurationService.setConfig(ConfigKey.TerminalDenyList, denyList);
 		runInTerminalTool.commandLineAutoApprover.updateConfiguration();
 	}

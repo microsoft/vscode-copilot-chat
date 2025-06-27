@@ -2786,21 +2786,24 @@
 						"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
 					},
 					"github.copilot.chat.agent.terminal.allowList": {
-						"type": "array",
-						"default": [
-							"echo",
-							"Write-Host",
-							"ls",
-							"Get-ChildItem",
-							"cat",
-							"Get-Content",
-							"pwd",
-							"Get-Location",
-							"cd",
-							"Set-Location"
-						],
-						"items": {
-							"type": "string"
+						"type": "object",
+						"default": {
+							"echo": true,
+							"Write-Host": true,
+							"ls": true,
+							"Get-ChildItem": true,
+							"cat": true,
+							"Get-Content": true,
+							"pwd": true,
+							"Get-Location": true,
+							"cd": true,
+							"Set-Location": true
+						},
+						"additionalProperties": {
+							"type": "boolean",
+							"enum": [true, false],
+							"enumDescriptions": ["Enable the pattern.", "Disable the pattern."],
+							"description": "The start of a command to match against. A regular expression can be provided by wrapping the string in `/` characters."
 						},
 						"tags": [
 							"experimental"

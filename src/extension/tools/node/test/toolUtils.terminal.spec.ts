@@ -30,35 +30,47 @@ describe('CommandLineAutoApprover', () => {
 
 	describe('allowList without a denyList', () => {
 		it('should auto-approve exact command match', () => {
-			configurationService.setConfig(ConfigKey.TerminalAllowList, ["echo"]);
+			configurationService.setConfig(ConfigKey.TerminalAllowList, {
+				"echo": true
+			});
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(commandLineAutoApprover.isAutoApproved('echo'));
 		});
 
 		it('should auto-approve command with arguments', () => {
-			configurationService.setConfig(ConfigKey.TerminalAllowList, ["echo"]);
+			configurationService.setConfig(ConfigKey.TerminalAllowList, {
+				"echo": true
+			});
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(commandLineAutoApprover.isAutoApproved('echo hello world'));
 		});
 
 		it('should not auto-approve when there is no match', () => {
-			configurationService.setConfig(ConfigKey.TerminalAllowList, ["echo"]);
+			configurationService.setConfig(ConfigKey.TerminalAllowList, {
+				"echo": true
+			});
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(!commandLineAutoApprover.isAutoApproved('ls'));
 		});
 
 		it('should not auto-approve partial command matches', () => {
-			configurationService.setConfig(ConfigKey.TerminalAllowList, ["echo"]);
+			configurationService.setConfig(ConfigKey.TerminalAllowList, {
+				"echo": true
+			});
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(!commandLineAutoApprover.isAutoApproved('echotest'));
 		});
 
 		it('should handle multiple commands in allowList', () => {
-			configurationService.setConfig(ConfigKey.TerminalAllowList, ["echo", "ls", "pwd"]);
+			configurationService.setConfig(ConfigKey.TerminalAllowList, {
+				"echo": true,
+				"ls": true,
+				"pwd": true
+			});
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(commandLineAutoApprover.isAutoApproved('echo'));
@@ -70,8 +82,8 @@ describe('CommandLineAutoApprover', () => {
 
 	describe('denyList without an allowList', () => {
 		it('should deny commands in denyList', () => {
+			configurationService.setConfig(ConfigKey.TerminalAllowList, {});
 			configurationService.setConfig(ConfigKey.TerminalDenyList, ["rm", "del"]);
-			configurationService.setConfig(ConfigKey.TerminalAllowList, []);
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(!commandLineAutoApprover.isAutoApproved('rm file.txt'));
@@ -79,8 +91,8 @@ describe('CommandLineAutoApprover', () => {
 		});
 
 		it('should not auto-approve safe commands when no allowList is present', () => {
+			configurationService.setConfig(ConfigKey.TerminalAllowList, {});
 			configurationService.setConfig(ConfigKey.TerminalDenyList, ["rm"]);
-			configurationService.setConfig(ConfigKey.TerminalAllowList, []);
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(!commandLineAutoApprover.isAutoApproved('echo hello'));
@@ -90,7 +102,10 @@ describe('CommandLineAutoApprover', () => {
 
 	describe('allowList with denyList', () => {
 		it('should deny commands in denyList even if in allowList', () => {
-			configurationService.setConfig(ConfigKey.TerminalAllowList, ["echo", "rm"]);
+			configurationService.setConfig(ConfigKey.TerminalAllowList, {
+				"echo": true,
+				"rm": true
+			});
 			configurationService.setConfig(ConfigKey.TerminalDenyList, ["rm"]);
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
@@ -99,7 +114,11 @@ describe('CommandLineAutoApprover', () => {
 		});
 
 		it('should auto-approve allowList commands not in denyList', () => {
-			configurationService.setConfig(ConfigKey.TerminalAllowList, ["echo", "ls", "pwd"]);
+			configurationService.setConfig(ConfigKey.TerminalAllowList, {
+				"echo": true,
+				"ls": true,
+				"pwd": true
+			});
 			configurationService.setConfig(ConfigKey.TerminalDenyList, ["rm", "del"]);
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
@@ -113,7 +132,11 @@ describe('CommandLineAutoApprover', () => {
 
 	describe('regex patterns', () => {
 		it('should handle regex patterns in allowList', () => {
-			configurationService.setConfig(ConfigKey.TerminalAllowList, ["/^echo/", "/^ls/", "pwd"]);
+			configurationService.setConfig(ConfigKey.TerminalAllowList, {
+				"/^echo/": true,
+				"/^ls/": true,
+				"pwd": true
+			});
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(commandLineAutoApprover.isAutoApproved('echo hello'));
@@ -123,7 +146,10 @@ describe('CommandLineAutoApprover', () => {
 		});
 
 		it('should handle regex patterns in denyList', () => {
-			configurationService.setConfig(ConfigKey.TerminalAllowList, ["echo", "rm"]);
+			configurationService.setConfig(ConfigKey.TerminalAllowList, {
+				"echo": true,
+				"rm": true
+			});
 			configurationService.setConfig(ConfigKey.TerminalDenyList, ["/^rm\\s+/", "/^del\\s+/"]);
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
@@ -134,7 +160,10 @@ describe('CommandLineAutoApprover', () => {
 		});
 
 		it('should handle complex regex patterns', () => {
-			configurationService.setConfig(ConfigKey.TerminalAllowList, ["/^(echo|ls|pwd)\\b/", "/^git (status|show\\b.*)$/"]);
+			configurationService.setConfig(ConfigKey.TerminalAllowList, {
+				"/^(echo|ls|pwd)\\b/": true,
+				"/^git (status|show\\b.*)$/": true
+			});
 			configurationService.setConfig(ConfigKey.TerminalDenyList, ["/rm|del|kill/"]);
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
@@ -152,7 +181,7 @@ describe('CommandLineAutoApprover', () => {
 
 	describe('edge cases', () => {
 		it('should handle empty allowList and denyList', () => {
-			configurationService.setConfig(ConfigKey.TerminalAllowList, []);
+			configurationService.setConfig(ConfigKey.TerminalAllowList, {});
 			configurationService.setConfig(ConfigKey.TerminalDenyList, []);
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
@@ -162,7 +191,9 @@ describe('CommandLineAutoApprover', () => {
 		});
 
 		it('should handle empty command strings', () => {
-			configurationService.setConfig(ConfigKey.TerminalAllowList, ["echo"]);
+			configurationService.setConfig(ConfigKey.TerminalAllowList, {
+				"echo": true
+			});
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(!commandLineAutoApprover.isAutoApproved(''));
@@ -170,7 +201,9 @@ describe('CommandLineAutoApprover', () => {
 		});
 
 		it('should handle whitespace in commands', () => {
-			configurationService.setConfig(ConfigKey.TerminalAllowList, ["echo"]);
+			configurationService.setConfig(ConfigKey.TerminalAllowList, {
+				"echo": true
+			});
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(commandLineAutoApprover.isAutoApproved('echo   hello   world'));
@@ -178,7 +211,9 @@ describe('CommandLineAutoApprover', () => {
 		});
 
 		it('should be case-sensitive by default', () => {
-			configurationService.setConfig(ConfigKey.TerminalAllowList, ["echo"]);
+			configurationService.setConfig(ConfigKey.TerminalAllowList, {
+				"echo": true
+			});
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(commandLineAutoApprover.isAutoApproved('echo hello'));
@@ -188,7 +223,9 @@ describe('CommandLineAutoApprover', () => {
 
 		// https://github.com/microsoft/vscode/issues/252411
 		it('should handle string-based values with special regex characters', () => {
-			configurationService.setConfig(ConfigKey.TerminalAllowList, ["pwsh.exe -File D:\\foo.bar\\a-script.ps1"]);
+			configurationService.setConfig(ConfigKey.TerminalAllowList, {
+				"pwsh.exe -File D:\\foo.bar\\a-script.ps1": true
+			});
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(commandLineAutoApprover.isAutoApproved('pwsh.exe -File D:\\foo.bar\\a-script.ps1'));
@@ -198,7 +235,11 @@ describe('CommandLineAutoApprover', () => {
 
 	describe('PowerShell-specific commands', () => {
 		it('should handle Windows PowerShell commands', () => {
-			configurationService.setConfig(ConfigKey.TerminalAllowList, ["Get-ChildItem", "Get-Content", "Get-Location"]);
+			configurationService.setConfig(ConfigKey.TerminalAllowList, {
+				"Get-ChildItem": true,
+				"Get-Content": true,
+				"Get-Location": true
+			});
 			configurationService.setConfig(ConfigKey.TerminalDenyList, ["Remove-Item", "del"]);
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
