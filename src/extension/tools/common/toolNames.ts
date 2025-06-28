@@ -47,6 +47,7 @@ export const enum ToolName {
 	SimpleBrowser = 'open_simple_browser',
 	CreateDirectory = 'create_directory',
 	RunVscodeCmd = 'run_vscode_command',
+	GetTaskOutput = 'get_task_output'
 }
 
 // When updating this, also update contributedToolNameToToolNames
@@ -92,6 +93,7 @@ export const enum ContributedToolName {
 	SimpleBrowser = 'copilot_openSimpleBrowser',
 	CreateDirectory = 'copilot_createDirectory',
 	RunVscodeCmd = 'copilot_runVscodeCommand',
+	GetTaskOutput = 'copilot_getTaskOutput'
 }
 
 const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>([
@@ -136,6 +138,7 @@ const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>([
 	[ContributedToolName.SimpleBrowser, ToolName.SimpleBrowser],
 	[ContributedToolName.CreateDirectory, ToolName.CreateDirectory],
 	[ContributedToolName.RunVscodeCmd, ToolName.RunVscodeCmd],
+	[ContributedToolName.GetTaskOutput, ToolName.GetTaskOutput]
 ]);
 
 const toolNameToContributedToolNames = new Map<ToolName, ContributedToolName>();

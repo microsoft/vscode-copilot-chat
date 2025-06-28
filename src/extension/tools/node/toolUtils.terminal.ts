@@ -42,7 +42,7 @@ export class ToolTerminalCreator {
 	) {
 	}
 
-	async createTerminal(sessionId: string, token: vscode.CancellationToken, isBackground?: boolean): Promise<IToolTerminal> {
+	async createTerminal(sessionId: string, id: string, token: vscode.CancellationToken, isBackground?: boolean): Promise<IToolTerminal> {
 		const terminal = this._createCopilotTerminal();
 		const toolTerminal: IToolTerminal = {
 			terminal,
@@ -60,11 +60,11 @@ export class ToolTerminalCreator {
 			if (shellIntegrationQuality !== ShellIntegrationQuality.None) {
 				ToolTerminalCreator._lastSuccessfulShell = ShellLaunchType.Default;
 				toolTerminal.shellIntegrationQuality = shellIntegrationQuality;
-				this.terminalService.associateTerminalWithSession(terminal, sessionId, shellIntegrationQuality, isBackground);
+				this.terminalService.associateTerminalWithSession(terminal, sessionId, id, shellIntegrationQuality, isBackground);
 				return toolTerminal;
 			}
 		}
-		this.terminalService.associateTerminalWithSession(terminal, sessionId, ShellIntegrationQuality.None, isBackground);
+		this.terminalService.associateTerminalWithSession(terminal, sessionId, id, ShellIntegrationQuality.None, isBackground);
 		// Fallback case: No shell integration in default profile
 		ToolTerminalCreator._lastSuccessfulShell = ShellLaunchType.Fallback;
 		return toolTerminal;

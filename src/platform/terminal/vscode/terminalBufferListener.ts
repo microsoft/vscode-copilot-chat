@@ -32,6 +32,9 @@ export function getBufferForTerminal(terminal?: Terminal, maxLines: number = 100
 	return buffer.slice(start).join('\n');
 }
 
+export function getLastCommandForTerminal(terminal: Terminal): TerminalExecutedCommand | undefined {
+	return terminalCommands.get(terminal)?.at(-1);
+}
 
 export function getActiveTerminalLastCommand(): TerminalExecutedCommand | undefined {
 	const activeTerminal = window.activeTerminal;
@@ -97,8 +100,8 @@ export function getActiveTerminalShellType(): string {
 
 function appendLimitedWindow<T>(target: T[], data: T) {
 	target.push(data);
-	if (target.length > 20000) {
-		// 20000 data events should capture a minimum of about twice the typical visible area
+	if (target.length > 40) {
+		// 40 data events should capture a minimum of about twice the typical visible area
 		target.shift();
 	}
 }

@@ -258,6 +258,7 @@
 	"copilot.tools.listDirectory.name": "List Dir",
 	"copilot.tools.runInTerminal.name": "Run In Terminal",
 	"copilot.tools.getTerminalOutput.name": "Get Terminal Output",
+	"copilot.tools.getTaskOutput.name": "Get Task Output",
 	"copilot.tools.getErrors.name": "Get Problems",
 	"copilot.tools.readProjectStructure.name": "Project Structure",
 	"copilot.tools.getChangedFiles.name": "Git Changes",

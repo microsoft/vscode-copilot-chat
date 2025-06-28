@@ -420,7 +420,7 @@
 				"name": "copilot_getTerminalOutput",
 				"toolReferenceName": "getTerminalOutput",
 				"displayName": "%copilot.tools.getTerminalOutput.name%",
-				"modelDescription": "Get the output of a terminal command previous started with copilot_runInTerminal",
+				"modelDescription": "Get the output of a terminal command previously started with runInTerminal",
 				"tags": [],
 				"inputSchema": {
 					"type": "object",
@@ -432,6 +432,30 @@
 					},
 					"required": [
 						"id"
+					]
+				}
+			},
+			{
+				"name": "copilot_getTaskOutput",
+				"toolReferenceName": "getTaskOutput",
+				"displayName": "%copilot.tools.getTaskOutput.name%",
+				"modelDescription": "Get the output of a task to evaluate it for errors, idle status, and more",
+				"tags": [],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"name": {
+							"type": "string",
+							"description": "The name of the task to check."
+						},
+						"maxLinesToRetrieve": {
+							"type": "number",
+							"description": "The maximum number of lines to retrieve from the terminal output."
+						}
+					},
+					"required": [
+						"maxLinesToRetrieve",
+						"name"
 					]
 				}
 			},
@@ -1220,7 +1244,8 @@
 				"icon": "$(terminal)",
 				"tools": [
 					"runInTerminal",
-					"getTerminalOutput"
+					"getTerminalOutput",
+					"getTaskOutput"
 				]
 			},
 			{
