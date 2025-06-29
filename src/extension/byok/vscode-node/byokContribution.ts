@@ -24,6 +24,7 @@ import { GeminiBYOKModelRegistry } from './geminiProvider';
 import { GroqModelRegistry } from './groqProvider';
 import { OllamaModelRegistry } from './ollamaProvider';
 import { OpenRouterBYOKModelRegistry } from './openRouterProvider';
+import { OAICompatibleModelRegistry } from './openAICompatibleProvider';
 
 export class BYOKContrib extends Disposable implements IExtensionContribution {
 	public readonly id: string = 'byok-contribution';
@@ -75,6 +76,11 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			this._modelRegistries.push(instantiationService.createInstance(GeminiBYOKModelRegistry));
 			this._modelRegistries.push(instantiationService.createInstance(GroqModelRegistry));
 			this._modelRegistries.push(instantiationService.createInstance(OAIBYOKModelRegistry));
+			// OpenAI Compatible providers (Like LM Studio, etc.)
+			const openAICompatibleProviders = this._configurationService.getConfig(ConfigKey.OpenAICompatibleProviders);
+			for (const provider of openAICompatibleProviders) {
+				this._modelRegistries.push(instantiationService.createInstance(OAICompatibleModelRegistry, provider.name, provider.url));
+			}
 			this._modelRegistries.push(instantiationService.createInstance(OllamaModelRegistry, this._configurationService.getConfig(ConfigKey.OllamaEndpoint)));
 			this._modelRegistries.push(instantiationService.createInstance(OpenRouterBYOKModelRegistry));
 			// Update known models list from CDN so all providers have the same list

@@ -754,6 +754,8 @@ export namespace ConfigKey {
 	export const EditsCodeNewNotebookAgentEnabled = defineExpSetting<boolean>('chat.edits.newNotebook.enabled', true);
 	export const AutoFixDiagnostics = defineSetting<boolean>('chat.agent.autoFix', true);
 	export const NotebookFollowCellExecution = defineSetting<boolean>('chat.notebook.followCellExecution.enabled', false);
+	/** Other OpenAI-Compative Providers */
+	export const OpenAICompatibleProviders = defineSetting<{ name: string; url: string }[]>('chat.openAICompatibleProviders', []);
 }
 
 export function getAllConfigKeys(): string[] {
