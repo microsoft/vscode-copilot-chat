@@ -8,6 +8,8 @@ import type { CancellationToken } from 'vscode';
 import { ILogService, LogLevel } from '../../log/common/logService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
+import { ThinkingData } from '../../thinking/common/thinking';
+import { IThinkingDataService } from '../../thinking/node/thinkingDataService';
 import { FinishedCallback, getRequestId, ICodeVulnerabilityAnnotation, ICopilotBeginToolCall, ICopilotConfirmation, ICopilotError, ICopilotFunctionCall, ICopilotReference, ICopilotToolCall, IIPCodeCitation, isCodeCitationAnnotation, isCopilotAnnotation, RequestId } from '../common/fetch';
 import { Response } from '../common/fetcherService';
 import { APIErrorResponse, APIJsonData, APIUsage, ChoiceLogProbs, FilterReason, FinishedCompletionReason, isApiUsage, IToolCall } from '../common/openai';
@@ -112,6 +114,11 @@ class StreamingToolCalls {
 	}
 }
 
+function isChainOfThoughtChoice(choice: ExtendedChoiceJSON): boolean {
+	return (choice.delta?.cot_id !== undefined || choice.delta?.cot_summary !== undefined || choice.delta?.reasoning_opaque !== undefined || choice.delta?.reasoning_text !== undefined);
+}
+
+
 // Given a string of lines separated by one or more newlines, returns complete
 // lines and any remaining partial line data. Exported for test only.
 export function splitChunk(chunk: string): [string[], string] {
@@ -137,10 +144,6 @@ export interface FinishedCompletion {
 	usage?: APIUsage;
 	requestId: RequestId;
 	index: number;
-	/** Thinking token identifier (cot_id for AOAI, reasoning_opaque for CAPI) */
-	thinkingTokenId?: string;
-	/** Thinking token content (cot_summary for AOAI, reasoning_text for CAPI) */
-	thinkingText?: string;
 }
 
 /** What comes back from the OpenAI API for a single choice in an SSE chunk. */
@@ -165,12 +168,7 @@ interface ChoiceJSON {
  */
 interface ExtendedChoiceJSON extends ChoiceJSON {
 	content_filter_results?: Record<Exclude<FilterReason, FilterReason.Copyright>, { filtered: boolean; severity: string }>;
-	message?: {
-		cot_id?: string;
-		cot_summary?: string;
-		reasoning_opaque?: string;
-		reasoning_text?: string;
-	};
+	message?: ThinkingData;
 	delta?: {
 		content: string | null;
 		copilot_annotations?: {
@@ -189,11 +187,7 @@ interface ExtendedChoiceJSON extends ChoiceJSON {
 		tool_calls?: IToolCall[];
 		role?: string;
 		name?: string;
-		cot_id?: string;
-		cot_summary?: string;
-		reasoning_opaque?: string;
-		reasoning_text?: string;
-	};
+	} & ThinkingData;
 }
 
 /**
@@ -215,16 +209,13 @@ export class SSEProcessor {
 	private readonly toolCalls = new StreamingToolCalls();
 	private functionCallName: string | undefined = undefined;
 
-	// Track thinking tokens per choice index
-	private readonly thinkingTokenIds: Record<number, string | undefined> = {};
-	private readonly thinkingTexts: Record<number, string | undefined> = {};
-
 	private constructor(
 		private readonly logService: ILogService,
 		private readonly telemetryService: ITelemetryService,
 		private readonly expectedNumChoices: number,
 		private readonly response: Response,
 		private readonly body: NodeJS.ReadableStream,
+		private readonly thinkingData: IThinkingDataService,
 		private readonly cancellationToken?: CancellationToken
 	) { }
 
@@ -233,6 +224,7 @@ export class SSEProcessor {
 		telemetryService: ITelemetryService,
 		expectedNumChoices: number,
 		response: Response,
+		thinkingData: IThinkingDataService,
 		cancellationToken?: CancellationToken
 	) {
 		const body = (await response.body()) as NodeJS.ReadableStream;
@@ -243,6 +235,7 @@ export class SSEProcessor {
 			expectedNumChoices,
 			response,
 			body,
+			thinkingData,
 			cancellationToken
 		);
 	}
@@ -307,7 +300,6 @@ export class SSEProcessor {
 		let extraData = '';
 		// This flag is set when at least for one solution we finished early (via `finishedCb`).
 		let hadEarlyFinishedSolution = false;
-
 		// Iterate over arbitrarily sized chunks coming in from the network.
 		for await (const chunk of this.body) {
 			if (this.maybeCancel('after awaiting body chunk')) {
@@ -410,6 +402,16 @@ export class SSEProcessor {
 
 					this.logChoice(choice);
 
+					if (isChainOfThoughtChoice(choice)) {
+						const toolCalls = this.toolCalls.getToolCalls();
+						if (toolCalls.length > 0) {
+							this.thinkingData.update(choice, toolCalls[0].id);
+						} else {
+							this.thinkingData.update(choice);
+						}
+						continue;
+					}
+
 					if (!(choice.index in this.solutions)) {
 						this.solutions[choice.index] = new APIJsonDataStreaming();
 					}
@@ -421,31 +423,7 @@ export class SSEProcessor {
 
 					let finishOffset: number | undefined;
 
-					let thinkingTokenId: string | undefined;
-					let thinkingText: string | undefined;
-
-					// Check for AOAI thinking tokens in message or delta
-					if (choice.message?.cot_id) {
-						thinkingTokenId = choice.message.cot_id;
-						thinkingText = choice.message.cot_summary;
-					} else if (choice.delta?.role === 'assistant' && choice.delta.cot_id) {
-						thinkingTokenId = choice.delta.cot_id;
-						thinkingText = choice.delta.cot_summary;
-					}
-					// Check for CAPI thinking tokens in message or delta
-					else if (choice.message?.reasoning_opaque) {
-						thinkingTokenId = choice.message.reasoning_opaque;
-						thinkingText = choice.message.reasoning_text;
-					} else if (choice.delta?.role === 'assistant' && choice.delta.reasoning_opaque) {
-						thinkingTokenId = choice.delta.reasoning_opaque;
-						thinkingText = choice.delta.reasoning_text;
-					}
-
-					if (thinkingTokenId || thinkingText) {
-						this.updateThinkingTokens(choice.index, thinkingTokenId, thinkingText);
-					}
-
-					const emitSolution = async (delta?: { vulnAnnotations?: ICodeVulnerabilityAnnotation[]; ipCodeCitations?: IIPCodeCitation[]; references?: ICopilotReference[]; toolCalls?: ICopilotToolCall[]; functionCalls?: ICopilotFunctionCall[]; errors?: ICopilotError[]; beginToolCalls?: ICopilotBeginToolCall[]; thinkingTokenId?: string; thinkingText?: string }) => {
+					const emitSolution = async (delta?: { vulnAnnotations?: ICodeVulnerabilityAnnotation[]; ipCodeCitations?: IIPCodeCitation[]; references?: ICopilotReference[]; toolCalls?: ICopilotToolCall[]; functionCalls?: ICopilotFunctionCall[]; errors?: ICopilotError[]; beginToolCalls?: ICopilotBeginToolCall[] }) => {
 						if (delta?.vulnAnnotations && (!Array.isArray(delta.vulnAnnotations) || !delta.vulnAnnotations.every(a => isCopilotAnnotation(a)))) {
 							delta.vulnAnnotations = undefined;
 						}
@@ -464,9 +442,7 @@ export class SSEProcessor {
 							copilotToolCalls: delta?.toolCalls,
 							_deprecatedCopilotFunctionCalls: delta?.functionCalls,
 							beginToolCalls: delta?.beginToolCalls,
-							copilotErrors: delta?.errors,
-							thinkingTokenId: delta?.thinkingTokenId,
-							thinkingText: delta?.thinkingText
+							copilotErrors: delta?.errors
 						});
 						if (finishOffset !== undefined) {
 							hadEarlyFinishedSolution = true;
@@ -485,11 +461,6 @@ export class SSEProcessor {
 							}
 						}
 						this.toolCalls.update(choice);
-					} else if (thinkingTokenId || thinkingText) {
-						// Handle thinking tokens - only emit what's in the current chunk
-						if (await emitSolution({ thinkingTokenId: thinkingTokenId, thinkingText: thinkingText })) {
-							continue;
-						}
 					} else if (choice.delta?.copilot_annotations?.CodeVulnerability || choice.delta?.copilot_annotations?.IPCodeCitations) {
 						if (await emitSolution()) {
 							continue;
@@ -582,8 +553,6 @@ export class SSEProcessor {
 						filterReason: choiceToFilterReason(choice),
 						requestId: this.requestId,
 						index: choice.index,
-						thinkingTokenId: this.getCurrentThinkingTokenId(choice.index),
-						thinkingText: this.getCurrentThinkingText(choice.index),
 					};
 
 					if (this.maybeCancel('after yielding finished choice')) {
@@ -610,8 +579,6 @@ export class SSEProcessor {
 				reason: FinishedCompletionReason.ClientIterationDone,
 				requestId: this.requestId,
 				index: solutionIndex,
-				thinkingTokenId: this.getCurrentThinkingTokenId(solutionIndex),
-				thinkingText: this.getCurrentThinkingText(solutionIndex),
 			};
 
 			if (this.maybeCancel('after yielding after iteration done')) {
@@ -694,23 +661,6 @@ export class SSEProcessor {
 		delete choiceCopy.content_filter_results;
 		delete choiceCopy.content_filter_offsets;
 		this.logService.logger.trace(`choice ${JSON.stringify(choiceCopy)}`);
-	}
-
-	private updateThinkingTokens(choiceIndex: number, thinkingTokenId?: string, thinkingText?: string): void {
-		if (thinkingTokenId !== undefined) {
-			this.thinkingTokenIds[choiceIndex] = thinkingTokenId;
-		}
-		if (thinkingText !== undefined) {
-			this.thinkingTexts[choiceIndex] = thinkingText;
-		}
-	}
-
-	private getCurrentThinkingTokenId(choiceIndex: number): string | undefined {
-		return this.thinkingTokenIds[choiceIndex];
-	}
-
-	private getCurrentThinkingText(choiceIndex: number): string | undefined {
-		return this.thinkingTexts[choiceIndex];
 	}
 }
 

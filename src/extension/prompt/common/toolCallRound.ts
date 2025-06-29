@@ -20,16 +20,12 @@ export class ToolCallRound implements IToolCallRound {
 	 * @param response The text response from the assistant
 	 * @param toolCalls The tool calls made by the assistant
 	 * @param toolInputRetry The number of times this round has been retried due to tool input validation failures
-	 * @param thinkingTokenId The thinking token identifier (cot_id for AOAI, reasoning_opaque for CAPI)
-	 * @param thinkingText The thinking token content (cot_summary for AOAI, reasoning_text for CAPI)
 	 */
 	constructor(
 		public readonly response: string,
 		public readonly toolCalls: IToolCall[],
 		public readonly toolInputRetry: number = 0,
 		public readonly id: string = ToolCallRound.generateID(),
-		public readonly thinkingTokenId?: string,
-		public readonly thinkingText?: string
 	) { }
 
 	private static generateID(): string {
