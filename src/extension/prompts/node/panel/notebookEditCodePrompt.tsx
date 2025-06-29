@@ -43,7 +43,7 @@ export class NotebookReminderInstructions extends PromptElement<NotebookFormatPr
 			getNotebookUrisFromChatVariables(this.props.chatVariables, this._workspaceService, this.notebookService) :
 			this.props.chatVariables.filter(entry => isNotebookWorkingSetEntry(entry)).map(entry => entry.document.uri);
 		if (notebookRelatedUris.length || queryContainsNotebookSpecificKeywords(this.props.query)) {
-			return <>Do not show cell IDs to the user.<br /></>;
+			return <>Do not show Cell IDs to the user.<br /></>;
 		}
 	}
 }
