@@ -21,7 +21,7 @@ import { EXISTING_CODE_MARKER } from './codeBlockFormattingRules';
 import { ConversationHistoryWithTools } from './conversationHistory';
 import { CustomInstructions } from './customInstructions';
 import { NewFilesLocationHint } from './editCodePrompt';
-import { NotebookFormat } from './notebookEditCodePrompt';
+import { NotebookFormat, NotebookReminderInstructions } from './notebookEditCodePrompt';
 import { ProjectLabels } from './projectLabels';
 import { ChatToolCalls } from './toolCalling';
 
@@ -148,7 +148,8 @@ export class EditCode2UserMessage extends PromptElement<AgentPromptProps> {
 					<ChatToolReferences flexGrow={4} priority={898} promptContext={this.props.promptContext} documentContext={this.props.documentContext} />
 					<ChatVariables flexGrow={3} priority={898} chatVariables={chatVariables} />
 					<Tag name='reminder'>
-						{getEditingReminder(hasEditFileTool, hasReplaceStringTool)}<br />
+						{getEditingReminder(hasEditFileTool, hasReplaceStringTool)}
+						<NotebookReminderInstructions chatVariables={chatVariables} query={query} />
 						<NewFilesLocationHint />
 					</Tag>
 					<Tag name='prompt'><UserQuery flexGrow={7} priority={900} chatVariables={chatVariables} query={query} /></Tag>
