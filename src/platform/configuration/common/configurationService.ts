@@ -777,6 +777,8 @@ export namespace ConfigKey {
 	export const AutoFixDiagnostics = defineSetting<boolean>('chat.agent.autoFix', true);
 	export const NotebookFollowCellExecution = defineSetting<boolean>('chat.notebook.followCellExecution.enabled', false);
 	export const CustomInstructionsInSystemMessage = defineSetting<boolean>('chat.customInstructionsInSystemMessage', false);
+	/** Other OpenAI-Compative Providers */
+	export const OpenAICompatibleProviders = defineSetting<{ name: string; url: string }[]>('chat.openAICompatibleProviders', []);
 }
 
 export function getAllConfigKeys(): string[] {
