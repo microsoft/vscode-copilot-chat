@@ -9460,9 +9460,9 @@
   {
     "name": "notebookEdits (modification - xml) [panel] [python] - Insert markdown cells explaining code",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "notebookEdits (modification - xml) [panel] [python] - new code cells in empty notebook",
@@ -9474,9 +9474,9 @@
   {
     "name": "notebookEdits (modification - xml) [panel] [python] - notebook code cell deletion",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "notebookEdits (modification - xml) [panel] [python] - re-organize python imports to top of the notebook",
