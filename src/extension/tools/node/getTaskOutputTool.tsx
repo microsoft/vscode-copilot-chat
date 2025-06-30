@@ -9,7 +9,7 @@ import { IPromptPathRepresentationService } from '../../../platform/prompts/comm
 import { ITasksService } from '../../../platform/tasks/common/tasksService';
 import { ITerminalService } from '../../../platform/terminal/common/terminalService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
-import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
+import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
 
@@ -33,7 +33,7 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ITaskOptions>, token: vscode.CancellationToken) {
-		const label = this.getTaskLabel(options.input);
+		const label = this.getTaskDefinition(options.input)?.taskLabel;
 		if (!label) {
 			return;
 		}
@@ -48,15 +48,23 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 		]);
 	}
 
-	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ITaskOptions>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
-		const label = this.getTaskLabel(options.input) || {};
+	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ITaskOptions>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
+		const { task, workspaceFolder } = this.getTaskDefinition(options.input) || {};
+		const position = workspaceFolder && task && await this.tasksService.getTaskConfigPosition(workspaceFolder, task);
+		const link = (s: string) => position ? `[${s}](${position.uri.toString()}#${position.range.startLineNumber}-${position.range.endLineNumber})` : s;
+		const trustedMark = (value: string) => {
+			const s = new MarkdownString(value);
+			s.isTrusted = true;
+			return s;
+		};
+
 		return {
-			invocationMessage: l10n.t("Checking output for task {0}", label),
-			pastTenseMessage: l10n.t("Checked output for task {0}", label)
+			invocationMessage: trustedMark(l10n.t`Getting output for ${link(options.input.id)}`),
+			pastTenseMessage: trustedMark(task?.isBackground ? l10n.t`Got output for ${link(options.input.id)}` : l10n.t`Got output for ${link(options.input.id)}`),
 		};
 	}
 
-	private getTaskLabel(input: ITaskOptions) {
+	private getTaskDefinition(input: ITaskOptions) {
 		const idx = input.id.indexOf(': ');
 		const taskType = input.id.substring(0, idx);
 		const taskLabel = input.id.substring(idx + 2);
@@ -68,7 +76,7 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 			return undefined;
 		}
 
-		return taskLabel;
+		return { workspaceFolder, task, taskLabel };
 	}
 }
 
