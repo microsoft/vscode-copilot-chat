@@ -582,10 +582,8 @@ export class CommandLineAutoApprover extends Disposable {
 	}
 
 	updateConfiguration() {
-		const denyList = this.configurationService.getConfig(ConfigKey.TerminalDenyList);
-		this._denyListRegexes = denyList.map(e => this.convertAutoApproveEntryToRegex(e));
-		const allowList = this.configurationService.getConfig(ConfigKey.TerminalAllowList);
-		this._allowListRegexes = allowList.map(e => this.convertAutoApproveEntryToRegex(e));
+		this._denyListRegexes = this.mapAutoApproveConfigToRegexList(this.configurationService.getConfig(ConfigKey.TerminalDenyList));
+		this._allowListRegexes = this.mapAutoApproveConfigToRegexList(this.configurationService.getConfig(ConfigKey.TerminalAllowList));
 	}
 
 	isAutoApproved(commandLine: string): boolean {
@@ -603,6 +601,15 @@ export class CommandLineAutoApprover extends Disposable {
 
 		// Fallback is always to require approval
 		return false;
+	}
+
+	private mapAutoApproveConfigToRegexList(config: unknown): RegExp[] {
+		if (!config || typeof config !== 'object') {
+			return [];
+		}
+		return Object.entries(config)
+			.map(([key, value]) => value ? this.convertAutoApproveEntryToRegex(key) : undefined)
+			.filter(e => !!e);
 	}
 
 	private convertAutoApproveEntryToRegex(value: string): RegExp {

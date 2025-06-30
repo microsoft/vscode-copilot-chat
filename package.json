@@ -2819,21 +2819,24 @@
 						"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
 					},
 					"github.copilot.chat.agent.terminal.allowList": {
-						"type": "array",
-						"default": [
-							"echo",
-							"Write-Host",
-							"ls",
-							"Get-ChildItem",
-							"cat",
-							"Get-Content",
-							"pwd",
-							"Get-Location",
-							"cd",
-							"Set-Location"
-						],
-						"items": {
-							"type": "string"
+						"type": "object",
+						"default": {
+							"echo": true,
+							"Write-Host": true,
+							"ls": true,
+							"Get-ChildItem": true,
+							"cat": true,
+							"Get-Content": true,
+							"pwd": true,
+							"Get-Location": true,
+							"cd": true,
+							"Set-Location": true
+						},
+						"additionalProperties": {
+							"type": "boolean",
+							"enum": [true, false],
+							"enumDescriptions": ["%github.copilot.config.agent.terminal.allowList.value.true%", "%github.copilot.config.agent.terminal.allowList.value.false%"],
+							"description": "%github.copilot.config.agent.terminal.allowList.key%"
 						},
 						"tags": [
 							"experimental"
@@ -2841,21 +2844,27 @@
 						"markdownDescription": "%github.copilot.config.agent.terminal.allowList%"
 					},
 					"github.copilot.chat.agent.terminal.denyList": {
-						"type": "array",
-						"default": [
-							"rm",
-							"rmdir",
-							"del",
-							"Remove-Item",
-							"kill",
-							"curl",
-							"wget",
-							"eval",
-							"chmod",
-							"chown"
-						],
-						"items": {
-							"type": "string"
+						"type": "object",
+						"default": {
+							"rm": true,
+							"rmdir": true,
+							"del": true,
+							"Remove-Item": true,
+							"kill": true,
+							"curl": true,
+							"wget": true,
+							"eval": true,
+							"chmod": true,
+							"chown": true
+						},
+						"additionalProperties": {
+							"type": "boolean",
+							"enum": [
+								true,
+								false
+							],
+							"enumDescriptions": ["%github.copilot.config.agent.terminal.denyList.value.true%", "%github.copilot.config.agent.terminal.denyList.value.false%"],
+							"description": "%github.copilot.config.agent.terminal.denyList.key%"
 						},
 						"tags": [
 							"experimental"

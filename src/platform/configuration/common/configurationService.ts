@@ -749,8 +749,30 @@ export namespace ConfigKey {
 	export const NewWorkspaceCreationAgentEnabled = defineSetting<boolean>('chat.newWorkspaceCreation.enabled', true);
 	export const SummarizeAgentConversationHistory = defineExpSetting<boolean>('chat.summarizeAgentConversationHistory.enabled', true);
 	export const CurrentEditorAgentContext = defineSetting<boolean>('chat.agent.currentEditorContext.enabled', true);
-	export const TerminalAllowList = defineSetting<string[]>('chat.agent.terminal.allowList', ["echo", "Write-Host", "ls", "Get-ChildItem", "cat", "Get-Content", "pwd", "Get-Location", "cd", "Set-Location"]);
-	export const TerminalDenyList = defineSetting<string[]>('chat.agent.terminal.denyList', ["rm", "rmdir", "del", "Remove-Item", "kill", "curl", "wget", "eval", "chmod", "chown"]);
+	export const TerminalAllowList = defineSetting<{ [key: string]: boolean }>('chat.agent.terminal.allowList', {
+		"echo": true,
+		"Write-Host": true,
+		"ls": true,
+		"Get-ChildItem": true,
+		"cat": true,
+		"Get-Content": true,
+		"pwd": true,
+		"Get-Location": true,
+		"cd": true,
+		"Set-Location": true
+	});
+	export const TerminalDenyList = defineSetting<{ [key: string]: boolean }>('chat.agent.terminal.denyList', {
+		"rm": true,
+		"rmdir": true,
+		"del": true,
+		"Remove-Item": true,
+		"kill": true,
+		"curl": true,
+		"wget": true,
+		"eval": true,
+		"chmod": true,
+		"chown": true
+	});
 	/** BYOK  */
 	export const OllamaEndpoint = defineSetting<string>('chat.byok.ollamaEndpoint', 'http://localhost:11434');
 	export const EditsCodeNewNotebookAgentEnabled = defineExpSetting<boolean>('chat.edits.newNotebook.enabled', true);

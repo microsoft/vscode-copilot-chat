@@ -8,7 +8,7 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
-type Contributor = {
+type Collaborator = {
 	readonly id: string;
 	readonly login: string;
 }
@@ -36,15 +36,15 @@ type PullRequestCommit = {
 	readonly sha: string;
 }
 
-async function getContributors(repository: string): Promise<readonly Contributor[]> {
+async function getCollaborators(repository: string): Promise<readonly Collaborator[]> {
 	const { stdout, stderr } = await execAsync(
-		`gh api -H "Accept: application/vnd.github+json" /repos/${repository}/contributors --paginate`, { maxBuffer: 25 * 1024 * 1024 });
+		`gh api -H "Accept: application/vnd.github+json" /repos/${repository}/collaborators --paginate`, { maxBuffer: 25 * 1024 * 1024 });
 
 	if (stderr) {
-		throw new Error(`Error fetching repository contributors - ${stderr}`);
+		throw new Error(`Error fetching repository collaborators - ${stderr}`);
 	}
 
-	return JSON.parse(stdout) as ReadonlyArray<Contributor>;
+	return JSON.parse(stdout) as ReadonlyArray<Collaborator>;
 }
 
 async function getCommit(repository: string, sha: string): Promise<Commit> {
@@ -95,20 +95,20 @@ async function checkDatabaseFile(files: ReadonlyArray<PullRequestFile>): Promise
 }
 
 async function checkDatabaseLayerFiles(repository: string, pullRequestNumber: string, files: readonly PullRequestFile[])
-	: Promise<{ statusCheck: boolean; verifiedCheck: boolean; contributorCheck: boolean }> {
+	: Promise<{ statusCheck: boolean; verifiedCheck: boolean; collaboratorCheck: boolean }> {
 	const layerFiles = files.filter(f => f.filename.toLowerCase().startsWith('test/simulation/cache/layers/'));
 
 	if (layerFiles.length === 0) {
 		console.log('✅ Pull request does not contain any layer files.');
-		return { statusCheck: true, verifiedCheck: true, contributorCheck: true };
+		return { statusCheck: true, verifiedCheck: true, collaboratorCheck: true };
 	}
 
-	// Get contributors and commits for the pull request
-	const contributors = await getContributors(repository);
+	// Get collaborators and commits for the pull request
+	const collaborators = await getCollaborators(repository);
 	const pullRequestCommits = await getPullRequestCommits(repository, pullRequestNumber);
 	const commitsWithDetails = await Promise.all(pullRequestCommits.map(sha => getCommit(repository, sha)));
 
-	let statusCheckResult = true, verifiedCheckResult = true, contributorCheckResult = true;
+	let statusCheckResult = true, verifiedCheckResult = true, collaboratorCheckResult = true;
 	console.log(`🔍 Pull request contains ${layerFiles.length} layer files. Checking status and author...`);
 
 	for (const file of layerFiles) {
@@ -126,20 +126,20 @@ async function checkDatabaseLayerFiles(repository: string, pullRequestNumber: st
 
 		console.log(`     - Commit(s):`);
 		for (const commit of commits) {
-			const contributorCheck = contributors.find(c => c.login === commit.committer.login);
+			const collaboratorCheck = collaborators.find(c => c.login === commit.committer.login);
 			const verifiedCheck = commit.commit.verification.verified && commit.commit.verification.reason === 'valid';
-			console.log(`       - ${commit.sha} by ${commit.committer.login}. Contributor: ${contributorCheck ? '✅' : '⛔'} Verified: ${verifiedCheck ? '✅' : '⛔'}`);
+			console.log(`       - ${commit.sha} by ${commit.committer.login}. Collaborator: ${collaboratorCheck ? '✅' : '⛔'} Verified: ${verifiedCheck ? '✅' : '⛔'}`);
 
 			if (!verifiedCheck) {
 				verifiedCheckResult = false;
 			}
-			if (!contributorCheck) {
-				contributorCheckResult = false;
+			if (!collaboratorCheck) {
+				collaboratorCheckResult = false;
 			}
 		}
 	}
 
-	return { statusCheck: statusCheckResult, verifiedCheck: verifiedCheckResult, contributorCheck: contributorCheckResult };
+	return { statusCheck: statusCheckResult, verifiedCheck: verifiedCheckResult, collaboratorCheck: collaboratorCheckResult };
 }
 
 async function main() {
@@ -168,7 +168,7 @@ async function main() {
 		if (!layerCheckResult.statusCheck) {
 			throw new Error('Cache layer files can only be added or deleted, never modified');
 		}
-		if (!layerCheckResult.verifiedCheck || !layerCheckResult.contributorCheck) {
+		if (!layerCheckResult.verifiedCheck || !layerCheckResult.collaboratorCheck) {
 			throw new Error('Cache layer files can only be added by VS Code team members with signed commits');
 		}
 	} catch (error) {
