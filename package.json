@@ -2802,8 +2802,8 @@
 						"additionalProperties": {
 							"type": "boolean",
 							"enum": [true, false],
-							"enumDescriptions": ["Enable the pattern.", "Disable the pattern."],
-							"description": "The start of a command to match against. A regular expression can be provided by wrapping the string in `/` characters."
+							"enumDescriptions": ["%github.copilot.config.agent.terminal.allowList.value.true%", "%github.copilot.config.agent.terminal.allowList.value.false%"],
+							"description": "%github.copilot.config.agent.terminal.allowList.key%"
 						},
 						"tags": [
 							"experimental"
