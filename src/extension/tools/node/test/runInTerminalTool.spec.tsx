@@ -82,8 +82,12 @@ describe('RunInTerminalTool', () => {
 		for (const entry of allowList) {
 			allowListObject[entry] = true;
 		}
+		const denyListObject: { [key: string]: boolean } = {};
+		for (const entry of denyList) {
+			denyListObject[entry] = true;
+		}
 		configurationService.setConfig(ConfigKey.TerminalAllowList, allowListObject);
-		configurationService.setConfig(ConfigKey.TerminalDenyList, denyList);
+		configurationService.setConfig(ConfigKey.TerminalDenyList, denyListObject);
 		runInTerminalTool.commandLineAutoApprover.updateConfiguration();
 	}
 

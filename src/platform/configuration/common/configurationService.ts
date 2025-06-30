@@ -758,7 +758,18 @@ export namespace ConfigKey {
 		"cd": true,
 		"Set-Location": true
 	});
-	export const TerminalDenyList = defineSetting<string[]>('chat.agent.terminal.denyList', ["rm", "rmdir", "del", "Remove-Item", "kill", "curl", "wget", "eval", "chmod", "chown"]);
+	export const TerminalDenyList = defineSetting<{ [key: string]: boolean }>('chat.agent.terminal.denyList', {
+		"rm": true,
+		"rmdir": true,
+		"del": true,
+		"Remove-Item": true,
+		"kill": true,
+		"curl": true,
+		"wget": true,
+		"eval": true,
+		"chmod": true,
+		"chown": true
+	});
 	/** BYOK  */
 	export const OllamaEndpoint = defineSetting<string>('chat.byok.ollamaEndpoint', 'http://localhost:11434');
 	export const EditsCodeNewNotebookAgentEnabled = defineExpSetting<boolean>('chat.edits.newNotebook.enabled', true);

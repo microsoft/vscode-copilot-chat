@@ -83,7 +83,10 @@ describe('CommandLineAutoApprover', () => {
 	describe('denyList without an allowList', () => {
 		it('should deny commands in denyList', () => {
 			configurationService.setConfig(ConfigKey.TerminalAllowList, {});
-			configurationService.setConfig(ConfigKey.TerminalDenyList, ["rm", "del"]);
+			configurationService.setConfig(ConfigKey.TerminalDenyList, {
+				"rm": true,
+				"del": true
+			});
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(!commandLineAutoApprover.isAutoApproved('rm file.txt'));
@@ -92,7 +95,9 @@ describe('CommandLineAutoApprover', () => {
 
 		it('should not auto-approve safe commands when no allowList is present', () => {
 			configurationService.setConfig(ConfigKey.TerminalAllowList, {});
-			configurationService.setConfig(ConfigKey.TerminalDenyList, ["rm"]);
+			configurationService.setConfig(ConfigKey.TerminalDenyList, {
+				"rm": true
+			});
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(!commandLineAutoApprover.isAutoApproved('echo hello'));
@@ -106,7 +111,9 @@ describe('CommandLineAutoApprover', () => {
 				"echo": true,
 				"rm": true
 			});
-			configurationService.setConfig(ConfigKey.TerminalDenyList, ["rm"]);
+			configurationService.setConfig(ConfigKey.TerminalDenyList, {
+				"rm": true
+			});
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(commandLineAutoApprover.isAutoApproved('echo hello'));
@@ -119,7 +126,10 @@ describe('CommandLineAutoApprover', () => {
 				"ls": true,
 				"pwd": true
 			});
-			configurationService.setConfig(ConfigKey.TerminalDenyList, ["rm", "del"]);
+			configurationService.setConfig(ConfigKey.TerminalDenyList, {
+				"rm": true,
+				"del": true
+			});
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(commandLineAutoApprover.isAutoApproved('echo'));
@@ -150,7 +160,10 @@ describe('CommandLineAutoApprover', () => {
 				"echo": true,
 				"rm": true
 			});
-			configurationService.setConfig(ConfigKey.TerminalDenyList, ["/^rm\\s+/", "/^del\\s+/"]);
+			configurationService.setConfig(ConfigKey.TerminalDenyList, {
+				"/^rm\\s+/": true,
+				"/^del\\s+/": true
+			});
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(commandLineAutoApprover.isAutoApproved('echo hello'));
@@ -164,7 +177,9 @@ describe('CommandLineAutoApprover', () => {
 				"/^(echo|ls|pwd)\\b/": true,
 				"/^git (status|show\\b.*)$/": true
 			});
-			configurationService.setConfig(ConfigKey.TerminalDenyList, ["/rm|del|kill/"]);
+			configurationService.setConfig(ConfigKey.TerminalDenyList, {
+				"/rm|del|kill/": true
+			});
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(commandLineAutoApprover.isAutoApproved('echo test'));
@@ -182,7 +197,7 @@ describe('CommandLineAutoApprover', () => {
 	describe('edge cases', () => {
 		it('should handle empty allowList and denyList', () => {
 			configurationService.setConfig(ConfigKey.TerminalAllowList, {});
-			configurationService.setConfig(ConfigKey.TerminalDenyList, []);
+			configurationService.setConfig(ConfigKey.TerminalDenyList, {});
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(!commandLineAutoApprover.isAutoApproved('echo hello'));
@@ -240,7 +255,10 @@ describe('CommandLineAutoApprover', () => {
 				"Get-Content": true,
 				"Get-Location": true
 			});
-			configurationService.setConfig(ConfigKey.TerminalDenyList, ["Remove-Item", "del"]);
+			configurationService.setConfig(ConfigKey.TerminalDenyList, {
+				"Remove-Item": true,
+				"del": true
+			});
 			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
 
 			ok(commandLineAutoApprover.isAutoApproved('Get-ChildItem'));

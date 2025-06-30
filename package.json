@@ -2811,21 +2811,27 @@
 						"markdownDescription": "%github.copilot.config.agent.terminal.allowList%"
 					},
 					"github.copilot.chat.agent.terminal.denyList": {
-						"type": "array",
-						"default": [
-							"rm",
-							"rmdir",
-							"del",
-							"Remove-Item",
-							"kill",
-							"curl",
-							"wget",
-							"eval",
-							"chmod",
-							"chown"
-						],
-						"items": {
-							"type": "string"
+						"type": "object",
+						"default": {
+							"rm": true,
+							"rmdir": true,
+							"del": true,
+							"Remove-Item": true,
+							"kill": true,
+							"curl": true,
+							"wget": true,
+							"eval": true,
+							"chmod": true,
+							"chown": true
+						},
+						"additionalProperties": {
+							"type": "boolean",
+							"enum": [
+								true,
+								false
+							],
+							"enumDescriptions": ["%github.copilot.config.agent.terminal.denyList.value.true%", "%github.copilot.config.agent.terminal.denyList.value.false%"],
+							"description": "%github.copilot.config.agent.terminal.denyList.key%"
 						},
 						"tags": [
 							"experimental"

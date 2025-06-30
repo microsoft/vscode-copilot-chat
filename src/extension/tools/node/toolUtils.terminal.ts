@@ -582,8 +582,7 @@ export class CommandLineAutoApprover extends Disposable {
 	}
 
 	updateConfiguration() {
-		const denyList = this.configurationService.getConfig(ConfigKey.TerminalDenyList);
-		this._denyListRegexes = denyList.map(e => this.convertAutoApproveEntryToRegex(e));
+		this._denyListRegexes = this.mapAutoApproveConfigToRegexList(this.configurationService.getConfig(ConfigKey.TerminalDenyList));
 		this._allowListRegexes = this.mapAutoApproveConfigToRegexList(this.configurationService.getConfig(ConfigKey.TerminalAllowList));
 	}
 
