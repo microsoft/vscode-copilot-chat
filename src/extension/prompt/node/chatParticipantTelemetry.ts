@@ -20,7 +20,8 @@ import { Conversation } from '../common/conversation';
 import { IToolCall, IToolCallRound } from '../common/intents';
 import { IDocumentContext } from './documentContext';
 import { IIntent, TelemetryData } from './intents';
-import { ConversationalBaseTelemetryData, createTelemetryWithId, extendUserMessageTelemetryData, getCodeBlocks, sendModelMessageTelemetry, sendOffTopicMessageTelemetry, sendUserMessageTelemetry } from './telemetry';
+import { ConversationalBaseTelemetryData, createTelemetryWithId, extendUserMessageTelemetryData, getCodeBlocks, sendModelMessageTelemetry, sendOffTopicMessageTelemetry, sendUserActionTelemetry, sendUserMessageTelemetry } from './telemetry';
+import { AgentIntent } from '../../intents/node/editAgentIntent';
 
 // #region: internal telemetry for responses
 
@@ -136,6 +137,7 @@ export type RequestTelemetryMeasurements = {
 
 export type RequestPanelTelemetryMeasurements = RequestTelemetryMeasurements & {
 	turn: number;
+	round: number;
 	textBlocks: number;
 	links: number;
 	maybeOffTopic: number;
@@ -498,6 +500,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		const temporalContexData = this._getTelemetryData(TemporalContextStats);
 
 		const turn = this._conversation.getLatestTurn();
+		const roundIndex = turn.rounds.length - 1;
 
 		const codeBlocks = response ? getCodeBlocks(response) : [];
 
@@ -535,6 +538,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 				"codeBlocks": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Code block languages in the response." },
 				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that is used in the endpoint." },
 				"turn": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How many turns have been made in the conversation." },
+				"round": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The current round index of the turn." },
 				"textBlocks": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "For text-only responses (no code), how many paragraphs were in the response." },
 				"links": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Symbol and file links in the response.", "isMeasurement": true },
 				"maybeOffTopic": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "If the response sounds like it got rejected due to the request being off-topic." },
@@ -564,7 +568,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			conversationId: this._sessionId,
 			requestId: turn.id,
 			responseId: turn.id, // SAME as fetchResult.requestId ,
-			responseType: responseType,
+			responseType,
 			languageId: this._documentContext?.document.languageId,
 			codeBlocks: codeBlocks.join(','),
 			model: this._endpoint.model,
@@ -572,6 +576,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			toolCounts: JSON.stringify(toolCounts),
 		} satisfies RequestPanelTelemetryProperties, {
 			turn: this._conversation.turns.length,
+			round: roundIndex,
 			textBlocks: codeBlocks.length ? -1 : response.split(/\n{2,}/).length ?? 0,
 			links: this._addedLinkCount,
 			maybeOffTopic: maybeOffTopic,
@@ -588,6 +593,43 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			temporalCtxFileCount: temporalContexData?.documentCount ?? -1,
 			temporalCtxTotalCharCount: temporalContexData?.totalCharLength ?? -1
 		} satisfies RequestPanelTelemetryMeasurements);
+
+		sendUserActionTelemetry(
+			this._telemetryService,
+			undefined,
+			{
+				command: this._intent.id,
+				conversationId: this._sessionId,
+				requestId: turn.id,
+				responseType,
+				languageId: this._documentContext?.document.languageId ?? '',
+				codeBlocks: codeBlocks.join(','),
+				model: this._endpoint.model,
+				isParticipantDetected: String(this._request.isParticipantDetected),
+				toolCounts: JSON.stringify(toolCounts),
+			},
+			{
+				isAgent: this._intent.id === AgentIntent.ID ? 1 : 0,
+				turn: this._conversation.turns.length,
+				round: roundIndex,
+				textBlocks: codeBlocks.length ? -1 : response.split(/\n{2,}/).length ?? 0,
+				links: this._addedLinkCount,
+				maybeOffTopic,
+				messageTokenCount,
+				promptTokenCount,
+				userPromptCount: this._messages.filter(msg => msg.role === Raw.ChatRole.User).length,
+				responseTokenCount,
+				timeToRequest: this._requestStartTime - this._startTime,
+				timeToFirstToken: this._firstTokenTime ? this._firstTokenTime - this._startTime : -1,
+				timeToComplete: Date.now() - this._startTime,
+				numToolCalls: toolCalls.length,
+				availableToolCount: this._availableToolCount,
+				temporalCtxFileCount: temporalContexData?.documentCount ?? -1,
+				temporalCtxTotalCharCount: temporalContexData?.totalCharLength ?? -1
+
+			},
+			'user_prompt'
+		);
 	}
 
 	protected override _sendResponseInternalTelemetryEvent(_responseType: ChatFetchResponseType, response: string): void {
