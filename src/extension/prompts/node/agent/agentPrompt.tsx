@@ -169,7 +169,7 @@ interface GlobalAgentContextProps extends BasePromptElementProps {
  * The "global agent context" is a static prompt at the start of a conversation containing user environment info, initial workspace structure, anything else that is a useful beginning
  * hint for the agent but is not updated during the conversation.
  */
-class GlobalAgentContext extends PromptElement<GlobalAgentContextProps> {
+export class GlobalAgentContext extends PromptElement<GlobalAgentContextProps> {
 	render() {
 		return <UserMessage>
 			<Tag name='environment_info'>

@@ -31,11 +31,9 @@ import { renderPromptElement } from '../base/promptRenderer';
 import { SafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
 import { CustomInstructions } from '../panel/customInstructions';
-import { UserPreferences } from '../panel/preferences';
 import { ChatToolCalls } from '../panel/toolCalling';
-import { MultirootWorkspaceStructure } from '../panel/workspace/workspaceStructure';
 import { DefaultAgentPrompt, SweBenchAgentPrompt } from './agentInstructions';
-import { AgentUserMessage, getKeepGoingReminder, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn } from './agentPrompt';
+import { AgentUserMessage, getKeepGoingReminder, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn, GlobalAgentContext } from './agentPrompt';
 import { SimpleSummarizedHistory } from './simpleSummarizedHistoryPrompt';
 
 export interface ConversationHistorySummarizationPromptProps extends SummarizedAgentHistoryProps {
@@ -46,15 +44,49 @@ export interface ConversationHistorySummarizationPromptProps extends SummarizedA
  * @deprecated Use AgentSummarizationPrompt instead for better caching efficiency.
  * Legacy prompt used to summarize conversation history when the context window is exceeded.
  * (Kept for backward compatibility only)
+ *
+ * Updated to align with AgentSummarizationPrompt structure for cache consistency.
  */
 export class ConversationHistorySummarizationPrompt extends PromptElement<ConversationHistorySummarizationPromptProps> {
+	constructor(
+		props: ConversationHistorySummarizationPromptProps,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+	) {
+		super(props);
+	}
+
 	override async render(state: void, sizing: PromptSizing) {
-		// Legacy implementation - consider migrating to AgentSummarizationPrompt
+		// Use the same agent instructions for cache alignment
+		const instructions = this.configurationService.getConfig(ConfigKey.Internal.SweBenchAgentPrompt) ?
+			<SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} /> :
+			<DefaultAgentPrompt
+				availableTools={this.props.promptContext.tools?.availableTools}
+				modelFamily={this.props.endpoint.family}
+				codesearchMode={false}
+			/>;
+
 		const history = this.props.simpleMode ?
 			<SimpleSummarizedHistory priority={1} promptContext={this.props.promptContext} location={this.props.location} endpoint={this.props.endpoint} maxToolResultLength={this.props.maxToolResultLength} /> :
 			<ConversationHistory priority={1} promptContext={this.props.promptContext} location={this.props.location} endpoint={this.props.endpoint} maxToolResultLength={this.props.maxToolResultLength} />;
+
 		return (
 			<>
+				{/* Reuse the same system prompt structure as AgentPrompt for maximum caching */}
+				<SystemMessage>
+					You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
+					<CopilotIdentityRules />
+					<SafetyRules />
+				</SystemMessage>
+				{instructions}
+				<UserMessage>
+					<CustomInstructions languageId={undefined} chatVariables={this.props.promptContext.chatVariables} />
+					{this.props.promptContext.modeInstructions && <Tag name='customInstructions'>
+						Below are some additional instructions from the user.<br />
+						<br />
+						{this.props.promptContext.modeInstructions}
+					</Tag>}
+				</UserMessage>
+				<GlobalAgentContext enableCacheBreakpoints={true} />
 				<SystemMessage priority={this.props.priority}>
 					Your task is to create a comprehensive, detailed summary of the entire conversation that captures all essential information needed to seamlessly continue the work without any loss of context. This summary will be used to compact the conversation while preserving critical technical details, decisions, and progress.<br />
 
@@ -157,9 +189,10 @@ export class ConversationHistorySummarizationPrompt extends PromptElement<Conver
 
 					This summary should serve as a comprehensive handoff document that enables seamless continuation of all active work streams while preserving the full technical and contextual richness of the original conversation.<br />
 				</SystemMessage>
+				{/* Dynamic history components - not cached for optimal cache efficiency */}
 				{history}
 				{this.props.workingNotebook && <WorkingNotebookSummary priority={this.props.priority - 2} notebook={this.props.workingNotebook} />}
-				<UserMessage>
+				<UserMessage priority={900}>
 					Summarize the conversation history so far, paying special attention to the most recent agent commands and tool results that triggered this summarization. Structure your summary using the enhanced format provided in the system message.<br />
 
 					Focus particularly on:<br />
@@ -170,6 +203,7 @@ export class ConversationHistorySummarizationPrompt extends PromptElement<Conver
 
 					Include all important tool calls and their results as part of the appropriate sections, with special emphasis on the most recent operations.
 				</UserMessage>
+				<cacheBreakpoint type={CacheType} />
 			</>
 		);
 	}
@@ -226,17 +260,7 @@ export class AgentSummarizationPrompt extends PromptElement<ConversationHistoryS
 						{this.props.promptContext.modeInstructions}
 					</Tag>}
 				</UserMessage>
-				<UserMessage>
-					<Tag name='environment_info'>
-						Environment and workspace information available in conversation context.
-					</Tag>
-					<Tag name='workspace_info'>
-						<MultirootWorkspaceStructure maxSize={2000} excludeDotFiles={true} /><br />
-						This is the state of the context at this point in the conversation. The view of the workspace structure may be truncated. You can use tools to collect more context if needed.
-					</Tag>
-					<UserPreferences flexGrow={7} priority={800} />
-					<cacheBreakpoint type={CacheType} />
-				</UserMessage>
+				<GlobalAgentContext enableCacheBreakpoints={true} />
 				{/* Dynamic history components - not cached for optimal cache efficiency */}
 				<ConversationHistoryForSummarization
 					priority={1}
