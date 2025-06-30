@@ -41,13 +41,18 @@ export interface ConversationHistorySummarizationPromptProps extends SummarizedA
 }
 
 /**
- * @deprecated Use AgentSummarizationPrompt instead for better caching efficiency.
- * Legacy prompt used to summarize conversation history when the context window is exceeded.
- * (Kept for backward compatibility only)
+ * Optimized agent-style prompt structure for summarization that maximizes caching efficiency.
  *
- * Updated to align with AgentSummarizationPrompt structure for cache consistency.
+ * Cache Optimizations Implemented:
+ * 1. Reuses the same system prompt, agent instructions, and environment setup as normal agent prompts
+ * 2. Strategic cache breakpoint placement: caches stable components, excludes dynamic history
+ * 3. Unified mode handling via boolean flags instead of enum-based cache fragmentation
+ * 4. Dynamic conversation history components placed outside cached sections
+ *
+ * This structure allows the expensive-to-compute components (system setup, instructions, environment)
+ * to be cached while only the conversation history and final query remain dynamic.
  */
-export class ConversationHistorySummarizationPrompt extends PromptElement<ConversationHistorySummarizationPromptProps> {
+export class AgentSummarizationPrompt extends PromptElement<ConversationHistorySummarizationPromptProps> {
 	constructor(
 		props: ConversationHistorySummarizationPromptProps,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
@@ -56,7 +61,7 @@ export class ConversationHistorySummarizationPrompt extends PromptElement<Conver
 	}
 
 	override async render(state: void, sizing: PromptSizing) {
-		// Use the same agent instructions for cache alignment
+		// Use the same agent instructions to get caching benefits
 		const instructions = this.configurationService.getConfig(ConfigKey.Internal.SweBenchAgentPrompt) ?
 			<SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} /> :
 			<DefaultAgentPrompt
@@ -65,9 +70,9 @@ export class ConversationHistorySummarizationPrompt extends PromptElement<Conver
 				codesearchMode={false}
 			/>;
 
-		const history = this.props.simpleMode ?
-			<SimpleSummarizedHistory priority={1} promptContext={this.props.promptContext} location={this.props.location} endpoint={this.props.endpoint} maxToolResultLength={this.props.maxToolResultLength} /> :
-			<ConversationHistory priority={1} promptContext={this.props.promptContext} location={this.props.location} endpoint={this.props.endpoint} maxToolResultLength={this.props.maxToolResultLength} />;
+		// Determine summarization detail level based on available context and simple mode
+		const useDetailedSummary = !this.props.simpleMode;
+		const summarizationQuery = this.getSummarizationQuery(useDetailedSummary);
 
 		return (
 			<>
@@ -190,78 +195,6 @@ export class ConversationHistorySummarizationPrompt extends PromptElement<Conver
 					This summary should serve as a comprehensive handoff document that enables seamless continuation of all active work streams while preserving the full technical and contextual richness of the original conversation.<br />
 				</SystemMessage>
 				{/* Dynamic history components - not cached for optimal cache efficiency */}
-				{history}
-				{this.props.workingNotebook && <WorkingNotebookSummary priority={this.props.priority - 2} notebook={this.props.workingNotebook} />}
-				<UserMessage priority={900}>
-					Summarize the conversation history so far, paying special attention to the most recent agent commands and tool results that triggered this summarization. Structure your summary using the enhanced format provided in the system message.<br />
-
-					Focus particularly on:<br />
-					- The specific agent commands/tools that were just executed<br />
-					- The results returned from these recent tool calls (truncate if very long but preserve key information)<br />
-					- What the agent was actively working on when the token budget was exceeded<br />
-					- How these recent operations connect to the overall user goals<br />
-
-					Include all important tool calls and their results as part of the appropriate sections, with special emphasis on the most recent operations.
-				</UserMessage>
-				<cacheBreakpoint type={CacheType} />
-			</>
-		);
-	}
-}
-
-/**
- * Optimized agent-style prompt structure for summarization that maximizes caching efficiency.
- *
- * Cache Optimizations Implemented:
- * 1. Reuses the same system prompt, agent instructions, and environment setup as normal agent prompts
- * 2. Strategic cache breakpoint placement: caches stable components, excludes dynamic history
- * 3. Unified mode handling via boolean flags instead of enum-based cache fragmentation
- * 4. Dynamic conversation history components placed outside cached sections
- *
- * This structure allows the expensive-to-compute components (system setup, instructions, environment)
- * to be cached while only the conversation history and final query remain dynamic.
- */
-export class AgentSummarizationPrompt extends PromptElement<ConversationHistorySummarizationPromptProps> {
-	constructor(
-		props: ConversationHistorySummarizationPromptProps,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
-	) {
-		super(props);
-	}
-
-	override async render(state: void, sizing: PromptSizing) {
-		// Use the same agent instructions to get caching benefits
-		const instructions = this.configurationService.getConfig(ConfigKey.Internal.SweBenchAgentPrompt) ?
-			<SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} /> :
-			<DefaultAgentPrompt
-				availableTools={this.props.promptContext.tools?.availableTools}
-				modelFamily={this.props.endpoint.family}
-				codesearchMode={false}
-			/>;
-
-		// Determine summarization detail level based on available context and simple mode
-		const useDetailedSummary = !this.props.simpleMode;
-		const summarizationQuery = this.getSummarizationQuery(useDetailedSummary);
-
-		return (
-			<>
-				{/* Reuse the same system prompt structure as AgentPrompt for maximum caching */}
-				<SystemMessage>
-					You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
-					<CopilotIdentityRules />
-					<SafetyRules />
-				</SystemMessage>
-				{instructions}
-				<UserMessage>
-					<CustomInstructions languageId={undefined} chatVariables={this.props.promptContext.chatVariables} />
-					{this.props.promptContext.modeInstructions && <Tag name='customInstructions'>
-						Below are some additional instructions from the user.<br />
-						<br />
-						{this.props.promptContext.modeInstructions}
-					</Tag>}
-				</UserMessage>
-				<GlobalAgentContext enableCacheBreakpoints={true} />
-				{/* Dynamic history components - not cached for optimal cache efficiency */}
 				<ConversationHistoryForSummarization
 					priority={1}
 					promptContext={this.props.promptContext}
@@ -273,53 +206,23 @@ export class AgentSummarizationPrompt extends PromptElement<ConversationHistoryS
 				{this.props.workingNotebook && <WorkingNotebookSummary priority={this.props.priority - 2} notebook={this.props.workingNotebook} />}
 				<UserMessage priority={900}>
 					{summarizationQuery}
+					<cacheBreakpoint type={CacheType} />
 				</UserMessage>
-				<cacheBreakpoint type={CacheType} />
 			</>
 		);
 	}
 
 	private getSummarizationQuery(useDetailedSummary: boolean): string {
 		if (useDetailedSummary) {
-			return `Please create a comprehensive, detailed summary of this conversation that captures all essential information needed to seamlessly continue the work without any loss of context. Structure your summary using the following format:
+			return `Summarize the conversation history so far, paying special attention to the most recent agent commands and tool results that triggered this summarization. Structure your summary using the enhanced format provided in the system message.<br />
 
-1. Conversation Overview:
-- Primary Objectives: All explicit user requests and overarching goals
-- Session Context: High-level narrative of conversation flow and key phases
-- User Intent Evolution: How user's needs or direction changed throughout conversation
+Focus particularly on:<br />
+- The specific agent commands/tools that were just executed<br />
+- The results returned from these recent tool calls (truncate if very long but preserve key information)<br />
+- What the agent was actively working on when the token budget was exceeded<br />
+- How these recent operations connect to the overall user goals<br />
 
-2. Technical Foundation:
-- Core technologies, frameworks, and architectural patterns used
-- Environment details and constraints
-
-3. Codebase Status:
-- All files discussed or modified with their purpose and current state
-- Key code segments and dependencies
-
-4. Problem Resolution:
-- Issues encountered and solutions implemented
-- Debugging context and lessons learned
-
-5. Progress Tracking:
-- Completed tasks with status indicators
-- Partially complete work
-- Validated outcomes
-
-6. Active Work State:
-- Current focus and recent context
-- Working code being modified
-- Immediate context before this summary
-
-7. Recent Operations:
-- Last agent commands executed
-- Tool results summary (truncate long results but keep essential info)
-- Pre-summary state and operation context
-
-8. Continuation Plan:
-- Pending tasks with specific next steps
-- Priority information and immediate next actions
-
-Focus particularly on the specific agent commands/tools that were just executed and their results.`;
+Include all important tool calls and their results as part of the appropriate sections, with special emphasis on the most recent operations.`;
 		} else {
 			return `Please provide a concise summary of this conversation history using the following format:
 
@@ -533,9 +436,10 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 }
 
 /**
- * @deprecated This enum is maintained for telemetry compatibility only.
- * The actual mode selection is now handled directly via boolean flags to optimize caching.
- * Consider removing this enum in future cleanup when telemetry migration is complete.
+ * Enumeration for conversation summarization modes used for telemetry tracking.
+ *
+ * While the actual mode selection is handled via boolean flags for caching optimization,
+ * this enum provides standardized string values for telemetry reporting and configuration.
  */
 enum SummaryMode {
 	Simple = 'simple',
