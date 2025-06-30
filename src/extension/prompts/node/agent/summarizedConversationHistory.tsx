@@ -194,7 +194,8 @@ export class AgentSummarizationPrompt extends PromptElement<ConversationHistoryS
 
 					This summary should serve as a comprehensive handoff document that enables seamless continuation of all active work streams while preserving the full technical and contextual richness of the original conversation.<br />
 				</SystemMessage>
-				{/* Dynamic history components - not cached for optimal cache efficiency */}
+				<cacheBreakpoint type={CacheType} />
+				{/* Only truly dynamic content after cache breakpoint */}
 				<ConversationHistoryForSummarization
 					priority={1}
 					promptContext={this.props.promptContext}
@@ -206,7 +207,6 @@ export class AgentSummarizationPrompt extends PromptElement<ConversationHistoryS
 				{this.props.workingNotebook && <WorkingNotebookSummary priority={this.props.priority - 2} notebook={this.props.workingNotebook} />}
 				<UserMessage priority={900}>
 					{summarizationQuery}
-					<cacheBreakpoint type={CacheType} />
 				</UserMessage>
 			</>
 		);
