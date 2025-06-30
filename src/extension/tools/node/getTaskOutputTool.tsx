@@ -20,7 +20,7 @@ export interface ITaskOptions {
 }
 
 /**
- * Tool to provide output for a given task terminal.
+ * Tool to provide output for a given task.
  */
 export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions> {
 	public static readonly toolName = ToolName.GetTaskOutput;
@@ -44,15 +44,15 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 		}
 		const buffer = this.terminalService.getBufferForTerminal(terminal, Math.min(options.input.maxCharsToRetrieve ?? 16000, 16000));
 		return new LanguageModelToolResult([
-			new LanguageModelTextPart(`Output for task terminal ${terminal.name}: ${buffer}`)
+			new LanguageModelTextPart(`Output for task ${terminal.name}: ${buffer}`)
 		]);
 	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ITaskOptions>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
 		const label = this.getTaskLabel(options.input) || {};
 		return {
-			invocationMessage: l10n.t("Checking output for task terminal {0}", label),
-			pastTenseMessage: l10n.t("Checked output for task terminal {0}", label)
+			invocationMessage: l10n.t("Checking output for task {0}", label),
+			pastTenseMessage: l10n.t("Checked output for task {0}", label)
 		};
 	}
 

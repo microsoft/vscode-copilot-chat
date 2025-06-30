@@ -940,15 +940,9 @@
   {
     "name": "edit (toolCalling) [panel] - does not read",
     "contentFilterCount": 0,
-<<<<<<< HEAD
     "passCount": 8,
     "failCount": 2,
     "score": 0.8
-=======
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
->>>>>>> main
   },
   {
     "name": "edit [inline] [cpp] - edit for cpp",
