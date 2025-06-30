@@ -448,13 +448,12 @@
 							"type": "string",
 							"description": "The name of the task to check."
 						},
-						"maxLinesToRetrieve": {
+						"maxCharsToRetrieve": {
 							"type": "number",
-							"description": "The maximum number of lines to retrieve from the terminal output."
+							"description": "The maximum number of characters to retrieve from the terminal output."
 						}
 					},
 					"required": [
-						"maxLinesToRetrieve",
 						"name"
 					]
 				}

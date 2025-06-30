@@ -148,8 +148,8 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 		}
 	}
 
-	getBufferForTerminal(terminal: Terminal, maxLines?: number): string {
-		return getBufferForTerminal(terminal, maxLines);
+	getBufferForTerminal(terminal: Terminal, maxChars?: number): string {
+		return getBufferForTerminal(terminal, maxChars);
 	}
 
 	getLastCommandForTerminal(terminal: Terminal): TerminalExecutedCommand | undefined {

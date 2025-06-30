@@ -72,9 +72,9 @@ export interface ITerminalService {
 
 	/**
 	 * Gets the buffer for a terminal.
-	 * @param maxLines The maximum number of lines to return from the buffer, defaults to 1000
+	 * @param maxChars The maximum number of chars to return from the buffer, defaults to 16k
 	 */
-	getBufferForTerminal(terminal: vscode.Terminal, maxLines?: number): string;
+	getBufferForTerminal(terminal: vscode.Terminal, maxChars?: number): string;
 
 	/**
 	 * Gets the last command executed in a terminal.

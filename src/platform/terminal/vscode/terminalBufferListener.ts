@@ -16,10 +16,10 @@ export function getActiveTerminalBuffer(): string {
 	if (activeTerminal === undefined) {
 		return '';
 	}
-	return terminalBuffers.get(activeTerminal)?.join('\n') || '';
+	return terminalBuffers.get(activeTerminal)?.join('') || '';
 }
 
-export function getBufferForTerminal(terminal?: Terminal, maxLines: number = 1000): string {
+export function getBufferForTerminal(terminal?: Terminal, maxChars: number = 16000): string {
 	if (!terminal) {
 		return '';
 	}
@@ -28,8 +28,9 @@ export function getBufferForTerminal(terminal?: Terminal, maxLines: number = 100
 	if (!buffer) {
 		return '';
 	}
-	const start = Math.max(0, buffer.length - maxLines);
-	return buffer.slice(start).join('\n');
+	const joined = buffer.join('');
+	const start = Math.max(0, joined.length - maxChars);
+	return joined.slice(start);
 }
 
 export function getLastCommandForTerminal(terminal: Terminal): TerminalExecutedCommand | undefined {

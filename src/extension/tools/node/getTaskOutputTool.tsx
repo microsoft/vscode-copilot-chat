@@ -12,7 +12,7 @@ import { ToolRegistry } from '../common/toolsRegistry';
 
 export interface ITaskOptions {
 	name: string;
-	maxLinesToRetrieve: number;
+	maxCharsToRetrieve?: number;
 }
 
 /**
@@ -30,8 +30,7 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 		if (!terminal) {
 			return;
 		}
-		// 40 chars per line and 60k chars is about 1500 lines
-		const buffer = this.terminalService.getBufferForTerminal(terminal, Math.min(options.input.maxLinesToRetrieve, 1500));
+		const buffer = this.terminalService.getBufferForTerminal(terminal, Math.min(options.input.maxCharsToRetrieve ?? 16000, 16000));
 		return new LanguageModelToolResult([
 			new LanguageModelTextPart(`Output for task terminal ${terminal.name}: ${buffer}`)
 		]);

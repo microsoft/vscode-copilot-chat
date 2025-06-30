@@ -822,7 +822,7 @@ export class TestingTerminalService extends Disposable implements ITerminalServi
 	get terminalShellType(): string {
 		return this._workspace.terminalShellType ?? '';
 	}
-	getBufferForTerminal(terminal: vscode.Terminal, maxLines?: number): string {
+	getBufferForTerminal(terminal: vscode.Terminal, maxChars?: number): string {
 		return '';
 	}
 }
