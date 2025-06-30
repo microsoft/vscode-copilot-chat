@@ -56,7 +56,5 @@ export function prepareChatCompletionForReturn(
 		tokens: jsonData.tokens,
 		usage: c.usage,
 		telemetryData: telemetryData,
-		thinkingTokenId: c.thinkingTokenId,
-		thinkingText: c.thinkingText,
 	};
 }

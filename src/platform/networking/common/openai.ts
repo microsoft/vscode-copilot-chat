@@ -244,8 +244,6 @@ export interface ChatCompletion {
 	filterReason?: FilterReason; // optional filter reason if the completion was filtered
 	telemetryData: TelemetryData; // optional telemetry data providing background
 	error?: APIErrorResponse; // optional, error was encountered during the response
-	thinkingTokenId?: string;
-	thinkingText?: string;
 }
 
 export interface ChoiceLogProbs {

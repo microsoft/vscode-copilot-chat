@@ -23,8 +23,6 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     ToolCallRound {
       "id": "static-id",
       "response": "response number 0",
-      "thinkingText": undefined,
-      "thinkingTokenId": undefined,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -37,8 +35,6 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     ToolCallRound {
       "id": "static-id",
       "response": "response number 1",
-      "thinkingText": undefined,
-      "thinkingTokenId": undefined,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -51,8 +47,6 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     ToolCallRound {
       "id": "static-id",
       "response": "response number 2",
-      "thinkingText": undefined,
-      "thinkingTokenId": undefined,
       "toolCalls": [],
       "toolInputRetry": 0,
     },
@@ -83,8 +77,6 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     ToolCallRound {
       "id": "static-id",
       "response": "response number 3",
-      "thinkingText": undefined,
-      "thinkingTokenId": undefined,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -97,8 +89,6 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     ToolCallRound {
       "id": "static-id",
       "response": "response number 4",
-      "thinkingText": undefined,
-      "thinkingTokenId": undefined,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -111,8 +101,6 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     ToolCallRound {
       "id": "static-id",
       "response": "response number 5",
-      "thinkingText": undefined,
-      "thinkingTokenId": undefined,
       "toolCalls": [],
       "toolInputRetry": 0,
     },
@@ -179,8 +167,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 0",
-        "thinkingText": undefined,
-        "thinkingTokenId": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -193,8 +179,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 1",
-        "thinkingText": undefined,
-        "thinkingTokenId": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -207,8 +191,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 2",
-        "thinkingText": undefined,
-        "thinkingTokenId": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -221,8 +203,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 3",
-        "thinkingText": undefined,
-        "thinkingTokenId": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -276,8 +256,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 4",
-        "thinkingText": undefined,
-        "thinkingTokenId": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -290,8 +268,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 5",
-        "thinkingText": undefined,
-        "thinkingTokenId": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -304,8 +280,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 6",
-        "thinkingText": undefined,
-        "thinkingTokenId": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -318,8 +292,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 7",
-        "thinkingText": undefined,
-        "thinkingTokenId": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -1778,8 +1750,6 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
       ToolCallRound {
         "id": "static-id",
         "response": "some response here :)",
-        "thinkingText": undefined,
-        "thinkingTokenId": undefined,
         "toolCalls": [],
         "toolInputRetry": 0,
       },
@@ -1990,8 +1960,6 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
       ToolCallRound {
         "id": "static-id",
         "response": "some response here :)",
-        "thinkingText": undefined,
-        "thinkingTokenId": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -2004,8 +1972,6 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
       ToolCallRound {
         "id": "static-id",
         "response": "response to tool call",
-        "thinkingText": undefined,
-        "thinkingTokenId": undefined,
         "toolCalls": [],
         "toolInputRetry": 0,
       },

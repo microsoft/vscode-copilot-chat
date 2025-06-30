@@ -16,6 +16,7 @@ import { FinishedCallback, OptionalChatRequestParams } from '../../../platform/n
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IChatEndpoint, IEndpointBody } from '../../../platform/networking/common/networking';
 import { ITelemetryService, TelemetryProperties } from '../../../platform/telemetry/common/telemetry';
+import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 
@@ -54,7 +55,8 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		@IAuthenticationService authService: IAuthenticationService,
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
-		@IInstantiationService private instantiationService: IInstantiationService
+		@IInstantiationService private instantiationService: IInstantiationService,
+		@IThinkingDataService thinkingDataService: IThinkingDataService
 	) {
 		super(
 			_modelInfo,
@@ -66,7 +68,8 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
-			instantiationService
+			instantiationService,
+			thinkingDataService
 		);
 	}
 

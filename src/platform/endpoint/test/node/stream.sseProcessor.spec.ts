@@ -12,6 +12,7 @@ import { FinishedCompletion, SSEProcessor } from '../../../networking/node/strea
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { createFakeStreamResponse } from '../../../test/node/fetcher';
 import { createPlatformServices } from '../../../test/node/services';
+import { IThinkingDataService } from '../../../thinking/node/thinkingDataService';
 
 async function getAll<T>(iter: AsyncIterable<T>): Promise<T[]> {
 	const result: T[] = [];
@@ -39,11 +40,13 @@ const createSpyingFinishedCb = () => {
 suite('SSEProcessor', () => {
 	let telemetryService: ITelemetryService;
 	let logService: ILogService;
+	let thinkingData: IThinkingDataService;
 
 	beforeAll(() => {
 		const accessor = createPlatformServices().createTestingAccessor();
 		telemetryService = accessor.get(ITelemetryService);
 		logService = accessor.get(ILogService);
+		thinkingData = accessor.get(IThinkingDataService);
 	});
 
 	interface SimpleResult {
@@ -73,6 +76,7 @@ suite('SSEProcessor', () => {
 			telemetryService,
 			1,
 			createFakeStreamResponse(''),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {});
@@ -83,7 +87,8 @@ suite('SSEProcessor', () => {
 			logService,
 			telemetryService,
 			1,
-			createFakeStreamResponse('data: [DONE]\n')
+			createFakeStreamResponse('data: [DONE]\n'),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {});
@@ -94,7 +99,8 @@ suite('SSEProcessor', () => {
 			logService,
 			telemetryService,
 			1,
-			createFakeStreamResponse('data: {\n')
+			createFakeStreamResponse('data: {\n'),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {});
@@ -105,7 +111,8 @@ suite('SSEProcessor', () => {
 			logService,
 			telemetryService,
 			1,
-			createFakeStreamResponse('data: {}\n')
+			createFakeStreamResponse('data: {}\n'),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {});
@@ -119,7 +126,8 @@ data: [DONE]
 			logService,
 			telemetryService,
 			1,
-			createFakeStreamResponse(response)
+			createFakeStreamResponse(response),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -138,7 +146,8 @@ data: [DONE]
 			logService,
 			telemetryService,
 			1,
-			createFakeStreamResponse(response)
+			createFakeStreamResponse(response),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -159,7 +168,8 @@ data: [DONE]
 			logService,
 			telemetryService,
 			1,
-			createFakeStreamResponse(response)
+			createFakeStreamResponse(response),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -181,7 +191,8 @@ data: [DONE]
 			logService,
 			telemetryService,
 			1,
-			createFakeStreamResponse(response)
+			createFakeStreamResponse(response),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -200,7 +211,8 @@ data: [DONE]
 			logService,
 			telemetryService,
 			1,
-			createFakeStreamResponse(response)
+			createFakeStreamResponse(response),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -219,7 +231,8 @@ data: [DONE]
 			logService,
 			telemetryService,
 			1,
-			createFakeStreamResponse(response)
+			createFakeStreamResponse(response),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -240,7 +253,8 @@ data: [DONE]
 			logService,
 			telemetryService,
 			1,
-			createFakeStreamResponse(response)
+			createFakeStreamResponse(response),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -261,7 +275,8 @@ data: [DONE]
 			logService,
 			telemetryService,
 			1,
-			createFakeStreamResponse(response)
+			createFakeStreamResponse(response),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -282,8 +297,8 @@ data: [DONE]
 			logService,
 			telemetryService,
 			2,
-
-			createFakeStreamResponse(response)
+			createFakeStreamResponse(response),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -308,7 +323,8 @@ data: [DONE]
 			logService,
 			telemetryService,
 			2,
-			createFakeStreamResponse(response)
+			createFakeStreamResponse(response),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -334,6 +350,7 @@ data: [DONE]
 			telemetryService,
 			1,
 			createFakeStreamResponse(response),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -354,7 +371,8 @@ data: [DONE]
 			logService,
 			telemetryService,
 			1,
-			createFakeStreamResponse(response)
+			createFakeStreamResponse(response),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assertSimplifiedResultsEqual(results, {
@@ -375,7 +393,8 @@ data: [DONE]
 			logService,
 			telemetryService,
 			1,
-			createFakeStreamResponse(response)
+			createFakeStreamResponse(response),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE(async () => 0));
 		assertSimplifiedResultsEqual(results, {
@@ -396,7 +415,8 @@ data: [DONE]
 			logService,
 			telemetryService,
 			1,
-			createFakeStreamResponse(response)
+			createFakeStreamResponse(response),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE(async () => 0));
 		assertSimplifiedResultsEqual(results, {
@@ -419,7 +439,8 @@ data: [DONE]
 			logService,
 			telemetryService,
 			2,
-			createFakeStreamResponse(response)
+			createFakeStreamResponse(response),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE(async () => 0));
 		assertSimplifiedResultsEqual(results, {
@@ -446,7 +467,8 @@ data: [DONE]
 			logService,
 			telemetryService,
 			2,
-			createFakeStreamResponse(response)
+			createFakeStreamResponse(response),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE(async () => 0));
 		assertSimplifiedResultsEqual(results, {
@@ -474,7 +496,8 @@ data: [DONE]
 			logService,
 			telemetryService,
 			2,
-			createFakeStreamResponse(response)
+			createFakeStreamResponse(response),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE(async () => {
 			callCount++;
@@ -503,7 +526,8 @@ data: [DONE]
 			logService,
 			telemetryService,
 			1,
-			createFakeStreamResponse(response)
+			createFakeStreamResponse(response),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assert.ok(results[0].usage);
@@ -527,6 +551,7 @@ data: [DONE]
 			telemetryService,
 			1,
 			responseStream,
+			thinkingData,
 			cts.token
 		);
 		const results = await getAll(processor.processSSE());
@@ -544,13 +569,71 @@ data: [DONE]
 			logService,
 			telemetryService,
 			1,
-			createFakeStreamResponse(response)
+			createFakeStreamResponse(response),
+			thinkingData
 		);
 		const results = await getAll(processor.processSSE());
 		assert.ok(results[0].usage);
 		assert.strictEqual(results[0]?.usage?.completion_tokens, 2);
 		assert.strictEqual(results[0]?.usage?.prompt_tokens, 358);
 		assert.strictEqual(results[0]?.usage?.total_tokens, 360);
+	});
+
+	test('stream containing cot_summary and cot_id', async function () {
+		const response = [
+			`data: {"choices":[],"created":0,"id":"","model":"","object":"","prompt_filter_results":[{"prompt_index":0,"content_filter_results":{"hate":{"filtered":false,"severity":"safe"},"self_harm":{"filtered":false,"severity":"safe"},"sexual":{"filtered":false,"severity":"safe"},"violence":{"filtered":false,"severity":"safe"}}}]}\n`,
+			`data: {"choices":[{"content_filter_results":{},"delta":{"cot_summary":" "},"index":0}],"created":1751057335,"id":"","model":"","object":"chat.completion.chunk","system_fingerprint":"fp_ef29a3520f","usage":null}\n`,
+			`data: {"choices":[{"content_filter_results":{},"delta":{"cot_summary":"Analy"},"index":0}],"created":1751057335,"id":"","model":"","object":"chat.completion.chunk","system_fingerprint":"fp_ef29a3520f","usage":null}\n`,
+			`data: {"choices":[{"content_filter_results":{},"delta":{"cot_summary":"zing"},"index":0}],"created":1751057335,"id":"chatcmpl-BnAIAsJndIJEfDlso8pzFD55XYEbc","model":"","object":"chat.completion.chunk","system_fingerprint":"fp_ef29a3520f","usage":null}\n`,
+			`data: {"choices":[{"content_filter_results":{},"delta":{"content":null,"refusal":null,"role":"assistant","tool_calls":[{"function":{"arguments":"","name":"read_file"},"id":"call_bNK0HIaqlEFyZK6wEz8bXDXJ","index":0,"type":"function"}]},"finish_reason":null,"index":0,"logprobs":null}],"created":1751242659,"id":"chatcmpl-BnAIAsJndIJEfDlso8pzFD55XYEbc","model":"","object":"chat.completion.chunk","system_fingerprint":"fp_ef29a3520f","usage":null}\n`,
+			`data: {"choices":[{"content_filter_results":{},"delta":{"tool_calls":[{"function":{"arguments":"arg-part1"},"index":0}]},"finish_reason":null,"index":0,"logprobs":null}],"created":1751057334,"id":"chatcmpl-BnAIAsJndIJEfDlso8pzFD55XYEbc","model":"","object":"chat.completion.chunk","system_fingerprint":"fp_ef29a3520f","usage":null}\n`,
+			`data: {"choices":[{"content_filter_results":{},"delta":{"tool_calls":[{"function":{"arguments":"arg-part2"},"index":0}]},"finish_reason":null,"index":0,"logprobs":null}],"created":1751057334,"id":"chatcmpl-BnAIAsJndIJEfDlso8pzFD55XYEbc","model":"","object":"chat.completion.chunk","system_fingerprint":"fp_ef29a3520f","usage":null}\n`,
+			`data: {"choices":[{"content_filter_results":{},"delta":{},"finish_reason":"tool_calls","index":0,"logprobs":null}],"created":1751057334,"id":"chatcmpl-BnAIAsJndIJEfDlso8pzFD55XYEbc","model":"","object":"chat.completion.chunk","system_fingerprint":"fp_ef29a3520f","usage":null}\n`,
+			`data: {"choices":[{"content_filter_results":{},"delta":{"cot_id":"cot_a3074ac0-a8e8-4a55-bb5b-65cbb1648dcf"},"index":0}],"created":1751050807,"id":"","model":"","object":"chat.completion.chunk","system_fingerprint":"fp_ef29a3520f","usage":null}\n`,
+			`data: [DONE]\n`,
+		];
+		thinkingData.clear();
+		const processor = await SSEProcessor.create(
+			logService,
+			telemetryService,
+			1,
+			createFakeStreamResponse(response),
+			thinkingData
+		);
+
+		await getAll(processor.processSSE());
+		const thinking = thinkingData.consume('call_bNK0HIaqlEFyZK6wEz8bXDXJ');
+
+		expect(thinking).toBeDefined();
+		expect(thinking?.cot_summary).toBe(' Analyzing');
+		expect(thinking?.cot_id).toBe('cot_a3074ac0-a8e8-4a55-bb5b-65cbb1648dcf');
+	});
+
+	test('stream containing only cot_id', async function () {
+		const response = [
+			`data: {"choices":[],"created":0,"id":"","model":"","object":"","prompt_filter_results":[{"prompt_index":0,"content_filter_results":{"hate":{"filtered":false,"severity":"safe"},"self_harm":{"filtered":false,"severity":"safe"},"sexual":{"filtered":false,"severity":"safe"},"violence":{"filtered":false,"severity":"safe"}}}]}\n`,
+			`data: {"choices":[{"content_filter_results":{},"delta":{"content":null,"refusal":null,"role":"assistant","tool_calls":[{"function":{"arguments":"","name":"read_file"},"id":"call_bNK0HIaqlEFyZK6wEz8bXDXJ","index":0,"type":"function"}]},"finish_reason":null,"index":0,"logprobs":null}],"created":1751242659,"id":"chatcmpl-BnAIAsJndIJEfDlso8pzFD55XYEbc","model":"","object":"chat.completion.chunk","system_fingerprint":"fp_ef29a3520f","usage":null}\n`,
+			`data: {"choices":[{"content_filter_results":{},"delta":{"tool_calls":[{"function":{"arguments":"arg-part1"},"index":0}]},"finish_reason":null,"index":0,"logprobs":null}],"created":1751057334,"id":"chatcmpl-BnAIAsJndIJEfDlso8pzFD55XYEbc","model":"","object":"chat.completion.chunk","system_fingerprint":"fp_ef29a3520f","usage":null}\n`,
+			`data: {"choices":[{"content_filter_results":{},"delta":{"tool_calls":[{"function":{"arguments":"arg-part2"},"index":0}]},"finish_reason":null,"index":0,"logprobs":null}],"created":1751057334,"id":"chatcmpl-BnAIAsJndIJEfDlso8pzFD55XYEbc","model":"","object":"chat.completion.chunk","system_fingerprint":"fp_ef29a3520f","usage":null}\n`,
+			`data: {"choices":[{"content_filter_results":{},"delta":{},"finish_reason":"tool_calls","index":0,"logprobs":null}],"created":1751057334,"id":"chatcmpl-BnAIAsJndIJEfDlso8pzFD55XYEbc","model":"","object":"chat.completion.chunk","system_fingerprint":"fp_ef29a3520f","usage":null}\n`,
+			`data: {"choices":[{"content_filter_results":{},"delta":{"cot_id":"cot_a3074ac0-a8e8-4a55-bb5b-65cbb1648dcf"},"index":0}],"created":1751050807,"id":"","model":"","object":"chat.completion.chunk","system_fingerprint":"fp_ef29a3520f","usage":null}\n`,
+			`data: [DONE]\n`,
+		];
+		thinkingData.clear();
+		const processor = await SSEProcessor.create(
+			logService,
+			telemetryService,
+			1,
+			createFakeStreamResponse(response),
+			thinkingData
+		);
+
+		await getAll(processor.processSSE());
+		const thinking = thinkingData.consume('call_bNK0HIaqlEFyZK6wEz8bXDXJ');
+
+		expect(thinking).toBeDefined();
+		expect(thinking?.cot_summary).toBeUndefined();
+		expect(thinking?.cot_id).toBe('cot_a3074ac0-a8e8-4a55-bb5b-65cbb1648dcf');
 	});
 
 	suite('real world snapshots', () => {
@@ -561,7 +644,8 @@ data: [DONE]
 				logService,
 				telemetryService,
 				expectedNumChoices,
-				createFakeStreamResponse(response)
+				createFakeStreamResponse(response),
+				thinkingData
 			);
 			const results = await getAll(processor.processSSE(finishedCb));
 			return { collection, results };

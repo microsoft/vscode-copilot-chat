@@ -314,8 +314,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			} satisfies OpenAiFunctionDef;
 		}) : undefined;
 		const toolCalls: IToolCall[] = [];
-		let currentThinkingTokenId: string | undefined;
-		let currentThinkingText: string | undefined;
 		const fixedMessages = this.applyMessagePostProcessing(buildPromptResult.messages);
 		const fetchResult = await this.fetch(
 			fixedMessages,
@@ -327,13 +325,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						id: this.createInternalToolCallId(call.id),
 						arguments: call.arguments === '' ? '{}' : call.arguments
 					})));
-				}
-
-				if (delta.thinkingTokenId) {
-					currentThinkingTokenId = delta.thinkingTokenId;
-				}
-				if (delta.thinkingText) {
-					currentThinkingText += delta.thinkingText;
 				}
 
 				return stopEarly ? text.length : undefined;
@@ -377,9 +368,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					fetchResult.value,
 					toolCalls,
 					toolInputRetry,
-					undefined,
-					currentThinkingTokenId,
-					currentThinkingText
+					undefined
 				),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
@@ -393,7 +382,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
 			lastRequestMessages: buildPromptResult.messages,
 			availableToolCount: availableTools.length,
-			round: new ToolCallRound('', toolCalls, toolInputRetry, undefined, currentThinkingTokenId, currentThinkingText)
+			round: new ToolCallRound('', toolCalls, toolInputRetry, undefined)
 		};
 	}
 
