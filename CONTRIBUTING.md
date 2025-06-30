@@ -164,14 +164,6 @@ Please note:
 * Newlines are not preserved in string literals when rendered, and must be explicitly declared with the builtin `<br />` attribute.
 * For now, if two prompt messages _with the same priority_ are up for eviction due to exceeding the token budget, it is not possible for a subtree of the prompt message declared before to evict a subtree of the prompt message declared later.
 
-## Tools
-
-### Tags
-
-Copilot registers a number of different tools. Tools are not automatically provided to the model on any given request, and their enablement is controlled by tags, when they're registered in the package.json. The following tags are recognized and are used to include logic:
-
-- `enable_other_tool_${name}`: when a tool is tagged in this way, another tool by the given `${name}` is automatically enabled in the prompt (for tool references)
-
 ## Code structure
 
 ### Project Architecture and Coding Standards
@@ -254,11 +246,42 @@ Similarly, services are registered and automatically picked up by the main insta
 
 Again, try to make your services and contributions available in the `vscode` layer so that it can be used in all supported runtimes.
 
+## Agent mode
+
+The main interesting files related to agent mode are:
+
+- [`agentPrompt.tsx`](src/extension/prompts/node/agent/agentPrompt.tsx): The main entrypoint for rendering the agent prompt
+- [`agentInstructions.tsx`](src/extension/prompts/node/agent/agentInstructions.tsx): The agent mode system prompt
+- [`toolCallingLoop.ts`](src/extension/intents/node/toolCallingLoop.ts): Running the agentic loop
+- [`chatAgents.ts`](src/extension/conversation/vscode-node/chatParticipants.ts): Registers agent mode and other participants, and the handlers for requests coming from VS Code.
+
+Currently, agent mode is essentially a [chat participant](https://code.visualstudio.com/api/extension-guides/chat) registered with VS Code. It mainly uses the standard API along with the standard [`vscode.lm.invokeTool`](https://code.visualstudio.com/api/references/vscode-api#lm.tools) API to invoke tools, but is registered with a flag in `package.json` denoting it as the "agent mode" participant. It also has some special abilities driven by [proposed API](https://code.visualstudio.com/api/advanced-topics/using-proposed-api).
+
+> **Note**: Some usages of "agent" in the codebase may refer to our older chat participants (`@workspace`, `@vscode`, ...) or Copilot Extension agents installed by a GitHub App.
+
+## Tools
+
+Copilot registers a number of different tools. Tools are also available from other VS Code extensions or from MCP servers registered with VS Code. The tool picker in VS Code primarily determines which tools are enabled, and this set is passed to the agent on the ChatRequest. Some edit tools are only enabled for certain models or based on configuration or experiments. The agent has the final say for which tools are included in a request, and this logic is in `getTools` in [`agentIntent.ts`](src/extension/intents/node/agentIntent.ts).
+
+### Developing tools
+
+Tools are registered through VS Code's normal [Language Model Tool API](https://code.visualstudio.com/api/extension-guides/tools). The key parts of the built-in tools are here:
+
+- [`package.json`](package.json): The tool descriptions and schemas are defined here.
+- [`toolNames.ts`](src/extension/tools/common/toolNames.ts): Contains the model-facing tool names.
+- [`tools/`](src/extension/tools/node/): Tool implementations are in this folder. For the most part, they are implementations of the standard `vscode.LanguageModelTool` interface, but since some have additional custom behavior, they can implement the extended `ICopilotTool` interface.
+
 ## Tree Sitter
 
 We have now moved to https://github.com/microsoft/vscode-tree-sitter-wasm for WASM prebuilds.
 
 ## Troubleshooting
+
+### Reading requests
+
+To easily see the details of requests made by Copilot Chat, run the command "Show Chat Debug View". This will show a treeview with an entry for each request made. You can see the prompt that was sent to the model, the tools that were enabled, the response, and other key details. Always read the prompt when making any changes, to ensure that it's being rendered as you expect!
+
+The view also has entries for tool calls on their own, and a prompt-tsx debug view that opens in the Simple Browser.
 
 ## API updates
 

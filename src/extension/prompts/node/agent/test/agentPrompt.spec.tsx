@@ -20,7 +20,7 @@ import { URI } from '../../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../../../vscodeTypes';
-import { addCacheBreakpoints } from '../../../../intents/node/editAgentIntent';
+import { addCacheBreakpoints } from '../../../../intents/node/agentIntent';
 import { ChatVariablesCollection } from '../../../../prompt/common/chatVariablesCollection';
 import { Conversation, ICopilotChatResultIn, Turn, TurnStatus } from '../../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCall } from '../../../../prompt/common/intents';
@@ -29,7 +29,7 @@ import { createExtensionUnitTestingServices } from '../../../../test/node/servic
 import { ToolName } from '../../../../tools/common/toolNames';
 import { IToolsService } from '../../../../tools/common/toolsService';
 import { PromptRenderer } from '../../base/promptRenderer';
-import { AgentPrompt, AgentPromptProps } from '../editAgentPrompt';
+import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 
 suite('AgentPrompt', () => {
 	let accessor: ITestingServicesAccessor;

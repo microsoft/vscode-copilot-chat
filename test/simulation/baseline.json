@@ -940,9 +940,15 @@
   {
     "name": "edit (toolCalling) [panel] - does not read",
     "contentFilterCount": 0,
+<<<<<<< HEAD
     "passCount": 8,
     "failCount": 2,
     "score": 0.8
+=======
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
+>>>>>>> main
   },
   {
     "name": "edit [inline] [cpp] - edit for cpp",
@@ -1704,6 +1710,34 @@
   },
   {
     "name": "explain [inline] [css] - is not distracted by project context",
+    "contentFilterCount": 0,
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
+  },
+  {
+    "name": "fetchWebPageTool (toolCalling) [panel] - multiple URLs boundary test with 6 URLs",
+    "contentFilterCount": 0,
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
+  },
+  {
+    "name": "fetchWebPageTool (toolCalling) [panel] - multiple URLs handling",
+    "contentFilterCount": 0,
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
+  },
+  {
+    "name": "fetchWebPageTool (toolCalling) [panel] - proper URL validation and query handling",
+    "contentFilterCount": 0,
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
+  },
+  {
+    "name": "fetchWebPageTool (toolCalling) [panel] - query parameter extraction",
     "contentFilterCount": 0,
     "passCount": 10,
     "failCount": 0,
@@ -9236,9 +9270,9 @@
   {
     "name": "notebookEdits (modification - json) [panel] [python] - notebook code cell deletion",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 6,
+    "failCount": 4,
+    "score": 0.6
   },
   {
     "name": "notebookEdits (modification - json) [panel] [python] - re-organize python imports to top of the notebook",
@@ -9348,9 +9382,9 @@
   {
     "name": "notebookEdits (modification - text) [panel] [python] - re-organize python imports to top of the notebook",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 3,
+    "failCount": 7,
+    "score": 0.3
   },
   {
     "name": "notebookEdits (modification - xml) [panel] [julia] - new julia code cells in empty notebook",
@@ -9453,9 +9487,9 @@
   {
     "name": "notebookEdits (modification - xml) [panel] [python] - re-organize python imports to top of the notebook",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 8,
+    "failCount": 2,
+    "score": 0.8
   },
   {
     "name": "notebooks (toolCalling) [panel] - Edit cell tool",
@@ -11777,9 +11811,9 @@
   {
     "name": "toolCalling [panel] - find all phone numbers in markdown files in the codebase",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 4,
+    "failCount": 6,
+    "score": 0.4
   },
   {
     "name": "toolCalling [panel] - I'm using git, create a new branch called issue-9876",

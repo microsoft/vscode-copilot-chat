@@ -153,6 +153,11 @@ export class CopilotToken {
 		return this.getTokenValue('editor_preview_features') !== '0';
 	}
 
+	isMcpEnabled(): boolean {
+		// MCP is disabled if the flag is present and set to 0
+		return this.getTokenValue('mcp') !== '0';
+	}
+
 	getTokenValue(key: string): string | undefined {
 		return this.tokenMap.get(key);
 	}

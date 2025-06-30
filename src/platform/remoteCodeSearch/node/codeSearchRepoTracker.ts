@@ -29,6 +29,7 @@ import { IWorkspaceService } from '../../workspace/common/workspaceService';
 import { IAdoCodeSearchService } from '../common/adoCodeSearchService';
 import { IGithubCodeSearchService } from '../common/githubCodeSearchService';
 import { RemoteCodeSearchIndexState, RemoteCodeSearchIndexStatus } from '../common/remoteCodeSearch';
+import { ICodeSearchAuthenticationService } from './codeSearchRepoAuth';
 
 export enum RepoStatus {
 	/** We could not resolve this repo */
@@ -45,8 +46,24 @@ export enum RepoStatus {
 	/** The remote index is not indexed and we cannot trigger indexing for it */
 	NotIndexable = 'NotIndexable',
 
-	/** We failed to check the remote index status */
+	/**
+	 * We failed to check the remote index status.
+	 *
+	 * This has a number of possible causes:
+	 *
+	 * - The repo doesn't exist
+	 * - The user cannot access the repo (most services won't differentiate with it not existing). If we know
+	 * 		for sure that the user cannot access the repo, we will instead use {@linkcode NotAuthorized}.
+	 * - The status endpoint returned an error.
+	 */
 	CouldNotCheckIndexStatus = 'CouldNotCheckIndexStatus',
+
+	/**
+	 * The user is not authorized to access the remote index.
+	 *
+	 * This is a special case of {@linkcode CouldNotCheckIndexStatus} that is shown when we know the user is not authorized.
+	 */
+	NotAuthorized = 'NotAuthorized',
 
 	/** The remote index is being build but is not ready for use  */
 	BuildingIndex = 'BuildingIndex',
@@ -61,7 +78,7 @@ export interface RepoInfo {
 
 
 export interface ResolvedRepoEntry {
-	readonly status: RepoStatus.NotYetIndexed | RepoStatus.NotIndexable | RepoStatus.BuildingIndex | RepoStatus.CouldNotCheckIndexStatus;
+	readonly status: RepoStatus.NotYetIndexed | RepoStatus.NotIndexable | RepoStatus.BuildingIndex | RepoStatus.CouldNotCheckIndexStatus | RepoStatus.NotAuthorized;
 	readonly repo: RepoInfo;
 	readonly remoteInfo: ResolvedRepoRemoteInfo;
 }
@@ -226,13 +243,14 @@ export class CodeSearchRepoTracker extends Disposable {
 	constructor(
 		@IAdoCodeSearchService private readonly _adoCodeSearchService: IAdoCodeSearchService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@ICodeSearchAuthenticationService private readonly _codeSearchAuthService: ICodeSearchAuthenticationService,
 		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
 		@IGithubCodeSearchService private readonly _githubCodeSearchService: IGithubCodeSearchService,
 		@IGitService private readonly _gitService: IGitService,
 		@ILogService private readonly _logService: ILogService,
+		@ISimulationTestContext private readonly _simulationTestContext: ISimulationTestContext,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
-		@ISimulationTestContext private readonly _simulationTestContext: ISimulationTestContext,
 	) {
 		super();
 
@@ -632,11 +650,14 @@ export class CodeSearchRepoTracker extends Disposable {
 
 		let statusResult: Result<RemoteCodeSearchIndexState, Error>;
 		if (remoteInfo.repoId.type === 'github') {
-			const authToken = (await this._authenticationService.getPermissiveGitHubSession({ silent: true }))?.accessToken
-				?? (await this._authenticationService.getAnyGitHubSession({ silent: true }))?.accessToken;
+			const authToken = await this.getGithubAccessToken(true);
 			if (!authToken) {
 				this._logService.logger.error(`CodeSearchRepoTracker.getIndexedStatus(${remoteInfo.repoId}). Failed to fetch indexing status. No valid github auth token.`);
-				return couldNotCheckStatus;
+				return {
+					status: RepoStatus.NotAuthorized,
+					repo,
+					remoteInfo,
+				};
 			}
 
 			statusResult = await this._githubCodeSearchService.getRemoteIndexState(authToken, remoteInfo.repoId, token);
@@ -644,7 +665,11 @@ export class CodeSearchRepoTracker extends Disposable {
 			const authToken = (await this._authenticationService.getAdoAccessTokenBase64({ silent: true }));
 			if (!authToken) {
 				this._logService.logger.error(`CodeSearchRepoTracker.getIndexedStatus(${remoteInfo.repoId}). Failed to fetch indexing status. No valid ado auth token.`);
-				return couldNotCheckStatus;
+				return {
+					status: RepoStatus.NotAuthorized,
+					repo,
+					remoteInfo,
+				};
 			}
 
 			statusResult = await this._adoCodeSearchService.getRemoteIndexState(authToken, remoteInfo.repoId, token);
@@ -674,6 +699,11 @@ export class CodeSearchRepoTracker extends Disposable {
 			case RemoteCodeSearchIndexStatus.NotIndexable:
 				return { status: RepoStatus.NotIndexable, repo, remoteInfo };
 		}
+	}
+
+	private async getGithubAccessToken(silent: boolean) {
+		return (await this._authenticationService.getPermissiveGitHubSession({ silent }))?.accessToken
+			?? (await this._authenticationService.getAnyGitHubSession({ silent }))?.accessToken;
 	}
 
 	private closeRepo(repo: RepoContext) {
@@ -734,7 +764,7 @@ export class CodeSearchRepoTracker extends Disposable {
 			return Result.error(TriggerRemoteIndexingError.alreadyIndexing);
 		}
 
-		if (candidateRepos.every(repo => repo.status === RepoStatus.CouldNotCheckIndexStatus)) {
+		if (candidateRepos.every(repo => repo.status === RepoStatus.CouldNotCheckIndexStatus || repo.status === RepoStatus.NotAuthorized)) {
 			return Result.error(TriggerRemoteIndexingError.couldNotCheckIndexStatus);
 		}
 
@@ -761,6 +791,7 @@ export class CodeSearchRepoTracker extends Disposable {
 				case RepoStatus.BuildingIndex:
 				case RepoStatus.Ready:
 				case RepoStatus.CouldNotCheckIndexStatus:
+				case RepoStatus.NotAuthorized:
 					return this.updateRepoStateFromEndpoint(repo.repo, repo.remoteInfo, true, CancellationToken.None).catch(() => { });
 			}
 		}));
@@ -816,6 +847,33 @@ export class CodeSearchRepoTracker extends Disposable {
 		});
 
 		return Result.ok(true);
+	}
+
+	public async tryAuthIfNeeded(_telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<PromiseLike<undefined> | undefined> {
+		await raceCancellationError(this.initialize(), token);
+		if (this._isDisposed) {
+			return;
+		}
+
+		// See if there are any repos that we know for sure we are not authorized for
+		const allRepos = Array.from(this.getAllRepos());
+		const notAuthorizedRepos = allRepos.filter(repo => repo.status === RepoStatus.NotAuthorized) as ResolvedRepoEntry[];
+		if (!notAuthorizedRepos.length) {
+			return;
+		}
+
+		// TODO: only handles first repos of each type, but our other services also don't track tokens for multiple
+		// repos in a workspace right now
+
+		const firstGithubRepo = notAuthorizedRepos.find(repo => repo.remoteInfo.repoId.type === 'github');
+		if (firstGithubRepo) {
+			await this._codeSearchAuthService.tryAuthenticating(firstGithubRepo);
+		}
+
+		const firstAdoRepo = notAuthorizedRepos.find(repo => repo.remoteInfo.repoId.type === 'ado');
+		if (firstAdoRepo) {
+			await this._codeSearchAuthService.tryAuthenticating(firstAdoRepo);
+		}
 	}
 
 	private updateRepoEntry(repo: RepoInfo, entry: RepoEntry): void {

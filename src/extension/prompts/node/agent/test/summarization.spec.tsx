@@ -11,7 +11,7 @@ import { CodeGenerationTextInstruction, ConfigKey, IConfigurationService } from 
 import { MockEndpoint } from '../../../../../platform/endpoint/test/node/mockEndpoint';
 import { messageToMarkdown } from '../../../../../platform/log/common/messageStringify';
 import { IResponseDelta } from '../../../../../platform/networking/common/fetch';
-import { rawMessageToCAPI } from '../../../../../platform/networking/common/openai';
+import { ChatRole, rawMessageToCAPI } from '../../../../../platform/networking/common/openai';
 import { ITestingServicesAccessor } from '../../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
@@ -20,7 +20,7 @@ import { URI } from '../../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../../../vscodeTypes';
-import { addCacheBreakpoints } from '../../../../intents/node/editAgentIntent';
+import { addCacheBreakpoints } from '../../../../intents/node/agentIntent';
 import { ChatVariablesCollection } from '../../../../prompt/common/chatVariablesCollection';
 import { Conversation, ICopilotChatResultIn, normalizeSummariesOnRounds, Turn, TurnStatus } from '../../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCall } from '../../../../prompt/common/intents';
@@ -28,7 +28,7 @@ import { ToolCallRound } from '../../../../prompt/common/toolCallRound';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { ToolName } from '../../../../tools/common/toolNames';
 import { PromptRenderer } from '../../base/promptRenderer';
-import { AgentPrompt, AgentPromptProps } from '../editAgentPrompt';
+import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 import { ConversationHistorySummarizationPrompt, SummarizedConversationHistoryMetadata, SummarizedConversationHistoryPropsBuilder } from '../summarizedConversationHistory';
 
 suite('Agent Summarization', () => {
@@ -68,7 +68,8 @@ suite('Agent Summarization', () => {
 
 	enum TestPromptType {
 		Agent = 'Agent',
-		ConversationHistorySummarization = 'ConversationHistorySummarization'
+		FullSummarization = 'FullSumm',
+		SimpleSummarization = 'SimpleSummarizedHistory'
 	}
 
 	async function agentPromptToString(accessor: ITestingServicesAccessor, promptContext: IBuildPromptContext, otherProps?: Partial<AgentPromptProps>, promptType: TestPromptType = TestPromptType.Agent): Promise<string> {
@@ -94,7 +95,8 @@ suite('Agent Summarization', () => {
 			renderer = PromptRenderer.create(instaService, endpoint, AgentPrompt, props);
 		} else {
 			const propsInfo = instaService.createInstance(SummarizedConversationHistoryPropsBuilder).getProps(baseProps);
-			renderer = PromptRenderer.create(instaService, endpoint, ConversationHistorySummarizationPrompt, propsInfo.props);
+			const simpleMode = promptType === TestPromptType.SimpleSummarization;
+			renderer = PromptRenderer.create(instaService, endpoint, ConversationHistorySummarizationPrompt, { ...propsInfo.props, simpleMode });
 		}
 
 		const r = await renderer.render();
@@ -108,6 +110,7 @@ suite('Agent Summarization', () => {
 		}
 		addCacheBreakpoints(r.messages);
 		return rawMessageToCAPI(r.messages)
+			.filter(message => message.role !== ChatRole.System)
 			.map(messageToMarkdown)
 			.join('\n\n')
 			.replace(/\\+/g, '/')
@@ -132,7 +135,9 @@ suite('Agent Summarization', () => {
 		return result;
 	}
 
-
+	function getSnapshotFile(promptType: TestPromptType, name: string): string {
+		return `./__snapshots__/summarization-${name}-${promptType}.spec.snap`;
+	}
 
 	const tools: IBuildPromptContext['tools'] = {
 		availableTools: [],
@@ -149,7 +154,7 @@ suite('Agent Summarization', () => {
 			tools,
 		};
 		await expect(() => agentPromptToString(
-			accessor, promptContextNoHistory, undefined, TestPromptType.ConversationHistorySummarization)).rejects.toThrow();
+			accessor, promptContextNoHistory, undefined, TestPromptType.FullSummarization)).rejects.toThrow();
 		await expect(() => agentPromptToString(
 			accessor,
 			{
@@ -159,7 +164,7 @@ suite('Agent Summarization', () => {
 				],
 				toolCallResults: createEditFileToolResult(1),
 				tools,
-			}, undefined, TestPromptType.ConversationHistorySummarization)).rejects.toThrow();
+			}, undefined, TestPromptType.FullSummarization)).rejects.toThrow();
 	});
 
 	async function testTriggerSummarizationDuringToolCalling(promptType: TestPromptType) {
@@ -169,7 +174,7 @@ suite('Agent Summarization', () => {
 			new ToolCallRound('ok 2', [createEditFileToolCall(2)]),
 			new ToolCallRound('ok 3', [createEditFileToolCall(3)]),
 		];
-		expect(await agentPromptToString(
+		await expect(await agentPromptToString(
 			accessor,
 			{
 				chatVariables: new ChatVariablesCollection([{ id: 'vscode.file', name: 'file', value: fileTsUri }]),
@@ -182,7 +187,7 @@ suite('Agent Summarization', () => {
 			{
 				enableCacheBreakpoints: true,
 				triggerSummarize: true,
-			}, promptType)).toMatchSnapshot();
+			}, promptType)).toMatchFileSnapshot(getSnapshotFile(promptType, 'duringToolCalling'));
 		if (promptType === TestPromptType.Agent) {
 			expect(toolCallRounds.at(-2)?.summary).toBe('summarized!');
 		}
@@ -190,13 +195,14 @@ suite('Agent Summarization', () => {
 
 	// Summarization for rounds in current turn
 	test('trigger summarization during tool calling', async () => await testTriggerSummarizationDuringToolCalling(TestPromptType.Agent));
-	test('ConversationHistorySummarizationPrompt - trigger summarization during tool calling', async () => await testTriggerSummarizationDuringToolCalling(TestPromptType.ConversationHistorySummarization));
+	test('FullSummarization - trigger summarization during tool calling', async () => await testTriggerSummarizationDuringToolCalling(TestPromptType.FullSummarization));
+	test('SimpleSummarization - trigger summarization during tool calling', async () => await testTriggerSummarizationDuringToolCalling(TestPromptType.SimpleSummarization));
 
 	async function testSummaryCurrentTurn(promptType: TestPromptType) {
 		const excludedPreviousRound = new ToolCallRound('previous round EXCLUDED', [createEditFileToolCall(1)]);
 		const round = new ToolCallRound('ok', [createEditFileToolCall(2)]);
 		round.summary = 'summarized!';
-		expect(await agentPromptToString(
+		await expect(await agentPromptToString(
 			accessor,
 			{
 				chatVariables: new ChatVariablesCollection([{ id: 'vscode.file', name: 'file', value: fileTsUri }]),
@@ -211,7 +217,7 @@ suite('Agent Summarization', () => {
 			},
 			{
 				enableCacheBreakpoints: true,
-			}, promptType)).toMatchSnapshot();
+			}, promptType)).toMatchFileSnapshot(getSnapshotFile(promptType, 'currentTurn'));
 	}
 
 	// SummarizationPrompt test is not relevant when the last round was summarized
@@ -222,7 +228,7 @@ suite('Agent Summarization', () => {
 		round.summary = 'summarized!';
 		const round2 = new ToolCallRound('round 2', [createEditFileToolCall(2)]);
 		const round3 = new ToolCallRound('round 3', [createEditFileToolCall(3)]);
-		expect(await agentPromptToString(
+		await expect(await agentPromptToString(
 			accessor,
 			{
 				chatVariables: new ChatVariablesCollection([{ id: 'vscode.file', name: 'file', value: fileTsUri }]),
@@ -238,11 +244,12 @@ suite('Agent Summarization', () => {
 			},
 			{
 				enableCacheBreakpoints: true,
-			}, promptType)).toMatchSnapshot();
+			}, promptType)).toMatchFileSnapshot(getSnapshotFile(promptType, 'currentTurnEarlierRound'));
 	}
 
 	test('render summary in previous turn', async () => await testSummaryCurrentTurnEarlierRound(TestPromptType.Agent));
-	test('ConversationHistorySummarizationPrompt - render summary in previous turn', async () => await testSummaryCurrentTurnEarlierRound(TestPromptType.ConversationHistorySummarization));
+	test('FullSummarization - render summary in previous turn', async () => await testSummaryCurrentTurnEarlierRound(TestPromptType.FullSummarization));
+	test('SimpleSummarization - render summary in previous turn', async () => await testSummaryCurrentTurnEarlierRound(TestPromptType.SimpleSummarization));
 
 	async function testSummaryPrevTurnMultiple(promptType: TestPromptType) {
 		const previousTurn = new Turn('id', { type: 'user', message: 'previous turn excluded' });
@@ -277,7 +284,7 @@ suite('Agent Summarization', () => {
 		};
 		turn.setResponse(TurnStatus.Success, { type: 'user', message: 'response' }, 'responseId', result);
 
-		expect(await agentPromptToString(
+		await expect(await agentPromptToString(
 			accessor,
 			{
 				chatVariables: new ChatVariablesCollection([{ id: 'vscode.file', name: 'file', value: fileTsUri }]),
@@ -289,11 +296,12 @@ suite('Agent Summarization', () => {
 			},
 			{
 				enableCacheBreakpoints: true,
-			}, promptType)).toMatchSnapshot();
+			}, promptType)).toMatchFileSnapshot(getSnapshotFile(promptType, 'previousTurnMultiple'));
 	}
 
 	test('render summary in previous turn (with multiple)', () => testSummaryPrevTurnMultiple(TestPromptType.Agent));
-	test('ConversationHistorySummarizationPrompt - render summary in previous turn (with multiple)', () => testSummaryPrevTurnMultiple(TestPromptType.ConversationHistorySummarization));
+	test('FullSummarization - render summary in previous turn (with multiple)', () => testSummaryPrevTurnMultiple(TestPromptType.FullSummarization));
+	test('SimpleSummarization - render summary in previous turn (with multiple)', () => testSummaryPrevTurnMultiple(TestPromptType.SimpleSummarization));
 
 	async function testSummarizeWithNoRoundsInCurrentTurn(promptType: TestPromptType) {
 		const previousTurn1 = new Turn('id', { type: 'user', message: 'previous turn 1' });
@@ -311,7 +319,7 @@ suite('Agent Summarization', () => {
 		};
 		previousTurn2.setResponse(TurnStatus.Success, { type: 'user', message: 'response' }, 'responseId', previousTurn2Result);
 
-		expect(await agentPromptToString(
+		await expect(await agentPromptToString(
 			accessor,
 			{
 				chatVariables: new ChatVariablesCollection([{ id: 'vscode.file', name: 'file', value: fileTsUri }]),
@@ -321,9 +329,10 @@ suite('Agent Summarization', () => {
 			},
 			{
 				enableCacheBreakpoints: true,
-			}, promptType)).toMatchSnapshot();
+			}, promptType)).toMatchFileSnapshot(getSnapshotFile(promptType, 'previousTurnNoRounds'));
 	}
 
 	test('summary for previous turn, no tool call rounds', async () => testSummarizeWithNoRoundsInCurrentTurn(TestPromptType.Agent));
-	test('ConversationHistorySummarizationPrompt - summary for previous turn, no tool call rounds', async () => testSummarizeWithNoRoundsInCurrentTurn(TestPromptType.ConversationHistorySummarization));
+	test('FullSummarization - summary for previous turn, no tool call rounds', async () => testSummarizeWithNoRoundsInCurrentTurn(TestPromptType.FullSummarization));
+	test('SimpleSummarization - summary for previous turn, no tool call rounds', async () => testSummarizeWithNoRoundsInCurrentTurn(TestPromptType.SimpleSummarization));
 });

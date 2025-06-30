@@ -29,8 +29,7 @@ import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { SafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
 import { ChatToolReferences, ChatVariablesAndQuery } from './chatVariables';
-import { HistoryWithInstructions } from './conversationHistory';
-import { AgentConversationHistory } from './editAgentInstructions';
+import { ConversationHistoryWithTools, HistoryWithInstructions } from './conversationHistory';
 import { ChatToolCalls } from './toolCalling';
 import { UnsafeCodeBlock } from './unsafeElements';
 
@@ -359,7 +358,7 @@ ms-python.python,ms-python.vscode-pylance
 						<ResponseTranslationRules />
 					</InstructionMessage>
 				</SystemMessage>
-				<AgentConversationHistory flexGrow={1} priority={700} promptContext={this.props.promptContext} />
+				<ConversationHistoryWithTools flexGrow={1} priority={700} promptContext={this.props.promptContext} />
 				<UserMessage flexGrow={1} priority={800}>
 					Use the examples above to help you formulate your response and follow the examples as closely as possible.
 					Below is a list of information we found which might be relevant to the question. For view related commands "Toggle" often means Show or Hide. A setting may reference another setting, that will appear as \`#setting.id#\`, you must return the referenced setting as well. You may use this context to help you formulate your response, but are not required to.<br />

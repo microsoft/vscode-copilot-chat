@@ -10,6 +10,7 @@ import { IExperimentationService } from '../../../../platform/telemetry/common/n
 import { isLocation, isUri } from '../../../../util/common/types';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
+import { AgentPromptProps, getEditingReminder } from '../agent/agentPrompt';
 import { CopilotIdentityRules } from '../base/copilotIdentity';
 import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
@@ -17,11 +18,10 @@ import { SafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
 import { ChatToolReferences, ChatVariables, UserQuery } from './chatVariables';
 import { EXISTING_CODE_MARKER } from './codeBlockFormattingRules';
+import { ConversationHistoryWithTools } from './conversationHistory';
 import { CustomInstructions } from './customInstructions';
-import { AgentConversationHistory } from './editAgentInstructions';
-import { AgentPromptProps, getEditingReminder } from './editAgentPrompt';
 import { NewFilesLocationHint } from './editCodePrompt';
-import { NotebookFormat } from './notebookEditCodePrompt';
+import { NotebookFormat, NotebookReminderInstructions } from './notebookEditCodePrompt';
 import { ProjectLabels } from './projectLabels';
 import { ChatToolCalls } from './toolCalling';
 
@@ -115,7 +115,7 @@ export class EditCodePrompt2 extends PromptElement<AgentPromptProps> {
 					<SafetyRules />
 				</SystemMessage>
 				{instructionsAfterHistory ? undefined : instructions}
-				<AgentConversationHistory flexGrow={1} priority={700} promptContext={this.props.promptContext} />
+				<ConversationHistoryWithTools flexGrow={1} priority={700} promptContext={this.props.promptContext} />
 				{instructionsAfterHistory ? instructions : undefined}
 				<EditCode2UserMessage flexGrow={2} priority={900} promptContext={this.props.promptContext} endpoint={this.props.endpoint} location={this.props.location} />
 				<ChatToolCalls priority={899} flexGrow={3} promptContext={this.props.promptContext} toolCallRounds={this.props.promptContext.toolCallRounds} toolCallResults={this.props.promptContext.toolCallResults} />
@@ -148,7 +148,8 @@ export class EditCode2UserMessage extends PromptElement<AgentPromptProps> {
 					<ChatToolReferences flexGrow={4} priority={898} promptContext={this.props.promptContext} documentContext={this.props.documentContext} />
 					<ChatVariables flexGrow={3} priority={898} chatVariables={chatVariables} />
 					<Tag name='reminder'>
-						{getEditingReminder(hasEditFileTool, hasReplaceStringTool)}<br />
+						{getEditingReminder(hasEditFileTool, hasReplaceStringTool)}
+						<NotebookReminderInstructions chatVariables={chatVariables} query={query} />
 						<NewFilesLocationHint />
 					</Tag>
 					<Tag name='prompt'><UserQuery flexGrow={7} priority={900} chatVariables={chatVariables} query={query} /></Tag>

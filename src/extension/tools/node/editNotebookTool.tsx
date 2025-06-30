@@ -73,6 +73,7 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IEditNotebookToolParams>, token: vscode.CancellationToken) {
 		let uri = this.promptPathRepresentationService.resolveFilePath(options.input.filePath);
 		if (!uri) {
+			sendEditNotebookToolOutcomeTelemetry(this.telemetryService, this.endpointProvider, options, 'invalid_file_path');
 			throw new ErrorWithTelemetrySafeReason(`Invalid file path`, 'invalid_file_path');
 		}
 		// Sometimes we get the notebook cell Uri in the resource.
@@ -82,6 +83,7 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 		// Validate parameters
 		const stream = this.promptContext?.stream;
 		if (!stream) {
+			sendEditNotebookToolOutcomeTelemetry(this.telemetryService, this.endpointProvider, options, 'invalid_input_no_stream');
 			throw new ErrorWithTelemetrySafeReason(`Invalid input, no stream`, 'invalid_input_no_stream');
 		}
 
@@ -89,12 +91,10 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 		const notebookUri = notebook.uri;
 		const provider = this.alternativeNotebookContent.create(this.alternativeNotebookContent.getFormat(this.promptContext?.request?.model));
 		if (token.isCancellationRequested) {
+			sendEditNotebookToolOutcomeTelemetry(this.telemetryService, this.endpointProvider, options, 'cancelled');
 			return;
 		}
 
-		// First validate all of the args begore applying any changes.
-		this.fixInput(options.input, notebook, provider);
-		this.validateInput(options.input, notebook, provider);
 
 		const codeMapperCompleted: Promise<any>[] = [];
 		const cells: ChangedCell[] = notebook.getCells().map((cell, index) => ({ cell, index, type: 'existing' }));
@@ -114,6 +114,9 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 		const counters = { insert: 0, edit: 0, delete: 0 };
 		let failureReason: string | undefined = undefined;
 		try {
+			// First validate all of the args begore applying any changes.
+			this.fixInput(options.input, notebook, provider);
+			this.validateInput(options.input, notebook, provider);
 			stream.notebookEdit(notebookUri, []);
 			let previousCellIdUsedForInsertion = '';
 			const explanation = options.input.explanation;
@@ -324,25 +327,25 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 		const id = ((typeof (cellId as any) === 'number' ? `${cellId}` : cellId) || '').trim();
 		const cell = (id && id !== 'top' && id !== 'bottom') ? provider.getCell(notebook, id) : undefined;
 		if (id && id !== 'top' && id !== 'bottom' && !cell) {
-			throw new Error(`None of the edits were applied as cell id: ${id} is invalid. Notebook may have been modified, try reading the file again`);
+			throw new ErrorWithTelemetrySafeReason(`None of the edits were applied as cell id: ${id} is invalid. Notebook may have been modified, try reading the file again`, 'invalidCellId');
 		}
 		switch (editType) {
 			case 'insert':
 				if (newCode === undefined) {
-					throw new Error('None of the edits were applied as newCode is required for insert operation');
+					throw new ErrorWithTelemetrySafeReason('None of the edits were applied as newCode is required for insert operation', 'missingNewCode');
 				}
 				break;
 			case 'delete':
 				if (id === undefined) {
-					throw new Error('None of the edits were applied as cellId is required for delete operation');
+					throw new ErrorWithTelemetrySafeReason('None of the edits were applied as cellId is required for delete operation', 'missingCellId');
 				}
 				break;
 			case 'edit':
 				if (!id) {
-					throw new Error('None of the edits were applied as cellId is required for edit operation');
+					throw new ErrorWithTelemetrySafeReason('None of the edits were applied as cellId is required for edit operation', 'missingCellId');
 				}
 				if (newCode === undefined) {
-					throw new Error('None of the edits were applied as newCode is required for edit operation');
+					throw new ErrorWithTelemetrySafeReason('None of the edits were applied as newCode is required for edit operation', 'missingNewCode');
 				}
 				break;
 		}

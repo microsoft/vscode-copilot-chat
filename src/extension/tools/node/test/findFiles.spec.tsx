@@ -35,7 +35,13 @@ suite('FindFiles', () => {
 	});
 
 	function setup(expected: vscode.GlobPattern) {
-		collection.define(ISearchService, new TestSearchService(expected));
+		const patterns: vscode.GlobPattern[] = [expected];
+		if (typeof expected === 'string' && !expected.endsWith('/**')) {
+			patterns.push(expected + '/**');
+		} else if (typeof expected !== 'string' && !expected.pattern.endsWith('/**')) {
+			patterns.push(new RelativePattern(expected.baseUri, expected.pattern + '/**'));
+		}
+		collection.define(ISearchService, new TestSearchService(patterns));
 		accessor = collection.createTestingAccessor();
 	}
 
@@ -94,7 +100,7 @@ suite('FindFiles', () => {
 });
 
 class TestSearchService extends AbstractSearchService {
-	constructor(private readonly expectedPattern: vscode.GlobPattern) {
+	constructor(private readonly expectedPattern: vscode.GlobPattern | vscode.GlobPattern[]) {
 		super();
 	}
 
@@ -106,7 +112,7 @@ class TestSearchService extends AbstractSearchService {
 		throw new Error('Method not implemented.');
 	}
 
-	override async findFiles(filePattern: vscode.GlobPattern, options?: vscode.FindFiles2Options | undefined, token?: vscode.CancellationToken | undefined): Promise<vscode.Uri[]> {
+	override async findFiles(filePattern: vscode.GlobPattern | vscode.GlobPattern[], options?: vscode.FindFiles2Options | undefined, token?: vscode.CancellationToken | undefined): Promise<vscode.Uri[]> {
 		expect(filePattern).toEqual(this.expectedPattern);
 		return [];
 	}

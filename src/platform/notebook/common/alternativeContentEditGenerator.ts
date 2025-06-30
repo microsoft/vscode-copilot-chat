@@ -119,7 +119,7 @@ export class AlternativeNotebookContentEditGenerator implements IAlternativeNote
 				requestId: telemetryOptions?.requestId,
 				requestSource: telemetryOptions?.source,
 				model,
-				format
+				inputFormat: format
 			}, {
 				isEmptyNotebook: isEmptyNotebook ? 1 : 0,
 				isNotebookOrUri: isUri(notebookOrUri) ? 0 : 1,
@@ -166,7 +166,7 @@ export class AlternativeNotebookContentEditGenerator implements IAlternativeNote
 				requestId: telemetryOptions?.requestId,
 				requestSource: telemetryOptions?.source,
 				model,
-				format
+				inputFormat: format
 			}, {
 				isEmptyNotebook: isEmptyNotebook ? 1 : 0,
 				isNotebookOrUri: isUri(notebookOrUri) ? 0 : 1,

@@ -34,7 +34,14 @@ suite('FindTextInFiles', () => {
 	});
 
 	function setup(expected: vscode.GlobPattern) {
-		collection.define(ISearchService, new TestSearchService([expected]));
+		const patterns: vscode.GlobPattern[] = [expected];
+		if (typeof expected === 'string' && !expected.endsWith('/**')) {
+			patterns.push(expected + '/**');
+		} else if (typeof expected !== 'string' && !expected.pattern.endsWith('/**')) {
+			patterns.push(new RelativePattern(expected.baseUri, expected.pattern + '/**'));
+		}
+
+		collection.define(ISearchService, new TestSearchService(patterns));
 		accessor = collection.createTestingAccessor();
 	}
 
@@ -43,6 +50,13 @@ suite('FindTextInFiles', () => {
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
 		await tool.invoke({ input: { query: 'hello', includePattern: '*.ts' }, toolInvocationToken: null!, }, CancellationToken.None);
+	});
+
+	test('using **/ correctly', async () => {
+		setup('src/**');
+
+		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
+		await tool.invoke({ input: { query: 'hello', includePattern: 'src/**' }, toolInvocationToken: null!, }, CancellationToken.None);
 	});
 
 	test('handles absolute path with glob', async () => {

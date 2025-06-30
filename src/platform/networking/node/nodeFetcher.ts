@@ -14,7 +14,7 @@ export class NodeFetcher implements IFetcher {
 	constructor(
 		private readonly _envService: IEnvService,
 
-		private readonly _userAgentSuffix?: string,
+		private readonly _userAgentLibraryUpdate?: (original: string) => string,
 	) {
 	}
 
@@ -25,7 +25,7 @@ export class NodeFetcher implements IFetcher {
 	fetch(url: string, options: FetchOptions): Promise<Response> {
 		const headers = { ...options.headers };
 		headers['User-Agent'] = `GitHubCopilotChat/${this._envService.getVersion()}`;
-		headers[userAgentLibraryHeader] = this._userAgentSuffix ? `${this.getUserAgentLibrary()}-${this._userAgentSuffix}` : this.getUserAgentLibrary();
+		headers[userAgentLibraryHeader] = this._userAgentLibraryUpdate ? this._userAgentLibraryUpdate(this.getUserAgentLibrary()) : this.getUserAgentLibrary();
 
 		let body = options.body;
 		if (options.json) {

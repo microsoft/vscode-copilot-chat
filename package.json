@@ -290,15 +290,15 @@
 					"properties": {
 						"query": {
 							"type": "string",
-							"description": "The pattern to search for in files in the workspace. Use regex with alternation (e.g., 'word1|word2|word3') or character classes to find multiple potential words in a single search. The isRegexp property declares whether it's a regex or plain text pattern. Is case-insensitive."
+							"description": "The pattern to search for in files in the workspace. Use regex with alternation (e.g., 'word1|word2|word3') or character classes to find multiple potential words in a single search. Be sure to set the isRegexp property properly to declare whether it's a regex or plain text pattern. Is case-insensitive."
 						},
 						"isRegexp": {
 							"type": "boolean",
-							"description": "Whether the pattern is a regex. False by default."
+							"description": "Whether the pattern is a regex."
 						},
 						"includePattern": {
 							"type": "string",
-							"description": "Search files matching this glob pattern. Will be applied to the relative path of files within the workspace."
+							"description": "Search files matching this glob pattern. Will be applied to the relative path of files within the workspace. To search recursively inside a folder, use a proper glob pattern like \"src/folder/**\". Do not use | in includePattern."
 						},
 						"maxResults": {
 							"type": "number",
@@ -469,7 +469,6 @@
 				"toolReferenceName": "problems",
 				"canBeReferencedInPrompt": true,
 				"icon": "$(error)",
-				"when": "config.chat.agent.enabled",
 				"userDescription": "%copilot.tools.errors.description%",
 				"modelDescription": "Get any compile or lint errors in a code file. If the user mentions errors or problems in a file, they may be referring to these. Use the tool to see the same errors that the user is seeing. Also use this tool after editing a file to validate the change.",
 				"tags": [],
@@ -543,7 +542,6 @@
 					"enable_other_tool_copilot_findFiles",
 					"enable_other_tool_copilot_runTests"
 				],
-				"when": "config.chat.agent.enabled",
 				"canBeReferencedInPrompt": true
 			},
 			{
@@ -594,8 +592,7 @@
 					"enable_other_tool_copilot_listDirectory",
 					"enable_other_tool_copilot_findFiles",
 					"enable_other_tool_copilot_runTests"
-				],
-				"when": "config.chat.agent.enabled"
+				]
 			},
 			{
 				"name": "copilot_getTerminalSelection",
@@ -1418,7 +1415,7 @@
 				],
 				"isDefault": true,
 				"isAgent": true,
-				"when": "config.chat.agent.enabled && !chatAgentModeDisallowed",
+				"when": "config.chat.agent.enabled",
 				"commands": [
 					{
 						"name": "list"
@@ -2453,6 +2450,7 @@
 						"markdownDescription": "%github.copilot.chat.edits.suggestRelatedFilesForTests%"
 					},
 					"github.copilot.chat.codeGeneration.instructions": {
+						"markdownDeprecationMessage": "%github.copilot.config.codeGeneration.instructions.deprecated%",
 						"type": "array",
 						"items": {
 							"oneOf": [
@@ -2524,6 +2522,7 @@
 						]
 					},
 					"github.copilot.chat.testGeneration.instructions": {
+						"markdownDeprecationMessage": "%github.copilot.config.testGeneration.instructions.deprecated%",
 						"type": "array",
 						"items": {
 							"oneOf": [
@@ -3798,7 +3797,7 @@
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@roamhq/mac-ca": "^1.0.7",
-		"@vscode/copilot-api": "^0.1.0",
+		"@vscode/copilot-api": "^0.1.1",
 		"@vscode/extension-telemetry": "^1.0.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",

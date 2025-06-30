@@ -29,7 +29,7 @@ import { ToolCallRound } from '../../prompt/common/toolCallRound';
 import { IBuildPromptResult, IResponseProcessor } from '../../prompt/node/intents';
 import { PseudoStopStartResponseProcessor } from '../../prompt/node/pseudoStartStopConversationCallback';
 import { ResponseProcessorContext } from '../../prompt/node/responseProcessorContext';
-import { SummarizedConversationHistoryMetadata } from '../../prompts/node/panel/summarizedConversationHistory';
+import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/summarizedConversationHistory';
 import { ToolFailureEncountered, ToolResultMetadata } from '../../prompts/node/panel/toolCalling';
 import { ToolName } from '../../tools/common/toolNames';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
@@ -510,18 +510,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		};
 
 		const buildPromptResult = await this.buildPrompt(buildPromptContext, progress, token);
-
-		// If we had to summarize a tool call round that's part of the in-progress turn,
-		// associate the generated summary with the tool call round
-		// const summarizedConversationMetadata = buildPromptResult.metadata.get(SummarizedConversationHistoryMetadata);
-		// if (summarizedConversationMetadata) {
-		// 	for (const toolCallRound of this.toolCallRounds) {
-		// 		if (toolCallRound.id === summarizedConversationMetadata.toolCallRoundId) {
-		// 			toolCallRound.summary = summarizedConversationMetadata.text;
-		// 		}
-		// 	}
-		// }
-
 		for (const metadata of buildPromptResult.metadata.getAll(ToolResultMetadata)) {
 			this.logToolResult(buildPromptContext, metadata);
 			this.toolCallResults[metadata.toolCallId] = metadata.result;

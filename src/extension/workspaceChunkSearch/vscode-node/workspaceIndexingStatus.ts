@@ -6,7 +6,7 @@
 import { t } from '@vscode/l10n';
 import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
+import { ICodeSearchAuthenticationService } from '../../../platform/remoteCodeSearch/node/codeSearchRepoAuth';
 import { RepoStatus, ResolvedRepoEntry } from '../../../platform/remoteCodeSearch/node/codeSearchRepoTracker';
 import { CodeSearchRemoteIndexStatus } from '../../../platform/workspaceChunkSearch/node/codeSearchChunkSearch';
 import { LocalEmbeddingsIndexStatus } from '../../../platform/workspaceChunkSearch/node/embeddingsChunkSearch';
@@ -81,7 +81,7 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 
 	constructor(
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
-		@IAuthenticationChatUpgradeService private readonly _authUpgradeService: IAuthenticationChatUpgradeService,
+		@ICodeSearchAuthenticationService private readonly _codeSearchAuthService: ICodeSearchAuthenticationService,
 		@IWorkspaceChunkSearchService _workspaceChunkSearch: IWorkspaceChunkSearchService,
 	) {
 		super();
@@ -173,7 +173,8 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 				});
 
 			case CodeSearchRemoteIndexStatus.CouldNotCheckIndexStatus: {
-				const inaccessibleRepo = state.remoteIndexState.repos.find(repo => repo.status === RepoStatus.CouldNotCheckIndexStatus) as ResolvedRepoEntry | undefined;
+				const inaccessibleRepo = state.remoteIndexState.repos.find(repo =>
+					repo.status === RepoStatus.CouldNotCheckIndexStatus || repo.status === RepoStatus.NotAuthorized) as ResolvedRepoEntry | undefined;
 
 				// Not signed in at all
 				if (!this._authService.getAnyGitHubSession({ silent: true })) {
@@ -183,7 +184,7 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 							learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
 						},
 						progress: {
-							message: t(`[Sign in](${commandUri(signInFirstTimeCommandId, [inaccessibleRepo])} "${t('Sign in to GitHub to access the remote index')}")`),
+							message: t(`[Sign in](${commandUri(signInFirstTimeCommandId, [inaccessibleRepo])} "${t('Sign in to access the remote workspace index')}")`),
 							busy: false,
 						},
 					});
@@ -196,7 +197,7 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 						learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
 					},
 					progress: {
-						message: t(`[Try re-authenticating](${commandUri(reauthenticateCommandId, [inaccessibleRepo])} "${t('Try signing in again to GitHub to access the remote index')}")`),
+						message: t(`[Try re-authenticating](${commandUri(reauthenticateCommandId, [inaccessibleRepo])} "${t('Try signing in again to access the remote workspace index')}")`),
 						busy: false,
 					},
 				});
@@ -298,75 +299,19 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 		const disposables = new DisposableStore();
 
 		disposables.add(vscode.commands.registerCommand(signInFirstTimeCommandId, async (repo: ResolvedRepoEntry | undefined) => {
-			const fetchUrl = repo?.remoteInfo.fetchUrl;
-
-			const signInButton: vscode.MessageItem = {
-				title: t`Sign In`,
-			};
-			const cancelButton: vscode.MessageItem = {
-				title: t`Cancel`,
-				isCloseAffordance: true
-			};
-
-			if (repo?.remoteInfo.repoId.type === 'ado') {
-				const result = await vscode.window.showWarningMessage(t`Sign in to use remote index`, {
-					modal: true,
-					detail: fetchUrl
-						? t`Sign in to Azure DevOps to use remote workspace index for: ${fetchUrl.toString()}`
-						: t`Sign in to Azure DevOps to use remote workspace index for a repo in this workspace`
-				}, signInButton, cancelButton);
-
-				if (result === signInButton) {
-					return this._authService.getAdoAccessTokenBase64({ silent: false });
-				}
-			} else {
-				const result = await vscode.window.showWarningMessage(t`Sign in to use remote index`, {
-					modal: true,
-					detail: fetchUrl
-						? t`Sign in to GitHub to use remote workspace index for: ${fetchUrl.toString()}`
-						: t`Sign in to GitHub to use remote workspace index for a repo in this workspace`
-				}, signInButton, cancelButton);
-
-				if (result === signInButton) {
-					return this._authService.getAnyGitHubSession({ silent: false });
-				}
+			if (!repo) {
+				return;
 			}
+
+			return this._codeSearchAuthService.tryAuthenticating(repo);
 		}));
 
 		disposables.add(vscode.commands.registerCommand(reauthenticateCommandId, async (repo: ResolvedRepoEntry | undefined) => {
-			const fetchUrl = repo?.remoteInfo.fetchUrl;
-
-			const signInButton: vscode.MessageItem = {
-				title: t`Sign In`,
-			};
-			const cancelButton: vscode.MessageItem = {
-				title: t`Cancel`,
-				isCloseAffordance: true
-			};
-
-			if (repo?.remoteInfo.repoId.type === 'ado') {
-				const result = await vscode.window.showWarningMessage(t`Reauthenticate to use remote index`, {
-					modal: true,
-					detail: fetchUrl
-						? t`Sign in to Azure DevOps again to use remote workspace index for: ${fetchUrl}`
-						: t`Sign in to Azure DevOps again to use remote workspace index for a repo in this workspace`
-				}, signInButton, cancelButton);
-
-				if (result === signInButton) {
-					return this._authService.getAdoAccessTokenBase64({ createIfNone: true });
-				}
-			} else {
-				const result = await vscode.window.showWarningMessage(t`Reauthenticate to use remote index`, {
-					modal: true,
-					detail: fetchUrl
-						? t`Sign in to GitHub again to use remote workspace index for: ${fetchUrl}`
-						: t`Sign in to GitHub again to use remote workspace index for a repo in this workspace`
-				}, signInButton, cancelButton);
-
-				if (result === signInButton) {
-					return this._authUpgradeService.showPermissiveSessionModal();
-				}
+			if (!repo) {
+				return;
 			}
+
+			return this._codeSearchAuthService.tryReauthenticating(repo);
 		}));
 
 		return disposables;

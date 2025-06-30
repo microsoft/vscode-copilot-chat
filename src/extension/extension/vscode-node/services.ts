@@ -37,6 +37,8 @@ import { IParserService } from '../../../platform/parser/node/parserService';
 import { ParserServiceImpl } from '../../../platform/parser/node/parserServiceImpl';
 import { AdoCodeSearchService, IAdoCodeSearchService } from '../../../platform/remoteCodeSearch/common/adoCodeSearchService';
 import { GithubCodeSearchService, IGithubCodeSearchService } from '../../../platform/remoteCodeSearch/common/githubCodeSearchService';
+import { ICodeSearchAuthenticationService } from '../../../platform/remoteCodeSearch/node/codeSearchRepoAuth';
+import { VsCodeCodeSearchAuthenticationService } from '../../../platform/remoteCodeSearch/vscode-node/codeSearchRepoAuth';
 import { IDocsSearchClient } from '../../../platform/remoteSearch/common/codeOrDocsSearchClient';
 import { DocsSearchClient } from '../../../platform/remoteSearch/node/codeOrDocsSearchClientImpl';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
@@ -175,6 +177,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IFixCookbookService, new SyncDescriptor(FixCookbookService));
 	builder.define(ILanguageContextService, new SyncDescriptor(LanguageContextServiceImpl));
 	builder.define(IWorkspaceListenerService, new SyncDescriptor(WorkspacListenerService));
+	builder.define(ICodeSearchAuthenticationService, new SyncDescriptor(VsCodeCodeSearchAuthenticationService));
 }
 
 function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext) {
