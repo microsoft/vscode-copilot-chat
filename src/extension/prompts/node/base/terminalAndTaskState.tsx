@@ -70,7 +70,6 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 								{t.problemMatcher ? `Problem Matchers: ${t.problemMatcher}` : ''}<br />
 								{t.group ? `Group: ${t.group}` : ''}<br />
 								{t.dependsOn ? `Depends On: ${t.dependsOn}` : ''}<br />
-								Output: {'{'}Query {ToolName.GetTaskOutput} for task terminal with name: {t.name} with the number of lines from the bottom to retrieve. {'}'}<br />
 								<br />
 							</>
 						))}
