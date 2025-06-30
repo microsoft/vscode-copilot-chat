@@ -207,6 +207,8 @@ export class AgentSummarizationPrompt extends PromptElement<ConversationHistoryS
 				{this.props.workingNotebook && <WorkingNotebookSummary priority={this.props.priority - 2} notebook={this.props.workingNotebook} />}
 				<UserMessage priority={900}>
 					{summarizationQuery}
+					{/* Cache breakpoint needed for full mode (large history) but not simple mode (truncated history) */}
+					{!this.props.simpleMode && <cacheBreakpoint type={CacheType} />}
 				</UserMessage>
 			</>
 		);
