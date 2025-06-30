@@ -24,12 +24,11 @@ import { ToolCallingLoop } from '../../../intents/node/toolCallingLoop';
 import { IResultMetadata } from '../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCallRound } from '../../../prompt/common/intents';
 import { ToolName } from '../../../tools/common/toolNames';
-import { normalizeToolSchema } from '../../../tools/common/toolSchemaNormalizer';
 import { NotebookSummary } from '../../../tools/node/notebookSummaryTool';
 import { renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 import { ChatToolCalls } from '../panel/toolCalling';
-import { AgentUserMessage, getKeepGoingReminder, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn } from './agentPrompt';
+import { AgentPrompt, AgentPromptProps, AgentUserMessage, getKeepGoingReminder, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn } from './agentPrompt';
 import { SimpleSummarizedHistory } from './simpleSummarizedHistoryPrompt';
 
 export interface ConversationHistorySummarizationPromptProps extends SummarizedAgentHistoryProps {
@@ -415,10 +414,75 @@ class ConversationHistorySummarizer {
 	private async getSummary(mode: SummaryMode, propsInfo: ISummarizedConversationHistoryInfo): Promise<FetchSuccess<string>> {
 		const endpoint = this.props.endpoint;
 
+		// Create summarization query based on mode
+		const summarizationQuery = mode === SummaryMode.Simple ?
+			`Please provide a brief summary of this conversation history using the following format:
+
+TASK DESCRIPTION: The description of the task to perform
+
+COMPLETED: Tasks completed so far with brief results
+PENDING: Tasks that still need to be done
+
+CODE STATE: All file paths that were discussed or modified
+CHANGES: Key code edits that have taken place
+
+Include all important tool calls that have already taken place as part of the appropriate sections.` :
+			`Please create a comprehensive, detailed summary of this conversation that captures all essential information needed to seamlessly continue the work without any loss of context. Structure your summary using the following format:
+
+1. Conversation Overview:
+- Primary Objectives: All explicit user requests and overarching goals
+- Session Context: High-level narrative of conversation flow and key phases
+- User Intent Evolution: How user's needs or direction changed throughout conversation
+
+2. Technical Foundation:
+- Core technologies, frameworks, and architectural patterns used
+- Environment details and constraints
+
+3. Codebase Status:
+- All files discussed or modified with their purpose and current state
+- Key code segments and dependencies
+
+4. Problem Resolution:
+- Issues encountered and solutions implemented
+- Debugging context and lessons learned
+
+5. Progress Tracking:
+- Completed tasks with status indicators
+- Partially complete work
+- Validated outcomes
+
+6. Active Work State:
+- Current focus and recent context
+- Working code being modified
+- Immediate context before this summary
+
+7. Recent Operations:
+- Last agent commands executed
+- Tool results summary (truncate long results but keep essential info)
+- Pre-summary state and operation context
+
+8. Continuation Plan:
+- Pending tasks with specific next steps
+- Priority information and immediate next actions
+
+Focus particularly on the specific agent commands/tools that were just executed and their results.`;
+
+		// Construct AgentPromptProps to reuse the same prompt structure for caching benefits
+		const agentProps: AgentPromptProps = {
+			endpoint: this.props.endpoint,
+			location: this.props.location,
+			promptContext: {
+				...propsInfo.props.promptContext,
+				query: summarizationQuery
+			},
+			enableCacheBreakpoints: true, // Enable caching to benefit from prompt cache
+			triggerSummarize: false // We're doing the summarization, not triggering another one
+		};
+
 		let summarizationPrompt: ChatMessage[];
 		try {
 			const start = Date.now();
-			summarizationPrompt = (await renderPromptElement(this.instantiationService, endpoint, ConversationHistorySummarizationPrompt, { ...propsInfo.props, simpleMode: mode === SummaryMode.Simple }, undefined, this.token)).messages;
+			summarizationPrompt = (await renderPromptElement(this.instantiationService, endpoint, AgentPrompt, agentProps, undefined, this.token)).messages;
 			this.logService.logger.info(`[SummarizedConversationHistory] summarization prompt rendered in ${Date.now() - start}ms. Mode: ${mode}`);
 		} catch (e) {
 			const budgetExceeded = e instanceof BudgetExceededError;
@@ -429,27 +493,11 @@ class ConversationHistorySummarizer {
 
 		let summaryResponse: ChatResponse;
 		try {
-			const toolOpts = mode === SummaryMode.Full ? {
-				tool_choice: 'none' as const,
-				tools: normalizeToolSchema(
-					endpoint.family,
-					this.props.tools?.map(tool => ({
-						function:
-						{
-							name: tool.name,
-							description: tool.description,
-							parameters: tool.inputSchema && Object.keys(tool.inputSchema).length ? tool.inputSchema : undefined
-						}, type: 'function'
-					})),
-					(tool, rule) => {
-						this.logService.logger.warn(`Tool ${tool} failed validation: ${rule}`);
-					},
-				),
-			} : undefined;
+			// Don't include tools in the summarization request to prevent tool calling
 			summaryResponse = await endpoint.makeChatRequest('summarizeConversationHistory', ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt), undefined, this.token ?? CancellationToken.None, ChatLocation.Other, undefined, {
 				temperature: 0,
 				stream: false,
-				...toolOpts
+				tool_choice: 'none' // Explicitly disable tool calling during summarization
 			});
 		} catch (e) {
 			this.sendSummarizationTelemetry('requestThrow', '', this.props.endpoint.model, mode);
