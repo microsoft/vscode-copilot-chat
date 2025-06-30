@@ -89,7 +89,7 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 										Cwd: {term.lastCommand.cwd ?? '(unknown)'}<br />
 										Exit Code: {term.lastCommand.exitCode ?? '(unknown)'}<br />
 									</>
-								) : null}
+								) : ''}
 								Output: {'{'}Query {ToolName.GetTerminalOutput} for terminal with ID: {term.id}. {'}'}<br />
 							</>
 						))}
