@@ -24,7 +24,7 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 		super(props);
 	}
 	async render() {
-		const runningTasks: { name: string; isBackground: boolean; type?: string; command?: string; problemMatcher?: string; group?: string; script?: string; dependsOn?: string }[] = [];
+		const runningTasks: { name: string; isBackground: boolean; type?: string; command?: string; problemMatcher?: string; group?: { isDefault?: boolean; kind?: string }; script?: string; dependsOn?: string }[] = [];
 		const running = this.tasksService.getTasks();
 		const tasks = Array.isArray(running?.[0]?.[1]) ? running[0][1].filter(t => this.tasksService.isTaskActive(t)) : [];
 		for (const exec of tasks) {
@@ -68,7 +68,7 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 								{t.command ? `, command: ${t.command}` : ''}
 								{t.script ? `, script: ${t.script}` : ''})<br />
 								{t.problemMatcher ? `Problem Matchers: ${t.problemMatcher}` : ''}<br />
-								{t.group ? `Group: ${t.group}` : ''}<br />
+								{t.group ? `Group: ${t.group.isDefault ? 'isDefault ' + (t.group.kind ?? '') : (t.group.kind ?? '')} ` : ''}<br />
 								{t.dependsOn ? `Depends On: ${t.dependsOn}` : ''}<br />
 								<br />
 							</>
