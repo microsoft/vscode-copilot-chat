@@ -32,8 +32,7 @@ import { SafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
 import { CustomInstructions } from '../panel/customInstructions';
 import { ChatToolCalls } from '../panel/toolCalling';
-import { DefaultAgentPrompt, SweBenchAgentPrompt } from './agentInstructions';
-import { AgentUserMessage, getKeepGoingReminder, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn, GlobalAgentContext } from './agentPrompt';
+import { AgentUserMessage, getAgentInstructions, getKeepGoingReminder, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn, GlobalAgentContext } from './agentPrompt';
 import { SimpleSummarizedHistory } from './simpleSummarizedHistoryPrompt';
 
 export interface ConversationHistorySummarizationPromptProps extends SummarizedAgentHistoryProps {
@@ -62,13 +61,12 @@ export class AgentSummarizationPrompt extends PromptElement<ConversationHistoryS
 
 	override async render(state: void, sizing: PromptSizing) {
 		// Use the same agent instructions to get caching benefits
-		const instructions = this.configurationService.getConfig(ConfigKey.Internal.SweBenchAgentPrompt) ?
-			<SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} /> :
-			<DefaultAgentPrompt
-				availableTools={this.props.promptContext.tools?.availableTools}
-				modelFamily={this.props.endpoint.family}
-				codesearchMode={false}
-			/>;
+		const instructions = getAgentInstructions(
+			this.configurationService,
+			this.props.promptContext.tools?.availableTools,
+			this.props.endpoint.family,
+			false // codesearchMode always false for summarization
+		);
 
 		// Use the same comprehensive summarization prompt for both modes
 		// The difference in output detail will come from the amount of history provided

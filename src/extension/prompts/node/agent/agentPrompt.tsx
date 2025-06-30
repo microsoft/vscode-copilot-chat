@@ -654,3 +654,22 @@ export class EditedFileEvents extends PromptElement<EditedFileEventsProps> {
 		}
 	}
 }
+
+/**
+ * Shared helper to generate agent instructions consistently across AgentPrompt and AgentSummarizationPrompt.
+ * This ensures both prompts use identical instruction logic for optimal caching.
+ */
+export function getAgentInstructions(
+	configurationService: IConfigurationService,
+	availableTools: readonly LanguageModelToolInformation[] | undefined,
+	modelFamily: string,
+	codesearchMode: boolean | undefined
+) {
+	return configurationService.getConfig(ConfigKey.Internal.SweBenchAgentPrompt) ?
+		<SweBenchAgentPrompt availableTools={availableTools} modelFamily={modelFamily} codesearchMode={undefined} /> :
+		<DefaultAgentPrompt
+			availableTools={availableTools}
+			modelFamily={modelFamily}
+			codesearchMode={codesearchMode ?? false}
+		/>;
+}
