@@ -4,8 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { deepStrictEqual, ok } from 'assert';
-import { afterEach, beforeEach, describe, it } from 'vitest';
+import { afterEach, beforeEach, describe, it, vi } from 'vitest';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { IEnvService } from '../../../../platform/env/common/envService';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
@@ -15,6 +16,7 @@ describe('CommandLineAutoApprover', () => {
 	let store: DisposableStore;
 	let instantiationService: IInstantiationService;
 	let configurationService: IConfigurationService;
+	let envService: IEnvService;
 
 	beforeEach(() => {
 		store = new DisposableStore();
@@ -22,6 +24,7 @@ describe('CommandLineAutoApprover', () => {
 		const accessor = store.add(createExtensionUnitTestingServices()).createTestingAccessor();
 		instantiationService = accessor.get(IInstantiationService);
 		configurationService = accessor.get(IConfigurationService);
+		envService = accessor.get(IEnvService);
 	});
 
 	afterEach(() => {
@@ -249,6 +252,10 @@ describe('CommandLineAutoApprover', () => {
 	});
 
 	describe('PowerShell-specific commands', () => {
+		beforeEach(() => {
+			vi.spyOn(envService, 'shell', 'get').mockReturnValue('pwsh');
+		});
+
 		it('should handle Windows PowerShell commands', () => {
 			configurationService.setConfig(ConfigKey.TerminalAllowList, {
 				"Get-ChildItem": true,
@@ -265,6 +272,18 @@ describe('CommandLineAutoApprover', () => {
 			ok(commandLineAutoApprover.isAutoApproved('Get-Content file.txt'));
 			ok(commandLineAutoApprover.isAutoApproved('Get-Location'));
 			ok(!commandLineAutoApprover.isAutoApproved('Remove-Item file.txt'));
+		});
+
+		it('should handle ( prefixes', () => {
+			configurationService.setConfig(ConfigKey.TerminalAllowList, {
+				"Get-Content": true
+			});
+			const commandLineAutoApprover = instantiationService.createInstance(CommandLineAutoApprover);
+
+			ok(commandLineAutoApprover.isAutoApproved('Get-Content file.txt'));
+			ok(commandLineAutoApprover.isAutoApproved('(Get-Content file.txt'));
+			ok(!commandLineAutoApprover.isAutoApproved('[Get-Content'));
+			ok(!commandLineAutoApprover.isAutoApproved('foo'));
 		});
 	});
 });

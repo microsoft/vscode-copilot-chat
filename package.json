@@ -2793,15 +2793,15 @@
 						"type": "object",
 						"default": {
 							"echo": true,
-							"Write-Host": true,
-							"ls": true,
-							"Get-ChildItem": true,
-							"cat": true,
-							"Get-Content": true,
-							"pwd": true,
-							"Get-Location": true,
 							"cd": true,
-							"Set-Location": true
+							"ls": true,
+							"cat": true,
+							"pwd": true,
+							"Write-Host": true,
+							"Set-Location": true,
+							"Get-ChildItem": true,
+							"Get-Content": true,
+							"Get-Location": true
 						},
 						"additionalProperties": {
 							"type": "boolean",
@@ -2820,13 +2820,13 @@
 							"rm": true,
 							"rmdir": true,
 							"del": true,
-							"Remove-Item": true,
 							"kill": true,
 							"curl": true,
 							"wget": true,
 							"eval": true,
 							"chmod": true,
-							"chown": true
+							"chown": true,
+							"Remove-Item": true
 						},
 						"additionalProperties": {
 							"type": "boolean",

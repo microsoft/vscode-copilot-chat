@@ -751,27 +751,27 @@ export namespace ConfigKey {
 	export const CurrentEditorAgentContext = defineSetting<boolean>('chat.agent.currentEditorContext.enabled', true);
 	export const TerminalAllowList = defineSetting<{ [key: string]: boolean }>('chat.agent.terminal.allowList', {
 		"echo": true,
-		"Write-Host": true,
-		"ls": true,
-		"Get-ChildItem": true,
-		"cat": true,
-		"Get-Content": true,
-		"pwd": true,
-		"Get-Location": true,
 		"cd": true,
-		"Set-Location": true
+		"ls": true,
+		"cat": true,
+		"pwd": true,
+		"Write-Host": true,
+		"Set-Location": true,
+		"Get-ChildItem": true,
+		"Get-Content": true,
+		"Get-Location": true
 	});
 	export const TerminalDenyList = defineSetting<{ [key: string]: boolean }>('chat.agent.terminal.denyList', {
 		"rm": true,
 		"rmdir": true,
 		"del": true,
-		"Remove-Item": true,
 		"kill": true,
 		"curl": true,
 		"wget": true,
 		"eval": true,
 		"chmod": true,
-		"chown": true
+		"chown": true,
+		"Remove-Item": true
 	});
 	/** BYOK  */
 	export const OllamaEndpoint = defineSetting<string>('chat.byok.ollamaEndpoint', 'http://localhost:11434');

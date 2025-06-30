@@ -1,5 +1,33 @@
 ### User
 ~~~md
+When generating code, please follow these user provided coding instructions. You can ignore an instruction if it contradicts a system message.
+<instructions>
+This is a test custom instruction file
+</instructions>
+~~~
+
+
+### User
+~~~md
+<environment_info>
+The user's current OS is: Linux
+The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
+</environment_info>
+<workspace_info>
+I am working in a workspace with the following folders:
+- /workspace 
+I am working in a workspace that has the following structure:
+```
+
+```
+This is the state of the context at this point in the conversation. The view of the workspace structure may be truncated. You can use tools to collect more context if needed.
+</workspace_info>
+copilot_cache_control: {"type":"ephemeral"}
+~~~
+
+
+### User
+~~~md
 <attachments>
 <attachment id="file" filePath="/workspace/file.ts">
 ```ts
@@ -21,7 +49,6 @@ line 5
 <userRequest>
 edit this file
 </userRequest>
-copilot_cache_control: {"type":"ephemeral"}
 ~~~
 
 
@@ -40,6 +67,7 @@ console.log('hi')"
 ~~~md
 🛠️ tooluse_1
 success
+copilot_cache_control: {"type":"ephemeral"}
 ~~~
 
 
@@ -58,17 +86,20 @@ console.log('hi')"
 ~~~md
 🛠️ tooluse_2
 success
+copilot_cache_control: {"type":"ephemeral"}
 ~~~
 
 
 ### User
 ~~~md
-Summarize the conversation history so far, paying special attention to the most recent agent commands and tool results that triggered this summarization. Structure your summary using the enhanced format provided in the system message.
-Focus particularly on:
-- The specific agent commands/tools that were just executed
-- The results returned from these recent tool calls (truncate if very long but preserve key information)
-- What the agent was actively working on when the token budget was exceeded
-- How these recent operations connect to the overall user goals
+Summarize the conversation history so far, paying special attention to the most recent agent commands and tool results that triggered this summarization. Structure your summary using the enhanced format provided in the system message.<br />
+
+Focus particularly on:<br />
+- The specific agent commands/tools that were just executed<br />
+- The results returned from these recent tool calls (truncate if very long but preserve key information)<br />
+- What the agent was actively working on when the token budget was exceeded<br />
+- How these recent operations connect to the overall user goals<br />
+
 Include all important tool calls and their results as part of the appropriate sections, with special emphasis on the most recent operations.
 copilot_cache_control: {"type":"ephemeral"}
 ~~~

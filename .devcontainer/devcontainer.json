@@ -8,7 +8,6 @@
 		"ghcr.io/devcontainers/features/azure-cli:1": {},
 		"ghcr.io/devcontainers/features/python:1": {},
 		"ghcr.io/devcontainers/features/dotnet:2": {},
-		"ghcr.io/devcontainers-contrib/features/pylint:2": {},
 		"ghcr.io/devcontainers/features/desktop-lite:1": {}
 	},
 	"containerEnv": {
