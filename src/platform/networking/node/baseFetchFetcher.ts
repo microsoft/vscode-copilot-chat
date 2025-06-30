@@ -14,7 +14,7 @@ export abstract class BaseFetchFetcher implements IFetcher {
 	constructor(
 		private readonly _fetchImpl: typeof fetch | typeof import('electron').net.fetch,
 		private readonly _envService: IEnvService,
-		private readonly userAgentSuffix?: string,
+		private readonly userAgentLibraryUpdate?: (original: string) => string,
 	) {
 	}
 
@@ -23,7 +23,7 @@ export abstract class BaseFetchFetcher implements IFetcher {
 	async fetch(url: string, options: FetchOptions): Promise<Response> {
 		const headers = { ...options.headers };
 		headers['User-Agent'] = `GitHubCopilotChat/${this._envService.getVersion()}`;
-		headers[userAgentLibraryHeader] = this.userAgentSuffix ? `${this.getUserAgentLibrary()}-${this.userAgentSuffix}` : this.getUserAgentLibrary();
+		headers[userAgentLibraryHeader] = this.userAgentLibraryUpdate ? this.userAgentLibraryUpdate(this.getUserAgentLibrary()) : this.getUserAgentLibrary();
 
 		let body = options.body;
 		if (options.json) {

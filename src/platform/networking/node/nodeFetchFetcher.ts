@@ -11,9 +11,9 @@ export class NodeFetchFetcher extends BaseFetchFetcher {
 
 	constructor(
 		envService: IEnvService,
-		userAgentSuffix?: string,
+		userAgentLibraryUpdate?: (original: string) => string,
 	) {
-		super(getFetch(), envService, userAgentSuffix);
+		super(getFetch(), envService, userAgentLibraryUpdate);
 	}
 
 	getUserAgentLibrary(): string {

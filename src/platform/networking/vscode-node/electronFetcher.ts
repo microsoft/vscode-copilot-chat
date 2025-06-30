@@ -8,12 +8,12 @@ import { BaseFetchFetcher } from '../node/baseFetchFetcher';
 
 export class ElectronFetcher extends BaseFetchFetcher {
 
-	public static create(envService: IEnvService, userAgentSuffix?: string): ElectronFetcher | null {
+	public static create(envService: IEnvService, userAgentLibraryUpdate?: (original: string) => string): ElectronFetcher | null {
 		const net = loadNetModule();
 		if (!net) {
 			return null;
 		}
-		return new ElectronFetcher(net.fetch, envService, userAgentSuffix);
+		return new ElectronFetcher(net.fetch, envService, userAgentLibraryUpdate);
 	}
 
 	getUserAgentLibrary(): string {
