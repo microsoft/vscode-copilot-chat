@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Copilot Chat Issues
+    url: https://github.com/microsoft/vscode/issues/new?labels=chat
+    about: Please file issues related to Copilot Chat in the VS Code repository.
