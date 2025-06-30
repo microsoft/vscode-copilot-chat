@@ -4,6 +4,7 @@ When generating code, please follow these user provided coding instructions. You
 <instructions>
 This is a test custom instruction file
 </instructions>
+copilot_cache_control: {"type":"ephemeral"}
 ~~~
 
 
@@ -22,7 +23,6 @@ I am working in a workspace that has the following structure:
 ```
 This is the state of the context at this point in the conversation. The view of the workspace structure may be truncated. You can use tools to collect more context if needed.
 </workspace_info>
-copilot_cache_control: {"type":"ephemeral"}
 ~~~
 
 
@@ -48,18 +48,14 @@ copilot_cache_control: {"type":"ephemeral"}
 
 ### User
 ~~~md
-Please provide a concise summary of this conversation history using the following format:
+Summarize the conversation history so far, paying special attention to the most recent agent commands and tool results that triggered this summarization. Structure your summary using the enhanced format provided in the system message.<br />
 
-TASK DESCRIPTION: The description of the task to perform
+Focus particularly on:<br />
+- The specific agent commands/tools that were just executed<br />
+- The results returned from these recent tool calls (truncate if very long but preserve key information)<br />
+- What the agent was actively working on when the token budget was exceeded<br />
+- How these recent operations connect to the overall user goals<br />
 
-COMPLETED: Tasks completed so far with brief results
-PENDING: Tasks that still need to be done
-
-CODE STATE: All file paths that were discussed or modified
-CHANGES: Key code edits that have taken place
-
-RECENT OPERATIONS: Last agent commands executed and their key results
-
-Include all important tool calls that have already taken place as part of the appropriate sections.
+Include all important tool calls and their results as part of the appropriate sections, with special emphasis on the most recent operations.
 copilot_cache_control: {"type":"ephemeral"}
 ~~~

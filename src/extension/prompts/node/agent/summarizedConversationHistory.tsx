@@ -70,9 +70,9 @@ export class AgentSummarizationPrompt extends PromptElement<ConversationHistoryS
 				codesearchMode={false}
 			/>;
 
-		// Determine summarization detail level based on available context and simple mode
-		const useDetailedSummary = !this.props.simpleMode;
-		const summarizationQuery = this.getSummarizationQuery(useDetailedSummary);
+		// Use the same comprehensive summarization prompt for both modes
+		// The difference in output detail will come from the amount of history provided
+		const summarizationQuery = this.getSummarizationQuery();
 
 		return (
 			<>
@@ -91,7 +91,7 @@ export class AgentSummarizationPrompt extends PromptElement<ConversationHistoryS
 						{this.props.promptContext.modeInstructions}
 					</Tag>}
 				</UserMessage>
-				<GlobalAgentContext enableCacheBreakpoints={true} />
+				<GlobalAgentContext enableCacheBreakpoints={false} />
 				<SystemMessage priority={this.props.priority}>
 					Your task is to create a comprehensive, detailed summary of the entire conversation that captures all essential information needed to seamlessly continue the work without any loss of context. This summary will be used to compact the conversation while preserving critical technical details, decisions, and progress.<br />
 
@@ -212,9 +212,10 @@ export class AgentSummarizationPrompt extends PromptElement<ConversationHistoryS
 		);
 	}
 
-	private getSummarizationQuery(useDetailedSummary: boolean): string {
-		if (useDetailedSummary) {
-			return `Summarize the conversation history so far, paying special attention to the most recent agent commands and tool results that triggered this summarization. Structure your summary using the enhanced format provided in the system message.<br />
+	private getSummarizationQuery(): string {
+		// Use the same comprehensive prompt for both simple and detailed modes
+		// The model will naturally adjust output detail based on the amount of history provided
+		return `Summarize the conversation history so far, paying special attention to the most recent agent commands and tool results that triggered this summarization. Structure your summary using the enhanced format provided in the system message.<br />
 
 Focus particularly on:<br />
 - The specific agent commands/tools that were just executed<br />
@@ -223,27 +224,12 @@ Focus particularly on:<br />
 - How these recent operations connect to the overall user goals<br />
 
 Include all important tool calls and their results as part of the appropriate sections, with special emphasis on the most recent operations.`;
-		} else {
-			return `Please provide a concise summary of this conversation history using the following format:
-
-TASK DESCRIPTION: The description of the task to perform
-
-COMPLETED: Tasks completed so far with brief results
-PENDING: Tasks that still need to be done
-
-CODE STATE: All file paths that were discussed or modified
-CHANGES: Key code edits that have taken place
-
-RECENT OPERATIONS: Last agent commands executed and their key results
-
-Include all important tool calls that have already taken place as part of the appropriate sections.`;
-		}
 	}
 }
 
 /**
- * Optimized conversation history component that selects the appropriate rendering strategy
- * based on the summarization mode while maintaining separation from cached components.
+ * Conversation history component that selects between truncated (simple) or full history
+ * while using the same comprehensive summarization prompt for optimal cache efficiency.
  */
 class ConversationHistoryForSummarization extends PromptElement<SummarizedAgentHistoryProps & { simpleMode?: boolean }> {
 	override async render(state: void, sizing: PromptSizing) {
@@ -487,7 +473,7 @@ class ConversationHistorySummarizer {
 			try {
 				return await this.getSummary(false, propsInfo);
 			} catch (e) {
-				// Fallback to simple mode on error
+				// Fallback to simple mode on error (different history, same prompt)
 				return await this.getSummary(true, propsInfo);
 			}
 		}
@@ -500,6 +486,8 @@ class ConversationHistorySummarizer {
 		let summarizationPrompt: ChatMessage[];
 		try {
 			const start = Date.now();
+			// Both modes now use the same prompt structure for optimal caching
+			// The simpleMode only affects which history component is rendered (truncated vs full)
 			summarizationPrompt = (await renderPromptElement(this.instantiationService, endpoint, AgentSummarizationPrompt, { ...propsInfo.props, simpleMode }, undefined, this.token)).messages;
 			this.logService.logger.info(`[SummarizedConversationHistory] summarization prompt rendered in ${Date.now() - start}ms. Mode: ${mode}`);
 		} catch (e) {
