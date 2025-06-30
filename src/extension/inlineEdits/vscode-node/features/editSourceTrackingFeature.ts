@@ -77,9 +77,8 @@ export class EditSourceTrackingFeature extends Disposable {
 
 			const statusBarItem = reader.store.add(vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100));
 
-			const docs = impl.docsState.read(reader);
-
 			const sumChangedCharacters = derived(reader => {
+				const docs = impl.docsState.read(reader);
 				let sum = 0;
 				for (const state of docs.values()) {
 					const t = state.longtermTracker.read(reader);
@@ -95,6 +94,7 @@ export class EditSourceTrackingFeature extends Disposable {
 			}));
 
 			reader.store.add(autorun(reader => {
+				const docs = impl.docsState.read(reader);
 				const docsDataInTooltip: string[] = [];
 				const editSources: EditSource[] = [];
 				for (const [doc, state] of docs) {
@@ -151,6 +151,7 @@ export class EditSourceTrackingFeature extends Disposable {
 			}));
 
 			reader.store.add(vscode.commands.registerCommand(this._showStateInMarkdownDoc, async () => {
+				const docs = impl.docsState.get();
 				const allDocsData: string[] = [];
 				for (const [doc, state] of docs) {
 					const tracker = state.longtermTracker.get();

@@ -46,7 +46,7 @@ export function formatUriForFileWidget(uriOrLocation: URI | Location): string {
 	// Empty link text -> rendered as file widget
 	return `[](${uri.toString()}${rangePart})`;
 }
-export function inputGlobToPattern(query: string, workspaceService: IWorkspaceService): vscode.GlobPattern {
+export function inputGlobToPattern(query: string, workspaceService: IWorkspaceService): vscode.GlobPattern[] {
 	let pattern: vscode.GlobPattern = query;
 	if (isAbsolute(query)) {
 		try {
@@ -62,7 +62,13 @@ export function inputGlobToPattern(query: string, workspaceService: IWorkspaceSe
 		}
 	}
 
-	return pattern;
+	const patterns = [pattern];
+	if (typeof pattern === 'string' && !pattern.endsWith('/**')) {
+		patterns.push(pattern + '/**');
+	} else if (typeof pattern !== 'string' && !pattern.pattern.endsWith('/**')) {
+		patterns.push(new RelativePattern(pattern.baseUri, pattern.pattern + '/**'));
+	}
+	return patterns;
 }
 
 export function resolveToolInputPath(path: string, promptPathRepresentationService: IPromptPathRepresentationService): URI {
@@ -78,15 +84,16 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI):
 	const workspaceService = accessor.get(IWorkspaceService);
 	const tabsAndEditorsService = accessor.get(ITabsAndEditorsService);
 	const ignoreService = accessor.get(IIgnoreService);
+	const promptPathRepresentationService = accessor.get(IPromptPathRepresentationService);
 
 	if (workspaceService.getWorkspaceFolders.length > 0 && !workspaceService.getWorkspaceFolder(normalizePath(uri))) {
 		const fileOpenInSomeTab = tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri));
 		if (!fileOpenInSomeTab) {
-			throw new Error(`File is outside of the workspace and can't be read`);
+			throw new Error(`File ${promptPathRepresentationService.getFilePath(uri)} is outside of the workspace and can't be read`);
 		}
 	}
 
 	if (await ignoreService.isCopilotIgnored(uri)) {
-		throw new Error(`File is configured to be ignored by Copilot`);
+		throw new Error(`File ${promptPathRepresentationService.getFilePath(uri)} is configured to be ignored by Copilot`);
 	}
 }

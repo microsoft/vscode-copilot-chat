@@ -9,16 +9,22 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 export class DelaySession {
 	private readonly providerInvocationTime = Date.now();
 
+	private extraDebounce = 0;
+
 	constructor(
 		private baseDebounceTime: number,
 		private readonly expectedTotalTime: number | undefined,
 	) {
 	}
 
+	public setExtraDebounce(extraDebounce: number): void {
+		this.extraDebounce = extraDebounce;
+	}
+
 	getDebounceTime() {
 		const expectedDebounceTime = this.expectedTotalTime === undefined
-			? this.baseDebounceTime
-			: Math.min(this.baseDebounceTime, this.expectedTotalTime);
+			? this.baseDebounceTime + this.extraDebounce
+			: Math.min(this.baseDebounceTime + this.extraDebounce, this.expectedTotalTime);
 
 		const timeAlreadySpent = Date.now() - this.providerInvocationTime;
 		const actualDebounceTime = Math.max(0, expectedDebounceTime - timeAlreadySpent);

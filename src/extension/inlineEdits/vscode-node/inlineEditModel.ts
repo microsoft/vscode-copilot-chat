@@ -14,7 +14,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITracer, createTracer } from '../../../util/common/tracing';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { observableSignal } from '../../../util/vs/base/common/observableInternal';
+import { IObservableSignal, observableSignal } from '../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { createNextEditProvider } from '../node/createNextEditProvider';
 import { DebugRecorder } from '../node/debugRecorder';
@@ -34,8 +34,6 @@ export class InlineEditModel extends Disposable {
 
 	public readonly inlineEditsInlineCompletionsEnabled = this._configurationService.getConfigObservable(ConfigKey.Internal.InlineEditsInlineCompletionsEnabled);
 
-	private readonly _tracer: ITracer;
-
 	public readonly onChange = observableSignal(this);
 
 	constructor(
@@ -50,101 +48,146 @@ export class InlineEditModel extends Disposable {
 	) {
 		super();
 
-		this._tracer = createTracer(['NES', 'Model'], (s) => this._logService.logger.trace(s));
-
 		this._predictor = createNextEditProvider(this._predictorId, this._instantiationService);
 		const xtabDiffNEntries = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffNEntries, this._expService);
-		this.nextEditProvider = this._instantiationService.createInstance(NextEditProvider, this.workspace, this._predictor, historyContextProvider, new NesXtabHistoryTracker(this.workspace, xtabDiffNEntries), this.debugRecorder);
+		const xtabHistoryTracker = new NesXtabHistoryTracker(this.workspace, xtabDiffNEntries);
+		this.nextEditProvider = this._instantiationService.createInstance(NextEditProvider, this.workspace, this._predictor, historyContextProvider, xtabHistoryTracker, this.debugRecorder);
+
 		if (this._predictor.dependsOnSelection) {
-			const documentsToLastChangeEvents = new Map<DocumentId, { lastEditedTimestamp: number; lineNumberTriggers: Map<number /* lineNumber */, number /* timestamp */> }>();
-			this._store.add(this._register(vscode.workspace.onDidChangeTextDocument(e => {
-				if (e.document.uri.scheme === 'output') {
-					// ignore
-					return;
-				}
-				const tracer = this._tracer.sub('onDidChangeTextDocument');
-				if (e.reason === TextDocumentChangeReason.Undo || e.reason === TextDocumentChangeReason.Redo) {
-					// ignore
-					tracer.returns('undo/redo');
-					return;
-				}
-				const doc = this.workspace.getDocumentByTextDocument(e.document);
-				if (!doc) {
-					// an ignored document
-					tracer.returns('ignored document');
-					return;
-				}
-				documentsToLastChangeEvents.set(doc.id, { lastEditedTimestamp: Date.now(), lineNumberTriggers: new Map() });
-				tracer.returns('setting last edited timestamp');
-			})));
-			this._store.add(this._register(window.onDidChangeTextEditorSelection((e) => {
-				if (e.textEditor.document.uri.scheme === 'output') {
-					// ignore
-					return;
-				}
-				const tracer = this._tracer.sub('onDidChangeTextEditorSelection');
-				if (e.selections.length !== 1) {
-					// ignore
-					tracer.returns('multiple selections');
-					return;
-				}
-				if (!e.selections[0].isEmpty) {
-					// ignore
-					tracer.returns('not empty selection');
-					return;
-				}
-				const doc = this.workspace.getDocumentByTextDocument(e.textEditor.document);
-				if (!doc) {
-					return;
-				}
-				if (Date.now() - this.nextEditProvider.lastRejectionTime < TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN) {
-					// the cursor has moved within 5s of the last rejection, don't auto-trigger until another doc modification
-					documentsToLastChangeEvents.delete(doc.id);
-					tracer.returns('rejection cooldown');
-				}
+			this._register(new InlineEditTriggerer(this.workspace, this.nextEditProvider, this.onChange, this._logService));
+		}
+	}
+}
 
-				const mostRecentChange = documentsToLastChangeEvents.get(doc.id);
-				if (!mostRecentChange) {
-					// an ignored document
-					tracer.returns('ignored document');
-					return;
-				}
-				const now = Date.now();
-				const hasRecentEdit = (now - mostRecentChange.lastEditedTimestamp) < TRIGGER_INLINE_EDIT_AFTER_CHANGE_LIMIT;
-				if (!hasRecentEdit) {
-					tracer.returns('no recent edit');
-					return;
-				}
+class InlineEditTriggerer extends Disposable {
 
-				const hasRecentTrigger = (Date.now() - this.nextEditProvider.lastTriggerTime) < TRIGGER_INLINE_EDIT_AFTER_CHANGE_LIMIT;
-				if (!hasRecentTrigger) {
-					// the provider was not triggered recently, so we might be observing a cursor change event following
-					// a document edit caused outside of regular typing, otherwise the UI would have invoked us recently
-					tracer.returns('no recent trigger');
-					return;
-				}
+	private readonly docToLastChangeMap = new Map<DocumentId, { lastEditedTimestamp: number; lineNumberTriggers: Map<number /* lineNumber */, number /* timestamp */> }>();
 
-				const selectionLine = e.selections[0].active.line;
-				const lastTriggerTimestampForLine = mostRecentChange.lineNumberTriggers.get(selectionLine);
-				if (lastTriggerTimestampForLine !== undefined && lastTriggerTimestampForLine + TRIGGER_INLINE_EDIT_ON_SAME_LINE_COOLDOWN > now) {
-					tracer.returns('same line cooldown');
-					return;
-				}
+	private readonly _tracer: ITracer;
 
-				// TODO: Do not trigger if there is an existing valid request now running, ie don't use just last-trigger timestamp
-				// cleanup old triggers if too many
-				if (mostRecentChange.lineNumberTriggers.size > 100) {
-					for (const [lineNumber, timestamp] of mostRecentChange.lineNumberTriggers.entries()) {
-						if (now - timestamp > TRIGGER_INLINE_EDIT_AFTER_CHANGE_LIMIT) {
-							mostRecentChange.lineNumberTriggers.delete(lineNumber);
-						}
+	constructor(
+		private readonly workspace: VSCodeWorkspace,
+		private readonly nextEditProvider: NextEditProvider,
+		private readonly onChange: IObservableSignal<void>,
+		@ILogService private readonly _logService: ILogService,
+	) {
+		super();
+
+		this._tracer = createTracer(['NES', 'Triggerer'], (s) => this._logService.logger.trace(s));
+
+		this.registerListeners();
+	}
+
+	public registerListeners() {
+		this._registerDocumentChangeListener();
+		this._registerSelectionChangeListener();
+	}
+
+	private _shouldIgnoreDoc(doc: vscode.TextDocument): boolean {
+		return doc.uri.scheme === 'output'; // ignore output pane documents
+	}
+
+	private _registerDocumentChangeListener() {
+		this._store.add(this._register(vscode.workspace.onDidChangeTextDocument(e => {
+			if (this._shouldIgnoreDoc(e.document)) {
+				return;
+			}
+
+			const tracer = this._tracer.sub('onDidChangeTextDocument');
+
+			if (e.reason === TextDocumentChangeReason.Undo || e.reason === TextDocumentChangeReason.Redo) { // ignore
+				tracer.returns('undo/redo');
+				return;
+			}
+
+			const doc = this.workspace.getDocumentByTextDocument(e.document);
+
+			if (!doc) { // doc is likely copilot-ignored
+				tracer.returns('ignored document');
+				return;
+			}
+
+			this.docToLastChangeMap.set(doc.id, { lastEditedTimestamp: Date.now(), lineNumberTriggers: new Map() });
+
+			tracer.returns('setting last edited timestamp');
+		})));
+	}
+
+	private _registerSelectionChangeListener() {
+		this._store.add(this._register(window.onDidChangeTextEditorSelection((e) => {
+			if (this._shouldIgnoreDoc(e.textEditor.document)) {
+				return;
+			}
+
+			const tracer = this._tracer.sub('onDidChangeTextEditorSelection');
+
+			if (e.selections.length !== 1) { // ignore multi-selection case
+				tracer.returns('multiple selections');
+				return;
+			}
+
+			if (!e.selections[0].isEmpty) { // ignore non-empty selection
+				tracer.returns('not empty selection');
+				return;
+			}
+
+			const doc = this.workspace.getDocumentByTextDocument(e.textEditor.document);
+			if (!doc) { // doc is likely copilot-ignored
+				return;
+			}
+
+			const now = Date.now();
+			const timeSince = (timestamp: number) => now - timestamp;
+
+			if (timeSince(this.nextEditProvider.lastRejectionTime) < TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN) {
+				// the cursor has moved within 5s of the last rejection, don't auto-trigger until another doc modification
+				this.docToLastChangeMap.delete(doc.id);
+				tracer.returns('rejection cooldown');
+				return;
+			}
+
+			const mostRecentChange = this.docToLastChangeMap.get(doc.id);
+			if (!mostRecentChange) {
+				tracer.returns('document not tracked - does not have recent changes');
+				return;
+			}
+
+			const hasRecentEdit = timeSince(mostRecentChange.lastEditedTimestamp) < TRIGGER_INLINE_EDIT_AFTER_CHANGE_LIMIT;
+
+			if (!hasRecentEdit) {
+				tracer.returns('no recent edit');
+				return;
+			}
+
+			const hasRecentTrigger = timeSince(this.nextEditProvider.lastTriggerTime) < TRIGGER_INLINE_EDIT_AFTER_CHANGE_LIMIT;
+			if (!hasRecentTrigger) {
+				// the provider was not triggered recently, so we might be observing a cursor change event following
+				// a document edit caused outside of regular typing, otherwise the UI would have invoked us recently
+				tracer.returns('no recent trigger');
+				return;
+			}
+
+			const selectionLine = e.selections[0].active.line;
+			const lastTriggerTimestampForLine = mostRecentChange.lineNumberTriggers.get(selectionLine);
+			if (lastTriggerTimestampForLine !== undefined && timeSince(lastTriggerTimestampForLine) < TRIGGER_INLINE_EDIT_ON_SAME_LINE_COOLDOWN) {
+				tracer.returns('same line cooldown');
+				return;
+			}
+
+			// TODO: Do not trigger if there is an existing valid request now running, ie don't use just last-trigger timestamp
+
+			// cleanup old triggers if too many
+			if (mostRecentChange.lineNumberTriggers.size > 100) {
+				for (const [lineNumber, timestamp] of mostRecentChange.lineNumberTriggers.entries()) {
+					if (now - timestamp > TRIGGER_INLINE_EDIT_AFTER_CHANGE_LIMIT) {
+						mostRecentChange.lineNumberTriggers.delete(lineNumber);
 					}
 				}
+			}
 
-				mostRecentChange.lineNumberTriggers.set(selectionLine, now);
-				tracer.returns('triggering inline edit');
-				this.onChange.trigger(undefined);
-			})));
-		}
+			mostRecentChange.lineNumberTriggers.set(selectionLine, now);
+			tracer.returns('triggering inline edit');
+			this.onChange.trigger(undefined);
+		})));
 	}
 }

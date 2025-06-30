@@ -157,13 +157,19 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		const currentFileContent = activeDocument.documentAfterEdits;
 		const currentFileContentLines = currentFileContent.getLines();
 
-		const cursorLine = cursorPosition.lineNumber - 1 /* to convert to 0-based */;
+		const cursorLineIdx = cursorPosition.lineNumber - 1 /* to convert to 0-based */;
 
-		const areaAroundEditWindowLinesRange = this.computeAreaAroundEditWindowLinesRange(currentFileContentLines, cursorLine);
+		const cursorLine = currentFileContentLines[cursorLineIdx];
+		const isCursorAtEndOfLine = cursorPosition.column === cursorLine.trimEnd().length;
+		if (isCursorAtEndOfLine) {
+			delaySession.setExtraDebounce(this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsExtraDebounceEndOfLine, this.expService));
+		}
 
-		const editWindowLinesRange = this.computeEditWindowLinesRange(currentFileContentLines, cursorLine);
+		const areaAroundEditWindowLinesRange = this.computeAreaAroundEditWindowLinesRange(currentFileContentLines, cursorLineIdx);
 
-		const cursorOriginalLinesOffset = Math.max(0, cursorLine - editWindowLinesRange.start);
+		const editWindowLinesRange = this.computeEditWindowLinesRange(currentFileContentLines, cursorLineIdx);
+
+		const cursorOriginalLinesOffset = Math.max(0, cursorLineIdx - editWindowLinesRange.start);
 		const editWindowLastLineLength = activeDocument.documentAfterEdits.getTransformer().getLineLength(editWindowLinesRange.endExclusive);
 		const editWindow = activeDocument.documentAfterEdits.getTransformer().getOffsetRange(new Range(editWindowLinesRange.start + 1, 1, editWindowLinesRange.endExclusive, editWindowLastLineLength + 1));
 

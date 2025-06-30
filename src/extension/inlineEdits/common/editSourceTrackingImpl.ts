@@ -8,14 +8,16 @@ import { IGitService, RepoContext } from '../../../platform/git/common/gitServic
 import { IObservableDocument, ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
 import { sum } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { compareBy, numberComparator, reverseOrder } from '../../../util/vs/base/common/arrays';
 import { IntervalTimer, TimeoutTimer } from '../../../util/vs/base/common/async';
 import { Disposable, DisposableStore, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { derived, IObservable, IObservableWithChange, IReader, mapObservableArrayCached, observableSignal, observableValue, runOnChange, transaction } from '../../../util/vs/base/common/observableInternal';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { AnnotatedStringEdit, BaseStringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { createTimeout } from './common';
-import { CombineStreamedChanges, DocumentWithAnnotatedEdits, EditSource, EditSourceData, EditSourceDataWithMetadata, IDocumentWithAnnotatedEdits, MinimizeEditsProcessor } from './documentWithAnnotatedEdits';
+import { CombineStreamedChanges, DocumentWithAnnotatedEdits, EditReasonData, EditSource, EditSourceData, IDocumentWithAnnotatedEdits, MinimizeEditsProcessor } from './documentWithAnnotatedEdits';
 import { DocumentEditSourceTracker, TrackedEdit } from './editTracker';
 
 export class EditSourceTrackingImpl extends Disposable {
@@ -49,9 +51,9 @@ class TrackedDocumentInfo extends Disposable {
 		super();
 
 		// Use the listener service and special events from core to annotate where an edit came from (is async)
-		let processedDoc: IDocumentWithAnnotatedEdits<EditSourceDataWithMetadata> = this._store.add(new DocumentWithAnnotatedEdits(_doc));
+		let processedDoc: IDocumentWithAnnotatedEdits<EditReasonData> = this._store.add(new DocumentWithAnnotatedEdits(_doc));
 		// Combine streaming edits into one and make edit smaller
-		processedDoc = this._store.add(this._instantiationService.createInstance((CombineStreamedChanges<EditSourceDataWithMetadata>), processedDoc));
+		processedDoc = this._store.add(this._instantiationService.createInstance((CombineStreamedChanges<EditReasonData>), processedDoc));
 		// Remove common suffix and prefix from edits
 		processedDoc = this._store.add(new MinimizeEditsProcessor(processedDoc));
 
@@ -131,6 +133,8 @@ class TrackedDocumentInfo extends Disposable {
 		const data = this.getTelemetryData(ranges);
 		const isTrackedByGit = await data.isTrackedByGit;
 
+		const statsUuid = generateUuid();
+
 		/* __GDPR__
 			"editSourceTracker.stats" : {
 				"owner": "hediet",
@@ -138,6 +142,7 @@ class TrackedDocumentInfo extends Disposable {
 
 				"mode": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "longterm or 5minWindow" },
 				"languageId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The language id of the document." },
+				"statsUuid": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The unique identifier for the telemetry event." },
 
 				"nesModifiedCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Fraction of nes modified characters", "isMeasurement": true },
 				"inlineCompletionsCopilotModifiedCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Fraction of inline completions copilot modified characters", "isMeasurement": true },
@@ -153,6 +158,7 @@ class TrackedDocumentInfo extends Disposable {
 		this._telemetryService.sendTelemetryEvent<IEditSourceTrackerStatsEvent>('editSourceTracker.stats', { microsoft: true, github: { eventNamePrefix: 'copilot-nes/' } }, {
 			mode,
 			languageId: this._doc.languageId.get(),
+			statsUuid: statsUuid,
 		}, {
 			nesModifiedCount: data.nesModifiedCount,
 			inlineCompletionsCopilotModifiedCount: data.inlineCompletionsCopilotModifiedCount,
@@ -165,6 +171,38 @@ class TrackedDocumentInfo extends Disposable {
 			externalModifiedCount: data.externalModifiedCount,
 			isTrackedByGit: isTrackedByGit ? 1 : 0,
 		});
+
+
+		const sums = sumByCategory(ranges, r => r.range.length, r => r.sourceKey);
+		const entries = Object.entries(sums).filter(([key, value]) => value !== undefined);
+		entries.sort(reverseOrder(compareBy(([key, value]) => value!, numberComparator)));
+		entries.length = mode === 'longterm' ? 30 : 10;
+
+		for (const [key, value] of Object.entries(sums)) {
+			/* __GDPR__
+				"editSourceTracker.details" : {
+					"owner": "hediet",
+					"comment": "Reports distribution of various edit kinds.",
+
+					"reasonKey": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The reason for the edit." },
+					"mode": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "longterm or 5minWindow" },
+					"languageId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The language id of the document." },
+					"statsUuid": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The unique identifier for the telemetry event." },
+
+					"modifiedCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Fraction of nes modified characters", "isMeasurement": true },
+					"totalModifiedCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Total number of characters", "isMeasurement": true }
+				}
+			*/
+			this._telemetryService.sendTelemetryEvent('editSourceTracker.details', { microsoft: true, github: false }, {
+				mode,
+				reasonKey: key,
+				languageId: this._doc.languageId.get(),
+				statsUuid: statsUuid,
+			}, {
+				modifiedCount: value,
+				totalModifiedCount: data.totalModifiedCharactersInFinalState,
+			});
+		}
 	}
 
 	getTelemetryData(ranges: readonly TrackedEdit[]) {
@@ -212,6 +250,7 @@ interface IEditSourceTrackerStatsEvent {
 	properties: {
 		mode: string;
 		languageId: string;
+		statsUuid: string;
 	};
 	measurements: {
 		nesModifiedCount: number;
@@ -242,7 +281,7 @@ function mapObservableDelta<T, TDelta, TDeltaNew>(obs: IObservableWithChange<T, 
 /**
  * Removing the metadata allows touching edits from the same source to merged, even if they were caused by different actions (e.g. two user edits).
  */
-function createDocWithJustReason(docWithAnnotatedEdits: IDocumentWithAnnotatedEdits<EditSourceDataWithMetadata>, store: DisposableStore): IDocumentWithAnnotatedEdits<EditSourceData> {
+function createDocWithJustReason(docWithAnnotatedEdits: IDocumentWithAnnotatedEdits<EditReasonData>, store: DisposableStore): IDocumentWithAnnotatedEdits<EditSourceData> {
 	const docWithJustReason: IDocumentWithAnnotatedEdits<EditSourceData> = {
 		value: mapObservableDelta(docWithAnnotatedEdits.value, edit => ({ edit: edit.edit.mapData(d => d.data.toEditSourceData()) }), store),
 		waitForQueue: () => docWithAnnotatedEdits.waitForQueue(),
@@ -252,7 +291,7 @@ function createDocWithJustReason(docWithAnnotatedEdits: IDocumentWithAnnotatedEd
 
 class ArcTelemetrySender extends Disposable {
 	constructor(
-		docWithAnnotatedEdits: IDocumentWithAnnotatedEdits<EditSourceDataWithMetadata>,
+		docWithAnnotatedEdits: IDocumentWithAnnotatedEdits<EditReasonData>,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService
 	) {
 		super();
@@ -263,14 +302,8 @@ class ArcTelemetrySender extends Disposable {
 				return;
 			}
 			const singleEdit = edit.replacements[0];
-			const data = singleEdit.data.metadata;
+			const data = singleEdit.data.editReason.metadata;
 			if (data?.source !== 'inlineCompletionAccept') {
-				return;
-			}
-
-			if (data.type === 'word' || data.type === 'line') {
-				// TODO: this was a partial acceptance, we don't have acceptedLength
-				// so instead of sending broken telemetry, we skip sending it
 				return;
 			}
 
@@ -291,8 +324,8 @@ class ArcTelemetrySender extends Disposable {
 				*/
 				res.telemetryService.sendTelemetryEvent<IReportInlineEditArcEvent>('reportInlineEditArc', { microsoft: true, github: { eventNamePrefix: 'copilot-nes/' } },
 					{
-						extensionId: data.extensionId ?? '',
-						opportunityId: data.requestUuid ?? 'unknown',
+						extensionId: data.$extensionId ?? '',
+						opportunityId: data.$$requestUuid ?? 'unknown',
 					},
 					{
 						didBranchChange: res.didBranchChange ? 1 : 0,

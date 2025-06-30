@@ -3,14 +3,16 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { BasePromptElementProps, Chunk, PromptElement, PromptSizing, TextChunk, useKeepWith } from '@vscode/prompt-tsx';
-import { CancellationToken, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolInvocationOptions, LanguageModelToolInvocationPrepareOptions, LanguageModelToolResult, lm, PreparedToolInvocation, ProviderResult } from 'vscode';
+import { CancellationToken, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelDataPart, LanguageModelToolInvocationOptions, LanguageModelToolInvocationPrepareOptions, LanguageModelToolResult, lm, PreparedToolInvocation, ProviderResult } from 'vscode';
 import { FileChunkAndScore } from '../../../platform/chunking/common/chunk';
 import { ILogService } from '../../../platform/log/common/logService';
 import { UrlChunkEmbeddingsIndex } from '../../../platform/urlChunkSearch/node/urlChunkEmbeddingsIndex';
 import { Lazy } from '../../../util/vs/base/common/lazy';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { isImageDataPart } from '../../conversation/common/languageModelChatMessageHelpers';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
+import { imageDataPartToTSX } from '../../prompts/node/panel/toolCalling';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 
@@ -28,6 +30,11 @@ interface WebPageChunkResult {
 	uri: URI;
 	chunks: FileChunkAndScore[];
 	sumScore: number;
+}
+
+interface WebPageImageResult {
+	uri: URI;
+	imagePart: LanguageModelDataPart;
 }
 
 /**
@@ -61,7 +68,7 @@ class FetchWebPageTool implements ICopilotTool<IFetchWebPageParams> {
 			throw new Error('Tool not found');
 		}
 		const { urls } = options.input;
-		const { content } = await lm.invokeTool(internalToolName, options, token) as { content: LanguageModelTextPart[] };
+		const { content } = await lm.invokeTool(internalToolName, options, token);
 		if (urls.length !== content.length) {
 			this._logService.logger.error(`Expected ${urls.length} responses but got ${content.length}`);
 			return new LanguageModelToolResult([
@@ -70,10 +77,30 @@ class FetchWebPageTool implements ICopilotTool<IFetchWebPageParams> {
 		}
 
 		const invalidUrls: string[] = [];
-		const valid: Array<{ readonly uri: URI; readonly content: string }> = [];
+		const validTextContent: Array<{ readonly uri: URI; readonly content: string }> = [];
+		const imageResults: WebPageImageResult[] = [];
+
 		for (let i = 0; i < urls.length; i++) {
 			try {
-				valid.push({ uri: URI.parse(urls[i]), content: content[i].value });
+				const uri = URI.parse(urls[i]);
+				const contentPart = content[i];
+
+				if (options.model?.capabilities.supportsImageToText && isImageDataPart(contentPart)) {
+					// Handle image data - don't chunk it, just pass it through
+					imageResults.push({ uri, imagePart: contentPart });
+				} else if (contentPart instanceof LanguageModelTextPart) {
+					// Handle text content - this will be chunked
+					validTextContent.push({ uri, content: contentPart.value });
+				} else {
+					// Handle other data parts as text if they have a value property
+					const textValue = (contentPart as any).value;
+					if (typeof textValue === 'string') {
+						validTextContent.push({ uri, content: textValue });
+					} else {
+						this._logService.logger.warn(`Unsupported content type at index ${i}: ${urls[i]}`);
+						invalidUrls.push(urls[i]);
+					}
+				}
 			} catch (error) {
 				this._logService.logger.error(`Invalid URL at index ${i}: ${urls[i]}`, error);
 				invalidUrls.push(urls[i]);
@@ -81,14 +108,14 @@ class FetchWebPageTool implements ICopilotTool<IFetchWebPageParams> {
 		}
 
 		const filesAndTheirChunks = await this._index.value.findInUrls(
-			valid,
+			validTextContent,
 			options.input.query ?? '',
 			token
 		);
 
 		const webPageResults = new Array<WebPageChunkResult>();
-		for (let i = 0; i < valid.length; i++) {
-			const file = valid[i];
+		for (let i = 0; i < validTextContent.length; i++) {
+			const file = validTextContent[i];
 			const chunks = filesAndTheirChunks[i];
 			const sumScore = chunks.reduce((acc, chunk) => acc + (chunk.distance?.value ?? 0), 0);
 			webPageResults.push({ uri: file.uri, chunks, sumScore });
@@ -99,7 +126,7 @@ class FetchWebPageTool implements ICopilotTool<IFetchWebPageParams> {
 		const element = await renderPromptElementJSON(
 			this._instantiationService,
 			WebPageResults,
-			{ webPageResults, invalidUrls },
+			{ webPageResults, imageResults, invalidUrls },
 			options.tokenizationOptions,
 			token
 		);
@@ -112,6 +139,7 @@ ToolRegistry.registerTool(FetchWebPageTool);
 
 interface WebPageResultsProps extends BasePromptElementProps {
 	webPageResults: WebPageChunkResult[];
+	imageResults: WebPageImageResult[];
 	invalidUrls: string[];
 }
 
@@ -119,7 +147,10 @@ class WebPageResults extends PromptElement<WebPageResultsProps, void> {
 	render(_state: void, _sizing: PromptSizing) {
 		return <>
 			{
-				this.props.webPageResults.map<WebPageContentChunks>(result => <WebPageContentChunks uri={result.uri} chunks={result.chunks} passPriority />)
+				this.props.webPageResults.map(result => <WebPageContentChunks uri={result.uri} chunks={result.chunks} passPriority />)
+			}
+			{
+				this.props.imageResults.map(result => <WebPageImage uri={result.uri} imagePart={result.imagePart} passPriority />)
 			}
 			{
 				this.props.invalidUrls.map(url => <TextChunk>Invalid URL so no data was provided: {url}</TextChunk>)
@@ -131,6 +162,11 @@ class WebPageResults extends PromptElement<WebPageResultsProps, void> {
 interface WebPageContentChunksProps extends BasePromptElementProps {
 	uri: URI;
 	chunks: FileChunkAndScore[];
+}
+
+interface WebPageImageProps extends BasePromptElementProps {
+	uri: URI;
+	imagePart: LanguageModelDataPart;
 }
 
 class WebPageContentChunks extends PromptElement<WebPageContentChunksProps, void> {
@@ -170,6 +206,22 @@ class WebPageContentChunks extends PromptElement<WebPageContentChunksProps, void
 				{
 					chunksWithRankPriorities.map(c => <TextChunk priority={c.rankPriority}>{c.chunk.text}</TextChunk>)
 				}
+			</KeepWith>
+		</Chunk>;
+	}
+}
+
+class WebPageImage extends PromptElement<WebPageImageProps, void> {
+	render(_state: void, _sizing: PromptSizing) {
+		const KeepWith = useKeepWith();
+		const imageElement = imageDataPartToTSX(this.props.imagePart);
+
+		return <Chunk passPriority>
+			<KeepWith>
+				<TextChunk>Here is an image from the web page {this.props.uri.toString()}:</TextChunk>
+			</KeepWith>
+			<KeepWith passPriority>
+				{imageElement}
 			</KeepWith>
 		</Chunk>;
 	}

@@ -12,6 +12,7 @@ import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRa
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { DocumentId } from './dataTypes/documentId';
 import { LanguageId } from './dataTypes/languageId';
+import { EditReason } from './editReason';
 
 export abstract class ObservableWorkspace {
 	abstract get openDocuments(): IObservableWithChange<readonly IObservableDocument[], { added: readonly IObservableDocument[]; removed: readonly IObservableDocument[] }>;
@@ -103,30 +104,6 @@ export class StringEditWithReason extends StringEdit {
 		super(replacements);
 	}
 }
-
-export class EditReason {
-	constructor(
-		public readonly metadata: ITextModelEditReasonMetadata = { source: 'unknown' },
-	) {
-	}
-
-	public static readonly unknown = new EditReason({ source: 'unknown' });
-}
-
-export type ITextModelEditReasonMetadata = {
-	source: 'unknown' | 'Chat.applyEdits' | 'inlineChat.applyEdit' | 'reloadFromDisk' | 'eolChange' | 'setValue' | 'applyEdits' | 'snippet' | 'formatEditsCommand';
-} | {
-	source: 'inlineCompletionAccept';
-	nes: boolean;
-	type: 'word' | 'line' | undefined;
-	requestUuid: string;
-	extensionId: string | undefined;
-} | {
-	source: 'cursor';
-	kind: 'compositionType' | 'compositionEnd' | 'type' | 'paste' | 'cut' | 'executeCommands' | 'executeCommand';
-	detailedSource?: string | null | undefined;
-};
-
 
 export class MutableObservableWorkspace extends ObservableWorkspace {
 	private readonly _openDocuments = observableValue<readonly IObservableDocument[], { added: readonly IObservableDocument[]; removed: readonly IObservableDocument[] }>(this, []);

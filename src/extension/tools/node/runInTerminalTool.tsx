@@ -309,7 +309,7 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 		const isPwsh = isPowerShell(this.envService.shell);
 		const cdPrefixMatch = commandLine.match(
 			isPwsh
-				? /^cd (?<dir>[^\s]+) ?(?:&&|;)\s+(?<suffix>.+)$/
+				? /^(?:cd|Set-Location(?: -Path)) (?<dir>[^\s]+) ?(?:&&|;)\s+(?<suffix>.+)$/i
 				: /^cd (?<dir>[^\s]+) &&\s+(?<suffix>.+)$/
 		);
 		const cdDir = cdPrefixMatch?.groups?.dir;
@@ -336,6 +336,9 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 			// Re-write the command if it matches the cwd
 			if (cwd) {
 				let cdDirPath = cdDir;
+				if (cdDirPath.startsWith('"') && cdDirPath.endsWith('"')) {
+					cdDirPath = cdDirPath.slice(1, -1);
+				}
 				let cwdFsPath = cwd.fsPath;
 				if (this.envService.OS === OperatingSystem.Windows) {
 					cdDirPath = cdDirPath.toLowerCase();

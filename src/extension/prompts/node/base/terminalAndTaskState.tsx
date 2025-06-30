@@ -23,6 +23,11 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 		super(props);
 	}
 	async render() {
+		if (Boolean('true')) {
+			// https://github.com/microsoft/vscode/issues/252690
+			return;
+		}
+
 		const runningTasks: { name: string; isBackground: boolean; type?: string; command?: string; problemMatcher?: string; group?: string; script?: string; dependsOn?: string; buffer: string }[] = [];
 		let terminals: { name: string; buffer: string }[] = [];
 

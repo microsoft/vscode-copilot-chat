@@ -491,6 +491,11 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		telemetryInfo: TelemetryCorrelationId,
 		token: CancellationToken
 	): Promise<StrategySearchOutcome> {
+		// Run prepare before starting the actual timeout
+		if (mainStrategy.prepareSearchWorkspace) {
+			await raceCancellationError(mainStrategy.prepareSearchWorkspace?.(telemetryInfo, token), token);
+		}
+
 		const mainOp = createCancelablePromise(token => this.runSearchStrategy(mainStrategy, sizing, query, options, telemetryInfo, token));
 		token.onCancellationRequested(() => mainOp.cancel());
 
@@ -587,6 +592,10 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 
 	private async runSearchStrategy(strategy: IWorkspaceChunkSearchStrategy, sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, options: WorkspaceChunkSearchOptions, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<StrategySearchOutcome> {
 		try {
+			if (strategy.prepareSearchWorkspace) {
+				await raceCancellationError(strategy.prepareSearchWorkspace(telemetryInfo, token), token);
+			}
+
 			const result = await raceCancellationError(strategy.searchWorkspace(sizing, query, options, telemetryInfo, token), token);
 			if (result) {
 				return Result.ok<StrategySearchOk>({

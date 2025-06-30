@@ -273,7 +273,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 
 		let allRepos = Array.from(this._repoTracker.getAllRepos());
 		if (canPrompt) {
-			if (allRepos.some(repo => repo.status === RepoStatus.CouldNotCheckIndexStatus)) {
+			if (allRepos.some(repo => repo.status === RepoStatus.CouldNotCheckIndexStatus || repo.status === RepoStatus.NotAuthorized)) {
 				if (await raceCancellationError(this._authUpgradeService.shouldRequestPermissiveSessionUpgrade(), token)) { // Needs more thought
 					if (await raceCancellationError(this._authUpgradeService.shouldRequestPermissiveSessionUpgrade(), token)) {
 						await raceCancellationError(this._repoTracker.updateAllRepoStatuses(), token);
@@ -309,7 +309,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				return Result.error<AvailableFailureMetadata>({ unavailableReason: 'Not yet indexed', repoStatuses });
 			}
 
-			if (allRepos.every(repo => repo.status === RepoStatus.CouldNotCheckIndexStatus)) {
+			if (allRepos.every(repo => repo.status === RepoStatus.CouldNotCheckIndexStatus || repo.status === RepoStatus.NotAuthorized)) {
 				return Result.error<AvailableFailureMetadata>({ unavailableReason: 'Could not check index status', repoStatuses });
 			}
 
@@ -404,11 +404,21 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			return CodeSearchRemoteIndexStatus.Indexing;
 		}
 
-		if (allPotentialRepos.some(repo => repo.status === RepoStatus.CouldNotCheckIndexStatus)) {
+		if (allPotentialRepos.some(repo => repo.status === RepoStatus.CouldNotCheckIndexStatus || repo.status === RepoStatus.NotAuthorized)) {
 			return CodeSearchRemoteIndexStatus.CouldNotCheckIndexStatus;
 		}
 
 		return CodeSearchRemoteIndexStatus.NoRepos;
+	}
+
+	private didRunPrepare = false;
+	async prepareSearchWorkspace(telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<undefined> {
+		if (this.didRunPrepare) {
+			return;
+		}
+
+		this.didRunPrepare = true;
+		return this._repoTracker.tryAuthIfNeeded(telemetryInfo, token);
 	}
 
 	async searchWorkspace(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, options: WorkspaceChunkSearchOptions, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<StrategySearchResult | undefined> {

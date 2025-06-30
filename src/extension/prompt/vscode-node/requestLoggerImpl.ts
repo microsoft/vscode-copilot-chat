@@ -5,7 +5,6 @@
 
 import { HTMLTracer, IChatEndpointInfo, RenderPromptResult } from '@vscode/prompt-tsx';
 import { CancellationToken, DocumentLink, DocumentLinkProvider, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult2, languages, Range, TextDocument, Uri, workspace } from 'vscode';
-import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -26,7 +25,6 @@ export class RequestLogger extends AbstractRequestLogger {
 
 	constructor(
 		@ILogService private readonly _logService: ILogService,
-		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 	) {
 		super();
@@ -62,7 +60,7 @@ export class RequestLogger extends AbstractRequestLogger {
 	public readonly onDidChangeRequests = this._onDidChangeRequests.event;
 
 	public override logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2): void {
-		this._addEntryIfInternal({
+		this._addEntry({
 			kind: LoggedInfoKind.ToolCall,
 			id,
 			chatRequest: this.currentRequest,
@@ -75,7 +73,7 @@ export class RequestLogger extends AbstractRequestLogger {
 
 	public override addPromptTrace(elementName: string, endpoint: IChatEndpointInfo, result: RenderPromptResult, trace: HTMLTracer): void {
 		const id = generateUuid().substring(0, 8);
-		this._addEntryIfInternal({ kind: LoggedInfoKind.Element, id, name: elementName, tokens: result.tokenCount, maxTokens: endpoint.modelMaxPromptTokens, trace, chatRequest: this.currentRequest })
+		this._addEntry({ kind: LoggedInfoKind.Element, id, name: elementName, tokens: result.tokenCount, maxTokens: endpoint.modelMaxPromptTokens, trace, chatRequest: this.currentRequest })
 			.catch(e => this._logService.logger.error(e));
 	}
 
@@ -84,7 +82,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		if (!this._shouldLog(entry)) {
 			return;
 		}
-		this._addEntryIfInternal({ kind: LoggedInfoKind.Request, id, entry, chatRequest: this.currentRequest })
+		this._addEntry({ kind: LoggedInfoKind.Request, id, entry, chatRequest: this.currentRequest })
 			.then(ok => {
 				if (ok) {
 					this._ensureLinkProvider();
@@ -112,12 +110,7 @@ export class RequestLogger extends AbstractRequestLogger {
 
 	private _isFirst = true;
 
-	private async _addEntryIfInternal(entry: LoggedInfo): Promise<boolean> {
-		const isInternal = (await this._authenticationService.getCopilotToken())?.isInternal;
-		if (!isInternal) {
-			return false;
-		}
-
+	private async _addEntry(entry: LoggedInfo): Promise<boolean> {
 		if (this._isFirst) {
 			this._isFirst = false;
 			this._logService.logger.info(`Latest entry: ${ChatRequestScheme.buildUri({ kind: 'latest' })}`);

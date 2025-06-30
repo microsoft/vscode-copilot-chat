@@ -65,6 +65,7 @@ export class CodebaseTool implements vscode.LanguageModelTool<ICodebaseToolParam
 				query: options.input.query,
 				history: [],
 			},
+			maxResults: 64,
 			include: {
 				workspaceChunks: true,
 				workspaceStructure: options.input.includeFileStructure ?? false
@@ -159,7 +160,7 @@ class WorkspaceContextWrapper extends PromptElement<WorkspaceContextProps> {
 	}
 
 	render() {
-		// WorkspaceContext allocates .7 of the token budget for chunks
+		// Main limit is set via maxChunks. Set a TokenLimit just to be sure.
 		return <TokenLimit max={28_000}>
 			<WorkspaceContext {...this.props} />
 		</TokenLimit>;

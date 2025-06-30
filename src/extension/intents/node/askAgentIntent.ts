@@ -26,10 +26,10 @@ import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry
 import { DefaultIntentRequestHandler, IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIntentRequestHandler';
 import { IDocumentContext } from '../../prompt/node/documentContext';
 import { IIntent, IIntentInvocationContext, IntentLinkificationOptions } from '../../prompt/node/intents';
+import { AgentPrompt } from '../../prompts/node/agent/agentPrompt';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
-import { AgentPrompt } from '../../prompts/node/panel/editAgentPrompt';
 import { IToolsService } from '../../tools/common/toolsService';
-import { AgentIntentInvocation } from './editAgentIntent';
+import { AgentIntentInvocation } from './agentIntent';
 import { getRequestedToolCallIterationLimit } from './toolCallingLoop';
 
 

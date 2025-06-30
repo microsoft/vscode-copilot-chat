@@ -66,6 +66,7 @@ import { IUrlOpener, NullUrlOpener } from '../../open/common/opener';
 import { IParserService } from '../../parser/node/parserService';
 import { ParserServiceImpl } from '../../parser/node/parserServiceImpl';
 import { IPromptPathRepresentationService, TestPromptPathRepresentationService } from '../../prompts/common/promptPathRepresentationService';
+import { BasicCodeSearchAuthenticationService, ICodeSearchAuthenticationService } from '../../remoteCodeSearch/node/codeSearchRepoAuth';
 import { NullRequestLogger } from '../../requestLogger/node/nullRequestLogger';
 import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { IScopeSelector } from '../../scopeSelection/common/scopeSelection';
@@ -212,6 +213,7 @@ export function _createBaselineServices(): TestingServiceCollection {
 	testingServiceCollection.define(ISurveyService, new SyncDescriptor(NullSurveyService));
 	testingServiceCollection.define(IEditSurvivalTrackerService, new SyncDescriptor(NullEditSurvivalTrackerService));
 	testingServiceCollection.define(IWorkspaceChunkSearchService, new SyncDescriptor(NullWorkspaceChunkSearchService));
+	testingServiceCollection.define(ICodeSearchAuthenticationService, new SyncDescriptor(BasicCodeSearchAuthenticationService));
 	return testingServiceCollection;
 }
 

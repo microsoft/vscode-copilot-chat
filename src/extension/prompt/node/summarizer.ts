@@ -20,25 +20,38 @@ class SummaryPrompt {
 			messages: [
 				{
 					role: 'system' as const,
-					content: `You are an expert at summarizing chat conversations. You will be provided a series of user/assistant message pairs in chronological order.
-The user is iterating on a feature specification, bug fix, or other common programming task.
-There may be relevant code snippets or files referenced in the conversation.
-The user is collaborating with the assistant to refine their ideas and solutions, course-correcting the assistant as needed.
-The user will provide feedback on the assistant's suggestions and may request changes or improvements.
-Disregard messages that the user has indicated are incorrect, irrelevant, or unhelpful.
-Preserve relevant and actiionable context and key information.
+					content: `You are an expert at summarizing chat conversations.
+
+You will be provided:
+
+- A series of user/assistant message pairs in chronological order
+- A final user message indicating the user's intent.
+
+Your task is to:
+
+- Create a detailed summary of the conversation that captures the user's intent and key information.
+
+Keep in mind:
+
+- The user is iterating on a feature specification, bug fix, or other common programming task.
+- There may be relevant code snippets or files referenced in the conversation.
+- The user is collaborating with the assistant to refine their ideas and solutions, course-correcting the assistant as needed.
+- The user will provide feedback on the assistant's suggestions and may request changes or improvements.
+- Disregard messages that the user has indicated are incorrect, irrelevant, or unhelpful.
+- Preserve relevant and actionable context and key information.
+- If the conversation is long or discusses several tasks, keep the summary focused on the task indicated by the user's intent.
+- Always prefer decisions in later messages over earlier ones.
 
 Structure your summary using the following format:
 
 TITLE: A brief title for the summary
-TASK DESCRIPTION: Main goals and user requirements
-COMPLETED: What has been accomplished. Include file paths and other direct references.
-PENDING: What still needs to be done
-CODE STATE: Files discussed or modified. Provide code snippets or diffs that illustrate desired changes.
+USER INTENT: The user's goal or intent for the conversation
+TASK DESCRIPTION: Main technical goals and user requirements
+EXISTING: What has already been accomplished. Include file paths and other direct references.
+PENDING: What still needs to be done. Include file paths and other direct references.
+CODE STATE: A list of all files discussed or modified. Provide code snippets or diffs that illustrate important context.
 RELEVANT CODE/DOCUMENTATION SNIPPETS: Key code or documentation snippets from referenced files or discussions.
-CHANGES: Key code changes made
-
-If the conversation is long, keep the summary focused on the most recent task discussed. Prefer decisions in later messages over earlier ones`
+OTHER NOTES: Any additional context or information that may be relevant.`
 				}
 			]
 		};
@@ -64,18 +77,20 @@ export class ChatSummarizerProvider implements vscode.ChatSummarizer {
 		}
 
 		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-4o-mini');
-
-		// Use simple approach like TitlePrompt
 		const summaryPrompt = new SummaryPrompt();
 		const { messages: systemMessages } = summaryPrompt.render();
 
 		// Condense each turn into a single user message containing both request and response
 		const conversationContent = turns
-			.filter(turn => turn.request?.message && turn.responseMessage?.message)
+			.filter(turn => turn.request?.message)
 			.map(turn => {
 				const userMsg = turn.request?.message || '';
 				const assistantMsg = turn.responseMessage?.message || '';
-				return `User: ${userMsg}\n\nAssistant: ${assistantMsg}`;
+				if (assistantMsg) {
+					return `User: ${userMsg}\n\nAssistant: ${assistantMsg}`;
+				} else {
+					return `User: ${userMsg}`;
+				}
 			})
 			.join('\n\n---\n\n');
 
@@ -84,7 +99,7 @@ export class ChatSummarizerProvider implements vscode.ChatSummarizer {
 				role: Raw.ChatRole.User,
 				content: [{
 					type: Raw.ChatCompletionContentPartKind.Text,
-					text: `Here is the conversation to summarize:\n\n${conversationContent}\n\nPlease summarize the conversation above.`
+					text: `Here is the conversation to summarize:\n\n${conversationContent}`
 				}]
 			}
 		];
@@ -120,7 +135,6 @@ export class ChatSummarizerProvider implements vscode.ChatSummarizer {
 			if (summary.match(/^".*"$/)) {
 				summary = summary.slice(1, -1);
 			}
-
 			return summary;
 		} else {
 			this.logService.logger.error(`Failed to fetch conversation summary because of response type (${response.type}) and reason (${response.reason})`);

@@ -8,6 +8,7 @@ import { ChatDisabledError, ContactSupportError, EnterpriseManagedError, NotSign
 import { SESSION_LOGIN_MESSAGE } from '../../../platform/authentication/vscode-node/session';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
+import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -28,6 +29,7 @@ const welcomeViewContextKeys = {
 
 const chatQuotaExceededContextKey = 'github.copilot.chat.quotaExceeded';
 
+const showLogViewContextKey = `github.copilot.chat.showLogView`;
 const debugReportFeedbackContextKey = 'github.copilot.debugReportFeedback';
 
 const previewFeaturesDisabledContextKey = 'github.copilot.previewFeaturesDisabled';
@@ -37,6 +39,7 @@ export class ContextKeysContribution extends Disposable {
 
 	private _needsOfflineCheck = false;
 	private _scheduledOfflineCheck: NodeJS.Timeout | undefined;
+	private _showLogView = false;
 
 	constructor(
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
@@ -44,15 +47,23 @@ export class ContextKeysContribution extends Disposable {
 		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@ILogService private readonly _logService: ILogService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
-		@ICAPIClientService private readonly _capiClientService: ICAPIClientService
+		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
+		@IEnvService private readonly _envService: IEnvService
 	) {
 		super();
 
 		void this._inspectContext().catch(console.error);
 		this._register(_authenticationService.onDidAuthenticationChange(async () => await this._onAuthenticationChange()));
 		this._register(commands.registerCommand('github.copilot.refreshToken', async () => await this._inspectContext()));
+		this._register(commands.registerCommand('github.copilot.debug.showChatLogView', async () => {
+			this._showLogView = true;
+			await commands.executeCommand('setContext', showLogViewContextKey, true);
+			await commands.executeCommand('copilot-chat.focus');
+		}));
 		this._register({ dispose: () => this._cancelPendingOfflineCheck() });
 		this._register(window.onDidChangeWindowState(() => this._runOfflineCheck('Window state change')));
+
+		this._updateShowLogViewContext();
 
 		const debugReportFeedback = this._configService.getConfigObservable(ConfigKey.Internal.DebugReportFeedback);
 		this._register(autorun(reader => {
@@ -169,10 +180,22 @@ export class ContextKeysContribution extends Disposable {
 		}
 	}
 
+	private _updateShowLogViewContext() {
+		if (this._showLogView) {
+			return;
+		}
+
+		this._showLogView = !!this._authenticationService.copilotToken?.isInternal || !this._envService.isProduction();
+		if (this._showLogView) {
+			commands.executeCommand('setContext', showLogViewContextKey, this._showLogView);
+		}
+	}
+
 	private async _onAuthenticationChange() {
 		this._inspectContext();
 		this._updateQuotaExceededContext();
 		this._updatePreviewFeaturesDisabledContext();
 		this._updateBYOKEnabled();
+		this._updateShowLogViewContext();
 	}
 }

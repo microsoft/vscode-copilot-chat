@@ -30,7 +30,7 @@ suite('FindTextInFilesResult', () => {
 		const clz = class extends PromptElement {
 			render() {
 				return <UserMessage>
-					<FindTextInFilesResult textResults={results} />
+					<FindTextInFilesResult textResults={results} maxResults={20} />
 				</UserMessage>;
 			}
 		};

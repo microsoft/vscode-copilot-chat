@@ -120,7 +120,7 @@ export class DocumentEditSourceTracker<T = void> extends Disposable {
 		return ranges.map((r, idx) => {
 			const e = this._edits.replacements[idx];
 			const reason = e.data.source;
-			const te = new TrackedEdit(e.replaceRange, r, reason);
+			const te = new TrackedEdit(e.replaceRange, r, reason, e.data.key);
 			return te;
 		});
 	}
@@ -155,5 +155,6 @@ export class TrackedEdit {
 		public readonly originalRange: OffsetRange,
 		public readonly range: OffsetRange,
 		public readonly source: EditSource,
+		public readonly sourceKey: string,
 	) { }
 }

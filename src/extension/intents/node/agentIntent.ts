@@ -36,10 +36,10 @@ import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry
 import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIntentRequestHandler';
 import { IDocumentContext } from '../../prompt/node/documentContext';
 import { IBuildPromptResult, IIntent, IntentLinkificationOptions } from '../../prompt/node/intents';
+import { AgentPrompt, AgentPromptProps } from '../../prompts/node/agent/agentPrompt';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { TemporalContextStats } from '../../prompts/node/inline/temporalContext';
-import { AgentPrompt, AgentPromptProps } from '../../prompts/node/panel/editAgentPrompt';
 import { EditCodePrompt2 } from '../../prompts/node/panel/editCodePrompt2';
 import { ToolResultMetadata } from '../../prompts/node/panel/toolCalling';
 import { ToolName } from '../../tools/common/toolNames';

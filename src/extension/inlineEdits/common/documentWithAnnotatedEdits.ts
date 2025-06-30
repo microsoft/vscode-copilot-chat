@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
-import { EditReason, IObservableDocument, ITextModelEditReasonMetadata } from '../../../platform/inlineEdits/common/observableWorkspace';
+import { EditReason } from '../../../platform/inlineEdits/common/editReason';
+import { IObservableDocument } from '../../../platform/inlineEdits/common/observableWorkspace';
 import { AsyncIterableObject, raceTimeout } from '../../../util/vs/base/common/async';
 import { CachedFunction } from '../../../util/vs/base/common/cache';
 import { Disposable, DisposableStore, toDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -21,8 +22,8 @@ export interface IDocumentWithAnnotatedEdits<TEditData extends IEditData<TEditDa
  * Creates a document that is a delayed copy of the original document,
  * but with edits annotated with the source of the edit.
 */
-export class DocumentWithAnnotatedEdits extends Disposable implements IDocumentWithAnnotatedEdits<EditSourceDataWithMetadata> {
-	public readonly value: IObservableWithChange<StringText, { edit: AnnotatedStringEdit<EditSourceDataWithMetadata> }>;
+export class DocumentWithAnnotatedEdits extends Disposable implements IDocumentWithAnnotatedEdits<EditReasonData> {
+	public readonly value: IObservableWithChange<StringText, { edit: AnnotatedStringEdit<EditReasonData> }>;
 
 	constructor(private readonly _originalDoc: IObservableDocument) {
 		super();
@@ -31,7 +32,7 @@ export class DocumentWithAnnotatedEdits extends Disposable implements IDocumentW
 
 		this._register(runOnChange(this._originalDoc.value, (val, _prevVal, edits) => {
 			const eComposed = AnnotatedStringEdit.compose(edits.map(e => {
-				const editSourceData = new EditSourceDataWithMetadata(EditSourceBase.create(e.reason), e.reason.metadata);
+				const editSourceData = new EditReasonData(e.reason);
 				return e.mapData(() => editSourceData);
 			}));
 
@@ -47,33 +48,36 @@ export class DocumentWithAnnotatedEdits extends Disposable implements IDocumentW
 /**
  * Only joins touching edits if the source and the metadata is the same.
 */
-export class EditSourceDataWithMetadata implements IEditData<EditSourceDataWithMetadata> {
+export class EditReasonData implements IEditData<EditReasonData> {
+	public readonly source = EditSourceBase.create(this.editReason);
+	public readonly key = this.editReason.toKey(1);
+
 	constructor(
-		public readonly source: EditSource,
-		public readonly metadata: ITextModelEditReasonMetadata | undefined,
+		public readonly editReason: EditReason,
 	) { }
 
-	join(data: EditSourceDataWithMetadata): EditSourceDataWithMetadata | undefined {
-		if (this.source !== data.source) {
-			return undefined;
-		}
-		if (this.metadata !== data.metadata) {
+	join(data: EditReasonData): EditReasonData | undefined {
+		if (this.editReason !== data.editReason) {
 			return undefined;
 		}
 		return this;
 	}
 
 	toEditSourceData(): EditSourceData {
-		return new EditSourceData(this.source);
+		return new EditSourceData(this.key, this.source);
 	}
 }
 
 export class EditSourceData implements IEditData<EditSourceData> {
 	constructor(
-		public readonly source: EditSource
+		public readonly key: string,
+		public readonly source: EditSource,
 	) { }
 
 	join(data: EditSourceData): EditSourceData | undefined {
+		if (this.key !== data.key) {
+			return undefined;
+		}
 		if (this.source !== data.source) {
 			return undefined;
 		}
@@ -89,18 +93,29 @@ export abstract class EditSourceBase {
 		switch (data.source) {
 			case 'reloadFromDisk':
 				return this._cache.get(new ExternalEditSource());
-			case 'inlineCompletionAccept':
-				if (data.nes) {
-					return this._cache.get(new InlineSuggestEditSource('nes', data.extensionId ?? '', data.type));
+			case 'inlineCompletionPartialAccept':
+			case 'inlineCompletionAccept': {
+				const type = 'type' in data ? data.type : undefined;
+				if ('$nes' in data && data.$nes) {
+					return this._cache.get(new InlineSuggestEditSource('nes', data.$extensionId ?? '', type));
 				}
-				return this._cache.get(new InlineSuggestEditSource('completion', data.extensionId ?? '', data.type));
+				return this._cache.get(new InlineSuggestEditSource('completion', data.$extensionId ?? '', type));
+			}
 			case 'snippet':
 				return this._cache.get(new IdeEditSource('suggest'));
-			case 'formatEditsCommand':
-				return this._cache.get(new IdeEditSource('format'));
+			case 'unknown':
+				if (!data.name) {
+					return this._cache.get(new UnknownEditSource());
+				}
+				switch (data.name) {
+					case 'formatEditsCommand':
+						return this._cache.get(new IdeEditSource('format'));
+				}
+				return this._cache.get(new UnknownEditSource());
+
 			case 'Chat.applyEdits':
 				return this._cache.get(new ChatEditSource('sidebar'));
-			case 'inlineChat.applyEdit':
+			case 'inlineChat.applyEdits':
 				return this._cache.get(new ChatEditSource('inline'));
 			case 'cursor':
 				return this._cache.get(new UserEditSource());

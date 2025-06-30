@@ -8,7 +8,8 @@ import { ConfigKey, IConfigurationService } from '../../../../platform/configura
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { LanguageId } from '../../../../platform/inlineEdits/common/dataTypes/languageId';
-import { EditReason, IObservableDocument, ObservableWorkspace, StringEditWithReason } from '../../../../platform/inlineEdits/common/observableWorkspace';
+import { EditReason } from '../../../../platform/inlineEdits/common/editReason';
+import { IObservableDocument, ObservableWorkspace, StringEditWithReason } from '../../../../platform/inlineEdits/common/observableWorkspace';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -67,7 +68,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 				return;
 			}
 			const edit = editFromTextDocumentContentChangeEvents(e.contentChanges);
-			const editWithReason = new StringEditWithReason(edit.replacements, new EditReason(e.detailedReason?.metadata as any));
+			const editWithReason = new StringEditWithReason(edit.replacements, EditReason.create(e.detailedReason?.metadata as any));
 			transaction(tx => {
 				doc.languageId.set(LanguageId.create(e.document.languageId), tx);
 				doc.value.set(stringValueFromDoc(e.document), tx, editWithReason);

@@ -9,22 +9,22 @@ import { ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { EditSurvivalResult } from '../../../platform/editSurvivalTracking/common/editSurvivalReporter';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IMultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
+import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { ISurveyService } from '../../../platform/survey/common/surveyService';
 import { ITelemetryService, TelemetryEventMeasurements, TelemetryEventProperties } from '../../../platform/telemetry/common/telemetry';
 import { isNotebookCellOrNotebookChatInput } from '../../../util/common/notebooks';
 import { createServiceIdentifier } from '../../../util/common/services';
+import { Schemas } from '../../../util/vs/base/common/network';
 import { Intent } from '../../common/constants';
 import { IConversationStore } from '../../conversationStore/node/conversationStore';
 import { findDiagnosticsTelemetry } from '../../inlineChat/node/diagnosticsTelemetry';
 import { CopilotInteractiveEditorResponse, InteractionOutcome } from '../../inlineChat/node/promptCraftingTypes';
+import { AgentParticipantId } from '../../intents/node/agentIntent';
 import { EditCodeStepTurnMetaData } from '../../intents/node/editCodeStep';
 import { Conversation, ICopilotChatResultIn } from '../../prompt/common/conversation';
 import { IntentInvocationMetadata } from '../../prompt/node/conversation';
 import { IFeedbackReporter } from '../../prompt/node/feedbackReporter';
 import { sendUserActionTelemetry } from '../../prompt/node/telemetry';
-import { INotebookService } from '../../../platform/notebook/common/notebookService';
-import { Schemas } from '../../../util/vs/base/common/network';
-import { AgentParticipantId } from '../../intents/node/editAgentIntent';
 
 export const IUserFeedbackService = createServiceIdentifier<IUserFeedbackService>('IUserFeedbackService');
 export interface IUserFeedbackService {
@@ -226,12 +226,16 @@ export class UserFeedbackService implements IUserFeedbackService {
 			};
 
 			// Copy actions have a copiedCharacters/Lines property since this includes manual copying which can be partial
+			let compType: 'full' | 'partial' = 'full';
 			if (e.action.kind === 'copy') {
 				measurements = {
 					...measurements,
 					copiedCharacters: e.action.copiedCharacters,
 					copiedLines: e.action.copiedLines,
 				};
+				if (e.action.copiedCharacters !== e.action.totalCharacters) {
+					compType = 'partial';
+				}
 			}
 
 			// If there is a document and selection, include cursor location
@@ -251,6 +255,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 					participant: agentId,
 					languageId: e.action.languageId ?? '',
 					modelId: e.action.modelId ?? '',
+					comp_type: compType
 				},
 				measurements,
 				e.action.kind === 'copy' ? 'conversation.acceptedCopy' : 'conversation.acceptedInsert'
