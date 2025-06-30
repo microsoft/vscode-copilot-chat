@@ -603,7 +603,10 @@ export class CommandLineAutoApprover extends Disposable {
 		return false;
 	}
 
-	private mapAutoApproveConfigToRegexList(config: Record<string, boolean>): RegExp[] {
+	private mapAutoApproveConfigToRegexList(config: unknown): RegExp[] {
+		if (!config || typeof config !== 'object') {
+			return [];
+		}
 		return Object.entries(config)
 			.map(([key, value]) => value ? this.convertAutoApproveEntryToRegex(key) : undefined)
 			.filter(e => !!e);
