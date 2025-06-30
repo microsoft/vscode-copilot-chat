@@ -1111,8 +1111,8 @@ class ContextItems implements ContextItemSummary {
 				return {
 					kind: ContextKind.Snippet,
 					priority: item.priority,
-					uri: vscode.Uri.parse(item.uri),
-					additionalUris: item.additionalUris?.map(uri => vscode.Uri.parse(uri)),
+					uri: vscode.Uri.file(item.uri),
+					additionalUris: item.additionalUris?.map(uri => vscode.Uri.file(uri)),
 					value: item.value
 				};
 			case protocol.ContextKind.Trait:
