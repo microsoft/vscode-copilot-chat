@@ -10,6 +10,7 @@ import { ChatMessage } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
 import type { ChatResponsePart, LanguageModelToolInformation, NotebookDocument, Progress } from 'vscode';
 import { ChatFetchResponseType, ChatLocation, ChatResponse, FetchSuccess } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
@@ -25,10 +26,16 @@ import { IResultMetadata } from '../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCallRound } from '../../../prompt/common/intents';
 import { ToolName } from '../../../tools/common/toolNames';
 import { NotebookSummary } from '../../../tools/node/notebookSummaryTool';
+import { CopilotIdentityRules } from '../base/copilotIdentity';
 import { renderPromptElement } from '../base/promptRenderer';
+import { SafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
+import { CustomInstructions } from '../panel/customInstructions';
+import { UserPreferences } from '../panel/preferences';
 import { ChatToolCalls } from '../panel/toolCalling';
-import { AgentPrompt, AgentPromptProps, AgentUserMessage, getKeepGoingReminder, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn } from './agentPrompt';
+import { MultirootWorkspaceStructure } from '../panel/workspace/workspaceStructure';
+import { DefaultAgentPrompt, SweBenchAgentPrompt } from './agentInstructions';
+import { AgentUserMessage, getKeepGoingReminder, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn } from './agentPrompt';
 import { SimpleSummarizedHistory } from './simpleSummarizedHistoryPrompt';
 
 export interface ConversationHistorySummarizationPromptProps extends SummarizedAgentHistoryProps {
@@ -36,10 +43,13 @@ export interface ConversationHistorySummarizationPromptProps extends SummarizedA
 }
 
 /**
- * Prompt used to summarize conversation history when the context window is exceeded.
+ * @deprecated Use AgentSummarizationPrompt instead for better caching efficiency.
+ * Legacy prompt used to summarize conversation history when the context window is exceeded.
+ * (Kept for backward compatibility only)
  */
 export class ConversationHistorySummarizationPrompt extends PromptElement<ConversationHistorySummarizationPromptProps> {
 	override async render(state: void, sizing: PromptSizing) {
+		// Legacy implementation - consider migrating to AgentSummarizationPrompt
 		const history = this.props.simpleMode ?
 			<SimpleSummarizedHistory priority={1} promptContext={this.props.promptContext} location={this.props.location} endpoint={this.props.endpoint} maxToolResultLength={this.props.maxToolResultLength} /> :
 			<ConversationHistory priority={1} promptContext={this.props.promptContext} location={this.props.location} endpoint={this.props.endpoint} maxToolResultLength={this.props.maxToolResultLength} />;
@@ -165,19 +175,155 @@ export class ConversationHistorySummarizationPrompt extends PromptElement<Conver
 	}
 }
 
-class WorkingNotebookSummary extends PromptElement<NotebookSummaryProps> {
+/**
+ * Optimized agent-style prompt structure for summarization that maximizes caching efficiency.
+ *
+ * Cache Optimizations Implemented:
+ * 1. Reuses the same system prompt, agent instructions, and environment setup as normal agent prompts
+ * 2. Strategic cache breakpoint placement: caches stable components, excludes dynamic history
+ * 3. Unified mode handling via boolean flags instead of enum-based cache fragmentation
+ * 4. Dynamic conversation history components placed outside cached sections
+ *
+ * This structure allows the expensive-to-compute components (system setup, instructions, environment)
+ * to be cached while only the conversation history and final query remain dynamic.
+ */
+export class AgentSummarizationPrompt extends PromptElement<ConversationHistorySummarizationPromptProps> {
+	constructor(
+		props: ConversationHistorySummarizationPromptProps,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+	) {
+		super(props);
+	}
+
 	override async render(state: void, sizing: PromptSizing) {
+		// Use the same agent instructions to get caching benefits
+		const instructions = this.configurationService.getConfig(ConfigKey.Internal.SweBenchAgentPrompt) ?
+			<SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} /> :
+			<DefaultAgentPrompt
+				availableTools={this.props.promptContext.tools?.availableTools}
+				modelFamily={this.props.endpoint.family}
+				codesearchMode={false}
+			/>;
+
+		// Determine summarization detail level based on available context and simple mode
+		const useDetailedSummary = !this.props.simpleMode;
+		const summarizationQuery = this.getSummarizationQuery(useDetailedSummary);
+
 		return (
-			<UserMessage>
-				This is the current state of the notebook that you have been working on:<br />
-				<NotebookSummary notebook={this.props.notebook} />
-			</UserMessage>
+			<>
+				{/* Reuse the same system prompt structure as AgentPrompt for maximum caching */}
+				<SystemMessage>
+					You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
+					<CopilotIdentityRules />
+					<SafetyRules />
+				</SystemMessage>
+				{instructions}
+				<UserMessage>
+					<CustomInstructions languageId={undefined} chatVariables={this.props.promptContext.chatVariables} />
+					{this.props.promptContext.modeInstructions && <Tag name='customInstructions'>
+						Below are some additional instructions from the user.<br />
+						<br />
+						{this.props.promptContext.modeInstructions}
+					</Tag>}
+				</UserMessage>
+				<UserMessage>
+					<Tag name='environment_info'>
+						Environment and workspace information available in conversation context.
+					</Tag>
+					<Tag name='workspace_info'>
+						<MultirootWorkspaceStructure maxSize={2000} excludeDotFiles={true} /><br />
+						This is the state of the context at this point in the conversation. The view of the workspace structure may be truncated. You can use tools to collect more context if needed.
+					</Tag>
+					<UserPreferences flexGrow={7} priority={800} />
+					<cacheBreakpoint type={CacheType} />
+				</UserMessage>
+				{/* Dynamic history components - not cached for optimal cache efficiency */}
+				<ConversationHistoryForSummarization
+					priority={1}
+					promptContext={this.props.promptContext}
+					location={this.props.location}
+					endpoint={this.props.endpoint}
+					maxToolResultLength={this.props.maxToolResultLength}
+					simpleMode={this.props.simpleMode}
+				/>
+				{this.props.workingNotebook && <WorkingNotebookSummary priority={this.props.priority - 2} notebook={this.props.workingNotebook} />}
+				<UserMessage priority={900}>
+					{summarizationQuery}
+				</UserMessage>
+				<cacheBreakpoint type={CacheType} />
+			</>
 		);
+	}
+
+	private getSummarizationQuery(useDetailedSummary: boolean): string {
+		if (useDetailedSummary) {
+			return `Please create a comprehensive, detailed summary of this conversation that captures all essential information needed to seamlessly continue the work without any loss of context. Structure your summary using the following format:
+
+1. Conversation Overview:
+- Primary Objectives: All explicit user requests and overarching goals
+- Session Context: High-level narrative of conversation flow and key phases
+- User Intent Evolution: How user's needs or direction changed throughout conversation
+
+2. Technical Foundation:
+- Core technologies, frameworks, and architectural patterns used
+- Environment details and constraints
+
+3. Codebase Status:
+- All files discussed or modified with their purpose and current state
+- Key code segments and dependencies
+
+4. Problem Resolution:
+- Issues encountered and solutions implemented
+- Debugging context and lessons learned
+
+5. Progress Tracking:
+- Completed tasks with status indicators
+- Partially complete work
+- Validated outcomes
+
+6. Active Work State:
+- Current focus and recent context
+- Working code being modified
+- Immediate context before this summary
+
+7. Recent Operations:
+- Last agent commands executed
+- Tool results summary (truncate long results but keep essential info)
+- Pre-summary state and operation context
+
+8. Continuation Plan:
+- Pending tasks with specific next steps
+- Priority information and immediate next actions
+
+Focus particularly on the specific agent commands/tools that were just executed and their results.`;
+		} else {
+			return `Please provide a concise summary of this conversation history using the following format:
+
+TASK DESCRIPTION: The description of the task to perform
+
+COMPLETED: Tasks completed so far with brief results
+PENDING: Tasks that still need to be done
+
+CODE STATE: All file paths that were discussed or modified
+CHANGES: Key code edits that have taken place
+
+RECENT OPERATIONS: Last agent commands executed and their key results
+
+Include all important tool calls that have already taken place as part of the appropriate sections.`;
+		}
 	}
 }
 
-export interface NotebookSummaryProps extends BasePromptElementProps {
-	notebook: NotebookDocument;
+/**
+ * Optimized conversation history component that selects the appropriate rendering strategy
+ * based on the summarization mode while maintaining separation from cached components.
+ */
+class ConversationHistoryForSummarization extends PromptElement<SummarizedAgentHistoryProps & { simpleMode?: boolean }> {
+	override async render(state: void, sizing: PromptSizing) {
+		return this.props.simpleMode ?
+			<SimpleSummarizedHistory priority={this.props.priority} promptContext={this.props.promptContext} location={this.props.location} endpoint={this.props.endpoint} maxToolResultLength={this.props.maxToolResultLength} /> :
+			<ConversationHistory priority={this.props.priority} promptContext={this.props.promptContext} location={this.props.location} endpoint={this.props.endpoint} maxToolResultLength={this.props.maxToolResultLength} />;
+	}
 }
 
 /**
@@ -362,6 +508,11 @@ export class SummarizedConversationHistory extends PromptElement<SummarizedAgent
 	}
 }
 
+/**
+ * @deprecated This enum is maintained for telemetry compatibility only.
+ * The actual mode selection is now handled directly via boolean flags to optimize caching.
+ * Consider removing this enum in future cleanup when telemetry migration is complete.
+ */
 enum SummaryMode {
 	Simple = 'simple',
 	Full = 'full'
@@ -400,89 +551,28 @@ class ConversationHistorySummarizer {
 
 	private async getSummaryWithFallback(propsInfo: ISummarizedConversationHistoryInfo): Promise<FetchSuccess<string>> {
 		const forceMode = this.configurationService.getConfig<string | undefined>(ConfigKey.Internal.AgentHistorySummarizationMode);
-		if (forceMode === SummaryMode.Simple) {
-			return await this.getSummary(SummaryMode.Simple, propsInfo);
+		const useSimpleMode = forceMode === SummaryMode.Simple;
+
+		if (useSimpleMode) {
+			return await this.getSummary(true, propsInfo);
 		} else {
 			try {
-				return await this.getSummary(SummaryMode.Full, propsInfo);
+				return await this.getSummary(false, propsInfo);
 			} catch (e) {
-				return await this.getSummary(SummaryMode.Simple, propsInfo);
+				// Fallback to simple mode on error
+				return await this.getSummary(true, propsInfo);
 			}
 		}
 	}
 
-	private async getSummary(mode: SummaryMode, propsInfo: ISummarizedConversationHistoryInfo): Promise<FetchSuccess<string>> {
+	private async getSummary(simpleMode: boolean, propsInfo: ISummarizedConversationHistoryInfo): Promise<FetchSuccess<string>> {
 		const endpoint = this.props.endpoint;
-
-		// Create summarization query based on mode
-		const summarizationQuery = mode === SummaryMode.Simple ?
-			`Please provide a brief summary of this conversation history using the following format:
-
-TASK DESCRIPTION: The description of the task to perform
-
-COMPLETED: Tasks completed so far with brief results
-PENDING: Tasks that still need to be done
-
-CODE STATE: All file paths that were discussed or modified
-CHANGES: Key code edits that have taken place
-
-Include all important tool calls that have already taken place as part of the appropriate sections.` :
-			`Please create a comprehensive, detailed summary of this conversation that captures all essential information needed to seamlessly continue the work without any loss of context. Structure your summary using the following format:
-
-1. Conversation Overview:
-- Primary Objectives: All explicit user requests and overarching goals
-- Session Context: High-level narrative of conversation flow and key phases
-- User Intent Evolution: How user's needs or direction changed throughout conversation
-
-2. Technical Foundation:
-- Core technologies, frameworks, and architectural patterns used
-- Environment details and constraints
-
-3. Codebase Status:
-- All files discussed or modified with their purpose and current state
-- Key code segments and dependencies
-
-4. Problem Resolution:
-- Issues encountered and solutions implemented
-- Debugging context and lessons learned
-
-5. Progress Tracking:
-- Completed tasks with status indicators
-- Partially complete work
-- Validated outcomes
-
-6. Active Work State:
-- Current focus and recent context
-- Working code being modified
-- Immediate context before this summary
-
-7. Recent Operations:
-- Last agent commands executed
-- Tool results summary (truncate long results but keep essential info)
-- Pre-summary state and operation context
-
-8. Continuation Plan:
-- Pending tasks with specific next steps
-- Priority information and immediate next actions
-
-Focus particularly on the specific agent commands/tools that were just executed and their results.`;
-
-		// Construct AgentPromptProps to reuse the same prompt structure for caching benefits
-		const agentProps: AgentPromptProps = {
-			endpoint: this.props.endpoint,
-			location: this.props.location,
-			promptContext: {
-				...propsInfo.props.promptContext,
-				query: summarizationQuery
-			},
-			enableCacheBreakpoints: true, // Enable caching to benefit from prompt cache
-			triggerSummarize: false // We're doing the summarization, not triggering another one
-		};
+		const mode = simpleMode ? SummaryMode.Simple : SummaryMode.Full;
 
 		let summarizationPrompt: ChatMessage[];
 		try {
 			const start = Date.now();
-			summarizationPrompt = (await renderPromptElement(this.instantiationService, endpoint, AgentPrompt, agentProps, undefined, this.token)).messages;
+			summarizationPrompt = (await renderPromptElement(this.instantiationService, endpoint, AgentSummarizationPrompt, { ...propsInfo.props, simpleMode }, undefined, this.token)).messages;
 			this.logService.logger.info(`[SummarizedConversationHistory] summarization prompt rendered in ${Date.now() - start}ms. Mode: ${mode}`);
 		} catch (e) {
 			const budgetExceeded = e instanceof BudgetExceededError;
@@ -684,4 +774,19 @@ class SummaryMessageElement extends PromptElement<SummaryMessageProps> {
 			</Tag>}
 		</UserMessage>;
 	}
+}
+
+class WorkingNotebookSummary extends PromptElement<NotebookSummaryProps> {
+	override async render(state: void, sizing: PromptSizing) {
+		return (
+			<UserMessage>
+				This is the current state of the notebook that you have been working on:<br />
+				<NotebookSummary notebook={this.props.notebook} />
+			</UserMessage>
+		);
+	}
+}
+
+export interface NotebookSummaryProps extends BasePromptElementProps {
+	notebook: NotebookDocument;
 }
