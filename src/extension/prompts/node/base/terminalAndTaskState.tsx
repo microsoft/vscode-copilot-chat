@@ -63,7 +63,7 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 						Active Tasks:<br />
 						{runningTasks.map((t) => (
 							<>
-								Task: {t.name} ( background: {String(t.isBackground)}
+								Task: {t.name} (background: {String(t.isBackground)}
 								{t.type ? `, type: ${t.type}` : ''}
 								{t.command ? `, command: ${t.command}` : ''}
 								{t.script ? `, script: ${t.script}` : ''})<br />
@@ -90,7 +90,7 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 										Exit Code: {term.lastCommand.exitCode ?? '(unknown)'}<br />
 									</>
 								) : ''}
-								Output: {'{'}Query {ToolName.GetTerminalOutput} for terminal with ID: {term.id}. {'}'}<br />
+								Output: {'{'}Use {ToolName.GetTerminalOutput} for terminal with ID: {term.id}.{'}'}<br />
 							</>
 						))}
 					</>
