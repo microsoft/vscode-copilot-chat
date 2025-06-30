@@ -381,7 +381,7 @@ describe('RunInTerminalTool', () => {
 
 			it('should support Set-Location on pwsh', async () => {
 				const testDir = '/test/workspace';
-				const options = createRewriteOptions(`Set-Location -Path "${testDir}" && npm install`, 'session-1');
+				const options = createRewriteOptions(`Set-Location "${testDir}" && npm install`, 'session-1');
 				vi.spyOn(workspaceService, 'getWorkspaceFolders').mockReturnValue([
 					{ fsPath: testDir } as any
 				]);
