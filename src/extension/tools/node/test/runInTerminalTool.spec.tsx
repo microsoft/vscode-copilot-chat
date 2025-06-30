@@ -371,6 +371,42 @@ describe('RunInTerminalTool', () => {
 				expect(result).toBe('npm install');
 			});
 
+			it('should support Set-Location on pwsh', async () => {
+				const testDir = '/test/workspace';
+				const options = createRewriteOptions(`Set-Location -Path "${testDir}" && npm install`, 'session-1');
+				vi.spyOn(workspaceService, 'getWorkspaceFolders').mockReturnValue([
+					{ fsPath: testDir } as any
+				]);
+				vi.spyOn(runInTerminalTool['terminalService'], 'getToolTerminalForSession').mockResolvedValue(undefined);
+				const result = await runInTerminalTool.rewriteCommandIfNeeded(options);
+
+				expect(result).toBe('npm install');
+			});
+
+			it('should support Set-Location -Path on pwsh', async () => {
+				const testDir = '/test/workspace';
+				const options = createRewriteOptions(`Set-Location -Path "${testDir}" && npm install`, 'session-1');
+				vi.spyOn(workspaceService, 'getWorkspaceFolders').mockReturnValue([
+					{ fsPath: testDir } as any
+				]);
+				vi.spyOn(runInTerminalTool['terminalService'], 'getToolTerminalForSession').mockResolvedValue(undefined);
+				const result = await runInTerminalTool.rewriteCommandIfNeeded(options);
+
+				expect(result).toBe('npm install');
+			});
+
+			it('should rewrite command when the path is wrapped in double quotes', async () => {
+				const testDir = '/test/workspace';
+				const options = createRewriteOptions(`cd "${testDir}" && npm install`, 'session-1');
+				vi.spyOn(workspaceService, 'getWorkspaceFolders').mockReturnValue([
+					{ fsPath: testDir } as any
+				]);
+				vi.spyOn(runInTerminalTool['terminalService'], 'getToolTerminalForSession').mockResolvedValue(undefined);
+				const result = await runInTerminalTool.rewriteCommandIfNeeded(options);
+
+				expect(result).toBe('npm install');
+			});
+
 			it('should rewrite command with ; separator when directory matches cwd', async () => {
 				const testDir = '/test/workspace';
 				const options = createRewriteOptions(`cd ${testDir}; npm test`, 'session-1');
