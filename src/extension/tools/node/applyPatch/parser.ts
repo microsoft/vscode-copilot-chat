@@ -420,8 +420,8 @@ export class Parser {
 	}
 }
 
-function replace_explicit_tabs(s: string) {
-	return s.replace(/^(\\t)+/gm, r => '\t'.repeat(r.length / 2));
+export function replace_explicit_tabs(s: string) {
+	return s.replace(/^(?:\s|\\t|\/|#)*/gm, r => r.replaceAll('\\t', '\t'));
 }
 
 function find_context_core(
