@@ -1,15 +1,30 @@
 # Contributing to GitHub Copilot Chat
 
 * [Creating good issues](#creating-good-issues)
+  * [Look For an Existing Issue](#look-for-an-existing-issue)
+    * [Writing Good Bug Reports and Feature Requests](#writing-good-bug-reports-and-feature-requests)
 * [Developing](#developing)
   * [Requirements](#requirements)
     * [First-time setup](#first-time-setup)
     * [Testing](#testing)
+    * [Use base/common utils](#use-basecommon-utils)
   * [Developing Prompts](#developing-prompts)
-  * [Tools](#tools)
+    * [Motivations for TSX prompt crafting](#motivations-for-tsx-prompt-crafting)
+    * [Quickstart](#quickstart)
   * [Code structure](#code-structure)
+    * [Project Architecture and Coding Standards](#project-architecture-and-coding-standards)
+    * [Layers](#layers)
+    * [Runtimes (node.js, web worker)](#runtimes-nodejs-web-worker)
+    * [Contributions and Services](#contributions-and-services)
+  * [Agent mode](#agent-mode)
+  * [Tools](#tools)
+    * [Developing tools](#developing-tools)
   * [Tree Sitter](#tree-sitter)
   * [Troubleshooting](#troubleshooting)
+    * [Reading requests](#reading-requests)
+  * [API updates](#api-updates)
+    * [Making breaking changes to API](#making-breaking-changes-to-api)
+    * [Making additive changes to API](#making-additive-changes-to-api)
 
 # Creating good issues
 
