@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { CHAT_MODEL } from '../../../platform/configuration/common/configurationService';
 import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
@@ -18,8 +19,9 @@ import { ITelemetryService, multiplexProperties } from '../../../platform/teleme
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { removeLeadingFilepathComment } from '../../../util/common/markdown';
+import { timeout } from '../../../util/vs/base/common/async';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseTextEditPart, LanguageModelPromptTsxPart, LanguageModelToolResult, WorkspaceEdit } from '../../../vscodeTypes';
+import { ChatResponseTextEditPart, EndOfLine, LanguageModelPromptTsxPart, LanguageModelToolResult, WorkspaceEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { processFullRewriteNotebook } from '../../prompts/node/codeMapper/codeMapper';
@@ -27,17 +29,17 @@ import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { ActionType } from './applyPatch/parser';
+import { CorrectedEditResult, ensureCorrectEdit } from './editFileCorrectorGemini';
 import { EditFileResult } from './editFileToolResult';
 import { EditError, NoMatchError, applyEdit } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileOkForTool, resolveToolInputPath } from './toolUtils';
-import { timeout } from '../../../util/vs/base/common/async';
 
 export interface IReplaceStringToolParams {
 	explanation: string;
 	filePath: string;
-	oldString?: string;
-	newString?: string;
+	oldString: string;
+	newString: string;
 }
 
 export class ReplaceStringTool implements ICopilotTool<IReplaceStringToolParams> {
@@ -99,19 +101,73 @@ export class ReplaceStringTool implements ICopilotTool<IReplaceStringToolParams>
 
 			const filePath = this.promptPathRepresentationService.getFilePath(document.uri);
 
+			let originalError = 'none';
+			let ensuredGenerationError = 'none';
+			let postCorrectError = 'none';
+
+
+			const eol = document instanceof TextDocumentSnapshot && document.eol === EndOfLine.CRLF ? '\r\n' : '\n';
+			const oldString = removeLeadingFilepathComment(options.input.oldString, document.languageId, filePath).replace(/\r?\n/g, eol);
+			const newString = removeLeadingFilepathComment(options.input.newString, document.languageId, filePath).replace(/\r?\n/g, eol);
+
 			try {
 				// Apply the edit using the improved applyEdit function that uses VS Code APIs
 				const workspaceEdit = new WorkspaceEdit();
-				const { updatedFile } = await applyEdit(
-					uri,
-					removeLeadingFilepathComment(options.input.oldString, document.languageId, filePath),
-					removeLeadingFilepathComment(options.input.newString, document.languageId, filePath),
-					workspaceEdit,
-					this.workspaceService,
-					this.notebookService,
-					this.alternativeNotebookContent,
-					this._promptContext.request?.model
-				);
+				let updatedFile: string;
+				try {
+					const result = await applyEdit(
+						uri,
+						oldString,
+						newString,
+						workspaceEdit,
+						this.workspaceService,
+						this.notebookService,
+						this.alternativeNotebookContent,
+						this._promptContext.request?.model
+					);
+					updatedFile = result.updatedFile;
+				} catch (e) {
+					originalError = (e as any).kindForTelemetry || e.constructor.name;
+					if (e instanceof NoMatchError) {
+						let corrected: CorrectedEditResult;
+						try {
+							corrected = await ensureCorrectEdit(
+								document.getText(),
+								{
+									explanation: options.input.explanation,
+									filePath: filePath,
+									oldString,
+									newString,
+								},
+								eol,
+								await this.endpointProvider.getChatEndpoint(CHAT_MODEL.GPT4OMINI),
+								token
+							);
+						} catch (e2) {
+							ensuredGenerationError = e2.stack || String(e2);
+							throw e;
+						}
+
+						try {
+							const result = await applyEdit(
+								uri,
+								corrected.params.oldString,
+								corrected.params.newString,
+								workspaceEdit,
+								this.workspaceService,
+								this.notebookService,
+								this.alternativeNotebookContent,
+								this._promptContext.request?.model
+							);
+							updatedFile = result.updatedFile;
+						} catch (e3) {
+							postCorrectError = (e3 as any).kindForTelemetry || e3.constructor.name;
+							throw e;
+						}
+					} else {
+						throw e;
+					}
+				}
 
 				this._promptContext.stream.markdown('\n```\n');
 				this._promptContext.stream.codeblockUri(uri, true);
@@ -217,6 +273,14 @@ export class ReplaceStringTool implements ICopilotTool<IReplaceStringToolParams>
 						),
 					)
 				]);
+			} finally {
+				console.log('#stringReplaceErr', JSON.stringify({
+					originalError,
+					ensuredGenerationError,
+					postCorrectError,
+					didPostCorrect: originalError === 'none' && ensuredGenerationError === 'none' && postCorrectError !== 'none',
+					okInitially: originalError === 'none',
+				}));
 			}
 		}
 	}

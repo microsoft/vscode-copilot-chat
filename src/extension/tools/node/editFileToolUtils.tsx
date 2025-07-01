@@ -4,11 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { LanguageModelChat } from 'vscode';
+import { OffsetLineColumnConverter } from '../../../platform/editing/common/offsetLineColumnConverter';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { URI } from '../../../util/vs/base/common/uri';
+import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
 import { EndOfLine, Position, Range, WorkspaceEdit } from '../../../vscodeTypes';
 
 // Simplified Hunk type for the patch
@@ -131,7 +133,7 @@ interface MatchResult {
  * @param newStr The replacement string
  * @returns An object with the new text, match type, and additional match information
  */
-function findAndReplaceOne(
+export function findAndReplaceOne(
 	text: string,
 	oldStr: string,
 	newStr: string,
@@ -212,65 +214,48 @@ function tryExactMatch(text: string, oldStr: string, newStr: string): MatchResul
  * Tries to match using flexible whitespace handling.
  */
 function tryWhitespaceFlexibleMatch(text: string, oldStr: string, newStr: string, eol: string): MatchResult {
-	// Handle trailing newlines for better matching
-	const hasTrailingLF = oldStr.endsWith(eol);
-	if (hasTrailingLF) {
-		oldStr = oldStr.slice(0, -eol.length);
+	const haystack = text.split(eol).map(line => line.trim());
+	const needle = oldStr.trim().split(eol).map(line => line.trim());
+	needle.push(''); // trailing newline to match until the end of a line
+
+	const convert = new OffsetLineColumnConverter(text);
+	const matchedLines: number[] = [];
+	for (let i = 0; i <= haystack.length - needle.length; i++) {
+		if (haystack.slice(i, i + needle.length).join('\n') === needle.join('\n')) {
+			matchedLines.push(i);
+			i += needle.length - 1;
+		}
 	}
-
-	// Build a pattern allowing flexible whitespace
-	const lines = oldStr.split(eol);
-	const pattern = lines
-		.map((line, i) => {
-			// Create a pattern that's more flexible with whitespace
-			// Allow any amount of leading whitespace, preserve indentation structure
-			const trimmed = line.trimStart();
-			const leadingSpaces = line.length - trimmed.length;
-			const leadingPattern = leadingSpaces > 0 ? `\\s{0,${leadingSpaces * 2}}` : '';
-
-			// Escape the line content for regex safety
-			const escaped = escapeRegex(trimmed);
-
-			// For all lines except the last (or if trailing newline), expect a newline after
-			const lineEnd = i < lines.length - 1 || hasTrailingLF
-				? '[ \\t]*\\r?\\n'
-				: '[ \\t]*';
-
-			return `${leadingPattern}${escaped}${lineEnd}`;
-		})
-		.join('');
-
-	const regex = new RegExp(pattern, 'g');
-
-	const matches = Array.from(text.matchAll(regex));
-	if (matches.length === 0) {
+	if (matchedLines.length === 0) {
 		return { text, editPosition: undefined, type: 'none' };
 	}
-	if (matches.length > 1) {
+
+	const positions = matchedLines.map(match => convert.positionToOffset(new EditorPosition(match + 1, 1)));
+
+	if (matchedLines.length > 1) {
 		return {
 			text,
 			type: 'multiple',
 			editPosition: undefined,
 			matchInfo: {
 				strategy: 'whitespace',
-				matchPositions: matches.map(match => match.index || 0),
+				matchPositions: positions,
 				suggestion: "Multiple matches found with flexible whitespace. Make your search string more unique."
 			}
 		};
 	}
 
 	// Exactly one whitespace-flexible match found
-	const match = matches[0];
-	const startIdx = match.index || 0;
-	const endIdx = startIdx + match[0].length;
-	const replaced = text.slice(0, startIdx) + newStr + text.slice(endIdx);
+	const startIdx = positions[0];
+	const endIdx = convert.positionToOffset(new EditorPosition(matchedLines[0] + 1 + needle.length, 1));
+	const replaced = text.slice(0, startIdx) + newStr + eol + text.slice(endIdx);
 	return {
 		text: replaced,
 		editPosition: [startIdx, endIdx],
 		type: 'whitespace',
 		matchInfo: {
 			strategy: 'whitespace-flexible',
-			matchPositions: [startIdx]
+			matchPositions: positions
 		}
 	};
 }

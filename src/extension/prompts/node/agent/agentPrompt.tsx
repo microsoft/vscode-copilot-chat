@@ -591,10 +591,12 @@ export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringToo
 	const lines = [];
 	if (hasEditFileTool) {
 		lines.push(<>When using the {ToolName.EditFile} tool, avoid repeating existing code, instead use a line comment with \`{EXISTING_CODE_MARKER}\` to represent regions of unchanged code.<br /></>);
-
 	}
 	if (hasReplaceStringTool) {
 		lines.push(<>When using the {ToolName.ReplaceString} tool, include 3-5 lines of unchanged code before and after the string you want to replace, to make it unambiguous which part of the file should be edited.<br /></>);
+	}
+	if (hasEditFileTool && hasReplaceStringTool) {
+		lines.push(<>It is much faster to edit using the {ToolName.ReplaceString} tool. Prefer {ToolName.ReplaceString} for making edits and only fall back to {ToolName.EditFile} if it fails.</>);
 	}
 
 	return lines;
