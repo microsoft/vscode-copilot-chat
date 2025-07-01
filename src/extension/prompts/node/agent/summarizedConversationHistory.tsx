@@ -21,137 +21,203 @@ import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart2 } from '../../../../vscodeTypes';
 import { ToolCallingLoop } from '../../../intents/node/toolCallingLoop';
-import { IResultMetadata } from '../../../prompt/common/conversation';
+import { GlobalContextMessageMetadata, IResultMetadata } from '../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCallRound } from '../../../prompt/common/intents';
 import { ToolName } from '../../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../../tools/common/toolSchemaNormalizer';
 import { NotebookSummary } from '../../../tools/node/notebookSummaryTool';
+import { CopilotIdentityRules } from '../base/copilotIdentity';
 import { renderPromptElement } from '../base/promptRenderer';
+import { SafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
+import { CustomInstructions } from '../panel/customInstructions';
 import { ChatToolCalls } from '../panel/toolCalling';
-import { AgentUserMessage, getKeepGoingReminder, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn } from './agentPrompt';
+import { DefaultAgentPrompt, SweBenchAgentPrompt } from './agentInstructions';
+import { AgentUserMessage, getKeepGoingReminder, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn, renderedMessageToTsxChildren } from './agentPrompt';
 import { SimpleSummarizedHistory } from './simpleSummarizedHistoryPrompt';
 
 export interface ConversationHistorySummarizationPromptProps extends SummarizedAgentHistoryProps {
 	simpleMode?: boolean;
 }
 
+interface GlobalAgentContextProps extends BasePromptElementProps {
+	readonly enableCacheBreakpoints?: boolean;
+}
+
+/**
+ * The "global agent context" is a static prompt at the start of a conversation containing user environment info, initial workspace structure, anything else that is a useful beginning
+ * hint for the agent but is not updated during the conversation.
+ */
+class GlobalAgentContext extends PromptElement<GlobalAgentContextProps> {
+	render() {
+		return <UserMessage>
+			<Tag name='environment_info'>
+				User OS and shell information will be included here
+			</Tag>
+			<Tag name='workspace_info'>
+				Workspace structure and tasks information will be included here
+			</Tag>
+		</UserMessage>;
+	}
+}
+
 /**
  * Prompt used to summarize conversation history when the context window is exceeded.
+ * Structured to match normal AgentPrompt for maximum cache hit potential.
  */
 export class ConversationHistorySummarizationPrompt extends PromptElement<ConversationHistorySummarizationPromptProps> {
+	constructor(
+		props: ConversationHistorySummarizationPromptProps,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+	) {
+		super(props);
+	}
+
 	override async render(state: void, sizing: PromptSizing) {
+		// Match the exact structure of AgentPrompt for cache compatibility
+		const instructions = this.configurationService.getConfig(ConfigKey.Internal.SweBenchAgentPrompt) ?
+			<SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} /> :
+			<DefaultAgentPrompt
+				availableTools={this.props.promptContext.tools?.availableTools}
+				modelFamily={this.props.endpoint.family}
+				codesearchMode={false}
+			/>;
+
+		// Same base instructions as AgentPrompt
+		const baseInstructions = <>
+			<SystemMessage>
+				You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
+				<CopilotIdentityRules />
+				<SafetyRules />
+			</SystemMessage>
+			{instructions}
+			<UserMessage>
+				<CustomInstructions languageId={undefined} chatVariables={this.props.promptContext.chatVariables} />
+				{this.props.promptContext.modeInstructions && <Tag name='customInstructions'>
+					Below are some additional instructions from the user.<br />
+					<br />
+					{this.props.promptContext.modeInstructions}
+				</Tag>}
+			</UserMessage>
+			<UserMessage>
+				{await this.getOrCreateGlobalAgentContext(this.props.endpoint)}
+			</UserMessage>
+		</>;
+
 		const history = this.props.simpleMode ?
 			<SimpleSummarizedHistory priority={1} promptContext={this.props.promptContext} location={this.props.location} endpoint={this.props.endpoint} maxToolResultLength={this.props.maxToolResultLength} /> :
 			<ConversationHistory priority={1} promptContext={this.props.promptContext} location={this.props.location} endpoint={this.props.endpoint} maxToolResultLength={this.props.maxToolResultLength} />;
+
 		return (
 			<>
-				<SystemMessage priority={this.props.priority}>
-					Your task is to create a comprehensive, detailed summary of the entire conversation that captures all essential information needed to seamlessly continue the work without any loss of context. This summary will be used to compact the conversation while preserving critical technical details, decisions, and progress.<br />
-
-					## Recent Context Analysis<br />
-
-					Pay special attention to the most recent agent commands and tool executions that led to this summarization being triggered. Include:<br />
-					- **Last Agent Commands**: What specific actions/tools were just executed<br />
-					- **Tool Results**: Key outcomes from recent tool calls (truncate if very long, but preserve essential information)<br />
-					- **Immediate State**: What was the system doing right before summarization<br />
-					- **Triggering Context**: What caused the token budget to be exceeded<br />
-
-					## Analysis Process<br />
-
-					Before providing your final summary, wrap your analysis in `&lt;analysis&gt;` tags to organize your thoughts systematically:<br />
-
-					1. **Chronological Review**: Go through the conversation chronologically, identifying key phases and transitions<br />
-					2. **Intent Mapping**: Extract all explicit and implicit user requests, goals, and expectations<br />
-					3. **Technical Inventory**: Catalog all technical concepts, tools, frameworks, and architectural decisions<br />
-					4. **Code Archaeology**: Document all files, functions, and code patterns that were discussed or modified<br />
-					5. **Progress Assessment**: Evaluate what has been completed vs. what remains pending<br />
-					6. **Context Validation**: Ensure all critical information for continuation is captured<br />
-					7. **Recent Commands Analysis**: Document the specific agent commands and tool results from the most recent operations<br />
-
-					## Summary Structure<br />
-
-					Your summary must include these sections in order, following the exact format below:<br />
-
-					<Tag name='analysis'>
-						[Chronological Review: Walk through conversation phases: initial request → exploration → implementation → debugging → current state]<br />
-						[Intent Mapping: List each explicit user request with message context]<br />
-						[Technical Inventory: Catalog all technologies, patterns, and decisions mentioned]<br />
-						[Code Archaeology: Document every file, function, and code change discussed]<br />
-						[Progress Assessment: What's done vs. pending with specific status]<br />
-						[Context Validation: Verify all continuation context is captured]<br />
-						[Recent Commands Analysis: Last agent commands executed, tool results (truncated if long), immediate pre-summarization state]<br />
-					</Tag><br />
-
-					<Tag name='summary'>
-						1. Conversation Overview:<br />
-						- Primary Objectives: [All explicit user requests and overarching goals with exact quotes]<br />
-						- Session Context: [High-level narrative of conversation flow and key phases]<br />
-						- User Intent Evolution: [How user's needs or direction changed throughout conversation]<br />
-
-						2. Technical Foundation:<br />
-						- [Core Technology 1]: [Version/details and purpose]<br />
-						- [Framework/Library 2]: [Configuration and usage context]<br />
-						- [Architectural Pattern 3]: [Implementation approach and reasoning]<br />
-						- [Environment Detail 4]: [Setup specifics and constraints]<br />
-
-						3. Codebase Status:<br />
-						- [File Name 1]:<br />
-						- Purpose: [Why this file is important to the project]<br />
-						- Current State: [Summary of recent changes or modifications]<br />
-						- Key Code Segments: [Important functions/classes with brief explanations]<br />
-						- Dependencies: [How this relates to other components]<br />
-						- [File Name 2]:<br />
-						- Purpose: [Role in the project]<br />
-						- Current State: [Modification status]<br />
-						- Key Code Segments: [Critical code blocks]<br />
-						- [Additional files as needed]<br />
-
-						4. Problem Resolution:<br />
-						- Issues Encountered: [Technical problems, bugs, or challenges faced]<br />
-						- Solutions Implemented: [How problems were resolved and reasoning]<br />
-						- Debugging Context: [Ongoing troubleshooting efforts or known issues]<br />
-						- Lessons Learned: [Important insights or patterns discovered]<br />
-
-						5. Progress Tracking:<br />
-						- Completed Tasks: [What has been successfully implemented with status indicators]<br />
-						- Partially Complete Work: [Tasks in progress with current completion status]<br />
-						- Validated Outcomes: [Features or code confirmed working through testing]<br />
-
-						6. Active Work State:<br />
-						- Current Focus: [Precisely what was being worked on in most recent messages]<br />
-						- Recent Context: [Detailed description of last few conversation exchanges]<br />
-						- Working Code: [Code snippets being modified or discussed recently]<br />
-						- Immediate Context: [Specific problem or feature being addressed before summary]<br />
-
-						7. Recent Operations:<br />
-						- Last Agent Commands: [Specific tools/actions executed just before summarization with exact command names]<br />
-						- Tool Results Summary: [Key outcomes from recent tool executions - truncate long results but keep essential info]<br />
-						- Pre-Summary State: [What the agent was actively doing when token budget was exceeded]<br />
-						- Operation Context: [Why these specific commands were executed and their relationship to user goals]<br />
-
-						8. Continuation Plan:<br />
-						- [Pending Task 1]: [Details and specific next steps with verbatim quotes]<br />
-						- [Pending Task 2]: [Requirements and continuation context]<br />
-						- [Priority Information]: [Which tasks are most urgent or logically sequential]<br />
-						- [Next Action]: [Immediate next step with direct quotes from recent messages]<br />
-					</Tag><br />
-
-					## Quality Guidelines<br />
-
-					- **Precision**: Include exact filenames, function names, variable names, and technical terms<br />
-					- **Completeness**: Capture all context needed to continue without re-reading the full conversation<br />
-					- **Clarity**: Write for someone who needs to pick up exactly where the conversation left off<br />
-					- **Verbatim Accuracy**: Use direct quotes for task specifications and recent work context<br />
-					- **Technical Depth**: Include enough detail for complex technical decisions and code patterns<br />
-					- **Logical Flow**: Present information in a way that builds understanding progressively<br />
-
-					This summary should serve as a comprehensive handoff document that enables seamless continuation of all active work streams while preserving the full technical and contextual richness of the original conversation.<br />
-				</SystemMessage>
+				{baseInstructions}
 				{history}
 				{this.props.workingNotebook && <WorkingNotebookSummary priority={this.props.priority - 2} notebook={this.props.workingNotebook} />}
 				<UserMessage>
-					Summarize the conversation history so far, paying special attention to the most recent agent commands and tool results that triggered this summarization. Structure your summary using the enhanced format provided in the system message.<br />
+					<Tag name='summarizationInstructions'>
+						Your task is to create a comprehensive, detailed summary of the entire conversation that captures all essential information needed to seamlessly continue the work without any loss of context. This summary will be used to compact the conversation while preserving critical technical details, decisions, and progress.<br />
+
+						## Recent Context Analysis<br />
+
+						Pay special attention to the most recent agent commands and tool executions that led to this summarization being triggered. Include:<br />
+						- **Last Agent Commands**: What specific actions/tools were just executed<br />
+						- **Tool Results**: Key outcomes from recent tool calls (truncate if very long, but preserve essential information)<br />
+						- **Immediate State**: What was the system doing right before summarization<br />
+						- **Triggering Context**: What caused the token budget to be exceeded<br />
+
+						## Analysis Process<br />
+
+						Before providing your final summary, wrap your analysis in `&lt;analysis&gt;` tags to organize your thoughts systematically:<br />
+
+						1. **Chronological Review**: Go through the conversation chronologically, identifying key phases and transitions<br />
+						2. **Intent Mapping**: Extract all explicit and implicit user requests, goals, and expectations<br />
+						3. **Technical Inventory**: Catalog all technical concepts, tools, frameworks, and architectural decisions<br />
+						4. **Code Archaeology**: Document all files, functions, and code patterns that were discussed or modified<br />
+						5. **Progress Assessment**: Evaluate what has been completed vs. what remains pending<br />
+						6. **Context Validation**: Ensure all critical information for continuation is captured<br />
+						7. **Recent Commands Analysis**: Document the specific agent commands and tool results from the most recent operations<br />
+
+						## Summary Structure<br />
+
+						Your summary must include these sections in order, following the exact format below:<br />
+
+						<Tag name='analysis'>
+							[Chronological Review: Walk through conversation phases: initial request → exploration → implementation → debugging → current state]<br />
+							[Intent Mapping: List each explicit user request with message context]<br />
+							[Technical Inventory: Catalog all technologies, patterns, and decisions mentioned]<br />
+							[Code Archaeology: Document every file, function, and code change discussed]<br />
+							[Progress Assessment: What's done vs. pending with specific status]<br />
+							[Context Validation: Verify all continuation context is captured]<br />
+							[Recent Commands Analysis: Last agent commands executed, tool results (truncated if long), immediate pre-summarization state]<br />
+						</Tag><br />
+
+						<Tag name='summary'>
+							1. Conversation Overview:<br />
+							- Primary Objectives: [All explicit user requests and overarching goals with exact quotes]<br />
+							- Session Context: [High-level narrative of conversation flow and key phases]<br />
+							- User Intent Evolution: [How user's needs or direction changed throughout conversation]<br />
+
+							2. Technical Foundation:<br />
+							- [Core Technology 1]: [Version/details and purpose]<br />
+							- [Framework/Library 2]: [Configuration and usage context]<br />
+							- [Architectural Pattern 3]: [Implementation approach and reasoning]<br />
+							- [Environment Detail 4]: [Setup specifics and constraints]<br />
+
+							3. Codebase Status:<br />
+							- [File Name 1]:<br />
+							- Purpose: [Why this file is important to the project]<br />
+							- Current State: [Summary of recent changes or modifications]<br />
+							- Key Code Segments: [Important functions/classes with brief explanations]<br />
+							- Dependencies: [How this relates to other components]<br />
+							- [File Name 2]:<br />
+							- Purpose: [Role in the project]<br />
+							- Current State: [Modification status]<br />
+							- Key Code Segments: [Critical code blocks]<br />
+							- [Additional files as needed]<br />
+
+							4. Problem Resolution:<br />
+							- Issues Encountered: [Technical problems, bugs, or challenges faced]<br />
+							- Solutions Implemented: [How problems were resolved and reasoning]<br />
+							- Debugging Context: [Ongoing troubleshooting efforts or known issues]<br />
+							- Lessons Learned: [Important insights or patterns discovered]<br />
+
+							5. Progress Tracking:<br />
+							- Completed Tasks: [What has been successfully implemented with status indicators]<br />
+							- Partially Complete Work: [Tasks in progress with current completion status]<br />
+							- Validated Outcomes: [Features or code confirmed working through testing]<br />
+
+							6. Active Work State:<br />
+							- Current Focus: [Precisely what was being worked on in most recent messages]<br />
+							- Recent Context: [Detailed description of last few conversation exchanges]<br />
+							- Working Code: [Code snippets being modified or discussed recently]<br />
+							- Immediate Context: [Specific problem or feature being addressed before summary]<br />
+
+							7. Recent Operations:<br />
+							- Last Agent Commands: [Specific tools/actions executed just before summarization with exact command names]<br />
+							- Tool Results Summary: [Key outcomes from recent tool executions - truncate long results but keep essential info]<br />
+							- Pre-Summary State: [What the agent was actively doing when token budget was exceeded]<br />
+							- Operation Context: [Why these specific commands were executed and their relationship to user goals]<br />
+
+							8. Continuation Plan:<br />
+							- [Pending Task 1]: [Details and specific next steps with verbatim quotes]<br />
+							- [Pending Task 2]: [Requirements and continuation context]<br />
+							- [Priority Information]: [Which tasks are most urgent or logically sequential]<br />
+							- [Next Action]: [Immediate next step with direct quotes from recent messages]<br />
+						</Tag><br />
+
+						## Quality Guidelines<br />
+
+						- **Precision**: Include exact filenames, function names, variable names, and technical terms<br />
+						- **Completeness**: Capture all context needed to continue without re-reading the full conversation<br />
+						- **Clarity**: Write for someone who needs to pick up exactly where the conversation left off<br />
+						- **Verbatim Accuracy**: Use direct quotes for task specifications and recent work context<br />
+						- **Technical Depth**: Include enough detail for complex technical decisions and code patterns<br />
+						- **Logical Flow**: Present information in a way that builds understanding progressively<br />
+
+						This summary should serve as a comprehensive handoff document that enables seamless continuation of all active work streams while preserving the full technical and contextual richness of the original conversation.<br />
+					</Tag>
+					Summarize the conversation history so far, paying special attention to the most recent agent commands and tool results that triggered this summarization. Structure your summary using the enhanced format provided above.<br />
 
 					Focus particularly on:<br />
 					- The specific agent commands/tools that were just executed<br />
@@ -163,6 +229,31 @@ export class ConversationHistorySummarizationPrompt extends PromptElement<Conver
 				</UserMessage>
 			</>
 		);
+	}
+
+	private async getOrCreateGlobalAgentContext(endpoint: IChatEndpoint) {
+		// Reuse the same logic as AgentPrompt for consistency
+		const globalContext = await this.getOrCreateGlobalAgentContextContent(endpoint);
+		return globalContext ?
+			renderedMessageToTsxChildren(globalContext, !!this.props.enableCacheBreakpoints) :
+			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} />;
+	}
+
+	private async getOrCreateGlobalAgentContextContent(endpoint: IChatEndpoint) {
+		const firstTurn = this.props.promptContext.conversation?.turns.at(0);
+		if (firstTurn) {
+			const metadata = firstTurn.getMetadata(GlobalContextMessageMetadata);
+			if (metadata) {
+				return metadata.renderedGlobalContext;
+			}
+		}
+
+		const rendered = await renderPromptElement(this.instantiationService, endpoint, GlobalAgentContext, { enableCacheBreakpoints: this.props.enableCacheBreakpoints }, undefined, undefined);
+		const msg = rendered.messages.at(0)?.content;
+		if (msg) {
+			firstTurn?.setMetadata(new GlobalContextMessageMetadata(msg));
+			return msg;
+		}
 	}
 }
 
