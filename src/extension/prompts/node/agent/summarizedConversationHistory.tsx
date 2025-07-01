@@ -388,7 +388,9 @@ class ConversationHistorySummarizer {
 
 		const summaryPromise = this.getSummaryWithFallback(propsInfo);
 		this.progress?.report(new ChatResponseProgressPart2(l10n.t('Summarizing conversation history...'), async () => {
-			await summaryPromise;
+			try {
+				await summaryPromise;
+			} catch { }
 			return l10n.t('Summarized conversation history');
 		}));
 
@@ -412,6 +414,10 @@ class ConversationHistorySummarizer {
 		}
 	}
 
+	private logInfo(message: string, mode: SummaryMode): void {
+		this.logService.logger.info(`[ConversationHistorySummarizer] [${mode}] ${message}`);
+	}
+
 	private async getSummary(mode: SummaryMode, propsInfo: ISummarizedConversationHistoryInfo): Promise<FetchSuccess<string>> {
 		const endpoint = this.props.endpoint;
 
@@ -419,10 +425,11 @@ class ConversationHistorySummarizer {
 		try {
 			const start = Date.now();
 			summarizationPrompt = (await renderPromptElement(this.instantiationService, endpoint, ConversationHistorySummarizationPrompt, { ...propsInfo.props, simpleMode: mode === SummaryMode.Simple }, undefined, this.token)).messages;
-			this.logService.logger.info(`[SummarizedConversationHistory] summarization prompt rendered in ${Date.now() - start}ms. Mode: ${mode}`);
+			this.logInfo(`summarization prompt rendered in ${Date.now() - start}ms.`, mode);
 		} catch (e) {
 			const budgetExceeded = e instanceof BudgetExceededError;
 			const outcome = budgetExceeded ? 'budget_exceeded' : 'renderError';
+			this.logInfo(`Error rendering summarization prompt in mode: ${mode}. ${e.stack}`, mode);
 			this.sendSummarizationTelemetry(outcome, '', this.props.endpoint.model, mode);
 			throw e;
 		}
@@ -452,6 +459,7 @@ class ConversationHistorySummarizer {
 				...toolOpts
 			});
 		} catch (e) {
+			this.logInfo(`Error from summarization request. ${e.message}`, mode);
 			this.sendSummarizationTelemetry('requestThrow', '', this.props.endpoint.model, mode);
 			throw e;
 		}
@@ -465,11 +473,14 @@ class ConversationHistorySummarizer {
 				'failed' :
 				response.type;
 			this.sendSummarizationTelemetry(outcome, response.requestId, this.props.endpoint.model, mode, response.reason);
+			this.logInfo(`Summarization request failed. ${response.type} ${response.reason}`, mode);
 			throw new Error('Summarization request failed');
 		}
 
-		if (await this.sizing.countTokens(response.value) > this.sizing.tokenBudget) {
+		const summarySize = await this.sizing.countTokens(response.value);
+		if (summarySize > this.sizing.tokenBudget) {
 			this.sendSummarizationTelemetry('too_large', response.requestId, this.props.endpoint.model, mode);
+			this.logInfo(`Summary too large: ${summarySize} tokens`, mode);
 			throw new Error('Summary too large');
 		}
 

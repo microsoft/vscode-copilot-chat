@@ -105,10 +105,12 @@ export class SimpleSummarizedHistory extends PromptElement<SummarizedAgentHistor
 		];
 	}
 
-	private renderToolCall(toolCall: IToolCall, result: LanguageModelToolResult) {
+	private renderToolCall(toolCall: IToolCall, result: LanguageModelToolResult | undefined) {
 		return <ChunkTag name='tool'>
 			Used tool "{toolCall.name}" with arguments: {truncate(toolCall.arguments, 200)}<br />
-			<ToolResult content={result.content} truncate={this.props.maxToolResultLength / 2} />
+			{result ?
+				<ToolResult content={result.content} truncate={this.props.maxToolResultLength / 2} /> :
+				<>Tool result empty</>}
 		</ChunkTag>;
 	}
 }
