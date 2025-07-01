@@ -38,13 +38,22 @@ type PullRequestCommit = {
 
 async function getCollaborators(repository: string): Promise<readonly Collaborator[]> {
 	const { stdout, stderr } = await execAsync(
-		`gh api -H "Accept: application/vnd.github+json" /repos/${repository}/collaborators --paginate`, { maxBuffer: 25 * 1024 * 1024 });
+		`gh api -H "Accept: application/vnd.github+json" /repos/${repository}/collaborators?affiliation=all --paginate`, { maxBuffer: 25 * 1024 * 1024 });
 
 	if (stderr) {
 		throw new Error(`Error fetching repository collaborators - ${stderr}`);
 	}
 
 	return JSON.parse(stdout) as ReadonlyArray<Collaborator>;
+}
+
+async function isCollaborator(repository: string, login: string): Promise<boolean> {
+	try {
+		await execAsync(`gh api -H "Accept: application/vnd.github+json" /repos/${repository}/collaborators/${login}?affiliation=all --silent`);
+		return true;
+	} catch (error) {
+		return false;
+	}
 }
 
 async function getCommit(repository: string, sha: string): Promise<Commit> {
@@ -150,6 +159,11 @@ async function main() {
 		if (!repository || !pullRequestNumber) {
 			throw new Error('Missing required environment variables: REPOSITORY or PULL_REQUEST');
 		}
+
+		console.log('isCollaborator', 'joaomoreno', await isCollaborator(repository, 'joaomoreno'));
+		console.log('isCollaborator', 'egamma', await isCollaborator(repository, 'egamma'));
+		console.log('isCollaborator', 'meganrogge', await isCollaborator(repository, 'meganrogge'));
+		console.log(JSON.stringify(await getCollaborators(repository), null, 2));
 
 		console.log(`🔍 Checking pull request #${pullRequestNumber} in repository "${repository}"...`);
 
