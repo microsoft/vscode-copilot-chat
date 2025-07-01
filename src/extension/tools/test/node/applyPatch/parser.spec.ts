@@ -217,7 +217,7 @@ suite('applyPatch parser', () => {
 			            "insLines": [
 			              "",
 			              "def greet():",
-			              "  print("Hello, world!")",
+			              "	print("Hello, world!")",
 			            ],
 			            "origIndex": 1,
 			          },
