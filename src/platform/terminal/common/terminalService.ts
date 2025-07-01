@@ -54,11 +54,12 @@ export interface ITerminalService {
 	 *
 	 * @param terminal The terminal to associate with the session
 	 * @param sessionId The session ID to associate the terminal with
+	 * @param id The ID of the terminal
 	 * @param shellIntegrationQuality The shell integration quality of the terminal
 	 * @param isBackground Whether the terminal is a background terminal
 	 * @returns Promise resolving when the terminal is associated with the session
 	 */
-	associateTerminalWithSession(terminal: vscode.Terminal, sessionId: string, shellIntegrationQuality: ShellIntegrationQuality, isBackground?: boolean): Promise<void>;
+	associateTerminalWithSession(terminal: vscode.Terminal, sessionId: string, id: string, shellIntegrationQuality: ShellIntegrationQuality, isBackground?: boolean): Promise<void>;
 
 	/**
 	 * Gets non-background terminals associated with a specific session ID
@@ -67,13 +68,19 @@ export interface ITerminalService {
 	 * @param includeBackground Whether to include background terminals in the result
 	 * @returns Promise resolving to an array of terminals associated with the session
 	 */
-	getCopilotTerminals(sessionId?: string, includeBackground?: boolean): Promise<vscode.Terminal[]>;
+	getCopilotTerminals(sessionId?: string, includeBackground?: boolean): Promise<IKnownTerminal[]>;
 
 	/**
 	 * Gets the buffer for a terminal.
-	 * @param maxLines The maximum number of lines to return from the buffer, defaults to 1000
+	 * @param maxChars The maximum number of chars to return from the buffer, defaults to 16k
 	 */
-	getBufferForTerminal(terminal: vscode.Terminal, maxLines?: number): string;
+	getBufferForTerminal(terminal: vscode.Terminal, maxChars?: number): string;
+
+	/**
+	 * Gets the last command executed in a terminal.
+	 * @param terminal The terminal to get the last command for
+	 */
+	getLastCommandForTerminal(terminal: vscode.Terminal): vscode.TerminalExecutedCommand | undefined;
 
 	readonly terminals: readonly vscode.Terminal[];
 }
@@ -119,15 +126,15 @@ export class NullTerminalService extends Disposable implements ITerminalService 
 		return Promise.resolve(undefined);
 	}
 
-	async getCopilotTerminals(sessionId: string): Promise<vscode.Terminal[]> {
+	async getCopilotTerminals(sessionId: string): Promise<IKnownTerminal[]> {
 		return Promise.resolve([]);
 	}
 
-	getTerminalsWithSessionInfo(): Promise<{ terminal: vscode.Terminal; sessionId: string; shellIntegrationQuality: ShellIntegrationQuality }[]> {
+	getTerminalsWithSessionInfo(): Promise<{ terminal: IKnownTerminal; sessionId: string; shellIntegrationQuality: ShellIntegrationQuality }[]> {
 		throw new Error('Method not implemented.');
 	}
 
-	getToolTerminalForSession(sessionId: string): Promise<{ terminal: vscode.Terminal; shellIntegrationQuality: ShellIntegrationQuality } | undefined> {
+	getToolTerminalForSession(sessionId: string): Promise<{ terminal: IKnownTerminal; shellIntegrationQuality: ShellIntegrationQuality } | undefined> {
 		throw new Error('Method not implemented.');
 	}
 
@@ -149,10 +156,18 @@ export class NullTerminalService extends Disposable implements ITerminalService 
 	getBufferForTerminal(terminal: vscode.Terminal, maxLines?: number): string {
 		return '';
 	}
+
+	getLastCommandForTerminal(terminal: vscode.Terminal): vscode.TerminalExecutedCommand | undefined {
+		return undefined;
+	}
 }
 export function isTerminalService(thing: any): thing is ITerminalService {
 	return thing && typeof thing.createTerminal === 'function';
 }
 export function isNullTerminalService(thing: any): thing is NullTerminalService {
 	return thing && typeof thing.createTerminal === 'function' && thing.createTerminal() === undefined;
+}
+
+export interface IKnownTerminal extends vscode.Terminal {
+	id: string;
 }

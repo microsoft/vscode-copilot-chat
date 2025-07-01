@@ -13,6 +13,7 @@ import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -58,6 +59,7 @@ export class XtabEndpoint extends ChatEndpoint {
 		@IChatMLFetcher _chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider _tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService _instantiationService: IInstantiationService,
+		@IThinkingDataService _thinkingDataService: IThinkingDataService
 	) {
 		super(
 			XtabEndpoint.chatModelInfo,
@@ -70,6 +72,7 @@ export class XtabEndpoint extends ChatEndpoint {
 			_chatMLFetcher,
 			_tokenizerProvider,
 			_instantiationService,
+			_thinkingDataService
 		);
 	}
 

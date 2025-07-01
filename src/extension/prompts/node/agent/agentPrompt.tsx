@@ -549,7 +549,7 @@ class AgentTasksInstructions extends PromptElement {
 		}
 
 		return <>
-			The following tasks can be executed using the {ToolName.RunTask} tool:<br />
+			The following tasks can be executed using the {ToolName.RunTask} tool and their output can be reviewed using the {ToolName.GetTaskOutput} tool:<br />
 			{taskGroups.map(([folder, tasks]) =>
 				<Tag name='workspaceFolder' attrs={{ path: this._promptPathRepresentationService.getFilePath(folder) }}>
 					{tasks.map((t, i) => <Tag name='task' attrs={{ id: `${t.type}: ${t.label || i}` }}>{this.makeTaskPresentation(t)}</Tag>)}

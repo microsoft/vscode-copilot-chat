@@ -608,7 +608,7 @@ export namespace ConfigKey {
 		 * Requires a window reload to take effect
 		 */
 		export const DebugReportFeedback = defineSetting('chat.advanced.debug.reportFeedback', { defaultValue: false, teamDefaultValue: true }, INTERNAL_RESTRICTED);
-		export const DebugCollectFetcherTelemetry = defineExpSetting<boolean>('chat.advanced.debug.collectFetcherTelemetry', isPreRelease, INTERNAL_RESTRICTED);
+		export const DebugCollectFetcherTelemetry = defineExpSetting<boolean>('chat.advanced.debug.collectFetcherTelemetry', true, INTERNAL_RESTRICTED);
 		export const GitHistoryRelatedFilesUsingEmbeddings = defineSetting('chat.advanced.suggestRelatedFilesFromGitHistory.useEmbeddings', false);
 
 		/** Enable or disable chat variables by name. The default is { "*": true } for pre-release
@@ -641,7 +641,7 @@ export namespace ConfigKey {
 		export const InlineEditsAsyncCompletions = defineExpSetting<boolean>('chat.advanced.inlineEdits.asyncCompletions', true, INTERNAL_RESTRICTED);
 		export const InlineEditsRevisedCacheStrategy = defineExpSetting<boolean>('chat.advanced.inlineEdits.revisedCacheStrategy', true, INTERNAL_RESTRICTED);
 		export const InlineEditsCacheTracksRejections = defineExpSetting<boolean>('chat.advanced.inlineEdits.cacheTracksRejections', true, INTERNAL_RESTRICTED);
-		export const InlineEditsRecentlyShownCacheEnabled = defineExpSetting<boolean>('chat.advanced.inlineEdits.recentlyShownCacheEnabled', true, INTERNAL_RESTRICTED);
+		export const InlineEditsRecentlyShownCacheEnabled = defineExpSetting<boolean>('chat.advanced.inlineEdits.recentlyShownCacheEnabled', false, INTERNAL_RESTRICTED);
 		export const InlineEditsYieldToCopilot = defineExpSetting<boolean>('chat.advanced.inlineEdits.yieldToCopilot', false, INTERNAL_RESTRICTED);
 		export const InlineEditsLogContextRecorderEnabled = defineSetting('chat.advanced.inlineEdits.logContextRecorder.enabled', false, INTERNAL_RESTRICTED);
 		export const InlineEditsDebounce = defineExpSetting<number>('chat.advanced.inlineEdits.debounce', 200, INTERNAL_RESTRICTED);

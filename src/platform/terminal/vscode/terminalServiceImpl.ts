@@ -8,8 +8,8 @@ import { timeout } from '../../../util/vs/base/common/async';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IChatSessionService } from '../../chat/common/chatSessionService';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
-import { ITerminalService, ShellIntegrationQuality } from '../common/terminalService';
-import { getActiveTerminalBuffer, getActiveTerminalLastCommand, getActiveTerminalSelection, getActiveTerminalShellType, getBufferForTerminal, installTerminalBufferListeners } from './terminalBufferListener';
+import { IKnownTerminal, ITerminalService, ShellIntegrationQuality } from '../common/terminalService';
+import { getActiveTerminalBuffer, getActiveTerminalLastCommand, getActiveTerminalSelection, getActiveTerminalShellType, getBufferForTerminal, getLastCommandForTerminal, installTerminalBufferListeners } from './terminalBufferListener';
 
 export const TerminalSessionStorageKey = 'runInTerminalTool.sessionTerminals';
 export class TerminalServiceImpl extends Disposable implements ITerminalService {
@@ -84,16 +84,17 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 		return terminal;
 	}
 
-	async associateTerminalWithSession(terminal: Terminal, sessionId: string, shellIntegrationQuality: ShellIntegrationQuality, isBackground?: boolean): Promise<void> {
+	async associateTerminalWithSession(terminal: Terminal, sessionId: string, id: string, shellIntegrationQuality: ShellIntegrationQuality, isBackground?: boolean): Promise<void> {
 		try {
 			const pid = await Promise.race([terminal.processId, timeout(5000)]);
 			if (typeof pid === 'number') {
-				const associations: Record<number, { shellIntegrationQuality: ShellIntegrationQuality; sessionId: string; isBackground?: boolean }> = this.extensionContext.workspaceState.get(TerminalSessionStorageKey, {});
+				const associations: Record<number, { shellIntegrationQuality: ShellIntegrationQuality; sessionId: string; id: string; isBackground?: boolean }> = this.extensionContext.workspaceState.get(TerminalSessionStorageKey, {});
 				const existingAssociation = associations[pid] || {};
 				associations[pid] = {
 					...existingAssociation,
 					sessionId,
 					shellIntegrationQuality,
+					id,
 					isBackground
 				};
 
@@ -102,9 +103,9 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 		} catch { }
 	}
 
-	async getCopilotTerminals(sessionId: string, includeBackground?: boolean): Promise<Terminal[]> {
+	async getCopilotTerminals(sessionId: string, includeBackground?: boolean): Promise<IKnownTerminal[]> {
 
-		const terminals: Terminal[] = [];
+		const terminals: IKnownTerminal[] = [];
 		const storedTerminalAssociations: Record<number, any> = this.extensionContext.workspaceState.get(TerminalSessionStorageKey, {});
 
 		for (const terminal of this.terminals) {
@@ -113,7 +114,7 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 				if (typeof pid === 'number') {
 					const association = storedTerminalAssociations[pid];
 					if (association && typeof association === 'object' && (includeBackground || !association.isBackground) && association.sessionId === sessionId) {
-						terminals.push(terminal);
+						terminals.push({ ...terminal, id: association.id });
 					}
 				}
 			} catch { }
@@ -147,8 +148,12 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 		}
 	}
 
-	getBufferForTerminal(terminal: Terminal, maxLines?: number): string {
-		return getBufferForTerminal(terminal, maxLines);
+	getBufferForTerminal(terminal: Terminal, maxChars?: number): string {
+		return getBufferForTerminal(terminal, maxChars);
+	}
+
+	getLastCommandForTerminal(terminal: Terminal): TerminalExecutedCommand | undefined {
+		return getLastCommandForTerminal(terminal);
 	}
 
 	get terminalBuffer(): string {

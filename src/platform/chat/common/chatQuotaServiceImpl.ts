@@ -38,7 +38,7 @@ export class ChatQuotaService extends Disposable implements IChatQuotaService {
 	}
 
 	processQuotaHeaders(headers: IHeaders): void {
-		const quotaHeader = headers.get('x-quota-snapshot-premium_models') || headers.get('x-quota-snapshot-premium_interactions');
+		const quotaHeader = this._authService.copilotToken?.isFreeUser ? headers.get('x-quota-snapshot-chat') : headers.get('x-quota-snapshot-premium_models') || headers.get('x-quota-snapshot-premium_interactions');
 		if (!quotaHeader) {
 			return;
 		}
