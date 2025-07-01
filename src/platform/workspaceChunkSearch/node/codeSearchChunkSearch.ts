@@ -261,7 +261,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	}
 
 	private async doIsAvailableCheck(canPrompt = false, token: CancellationToken): Promise<Result<AvailableSuccessMetadata, AvailableFailureMetadata>> {
-		if (!this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.WorkspaceEnableCodeSearch, this._experimentationService)) {
+		if (!this.isCodeSearchEnabled()) {
 			return Result.error<AvailableFailureMetadata>({ unavailableReason: 'Disabled by experiment', repoStatuses: {} });
 		}
 
@@ -333,7 +333,19 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		return Result.ok({ indexedRepos, notYetIndexedRepos, repoStatuses });
 	}
 
+	private isCodeSearchEnabled() {
+		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.WorkspaceEnableCodeSearch, this._experimentationService);
+	}
+
 	getRemoteIndexState(): CodeSearchRemoteIndexState {
+		if (!this.isCodeSearchEnabled()) {
+			return {
+				status: CodeSearchRemoteIndexStatus.NoRepos,
+				repos: [],
+				getDiffState: async () => { return undefined; }
+			};
+		}
+
 		return {
 			status: this.getRemoteIndexStatus(),
 			repos: Array.from(this._repoTracker.getAllRepos()),
