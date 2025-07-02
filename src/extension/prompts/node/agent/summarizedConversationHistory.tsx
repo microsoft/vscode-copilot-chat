@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
-import { BasePromptElementProps, PrioritizedList, PromptElement, PromptMetadata, PromptSizing, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
+import { BasePromptElementProps, PrioritizedList, PromptElement, PromptMetadata, PromptSizing, Raw, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
 import { BudgetExceededError } from '@vscode/prompt-tsx/dist/base/materialized';
 import { ChatMessage } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
 import type { ChatResponsePart, LanguageModelToolInformation, NotebookDocument, Progress } from 'vscode';
@@ -453,6 +453,8 @@ class ConversationHistorySummarizer {
 					},
 				),
 			} : undefined;
+
+			stripCacheBreakpoints(summarizationPrompt);
 			summaryResponse = await endpoint.makeChatRequest('summarizeConversationHistory', ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt), undefined, this.token ?? CancellationToken.None, ChatLocation.Other, undefined, {
 				temperature: 0,
 				stream: false,
@@ -555,6 +557,14 @@ class ConversationHistorySummarizer {
 			hasWorkingNotebook
 		});
 	}
+}
+
+function stripCacheBreakpoints(messages: ChatMessage[]): void {
+	messages.forEach(message => {
+		message.content = message.content.filter(part => {
+			return part.type !== Raw.ChatCompletionContentPartKind.CacheBreakpoint;
+		});
+	});
 }
 
 export interface ISummarizedConversationHistoryInfo {
