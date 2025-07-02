@@ -56,7 +56,7 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 	}
 
 	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IRunTaskToolInput>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
-		const { task, workspaceFolder } = this.getTaskDefinition(options.input) || {};
+		const { task, workspaceFolder, taskLabel } = this.getTaskDefinition(options.input) || {};
 		const position = workspaceFolder && task && await this.tasksService.getTaskConfigPosition(workspaceFolder, task);
 		const link = (s: string) => position ? `[${s}](${position.uri.toString()}#${position.range.startLineNumber}-${position.range.endLineNumber})` : s;
 		const trustedMark = (value: string) => {
@@ -66,8 +66,8 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 		};
 
 		return {
-			invocationMessage: trustedMark(l10n.t`Running ${link(options.input.id)}`),
-			pastTenseMessage: trustedMark(task?.isBackground ? l10n.t`Started ${link(options.input.id)}` : l10n.t`Ran ${link(options.input.id)}`),
+			invocationMessage: trustedMark(l10n.t`Running ${taskLabel ?? link(options.input.id)}`),
+			pastTenseMessage: trustedMark(task?.isBackground ? l10n.t`Started ${link(taskLabel ?? options.input.id)}` : l10n.t`Ran ${link(taskLabel ?? options.input.id)}`),
 			confirmationMessages: task && task.group !== 'build'
 				? { title: l10n.t`Allow task run?`, message: trustedMark(l10n.t`Allow Copilot to run the \`${task.type}\` task ${link(`\`${task.label}\``)}?`) }
 				: undefined
@@ -86,7 +86,7 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 			return undefined;
 		}
 
-		return { workspaceFolder, task };
+		return { workspaceFolder, task, taskLabel };
 	}
 }
 

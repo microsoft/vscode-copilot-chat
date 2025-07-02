@@ -11,6 +11,7 @@ import { Lazy } from '../../../util/vs/base/common/lazy';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { Schemas } from '../../../util/vs/base/common/network';
 import * as path from '../../../util/vs/base/common/path';
+import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IRange, Range } from '../../../util/vs/editor/common/core/range';
 import { FileChunk, FileChunkAndScore } from '../../chunking/common/chunk';
@@ -223,17 +224,26 @@ export class TfidfChunkSearch extends Disposable implements IWorkspaceChunkSearc
 	}
 
 	private async initializeWorkspaceFiles(): Promise<void> {
+		const sw = new StopWatch();
 		await logExecTime(this._logService, 'initialize workspaceIndex', () => this._workspaceIndex.initialize());
+		const initWorkspaceIndexTime = sw.elapsed();
 		if (this._isDisposed) {
 			return;
 		}
 
 		let filesToIndex: FileRepresentation[] = [];
 		let telemetryData: TfIdfInitializeTelemetry | undefined;
+		let readInitDocsTime: number | undefined = undefined;
 		await logExecTime(this._logService, 'initialize tfidf', async () => {
+			sw.reset();
 			filesToIndex = Array.from(this._workspaceIndex.values()).slice(0, this._maxInitialFileCount);
 
 			const initDocs = await Promise.all(filesToIndex.map(async entry => ({ uri: entry.uri, contentId: await entry.getFastContentVersionId() })));
+			readInitDocsTime = sw.elapsed();
+			if (this._isDisposed) {
+				return;
+			}
+
 			telemetryData = await this._tfIdfWorker.value.proxy.initialize(initDocs);
 		}, (execTime, status) => {
 			/* __GDPR__
@@ -242,6 +252,8 @@ export class TfidfChunkSearch extends Disposable implements IWorkspaceChunkSearc
 					"comment": "Understanding how long it took to initialize the tfidf index",
 					"status": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the call succeeded or failed" },
 					"execTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Time in milliseconds that the call took" },
+					"initWorkspaceIndexTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Time in milliseconds that initializing the workspace index took" },
+					"readInitDocsTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Time in milliseconds that reading the initial documents took" },
 					"fileCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of files that we can index" },
 					"newFileCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of new files" },
 					"outOfSyncFileCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Number of files that are out of sync" },
@@ -250,12 +262,18 @@ export class TfidfChunkSearch extends Disposable implements IWorkspaceChunkSearc
 			*/
 			this._telemetryService.sendMSFTTelemetryEvent('tfidfChunkSearch.perf.initializeTfidf', { status }, {
 				execTime,
+				initWorkspaceIndexTime,
+				readInitDocsTime: readInitDocsTime,
 				fileCount: filesToIndex.length,
 				newFileCount: telemetryData?.newFileCount,
 				outOfSyncFileCount: telemetryData?.outOfSyncFileCount,
 				deletedFileCount: telemetryData?.deletedFileCount
 			});
 		});
+
+		if (this._isDisposed) {
+			return;
+		}
 
 		this._register(Event.any(
 			this._workspaceIndex.onDidCreateFiles,

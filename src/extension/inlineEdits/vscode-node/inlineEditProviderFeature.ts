@@ -124,10 +124,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 			const recordingDirPath = join(this._vscodeExtensionContext.globalStorageUri.fsPath, 'logContextRecordings');
 			const logContextRecorder = this.inlineEditsLogFileEnabled ? reader.store.add(this._instantiationService.createInstance(LogContextRecorder, recordingDirPath, logger)) : undefined;
 
-			let inlineEditDebugComponent: InlineEditDebugComponent | undefined = undefined;
-			if (this._internalActionsEnabled.read(reader)) {
-				inlineEditDebugComponent = reader.store.add(new InlineEditDebugComponent(this._internalActionsEnabled, this.inlineEditsEnabled, model.debugRecorder, this._inlineEditsProviderId));
-			}
+			const inlineEditDebugComponent = reader.store.add(new InlineEditDebugComponent(this._internalActionsEnabled, this.inlineEditsEnabled, model.debugRecorder, this._inlineEditsProviderId));
 
 			const telemetrySender = this._register(this._instantiationService.createInstance(TelemetrySender));
 

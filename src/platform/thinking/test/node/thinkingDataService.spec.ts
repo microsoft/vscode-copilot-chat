@@ -28,7 +28,7 @@ suite('ThinkingDataService', () => {
 
 			const result = thinkingDataService.consume('tool-call-id');
 			assert.strictEqual(result?.cot_id, 'test-id');
-			assert.strictEqual(result?.cot_summary, 'test summary');
+			assert.strictEqual(result?.cot_summary, undefined);
 		});
 
 		test('should handle delta updates for cot_summary', () => {
@@ -50,7 +50,8 @@ suite('ThinkingDataService', () => {
 			}, 'tool-call-id');
 
 			const result = thinkingDataService.consume('tool-call-id');
-			assert.strictEqual(result?.cot_summary, 'initial summary');
+			assert.strictEqual(result?.cot_id, 'test-id');
+			assert.strictEqual(result?.cot_summary, undefined);
 		});
 
 		test('should handle delta updates for reasoning_text', () => {
@@ -72,7 +73,8 @@ suite('ThinkingDataService', () => {
 			}, 'tool-call-id');
 
 			const result = thinkingDataService.consume('tool-call-id');
-			assert.strictEqual(result?.reasoning_text, 'thinking process');
+			assert.strictEqual(result?.reasoning_opaque, 'opaque-id');
+			assert.strictEqual(result?.reasoning_text, undefined);
 		});
 
 		test('should handle multiple choices with different indices', () => {
@@ -97,8 +99,10 @@ suite('ThinkingDataService', () => {
 			const result1 = thinkingDataService.consume('tool1');
 			const result2 = thinkingDataService.consume('tool2');
 
-			assert.strictEqual(result1?.cot_summary, 'summary1');
-			assert.strictEqual(result2?.cot_summary, 'summary2');
+			assert.strictEqual(result1?.cot_id, 'id1');
+			assert.strictEqual(result1?.cot_summary, undefined);
+			assert.strictEqual(result2?.cot_id, 'id2');
+			assert.strictEqual(result2?.cot_summary, undefined);
 		});
 	});
 
@@ -108,7 +112,7 @@ suite('ThinkingDataService', () => {
 		test('should return undefined for non-existent id', () => {
 			const result = thinkingDataService.consume('non-existent');
 			assert.strictEqual(result, undefined);
-		}); test('should return cot data when available', () => {
+		}); test('should return cot_id when available', () => {
 			thinkingDataService.update({
 				message: {
 					cot_id: 'cot-id',
@@ -119,12 +123,11 @@ suite('ThinkingDataService', () => {
 
 			const result = thinkingDataService.consume('tool-id');
 			assert.deepStrictEqual(result, {
-				cot_id: 'cot-id',
-				cot_summary: 'summary'
+				cot_id: 'cot-id'
 			});
 		});
 
-		test('should return reasoning data when available', () => {
+		test('should return reasoning_opaque when available', () => {
 			thinkingDataService.update({
 				message: {
 					reasoning_opaque: 'opaque-id',
@@ -135,8 +138,7 @@ suite('ThinkingDataService', () => {
 
 			const result = thinkingDataService.consume('tool-id');
 			assert.deepStrictEqual(result, {
-				reasoning_opaque: 'opaque-id',
-				reasoning_text: 'reasoning'
+				reasoning_opaque: 'opaque-id'
 			});
 		});
 
@@ -167,7 +169,7 @@ suite('ThinkingDataService', () => {
 
 			// Verify data exists
 			let result = thinkingDataService.consume('tool1');
-			assert.strictEqual(result?.cot_summary, 'summary1');
+			assert.strictEqual(result?.cot_id, 'id1');
 
 			// Clear the data
 			thinkingDataService.clear();
@@ -190,7 +192,7 @@ suite('ThinkingDataService', () => {
 
 			const result = thinkingDataService.consume('tool-id');
 			assert.strictEqual(result?.cot_id, 'cot-id');
-			assert.strictEqual(result?.cot_summary, 'summary');
+			assert.strictEqual(result?.cot_summary, undefined);
 		});
 
 		test('should extract cot data from delta', () => {
@@ -204,7 +206,7 @@ suite('ThinkingDataService', () => {
 
 			const result = thinkingDataService.consume('tool-id');
 			assert.strictEqual(result?.cot_id, 'cot-id');
-			assert.strictEqual(result?.cot_summary, 'summary');
+			assert.strictEqual(result?.cot_summary, undefined);
 		});
 
 		test('should extract reasoning data from message', () => {
@@ -218,7 +220,7 @@ suite('ThinkingDataService', () => {
 
 			const result = thinkingDataService.consume('tool-id');
 			assert.strictEqual(result?.reasoning_opaque, 'opaque-id');
-			assert.strictEqual(result?.reasoning_text, 'reasoning');
+			assert.strictEqual(result?.reasoning_text, undefined);
 		});
 
 		test('should extract reasoning data from delta', () => {
@@ -232,7 +234,7 @@ suite('ThinkingDataService', () => {
 
 			const result = thinkingDataService.consume('tool-id');
 			assert.strictEqual(result?.reasoning_opaque, 'opaque-id');
-			assert.strictEqual(result?.reasoning_text, 'reasoning');
+			assert.strictEqual(result?.reasoning_text, undefined);
 		});
 
 		test('should handle empty update', () => {
@@ -265,7 +267,8 @@ suite('ThinkingDataService', () => {
 
 			const result = thinkingDataService.consume('tool-id');
 
-			assert.strictEqual(result?.cot_summary, 'summary');
+			assert.strictEqual(result?.cot_id, 'cot-id');
+			assert.strictEqual(result?.cot_summary, undefined);
 		});
 
 		test('should return undefined reasoning_text or cot_summary', () => {
@@ -295,9 +298,9 @@ suite('ThinkingDataService', () => {
 
 			const result = thinkingDataService.consume('tool-id');
 
-			// The implementation prioritizes complete data
+			// The implementation prioritizes cot_id
 			assert.strictEqual(result?.cot_id, 'cot-id');
-			assert.strictEqual(result?.cot_summary, 'summary');
+			assert.strictEqual(result?.cot_summary, undefined);
 			assert.strictEqual(result?.reasoning_opaque, undefined);
 			assert.strictEqual(result?.reasoning_text, undefined);
 		});
