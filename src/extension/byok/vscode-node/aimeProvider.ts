@@ -8,7 +8,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { BYOKAuthType } from '../common/byokProvider';
 import { BaseOpenAICompatibleBYOKRegistry } from './baseOpenAICompatibleProvider';
 
-export class OAIBYOKModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
+export class AIMEBYOKModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 
 	constructor(
 		@IFetcherService _fetcherService: IFetcherService,
