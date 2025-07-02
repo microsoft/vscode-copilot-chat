@@ -89,16 +89,16 @@ export class ThinkingDataImpl implements IThinkingDataService {
 		const data = this.data.find(d => d.tool_call_id === id);
 		if (data) {
 			delete data.choice_index;
-			if (data.cot_id || data.cot_summary) {
+			if (data.cot_id) {
 				return {
 					cot_id: data.cot_id,
-					cot_summary: data.cot_summary,
 				};
 			}
-			return {
-				reasoning_opaque: data.reasoning_opaque,
-				reasoning_text: data.reasoning_text
-			};
+			if (data.reasoning_opaque) {
+				return {
+					reasoning_opaque: data.reasoning_opaque,
+				};
+			}
 		}
 		return undefined;
 	}

@@ -8,7 +8,8 @@
 		"ghcr.io/devcontainers/features/azure-cli:1": {},
 		"ghcr.io/devcontainers/features/python:1": {},
 		"ghcr.io/devcontainers/features/dotnet:2": {},
-		"ghcr.io/devcontainers/features/desktop-lite:1": {}
+		"ghcr.io/devcontainers/features/desktop-lite:1": {},
+		"ghcr.io/devcontainers/features/git-lfs:1": {}
 	},
 	"containerEnv": {
 		"DEBIAN_FRONTEND": "noninteractive"
@@ -29,6 +30,7 @@
 	},
 	"containerUser": "node",
 	"onCreateCommand": {
+		"initGitLfs": "git lfs install --force",
 		"npmInstall": "npm install || true"
 	}
 }

@@ -14,6 +14,8 @@ export interface ICodeSearchAuthenticationService {
 
 	tryAuthenticating(repo: ResolvedRepoEntry | undefined): Promise<void>;
 	tryReauthenticating(repo: ResolvedRepoEntry | undefined): Promise<void>;
+
+	promptForExpandedLocalIndexing(fileCount: number): Promise<boolean>;
 }
 
 export class BasicCodeSearchAuthenticationService implements ICodeSearchAuthenticationService {
@@ -40,5 +42,10 @@ export class BasicCodeSearchAuthenticationService implements ICodeSearchAuthenti
 		}
 
 		await this._authenticationService.getPermissiveGitHubSession({ createIfNone: true });
+	}
+
+	async promptForExpandedLocalIndexing(fileCount: number): Promise<boolean> {
+		// Can't show prompt here
+		return false;
 	}
 }

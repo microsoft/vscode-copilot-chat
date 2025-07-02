@@ -87,7 +87,6 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	public readonly displayName = 'Copilot next edit suggestion';
 
 	private readonly _tracer: ITracer;
-	private readonly _handleEndOfLifetimeTracer: ITracer;
 
 	public readonly onDidChange: vscodeEvent<void> | undefined = Event.fromObservableLight(this.model.onChange);
 
@@ -106,7 +105,6 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService
 	) {
 		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.logger.trace(s));
-		this._handleEndOfLifetimeTracer = this._tracer.sub('handleEndOfLifetime');
 	}
 
 	// copied from `vscodeWorkspace.ts` `DocumentFilter#_enabledLanguages`
@@ -125,7 +123,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		context: InlineCompletionContext,
 		token: CancellationToken
 	): Promise<NesCompletionList | undefined> {
-		const tracer = this._tracer.sub('provideInlineCompletionItems');
+		const tracer = this._tracer.sub(['provideInlineCompletionItems', shortOpportunityId(context.requestUuid)]);
 
 		const isCompletionsEnabled = this._isCompletionsEnabled(document);
 
@@ -302,7 +300,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	}
 
 	public handleListEndOfLifetime(list: NesCompletionList, reason: InlineCompletionsDisposeReason): void {
-		const tracer = this._tracer.sub('handleListEndOfLifetime');
+		const tracer = this._tracer.sub(['handleListEndOfLifetime', shortOpportunityId(list.requestUuid)]);
 		tracer.trace(`List ${list.requestUuid} disposed, reason: ${InlineCompletionsDisposeReasonKind[reason.kind]}`);
 
 		const telemetryBuilder = list.telemetryBuilder;
@@ -315,8 +313,9 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	}
 
 	public handleEndOfLifetime(item: NesCompletionItem, reason: InlineCompletionEndOfLifeReason): void {
-		const info = item.info;
-		this._handleEndOfLifetimeTracer.trace(`Id: ${info.requestUuid}, reason: ${InlineCompletionEndOfLifeReasonKind[reason.kind]}`);
+		const tracer = this._tracer.sub(['handleEndOfLifetime', shortOpportunityId(item.info.requestUuid)]);
+		tracer.trace(`reason: ${InlineCompletionEndOfLifeReasonKind[reason.kind]}`);
+
 		switch (reason.kind) {
 			case InlineCompletionEndOfLifeReasonKind.Accepted: {
 				this._handleAcceptance(item);
@@ -328,7 +327,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			}
 			case InlineCompletionEndOfLifeReasonKind.Ignored: {
 				const supersededBy = reason.supersededBy ? (reason.supersededBy as NesCompletionItem) : undefined;
-				this._handleEndOfLifetimeTracer.trace(`Superseded by: ${supersededBy?.info.requestUuid || 'none'}, was shown: ${item.wasShown}`);
+				tracer.trace(`Superseded by: ${supersededBy?.info.requestUuid || 'none'}, was shown: ${item.wasShown}`);
 				this._handleDidIgnoreCompletionItem(item, supersededBy);
 				break;
 			}
@@ -493,3 +492,6 @@ export function documentRangeFromOffsetRange(doc: TextDocument, range: OffsetRan
 	);
 }
 
+function shortOpportunityId(oppId: string): string {
+	return oppId.substring(4, 8);
+}

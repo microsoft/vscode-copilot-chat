@@ -49,7 +49,7 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 	}
 
 	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ITaskOptions>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
-		const { task, workspaceFolder } = this.getTaskDefinition(options.input) || {};
+		const { task, workspaceFolder, taskLabel } = this.getTaskDefinition(options.input) || {};
 		const position = workspaceFolder && task && await this.tasksService.getTaskConfigPosition(workspaceFolder, task);
 		const link = (s: string) => position ? `[${s}](${position.uri.toString()}#${position.range.startLineNumber}-${position.range.endLineNumber})` : s;
 		const trustedMark = (value: string) => {
@@ -59,8 +59,8 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 		};
 
 		return {
-			invocationMessage: trustedMark(l10n.t`Getting output for ${link(options.input.id)}`),
-			pastTenseMessage: trustedMark(task?.isBackground ? l10n.t`Got output for ${link(options.input.id)}` : l10n.t`Got output for ${link(options.input.id)}`),
+			invocationMessage: trustedMark(l10n.t`Getting output for ${link(taskLabel ?? options.input.id)}`),
+			pastTenseMessage: trustedMark(task?.isBackground ? l10n.t`Got output for ${link(taskLabel ?? options.input.id)}` : l10n.t`Got output for ${link(taskLabel ?? options.input.id)}`),
 		};
 	}
 
