@@ -16,7 +16,6 @@ User OS and shell information will be included here
 <workspace_info>
 Workspace structure and tasks information will be included here
 </workspace_info>
-copilot_cache_control: {"type":"ephemeral"}
 ~~~
 
 
