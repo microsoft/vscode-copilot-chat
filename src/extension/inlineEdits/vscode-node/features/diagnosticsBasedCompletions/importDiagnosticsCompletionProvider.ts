@@ -99,8 +99,12 @@ export class ImportDiagnosticCompletionItem extends DiagnosticCompletionItem {
 		return this._importSourceFile;
 	}
 
-	get isLocalImport(): ImportSource {
-		return this._importCodeAction.importSource;
+	get isLocalImport(): boolean | undefined {
+		switch (this._importCodeAction.importSource) {
+			case ImportSource.local: return true;
+			case ImportSource.external: return false;
+			default: return undefined;
+		}
 	}
 
 	get hasExistingSameFileImport(): boolean {
