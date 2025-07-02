@@ -37,7 +37,7 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ITaskOptions>, token: vscode.CancellationToken) {
 		const label = this.getTaskDefinition(options.input)?.taskLabel;
 		if (!label) {
-			this.logService.logger.debug('getTaskOutputTool returning undefined: no label for task ' + options.input.id);
+			this.logService.logger.debug('getTaskOutputTool returning undefined: no matching label for task ' + options.input.id);
 			return;
 		}
 		// TODO:@meganrogge when there's API to determine if a terminal is a task, improve this vscode#234440
