@@ -645,7 +645,7 @@
 				"icon": "$(json)",
 				"userDescription": "%github.copilot.tools.createAndRunTask.userDescription%",
 				"when": "config.github.copilot.chat.agent.runTasks",
-				"modelDescription": "For a workspace, this tool will create a task based on the package.json, README.md, and project structure so that the project can be built and run. \n-You can check the output of a task later on by using copilot_getTaskOutput.",
+				"modelDescription": "For a workspace, this tool will create a task based on the package.json, README.md, and project structure so that the project can be built and run.",
 				"inputSchema": {
 					"type": "object",
 					"properties": {
