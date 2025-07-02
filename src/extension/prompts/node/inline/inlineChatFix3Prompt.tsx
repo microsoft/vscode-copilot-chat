@@ -380,13 +380,6 @@ class CodeMapperFixReplyInterpreter implements ReplyInterpreter {
 				return this.promptPathRepresentationService.resolveFilePath(path);
 			},
 			(markdown: MarkdownString, codeBlockInfo: CodeBlockInfo | undefined, vulnerabilities: ChatVulnerability[] | undefined) => {
-				// Always output the markdown first to prevent content from disappearing
-				if (vulnerabilities) {
-					outputStream.markdownWithVulnerabilities(markdown, vulnerabilities);
-				} else {
-					outputStream.markdown(markdown);
-				}
-
 				if (codeBlockInfo) {
 					inFirstSentence = false;
 					if (codeBlockInfo !== currentCodeBlock) {
@@ -397,9 +390,18 @@ class CodeMapperFixReplyInterpreter implements ReplyInterpreter {
 							outputStream.codeblockUri(codeBlockInfo.resource);
 						}
 					}
-					// Note: We no longer return early here to ensure content is displayed
+					if (applyCodeBlock) {
+						return;
+					}
 				} else {
-					// Note: We no longer return early here to ensure content is displayed
+					if (!inFirstSentence) {
+						return;
+					}
+				}
+				if (vulnerabilities) {
+					outputStream.markdownWithVulnerabilities(markdown, vulnerabilities);
+				} else {
+					outputStream.markdown(markdown);
 				}
 			},
 			codeBlock => {
