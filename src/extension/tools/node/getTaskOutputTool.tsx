@@ -43,7 +43,7 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 		// TODO:@meganrogge when there's API to determine if a terminal is a task, improve this vscode#234440
 		const terminal = this.terminalService.terminals.find(t => t.name === label);
 		if (!terminal) {
-			this.logService.logger.debug('getTaskOutputTool returning undefined: no terminal for task ' + options.input.id);
+			this.logService.logger.debug('getTaskOutputTool returning undefined: no terminal for task: ' + options.input.id + ' label: ' + label + ' terminal names: ' + this.terminalService.terminals.map(t => t.name).join(', '));
 			return;
 		}
 		const buffer = this.terminalService.getBufferForTerminal(terminal, Math.min(options.input.maxCharsToRetrieve ?? 16000, 16000));
@@ -54,6 +54,13 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 
 	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ITaskOptions>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
 		const { task, workspaceFolder, taskLabel } = this.getTaskDefinition(options.input) || {};
+		if (task && !this.tasksService.isTaskActive(task)) {
+			return {
+				invocationMessage: l10n.t`${taskLabel ?? options.input.id} is not running.`,
+				pastTenseMessage: l10n.t`${taskLabel ?? options.input.id} is not running.`,
+				confirmationMessages: undefined
+			};
+		}
 		const position = workspaceFolder && task && await this.tasksService.getTaskConfigPosition(workspaceFolder, task);
 		const link = (s: string) => position ? `[${s}](${position.uri.toString()}#${position.range.startLineNumber}-${position.range.endLineNumber})` : s;
 		const trustedMark = (value: string) => {
