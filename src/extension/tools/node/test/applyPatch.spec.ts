@@ -6,8 +6,8 @@
 import * as fs from 'fs';
 import { describe, expect, it } from 'vitest';
 import { AbstractDocumentWithLanguageId, StringTextDocument } from '../../../../platform/editing/common/abstractText';
-import { processPatch } from '../applyPatch/parser';
 import { ToolName } from '../../common/toolNames';
+import { processPatch } from '../applyPatch/parser';
 import { applyPatchWithNotebookSupportDescription } from '../applyPatchTool';
 
 describe('ApplyPatch parser', function () {
@@ -119,7 +119,7 @@ plt.title('Correlation Heatmap')
 plt.show()
 </VSCode.Cell>`;
 
-		const patch = await processPatch(input, () => Promise.resolve(new StringTextDocumentWithLanguageId('xml', notebookContent)));
+		const patch = await processPatch(input, () => Promise.resolve(new StringTextDocumentWithLanguageId('xml', notebookContent)), true);
 		expect(patch).toBeDefined();
 	});
 
@@ -175,7 +175,7 @@ import sys
 #%% vscode.cell [id=d7161d69] [language=python]
 sys.executable`;
 
-		const patch = await processPatch(input, () => Promise.resolve(new StringTextDocumentWithLanguageId('xml', notebookContent)));
+		const patch = await processPatch(input, () => Promise.resolve(new StringTextDocumentWithLanguageId('xml', notebookContent)), true);
 		expect(patch).toBeDefined();
 	});
 
@@ -206,7 +206,7 @@ Hello
 #%% vscode.cell [id=05e875f9] [language=python]
 print(1)`;
 
-		const patch = await processPatch(input, () => Promise.resolve(new StringTextDocumentWithLanguageId('xml', notebookContent)));
+		const patch = await processPatch(input, () => Promise.resolve(new StringTextDocumentWithLanguageId('xml', notebookContent)), true);
 		expect(patch).toBeDefined();
 	});
 	it('Has same details as defined in package.json', async () => {
