@@ -257,8 +257,7 @@ export enum TokenErrorNotificationId {
 	ServerError = 'server_error',
 	FeatureFlagBlocked = 'feature_flag_blocked',
 	SpammyUser = 'spammy_user',
-	//TODO: Handle these if they're still applicable
-	CodespacesDemoInactive = 'codespaces_demo_inactive',
+	CodespacesDemoInactive = 'codespaces_demo_inactive', //TODO: Handle this if this is still applicable
 	SnippyNotConfigured = 'snippy_not_configured'
 }
 
