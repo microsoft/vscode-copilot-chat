@@ -23,8 +23,8 @@ import { CerebrasModelRegistry } from './cerebrasProvider';
 import { GeminiBYOKModelRegistry } from './geminiProvider';
 import { GroqModelRegistry } from './groqProvider';
 import { OllamaModelRegistry } from './ollamaProvider';
-import { OpenRouterBYOKModelRegistry } from './openRouterProvider';
 import { OAICompatibleModelRegistry } from './openAICompatibleProvider';
+import { OpenRouterBYOKModelRegistry } from './openRouterProvider';
 
 export class BYOKContrib extends Disposable implements IExtensionContribution {
 	public readonly id: string = 'byok-contribution';
@@ -32,6 +32,8 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 	private _registeredModelDisposables = new Map<string, VSCodeDisposable>();
 	private _byokUIService!: BYOKUIService; // Set in authChange, so ok to !
 	private readonly _byokStorageService: IBYOKStorageService;
+	private readonly _authenticationService: IAuthenticationService;
+	private readonly _instantiationService: IInstantiationService;
 
 	constructor(
 		@IFetcherService private readonly _fetcherService: IFetcherService,
@@ -45,6 +47,8 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 	) {
 		super();
 		this._byokStorageService = new BYOKStorageService(extensionContext);
+		this._authenticationService = authService;
+		this._instantiationService = instantiationService;
 		this._authChange(authService, instantiationService);
 
 		this._register(authService.onDidAuthenticationChange(() => {
@@ -80,6 +84,11 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			const openAICompatibleProviders = this._configurationService.getConfig(ConfigKey.OpenAICompatibleProviders);
 			for (const provider of openAICompatibleProviders) {
 				this._modelRegistries.push(instantiationService.createInstance(OAICompatibleModelRegistry, provider.name, provider.url));
+			}
+			// Custom providers from storage
+			const customProviders = await this._byokStorageService.getCustomProviders();
+			for (const customProvider of customProviders) {
+				this._modelRegistries.push(instantiationService.createInstance(OAICompatibleModelRegistry, customProvider.name, customProvider.url));
 			}
 			this._modelRegistries.push(instantiationService.createInstance(OllamaModelRegistry, this._configurationService.getConfig(ConfigKey.OllamaEndpoint)));
 			this._modelRegistries.push(instantiationService.createInstance(OpenRouterBYOKModelRegistry));
@@ -138,7 +147,41 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			return;
 		}
 
-		const { providerName, selectedModels, customModel, newApiKeyProvided, apiKey, customModelToDelete } = result;
+		const {
+			providerName,
+			selectedModels,
+			customModel,
+			newApiKeyProvided,
+			apiKey,
+			customModelToDelete,
+			customProviderToDelete,
+			newCustomProvider
+		} = result;
+
+		// Handle custom provider deletion
+		if (customProviderToDelete) {
+			// Remove all models for this provider first
+			const modelConfigs = await this._byokStorageService.getStoredModelConfigs(customProviderToDelete);
+			for (const modelId of Object.keys(modelConfigs)) {
+				await this.deregisterModel(modelId, customProviderToDelete, false);
+			}
+			// Reload providers to refresh the UI
+			const authService = this._authenticationService;
+			const instantiationService = this._instantiationService;
+			await this._authChange(authService, instantiationService);
+			return;
+		}
+
+		// Handle new custom provider creation
+		if (newCustomProvider) {
+			// Reload providers to include the new custom provider
+			const authService = this._authenticationService;
+			const instantiationService = this._instantiationService;
+			await this._authChange(authService, instantiationService);
+			window.showInformationMessage(`Successfully added custom provider: ${newCustomProvider.name}`);
+			return;
+		}
+
 		const providerInfo = this._modelRegistries.find(p => p.name === providerName);
 		if (!providerInfo) {
 			return;

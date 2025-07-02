@@ -12,6 +12,12 @@ export interface StoredModelConfig {
 	modelCapabilities?: BYOKModelCapabilities;
 }
 
+export interface CustomProviderConfig {
+	name: string;
+	url: string;
+	addedAt: number; // timestamp
+}
+
 export interface IBYOKStorageService {
 	/**
 	 * Get API key for a provider or model
@@ -53,6 +59,21 @@ export interface IBYOKStorageService {
 	 * 3. Custom model, and isDeletingCustomModel = false -> Do not delete from storage as we do not have the known model list. Instead mark unregistered
 	 */
 	removeModelConfig(modelId: string, providerName: string, isDeletingCustomModel: boolean): Promise<void>;
+
+	/**
+	 * Get all custom providers
+	 */
+	getCustomProviders(): Promise<CustomProviderConfig[]>;
+
+	/**
+	 * Add a custom provider
+	 */
+	addCustomProvider(provider: CustomProviderConfig): Promise<void>;
+
+	/**
+	 * Remove a custom provider
+	 */
+	removeCustomProvider(providerName: string): Promise<void>;
 }
 
 export class BYOKStorageService implements IBYOKStorageService {
@@ -155,5 +176,50 @@ export class BYOKStorageService implements IBYOKStorageService {
 				existingConfigs
 			);
 		}
+	}
+
+	public async getCustomProviders(): Promise<CustomProviderConfig[]> {
+		return this._extensionContext.globalState.get<CustomProviderConfig[]>(
+			'copilot-byok-custom-providers',
+			[]
+		);
+	}
+
+	public async addCustomProvider(provider: CustomProviderConfig): Promise<void> {
+		const existingProviders = await this.getCustomProviders();
+
+		// Check if provider with this name already exists
+		const existingIndex = existingProviders.findIndex(p => p.name === provider.name);
+		if (existingIndex >= 0) {
+			// Update existing provider
+			existingProviders[existingIndex] = provider;
+		} else {
+			// Add new provider
+			existingProviders.push(provider);
+		}
+
+		await this._extensionContext.globalState.update(
+			'copilot-byok-custom-providers',
+			existingProviders
+		);
+	}
+
+	public async removeCustomProvider(providerName: string): Promise<void> {
+		const existingProviders = await this.getCustomProviders();
+		const filteredProviders = existingProviders.filter(p => p.name !== providerName);
+
+		await this._extensionContext.globalState.update(
+			'copilot-byok-custom-providers',
+			filteredProviders
+		);
+
+		// Also remove all model configs for this provider
+		await this._extensionContext.globalState.update(
+			`copilot-byok-${providerName}-models-config`,
+			{}
+		);
+
+		// Remove provider API key
+		await this._extensionContext.secrets.delete(`copilot-byok-${providerName}-api-key`);
 	}
 }
