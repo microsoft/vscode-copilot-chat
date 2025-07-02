@@ -5,6 +5,7 @@
 
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ITasksService } from '../../../platform/tasks/common/tasksService';
 import { ITerminalService } from '../../../platform/terminal/common/terminalService';
@@ -30,16 +31,19 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 		@ITasksService private readonly tasksService: ITasksService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
+		@ILogService private readonly logService: ILogService
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ITaskOptions>, token: vscode.CancellationToken) {
 		const label = this.getTaskDefinition(options.input)?.taskLabel;
 		if (!label) {
+			this.logService.logger.debug('getTaskOutputTool returning undefined: no label for task ' + options.input.id);
 			return;
 		}
 		// TODO:@meganrogge when there's API to determine if a terminal is a task, improve this vscode#234440
 		const terminal = this.terminalService.terminals.find(t => t.name === label);
 		if (!terminal) {
+			this.logService.logger.debug('getTaskOutputTool returning undefined: no terminal for task ' + options.input.id);
 			return;
 		}
 		const buffer = this.terminalService.getBufferForTerminal(terminal, Math.min(options.input.maxCharsToRetrieve ?? 16000, 16000));
@@ -73,6 +77,7 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 		const workspaceFolder = (workspaceFolderRaw && this.workspaceService.getWorkspaceFolder(workspaceFolderRaw)) || this.workspaceService.getWorkspaceFolders()[0];
 		const task = this.tasksService.getTasks(workspaceFolder).find((t, i) => t.type === taskType && (t.label || String(i)) === taskLabel);
 		if (!task) {
+			this.logService.logger.debug('getTaskOutputTool returning undefined: no task for type: ' + taskType + ' label: ' + taskLabel + ' inputId: ' + input.id);
 			return undefined;
 		}
 
