@@ -13,11 +13,11 @@ import { CancellationToken } from '../../../../../util/vs/base/common/cancellati
 import { isAbsolute } from '../../../../../util/vs/base/common/path';
 import { dirname, resolvePath } from '../../../../../util/vs/base/common/resources';
 import { URI } from '../../../../../util/vs/base/common/uri';
+import { TextReplacement } from '../../../../../util/vs/editor/common/core/edits/textEdit';
 import { Position } from '../../../../../util/vs/editor/common/core/position';
 import { INextEditDisplayLocation } from '../../../node/nextEditResult';
 import { IVSCodeObservableDocument } from '../../parts/vscodeWorkspace';
 import { CodeAction, Diagnostic, DiagnosticCompletionItem, DiagnosticInlineEditRequestLogContext, getCodeActionsForDiagnostic, IDiagnosticCompletionProvider, isDiagnosticWithinDistance, log, logList } from './diagnosticsCompletions';
-import { TextReplacement } from '../../../../../util/vs/editor/common/core/edits/textEdit';
 
 class ImportCodeAction {
 
@@ -37,8 +37,8 @@ class ImportCodeAction {
 		return this._importDetails.labelDeduped;
 	}
 
-	public get isLocalImport(): boolean | undefined {
-		return this._importDetails.isLocalImport;
+	public get importSource(): ImportSource {
+		return this._importDetails.importSource;
 	}
 
 	constructor(
@@ -56,14 +56,21 @@ class ImportCodeAction {
 			return 1;
 		}
 
-		if (this.isLocalImport && !other.isLocalImport || this.isLocalImport === undefined && other.isLocalImport === false) {
+		if (
+			this.importSource === ImportSource.local && other.importSource !== ImportSource.local ||
+			this.importSource !== ImportSource.external && other.importSource === ImportSource.external
+		) {
 			return -1;
 		}
-		if (!this.isLocalImport && other.isLocalImport || this.isLocalImport === false && other.isLocalImport === undefined) {
+
+		if (
+			this.importSource !== ImportSource.local && other.importSource === ImportSource.local ||
+			this.importSource === ImportSource.external && other.importSource !== ImportSource.external
+		) {
 			return 1;
 		}
 
-		if (this.isLocalImport && other.isLocalImport) {
+		if (this.importSource !== ImportSource.unknown && other.importSource !== ImportSource.unknown) {
 			const aPathDistance = this.importPath.split('/').length - 1;
 			const bPathDistance = other.importPath.split('/').length - 1;
 			if (aPathDistance !== bPathDistance) {
@@ -93,7 +100,11 @@ export class ImportDiagnosticCompletionItem extends DiagnosticCompletionItem {
 	}
 
 	get isLocalImport(): boolean | undefined {
-		return this._importCodeAction.isLocalImport;
+		switch (this._importCodeAction.importSource) {
+			case ImportSource.local: return true;
+			case ImportSource.external: return false;
+			default: return undefined;
+		}
 	}
 
 	get hasExistingSameFileImport(): boolean {
@@ -231,7 +242,7 @@ export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletion
 		logList(`Sorted import code actions for \`${importDiagnosticToFix.message}\``, sortedImportCodeActions, logContext, this._tracer);
 
 		for (const codeAction of sortedImportCodeActions) {
-			const importCodeActionLabel = availableImportCodeActions.length === 1 ? codeAction.labelShort : codeAction.labelDeduped;
+			const importCodeActionLabel = availableImportCodeActions.length === 1 && codeAction.importSource !== ImportSource.external ? codeAction.labelShort : codeAction.labelDeduped;
 			const displayLocation: INextEditDisplayLocation = { range: importDiagnosticToFix.range, label: importCodeActionLabel };
 
 			const item = new ImportDiagnosticCompletionItem(codeAction, importDiagnosticToFix, displayLocation, workspaceDocument, availableImportCodeActions.length - 1);
@@ -326,12 +337,18 @@ export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletion
 	}
 }
 
+enum ImportSource {
+	local,
+	external,
+	unknown,
+}
+
 export type ImportDetails = {
 	importName: string;
 	importPath: string;
 	labelShort: string;
 	labelDeduped: string;
-	isLocalImport: boolean | undefined; // use undefined when unknown
+	importSource: ImportSource;
 }
 
 export interface ILanguageImportHandler {
@@ -356,8 +373,12 @@ class JavascriptImportHandler implements ILanguageImportHandler {
 	}
 
 	isImportInIgnoreList(importCodeAction: ImportCodeAction): boolean {
-		if (importCodeAction.isLocalImport) {
+		if (importCodeAction.importSource === ImportSource.local) {
 			return false;
+		}
+
+		if (importCodeAction.importSource === ImportSource.external && importCodeAction.importPath.includes('/')) {
+			return true; // Ignore imports that are from node_modules and point to a subpath
 		}
 
 		if (JavascriptImportHandler.ImportsToIgnore.has(importCodeAction.importName)) {
@@ -390,28 +411,29 @@ class JavascriptImportHandler implements ILanguageImportHandler {
 			importPath,
 			labelShort: `import ${importName}`,
 			labelDeduped: `import ${importName} from ${pathAsInTitle}`,
-			isLocalImport: this._isLocalImport(importPath, workspaceInfo)
+			importSource: this._getImportSource(importPath, workspaceInfo)
 		};
 	}
 
-	private _isLocalImport(importPath: string, workspaceInfo: WorkspaceInformation): boolean | undefined {
+	private _getImportSource(importPath: string, workspaceInfo: WorkspaceInformation): ImportSource {
 		if (importPath.startsWith('./') || importPath.startsWith('../')) {
-			return true;
+			return ImportSource.local;
 		}
 
 		// Resolve against tsconfig paths
 		for (const [alias, _] of Object.entries(workspaceInfo.tsconfigPaths)) {
 			const aliasBase = alias.replace(/\*$/, '');
 			if (importPath.startsWith(aliasBase)) {
-				return true;
+				return ImportSource.local;
 			}
 		}
 
-		if (workspaceInfo.nodeModules.has(importPath)) {
-			return false;
+		const potentialNodeModules = [importPath, importPath.split('/')[0], importPath.split(':')[0]];
+		if (potentialNodeModules.some(importPath => workspaceInfo.nodeModules.has(importPath))) {
+			return ImportSource.external;
 		}
 
-		return undefined;
+		return ImportSource.unknown;
 	}
 }
 
@@ -434,30 +456,30 @@ class PythonImportHandler implements ILanguageImportHandler {
 		if (fromImportMatch) {
 			const importPath = fromImportMatch[1];
 			const importName = fromImportMatch[2];
-			return { importName, importPath, labelDeduped: `import from ${importPath}`, labelShort: `import ${importName}`, isLocalImport: this._isLocalImport(importPath) };
+			return { importName, importPath, labelDeduped: `import from ${importPath}`, labelShort: `import ${importName}`, importSource: this._getImportSource(importPath) };
 		}
 
 		const importAsMatch = codeAction.title.match(/Add "import\s+(.+?)\s+as\s(.+?)"/);
 		if (importAsMatch) {
 			const importName = importAsMatch[1];
 			const importAs = importAsMatch[2];
-			return { importName, importPath: importName, labelDeduped: `import ${importName} as ${importAs}`, labelShort: `import ${importName} as ${importAs}`, isLocalImport: undefined };
+			return { importName, importPath: importName, labelDeduped: `import ${importName} as ${importAs}`, labelShort: `import ${importName} as ${importAs}`, importSource: ImportSource.unknown };
 		}
 
 		const importMatch = codeAction.title.match(/Add "import\s+(.+?)"/);
 		if (importMatch) {
 			const importName = importMatch[1];
-			return { importName, importPath: importName, labelDeduped: `import ${importName}`, labelShort: `import ${importName}`, isLocalImport: undefined };
+			return { importName, importPath: importName, labelDeduped: `import ${importName}`, labelShort: `import ${importName}`, importSource: ImportSource.unknown };
 		}
 
 		return null;
 	}
 
-	private _isLocalImport(importPath: string): boolean | undefined {
+	private _getImportSource(importPath: string): ImportSource {
 		if (importPath.startsWith('.')) {
-			return true;
+			return ImportSource.local;
 		}
 
-		return undefined;
+		return ImportSource.unknown;
 	}
 }

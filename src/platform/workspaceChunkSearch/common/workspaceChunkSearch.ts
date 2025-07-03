@@ -86,6 +86,18 @@ export interface IWorkspaceChunkSearchStrategy {
 	readonly id: WorkspaceChunkSearchStrategyId;
 
 	/**
+	 * Invoked before the search is performed.
+	 *
+	 * This can be used to prompt the user or perform other actions.
+	 *
+	 * Unlike time spent in `searchWorkspace`, this method will not count towards timeouts
+	 */
+	prepareSearchWorkspace?(
+		telemetryInfo: TelemetryCorrelationId,
+		token: CancellationToken,
+	): Promise<void>;
+
+	/**
 	 * Takes search queries and returns the chunks of text that are most semantically similar to any of the queries.
 	 *
 	 * @return Either the result (which may have zero chunks) or undefined if the search could not be performed.

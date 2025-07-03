@@ -140,18 +140,27 @@ class ReadFileTool implements ICopilotTool<ReadFileParams> {
 			]);
 		} catch (err) {
 			void this.sendReadFileTelemetry('error', options, ranges || { start: 0, end: 0, truncated: false });
+			throw err;
 		}
 	}
 
-	async prepareInvocation({ input }: vscode.LanguageModelToolInvocationPrepareOptions<ReadFileParams>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation | undefined> {
+	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ReadFileParams>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation | undefined> {
+		const { input } = options;
 		if (!input.filePath.length) {
 			return;
 		}
 
-		const uri = resolveToolInputPath(input.filePath, this.promptPathRepresentationService);
-		await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, uri));
+		let uri: URI;
+		let documentSnapshot: NotebookDocumentSnapshot | TextDocumentSnapshot;
+		try {
+			uri = resolveToolInputPath(input.filePath, this.promptPathRepresentationService);
+			await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, uri));
+			documentSnapshot = await this.getSnapshot(uri);
+		} catch (err) {
+			void this.sendReadFileTelemetry('invalidFile', options, { start: 0, end: 0, truncated: false });
+			throw err;
+		}
 
-		const documentSnapshot = await this.getSnapshot(uri);
 		const { start, end } = getParamRanges(input, documentSnapshot);
 		if (start === 1 && end === documentSnapshot.lineCount) {
 			return {
@@ -180,7 +189,7 @@ class ReadFileTool implements ICopilotTool<ReadFileParams> {
 			TextDocumentSnapshot.create(await this.workspaceService.openTextDocument(uri));
 	}
 
-	private async sendReadFileTelemetry(outcome: string, options: vscode.LanguageModelToolInvocationOptions<ReadFileParams>, { start, end, truncated }: IParamRanges) {
+	private async sendReadFileTelemetry(outcome: string, options: Pick<vscode.LanguageModelToolInvocationOptions<ReadFileParams>, 'model' | 'chatRequestId' | 'input'>, { start, end, truncated }: IParamRanges) {
 		const model = options.model && (await this.endpointProvider.getChatEndpoint(options.model)).model;
 
 		/* __GDPR__

@@ -330,3 +330,32 @@ export function normalizeIndentation(str: string, indentSize: number, insertSpac
 	}
 	return _normalizeIndentationFromWhitespace(str.substring(0, firstNonWhitespaceIndex), indentSize, insertSpaces) + str.substring(firstNonWhitespaceIndex);
 }
+
+export function getIndentationChar(indentation: IGuessedIndentation): string {
+	if (indentation.insertSpaces) {
+		return ' '.repeat(indentation.tabSize);
+	} else {
+		return '\t';
+	}
+}
+
+export function transformIndentation(content: string, fromIndent: IGuessedIndentation, toIndent: IGuessedIndentation): string {
+	if (fromIndent.insertSpaces === toIndent.insertSpaces && fromIndent.tabSize === toIndent.tabSize) {
+		return content;
+	}
+
+	const fromChr = getIndentationChar(fromIndent);
+	const toChr = getIndentationChar(toIndent);
+
+	const lines = content.split('\n');
+	for (let i = 0; i < lines.length; i++) {
+		let k = 0;
+		while (lines[i].slice(k, k + fromChr.length) === fromChr) {
+			k += fromChr.length;
+		}
+
+		lines[i] = toChr.repeat(k / fromChr.length) + lines[i].slice(k);
+	}
+
+	return lines.join('\n');
+}

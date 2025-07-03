@@ -38,7 +38,7 @@ import { ChatToolReferences, ChatVariables, UserQuery } from './chatVariables';
 import { EXISTING_CODE_MARKER } from './codeBlockFormattingRules';
 import { CustomInstructions } from './customInstructions';
 import { fileVariableCostFn } from './fileVariable';
-import { NotebookFormat } from './notebookEditCodePrompt';
+import { NotebookFormat, NotebookReminderInstructions } from './notebookEditCodePrompt';
 import { ProjectLabels } from './projectLabels';
 import { CodeBlock, ExampleCodeBlock } from './safeElements';
 import { ChatToolCalls } from './toolCalling';
@@ -318,6 +318,7 @@ export class EditCodeUserMessage extends PromptElement<EditCodePromptProps> {
 						Avoid repeating existing code, instead use a line comment with `{EXISTING_CODE_MARKER}` to represent regions of unchanged code.<br />
 						The code block for each file being edited must start with a comment containing the filepath. This includes Markdown code blocks.<br />
 						For existing files, make sure the filepath exactly matches the filepath of the original file.<br />
+						<NotebookReminderInstructions chatVariables={chatVariables} query={query} />
 						<NewFilesLocationHint />
 					</Tag>
 					{query && <Tag name='prompt'><UserQuery flexGrow={7} priority={900} chatVariables={chatVariables} query={query} /></Tag>}

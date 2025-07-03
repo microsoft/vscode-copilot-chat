@@ -86,10 +86,11 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 		let error: string | undefined;
 
 		const timingStart = Date.now();
+		const termId = generateUuid();
 
 		if (options.input.isBackground) {
-			this.logService.logger.debug(`RunInTerminalTool: Creating background terminal`);
-			const toolTerminal = await this.instantiationService.createInstance(ToolTerminalCreator).createTerminal(sessionId, token, true);
+			this.logService.logger.debug(`RunInTerminalTool: Creating background terminal with ID=${termId}`);
+			const toolTerminal = await this.instantiationService.createInstance(ToolTerminalCreator).createTerminal(sessionId, termId, token, true);
 			if (token.isCancellationRequested) {
 				toolTerminal.terminal.dispose();
 				throw new CancellationError();
@@ -98,11 +99,9 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 			toolTerminal.terminal.show(true);
 			const timingConnectMs = Date.now() - timingStart;
 
-			let termId: string | undefined;
 			try {
 				this.logService.logger.debug(`RunInTerminalTool: Starting background execution \`${command}\``);
 				const execution = new BackgroundTerminalExecution(toolTerminal.terminal, command);
-				const termId = generateUuid();
 				RunInTerminalTool.executions.set(termId, execution);
 				const resultText = (
 					didUserEditCommand
@@ -140,7 +139,7 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 				this.logService.logger.debug(`RunInTerminalTool: Using existing terminal with session ID \`${sessionId}\``);
 			} else {
 				this.logService.logger.debug(`RunInTerminalTool: Creating terminal with session ID \`${sessionId}\``);
-				toolTerminal = await this.instantiationService.createInstance(ToolTerminalCreator).createTerminal(sessionId, token);
+				toolTerminal = await this.instantiationService.createInstance(ToolTerminalCreator).createTerminal(sessionId, termId, token);
 				if (token.isCancellationRequested) {
 					toolTerminal.terminal.dispose();
 					throw new CancellationError();
@@ -309,7 +308,7 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 		const isPwsh = isPowerShell(this.envService.shell);
 		const cdPrefixMatch = commandLine.match(
 			isPwsh
-				? /^cd (?<dir>[^\s]+) ?(?:&&|;)\s+(?<suffix>.+)$/
+				? /^(?:cd|Set-Location(?: -Path)?) (?<dir>[^\s]+) ?(?:&&|;)\s+(?<suffix>.+)$/i
 				: /^cd (?<dir>[^\s]+) &&\s+(?<suffix>.+)$/
 		);
 		const cdDir = cdPrefixMatch?.groups?.dir;
@@ -336,6 +335,9 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 			// Re-write the command if it matches the cwd
 			if (cwd) {
 				let cdDirPath = cdDir;
+				if (cdDirPath.startsWith('"') && cdDirPath.endsWith('"')) {
+					cdDirPath = cdDirPath.slice(1, -1);
+				}
 				let cwdFsPath = cwd.fsPath;
 				if (this.envService.OS === OperatingSystem.Windows) {
 					cdDirPath = cdDirPath.toLowerCase();

@@ -6,9 +6,9 @@
 
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { IntentRegistry } from '../../prompt/node/intentRegistry';
+import { AgentIntent } from './agentIntent';
 import { AskAgentIntent } from './askAgentIntent';
 import { InlineDocIntent } from './docIntent';
-import { AgentIntent } from './editAgentIntent';
 import { EditCodeIntent } from './editCodeIntent';
 import { EditCode2Intent } from './editCodeIntent2';
 import { ExplainIntent } from './explainIntent';

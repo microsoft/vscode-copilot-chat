@@ -259,6 +259,7 @@ copilot_cache_control: {"type":"ephemeral"}
 <reminderInstructions>
 When using the insert_edit_into_file tool, avoid repeating existing code, instead use a line comment with /\`...existing code.../\` to represent regions of unchanged code.
 When using the replace_string_in_file tool, include 3-5 lines of unchanged code before and after the string you want to replace, to make it unambiguous which part of the file should be edited.
+
 </reminderInstructions>
 <userRequest>
 hello

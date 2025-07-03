@@ -26,7 +26,7 @@ import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperServ
 import { EditCodePrompt2 } from '../../prompts/node/panel/editCodePrompt2';
 import { ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
-import { AgentIntentInvocation } from './editAgentIntent';
+import { AgentIntentInvocation } from './agentIntent';
 import { EditCodeIntent, EditCodeIntentOptions } from './editCodeIntent';
 import { getRequestedToolCallIterationLimit } from './toolCallingLoop';
 

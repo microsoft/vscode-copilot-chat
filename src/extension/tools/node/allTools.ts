@@ -41,3 +41,4 @@ import './vscodeAPITool';
 import './simpleBrowserTool';
 import './createDirectoryTool';
 import './vscodeCmdTool';
+import './getTaskOutputTool';

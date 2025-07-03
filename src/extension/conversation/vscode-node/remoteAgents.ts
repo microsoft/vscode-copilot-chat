@@ -416,7 +416,7 @@ export class RemoteAgentContribution implements IDisposable {
 								? []
 								: [{ type: Raw.ChatCompletionContentPartKind.Text, text: resolved.message }],
 							...(copilotReferences.length ? { copilot_references: copilotReferences } : undefined),
-							...(confirmations?.length ? { copilot_confirmations: confirmations.length } : undefined),
+							...(confirmations?.length ? { copilot_confirmations: confirmations } : undefined),
 						}
 					],
 					async (result, _, delta) => {

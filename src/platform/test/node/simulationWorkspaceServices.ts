@@ -38,7 +38,7 @@ import { INotebookSummaryTracker } from '../../notebook/common/notebookSummaryTr
 import { IReviewService, ReviewComment, ReviewDiagnosticCollection } from '../../review/common/reviewService';
 import { AbstractSearchService } from '../../search/common/searchService';
 import { ITabsAndEditorsService, TabInfo } from '../../tabs/common/tabsAndEditorsService';
-import { ITerminalService, ShellIntegrationQuality } from '../../terminal/common/terminalService';
+import { IKnownTerminal, ITerminalService, ShellIntegrationQuality } from '../../terminal/common/terminalService';
 import { AbstractWorkspaceService, IWorkspaceService } from '../../workspace/common/workspaceService';
 import { isNotebook, SimulationWorkspace } from './simulationWorkspace';
 
@@ -764,7 +764,7 @@ export class TestingTerminalService extends Disposable implements ITerminalServi
 	onDidCloseTerminal: vscode.Event<vscode.Terminal> = Event.None;
 	onDidWriteTerminalData: vscode.Event<vscode.TerminalDataWriteEvent> = Event.None;
 
-	private readonly sessionTerminals = new Map<string, { terminal: vscode.Terminal; shellIntegrationQuality: ShellIntegrationQuality }[]>();
+	private readonly sessionTerminals = new Map<string, { terminal: vscode.Terminal; shellIntegrationQuality: ShellIntegrationQuality; id: string }[]>();
 
 	createTerminal(name?: string, shellPath?: string, shellArgs?: readonly string[] | string): vscode.Terminal;
 	createTerminal(options: vscode.TerminalOptions): vscode.Terminal;
@@ -788,22 +788,26 @@ export class TestingTerminalService extends Disposable implements ITerminalServi
 		return Promise.resolve(undefined);
 	}
 
-	associateTerminalWithSession(terminal: vscode.Terminal, sessionId: string, shellIntegrationQuality: ShellIntegrationQuality): Promise<void> {
+	associateTerminalWithSession(terminal: vscode.Terminal, sessionId: string, id: string, shellIntegrationQuality: ShellIntegrationQuality): Promise<void> {
 		const terms = this.sessionTerminals.get(sessionId);
 		if (terms) {
-			terms.push({ terminal, shellIntegrationQuality });
+			terms.push({ terminal, shellIntegrationQuality, id });
 		} else {
-			this.sessionTerminals.set(sessionId, [{ terminal, shellIntegrationQuality }]);
+			this.sessionTerminals.set(sessionId, [{ terminal, shellIntegrationQuality, id }]);
 		}
 		return Promise.resolve();
 	}
 
-	getCopilotTerminals(sessionId: string): Promise<vscode.Terminal[]> {
-		return Promise.resolve(this.sessionTerminals.get(sessionId)?.map(t => t.terminal) || []);
+	getCopilotTerminals(sessionId: string): Promise<IKnownTerminal[]> {
+		return Promise.resolve(this.sessionTerminals.get(sessionId)?.map(t => { return { ...t.terminal, id: t.id }; }) || []);
 	}
 
 	getToolTerminalForSession(sessionId: string): Promise<{ terminal: vscode.Terminal; shellIntegrationQuality: ShellIntegrationQuality } | undefined> {
 		return Promise.resolve(this.sessionTerminals.get(sessionId)?.at(0));
+	}
+
+	getLastCommandForTerminal(terminal: vscode.Terminal): vscode.TerminalExecutedCommand | undefined {
+		return undefined;
 	}
 
 	get terminalBuffer(): string {
@@ -818,7 +822,7 @@ export class TestingTerminalService extends Disposable implements ITerminalServi
 	get terminalShellType(): string {
 		return this._workspace.terminalShellType ?? '';
 	}
-	getBufferForTerminal(terminal: vscode.Terminal, maxLines?: number): string {
+	getBufferForTerminal(terminal: vscode.Terminal, maxChars?: number): string {
 		return '';
 	}
 }

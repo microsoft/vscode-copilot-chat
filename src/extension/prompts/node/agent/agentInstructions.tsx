@@ -3,63 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { AssistantMessage, BasePromptElementProps, Chunk, PrioritizedList, PromptElement, PromptSizing, UserMessage } from '@vscode/prompt-tsx';
+import { BasePromptElementProps, PromptElement, PromptSizing } from '@vscode/prompt-tsx';
 import type { LanguageModelToolInformation } from 'vscode';
-import { IResultMetadata } from '../../../prompt/common/conversation';
-import { IBuildPromptContext } from '../../../prompt/common/intents';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { Tag } from '../base/tag';
-import { CodeBlockFormattingRules, EXISTING_CODE_MARKER } from './codeBlockFormattingRules';
-import { AgentUserMessageInHistory } from './editAgentConversationHistory';
-import { getKeepGoingReminder, renderedMessageToTsxChildren } from './editAgentPrompt';
-import { ChatToolCalls } from './toolCalling';
-
-export interface AgentConversationHistoryProps extends BasePromptElementProps {
-	readonly priority: number;
-	readonly promptContext: IBuildPromptContext;
-}
-
-export class AgentConversationHistory extends PromptElement<AgentConversationHistoryProps> {
-	override async render(state: void, sizing: PromptSizing) {
-		const history: PromptElement[] = [];
-		const contextHistory = this.props.promptContext.history;
-		for (const [i, turn] of contextHistory.entries()) {
-			const metadata = turn.responseChatResult?.metadata as IResultMetadata | undefined;
-
-			if (metadata?.renderedUserMessage) {
-				history.push(<UserMessage><Chunk>{renderedMessageToTsxChildren(metadata.renderedUserMessage, false)}</Chunk></UserMessage>);
-			} else {
-				history.push(<AgentUserMessageInHistory turn={turn} />);
-			}
-
-			if (Array.isArray(metadata?.toolCallRounds) && metadata.toolCallRounds?.length > 0) {
-				// If a tool call limit is exceeded, the tool call from this turn will
-				// have been aborted and any result should be found in the next turn.
-				const toolCallResultInNextTurn = metadata.maxToolCallsExceeded;
-				let toolCallResults = metadata.toolCallResults;
-				if (toolCallResultInNextTurn) {
-					const nextMetadata = contextHistory.at(i + 1)?.responseChatResult?.metadata as IResultMetadata | undefined;
-					const mergeFrom = i === contextHistory.length - 1 ? this.props.promptContext.toolCallResults : nextMetadata?.toolCallResults;
-					toolCallResults = { ...toolCallResults, ...mergeFrom };
-				}
-
-				history.push(<ChatToolCalls
-					promptContext={this.props.promptContext}
-					toolCallRounds={metadata.toolCallRounds}
-					toolCallResults={toolCallResults}
-					isHistorical={!(toolCallResultInNextTurn && i === contextHistory.length - 1)}
-				/>);
-			} else if (turn.responseMessage) {
-				history.push(<AssistantMessage>{turn.responseMessage?.message}</AssistantMessage>);
-			}
-		}
-
-		return (<PrioritizedList priority={this.props.priority} descending={false}>{history}</PrioritizedList>);
-	}
-}
+import { CodeBlockFormattingRules, EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
+import { getKeepGoingReminder } from './agentPrompt';
 
 interface DefaultAgentPromptProps extends BasePromptElementProps {
 	readonly availableTools: readonly LanguageModelToolInformation[] | undefined;
@@ -67,6 +19,9 @@ interface DefaultAgentPromptProps extends BasePromptElementProps {
 	readonly codesearchMode: boolean | undefined;
 }
 
+/**
+ * Base system prompt for agent mode
+ */
 export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.RunInTerminal);
@@ -199,6 +154,9 @@ class CodesearchModeInstructions extends PromptElement<DefaultAgentPromptProps> 
 	}
 }
 
+/**
+ * A system prompt only used for some evals with swebench
+ */
 export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 	constructor(
 		props: DefaultAgentPromptProps,

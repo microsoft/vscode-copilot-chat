@@ -31,3 +31,5 @@ coverage/
 
 # Base cache database (GC mode)
 test/simulation/cache/_base.sqlite
+
+test/aml/out

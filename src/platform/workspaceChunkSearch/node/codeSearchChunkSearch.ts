@@ -261,7 +261,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	}
 
 	private async doIsAvailableCheck(canPrompt = false, token: CancellationToken): Promise<Result<AvailableSuccessMetadata, AvailableFailureMetadata>> {
-		if (!this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.WorkspaceEnableCodeSearch, this._experimentationService)) {
+		if (!this.isCodeSearchEnabled()) {
 			return Result.error<AvailableFailureMetadata>({ unavailableReason: 'Disabled by experiment', repoStatuses: {} });
 		}
 
@@ -273,7 +273,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 
 		let allRepos = Array.from(this._repoTracker.getAllRepos());
 		if (canPrompt) {
-			if (allRepos.some(repo => repo.status === RepoStatus.CouldNotCheckIndexStatus)) {
+			if (allRepos.some(repo => repo.status === RepoStatus.CouldNotCheckIndexStatus || repo.status === RepoStatus.NotAuthorized)) {
 				if (await raceCancellationError(this._authUpgradeService.shouldRequestPermissiveSessionUpgrade(), token)) { // Needs more thought
 					if (await raceCancellationError(this._authUpgradeService.shouldRequestPermissiveSessionUpgrade(), token)) {
 						await raceCancellationError(this._repoTracker.updateAllRepoStatuses(), token);
@@ -309,7 +309,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				return Result.error<AvailableFailureMetadata>({ unavailableReason: 'Not yet indexed', repoStatuses });
 			}
 
-			if (allRepos.every(repo => repo.status === RepoStatus.CouldNotCheckIndexStatus)) {
+			if (allRepos.every(repo => repo.status === RepoStatus.CouldNotCheckIndexStatus || repo.status === RepoStatus.NotAuthorized)) {
 				return Result.error<AvailableFailureMetadata>({ unavailableReason: 'Could not check index status', repoStatuses });
 			}
 
@@ -333,7 +333,19 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		return Result.ok({ indexedRepos, notYetIndexedRepos, repoStatuses });
 	}
 
+	private isCodeSearchEnabled() {
+		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.WorkspaceEnableCodeSearch, this._experimentationService);
+	}
+
 	getRemoteIndexState(): CodeSearchRemoteIndexState {
+		if (!this.isCodeSearchEnabled()) {
+			return {
+				status: CodeSearchRemoteIndexStatus.NoRepos,
+				repos: [],
+				getDiffState: async () => { return undefined; }
+			};
+		}
+
 		return {
 			status: this.getRemoteIndexStatus(),
 			repos: Array.from(this._repoTracker.getAllRepos()),
@@ -404,11 +416,21 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			return CodeSearchRemoteIndexStatus.Indexing;
 		}
 
-		if (allPotentialRepos.some(repo => repo.status === RepoStatus.CouldNotCheckIndexStatus)) {
+		if (allPotentialRepos.some(repo => repo.status === RepoStatus.CouldNotCheckIndexStatus || repo.status === RepoStatus.NotAuthorized)) {
 			return CodeSearchRemoteIndexStatus.CouldNotCheckIndexStatus;
 		}
 
 		return CodeSearchRemoteIndexStatus.NoRepos;
+	}
+
+	private didRunPrepare = false;
+	async prepareSearchWorkspace(telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<undefined> {
+		if (this.didRunPrepare) {
+			return;
+		}
+
+		this.didRunPrepare = true;
+		return this._repoTracker.tryAuthIfNeeded(telemetryInfo, token);
 	}
 
 	async searchWorkspace(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, options: WorkspaceChunkSearchOptions, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<StrategySearchResult | undefined> {

@@ -29,6 +29,25 @@ export interface NotebookFormatPromptProps extends BasePromptElementProps {
 	readonly query: string;
 }
 
+export class NotebookReminderInstructions extends PromptElement<NotebookFormatPromptProps> {
+	constructor(
+		props: NotebookFormatPromptProps,
+		@INotebookService private readonly notebookService: INotebookService,
+		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
+	) {
+		super(props);
+	}
+
+	public override render(_state: void, _sizing: PromptSizing) {
+		const notebookRelatedUris = this.props.chatVariables instanceof ChatVariablesCollection ?
+			getNotebookUrisFromChatVariables(this.props.chatVariables, this._workspaceService, this.notebookService) :
+			this.props.chatVariables.filter(entry => isNotebookWorkingSetEntry(entry)).map(entry => entry.document.uri);
+		if (notebookRelatedUris.length || queryContainsNotebookSpecificKeywords(this.props.query)) {
+			return <>Do not show Cell IDs to the user.<br /></>;
+		}
+	}
+}
+
 export class NotebookFormat extends PromptElement<NotebookFormatPromptProps> {
 	constructor(
 		props: NotebookFormatPromptProps,
@@ -44,7 +63,7 @@ export class NotebookFormat extends PromptElement<NotebookFormatPromptProps> {
 	public override render(_state: void, _sizing: PromptSizing) {
 		// These could be cell uris or output uris etc.
 		const notebookRelatedUris = this.props.chatVariables instanceof ChatVariablesCollection ?
-			this.getNotebookUris(this.props.chatVariables) :
+			getNotebookUrisFromChatVariables(this.props.chatVariables, this._workspaceService, this.notebookService) :
 			this.props.chatVariables.filter(entry => isNotebookWorkingSetEntry(entry)).map(entry => entry.document.uri);
 		if (notebookRelatedUris.length || queryContainsNotebookSpecificKeywords(this.props.query)) {
 			const notebookUris = getNotebookUris(notebookRelatedUris, this._workspaceService);
@@ -83,29 +102,6 @@ export class NotebookFormat extends PromptElement<NotebookFormatPromptProps> {
 
 		}
 	}
-
-	private getNotebookUris(chatVariables: ChatVariablesCollection): URI[] {
-		const notebookUris = [];
-		for (const chatVar of chatVariables) {
-			let notebookUri: Uri | undefined;
-			if (isNotebookVariable(chatVar.value)) {
-				// Notebook cell or output
-				const [notebook,] = getNotebookAndCellFromUri(chatVar.value, this._workspaceService.notebookDocuments);
-				if (chatVar.value.scheme === Schemas.vscodeNotebookCellOutput) {
-					continue;
-				}
-				notebookUri = notebook?.uri;
-			} else if (isUri(chatVar.value)) {
-				notebookUri = chatVar.value;
-			} else if (isLocation(chatVar.value)) {
-				notebookUri = chatVar.value.uri;
-			}
-			if (notebookUri && this.notebookService.hasSupportedNotebooks(notebookUri)) {
-				notebookUris.push(notebookUri);
-			}
-		}
-		return notebookUris;
-	}
 }
 
 function queryContainsNotebookSpecificKeywords(query: string): boolean {
@@ -125,6 +121,29 @@ function getNotebookUris(uris: Uri[], workspace: IWorkspaceService): Uri[] {
 		}
 		return undefined;
 	}))));
+}
+
+function getNotebookUrisFromChatVariables(chatVariables: ChatVariablesCollection, workspaceService: IWorkspaceService, notebookService: INotebookService): URI[] {
+	const notebookUris = [];
+	for (const chatVar of chatVariables) {
+		let notebookUri: Uri | undefined;
+		if (isNotebookVariable(chatVar.value)) {
+			// Notebook cell or output
+			const [notebook,] = getNotebookAndCellFromUri(chatVar.value, workspaceService.notebookDocuments);
+			if (chatVar.value.scheme === Schemas.vscodeNotebookCellOutput) {
+				continue;
+			}
+			notebookUri = notebook?.uri;
+		} else if (isUri(chatVar.value)) {
+			notebookUri = chatVar.value;
+		} else if (isLocation(chatVar.value)) {
+			notebookUri = chatVar.value.uri;
+		}
+		if (notebookUri && notebookService.hasSupportedNotebooks(notebookUri)) {
+			notebookUris.push(notebookUri);
+		}
+	}
+	return notebookUris;
 }
 
 interface NotebookFormatCommonPromptProps extends BasePromptElementProps {

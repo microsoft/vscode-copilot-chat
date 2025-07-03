@@ -18,6 +18,7 @@ import { ConfigKey, IConfigurationService } from '../../configuration/common/con
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { logExecTime, LogExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
+import { ICodeSearchAuthenticationService } from '../../remoteCodeSearch/node/codeSearchRepoAuth';
 import { BuildIndexTriggerReason, TriggerIndexingError } from '../../remoteCodeSearch/node/codeSearchRepoTracker';
 import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
@@ -55,7 +56,7 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 	private static readonly defaultAutomaticIndexingFileCap = 750;
 
 	/** Max workspace size for automatic for clients with expanded capabilities. */
-	private static readonly defaultExpandedAutomaticIndexingFileCap = 25_000;
+	private static readonly defaultExpandedAutomaticIndexingFileCap = 50_000;
 
 	/** Max workspace size that can indexed if requested by the user. */
 	private static readonly defaultManualIndexingFileCap = 2500;
@@ -73,11 +74,13 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 	private readonly _reindexRequests = new ResourceMap<Delayer<void>>;
 
 	private readonly _hasRequestedManualIndexingKey = 'copilot.embeddingsChunkSearch.hasRequestedManualIndexing';
+	private readonly _hasPromptedExpandedIndexingKey = 'copilot.embeddingsChunkSearch.hasRequestedExpandedIndexing';
 
 	constructor(
 		embeddingsIndex: WorkspaceChunkEmbeddingsIndex,
 		@ISimulationTestContext _simulationTestContext: ISimulationTestContext,
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
+		@ICodeSearchAuthenticationService private readonly _codeSearchAuthService: ICodeSearchAuthenticationService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@ILogService private readonly _logService: ILogService,
@@ -126,8 +129,38 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 		return Result.ok(true);
 	}
 
+	async prepareSearchWorkspace(telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<void> {
+		if (!this.isEmbeddingSearchEnabled()) {
+			return;
+		}
+
+		// We're potentially going to index a lot of files due to expanded indexing, prompt the user to confirm first.
+		// This both informs them that indexing may take some time and also reduces load for cases when
+		// the extra indexing was unexpected.
+		if (!await raceCancellationError(this.getExpandedClientSideIndexingStatus(), token)) {
+			return;
+		}
+
+		if (this._embeddingsIndex.fileCount < await this.getManualIndexFileCap()) {
+			return;
+		}
+
+		// Only auto prompt once per workspace
+		const hasPrompted = this._extensionContext.workspaceState.get<boolean | undefined>(this._hasPromptedExpandedIndexingKey);
+		if (hasPrompted) {
+			return;
+		}
+		this._extensionContext.workspaceState.update(this._hasPromptedExpandedIndexingKey, true);
+
+		const shouldIndex = await this._codeSearchAuthService.promptForExpandedLocalIndexing(this._embeddingsIndex.fileCount);
+		if (shouldIndex) {
+			// Don't await, just kick off
+			this.triggerIndexingOfWorkspace('manual', telemetryInfo.addCaller('EmbeddingsChunkSearch::prepareSearchWorkspace'));
+		}
+	}
+
 	async searchWorkspace(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, options: WorkspaceChunkSearchOptions, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<StrategySearchResult | undefined> {
-		if (!this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.WorkspaceEnableEmbeddingsSearch, this._experimentationService)) {
+		if (!this.isEmbeddingSearchEnabled()) {
 			return undefined;
 		}
 
@@ -160,6 +193,10 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 				workspaceSearchCorrelationId: telemetryInfo.correlationId,
 			}, { execTime });
 		});
+	}
+
+	private isEmbeddingSearchEnabled() {
+		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.WorkspaceEnableEmbeddingsSearch, this._experimentationService);
 	}
 
 	@LogExecTime(self => self._logService)
@@ -310,8 +347,7 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 	}
 
 	private async getAutoIndexFileCap() {
-		const token = await this._authService.getCopilotToken();
-		if (token?.isExpandedClientSideIndexingEnabled()) {
+		if (await this.getExpandedClientSideIndexingStatus() === 'enabled') {
 			return this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.expandedEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultExpandedAutomaticIndexingFileCap;
 		}
 
@@ -319,11 +355,26 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 	}
 
 	private async getManualIndexFileCap() {
-		const manualCap = this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.manualEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultManualIndexingFileCap;
+		let manualCap = this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.manualEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultManualIndexingFileCap;
+
+		if (await this.getExpandedClientSideIndexingStatus() === 'available') {
+			manualCap = this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.expandedEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultExpandedAutomaticIndexingFileCap;
+		}
 
 		// The manual cap should never be lower than the auto cap
 		return Math.max(manualCap, await this.getAutoIndexFileCap());
 	}
+
+	private async getExpandedClientSideIndexingStatus(): Promise<'enabled' | 'available' | 'disabled'> {
+		const token = await this._authService.getCopilotToken();
+		if (!token?.isExpandedClientSideIndexingEnabled()) {
+			return 'disabled';
+		}
+
+		const cache = this._extensionContext.workspaceState.get<boolean | undefined>(this._hasPromptedExpandedIndexingKey);
+		return cache === true ? 'enabled' : 'available';
+	}
+
 
 	private setState(status: LocalEmbeddingsIndexStatus): void {
 		if (this._state !== status) {

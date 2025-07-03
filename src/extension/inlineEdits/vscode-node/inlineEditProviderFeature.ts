@@ -20,7 +20,6 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
 import { TelemetrySender } from '../node/nextEditProviderTelemetry';
-import { TRIGGER_INLINE_EDIT_COMMAND } from './commands';
 import { InlineEditDebugComponent } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
 import { DiagnosticsNextEditProvider } from './features/diagnosticsInlineEditProvider';
@@ -125,10 +124,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 			const recordingDirPath = join(this._vscodeExtensionContext.globalStorageUri.fsPath, 'logContextRecordings');
 			const logContextRecorder = this.inlineEditsLogFileEnabled ? reader.store.add(this._instantiationService.createInstance(LogContextRecorder, recordingDirPath, logger)) : undefined;
 
-			let inlineEditDebugComponent: InlineEditDebugComponent | undefined = undefined;
-			if (this._internalActionsEnabled.read(reader)) {
-				inlineEditDebugComponent = reader.store.add(new InlineEditDebugComponent(this._internalActionsEnabled, this.inlineEditsEnabled, model.debugRecorder, this._inlineEditsProviderId));
-			}
+			const inlineEditDebugComponent = reader.store.add(new InlineEditDebugComponent(this._internalActionsEnabled, this.inlineEditsEnabled, model.debugRecorder, this._inlineEditsProviderId));
 
 			const telemetrySender = this._register(this._instantiationService.createInstance(TelemetrySender));
 
@@ -143,12 +139,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 				const lastEditTimeTracker = new LastEditTimeTracker(model.workspace);
 				reader.store.add(window.onDidChangeActiveTextEditor((activeEditor) => {
 					if (activeEditor !== undefined && lastEditTimeTracker.hadEditsRecently) {
-						const shouldTriggerChange = false; // TODO@hediet
-						if (shouldTriggerChange) {
-							model.onChange.trigger(undefined);
-						} else {
-							commands.executeCommand(TRIGGER_INLINE_EDIT_COMMAND);
-						}
+						model.onChange.trigger(undefined);
 					}
 				}));
 				reader.store.add(lastEditTimeTracker);

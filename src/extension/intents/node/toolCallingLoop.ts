@@ -29,7 +29,7 @@ import { ToolCallRound } from '../../prompt/common/toolCallRound';
 import { IBuildPromptResult, IResponseProcessor } from '../../prompt/node/intents';
 import { PseudoStopStartResponseProcessor } from '../../prompt/node/pseudoStartStopConversationCallback';
 import { ResponseProcessorContext } from '../../prompt/node/responseProcessorContext';
-import { SummarizedConversationHistoryMetadata } from '../../prompts/node/panel/summarizedConversationHistory';
+import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/summarizedConversationHistory';
 import { ToolFailureEncountered, ToolResultMetadata } from '../../prompts/node/panel/toolCalling';
 import { ToolName } from '../../tools/common/toolNames';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
@@ -314,8 +314,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			} satisfies OpenAiFunctionDef;
 		}) : undefined;
 		const toolCalls: IToolCall[] = [];
-		let currentThinkingTokenId: string | undefined;
-		let currentThinkingText: string | undefined;
 		const fixedMessages = this.applyMessagePostProcessing(buildPromptResult.messages);
 		const fetchResult = await this.fetch(
 			fixedMessages,
@@ -327,13 +325,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						id: this.createInternalToolCallId(call.id),
 						arguments: call.arguments === '' ? '{}' : call.arguments
 					})));
-				}
-
-				if (delta.thinkingTokenId) {
-					currentThinkingTokenId = delta.thinkingTokenId;
-				}
-				if (delta.thinkingText) {
-					currentThinkingText += delta.thinkingText;
 				}
 
 				return stopEarly ? text.length : undefined;
@@ -377,9 +368,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					fetchResult.value,
 					toolCalls,
 					toolInputRetry,
-					undefined,
-					currentThinkingTokenId,
-					currentThinkingText
+					undefined
 				),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
@@ -393,7 +382,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
 			lastRequestMessages: buildPromptResult.messages,
 			availableToolCount: availableTools.length,
-			round: new ToolCallRound('', toolCalls, toolInputRetry, undefined, currentThinkingTokenId, currentThinkingText)
+			round: new ToolCallRound('', toolCalls, toolInputRetry, undefined)
 		};
 	}
 
@@ -510,18 +499,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		};
 
 		const buildPromptResult = await this.buildPrompt(buildPromptContext, progress, token);
-
-		// If we had to summarize a tool call round that's part of the in-progress turn,
-		// associate the generated summary with the tool call round
-		// const summarizedConversationMetadata = buildPromptResult.metadata.get(SummarizedConversationHistoryMetadata);
-		// if (summarizedConversationMetadata) {
-		// 	for (const toolCallRound of this.toolCallRounds) {
-		// 		if (toolCallRound.id === summarizedConversationMetadata.toolCallRoundId) {
-		// 			toolCallRound.summary = summarizedConversationMetadata.text;
-		// 		}
-		// 	}
-		// }
-
 		for (const metadata of buildPromptResult.metadata.getAll(ToolResultMetadata)) {
 			this.logToolResult(buildPromptContext, metadata);
 			this.toolCallResults[metadata.toolCallId] = metadata.result;

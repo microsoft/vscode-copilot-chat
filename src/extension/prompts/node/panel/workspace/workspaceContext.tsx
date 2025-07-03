@@ -225,6 +225,7 @@ export interface WorkspaceContextProps extends BasePromptElementProps {
 	 */
 	referencesOut?: PromptReference[];
 	isToolCall?: boolean;
+	maxResults?: number;
 }
 
 export type WorkspaceContextState = WorkspaceChunkQuery | undefined;
@@ -415,8 +416,17 @@ export class WorkspaceContext extends PromptElement<WorkspaceContextProps, Works
 			{include.workspaceStructure && (scopedDirectories ?
 				scopedDirectories.map(dir => <DirectoryStructure flexGrow={1} maxSize={500 / scopedDirectories.length} directory={dir} {...this.props} />) :
 				<WorkspaceStructure flexGrow={1} maxSize={500} {...this.props} />)}
-			{include.workspaceChunks && <WorkspaceChunks priority={this.props.priority} telemetryInfo={this.props.telemetryInfo} query={state} globPatterns={{ include: includePatterns }} referencesOut={this.props.referencesOut} isToolCall={this.props.isToolCall} absolutePaths={this.props.absolutePaths} lines1Indexed={this.props.lines1Indexed} />}
+			{include.workspaceChunks && <WorkspaceChunks
+				priority={this.props.priority}
+				telemetryInfo={this.props.telemetryInfo}
+				query={state}
+				globPatterns={{ include: includePatterns }}
+				referencesOut={this.props.referencesOut}
+				isToolCall={this.props.isToolCall}
+				absolutePaths={this.props.absolutePaths}
+				lines1Indexed={this.props.lines1Indexed}
+				maxResults={this.props.maxResults}
+			/>}
 		</>;
 	}
 }
-

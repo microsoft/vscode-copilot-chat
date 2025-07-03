@@ -60,10 +60,6 @@ export class AlternativeNotebookContentEditGenerator implements IAlternativeNote
 		return format;
 	}
 
-	private shouldCollectSource(firstLine: string) {
-		return this.getFormat(firstLine) === 'text' && !lineMightHaveCellMarker(firstLine);
-	}
-
 	/**
 	 * Given a stream of lines for the alternative content, generate the corresponding edits to apply to the notebook document.
 	 * We accept a NotebookDocument or a Uri.
@@ -81,9 +77,7 @@ export class AlternativeNotebookContentEditGenerator implements IAlternativeNote
 		// Instead just sends plain python code.
 		// In such cases, if no new cells were emitted, then emit a new cell with the contents of the entire plain python code.
 		const linesCollected: string[] = [];
-		if (this.shouldCollectSource(firstNonEmptyLine)) {
-			lines = collectWhileStreaming(lines, linesCollected);
-		}
+		lines = collectWhileStreaming(lines, linesCollected);
 		const isEmptyNotebook = isUri(notebookOrUri) || notebookOrUri.cellCount === 0;
 
 		let notebookEditEmitted = false;
@@ -96,43 +90,8 @@ export class AlternativeNotebookContentEditGenerator implements IAlternativeNote
 			yield edit;
 		}
 
-		(async () => {
-			const model = await Promise.resolve(telemetryOptions?.model).catch(() => undefined);
-			/* __GDPR__
-				"notebook.chatEditGeneration" : {
-					"owner": "donjayamanne",
-					"comment": "Metadata about the code mapper request",
-					"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current request turn." },
-					"requestSource": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The source from where the request was made" },
-					"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
-					"inputFormat": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Input format for the notebook source (xml, json, text)" },
-					"isEmptyNotebook": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the notebook is empty", "isMeasurement": true },
-					"isNotebookOrUri": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether we're given a notebook or just a uri (1 = Notebook, 0 = Uri)", "isMeasurement": true },
-					"isJupyterNotebookUri": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether we're given a Jupyter notebook or just a uri (1 = Jupyter Notebook, 0 = Other)", "isMeasurement": true },
-					"isEditEmitted": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether a Notebook edit was emitted (insert or delete cell) (1 = Yes, 0 = No)", "isMeasurement": true },
-					"isCellTextEditEmitted": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether an edit was emitted for a cell (1 = Yes, 0 = No)", "isMeasurement": true },
-					"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the document is a notebook (this measure is used to identify notebook related telemetry)." },
-					"sourceLength": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of lines in the source code from which we're to generate edits", "isMeasurement": true }
-				}
-			*/
-			this.telemetryService.sendMSFTTelemetryEvent('notebook.chatEditGeneration', {
-				requestId: telemetryOptions?.requestId,
-				requestSource: telemetryOptions?.source,
-				model,
-				format
-			}, {
-				isEmptyNotebook: isEmptyNotebook ? 1 : 0,
-				isNotebookOrUri: isUri(notebookOrUri) ? 0 : 1,
-				isJupyterNotebookUri: isJupyterNotebookUri(isUri(notebookOrUri) ? notebookOrUri : notebookOrUri.uri) ? 1 : 0,
-				isEditEmitted: notebookEditEmitted ? 1 : 0,
-				isCellTextEditEmitted: cellTextEditEmitted ? 1 : 0,
-				isNotebook: 1,
-				sourceLength: linesCollected.length
-			});
-		})();
-
 		if (isEmptyNotebook || !isUri(notebookOrUri)) {
-			if (!notebookEditEmitted && format === 'text' && linesCollected.length) {
+			if (!notebookEditEmitted && format === 'text' && linesCollected.length && !lineMightHaveCellMarker(firstNonEmptyLine)) {
 				const uri = isUri(notebookOrUri) ? notebookOrUri : notebookOrUri.uri;
 				if (isJupyterNotebookUri(uri)) {
 					const cellData = new NotebookCellData(NotebookCellKind.Code, linesCollected.join(EOL), 'python');
@@ -147,7 +106,7 @@ export class AlternativeNotebookContentEditGenerator implements IAlternativeNote
 		(async () => {
 			const model = await Promise.resolve(telemetryOptions?.model).catch(() => undefined);
 			/* __GDPR__
-				"notebook.chatEditGeneration" : {
+				"notebook.editGeneration" : {
 					"owner": "donjayamanne",
 					"comment": "Metadata about the code mapper request",
 					"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current request turn." },
@@ -162,11 +121,11 @@ export class AlternativeNotebookContentEditGenerator implements IAlternativeNote
 					"sourceLength": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of lines in the source code from which we're to generate edits", "isMeasurement": true }
 				}
 			*/
-			this.telemetryService.sendMSFTTelemetryEvent('notebook.chatEditGeneration', {
+			this.telemetryService.sendMSFTTelemetryEvent('notebook.editGeneration', {
 				requestId: telemetryOptions?.requestId,
 				requestSource: telemetryOptions?.source,
 				model,
-				format
+				inputFormat: format
 			}, {
 				isEmptyNotebook: isEmptyNotebook ? 1 : 0,
 				isNotebookOrUri: isUri(notebookOrUri) ? 0 : 1,
@@ -178,7 +137,7 @@ export class AlternativeNotebookContentEditGenerator implements IAlternativeNote
 		})();
 	}
 
-	public async * generateNotebookEditsImpl(notebookOrUri: NotebookDocument | Uri, lines: AsyncIterable<LineOfText>, format: AlternativeContentFormat, token: CancellationToken): AsyncIterable<NotebookEdit | [Uri, TextEdit[]]> {
+	public async *generateNotebookEditsImpl(notebookOrUri: NotebookDocument | Uri, lines: AsyncIterable<LineOfText>, format: AlternativeContentFormat, token: CancellationToken): AsyncIterable<NotebookEdit | [Uri, TextEdit[]]> {
 		const provider = this.alternativeContentService.create(format);
 		const isEmptyNotebook = isUri(notebookOrUri) || notebookOrUri.cellCount === 0;
 		const isNotebookAvailable = !isUri(notebookOrUri);

@@ -31,6 +31,8 @@ interface IFindTextInFilesToolParams {
 	maxResults?: number;
 }
 
+const MaxResultsCap = 200;
+
 export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolParams> {
 	public static readonly toolName = ToolName.FindTextInFiles;
 
@@ -42,30 +44,20 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IFindTextInFilesToolParams>, token: CancellationToken) {
 		// The input _should_ be a pattern matching inside a workspace, folder, but sometimes we get absolute paths, so try to resolve them
-		const pattern = options.input.includePattern && inputGlobToPattern(options.input.includePattern, this.workspaceService);
+		const patterns = options.input.includePattern ? inputGlobToPattern(options.input.includePattern, this.workspaceService) : undefined;
 
 		checkCancellation(token);
-		const maxResults = options.input.maxResults ?? 20;
-		const searchResult = this.searchService.findTextInFiles2(
-			{
-				pattern: options.input.query,
-				isRegExp: options.input.isRegexp,
-			},
-			{
-				include: pattern ? [pattern] : undefined,
-				maxResults: maxResults + 1
-			},
-			token);
-		const results: vscode.TextSearchResult2[] = [];
-		for await (const item of searchResult.results) {
-			results.push(item);
+		const askedForTooManyResults = options.input.maxResults && options.input.maxResults > MaxResultsCap;
+		const maxResults = Math.min(options.input.maxResults ?? 20, MaxResultsCap);
+		const isRegExp = options.input.isRegexp ?? true;
+		let results = await this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, token);
+		if (!results.length) {
+			results = await this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, token);
 		}
-
-		checkCancellation(token);
 
 		const result = new ExtendedLanguageModelToolResult([
 			new LanguageModelPromptTsxPart(
-				await renderPromptElementJSON(this.instantiationService, FindTextInFilesResult, { textResults: results, maxResults }, options.tokenizationOptions, token))]);
+				await renderPromptElementJSON(this.instantiationService, FindTextInFilesResult, { textResults: results, maxResults, askedForTooManyResults: Boolean(askedForTooManyResults) }, options.tokenizationOptions, token))]);
 		const textMatches = results.flatMap(r => {
 			if ('ranges' in r) {
 				return asArray(r.ranges).map(rangeInfo => new Location(r.uri, rangeInfo.sourceRange));
@@ -84,6 +76,26 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		return result;
 	}
 
+	private async searchAndCollectResults(query: string, isRegExp: boolean, patterns: vscode.GlobPattern[] | undefined, maxResults: number, token: CancellationToken): Promise<vscode.TextSearchResult2[]> {
+		const searchResult = this.searchService.findTextInFiles2(
+			{
+				pattern: query,
+				isRegExp,
+			},
+			{
+				include: patterns ? patterns : undefined,
+				maxResults: maxResults + 1
+			},
+			token);
+		const results: vscode.TextSearchResult2[] = [];
+		for await (const item of searchResult.results) {
+			checkCancellation(token);
+			results.push(item);
+		}
+
+		return results;
+	}
+
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IFindTextInFilesToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
 		return {
 			invocationMessage: new MarkdownString(l10n.t`Searching text for ${this.formatQueryString(options.input)}`),
@@ -91,7 +103,7 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 	}
 
 	private formatQueryString(input: IFindTextInFilesToolParams): string {
-		return input.includePattern ?
+		return input.includePattern && input.includePattern !== '**/*' ?
 			`\`${input.query}\` (\`${input.includePattern}\`)` :
 			`\`${input.query}\``;
 
@@ -117,7 +129,8 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 ToolRegistry.registerTool(FindTextInFilesTool);
 export interface FindTextInFilesResultProps extends BasePromptElementProps {
 	textResults: vscode.TextSearchResult2[];
-	maxResults?: number;
+	maxResults: number;
+	askedForTooManyResults?: boolean;
 }
 
 /** Max number of characters between matching ranges. */
@@ -134,9 +147,12 @@ export class FindTextInFilesResult extends PromptElement<FindTextInFilesResultPr
 		}
 
 		const numResults = textMatches.reduce((acc, result) => acc + result.ranges.length, 0);
-		const maxResultsText = this.props.maxResults && numResults >= this.props.maxResults ? ` (more results are available)` : '';
+		const resultCountToDisplay = Math.min(numResults, this.props.maxResults);
+		const numResultsText = numResults === 1 ? '1 match' : `${resultCountToDisplay} matches`;
+		const maxResultsTooLargeText = this.props.askedForTooManyResults ? ` (maxResults capped at ${MaxResultsCap})` : '';
+		const maxResultsText = numResults > this.props.maxResults ? ` (more results are available)` : '';
 		return <>
-			{<TextChunk priority={20}>{numResults === 1 ? '1 total result' : `${numResults} total results${maxResultsText}`}</TextChunk>}
+			{<TextChunk priority={20}>{numResultsText}{maxResultsText}{maxResultsTooLargeText}</TextChunk>}
 			{textMatches.flatMap(result => {
 				// The result preview line always ends in a newline, I think that makes sense but don't display an extra empty line
 				const previewText = result.previewText.replace(/\n$/, '');

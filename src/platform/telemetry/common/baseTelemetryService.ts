@@ -32,13 +32,19 @@ export class BaseTelemetryService implements ITelemetryService {
 					"comment": "Copilot token received from the service.",
 					"chatEnabled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Indicates if the token enabled chat." },
 					"snippyEnabled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "If the block setting for public suggestions is enabled." },
-					"telemetryEnabled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "If the subscription has telemetry enabled." }
+					"telemetryEnabled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "If the subscription has telemetry enabled." },
+					"mcpEnabled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "If the token has MCP features enabled." },
+					"previewEnabled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "If the token has editor preview features enabled." },
+					"reviewEnabled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "If the token has Copilot code review features enabled." }
 				}
 			*/
 			this.sendMSFTTelemetryEvent('token', undefined, {
 				chatEnabled: token.isChatEnabled() ? 1 : 0,
 				snippyEnabled: token.isPublicSuggestionsEnabled() ? 1 : 0,
-				telemetryEnabled: token.isTelemetryEnabled() ? 1 : 0
+				telemetryEnabled: token.isTelemetryEnabled() ? 1 : 0,
+				mcpEnabled: token.isMcpEnabled() ? 1 : 0,
+				previewEnabled: token.isEditorPreviewFeaturesEnabled() ? 1 : 0,
+				reviewEnabled: token.isCopilotCodeReviewEnabled ? 1 : 0
 			});
 		}));
 	}

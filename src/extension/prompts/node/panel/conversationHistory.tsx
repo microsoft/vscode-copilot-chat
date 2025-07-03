@@ -3,15 +3,19 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { AssistantMessage, BasePromptElementProps, PrioritizedList, PromptElement, PromptPiece, PromptSizing, TokenLimit, UserMessage } from '@vscode/prompt-tsx';
+import { AssistantMessage, BasePromptElementProps, Chunk, PrioritizedList, PromptElement, PromptPiece, PromptSizing, TokenLimit, UserMessage } from '@vscode/prompt-tsx';
+import { modelPrefersInstructionsAfterHistory } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { Location } from '../../../../vscodeTypes';
 import { ChatVariablesCollection, PromptVariable } from '../../../prompt/common/chatVariablesCollection';
-import { Turn, TurnStatus } from '../../../prompt/common/conversation';
+import { IResultMetadata, Turn, TurnStatus } from '../../../prompt/common/conversation';
+import { IBuildPromptContext } from '../../../prompt/common/intents';
+import { AgentUserMessageInHistory } from '../agent/agentConversationHistory';
+import { renderedMessageToTsxChildren } from '../agent/agentPrompt';
 import { InstructionMessage } from '../base/instructionMessage';
 import { IPromptEndpoint } from '../base/promptRenderer';
 import { ChatVariablesAndQuery } from './chatVariables';
-import { URI } from '../../../../util/vs/base/common/uri';
-import { modelPrefersInstructionsAfterHistory } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { ChatToolCalls } from './toolCalling';
 
 interface ConversationHistoryProps extends BasePromptElementProps {
 	history: readonly Turn[];
@@ -126,4 +130,51 @@ function variableEquals(v1: PromptVariable, v2: PromptVariable) {
 	}
 
 	return false;
+}
+
+export interface ConversationHistoryWithToolsProps extends BasePromptElementProps {
+	readonly priority: number;
+	readonly promptContext: IBuildPromptContext;
+}
+
+/**
+ * This is conversation history including tool calls, but not summaries. New usages should use SummarizedConversationHistory instead.
+ */
+export class ConversationHistoryWithTools extends PromptElement<ConversationHistoryWithToolsProps> {
+	override async render(state: void, sizing: PromptSizing) {
+		const history: PromptElement[] = [];
+		const contextHistory = this.props.promptContext.history;
+		for (const [i, turn] of contextHistory.entries()) {
+			const metadata = turn.responseChatResult?.metadata as IResultMetadata | undefined;
+
+			if (metadata?.renderedUserMessage) {
+				history.push(<UserMessage><Chunk>{renderedMessageToTsxChildren(metadata.renderedUserMessage, false)}</Chunk></UserMessage>);
+			} else {
+				history.push(<AgentUserMessageInHistory turn={turn} />);
+			}
+
+			if (Array.isArray(metadata?.toolCallRounds) && metadata.toolCallRounds?.length > 0) {
+				// If a tool call limit is exceeded, the tool call from this turn will
+				// have been aborted and any result should be found in the next turn.
+				const toolCallResultInNextTurn = metadata.maxToolCallsExceeded;
+				let toolCallResults = metadata.toolCallResults;
+				if (toolCallResultInNextTurn) {
+					const nextMetadata = contextHistory.at(i + 1)?.responseChatResult?.metadata as IResultMetadata | undefined;
+					const mergeFrom = i === contextHistory.length - 1 ? this.props.promptContext.toolCallResults : nextMetadata?.toolCallResults;
+					toolCallResults = { ...toolCallResults, ...mergeFrom };
+				}
+
+				history.push(<ChatToolCalls
+					promptContext={this.props.promptContext}
+					toolCallRounds={metadata.toolCallRounds}
+					toolCallResults={toolCallResults}
+					isHistorical={!(toolCallResultInNextTurn && i === contextHistory.length - 1)}
+				/>);
+			} else if (turn.responseMessage) {
+				history.push(<AssistantMessage>{turn.responseMessage?.message}</AssistantMessage>);
+			}
+		}
+
+		return (<PrioritizedList priority={this.props.priority} descending={false}>{history}</PrioritizedList>);
+	}
 }

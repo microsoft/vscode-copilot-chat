@@ -66,6 +66,7 @@ import { IUrlOpener, NullUrlOpener } from '../../open/common/opener';
 import { IParserService } from '../../parser/node/parserService';
 import { ParserServiceImpl } from '../../parser/node/parserServiceImpl';
 import { IPromptPathRepresentationService, TestPromptPathRepresentationService } from '../../prompts/common/promptPathRepresentationService';
+import { BasicCodeSearchAuthenticationService, ICodeSearchAuthenticationService } from '../../remoteCodeSearch/node/codeSearchRepoAuth';
 import { NullRequestLogger } from '../../requestLogger/node/nullRequestLogger';
 import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { IScopeSelector } from '../../scopeSelection/common/scopeSelection';
@@ -80,6 +81,7 @@ import { IExperimentationService, NullExperimentationService } from '../../telem
 import { NullTelemetryService } from '../../telemetry/common/nullTelemetryService';
 import { ITelemetryService, ITelemetryUserConfig, TelemetryUserConfigImpl } from '../../telemetry/common/telemetry';
 import { ITerminalService, NullTerminalService } from '../../terminal/common/terminalService';
+import { IThinkingDataService, ThinkingDataImpl } from '../../thinking/node/thinkingDataService';
 import { ITokenizerProvider, TokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { IWorkbenchService } from '../../workbench/common/workbenchService';
 import { IWorkspaceService } from '../../workspace/common/workspaceService';
@@ -212,6 +214,7 @@ export function _createBaselineServices(): TestingServiceCollection {
 	testingServiceCollection.define(ISurveyService, new SyncDescriptor(NullSurveyService));
 	testingServiceCollection.define(IEditSurvivalTrackerService, new SyncDescriptor(NullEditSurvivalTrackerService));
 	testingServiceCollection.define(IWorkspaceChunkSearchService, new SyncDescriptor(NullWorkspaceChunkSearchService));
+	testingServiceCollection.define(ICodeSearchAuthenticationService, new SyncDescriptor(BasicCodeSearchAuthenticationService));
 	return testingServiceCollection;
 }
 
@@ -276,6 +279,7 @@ export function createPlatformServices(): TestingServiceCollection {
 	}));
 
 	testingServiceCollection.define(ITasksService, new SyncDescriptor(TestTasksService));
+	testingServiceCollection.define(IThinkingDataService, new SyncDescriptor(ThinkingDataImpl));
 
 	return testingServiceCollection;
 }
