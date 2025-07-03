@@ -134,7 +134,15 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		}
 	}
 
-	private async doGetNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, delaySession: DelaySession, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, telemetryBuilder: StatelessNextEditTelemetryBuilder): Promise<Result<void, NoNextEditReason>> {
+	private async doGetNextEdit(
+		request: StatelessNextEditRequest,
+		pushEdit: PushEdit,
+		delaySession: DelaySession,
+		logContext: InlineEditRequestLogContext,
+		cancellationToken: CancellationToken,
+		telemetryBuilder: StatelessNextEditTelemetryBuilder,
+	): Promise<Result<void, NoNextEditReason>> {
+
 		const tracer = this.tracer.sub('doGetNextEdit');
 
 		const activeDocument = request.getActiveDocument();
