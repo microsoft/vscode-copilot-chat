@@ -75,9 +75,9 @@ class VSCodeResponseProcessor {
 	private async processNonReporting(textDelta: string, progress: vscode.ChatResponseStream) {
 		const parsedCommands = await parseSettingsAndCommands(this.workbenchService, textDelta);
 
-		// Always show the original content first to ensure it never disappears
-		// This is crucial for user experience - content should never vanish
-		progress.markdown(textDelta);
+		if (parsedCommands.length === 0) {
+			progress.markdown(textDelta);
+		}
 
 		// Then add any additional functionality (buttons) based on parsing results
 		// This is additive - we enhance the experience without removing content
