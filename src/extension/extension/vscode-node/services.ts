@@ -136,8 +136,22 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 		setupTelemetry(builder, extensionContext, internalAIKey, internalLargeEventAIKey, ariaKey);
 		builder.define(ICopilotTokenManager, new SyncDescriptor(VSCodeCopilotTokenManager));
 	}
-	builder.define(IAuthenticationService, new SyncDescriptor(AuthenticationService));
 
+	// To use custom authentication that behaves as fully authenticated:
+	// import { registerCustomAuthenticationServices, getCustomAuthConfig } from '../../../platform/authentication/custom';
+	//
+	// const customConfig = getCustomAuthConfig();
+	// if (customConfig) {
+	//     registerCustomAuthenticationServices(builder, extensionContext, customConfig);
+	// } else {
+	//     // Use default authentication services
+	if (isTestMode) {
+		// ...existing code...
+	} else {
+		// ...existing code...
+	}
+	builder.define(IAuthenticationService, new SyncDescriptor(AuthenticationService));
+	// }
 	builder.define(ITestGenInfoStorage, new SyncDescriptor(TestGenInfoStorage)); // Used for test generation (/tests intent)
 	builder.define(IEndpointProvider, new SyncDescriptor(ProductionEndpointProvider, [collectFetcherTelemetry]));
 	builder.define(IParserService, new SyncDescriptor(ParserServiceImpl, [/*useWorker*/ true]));
