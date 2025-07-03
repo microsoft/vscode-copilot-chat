@@ -631,7 +631,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 				temporalCtxFileCount: temporalContexData?.documentCount ?? -1,
 				temporalCtxTotalCharCount: temporalContexData?.totalCharLength ?? -1
 			},
-			'user_prompt'
+			'panel_request'
 		);
 	}
 
