@@ -228,25 +228,43 @@ function telemetryPrefixForLocation(location: ChatLocation): string {
 	}
 }
 
-export function getCodeBlocks(text: string): string[] {
-	const lines = text.split('\n');
-	const codeBlockLanguages: string[] = [];
+export interface ICodeblockDetails {
+	readonly languageId: string;
+	readonly totalLines: number;
+}
 
-	let codeBlockState: undefined | { readonly delimiter: string; readonly languageId: string };
+export function getCodeBlocks(text: string): ICodeblockDetails[] {
+	const lines = text.split('\n');
+	const codeBlocks: ICodeblockDetails[] = [];
+
+	let codeBlockState: undefined | {
+		readonly delimiter: string;
+		readonly languageId: string;
+		totalLines: number;
+	};
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
 
 		if (codeBlockState) {
 			if (new RegExp(`^\\s*${codeBlockState.delimiter}\\s*$`).test(line)) {
-				codeBlockLanguages.push(codeBlockState.languageId);
+				codeBlocks.push({
+					languageId: codeBlockState.languageId,
+					totalLines: codeBlockState.totalLines
+				});
 				codeBlockState = undefined;
+			} else {
+				codeBlockState.totalLines++;
 			}
 		} else {
 			const match = line.match(/^(\s*)(`{3,}|~{3,})(\w*)/);
 			if (match) {
-				codeBlockState = { delimiter: match[2], languageId: match[3] };
+				codeBlockState = {
+					delimiter: match[2],
+					languageId: match[3],
+					totalLines: 0
+				};
 			}
 		}
 	}
-	return codeBlockLanguages;
+	return codeBlocks;
 }
