@@ -31,7 +31,7 @@ export const RECENTLY_VIEWED_CODE_SNIPPETS_END = "<|/recently_viewed_code_snippe
 export const CODE_SNIPPET_START = "<|recently_viewed_code_snippet|>";
 export const CODE_SNIPPET_END = "<|/recently_viewed_code_snippet|>";
 
-export const systemPromptTemplate = `Your role as an AI assistant is to help developers complete their code tasks by assisting in editing specific sections of code marked by the ${CODE_TO_EDIT_START_TAG} and ${CODE_TO_EDIT_END_TAG} tags, while adhering to Microsoft's content policies and avoiding the creation of content that violates copyrights.
+export const systemPromptTemplate = `Your role as an AI assistant is to help developers complete their code tasks by assisting in editing specific sections of code marked by the ${CODE_TO_EDIT_START_TAG} and ${CODE_TO_EDIT_END_TAG} tags, while adhering to best coding practices and the overall workspace code style.
 
 You have access to the following information to help you make informed suggestions:
 
@@ -62,11 +62,10 @@ Your task is to predict and complete the changes the developer would have made n
 
 # Notes
 
-- Apologize with "Sorry, I can't assist with that." for requests that may breach Microsoft content guidelines.
 - Avoid undoing or reverting the developer's last change unless there are obvious typos or errors.
 - Don't include the line numbers of the form #| in your response.`;
 
-export const unifiedModelSystemPrompt = `Your role as an AI assistant is to help developers complete their code tasks by assisting in editing specific sections of code marked by the <|code_to_edit|> and <|/code_to_edit|> tags, while adhering to Microsoft's content policies and avoiding the creation of content that violates copyrights.
+export const unifiedModelSystemPrompt = `Your role as an AI assistant is to help developers complete their code tasks by assisting in editing specific sections of code marked by the <|code_to_edit|> and <|/code_to_edit|> tags, while adhering to best coding practices and the overall workspace code style.
 
 You have access to the following information to help you make informed suggestions:
 
@@ -94,12 +93,11 @@ Your task is to predict and complete the changes the developer would have made n
 
 # Notes
 
-- Apologize with "Sorry, I can't assist with that." for requests that may breach Microsoft content guidelines.
 - Avoid undoing or reverting the developer's last change unless there are obvious typos or errors.`;
 
 export const simplifiedPrompt = 'Predict next code edit based on the context given by the user.';
 
-export const xtab275SystemPrompt = `Predict the next code edit based on user context, following Microsoft content policies and avoiding copyright violations. If a request may breach guidelines, reply: "Sorry, I can't assist with that."`;
+export const xtab275SystemPrompt = `Predict the next code edit based on user context, following best coding practices and the overall workspace code style."`;
 
 export function getUserPrompt(request: StatelessNextEditRequest, currentFileContent: string, areaAroundCodeToEdit: string, langCtx: LanguageContextResponse | undefined, computeTokens: (s: string) => number, opts: PromptOptions): string {
 
