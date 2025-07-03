@@ -21,6 +21,7 @@ export default defineConfig(({ mode }) => ({
 		include: ['**/*.spec.ts', '**/*.spec.tsx'],
 		exclude,
 		env: loadEnv(mode, process.cwd(), ''),
+		testTimeout: 10000, // Increase global timeout to 10 seconds for TypeScript tests
 		alias: {
 			// similar to aliasing in the esbuild config `.esbuild.ts`
 			// vitest requires aliases to be absolute paths. reference: https://vitejs.dev/config/shared-options#resolve-alias

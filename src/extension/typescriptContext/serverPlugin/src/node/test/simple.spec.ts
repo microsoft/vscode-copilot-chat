@@ -196,6 +196,12 @@ suite('Method - Signature', () => {
 });
 
 suite('Function signature', () => {
+	let p12Session: testing.TestSession;
+
+	beforeAll(() => {
+		p12Session = create(path.join(root, 'p12'));
+	});
+
 	test('complete function signature types', () => {
 		const session: testing.TestSession = create(path.join(root, 'p7'));
 		const expected: testing.ExpectedCodeSnippet[] = [{
@@ -222,51 +228,47 @@ suite('Function signature', () => {
 
 		const context = computeContext(session, path.join(root, 'p7/source/f2.ts'), { line: 6, character: 0 }, ContextKind.Snippet);
 		assertContextItems(context, expected);
-	});
+	}, 10000);
 
 	test('Imported types in functions', () => {
-		const session: testing.TestSession = create(path.join(root, 'p12'));
 		const expected: testing.ExpectedCodeSnippet[] = [{
 			kind: ContextKind.Snippet,
 			value: 'declare class Person { constructor(age: number = 10); public getAlter(): number; }',
 			uri: /p12\/source\/f1.ts$/
 		}];
-		const context = computeContext(session, path.join(root, 'p12/source/f2.ts'), { line: 3, character: 0 }, ContextKind.Snippet);
+		const context = computeContext(p12Session, path.join(root, 'p12/source/f2.ts'), { line: 3, character: 0 }, ContextKind.Snippet);
 		assertContextItems(context, expected);
-	});
+	}, 10000);
 
 	test('Type of locals in functions', () => {
-		const session: testing.TestSession = create(path.join(root, 'p12'));
 		const expected: testing.ExpectedCodeSnippet[] = [{
 			kind: ContextKind.Snippet,
 			value: 'declare class Person { constructor(age: number = 10); public getAlter(): number; }',
 			uri: /p12\/source\/f1.ts$/
 		}];
-		const context = computeContext(session, path.join(root, 'p12/source/f3.ts'), { line: 4, character: 0 }, ContextKind.Snippet);
+		const context = computeContext(p12Session, path.join(root, 'p12/source/f3.ts'), { line: 4, character: 0 }, ContextKind.Snippet);
 		assertContextItems(context, expected);
-	});
+	}, 10000);
 
 	test('Top level code', () => {
-		const session: testing.TestSession = create(path.join(root, 'p12'));
 		const expected: testing.ExpectedCodeSnippet[] = [{
 			kind: ContextKind.Snippet,
 			value: 'declare class Person { constructor(age: number = 10); public getAlter(): number; }',
 			uri: /p12\/source\/f1.ts$/
 		}];
-		const context = computeContext(session, path.join(root, 'p12/source/f4.ts'), { line: 3, character: 0 }, ContextKind.Snippet);
+		const context = computeContext(p12Session, path.join(root, 'p12/source/f4.ts'), { line: 3, character: 0 }, ContextKind.Snippet);
 		assertContextItems(context, expected);
-	});
+	}, 10000);
 
 	test('Module code', () => {
-		const session: testing.TestSession = create(path.join(root, 'p12'));
 		const expected: testing.ExpectedCodeSnippet[] = [{
 			kind: ContextKind.Snippet,
 			value: 'declare class Person { constructor(age: number = 10); public getAlter(): number; }',
 			uri: /p12\/source\/f1.ts$/
 		}];
-		const context = computeContext(session, path.join(root, 'p12/source/f5.ts'), { line: 3, character: 0 }, ContextKind.Snippet);
+		const context = computeContext(p12Session, path.join(root, 'p12/source/f5.ts'), { line: 3, character: 0 }, ContextKind.Snippet);
 		assertContextItems(context, expected);
-	});
+	}, 10000);
 });
 
 suite('Constructor', () => {

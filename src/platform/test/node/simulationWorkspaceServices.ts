@@ -844,7 +844,7 @@ class SimulationTerminal extends Disposable implements vscode.Terminal {
 	) {
 		super();
 		this.name = creationOptions.name ?? '';
-		this.state = { isInteractedWith: false };
+		this.state = { isInteractedWith: false, shell: undefined };
 		const cwd = creationOptions.cwd ?? workspace.workspaceFolders[0];
 		if (typeof cwd === 'string') {
 			throw new Error('String cwd not implemented');
