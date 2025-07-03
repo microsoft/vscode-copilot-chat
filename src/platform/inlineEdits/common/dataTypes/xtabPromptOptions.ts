@@ -24,6 +24,7 @@ export type PagedClipping = { pageSize: number };
 
 export type PromptOptions = {
 	readonly promptingStrategy: PromptingStrategy | undefined /* default */;
+	readonly currentFileMaxTokens: number;
 	readonly includeTagsInCurrentFile: boolean;
 	readonly pagedClipping: PagedClipping;
 	readonly recentlyViewedDocuments: RecentlyViewedDocumentsOptions;
@@ -39,6 +40,7 @@ export enum PromptingStrategy {
 
 export const DEFAULT_OPTIONS: PromptOptions = {
 	promptingStrategy: undefined,
+	currentFileMaxTokens: 2000,
 	includeTagsInCurrentFile: true,
 	pagedClipping: {
 		pageSize: 10,
