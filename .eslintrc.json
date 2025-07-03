@@ -227,17 +227,7 @@
 		"local/no-funny-filename": ["error"],
 		"local/no-bad-gdpr-comment": ["error"],
 		"local/no-gdpr-event-name-mismatch": ["error"],
-		"local/no-unlayered-files": ["error"],
-		"header/header": [
-			"error",
-			"block",
-			[
-				"---------------------------------------------------------------------------------------------",
-				" *  Copyright (c) Microsoft Corporation. All rights reserved.",
-				" *  Licensed under the MIT License. See License.txt in the project root for license information.",
-				" *--------------------------------------------------------------------------------------------"
-			]
-		]
+		"local/no-unlayered-files": ["error"]
 	},
 	"overrides": [
 		{
