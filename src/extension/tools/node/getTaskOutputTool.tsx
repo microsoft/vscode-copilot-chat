@@ -47,6 +47,7 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 			return;
 		}
 		const buffer = this.terminalService.getBufferForTerminal(terminal, Math.min(options.input.maxCharsToRetrieve ?? 16000, 16000));
+		this.logService.logger.debug('getTaskOutputTool task is still running with buffer length: ' + buffer.length + ' for terminal: ' + terminal.name);
 		return new LanguageModelToolResult([
 			new LanguageModelTextPart(`Output for task ${terminal.name}: ${buffer}`)
 		]);
