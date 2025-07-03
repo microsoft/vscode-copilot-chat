@@ -208,7 +208,7 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 				new LanguageModelPromptTsxPart(
 					await renderPromptElementJSON(this.instantiationService, RunInTerminalResult, {
 						result: terminalResult,
-						newCommand: command,
+						newCommand: didUserEditCommand || didToolEditCommand ? command : undefined,
 						newCommandReason: didUserEditCommand ? 'user' : didToolEditCommand ? 'tool' : undefined
 					}, options.tokenizationOptions, token)
 				)
@@ -290,10 +290,15 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 			}
 		}
 
-		this.rewrittenCommand = await this._rewriteCommandIfNeeded(options);
+		const rewrittenCommand = await this._rewriteCommandIfNeeded(options);
+		if (rewrittenCommand && rewrittenCommand !== options.input.command) {
+			this.rewrittenCommand = rewrittenCommand;
+		} else {
+			this.rewrittenCommand = undefined;
+		}
 
 		return new PreparedTerminalToolInvocation(
-			this.rewrittenCommand,
+			this.rewrittenCommand ?? options.input.command,
 			shellId,
 			confirmationMessages,
 			presentation);

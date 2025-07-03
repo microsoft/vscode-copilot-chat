@@ -471,14 +471,6 @@ export const N_LINES_ABOVE = 2;
 export const N_LINES_BELOW = 5;
 
 export const N_LINES_AS_CONTEXT = 15;
-/**
- * Maximum number of lines to include if truncating.
- */
-export const MAX_LINES_IF_TRUNCATING = 1000;
-/**
- * Maximum number of tokens to include if truncating.
- */
-export const MAX_TOKENS_IF_TRUNCATING = 2000;
 
 function expandRangeToPageRange(
 	currentDocLines: string[],
