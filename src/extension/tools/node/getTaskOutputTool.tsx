@@ -67,7 +67,7 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 	private getTaskDefinition(input: ITaskOptions) {
 		const idx = input.id.indexOf(': ');
 		const taskType = input.id.substring(0, idx);
-		const taskLabel = input.id.substring(idx + 2);
+		let taskLabel = input.id.substring(idx + 2);
 
 		const workspaceFolderRaw = this.promptPathRepresentationService.resolveFilePath(input.workspaceFolder);
 		const workspaceFolder = (workspaceFolderRaw && this.workspaceService.getWorkspaceFolder(workspaceFolderRaw)) || this.workspaceService.getWorkspaceFolders()[0];
@@ -75,7 +75,11 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 		if (!task) {
 			return undefined;
 		}
-
+		try {
+			if (typeof parseInt(taskLabel) === 'number') {
+				taskLabel = input.id;
+			}
+		} catch { }
 		return { workspaceFolder, task, taskLabel };
 	}
 }
