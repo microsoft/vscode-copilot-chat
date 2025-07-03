@@ -282,14 +282,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 
 		const userPrompt = getUserPrompt(request, taggedCurrentFileContent, areaAroundCodeToEdit, langCtx, computeTokens, promptOptions);
 
-		const prediction = this.configService.getConfig(ConfigKey.Internal.InlineEditsXtabProviderUsePrediction)
-			? {
-				type: 'content',
-				content: (
-					XtabProvider.getPredictedOutput(editWindowLines, promptOptions.promptingStrategy)
-				)
-			} as const
-			: undefined;
+		const prediction = this.getPredictedOutput(editWindowLines, promptOptions.promptingStrategy);
 
 		const messages = [
 			{
@@ -826,7 +819,16 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		return this.instaService.createInstance(ProxyXtabEndpoint, modelName);
 	}
 
-	private static getPredictedOutput(editWindowLines: readonly string[], promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined): string {
+	private getPredictedOutput(editWindowLines: string[], promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined): Prediction | undefined {
+		return this.configService.getConfig(ConfigKey.Internal.InlineEditsXtabProviderUsePrediction)
+			? {
+				type: 'content',
+				content: XtabProvider.getPredictionContents(editWindowLines, promptingStrategy)
+			}
+			: undefined;
+	}
+
+	private static getPredictionContents(editWindowLines: readonly string[], promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined): string {
 		if (promptingStrategy === xtabPromptOptions.PromptingStrategy.UnifiedModel) {
 			return ['<EDIT>', ...editWindowLines, '</EDIT>'].join('\n');
 		} else if (promptingStrategy === xtabPromptOptions.PromptingStrategy.Xtab275) {
