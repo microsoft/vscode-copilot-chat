@@ -57,6 +57,7 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 
 	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IRunTaskToolInput>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
 		const { task, workspaceFolder, taskLabel } = this.getTaskDefinition(options.input) || {};
+
 		const position = workspaceFolder && task && await this.tasksService.getTaskConfigPosition(workspaceFolder, task);
 		const link = (s: string) => position ? `[${s}](${position.uri.toString()}#${position.range.startLineNumber}-${position.range.endLineNumber})` : s;
 		const trustedMark = (value: string) => {
@@ -64,6 +65,14 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 			s.isTrusted = true;
 			return s;
 		};
+
+		if (task && this.tasksService.isTaskActive(task)) {
+			return {
+				invocationMessage: trustedMark(l10n.t`${link(taskLabel ?? options.input.id)} is already running.`),
+				pastTenseMessage: trustedMark(l10n.t`${link(taskLabel ?? options.input.id)} was already running.`),
+				confirmationMessages: undefined
+			};
+		}
 
 		return {
 			invocationMessage: trustedMark(l10n.t`Running ${taskLabel ?? link(options.input.id)}`),

@@ -334,11 +334,15 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 
 			// Re-write the command if it matches the cwd
 			if (cwd) {
+				// Remove any surrounding quotes
 				let cdDirPath = cdDir;
 				if (cdDirPath.startsWith('"') && cdDirPath.endsWith('"')) {
 					cdDirPath = cdDirPath.slice(1, -1);
 				}
-				let cwdFsPath = cwd.fsPath;
+				// Normalize trailing slashes
+				cdDirPath = cdDirPath.replace(/(?:[\\\/])$/, '');
+				let cwdFsPath = cwd.fsPath.replace(/(?:[\\\/])$/, '');
+				// Case-insensitive comparison on Windows
 				if (this.envService.OS === OperatingSystem.Windows) {
 					cdDirPath = cdDirPath.toLowerCase();
 					cwdFsPath = cwdFsPath.toLowerCase();

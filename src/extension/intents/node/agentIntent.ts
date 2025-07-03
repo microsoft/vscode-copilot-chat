@@ -376,5 +376,3 @@ function countCacheBreakpoints(messages: Raw.ChatMessage[]) {
 	}
 	return count;
 }
-
-export const AgentParticipantId = 'github.copilot.editsAgent';
