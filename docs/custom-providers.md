@@ -58,7 +58,7 @@ Any OpenAI-compatible API that implements the following endpoints:
 |----------|------|----------|-------------|
 | `name` | string | Yes | Display name for the provider |
 | `baseUrl` | string | Yes | Base URL for the API (e.g., `https://api.example.com/v1`) |
-| `apiKey` | string | Yes | API key for authentication |
+| `apiKey` | string | No | API key for authentication (optional for providers that don't require auth) |
 | `enabled` | boolean | No | Whether the provider is enabled (default: true) |
 
 ## Features
@@ -116,6 +116,15 @@ Any OpenAI-compatible API that implements the following endpoints:
   "name": "My vLLM Server",
   "baseUrl": "https://my-vllm-server.com/v1",
   "apiKey": "optional-api-key",
+  "enabled": true
+}
+```
+
+### Local Provider Without Authentication
+```json
+{
+  "name": "Local Model Server",
+  "baseUrl": "http://localhost:8080/v1",
   "enabled": true
 }
 ```

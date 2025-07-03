@@ -31,6 +31,11 @@
       "enabled": false
     },
     {
+      "name": "Local No Auth",
+      "baseUrl": "http://localhost:8080/v1",
+      "enabled": false
+    },
+    {
       "name": "Custom Self-Hosted",
       "baseUrl": "https://my-custom-llm.example.com/v1",
       "apiKey": "my-custom-api-key",

@@ -778,7 +778,7 @@ export namespace ConfigKey {
 	export const CustomProviders = defineSetting<Array<{
 		name: string;
 		baseUrl: string;
-		apiKey: string;
+		apiKey?: string;
 		enabled: boolean;
 	}>>('chat.byok.customProviders', []);
 	export const EditsCodeNewNotebookAgentEnabled = defineExpSetting<boolean>('chat.edits.newNotebook.enabled', true);

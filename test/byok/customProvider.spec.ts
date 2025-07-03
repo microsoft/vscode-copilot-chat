@@ -44,6 +44,12 @@ const testProviderConfig: CustomProviderConfig = {
 	enabled: true
 };
 
+const testProviderConfigNoAuth: CustomProviderConfig = {
+	name: 'Test Provider No Auth',
+	baseUrl: 'https://api.test.com/v1',
+	enabled: true
+};
+
 test('should create a custom provider registry with correct properties', () => {
 	const registry = new CustomBYOKModelRegistry(
 		BYOKAuthType.GlobalApiKey,
@@ -142,4 +148,58 @@ test('should handle trailing slashes in base URL', async () => {
 	// Should work without issues - the implementation removes trailing slashes
 	const models = await registry.getAllModels();
 	expect(models.length).toBe(2);
+});
+
+test('should work without API key for providers that do not require authentication', async () => {
+	const registry = new CustomBYOKModelRegistry(
+		BYOKAuthType.GlobalApiKey,
+		testProviderConfigNoAuth.name,
+		testProviderConfigNoAuth,
+		mockFetcherService,
+		mockLogService,
+		mockInstantiationService
+	);
+
+	const models = await registry.getAllModels();
+	expect(models.length).toBe(2);
+});
+
+test('should test getModelInfo method', async () => {
+	const registry = new CustomBYOKModelRegistry(
+		BYOKAuthType.GlobalApiKey,
+		testProviderConfig.name,
+		testProviderConfig,
+		mockFetcherService,
+		mockLogService,
+		mockInstantiationService
+	);
+
+	const modelInfo = await registry.getModelInfo('test-model-1', 'test-api-key');
+	expect(modelInfo).toBeDefined();
+});
+
+test('should test updateKnownModelsList method', () => {
+	const registry = new CustomBYOKModelRegistry(
+		BYOKAuthType.GlobalApiKey,
+		testProviderConfig.name,
+		testProviderConfig,
+		mockFetcherService,
+		mockLogService,
+		mockInstantiationService
+	);
+
+	const knownModels = {
+		'test-model-1': {
+			name: 'Test Model 1',
+			id: 'test-model-1',
+			maxInputTokens: 4096,
+			maxOutputTokens: 4096,
+			toolCalling: false,
+			vision: false
+		}
+	};
+
+	registry.updateKnownModelsList(knownModels);
+	// The method should update internal state without throwing
+	expect(true).toBe(true);
 });

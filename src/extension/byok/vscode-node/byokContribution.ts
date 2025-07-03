@@ -20,7 +20,7 @@ import { IExtensionContribution } from '../../common/contributions';
 import { BYOKStorageService, IBYOKStorageService } from './byokStorageService';
 import { BYOKUIService, ModelConfig } from './byokUIService';
 import { CerebrasModelRegistry } from './cerebrasProvider';
-import { createCustomProviderRegistries, CustomBYOKModelRegistry } from './customProvider';
+import { createCustomProviderRegistries } from './customProvider';
 import { GeminiBYOKModelRegistry } from './geminiProvider';
 import { GroqModelRegistry } from './groqProvider';
 import { OllamaModelRegistry } from './ollamaProvider';
@@ -356,21 +356,19 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 
 			// Validate each provider
 			for (const registry of customRegistries) {
-				if (registry instanceof CustomBYOKModelRegistry) {
-					try {
-						const validation = await registry.validateProvider();
-						results.push({
-							name: registry.name,
-							valid: validation.valid,
-							error: validation.error
-						});
-					} catch (error) {
-						results.push({
-							name: registry.name,
-							valid: false,
-							error: error.message || 'Validation failed'
-						});
-					}
+				try {
+					const validation = await registry.validateProvider();
+					results.push({
+						name: registry.name,
+						valid: validation.valid,
+						error: validation.error
+					});
+				} catch (error) {
+					results.push({
+						name: registry.name,
+						valid: false,
+						error: error instanceof Error ? error.message : 'Validation failed'
+					});
 				}
 			}
 

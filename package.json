@@ -2446,7 +2446,8 @@
 								},
 								"apiKey": {
 									"type": "string",
-									"description": "API key for authentication"
+									"format": "password",
+									"markdownDescription": "API key for authentication **(stored in plain text; consider using a dedicated secret store if available)**"
 								},
 								"enabled": {
 									"type": "boolean",
@@ -2454,7 +2455,7 @@
 									"default": true
 								}
 							},
-							"required": ["name", "baseUrl", "apiKey"],
+							"required": ["name", "baseUrl"],
 							"additionalProperties": false
 						}
 					}
