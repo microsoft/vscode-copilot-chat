@@ -57,7 +57,7 @@ const treeSitterGrammars: ITreeSitterGrammar[] = [
 	}
 ];
 
-const REPO_ROOT = path.join(__dirname, '..', '..');
+const REPO_ROOT = path.join(__dirname, '..');
 
 async function main() {
 	await fs.promises.mkdir(path.join(REPO_ROOT, '.build'), { recursive: true });
