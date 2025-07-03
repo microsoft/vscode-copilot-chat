@@ -10,7 +10,7 @@ import { IEnvService } from '../../../../platform/env/common/envService';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
-import { CommandLineAutoApprover, extractInlineSubCommands, splitCommandLineIntoSubCommands } from '../toolUtils.terminal';
+import { CommandLineAutoApprover, extractInlineSubCommands, isPowerShell, splitCommandLineIntoSubCommands } from '../toolUtils.terminal';
 
 describe('CommandLineAutoApprover', () => {
 	let store: DisposableStore;
@@ -671,6 +671,164 @@ describe('extractInlineSubCommands', () => {
 		it('should handle whitespace-only command line', () => {
 			const result = extractInlineSubCommands('   \t  \n  ', '/bin/bash');
 			assertSubCommandsUnordered(result, []);
+		});
+	});
+});
+
+describe('isPowerShell', () => {
+	describe('PowerShell executables', () => {
+		it('should detect powershell.exe', () => {
+			ok(isPowerShell('powershell.exe'));
+		});
+
+		it('should detect pwsh.exe', () => {
+			ok(isPowerShell('pwsh.exe'));
+		});
+
+		it('should detect powershell', () => {
+			ok(isPowerShell('powershell'));
+		});
+
+		it('should detect pwsh', () => {
+			ok(isPowerShell('pwsh'));
+		});
+
+		it('should detect powershell-preview', () => {
+			ok(isPowerShell('powershell-preview'));
+		});
+
+		it('should detect pwsh-preview', () => {
+			ok(isPowerShell('pwsh-preview'));
+		});
+	});
+
+	describe('PowerShell with full paths', () => {
+		it('should detect Windows PowerShell with full path', () => {
+			ok(isPowerShell('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'));
+		});
+
+		it('should detect PowerShell Core with full path', () => {
+			ok(isPowerShell('C:\\Program Files\\PowerShell\\7\\pwsh.exe'));
+		});
+
+		it('should detect PowerShell on Linux/macOS with full path', () => {
+			ok(isPowerShell('/usr/bin/pwsh'));
+		});
+
+		it('should detect PowerShell preview with full path', () => {
+			ok(isPowerShell('/opt/microsoft/powershell/7-preview/pwsh-preview'));
+		});
+
+		it('should detect nested path with powershell', () => {
+			ok(isPowerShell('/some/deep/path/to/powershell.exe'));
+		});
+	});
+
+	describe('Case sensitivity', () => {
+		it('should detect PowerShell regardless of case', () => {
+			ok(isPowerShell('PowerShell.exe'));
+			ok(isPowerShell('POWERSHELL.EXE'));
+			ok(isPowerShell('Pwsh.exe'));
+			ok(isPowerShell('PWSH'));
+		});
+	});
+
+	describe('Non-PowerShell shells', () => {
+		it('should not detect bash', () => {
+			ok(!isPowerShell('bash'));
+		});
+
+		it('should not detect zsh', () => {
+			ok(!isPowerShell('zsh'));
+		});
+
+		it('should not detect sh', () => {
+			ok(!isPowerShell('sh'));
+		});
+
+		it('should not detect fish', () => {
+			ok(!isPowerShell('fish'));
+		});
+
+		it('should not detect cmd.exe', () => {
+			ok(!isPowerShell('cmd.exe'));
+		});
+
+		it('should not detect command.com', () => {
+			ok(!isPowerShell('command.com'));
+		});
+
+		it('should not detect dash', () => {
+			ok(!isPowerShell('dash'));
+		});
+
+		it('should not detect tcsh', () => {
+			ok(!isPowerShell('tcsh'));
+		});
+
+		it('should not detect csh', () => {
+			ok(!isPowerShell('csh'));
+		});
+	});
+
+	describe('Non-PowerShell shells with full paths', () => {
+		it('should not detect bash with full path', () => {
+			ok(!isPowerShell('/bin/bash'));
+		});
+
+		it('should not detect zsh with full path', () => {
+			ok(!isPowerShell('/usr/bin/zsh'));
+		});
+
+		it('should not detect cmd.exe with full path', () => {
+			ok(!isPowerShell('C:\\Windows\\System32\\cmd.exe'));
+		});
+
+		it('should not detect git bash', () => {
+			ok(!isPowerShell('C:\\Program Files\\Git\\bin\\bash.exe'));
+		});
+	});
+
+	describe('Edge cases', () => {
+		it('should handle empty string', () => {
+			ok(!isPowerShell(''));
+		});
+
+		it('should handle paths with spaces', () => {
+			ok(isPowerShell('C:\\Program Files\\PowerShell\\7\\pwsh.exe'));
+			ok(!isPowerShell('C:\\Program Files\\Git\\bin\\bash.exe'));
+		});
+
+		it('should not match partial strings', () => {
+			ok(!isPowerShell('notpowershell'));
+			ok(!isPowerShell('powershellish'));
+			ok(!isPowerShell('mypwsh'));
+			ok(!isPowerShell('pwshell'));
+		});
+
+		it('should handle strings containing powershell but not as basename', () => {
+			ok(!isPowerShell('/powershell/bin/bash'));
+			ok(!isPowerShell('/usr/pwsh/bin/zsh'));
+			ok(!isPowerShell('C:\\powershell\\cmd.exe'));
+		});
+
+		it('should handle special characters in path', () => {
+			ok(isPowerShell('/path/with-dashes/pwsh.exe'));
+			ok(isPowerShell('/path/with_underscores/powershell'));
+			ok(isPowerShell('C:\\path\\with spaces\\pwsh.exe'));
+		});
+
+		it('should handle relative paths', () => {
+			ok(isPowerShell('./powershell.exe'));
+			ok(isPowerShell('../bin/pwsh'));
+			ok(isPowerShell('bin/powershell'));
+		});
+
+		it('should not match similar named tools', () => {
+			ok(!isPowerShell('powertool'));
+			ok(!isPowerShell('shell'));
+			ok(!isPowerShell('power'));
+			ok(!isPowerShell('pwshconfig'));
 		});
 	});
 });

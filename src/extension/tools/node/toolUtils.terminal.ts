@@ -14,6 +14,7 @@ import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { CancellationError } from '../../../util/vs/base/common/errors';
 import { Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
+import { basename } from '../../../util/vs/base/common/path';
 import { ThemeIcon } from '../../../util/vs/base/common/themables';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
 import type { IBuildPromptContext } from '../../prompt/common/intents';
@@ -612,7 +613,7 @@ export class CommandLineAutoApprover extends Disposable {
 	private commandMatchesRegex(regex: RegExp, command: string): boolean {
 		if (regex.test(command)) {
 			return true;
-		} else if (this.envService.shell === 'pwsh' && command.startsWith('(')) {
+		} else if (isPowerShell(this.envService.shell) && command.startsWith('(')) {
 			// Allow ignoring of the leading ( for PowerShell commands as it's a command pattern to
 			// operate on the output of a command. For example `(Get-Content README.md) ...`
 			if (regex.test(command.slice(1))) {
@@ -782,5 +783,5 @@ export function extractInlineSubCommands(commandLine: string, envShell: string):
 }
 
 export function isPowerShell(envShell: string): boolean {
-	return /(?:powershell|pwsh)(?:-preview)?/.test(envShell.replace(/\.exe$/, ''));
+	return /^(?:powershell|pwsh)(?:-preview)?$/i.test(basename(envShell).replace(/\.exe$/i, ''));
 }
