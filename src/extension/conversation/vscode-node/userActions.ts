@@ -19,12 +19,12 @@ import { Intent } from '../../common/constants';
 import { IConversationStore } from '../../conversationStore/node/conversationStore';
 import { findDiagnosticsTelemetry } from '../../inlineChat/node/diagnosticsTelemetry';
 import { CopilotInteractiveEditorResponse, InteractionOutcome } from '../../inlineChat/node/promptCraftingTypes';
-import { AgentParticipantId } from '../../intents/node/agentIntent';
 import { EditCodeStepTurnMetaData } from '../../intents/node/editCodeStep';
 import { Conversation, ICopilotChatResultIn } from '../../prompt/common/conversation';
 import { IntentInvocationMetadata } from '../../prompt/node/conversation';
 import { IFeedbackReporter } from '../../prompt/node/feedbackReporter';
 import { sendUserActionTelemetry } from '../../prompt/node/telemetry';
+import { ParticipantIds, participantIdToName } from '../../intents/common/intents';
 
 export const IUserFeedbackService = createServiceIdentifier<IUserFeedbackService>('IUserFeedbackService');
 export interface IUserFeedbackService {
@@ -222,7 +222,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 			measurements = {
 				totalCharacters: e.action.totalCharacters,
 				totalLines: e.action.totalLines,
-				isAgent: agentId === AgentParticipantId ? 1 : 0,
+				isAgent: agentId === ParticipantIds.Agent ? 1 : 0,
 			};
 
 			// Copy actions have a copiedCharacters/Lines property since this includes manual copying which can be partial
@@ -255,7 +255,8 @@ export class UserFeedbackService implements IUserFeedbackService {
 					participant: agentId,
 					languageId: e.action.languageId ?? '',
 					modelId: e.action.modelId ?? '',
-					comp_type: compType
+					comp_type: compType,
+					mode: participantIdToName(agentId),
 				},
 				measurements,
 				e.action.kind === 'copy' ? 'conversation.acceptedCopy' : 'conversation.acceptedInsert'
@@ -277,10 +278,11 @@ export class UserFeedbackService implements IUserFeedbackService {
 				headerRequestId: result.metadata?.responseId ?? '',
 				participant: agentId,
 				languageId: e.languageId ?? '',
-				modelId: e.modelId
+				modelId: e.modelId,
+				mode: participantIdToName(agentId),
 			},
 			{
-				isAgent: agentId === AgentParticipantId ? 1 : 0,
+				isAgent: agentId === ParticipantIds.Agent ? 1 : 0,
 				totalLines: e.totalLines,
 			},
 			'conversation.appliedCodeblock'
