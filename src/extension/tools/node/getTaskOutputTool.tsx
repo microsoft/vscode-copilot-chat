@@ -35,15 +35,15 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ITaskOptions>, token: vscode.CancellationToken) {
-		const label = this.getTaskDefinition(options.input)?.taskLabel;
-		if (!label) {
+		const taskDefinition = this.getTaskDefinition(options.input);
+		if (!taskDefinition) {
 			this.logService.logger.debug('getTaskOutputTool returning undefined: no matching label for task ' + options.input.id);
 			return;
 		}
 		// TODO:@meganrogge when there's API to determine if a terminal is a task, improve this vscode#234440
-		const terminal = this.terminalService.terminals.find(t => t.name === label);
+		const terminal = this.terminalService.terminals.find(t => t.name === this.getTaskTerminalName(taskDefinition.task));
 		if (!terminal) {
-			this.logService.logger.debug('getTaskOutputTool returning undefined: no terminal for task: ' + options.input.id + ' label: ' + label + ' terminal names: ' + this.terminalService.terminals.map(t => t.name).join(', '));
+			this.logService.logger.debug('getTaskOutputTool returning undefined: no terminal for task: ' + options.input.id + ' label: ' + taskDefinition.taskLabel + ' terminal names: ' + this.terminalService.terminals.map(t => t.name).join(', '));
 			return;
 		}
 		const buffer = this.terminalService.getBufferForTerminal(terminal, Math.min(options.input.maxCharsToRetrieve ?? 16000, 16000));
@@ -52,6 +52,19 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 			new LanguageModelTextPart(`Output for task ${terminal.name}: ${buffer}`)
 		]);
 	}
+
+
+	private getTaskTerminalName(task: vscode.TaskDefinition): string {
+		if ('label' in task) {
+			return task.label;
+		} else if ('script' in task) {
+			return task.type + ': ' + task.script;
+		} else if ('command' in task) {
+			return task.type + ': ' + task.command;
+		}
+		return '';
+	}
+
 
 	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ITaskOptions>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
 		const { task, workspaceFolder, taskLabel } = this.getTaskDefinition(options.input) || {};
