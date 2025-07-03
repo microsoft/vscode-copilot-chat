@@ -2121,6 +2121,13 @@
 				"enablement": "github.copilot.byokEnabled"
 			},
 			{
+				"command": "github.copilot.chat.validateCustomProviders",
+				"title": "Validate Custom Providers",
+				"icon": "$(check)",
+				"category": "GitHub Copilot",
+				"enablement": "github.copilot.byokEnabled"
+			},
+			{
 				"command": "github.copilot.chat.debug.showElements",
 				"title": "Show Rendered Elements"
 			},
@@ -2418,6 +2425,38 @@
 							"preview"
 						],
 						"markdownDescription": "%github.copilot.config.byok.ollamaEndpoint%"
+					},
+					"github.copilot.chat.byok.customProviders": {
+						"type": "array",
+						"default": [],
+						"tags": [
+							"preview"
+						],
+						"markdownDescription": "Configure custom OpenAI-compatible model providers. Each provider should have a name, baseUrl, apiKey, and enabled flag.",
+						"items": {
+							"type": "object",
+							"properties": {
+								"name": {
+									"type": "string",
+									"description": "Display name for the custom provider"
+								},
+								"baseUrl": {
+									"type": "string",
+									"description": "Base URL for the OpenAI-compatible API (e.g., https://api.example.com/v1)"
+								},
+								"apiKey": {
+									"type": "string",
+									"description": "API key for authentication"
+								},
+								"enabled": {
+									"type": "boolean",
+									"description": "Whether this provider is enabled",
+									"default": true
+								}
+							},
+							"required": ["name", "baseUrl", "apiKey"],
+							"additionalProperties": false
+						}
 					}
 				}
 			},

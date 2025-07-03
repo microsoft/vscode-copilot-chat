@@ -1,0 +1,40 @@
+{
+  "github.copilot.chat.byok.customProviders": [
+    {
+      "name": "Local LM Studio",
+      "baseUrl": "http://localhost:1234/v1",
+      "apiKey": "lm-studio",
+      "enabled": true
+    },
+    {
+      "name": "Together AI",
+      "baseUrl": "https://api.together.xyz/v1",
+      "apiKey": "your-together-api-key-here",
+      "enabled": true
+    },
+    {
+      "name": "Anyscale",
+      "baseUrl": "https://api.endpoints.anyscale.com/v1",
+      "apiKey": "your-anyscale-api-key-here",
+      "enabled": true
+    },
+    {
+      "name": "Fireworks AI",
+      "baseUrl": "https://api.fireworks.ai/inference/v1",
+      "apiKey": "your-fireworks-api-key-here",
+      "enabled": true
+    },
+    {
+      "name": "Local vLLM",
+      "baseUrl": "http://localhost:8000/v1",
+      "apiKey": "optional-key",
+      "enabled": false
+    },
+    {
+      "name": "Custom Self-Hosted",
+      "baseUrl": "https://my-custom-llm.example.com/v1",
+      "apiKey": "my-custom-api-key",
+      "enabled": false
+    }
+  ]
+}

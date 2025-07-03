@@ -20,6 +20,7 @@ import { IExtensionContribution } from '../../common/contributions';
 import { BYOKStorageService, IBYOKStorageService } from './byokStorageService';
 import { BYOKUIService, ModelConfig } from './byokUIService';
 import { CerebrasModelRegistry } from './cerebrasProvider';
+import { createCustomProviderRegistries, CustomBYOKModelRegistry } from './customProvider';
 import { GeminiBYOKModelRegistry } from './geminiProvider';
 import { GroqModelRegistry } from './groqProvider';
 import { OllamaModelRegistry } from './ollamaProvider';
@@ -31,6 +32,7 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 	private _registeredModelDisposables = new Map<string, VSCodeDisposable>();
 	private _byokUIService!: BYOKUIService; // Set in authChange, so ok to !
 	private readonly _byokStorageService: IBYOKStorageService;
+	private readonly _instantiationService: IInstantiationService;
 
 	constructor(
 		@IFetcherService private readonly _fetcherService: IFetcherService,
@@ -44,6 +46,7 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 	) {
 		super();
 		this._byokStorageService = new BYOKStorageService(extensionContext);
+		this._instantiationService = instantiationService;
 		this._authChange(authService, instantiationService);
 
 		this._register(authService.onDidAuthenticationChange(() => {
@@ -57,6 +60,7 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 		}));
 
 		this._register(commands.registerCommand('github.copilot.chat.manageModels', () => this.registerModelCommand()));
+		this._register(commands.registerCommand('github.copilot.chat.validateCustomProviders', () => this.validateCustomProvidersCommand()));
 	}
 
 	private async _authChange(authService: IAuthenticationService, instantiationService: IInstantiationService) {
@@ -77,6 +81,17 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			this._modelRegistries.push(instantiationService.createInstance(OAIBYOKModelRegistry));
 			this._modelRegistries.push(instantiationService.createInstance(OllamaModelRegistry, this._configurationService.getConfig(ConfigKey.OllamaEndpoint)));
 			this._modelRegistries.push(instantiationService.createInstance(OpenRouterBYOKModelRegistry));
+
+			// Add custom providers from configuration
+			const customProviders = this._configurationService.getConfig(ConfigKey.CustomProviders);
+			const customRegistries = createCustomProviderRegistries(
+				customProviders,
+				this._fetcherService,
+				this._logService,
+				instantiationService
+			);
+			this._modelRegistries.push(...customRegistries);
+
 			// Update known models list from CDN so all providers have the same list
 			await this.fetchKnownModelList(this._fetcherService);
 		}
@@ -319,5 +334,62 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 				}
 			}
 		}
+	}
+
+	private async validateCustomProvidersCommand() {
+			const customProviders = this._configurationService.getConfig(ConfigKey.CustomProviders);
+
+			if (customProviders.length === 0) {
+				window.showInformationMessage('No custom providers configured. Add providers in VS Code settings under "github.copilot.chat.byok.customProviders".');
+				return;
+			}
+
+			// Create temporary registries for validation
+			const customRegistries = createCustomProviderRegistries(
+				customProviders,
+				this._fetcherService,
+				this._logService,
+				this._instantiationService
+			);
+
+			const results: { name: string; valid: boolean; error?: string }[] = [];
+
+			// Validate each provider
+			for (const registry of customRegistries) {
+				if (registry instanceof CustomBYOKModelRegistry) {
+					try {
+						const validation = await registry.validateProvider();
+						results.push({
+							name: registry.name,
+							valid: validation.valid,
+							error: validation.error
+						});
+					} catch (error) {
+						results.push({
+							name: registry.name,
+							valid: false,
+							error: error.message || 'Validation failed'
+						});
+					}
+				}
+			}
+
+			// Show results
+			const validProviders = results.filter(r => r.valid);
+			const invalidProviders = results.filter(r => !r.valid);
+
+			let message = '';
+			if (validProviders.length > 0) {
+				message += `✅ Valid providers: ${validProviders.map(p => p.name).join(', ')}\n`;
+			}
+			if (invalidProviders.length > 0) {
+				message += `❌ Invalid providers:\n${invalidProviders.map(p => `  • ${p.name}: ${p.error}`).join('\n')}`;
+			}
+
+			if (invalidProviders.length === 0) {
+				window.showInformationMessage(`All ${validProviders.length} custom provider(s) are valid and ready to use!`);
+			} else {
+				window.showWarningMessage(message, { modal: true });
+			}
 	}
 }
