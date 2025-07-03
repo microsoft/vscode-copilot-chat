@@ -78,9 +78,20 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 			invocationMessage: trustedMark(l10n.t`Running ${taskLabel ?? link(options.input.id)}`),
 			pastTenseMessage: trustedMark(task?.isBackground ? l10n.t`Started ${link(taskLabel ?? options.input.id)}` : l10n.t`Ran ${link(taskLabel ?? options.input.id)}`),
 			confirmationMessages: task && task.group !== 'build'
-				? { title: l10n.t`Allow task run?`, message: trustedMark(l10n.t`Allow Copilot to run the \`${task.type}\` task ${link(`\`${task.label ?? task.script}\``)}?`) }
+				? { title: l10n.t`Allow task run?`, message: trustedMark(l10n.t`Allow Copilot to run the \`${task.type}\` task ${link(`\`${this.getTaskRepresentation(task)}\``)}?`) }
 				: undefined
 		};
+	}
+
+	private getTaskRepresentation(task: vscode.TaskDefinition): string {
+		if ('label' in task) {
+			return task.label;
+		} else if ('script' in task) {
+			return task.script;
+		} else if ('command' in task) {
+			return task.command;
+		}
+		return '';
 	}
 
 	private getTaskDefinition(input: IRunTaskToolInput) {
