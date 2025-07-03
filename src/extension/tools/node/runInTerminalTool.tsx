@@ -273,8 +273,8 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 		if (this.alternativeRecommendation || this.simulationTestContext.isInSimulationTests) {
 			confirmationMessages = undefined;
 		} else {
-			const subCommands = splitCommandLineIntoSubCommands(options.input.command, this.envService.shell);
-			const inlineSubCommands = subCommands.map(e => Array.from(extractInlineSubCommands(e, this.envService.shell))).flat();
+			const subCommands = splitCommandLineIntoSubCommands(options.input.command, this.envService.shell, this.envService.OS);
+			const inlineSubCommands = subCommands.map(e => Array.from(extractInlineSubCommands(e, this.envService.shell, this.envService.OS))).flat();
 			const allSubCommands = [...subCommands, ...inlineSubCommands];
 			if (allSubCommands.every(e => this._commandLineAutoApprover.isAutoApproved(e))) {
 				confirmationMessages = undefined;
@@ -305,7 +305,7 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 		// Re-write the command if it starts with `cd <dir> && <suffix>` or `cd <dir>; <suffix>`
 		// to just `<suffix>` if the directory matches the current terminal's cwd. This simplifies
 		// the result in the chat by removing redundancies that some models like to add.
-		const isPwsh = isPowerShell(this.envService.shell);
+		const isPwsh = isPowerShell(this.envService.shell, this.envService.OS);
 		const cdPrefixMatch = commandLine.match(
 			isPwsh
 				? /^(?:cd|Set-Location(?: -Path)?) (?<dir>[^\s]+) ?(?:&&|;)\s+(?<suffix>.+)$/i
