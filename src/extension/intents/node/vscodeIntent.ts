@@ -79,8 +79,6 @@ class VSCodeResponseProcessor {
 			progress.markdown(textDelta);
 		}
 
-		// Then add any additional functionality (buttons) based on parsing results
-		// This is additive - we enhance the experience without removing content
 		for (const parsedCommand of parsedCommands) {
 			if (parsedCommand.commandToRun) {
 				progress.button(parsedCommand.commandToRun);
