@@ -14,7 +14,7 @@
 			"envFile": "${workspaceFolder}/.env",
 			"env": {
 				"COPILOT_LOG_TELEMETRY": "true",
-				"VSCODE_DEV_DEBUG": "1",
+				"VSCODE_DEV_DEBUG": "1"
 			},
 			"outFiles": [
 				"${workspaceFolder}/dist/**/*.js",
@@ -37,14 +37,14 @@
 			"preLaunchTask": "watch",
 			"env": {
 				"COPILOT_LOG_TELEMETRY": "true",
-				"VSCODE_DEV_DEBUG": "1",
+				"VSCODE_DEV_DEBUG": "1"
 			},
 			"outFiles": [
 				"${workspaceFolder}/dist/**/*.js",
 				"!**/node_modules/**"
 			],
 			"presentation": {
-				"group": "0_launch",
+				"group": "0_launch"
 			}
 		},
 		{
@@ -231,7 +231,35 @@
 			"presentation": {
 				"group": "2_launch"
 			}
-		}
+		},
+		{
+			"type": "extensionHost",
+			"request": "launch",
+			"name": "Launch Custom Auth Copilot Extension",
+			"runtimeExecutable": "${execPath}",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"--profile=Custom Copilot Auth"
+			],
+			"smartStep": true,
+			"sourceMaps": true,
+			"envFile": "${workspaceFolder}/.env",
+			"env": {
+				"COPILOT_LOG_TELEMETRY": "true",
+				"VSCODE_DEV_DEBUG": "1",
+				"USE_CUSTOM_AUTH": "true",
+				"CUSTOM_COPILOT_API_KEY": "test-api-key-12345",
+				"CUSTOM_COPILOT_ENDPOINT": "https://test-auth.example.com/token",
+				"CUSTOM_ORG_PROVIDER": "CustomOrg"
+			},
+			"outFiles": [
+				"${workspaceFolder}/dist/**/*.js",
+				"!**/node_modules/**"
+			],
+			"presentation": {
+				"group": "0_launch"
+			}
+		},
 	],
 	"compounds": [
 		{

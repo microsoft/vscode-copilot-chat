@@ -174,10 +174,7 @@
 					},
 					{
 						"target": "**/vscode-node/**",
-						"from": [
-							"**/worker/**",
-							"**/vscode-worker/**"
-						]
+						"from": ["**/worker/**", "**/vscode-worker/**"]
 					},
 					{
 						"target": "**/worker/**",
@@ -190,10 +187,7 @@
 					},
 					{
 						"target": "**/vscode-worker/**",
-						"from": [
-							"**/node/**",
-							"**/vscode-node/**"
-						]
+						"from": ["**/node/**", "**/vscode-node/**"]
 					},
 					{
 						"target": "./src/",
@@ -208,7 +202,10 @@
 						"from": ["./src/extension"]
 					},
 					{
-						"target": ["./test", "!./test/base/extHostContext/*.ts"],
+						"target": [
+							"./test",
+							"!./test/base/extHostContext/*.ts"
+						],
 						"from": ["**/vscode-node/**", "**/vscode-worker/**"]
 					}
 				]
