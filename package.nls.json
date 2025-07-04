@@ -132,7 +132,7 @@
 	"github.copilot.config.setupTests.enabled": "Enables the `/setupTests` intent and prompting in `/tests` generation.",
 	"github.copilot.config.byok.ollamaEndpoint": "The endpoint to use for the Ollama when accessed via bring your own key. Defaults to localhost.",
 	"github.copilot.command.fixTestFailure": "Fix Test Failure",
-	"copilot.description": "Ask Copilot",
+	"copilot.description": "",
 	"copilot.edits.description": "Edit files in your workspace",
 	"copilot.agent.description": "Edit files in your workspace in agent mode",
 	"copilot.workspace.description": "Ask about your workspace",
