@@ -203,3 +203,161 @@ test('should test updateKnownModelsList method', () => {
 	// The method should update internal state without throwing
 	expect(true).toBe(true);
 });
+
+test('should handle different model response formats', async () => {
+	const mockFetcherWithDifferentFormats = {
+		fetch: async (url: string) => {
+			if (url.endsWith('/models')) {
+				return {
+					ok: true,
+					json: async () => ({
+						models: [
+							{ id: 'model-1', name: 'Model 1' },
+							{ id: 'model-2', name: 'Model 2' }
+						]
+					})
+				};
+			}
+			throw new Error(`Unexpected URL: ${url}`);
+		}
+	} as any;
+
+	const registry = new CustomBYOKModelRegistry(
+		BYOKAuthType.GlobalApiKey,
+		testProviderConfig.name,
+		testProviderConfig,
+		mockFetcherWithDifferentFormats,
+		mockLogService,
+		mockInstantiationService
+	);
+
+	const models = await registry.getAllModels();
+	expect(models.length).toBe(2);
+	expect(models[0].id).toBe('model-1');
+});
+
+test('should handle root-level array response format', async () => {
+	const mockFetcherWithArrayResponse = {
+		fetch: async (url: string) => {
+			if (url.endsWith('/models')) {
+				return {
+					ok: true,
+					json: async () => [
+						{ id: 'model-1', name: 'Model 1' },
+						{ id: 'model-2', name: 'Model 2' }
+					]
+				};
+			}
+			throw new Error(`Unexpected URL: ${url}`);
+		}
+	} as any;
+
+	const registry = new CustomBYOKModelRegistry(
+		BYOKAuthType.GlobalApiKey,
+		testProviderConfig.name,
+		testProviderConfig,
+		mockFetcherWithArrayResponse,
+		mockLogService,
+		mockInstantiationService
+	);
+
+	const models = await registry.getAllModels();
+	expect(models.length).toBe(2);
+	expect(models[0].id).toBe('model-1');
+});
+
+test('should handle validation failure for missing name', async () => {
+	const invalidConfig = {
+		name: '',
+		baseUrl: 'https://api.test.com/v1',
+		apiKey: 'test-key',
+		enabled: true
+	};
+
+	const registry = new CustomBYOKModelRegistry(
+		BYOKAuthType.GlobalApiKey,
+		invalidConfig.name,
+		invalidConfig,
+		mockFetcherService,
+		mockLogService,
+		mockInstantiationService
+	);
+
+	const validation = await registry.validateProvider();
+	expect(validation.valid).toBe(false);
+	expect(validation.error).toBe('Provider name is required');
+});
+
+test('should handle validation failure for invalid URL', async () => {
+	const invalidConfig = {
+		name: 'Test Provider',
+		baseUrl: 'not-a-valid-url',
+		apiKey: 'test-key',
+		enabled: true
+	};
+
+	const registry = new CustomBYOKModelRegistry(
+		BYOKAuthType.GlobalApiKey,
+		invalidConfig.name,
+		invalidConfig,
+		mockFetcherService,
+		mockLogService,
+		mockInstantiationService
+	);
+
+	const validation = await registry.validateProvider();
+	expect(validation.valid).toBe(false);
+	expect(validation.error).toBe('Invalid base URL format');
+});
+
+test('should handle API error responses', async () => {
+	const mockFetcherWithError = {
+		fetch: async (url: string) => {
+			if (url.endsWith('/models')) {
+				return {
+					ok: false,
+					status: 401,
+					statusText: 'Unauthorized'
+				};
+			}
+			throw new Error(`Unexpected URL: ${url}`);
+		}
+	} as any;
+
+	const registry = new CustomBYOKModelRegistry(
+		BYOKAuthType.GlobalApiKey,
+		testProviderConfig.name,
+		testProviderConfig,
+		mockFetcherWithError,
+		mockLogService,
+		mockInstantiationService
+	);
+
+	const validation = await registry.validateProvider();
+	expect(validation.valid).toBe(false);
+	expect(validation.error).toBe('HTTP 401: Unauthorized');
+});
+
+test('should handle network errors', async () => {
+	const mockFetcherWithNetworkError = {
+		fetch: async () => {
+			throw new Error('Network error');
+		}
+	} as any;
+
+	const registry = new CustomBYOKModelRegistry(
+		BYOKAuthType.GlobalApiKey,
+		testProviderConfig.name,
+		testProviderConfig,
+		mockFetcherWithNetworkError,
+		mockLogService,
+		mockInstantiationService
+	);
+
+	try {
+		await registry.getAllModels();
+		expect(false).toBe(true); // Should not reach here
+	} catch (error) {
+		expect(error.message).toContain('Failed to fetch models from Test Provider');
+	}
+});

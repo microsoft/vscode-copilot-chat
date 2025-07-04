@@ -27,14 +27,14 @@ Add custom providers to your VS Code settings:
 
 ## Supported Providers
 
-Any OpenAI-compatible API that implements the following endpoints:
+Any OpenAI-compatible API that implements **both of** the following endpoints:
 - `GET /models` - List available models
 - `POST /chat/completions` - Chat completions with streaming support
 
-### Examples of Compatible Providers:
+### Examples of Compatible Providers
 
 1. **Local LLMs**:
-   - Ollama (already has dedicated support)
+   - Ollama (which already has dedicated support)
    - LM Studio
    - LocalAI
    - Text Generation WebUI
@@ -154,10 +154,12 @@ Any OpenAI-compatible API that implements the following endpoints:
 
 ## Security Notes
 
-- API keys are stored in VS Code settings
-- Consider using environment variables for sensitive keys
+- **⚠️ API keys are stored in plain text** in VS Code settings (`settings.json`)
+- Settings are synced to the cloud by default - be cautious about credential exposure
+- Consider using environment variables for sensitive keys: `"apiKey": "${env:MY_PROVIDER_API_KEY}"`
 - Be cautious when sharing settings files that contain API keys
 - Local providers (localhost) are generally safer for experimentation
+- VS Code's Settings Sync may expose credentials - review [VS Code's secret storage guidance](https://code.visualstudio.com/docs/editor/settings-sync#_secrets-and-authentications)
 
 ## Limitations
 

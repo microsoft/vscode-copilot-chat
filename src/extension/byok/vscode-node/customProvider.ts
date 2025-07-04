@@ -73,7 +73,7 @@ export class CustomBYOKModelRegistry implements BYOKModelRegistry {
 			}
 
 			const modelList: { id: string; name: string }[] = [];
-			const modelData = Array.isArray(models.data) ? models.data : Array.isArray(models.models) ? models.models : []; // Support different response formats
+			const modelData = Array.isArray(models.data) ? models.data : Array.isArray(models.models) ? models.models : Array.isArray(models) ? models : []; // Support different response formats
 
 			for (const model of modelData) {
 				// Handle different model object formats
@@ -98,15 +98,15 @@ export class CustomBYOKModelRegistry implements BYOKModelRegistry {
 	}
 
 	async registerModel(config: BYOKModelConfig): Promise<Disposable> {
-		const apiKey: string = isNoAuthConfig(config) ? this._customProvider.apiKey : (config as any).apiKey;
+		const apiKey: string | undefined = isNoAuthConfig(config) ? this._customProvider.apiKey : (config as any).apiKey;
 		try {
-			const modelInfo: IChatModelInformation = await this.getModelInfo(config.modelId, apiKey, config.capabilities);
+			const modelInfo: IChatModelInformation = await this.getModelInfo(config.modelId, apiKey ?? '', config.capabilities);
 
 			const lmModelMetadata = chatModelInfoToProviderMetadata(modelInfo);
 
 			const baseUrl = this._customProvider.baseUrl.replace(/\/$/, ''); // Remove trailing slash
 			const modelUrl = `${baseUrl}/chat/completions`;
-			const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey, modelUrl);
+			const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey ?? '', modelUrl);
 			const provider = this._instantiationService.createInstance(CopilotLanguageModelWrapper, openAIChatEndpoint, lmModelMetadata);
 
 			return lm.registerChatModelProvider(

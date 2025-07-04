@@ -352,25 +352,23 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 				this._instantiationService
 			);
 
-			const results: { name: string; valid: boolean; error?: string }[] = [];
-
-			// Validate each provider
-			for (const registry of customRegistries) {
+			// Validate each provider in parallel for better performance
+			const results = await Promise.all(customRegistries.map(async (registry) => {
 				try {
 					const validation = await registry.validateProvider();
-					results.push({
+					return {
 						name: registry.name,
 						valid: validation.valid,
 						error: validation.error
-					});
+					};
 				} catch (error) {
-					results.push({
+					return {
 						name: registry.name,
 						valid: false,
 						error: error instanceof Error ? error.message : 'Validation failed'
-					});
+					};
 				}
-			}
+			}));
 
 			// Show results
 			const validProviders = results.filter(r => r.valid);

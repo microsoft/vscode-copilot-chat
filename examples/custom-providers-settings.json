@@ -1,4 +1,5 @@
 {
+  "_comment": "Example configuration for custom OpenAI-compatible providers. Replace placeholder API keys with actual values and update URLs as needed.",
   "github.copilot.chat.byok.customProviders": [
     {
       "name": "Local LM Studio",
