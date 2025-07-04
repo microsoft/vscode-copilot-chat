@@ -78,15 +78,26 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 			invocationMessage: trustedMark(l10n.t`Running ${taskLabel ?? link(options.input.id)}`),
 			pastTenseMessage: trustedMark(task?.isBackground ? l10n.t`Started ${link(taskLabel ?? options.input.id)}` : l10n.t`Ran ${link(taskLabel ?? options.input.id)}`),
 			confirmationMessages: task && task.group !== 'build'
-				? { title: l10n.t`Allow task run?`, message: trustedMark(l10n.t`Allow Copilot to run the \`${task.type}\` task ${link(`\`${task.label}\``)}?`) }
+				? { title: l10n.t`Allow task run?`, message: trustedMark(l10n.t`Allow Copilot to run the \`${task.type}\` task ${link(`\`${this.getTaskRepresentation(task)}\``)}?`) }
 				: undefined
 		};
+	}
+
+	private getTaskRepresentation(task: vscode.TaskDefinition): string {
+		if ('label' in task) {
+			return task.label;
+		} else if ('script' in task) {
+			return task.script;
+		} else if ('command' in task) {
+			return task.command;
+		}
+		return '';
 	}
 
 	private getTaskDefinition(input: IRunTaskToolInput) {
 		const idx = input.id.indexOf(': ');
 		const taskType = input.id.substring(0, idx);
-		const taskLabel = input.id.substring(idx + 2);
+		let taskLabel = input.id.substring(idx + 2);
 
 		const workspaceFolderRaw = this.promptPathRepresentationService.resolveFilePath(input.workspaceFolder);
 		const workspaceFolder = (workspaceFolderRaw && this.workspaceService.getWorkspaceFolder(workspaceFolderRaw)) || this.workspaceService.getWorkspaceFolders()[0];
@@ -94,7 +105,11 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 		if (!task) {
 			return undefined;
 		}
-
+		try {
+			if (typeof parseInt(taskLabel) === 'number') {
+				taskLabel = input.id;
+			}
+		} catch { }
 		return { workspaceFolder, task, taskLabel };
 	}
 }

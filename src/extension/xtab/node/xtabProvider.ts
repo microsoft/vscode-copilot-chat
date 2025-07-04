@@ -43,7 +43,7 @@ import { Delayer, DelaySession } from '../../inlineEdits/common/delayer';
 import { editWouldDeleteWhatWasJustInserted } from '../../inlineEdits/common/ghNearbyNesProvider';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
-import { AREA_AROUND_END_TAG, AREA_AROUND_START_TAG, CODE_TO_EDIT_END_TAG, CODE_TO_EDIT_START_TAG, createTaggedCurrentFileContentUsingPagedClipping, CURSOR_TAG, getUserPrompt, MAX_TOKENS_IF_TRUNCATING, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/promptCrafting';
+import { AREA_AROUND_END_TAG, AREA_AROUND_START_TAG, CODE_TO_EDIT_END_TAG, CODE_TO_EDIT_START_TAG, createTaggedCurrentFileContentUsingPagedClipping, CURSOR_TAG, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/promptCrafting';
 import { XtabEndpoint } from './xtabEndpoint';
 import { linesWithBackticksRemoved, toLines } from './xtabUtils';
 
@@ -61,6 +61,11 @@ namespace ResponseTags {
 		start: '<INSERT>',
 		end: '</INSERT>'
 	};
+}
+
+const enum RetryState {
+	NotRetrying,
+	RetryingWithExpandedWindow
 }
 
 export class XtabProvider extends ChainedStatelessNextEditProvider {
@@ -116,7 +121,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 
 			const delaySession = this.delayer.createDelaySession();
 
-			const nextEditResult = await this.doGetNextEdit(request, pushEdit, delaySession, logContext, cancellationToken, telemetry);
+			const nextEditResult = await this.doGetNextEdit(request, pushEdit, delaySession, logContext, cancellationToken, telemetry, RetryState.NotRetrying);
 
 			if (nextEditResult.isError() && nextEditResult.err instanceof NoNextEditReason.GotCancelled) {
 				logContext.setIsSkipped();
@@ -134,7 +139,16 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		}
 	}
 
-	private async doGetNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, delaySession: DelaySession, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, telemetryBuilder: StatelessNextEditTelemetryBuilder): Promise<Result<void, NoNextEditReason>> {
+	private async doGetNextEdit(
+		request: StatelessNextEditRequest,
+		pushEdit: PushEdit,
+		delaySession: DelaySession,
+		logContext: InlineEditRequestLogContext,
+		cancellationToken: CancellationToken,
+		telemetryBuilder: StatelessNextEditTelemetryBuilder,
+		retryState: RetryState,
+	): Promise<Result<void, NoNextEditReason>> {
+
 		const tracer = this.tracer.sub('doGetNextEdit');
 
 		const activeDocument = request.getActiveDocument();
@@ -164,10 +178,11 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		if (isCursorAtEndOfLine) {
 			delaySession.setExtraDebounce(this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsExtraDebounceEndOfLine, this.expService));
 		}
+		telemetryBuilder.setIsCursorAtLineEnd(isCursorAtEndOfLine);
 
 		const areaAroundEditWindowLinesRange = this.computeAreaAroundEditWindowLinesRange(currentFileContentLines, cursorLineIdx);
 
-		const editWindowLinesRange = this.computeEditWindowLinesRange(currentFileContentLines, cursorLineIdx);
+		const editWindowLinesRange = this.computeEditWindowLinesRange(currentFileContentLines, cursorLineIdx, retryState);
 
 		const cursorOriginalLinesOffset = Math.max(0, cursorLineIdx - editWindowLinesRange.start);
 		const editWindowLastLineLength = activeDocument.documentAfterEdits.getTransformer().getLineLength(editWindowLinesRange.endExclusive);
@@ -208,7 +223,11 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 			});
 			promptOptions = {
 				promptingStrategy,
-				includeTagsInCurrentFile: promptingStrategy !== xtabPromptOptions.PromptingStrategy.UnifiedModel /* unified model doesn't use tags in current file */ && this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabIncludeTagsInCurrentFile, this.expService),
+				currentFile: {
+					maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabCurrentFileMaxTokens, this.expService),
+					includeTags: promptingStrategy !== xtabPromptOptions.PromptingStrategy.UnifiedModel /* unified model doesn't use tags in current file */ && this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabIncludeTagsInCurrentFile, this.expService),
+					prioritizeAboveCursor: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabPrioritizeAboveCursor, this.expService)
+				},
 				pagedClipping: {
 					pageSize: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabPageSize, this.expService)
 				},
@@ -229,21 +248,22 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 			};
 		}
 
-		const areaAroundCodeToEditForCurrentFile = promptOptions.includeTagsInCurrentFile
+		const areaAroundCodeToEditForCurrentFile = promptOptions.currentFile.includeTags
 			? areaAroundCodeToEdit
 			: [
 				...contentWithCursorLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
 				...editWindowLines,
 				...contentWithCursorLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
 			].join('\n');
-		const taggedCurrentFileContent = createTaggedCurrentFileContentUsingPagedClipping(
+		const { taggedCurrentFileContent, nLines: nLinesCurrentFile } = createTaggedCurrentFileContentUsingPagedClipping(
 			currentFileContentLines,
 			areaAroundCodeToEditForCurrentFile,
 			areaAroundEditWindowLinesRange,
-			MAX_TOKENS_IF_TRUNCATING,
 			computeTokens,
 			promptOptions.pagedClipping.pageSize,
+			promptOptions.currentFile,
 		);
+		telemetryBuilder.setNLinesOfCurrentFileInPrompt(nLinesCurrentFile);
 
 		const recordingEnabled = this.configService.getConfig<boolean>(ConfigKey.Internal.InlineEditsLogContextRecorderEnabled);
 
@@ -308,7 +328,8 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 			prediction,
 			{
 				shouldRemoveCursorTagFromResponse,
-				promptingStrategy: promptOptions.promptingStrategy
+				promptingStrategy: promptOptions.promptingStrategy,
+				retryState,
 			},
 			delaySession,
 			tracer,
@@ -389,6 +410,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		opts: {
 			promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined;
 			shouldRemoveCursorTagFromResponse: boolean;
+			retryState: RetryState;
 		},
 		delaySession: DelaySession,
 		parentTracer: ITracer,
@@ -455,7 +477,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 				!this.forceUseDefaultModel // if we haven't already forced using the default model; otherwise, this could cause an infinite loop
 			) {
 				this.forceUseDefaultModel = true;
-				return this.doGetNextEdit(request, pushEdit, delaySession, logContext, cancellationToken, telemetryBuilder);
+				return this.doGetNextEdit(request, pushEdit, delaySession, logContext, cancellationToken, telemetryBuilder, opts.retryState); // use the same retry state
 			}
 			pushEdit(Result.error(XtabProvider.mapChatFetcherErrorToNoNextEditReason(fetchRes)));
 			return;
@@ -519,7 +541,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 				return;
 			}
 
-			if (firstLine.done) {
+			if (firstLine.done) { // no lines in response -- unexpected case but take as no suggestions
 				pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow)));
 				return;
 			}
@@ -527,7 +549,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 			const trimmedLines = firstLine.value.trim();
 
 			if (trimmedLines === ResponseTags.NO_CHANGE.start) {
-				pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow)));
+				this.pushNoSuggestionsOrRetry(request, editWindow, pushEdit, delaySession, logContext, cancellationToken, telemetryBuilder, opts.retryState);
 				return;
 			}
 
@@ -653,17 +675,47 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 						i++;
 					}
 				}
-				let noNextEditReasonError: NoNextEditReason = new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow);
+
 				if (chatResponseFailure) {
-					noNextEditReasonError = XtabProvider.mapChatFetcherErrorToNoNextEditReason(chatResponseFailure);
+					pushEdit(Result.error(XtabProvider.mapChatFetcherErrorToNoNextEditReason(chatResponseFailure)));
+					return;
 				}
-				pushEdit(Result.error(noNextEditReasonError));
+
+				const hadEdits = i > 0;
+				if (hadEdits) {
+					pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow)));
+				} else {
+					this.pushNoSuggestionsOrRetry(request, editWindow, pushEdit, delaySession, logContext, cancellationToken, telemetryBuilder, opts.retryState);
+				}
+
 			} catch (err) {
 				logContext.setError(err);
 				// Properly handle the error by pushing it as a result
 				pushEdit(Result.error(new NoNextEditReason.Unexpected(errors.fromUnknown(err))));
 			}
 		})();
+	}
+
+	private pushNoSuggestionsOrRetry(
+		request: StatelessNextEditRequest,
+		editWindow: OffsetRange,
+		pushEdit: PushEdit,
+		delaySession: DelaySession,
+		logContext: InlineEditRequestLogContext,
+		cancellationToken: CancellationToken,
+		telemetryBuilder: StatelessNextEditTelemetryBuilder,
+		retryState: RetryState,
+	) {
+		const allowRetryWithExpandedWindow = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderRetryWithNMoreLinesBelow, this.expService);
+
+		// if allowed to retry and not retrying already, flip the retry state and try again
+		if (allowRetryWithExpandedWindow && retryState === RetryState.NotRetrying) {
+			this.doGetNextEdit(request, pushEdit, delaySession, logContext, cancellationToken, telemetryBuilder, RetryState.RetryingWithExpandedWindow);
+			return;
+		}
+
+		pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, editWindow)));
+		return;
 	}
 
 	private computeAreaAroundEditWindowLinesRange(currentDocLines: string[], cursorLine: number): OffsetRange {
@@ -673,7 +725,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		return new OffsetRange(areaAroundStart, areaAroundEndExcl);
 	}
 
-	private computeEditWindowLinesRange(currentDocLines: string[], cursorLine: number): OffsetRange {
+	private computeEditWindowLinesRange(currentDocLines: string[], cursorLine: number, retryState: RetryState): OffsetRange {
 		let nLinesAbove: number;
 		{
 			const useVaryingLinesAbove = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseVaryingLinesAbove, this.expService);
@@ -697,8 +749,12 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 			}
 		}
 
-		const nLinesBelow = (this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderNLinesBelow, this.expService)
+		let nLinesBelow = (this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderNLinesBelow, this.expService)
 			?? N_LINES_BELOW);
+
+		if (retryState === RetryState.RetryingWithExpandedWindow) {
+			nLinesBelow += this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderRetryWithNMoreLinesBelow, this.expService) ?? 0;
+		}
 
 		const codeToEditStart = Math.max(0, cursorLine - nLinesAbove);
 		const codeToEditEndExcl = Math.min(currentDocLines.length, cursorLine + nLinesBelow + 1);

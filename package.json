@@ -645,7 +645,7 @@
 				"icon": "$(json)",
 				"userDescription": "%github.copilot.tools.createAndRunTask.userDescription%",
 				"when": "config.github.copilot.chat.agent.runTasks",
-				"modelDescription": "For a workspace, this tool will create a task based on the package.json, README.md, and project structure so that the project can be built and run. \n-You can check the output of a task later on by using copilot_getTaskOutput.",
+				"modelDescription": "For a workspace, this tool will create a task based on the package.json, README.md, and project structure so that the project can be built and run.",
 				"inputSchema": {
 					"type": "object",
 					"properties": {
@@ -817,7 +817,7 @@
 				"name": "copilot_runVsCodeTask",
 				"displayName": "runVsCodeTask",
 				"toolReferenceName": "runTask",
-				"modelDescription": "Runs a VS Code task.\n\n- If you see that an appropriate task exists for building or running code, prefer to use this tool to run the task instead of using the run_in_terminal tool.\n- Make sure that any appropriate build or watch task is running before trying to run tests or execute code.\n- If the user asks to run a task, use this tool to do so.\n-You can check the output of a task later on by using copilot_getTaskOutput.",
+				"modelDescription": "Runs a VS Code task.\n\n- If you see that an appropriate task exists for building or running code, prefer to use this tool to run the task instead of using the run_in_terminal tool.\n- Make sure that any appropriate build or watch task is running before trying to run tests or execute code.\n- If the user asks to run a task, use this tool to do so.",
 				"inputSchema": {
 					"type": "object",
 					"properties": {

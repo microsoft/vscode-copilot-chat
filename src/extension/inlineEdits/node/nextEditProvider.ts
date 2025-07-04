@@ -454,6 +454,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		const logContext = req.log;
 
 		const activeDocAndIdx = assertDefined(historyContext.getDocumentAndIdx(curDocId));
+		const activeDocSelection = doc.selection.get()[0] as OffsetRange | undefined;
 
 		const documentShorteningStrategy = this.getDocumentShorteningStrategy();
 		telemetryBuilder.setDocumentShorteningStrategy(documentShorteningStrategy);
@@ -548,7 +549,23 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 					} else {
 						tracer.returns(`no edit, reason: ${result.err.kind}`);
 						if (result.err instanceof NoNextEditReason.NoSuggestions) {
-							this._nextEditCache.setNoNextEdit(curDocId, result.err.documentBeforeEdits, result.err.window, req, nesConfigs);
+							const { documentBeforeEdits, window } = result.err;
+							let reducedWindow = window;
+							if (activeDocSelection && window) {
+								const cursorOffset = activeDocSelection.endExclusive;
+								const t = documentBeforeEdits.getTransformer();
+								const cursorPosition = t.getPosition(cursorOffset);
+								const lineOffset = t.getOffset(cursorPosition.with(undefined, 1));
+								const lineEndOffset = t.getOffset(cursorPosition.with(undefined, t.getLineLength(cursorPosition.lineNumber) + 1));
+								const reducedOffset = t.getOffset(t.getPosition(window.start).delta(1));
+								const reducedEndPosition = t.getPosition(window.endExclusive).delta(-2);
+								const reducedEndOffset = t.getOffset(reducedEndPosition.column > 1 ? reducedEndPosition.with(undefined, t.getLineLength(reducedEndPosition.lineNumber) + 1) : reducedEndPosition);
+								reducedWindow = new OffsetRange(
+									Math.min(reducedOffset, lineOffset),
+									Math.max(reducedEndOffset, lineEndOffset)
+								);
+							}
+							this._nextEditCache.setNoNextEdit(curDocId, documentBeforeEdits, reducedWindow, req, nesConfigs);
 						}
 					}
 					{
