@@ -178,6 +178,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		if (isCursorAtEndOfLine) {
 			delaySession.setExtraDebounce(this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsExtraDebounceEndOfLine, this.expService));
 		}
+		telemetryBuilder.setIsCursorAtLineEnd(isCursorAtEndOfLine);
 
 		const areaAroundEditWindowLinesRange = this.computeAreaAroundEditWindowLinesRange(currentFileContentLines, cursorLineIdx);
 
@@ -222,8 +223,11 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 			});
 			promptOptions = {
 				promptingStrategy,
-				currentFileMaxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabCurrentFileMaxTokens, this.expService),
-				includeTagsInCurrentFile: promptingStrategy !== xtabPromptOptions.PromptingStrategy.UnifiedModel /* unified model doesn't use tags in current file */ && this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabIncludeTagsInCurrentFile, this.expService),
+				currentFile: {
+					maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabCurrentFileMaxTokens, this.expService),
+					includeTags: promptingStrategy !== xtabPromptOptions.PromptingStrategy.UnifiedModel /* unified model doesn't use tags in current file */ && this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabIncludeTagsInCurrentFile, this.expService),
+					prioritizeAboveCursor: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabPrioritizeAboveCursor, this.expService)
+				},
 				pagedClipping: {
 					pageSize: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabPageSize, this.expService)
 				},
@@ -244,21 +248,22 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 			};
 		}
 
-		const areaAroundCodeToEditForCurrentFile = promptOptions.includeTagsInCurrentFile
+		const areaAroundCodeToEditForCurrentFile = promptOptions.currentFile.includeTags
 			? areaAroundCodeToEdit
 			: [
 				...contentWithCursorLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
 				...editWindowLines,
 				...contentWithCursorLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
 			].join('\n');
-		const taggedCurrentFileContent = createTaggedCurrentFileContentUsingPagedClipping(
+		const { taggedCurrentFileContent, nLines: nLinesCurrentFile } = createTaggedCurrentFileContentUsingPagedClipping(
 			currentFileContentLines,
 			areaAroundCodeToEditForCurrentFile,
 			areaAroundEditWindowLinesRange,
-			promptOptions.currentFileMaxTokens,
 			computeTokens,
 			promptOptions.pagedClipping.pageSize,
+			promptOptions.currentFile,
 		);
+		telemetryBuilder.setNLinesOfCurrentFileInPrompt(nLinesCurrentFile);
 
 		const recordingEnabled = this.configService.getConfig<boolean>(ConfigKey.Internal.InlineEditsLogContextRecorderEnabled);
 
@@ -282,14 +287,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 
 		const userPrompt = getUserPrompt(request, taggedCurrentFileContent, areaAroundCodeToEdit, langCtx, computeTokens, promptOptions);
 
-		const prediction = this.configService.getConfig(ConfigKey.Internal.InlineEditsXtabProviderUsePrediction)
-			? {
-				type: 'content',
-				content: (
-					XtabProvider.getPredictedOutput(editWindowLines, promptOptions.promptingStrategy)
-				)
-			} as const
-			: undefined;
+		const prediction = this.getPredictedOutput(editWindowLines, promptOptions.promptingStrategy);
 
 		const messages = [
 			{
@@ -826,7 +824,16 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		return this.instaService.createInstance(ProxyXtabEndpoint, modelName);
 	}
 
-	private static getPredictedOutput(editWindowLines: readonly string[], promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined): string {
+	private getPredictedOutput(editWindowLines: string[], promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined): Prediction | undefined {
+		return this.configService.getConfig(ConfigKey.Internal.InlineEditsXtabProviderUsePrediction)
+			? {
+				type: 'content',
+				content: XtabProvider.getPredictionContents(editWindowLines, promptingStrategy)
+			}
+			: undefined;
+	}
+
+	private static getPredictionContents(editWindowLines: readonly string[], promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined): string {
 		if (promptingStrategy === xtabPromptOptions.PromptingStrategy.UnifiedModel) {
 			return ['<EDIT>', ...editWindowLines, '</EDIT>'].join('\n');
 		} else if (promptingStrategy === xtabPromptOptions.PromptingStrategy.Xtab275) {
