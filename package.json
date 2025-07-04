@@ -13,7 +13,7 @@
 	"license": "SEE LICENSE IN LICENSE.txt",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/microsoft/vscode-copilot-release"
+		"url": "https://github.com/microsoft/vscode-copilot-chat"
 	},
 	"bugs": {
 		"url": "https://github.com/microsoft/vscode/issues"
