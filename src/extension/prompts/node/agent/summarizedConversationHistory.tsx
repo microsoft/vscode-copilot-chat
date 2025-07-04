@@ -16,6 +16,7 @@ import { IPromptPathRepresentationService } from '../../../../platform/prompts/c
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { CancellationError, isCancellationError } from '../../../../util/vs/base/common/errors';
 import { Iterable } from '../../../../util/vs/base/common/iterator';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -409,6 +410,10 @@ class ConversationHistorySummarizer {
 			try {
 				return await this.getSummary(SummaryMode.Full, propsInfo);
 			} catch (e) {
+				if (isCancellationError(e)) {
+					throw e;
+				}
+
 				return await this.getSummary(SummaryMode.Simple, propsInfo);
 			}
 		}
@@ -474,6 +479,10 @@ class ConversationHistorySummarizer {
 			const outcome = response.type;
 			this.sendSummarizationTelemetry(outcome, response.requestId, this.props.endpoint.model, mode, response.reason);
 			this.logInfo(`Summarization request failed. ${response.type} ${response.reason}`, mode);
+			if (response.type === ChatFetchResponseType.Canceled) {
+				throw new CancellationError();
+			}
+
 			throw new Error('Summarization request failed');
 		}
 
