@@ -2,6 +2,8 @@
 
 This feature allows you to configure custom OpenAI-compatible model providers in GitHub Copilot Chat. You can add multiple providers with their own base URLs and API keys.
 
+**✅ Works in all VS Code environments**: Desktop, VS Code Server, Code Server, web-based IDEs, and remote development setups.
+
 ## Configuration
 
 Add custom providers to your VS Code settings:

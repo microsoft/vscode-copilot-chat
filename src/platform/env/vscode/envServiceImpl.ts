@@ -91,7 +91,21 @@ export class EnvServiceImpl implements IEnvService {
 	}
 
 	getEditorInfo(): NameAndVersion {
-		return new NameAndVersion('vscode', vscode.version);
+		// Detect different VS Code variants
+		let editorName = 'vscode';
+		if (vscode.env.appName.includes('Code - OSS')) {
+			editorName = 'vscode-oss';
+		} else if (vscode.env.appName.includes('VSCodium')) {
+			editorName = 'vscodium';
+		} else if (vscode.env.remoteName) {
+			// VS Code Server environments
+			editorName = `vscode-${vscode.env.remoteName}`;
+		} else if (vscode.env.uriScheme !== 'vscode') {
+			// Code Server or other web-based variants
+			editorName = `vscode-web`;
+		}
+
+		return new NameAndVersion(editorName, vscode.version);
 	}
 	getEditorPluginInfo(): NameAndVersion {
 		return new NameAndVersion('copilot-chat', packageJson.version);

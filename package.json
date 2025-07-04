@@ -22,9 +22,9 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.102.0-20250627",
+		"vscode": "^1.85.0",
 		"npm": ">=9.0.0",
-		"node": ">=22.14.0"
+		"node": ">=18.0.0"
 	},
 	"categories": [
 		"AI",
@@ -32,6 +32,14 @@
 		"Programming Languages",
 		"Machine Learning"
 	],
+	"capabilities": {
+		"virtualWorkspaces": {
+			"supported": true
+		},
+		"untrustedWorkspaces": {
+			"supported": true
+		}
+	},
 	"keywords": [
 		"ai",
 		"openai",
@@ -85,6 +93,7 @@
 		"onFileSystem:ccsettings"
 	],
 	"main": "./dist/extension",
+	"browser": "./dist/web",
 	"l10n": "./l10n",
 	"enabledApiProposals": [
 		"extensionsAny",
@@ -1102,7 +1111,6 @@
 				"name": "copilot_fetchWebPage",
 				"displayName": "%copilot.tools.fetchWebPage.name%",
 				"toolReferenceName": "fetch",
-				"when": "!isWeb",
 				"canBeReferencedInPrompt": true,
 				"icon": "$(globe)",
 				"userDescription": "%copilot.tools.fetchWebPage.description%",
@@ -3545,7 +3553,6 @@
 				"id": "copilotWelcome",
 				"title": "%github.copilot.walkthrough.title%",
 				"description": "%github.copilot.walkthrough.description%",
-				"when": "!isWeb",
 				"steps": [
 					{
 						"id": "copilot.setup.signIn",

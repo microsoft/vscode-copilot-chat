@@ -45,9 +45,20 @@ To access GitHub Copilot, an active GitHub Copilot subscription is required. You
 
 GitHub Copilot works on any language, including Java, PHP, Python, JavaScript, Ruby, Go, C#, or C++. Because it’s been trained on languages in public repositories, it works for most popular languages, libraries and frameworks.
 
+### Platform compatibility
+
+GitHub Copilot Chat works across all VS Code environments:
+
+- **Desktop**: VS Code, VS Code Insiders, VSCodium
+- **Remote**: VS Code Server, SSH, Containers, WSL, Codespaces
+- **Web**: Code Server, vscode.dev, github.dev, Gitpod
+- **Self-hosted**: code-server, OpenVSCode Server, Theia, Eclipse Che
+
+For detailed setup instructions, see [VS Code Server Compatibility Guide](docs/vscode-server-compatibility.md).
+
 ### Version compatibility
 
-As Copilot Chat releases in lockstep with VS Code due to its deep UI integration, every new version of Copilot Chat is only compatible with the latest and newest release of VS Code. This means that if you are using an older version of VS Code, you will not be able to use the latest Copilot Chat.
+GitHub Copilot Chat requires VS Code 1.85.0 or later. While newer versions may have additional features, the extension is designed to work across different VS Code variants and environments.
 
 Only the latest Copilot Chat versions will use the latest models provided by the Copilot service, as even minor model upgrades require prompt changes and fixes in the extension. An older version of Copilot Chat will still use the latest version of Copilot completions.
 
