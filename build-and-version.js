@@ -55,10 +55,20 @@ try {
 // Run build
 console.log('Building project...');
 try {
-	execSync('node .esbuild.ts', { stdio: 'inherit' });
+	execSync('npx tsx .esbuild.ts', { stdio: 'inherit' });
 	console.log('Build completed successfully!');
 } catch (error) {
 	console.error('Build failed:', error.message);
+	process.exit(1);
+}
+
+// Create VSIX bundle
+console.log('Creating VSIX bundle...');
+try {
+	execSync('npx vsce package', { stdio: 'inherit' });
+	console.log('VSIX bundle created successfully!');
+} catch (error) {
+	console.error('VSIX packaging failed:', error.message);
 	process.exit(1);
 }
 

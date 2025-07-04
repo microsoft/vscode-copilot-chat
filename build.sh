@@ -2,4 +2,8 @@
 
 # Simple build without version increment
 echo "Building project without version increment..."
-node .esbuild.ts
+npx tsx .esbuild.ts
+
+# Create VSIX bundle
+echo "Creating VSIX bundle..."
+npx vsce package
