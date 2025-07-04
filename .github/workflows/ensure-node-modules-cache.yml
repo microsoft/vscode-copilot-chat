@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - 'gh-readonly-queue/main/*'
 
 permissions:
   contents: read

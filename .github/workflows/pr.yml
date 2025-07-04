@@ -1,6 +1,9 @@
 name: PR Checks
 
 on:
+  push:
+    branches:
+      - 'gh-readonly-queue/main/*'
   pull_request:
     branches:
       - main
@@ -53,7 +56,6 @@ jobs:
   check-telemetry:
     name: Check telemetry events
     runs-on: [ self-hosted, 1ES.Pool=1es-vscode-ubuntu-22.04-x64 ]
-    if: github.ref != 'refs/heads/main'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
