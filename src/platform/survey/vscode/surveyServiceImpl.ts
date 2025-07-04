@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
-import { l10n } from 'vscode';
 import { Uri } from '../../../vscodeTypes';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IEnvService } from '../../env/common/envService';
@@ -29,6 +28,8 @@ interface UsageData {
 	firstActive: number;
 	activeDays: number[];
 }
+
+const { l10n } = vscode;
 
 export class SurveyService implements ISurveyService {
 	readonly _serviceBrand: undefined;
