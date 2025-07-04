@@ -87,7 +87,7 @@ Your task is to predict and complete the changes the developer would have made n
 
 # Output Format
 - Your response should start with the word <EDIT>, <INSERT>, or <NO_CHANGE>.
-- If your are making an edit, start with <EDIT>, then provide the rewritten code window, then </EDIT>.
+- If you are making an edit, start with <EDIT>, then provide the rewritten code window, then </EDIT>.
 - If you are inserting new code, start with <INSERT> and then provide only the new code that will be inserted at the cursor position, then </INSERT>.
 - If no changes are necessary, reply only with <NO_CHANGE>.
 - Ensure that you do not output duplicate code that exists outside of these tags. The output should be the revised code that was between these tags and should not include the <|code_to_edit|> or <|/code_to_edit|> tags.
@@ -312,7 +312,7 @@ function getRecentCodeSnippets(
 	let tokenBudget = opts.languageContext.maxTokens;
 	if (langCtx) {
 		for (const langCtxEntry of langCtx.items) {
-			// Context which is provided on timeout is not guranteed to be good context
+			// Context which is provided on timeout is not guaranteed to be good context
 			// TODO should these be included?
 			if (langCtxEntry.onTimeout) {
 				continue;

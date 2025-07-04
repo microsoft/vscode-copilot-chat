@@ -163,7 +163,7 @@ export class NewNotebookCodeGenerationPrompt extends PromptElement<NewNotebookCo
 						When dealing with Jupyter Notebook, do not generate CELL INDEX in the code blocks in your answer, it is only used to help you understand the context.<br />
 
 						Your output should be valid Python code with inline comments.<br />
-						You should return the code directly without any explantion.<br />
+						You should return the code directly without any explanation.<br />
 						You should not print message to explain the code or purpose of the code.<br />
 						You should return the code directly, without wrapping it inside \`\`\`.<br />
 
@@ -173,7 +173,7 @@ export class NewNotebookCodeGenerationPrompt extends PromptElement<NewNotebookCo
 					<UserMessage priority={900}>
 						Overall topic of the notebook: {this.props.description}<br />
 						Title of the notebook section: {this.props.section.title}<br />
-						Description of the notebok section: {this.props.section.content}<br />
+						Description of the notebook section: {this.props.section.content}<br />
 						Given this information, write all the code for this section and this section only.<br />
 						The request to generate the outline of the notebook is already completed.<br />
 						Here is the request details for the outline generation:<br />

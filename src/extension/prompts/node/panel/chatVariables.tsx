@@ -168,7 +168,7 @@ interface IDiagnosticVariableProps extends BasePromptElementProps {
 	diagnostics: [uri: Uri, diagnostics: Diagnostic[]][];
 }
 
-const diangosticSeverityMap: { [K in DiagnosticSeverity]: string } = {
+const diagnosticSeverityMap: { [K in DiagnosticSeverity]: string } = {
 	[0]: 'error',
 	[1]: 'warning',
 	[2]: 'info',
@@ -192,7 +192,7 @@ class DiagnosticVariable extends PromptElement<IDiagnosticVariableProps> {
 				diagnostics.map(d => {
 					let range = d.range;
 					([uri, range] = this.translateNotebookUri(uri, range));
-					return <Tag name="error" attrs={{ path: this.promptPathRepresentationService.getFilePath(uri), line: range.start.line + 1, code: getDiagnosticCode(d), severity: diangosticSeverityMap[d.severity] }}>
+					return <Tag name="error" attrs={{ path: this.promptPathRepresentationService.getFilePath(uri), line: range.start.line + 1, code: getDiagnosticCode(d), severity: diagnosticSeverityMap[d.severity] }}>
 						{d.message}
 					</Tag>;
 				}
