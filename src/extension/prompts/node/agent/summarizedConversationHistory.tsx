@@ -21,32 +21,99 @@ import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart2 } from '../../../../vscodeTypes';
 import { ToolCallingLoop } from '../../../intents/node/toolCallingLoop';
-import { IResultMetadata } from '../../../prompt/common/conversation';
+import { GlobalContextMessageMetadata, IResultMetadata } from '../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCallRound } from '../../../prompt/common/intents';
 import { ToolName } from '../../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../../tools/common/toolSchemaNormalizer';
 import { NotebookSummary } from '../../../tools/node/notebookSummaryTool';
+import { CopilotIdentityRules } from '../base/copilotIdentity';
 import { renderPromptElement } from '../base/promptRenderer';
+import { SafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
+import { CustomInstructions } from '../panel/customInstructions';
 import { ChatToolCalls } from '../panel/toolCalling';
-import { AgentUserMessage, getKeepGoingReminder, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn } from './agentPrompt';
+import { DefaultAgentPrompt, SweBenchAgentPrompt } from './agentInstructions';
+import { AgentUserMessage, getKeepGoingReminder, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn, renderedMessageToTsxChildren } from './agentPrompt';
 import { SimpleSummarizedHistory } from './simpleSummarizedHistoryPrompt';
 
 export interface ConversationHistorySummarizationPromptProps extends SummarizedAgentHistoryProps {
 	simpleMode?: boolean;
 }
 
+interface GlobalAgentContextProps extends BasePromptElementProps {
+	readonly enableCacheBreakpoints?: boolean;
+}
+
+/**
+ * The "global agent context" is a static prompt at the start of a conversation containing user environment info, initial workspace structure, anything else that is a useful beginning
+ * hint for the agent but is not updated during the conversation.
+ */
+class GlobalAgentContext extends PromptElement<GlobalAgentContextProps> {
+	render() {
+		return <UserMessage>
+			<Tag name='environment_info'>
+				User OS and shell information will be included here
+			</Tag>
+			<Tag name='workspace_info'>
+				Workspace structure and tasks information will be included here
+			</Tag>
+		</UserMessage>;
+	}
+}
+
 /**
  * Prompt used to summarize conversation history when the context window is exceeded.
+ * Structured to match normal AgentPrompt for maximum cache hit potential.
  */
 export class ConversationHistorySummarizationPrompt extends PromptElement<ConversationHistorySummarizationPromptProps> {
+	constructor(
+		props: ConversationHistorySummarizationPromptProps,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+	) {
+		super(props);
+	}
+
 	override async render(state: void, sizing: PromptSizing) {
+		// Match the exact structure of AgentPrompt for cache compatibility
+		const instructions = this.configurationService.getConfig(ConfigKey.Internal.SweBenchAgentPrompt) ?
+			<SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} /> :
+			<DefaultAgentPrompt
+				availableTools={this.props.promptContext.tools?.availableTools}
+				modelFamily={this.props.endpoint.family}
+				codesearchMode={false}
+			/>;
+
+		// Same base instructions as AgentPrompt
+		const baseInstructions = <>
+			<SystemMessage>
+				You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
+				<CopilotIdentityRules />
+				<SafetyRules />
+			</SystemMessage>
+			{instructions}
+			<UserMessage>
+				<CustomInstructions languageId={undefined} chatVariables={this.props.promptContext.chatVariables} />
+				{this.props.promptContext.modeInstructions && <Tag name='customInstructions'>
+					Below are some additional instructions from the user.<br />
+					<br />
+					{this.props.promptContext.modeInstructions}
+				</Tag>}
+			</UserMessage>
+			<UserMessage>
+				{await this.getOrCreateGlobalAgentContext(this.props.endpoint)}
+			</UserMessage>
+		</>;
+
 		const history = this.props.simpleMode ?
 			<SimpleSummarizedHistory priority={1} promptContext={this.props.promptContext} location={this.props.location} endpoint={this.props.endpoint} maxToolResultLength={this.props.maxToolResultLength} /> :
 			<ConversationHistory priority={1} promptContext={this.props.promptContext} location={this.props.location} endpoint={this.props.endpoint} maxToolResultLength={this.props.maxToolResultLength} enableCacheBreakpoints={this.props.enableCacheBreakpoints} />;
 		return (
 			<>
-				<SystemMessage priority={this.props.priority}>
+				{baseInstructions}
+				{history}
+				{this.props.workingNotebook && <WorkingNotebookSummary priority={this.props.priority - 2} notebook={this.props.workingNotebook} />}
+				<UserMessage>
 					Your task is to create a comprehensive, detailed summary of the entire conversation that captures all essential information needed to seamlessly continue the work without any loss of context. This summary will be used to compact the conversation while preserving critical technical details, decisions, and progress.<br />
 
 					## Recent Context Analysis<br />
@@ -147,10 +214,7 @@ export class ConversationHistorySummarizationPrompt extends PromptElement<Conver
 					- **Logical Flow**: Present information in a way that builds understanding progressively<br />
 
 					This summary should serve as a comprehensive handoff document that enables seamless continuation of all active work streams while preserving the full technical and contextual richness of the original conversation.<br />
-				</SystemMessage>
-				{history}
-				{this.props.workingNotebook && <WorkingNotebookSummary priority={this.props.priority - 2} notebook={this.props.workingNotebook} />}
-				<UserMessage>
+
 					Summarize the conversation history so far, paying special attention to the most recent agent commands and tool results that triggered this summarization. Structure your summary using the enhanced format provided in the system message.<br />
 
 					Focus particularly on:<br />
@@ -163,6 +227,31 @@ export class ConversationHistorySummarizationPrompt extends PromptElement<Conver
 				</UserMessage>
 			</>
 		);
+	}
+
+	private async getOrCreateGlobalAgentContext(endpoint: IChatEndpoint) {
+		// Reuse the same logic as AgentPrompt for consistency
+		const globalContext = await this.getOrCreateGlobalAgentContextContent(endpoint);
+		return globalContext ?
+			renderedMessageToTsxChildren(globalContext, !!this.props.enableCacheBreakpoints) :
+			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} />;
+	}
+
+	private async getOrCreateGlobalAgentContextContent(endpoint: IChatEndpoint) {
+		const firstTurn = this.props.promptContext.conversation?.turns.at(0);
+		if (firstTurn) {
+			const metadata = firstTurn.getMetadata(GlobalContextMessageMetadata);
+			if (metadata) {
+				return metadata.renderedGlobalContext;
+			}
+		}
+
+		const rendered = await renderPromptElement(this.instantiationService, endpoint, GlobalAgentContext, { enableCacheBreakpoints: this.props.enableCacheBreakpoints }, undefined, undefined);
+		const msg = rendered.messages.at(0)?.content;
+		if (msg) {
+			firstTurn?.setMetadata(new GlobalContextMessageMetadata(msg));
+			return msg;
+		}
 	}
 }
 
