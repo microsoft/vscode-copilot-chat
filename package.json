@@ -2418,6 +2418,24 @@
 							"preview"
 						],
 						"markdownDescription": "%github.copilot.config.byok.ollamaEndpoint%"
+					},
+					"github.copilot.chat.openAICompatibleProviders": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"name": {
+									"type": "string"
+								},
+								"url": {
+									"type": "string",
+									"format": "uri"
+								}
+							},
+							"required": ["name", "url"]
+						},
+						"default": [],
+						"markdownDescription": "%github.copilot.config.openAICompatibleProviders%"
 					}
 				}
 			},
