@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Lazy } from '../../../util/vs/base/common/lazy';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -51,9 +53,11 @@ export class ToolsService extends BaseToolsService {
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
-		@ILogService logService: ILogService
+		@ILogService logService: ILogService,
+		@IEmbeddingsComputer embeddingsComputer: IEmbeddingsComputer | undefined,
+		@IConfigurationService private readonly configurationService: IConfigurationService
 	) {
-		super(logService);
+		super(logService, embeddingsComputer);
 		this._copilotTools = new Lazy(() => new Map(ToolRegistry.getTools().map(t => [t.toolName, instantiationService.createInstance(t)] as const)));
 	}
 
@@ -75,11 +79,11 @@ export class ToolsService extends BaseToolsService {
 		// Can't actually implement this in prod, name is not exposed
 		throw new Error('This method for tests only');
 	}
-
-	getEnabledTools(request: vscode.ChatRequest, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[] {
+	async getEnabledTools(request: vscode.ChatRequest, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): Promise<vscode.LanguageModelToolInformation[]> {
 		const toolMap = new Map(this.tools.map(t => [t.name, t]));
 
-		return this.tools.filter(tool => {
+		// First, apply explicit filtering to reduce the tool set
+		let candidateTools = this.tools.filter(tool => {
 			// 0. Check if the tool was disabled via the tool picker. If so, it must be disabled here
 			const toolPickerSelection = request.tools.get(getContributedToolName(tool.name));
 			if (toolPickerSelection === false) {
@@ -113,5 +117,46 @@ export class ToolsService extends BaseToolsService {
 
 			return false;
 		});
+
+		// Extract semantic query from the request if available
+		let semanticQuery: string | undefined;
+		if (request.prompt) {
+			// Use the user's prompt as the semantic query
+			semanticQuery = request.prompt;
+		}
+
+		// After explicit filtering, apply semantic filtering if we still have too many tools
+		// Only apply semantic filtering to tools tagged with 'mcp'
+		const isSemanticSearchEnabled = this.configurationService.getConfig(ConfigKey.ToolsSemanticSearchEnabled);
+		if (semanticQuery && candidateTools.length > 128 && isSemanticSearchEnabled) {
+			try {
+				// Separate MCP tools from other tools
+				const mcpTools = candidateTools.filter(tool => tool.tags.includes('mcp'));
+				const otherTools = candidateTools.filter(tool => !tool.tags.includes('mcp'));
+
+				// Calculate the maximum number of MCP tools we can keep based on the other tools count
+				const maxMcpTools = Math.max(0, 128 - otherTools.length);
+
+				const start = performance.now();
+				// Get semantic similarity only for MCP tools, with dynamic limit
+				const semanticallyFilteredMcpTools = await this.getSemanticallySimilarTools(semanticQuery, maxMcpTools, 0.3);
+				// Keep only MCP tools that passed both explicit and semantic filtering
+				const filteredMcpTools = mcpTools.filter(tool =>
+					semanticallyFilteredMcpTools.some(semanticTool => semanticTool.name === tool.name)
+				);
+				const semanticTime = performance.now() - start;
+
+				// Combine filtered MCP tools with all other tools (non-MCP tools are not semantically filtered)
+				candidateTools = [...filteredMcpTools, ...otherTools];
+
+				// Log removed tools
+				const removedTools = mcpTools.filter(tool => !filteredMcpTools.some(filteredTool => filteredTool.name === tool.name));
+				console.log(`Removed ${removedTools.length} tools after semantic filtering (${semanticTime.toFixed(2)} ms): ${removedTools.map(tool => tool.name).join(', ')}`);
+			} catch (error) {
+				this.logService.logger.error('Failed to apply semantic filtering, using explicitly filtered tools', error);
+			}
+		}
+
+		return candidateTools;
 	}
 }

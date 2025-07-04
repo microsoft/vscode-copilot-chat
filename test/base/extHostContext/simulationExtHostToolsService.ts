@@ -9,16 +9,17 @@ import type { CancellationToken, ChatRequest, LanguageModelTool, LanguageModelTo
 import { getToolName, ToolName } from '../../../src/extension/tools/common/toolNames';
 import { ICopilotTool } from '../../../src/extension/tools/common/toolsRegistry';
 import { BaseToolsService, IToolsService } from '../../../src/extension/tools/common/toolsService';
+import { getPackagejsonToolsForTest } from '../../../src/extension/tools/node/test/testToolsService';
 import { ToolsContribution } from '../../../src/extension/tools/vscode-node/tools';
 import { ToolsService } from '../../../src/extension/tools/vscode-node/toolsService';
+import { IConfigurationService } from '../../../src/platform/configuration/common/configurationService';
 import { packageJson } from '../../../src/platform/env/common/packagejson';
 import { ILogService } from '../../../src/platform/log/common/logService';
+import { raceTimeout } from '../../../src/util/vs/base/common/async';
 import { CancellationError } from '../../../src/util/vs/base/common/errors';
 import { Iterable } from '../../../src/util/vs/base/common/iterator';
 import { IInstantiationService } from '../../../src/util/vs/platform/instantiation/common/instantiation';
 import { logger } from '../../simulationLogger';
-import { raceTimeout } from '../../../src/util/vs/base/common/async';
-import { getPackagejsonToolsForTest } from '../../../src/extension/tools/node/test/testToolsService';
 
 export class SimulationExtHostToolsService extends BaseToolsService implements IToolsService {
 	declare readonly _serviceBrand: undefined;
@@ -54,9 +55,10 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 		private readonly _disabledTools: Set<string>,
 		@ILogService logService: ILogService,
 		@IInstantiationService instantiationService: IInstantiationService,
+		@IConfigurationService configurationService: IConfigurationService,
 	) {
-		super(logService);
-		this._inner = instantiationService.createInstance(ToolsService);
+		super(logService, undefined); // No embeddings computer in simulation environment
+		this._inner = new ToolsService(instantiationService, logService, undefined, configurationService);
 
 		// register the contribution so that our tools are on vscode.lm.tools
 		setImmediate(() => this.ensureToolsRegistered());

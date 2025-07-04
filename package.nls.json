@@ -129,6 +129,7 @@
 	"github.copilot.config.startDebugging.enabled": "Enables the `/startDebugging` intent in panel chat. Generates or finds launch config to match the query (if any), project structure, and more.",
 	"github.copilot.config.agent.runTasks": "Configures whether Copilot Edits can run workspace tasks in agent mode.",
 	"github.copilot.config.agent.thinkingTool": "Enables the thinking tool that allows Copilot to think deeply about your request before generating a response in agent mode.",
+	"github.copilot.config.tools.semanticSearch.enabled": "Enables semantic tool filtering. When enabled, Copilot will use embeddings to filter tools by relevance to your request when there are too many available tools.",
 	"github.copilot.config.setupTests.enabled": "Enables the `/setupTests` intent and prompting in `/tests` generation.",
 	"github.copilot.config.byok.ollamaEndpoint": "The endpoint to use for the Ollama when accessed via bring your own key. Defaults to localhost.",
 	"github.copilot.command.fixTestFailure": "Fix Test Failure",

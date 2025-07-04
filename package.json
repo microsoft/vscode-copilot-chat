@@ -2433,6 +2433,14 @@
 						],
 						"markdownDescription": "%github.copilot.config.agent.thinkingTool%"
 					},
+					"github.copilot.chat.tools.semanticSearch.enabled": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental"
+						],
+						"markdownDescription": "%github.copilot.config.tools.semanticSearch.enabled%"
+					},
 					"github.copilot.chat.edits.suggestRelatedFilesFromGitHistory": {
 						"type": "boolean",
 						"default": true,

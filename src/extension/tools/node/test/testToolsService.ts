@@ -50,7 +50,7 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 		@IInstantiationService instantiationService: IInstantiationService,
 		@ILogService logService: ILogService,
 	) {
-		super(logService);
+		super(logService, undefined);
 
 		const filteredTools = this.getFilteredTools(disabledTools);
 		this._copilotTools = new Map(filteredTools
