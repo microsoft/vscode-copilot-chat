@@ -343,7 +343,11 @@ export function addCacheBreakpoints(messages: Raw.ChatMessage[]) {
 			}
 		}
 
-		if (msg.role === Raw.ChatRole.User) {
+		if (msg.role === Raw.ChatRole.User &&
+			!msg.content.some(part =>
+				part.type === Raw.ChatCompletionContentPartKind.Text &&
+				part.text.includes('reminder')
+			)) {
 			isBelowCurrentUserMessage = false;
 		}
 	}

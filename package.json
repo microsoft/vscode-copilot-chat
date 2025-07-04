@@ -139,7 +139,7 @@
 				"icon": "$(folder)",
 				"canBeReferencedInPrompt": true,
 				"userDescription": "%copilot.codebase.tool.description%",
-				"modelDescription": "Run a natural language search for relevant code or documentation comments from the user's current workspace. Returns relevant code snippets from the user's current workspace if it is large, or the full contents of the workspace if it is small.",
+				"modelDescription": "Run a natural language search for relevant code or documentation comments from the user's current workspace. Returns relevant code snippets from the user's current workspace if it is large, or the full contents of the workspace if it is small. WARNING: this tool is very expensive to run. Use it as a last resort option only.",
 				"tags": [
 					"codesearch",
 					"vscode_codesearch"

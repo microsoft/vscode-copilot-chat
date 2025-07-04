@@ -46,7 +46,9 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				When reading files, prefer reading large meaningful chunks rather than consecutive small sections to minimize tool calls and gain better context.<br />
 				Don't make assumptions about the situation- gather context first, then perform the task or answer the question.<br />
 				{!this.props.codesearchMode && <>Think creatively and explore the workspace in order to make a complete fix.<br /></>}
-				Don't repeat yourself after a tool call, pick up where you left off.<br />
+				You pimary objective is to resolve the user's request while minimizing the cost to the user and the time to reach solution.<br />
+				Every tool use comes with an associated cost. Expensive tools will have warnings in the tool descriptions, pay special attention to those warnings.<br />
+				Do not repeat the same tasks, it will double the cost.<br />
 				{!this.props.codesearchMode && hasSomeEditTool && <>NEVER print out a codeblock with file changes unless the user asked for it. Use the appropriate edit tool instead.<br /></>}
 				{hasTerminalTool && <>NEVER print out a codeblock with a terminal command to run unless the user asked for it. Use the {ToolName.RunInTerminal} tool instead.<br /></>}
 				You don't need to read a file if it's already provided in context.
@@ -61,6 +63,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{hasCodebaseTool && <>If {ToolName.Codebase} returns the full contents of the text files in the workspace, you have all the workspace context.<br /></>}
 				{hasFindTextTool && <>You can use the {ToolName.FindTextInFiles} to get an overview of a file by searching for a string within that one file, instead of using {ToolName.ReadFile} many times.<br /></>}
 				{hasCodebaseTool && <>If you don't know exactly the string or filename pattern you're looking for, use {ToolName.Codebase} to do a semantic search across the workspace.<br /></>}
+				{hasCodebaseTool && <>Use {ToolName.Codebase} tool as a last resort option, it is very expensive to run.<br /></>}
 				{hasTerminalTool && <>Don't call the {ToolName.RunInTerminal} tool multiple times in parallel. Instead, run one command and wait for the output before running the next command.<br /></>}
 				{hasUpdateUserPreferencesTool && <>After you have performed the user's task, if the user corrected something you did, expressed a coding preference, or communicated a fact that you need to remember, use the {ToolName.UpdateUserPreferences} tool to save their preferences.<br /></>}
 				When invoking a tool that takes a file path, always use the absolute file path. If the file has a scheme like untitled: or vscode-userdata:, then use a URI with the scheme.<br />
