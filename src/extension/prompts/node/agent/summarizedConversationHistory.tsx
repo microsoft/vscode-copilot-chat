@@ -32,6 +32,7 @@ import { Tag } from '../base/tag';
 import { ChatToolCalls } from '../panel/toolCalling';
 import { AgentUserMessage, getKeepGoingReminder, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn } from './agentPrompt';
 import { SimpleSummarizedHistory } from './simpleSummarizedHistoryPrompt';
+import { StopWatch } from '../../../../util/vs/base/common/stopwatch';
 
 export interface ConversationHistorySummarizationPromptProps extends SummarizedAgentHistoryProps {
 	simpleMode?: boolean;
@@ -424,18 +425,18 @@ class ConversationHistorySummarizer {
 	}
 
 	private async getSummary(mode: SummaryMode, propsInfo: ISummarizedConversationHistoryInfo): Promise<FetchSuccess<string>> {
+		const stopwatch = new StopWatch(false);
 		const endpoint = this.props.endpoint;
 
 		let summarizationPrompt: ChatMessage[];
 		try {
-			const start = Date.now();
 			summarizationPrompt = (await renderPromptElement(this.instantiationService, endpoint, ConversationHistorySummarizationPrompt, { ...propsInfo.props, simpleMode: mode === SummaryMode.Simple }, undefined, this.token)).messages;
-			this.logInfo(`summarization prompt rendered in ${Date.now() - start}ms.`, mode);
+			this.logInfo(`summarization prompt rendered in ${stopwatch.elapsed()}ms.`, mode);
 		} catch (e) {
 			const budgetExceeded = e instanceof BudgetExceededError;
 			const outcome = budgetExceeded ? 'budget_exceeded' : 'renderError';
 			this.logInfo(`Error rendering summarization prompt in mode: ${mode}. ${e.stack}`, mode);
-			this.sendSummarizationTelemetry(outcome, '', this.props.endpoint.model, mode);
+			this.sendSummarizationTelemetry(outcome, '', this.props.endpoint.model, mode, stopwatch.elapsed());
 			throw e;
 		}
 
@@ -467,17 +468,17 @@ class ConversationHistorySummarizer {
 			});
 		} catch (e) {
 			this.logInfo(`Error from summarization request. ${e.message}`, mode);
-			this.sendSummarizationTelemetry('requestThrow', '', this.props.endpoint.model, mode);
+			this.sendSummarizationTelemetry('requestThrow', '', this.props.endpoint.model, mode, stopwatch.elapsed());
 			throw e;
 		}
 
-		return this.handleSummarizationResponse(summaryResponse, mode);
+		return this.handleSummarizationResponse(summaryResponse, mode, stopwatch.elapsed());
 	}
 
-	private async handleSummarizationResponse(response: ChatResponse, mode: SummaryMode): Promise<FetchSuccess<string>> {
+	private async handleSummarizationResponse(response: ChatResponse, mode: SummaryMode, elapsedTime: number): Promise<FetchSuccess<string>> {
 		if (response.type !== ChatFetchResponseType.Success) {
 			const outcome = response.type;
-			this.sendSummarizationTelemetry(outcome, response.requestId, this.props.endpoint.model, mode, response.reason);
+			this.sendSummarizationTelemetry(outcome, response.requestId, this.props.endpoint.model, mode, elapsedTime, response.reason);
 			this.logInfo(`Summarization request failed. ${response.type} ${response.reason}`, mode);
 			if (response.type === ChatFetchResponseType.Canceled) {
 				throw new CancellationError();
@@ -488,12 +489,12 @@ class ConversationHistorySummarizer {
 
 		const summarySize = await this.sizing.countTokens(response.value);
 		if (summarySize > this.sizing.tokenBudget) {
-			this.sendSummarizationTelemetry('too_large', response.requestId, this.props.endpoint.model, mode);
+			this.sendSummarizationTelemetry('too_large', response.requestId, this.props.endpoint.model, mode, elapsedTime);
 			this.logInfo(`Summary too large: ${summarySize} tokens`, mode);
 			throw new Error('Summary too large');
 		}
 
-		this.sendSummarizationTelemetry('success', response.requestId, this.props.endpoint.model, mode);
+		this.sendSummarizationTelemetry('success', response.requestId, this.props.endpoint.model, mode, elapsedTime);
 		return response;
 	}
 
@@ -501,7 +502,7 @@ class ConversationHistorySummarizer {
 	 * Send telemetry for conversation summarization.
 	 * @param success Whether the summarization was successful
 	 */
-	private sendSummarizationTelemetry(outcome: string, requestId: string, model: string, mode: SummaryMode, detailedOutcome?: string): void {
+	private sendSummarizationTelemetry(outcome: string, requestId: string, model: string, mode: SummaryMode, elapsedTime: number, detailedOutcome?: string): void {
 		const numRoundsInHistory = this.props.promptContext.history
 			.map(turn => turn.rounds.length)
 			.reduce((a, b) => a + b, 0);
@@ -552,7 +553,8 @@ class ConversationHistorySummarizer {
 				"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Id for the current chat conversation." },
 				"hasWorkingNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the conversation summary includes a working notebook." },
 				"mode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The mode of the conversation summary." },
-				"summarizationMode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The mode of the conversation summary." }
+				"summarizationMode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The mode of the conversation summary." },
+				"duration": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The duration of the summarization attempt in ms." }
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent('summarizedConversationHistory', {
@@ -565,7 +567,7 @@ class ConversationHistorySummarizer {
 			lastUsedTool,
 			conversationId,
 			mode,
-			summarizationMode: mode,
+			summarizationMode: mode, // Try to unstick GDPR
 		}, {
 			numRounds,
 			numRoundsSinceLastSummarization,
@@ -573,6 +575,7 @@ class ConversationHistorySummarizer {
 			curTurnRoundIndex,
 			isDuringToolCalling,
 			hasWorkingNotebook,
+			duration: elapsedTime,
 		});
 	}
 }
