@@ -27,7 +27,7 @@ To access GitHub Copilot, an active GitHub Copilot subscription is required. You
 
 ## Code suggestions in the editor
 
-**Automatically receive code suggestions in the editor** from [completions](https://aka.ms/vscode-completions) and [next edit suggestions](https://aka.ms/vscode-nes) to help you write code faster. Code completions provide suggestions at the current location, tailored to your coding style and your existing code. Copilot next edit suggestions (Copilot NES) takes it a step further and predicts what and where your next logical code change will be. Use to Tab key to navigate and accept changes in quick succession.
+**Automatically receive code suggestions in the editor** from [completions](https://aka.ms/vscode-completions) and [next edit suggestions](https://aka.ms/vscode-nes) to help you write code faster. Code completions provide suggestions at the current location, tailored to your coding style and your existing code. Copilot next edit suggestions (Copilot NES) takes it a step further and predicts what and where your next logical code change will be. Use the Tab key to navigate and accept changes in quick succession.
 
 ![Copilot next edit suggestions](https://code.visualstudio.com/assets/docs/copilot/inline-suggestions/nes-point.gif)
 

@@ -13,7 +13,7 @@ import { NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/work
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITracer, createTracer } from '../../../util/common/tracing';
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableMap, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { IObservableSignal, observableSignal } from '../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { createNextEditProvider } from '../node/createNextEditProvider';
@@ -54,14 +54,46 @@ export class InlineEditModel extends Disposable {
 		this.nextEditProvider = this._instantiationService.createInstance(NextEditProvider, this.workspace, this._predictor, historyContextProvider, xtabHistoryTracker, this.debugRecorder);
 
 		if (this._predictor.dependsOnSelection) {
-			this._register(new InlineEditTriggerer(this.workspace, this.nextEditProvider, this.onChange, this._logService));
+			this._register(new InlineEditTriggerer(this.workspace, this.nextEditProvider, this.onChange, this._logService, this._configurationService, this._expService));
 		}
+	}
+}
+
+class LastChange extends Disposable {
+	public lastEditedTimestamp: number;
+	public lineNumberTriggers: Map<number /* lineNumber */, number /* timestamp */>;
+
+	private _timeout: NodeJS.Timeout | undefined;
+	public set timeout(value: NodeJS.Timeout | undefined) {
+		if (value !== undefined) {
+			// TODO: we can end up collecting multiple timeouts, but also they could be cleared as debouncing happens
+			this._register(toDisposable(() => clearTimeout(value)));
+		}
+		this._timeout = value;
+	}
+	public get timeout(): NodeJS.Timeout | undefined {
+		return this._timeout;
+	}
+
+	private _nConsecutiveSelectionChanges = 0;
+	public get nConsequtiveSelectionChanges(): number {
+		return this._nConsecutiveSelectionChanges;
+	}
+	public incrementSelectionChangeEventCount(): void {
+		this._nConsecutiveSelectionChanges++;
+	}
+
+	constructor() {
+		super();
+		this.lastEditedTimestamp = Date.now();
+		this.lineNumberTriggers = new Map();
+		this.timeout = undefined;
 	}
 }
 
 class InlineEditTriggerer extends Disposable {
 
-	private readonly docToLastChangeMap = new Map<DocumentId, { lastEditedTimestamp: number; lineNumberTriggers: Map<number /* lineNumber */, number /* timestamp */> }>();
+	private readonly docToLastChangeMap = this._register(new DisposableMap<DocumentId, LastChange>());
 
 	private readonly _tracer: ITracer;
 
@@ -70,6 +102,8 @@ class InlineEditTriggerer extends Disposable {
 		private readonly nextEditProvider: NextEditProvider,
 		private readonly onChange: IObservableSignal<void>,
 		@ILogService private readonly _logService: ILogService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _expService: IExperimentationService,
 	) {
 		super();
 
@@ -107,7 +141,7 @@ class InlineEditTriggerer extends Disposable {
 				return;
 			}
 
-			this.docToLastChangeMap.set(doc.id, { lastEditedTimestamp: Date.now(), lineNumberTriggers: new Map() });
+			this.docToLastChangeMap.set(doc.id, new LastChange());
 
 			tracer.returns('setting last edited timestamp');
 		})));
@@ -141,7 +175,7 @@ class InlineEditTriggerer extends Disposable {
 
 			if (timeSince(this.nextEditProvider.lastRejectionTime) < TRIGGER_INLINE_EDIT_REJECTION_COOLDOWN) {
 				// the cursor has moved within 5s of the last rejection, don't auto-trigger until another doc modification
-				this.docToLastChangeMap.delete(doc.id);
+				this.docToLastChangeMap.deleteAndDispose(doc.id);
 				tracer.returns('rejection cooldown');
 				return;
 			}
@@ -187,7 +221,31 @@ class InlineEditTriggerer extends Disposable {
 
 			mostRecentChange.lineNumberTriggers.set(selectionLine, now);
 			tracer.returns('triggering inline edit');
-			this.onChange.trigger(undefined);
+
+			const debounceOnSelectionChange = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounceOnSelectionChange, this._expService);
+			if (debounceOnSelectionChange === undefined) {
+				this._triggerInlineEdit();
+			} else {
+				// this's 2 because first change is caused by the edit, 2nd one is potentially user intentionally to the next edit location
+				// further events would be multiple consecutive selection changes that we want to debounce
+				const N_ALLOWED_IMMEDIATE_SELECTION_CHANGE_EVENTS = 2;
+				if (mostRecentChange.nConsequtiveSelectionChanges < N_ALLOWED_IMMEDIATE_SELECTION_CHANGE_EVENTS) {
+					this._triggerInlineEdit();
+				} else {
+					if (mostRecentChange.timeout) {
+						clearTimeout(mostRecentChange.timeout);
+					}
+					mostRecentChange.timeout = setTimeout(() => {
+						mostRecentChange.timeout = undefined;
+						this._triggerInlineEdit();
+					}, debounceOnSelectionChange);
+				}
+				mostRecentChange.incrementSelectionChangeEventCount();
+			}
 		})));
+	}
+
+	private _triggerInlineEdit() {
+		this.onChange.trigger(undefined);
 	}
 }

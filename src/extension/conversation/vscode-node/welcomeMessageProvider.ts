@@ -14,7 +14,7 @@ export function getAdditionalWelcomeMessage(accessor: ServicesAccessor): vscode.
 	if (configurationService.getConfig(ConfigKey.Internal.InternalWelcomeHintEnabled)) { // can only be true for internal users
 		const openSettingsCommand = 'workbench.action.openSettings';
 		const messageString = new vscode.MarkdownString(vscode.l10n.t({
-			message: 'As an internal user, additional telemetry is collected. If you work on a project that contains customer content, you must [disable telemetry]({0}).',
+			message: 'If handling customer data, [disable telemetry]({0}).',
 			args: [`command:${openSettingsCommand}?${encodeURIComponent('["telemetry.telemetryLevel"]')}`],
 			// To make sure the translators don't break the link
 			comment: ["{Locked=']({'}"]

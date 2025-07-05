@@ -22,6 +22,7 @@ console.log('hi')"
 ~~~md
 🛠️ tooluse_2
 success
+copilot_cache_control: {"type":"ephemeral"}
 ~~~
 
 

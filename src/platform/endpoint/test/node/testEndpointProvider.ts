@@ -9,10 +9,10 @@ import { CHAT_MODEL, EMBEDDING_MODEL } from '../../../configuration/common/confi
 import { IChatEndpoint, IEmbeddingEndpoint } from '../../../networking/common/networking';
 import { ChatEndpointFamily, EmbeddingsEndpointFamily, IChatModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../common/endpointProvider';
 import { EmbeddingEndpoint } from '../../node/embeddingsEndpoint';
+import { AzureTestEndpoint } from './azureEndpoint';
 import { CAPITestEndpoint, modelIdToTokenizer } from './capiEndpoint';
 import { CustomNesEndpoint } from './customNesEndpoint';
 import { TestModelMetadataFetcher } from './testModelMetadataFetcher';
-import { AzureTestEndpoint } from './azureEndpoint';
 
 async function getModelMetadataMap(modelMetadataFetcher: TestModelMetadataFetcher): Promise<Map<string, IChatModelInformation>> {
 	let metadataArray: IChatModelInformation[] = [];
@@ -77,7 +77,6 @@ export class TestEndpointProvider implements IEndpointProvider {
 
 	async getAllChatEndpoints(): Promise<IChatEndpoint[]> {
 		const modelIDs: Set<string> = new Set([
-			CHAT_MODEL.DEEPSEEK_CHAT,
 			CHAT_MODEL.CUSTOM_NES
 		]);
 		const modelLabMetadata: Map<string, IChatModelInformation> = await this._modelLabChatModelMetadata;
