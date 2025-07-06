@@ -5,7 +5,7 @@
 import { execSync } from 'child_process';
 
 function prepareHusky() {
-	execSync('npm run husky:install', { stdio: 'inherit' });
+	execSync('husky', { stdio: 'inherit' });
 }
 
 function main() {
