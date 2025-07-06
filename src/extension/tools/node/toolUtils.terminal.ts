@@ -4,9 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Terminal as XtermTerminal } from '@xterm/headless';
+import { basename as basenamePosix } from 'path/posix';
+import { basename as basenameWin32 } from 'path/win32';
 import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { IEnvService } from '../../../platform/env/common/envService';
+import { IEnvService, OperatingSystem } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITerminalService, ShellIntegrationQuality } from '../../../platform/terminal/common/terminalService';
 import { DeferredPromise, disposableTimeout, RunOnceScheduler, timeout } from '../../../util/vs/base/common/async';
@@ -612,7 +614,7 @@ export class CommandLineAutoApprover extends Disposable {
 	private commandMatchesRegex(regex: RegExp, command: string): boolean {
 		if (regex.test(command)) {
 			return true;
-		} else if (this.envService.shell === 'pwsh' && command.startsWith('(')) {
+		} else if (isPowerShell(this.envService.shell, this.envService.OS) && command.startsWith('(')) {
 			// Allow ignoring of the leading ( for PowerShell commands as it's a command pattern to
 			// operate on the output of a command. For example `(Get-Content README.md) ...`
 			if (regex.test(command.slice(1))) {
@@ -654,10 +656,10 @@ const shellTypeResetChars = new Map<'sh' | 'zsh' | 'pwsh', string[]>([
 	['pwsh', ['*>>', '2>>', '>>', '2>', '&&', '*>', '>', '<', '|', ';', '!', '&']],
 ]);
 
-export function splitCommandLineIntoSubCommands(commandLine: string, envShell: string): string[] {
+export function splitCommandLineIntoSubCommands(commandLine: string, envShell: string, envOS: OperatingSystem): string[] {
 	let shellType: 'sh' | 'zsh' | 'pwsh';
 	const envShellWithoutExe = envShell.replace(/\.exe$/, '');
-	if (isPowerShell(envShell)) {
+	if (isPowerShell(envShell, envOS)) {
 		shellType = 'pwsh';
 	} else {
 		switch (envShellWithoutExe) {
@@ -681,9 +683,9 @@ export function splitCommandLineIntoSubCommands(commandLine: string, envShell: s
 	return subCommands;
 }
 
-export function extractInlineSubCommands(commandLine: string, envShell: string): Set<string> {
+export function extractInlineSubCommands(commandLine: string, envShell: string, envOS: OperatingSystem): Set<string> {
 	const inlineCommands: string[] = [];
-	const shellType = isPowerShell(envShell) ? 'pwsh' : 'sh';
+	const shellType = isPowerShell(envShell, envOS) ? 'pwsh' : 'sh';
 
 	/**
 	 * Extract command substitutions that start with a specific prefix and are enclosed in parentheses
@@ -724,7 +726,7 @@ export function extractInlineSubCommands(commandLine: string, envShell: string):
 				if (innerCommand) {
 					results.push(innerCommand);
 					// Recursively extract nested inline commands
-					results.push(...extractInlineSubCommands(innerCommand, envShell));
+					results.push(...extractInlineSubCommands(innerCommand, envShell, envOS));
 				}
 			}
 
@@ -756,7 +758,7 @@ export function extractInlineSubCommands(commandLine: string, envShell: string):
 			if (innerCommand) {
 				results.push(innerCommand);
 				// Recursively extract nested inline commands
-				results.push(...extractInlineSubCommands(innerCommand, envShell));
+				results.push(...extractInlineSubCommands(innerCommand, envShell, envOS));
 			}
 
 			i = endIndex + 1;
@@ -781,6 +783,10 @@ export function extractInlineSubCommands(commandLine: string, envShell: string):
 	return new Set(inlineCommands);
 }
 
-export function isPowerShell(envShell: string): boolean {
-	return /(?:powershell|pwsh)(?:-preview)?/.test(envShell.replace(/\.exe$/, ''));
+export function isPowerShell(envShell: string, os: OperatingSystem): boolean {
+	if (os === OperatingSystem.Windows) {
+		return /^(?:powershell|pwsh)(?:-preview)?$/i.test(basenameWin32(envShell).replace(/\.exe$/i, ''));
+
+	}
+	return /^(?:powershell|pwsh)(?:-preview)?$/.test(basenamePosix(envShell));
 }

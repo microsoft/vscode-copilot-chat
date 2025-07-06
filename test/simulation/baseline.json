@@ -940,9 +940,9 @@
   {
     "name": "edit (toolCalling) [panel] - does not read",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "edit [inline] [cpp] - edit for cpp",
@@ -9509,9 +9509,9 @@
   {
     "name": "notebooks (toolCalling) [panel] - Run cell tool should avoid running markdown cells",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "PR Title and Description [context] - Multiple commits without issue information",
@@ -11805,9 +11805,9 @@
   {
     "name": "toolCalling [panel] - find all phone numbers in markdown files in the codebase",
     "contentFilterCount": 0,
-    "passCount": 7,
-    "failCount": 3,
-    "score": 0.7
+    "passCount": 3,
+    "failCount": 7,
+    "score": 0.3
   },
   {
     "name": "toolCalling [panel] - I'm using git, create a new branch called issue-9876",

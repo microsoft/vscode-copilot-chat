@@ -54,7 +54,7 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 			});
 
 			if (terminals.length === 0 && tasks.length === 0) {
-				return;
+				return 'No active tasks or terminals found.';
 			}
 
 			const renderTasks = () =>
@@ -98,8 +98,8 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 
 			return (
 				<>
-					{renderTasks()}
-					{renderTerminals()}
+					{tasks.length > 0 ? renderTasks() : 'No active tasks found.'}
+					{terminals.length > 0 ? renderTerminals() : 'No active terminals found.'}
 				</>
 			);
 		}

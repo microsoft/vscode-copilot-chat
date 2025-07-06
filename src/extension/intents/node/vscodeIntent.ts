@@ -75,11 +75,11 @@ class VSCodeResponseProcessor {
 	private async processNonReporting(textDelta: string, progress: vscode.ChatResponseStream) {
 		const parsedCommands = await parseSettingsAndCommands(this.workbenchService, textDelta);
 
-		for (const parsedCommand of parsedCommands) {
-			if (parsedCommand.showCodeBlock) {
-				progress.markdown(parsedCommand.codeBlock ? parsedCommand.codeBlock : textDelta);
+		if (parsedCommands.length === 0) {
+			progress.markdown(textDelta);
+		}
 
-			}
+		for (const parsedCommand of parsedCommands) {
 			if (parsedCommand.commandToRun) {
 				progress.button(parsedCommand.commandToRun);
 			}

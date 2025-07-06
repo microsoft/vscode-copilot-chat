@@ -549,10 +549,18 @@ class AgentTasksInstructions extends PromptElement {
 		}
 
 		return <>
-			The following tasks can be executed using the {ToolName.RunTask} tool and their output can be reviewed using the {ToolName.GetTaskOutput} tool:<br />
+			The following tasks can be executed using the {ToolName.RunTask} tool if they are not already running:<br />
 			{taskGroups.map(([folder, tasks]) =>
 				<Tag name='workspaceFolder' attrs={{ path: this._promptPathRepresentationService.getFilePath(folder) }}>
-					{tasks.map((t, i) => <Tag name='task' attrs={{ id: `${t.type}: ${t.label || i}` }}>{this.makeTaskPresentation(t)}</Tag>)}
+					{tasks.map((t, i) => {
+						const isActive = this._tasksService.isTaskActive(t);
+						return (
+							<Tag name='task' attrs={{ id: `${t.type}: ${t.label || i}` }}>
+								{this.makeTaskPresentation(t)}
+								{isActive && <> (This task is currently running. You can use the {ToolName.GetTaskOutput} tool to view its output.)</>}
+							</Tag>
+						);
+					})}
 				</Tag>
 			)}
 		</>;

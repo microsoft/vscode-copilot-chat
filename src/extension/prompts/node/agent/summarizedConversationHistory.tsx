@@ -471,9 +471,7 @@ class ConversationHistorySummarizer {
 
 	private async handleSummarizationResponse(response: ChatResponse, mode: SummaryMode): Promise<FetchSuccess<string>> {
 		if (response.type !== ChatFetchResponseType.Success) {
-			const outcome = response.type === ChatFetchResponseType.Failed ?
-				'failed' :
-				response.type;
+			const outcome = response.type;
 			this.sendSummarizationTelemetry(outcome, response.requestId, this.props.endpoint.model, mode, response.reason);
 			this.logInfo(`Summarization request failed. ${response.type} ${response.reason}`, mode);
 			throw new Error('Summarization request failed');
@@ -516,6 +514,9 @@ class ConversationHistorySummarizer {
 			}
 		}
 
+		const turnIndex = this.props.promptContext.history.length;
+		const curTurnRoundIndex = this.props.promptContext.toolCallRounds?.length ?? 0;
+
 		const lastUsedTool = this.props.promptContext.toolCallRounds?.at(-1)?.toolCalls?.at(-1)?.name ??
 			this.props.promptContext.history?.at(-1)?.rounds.at(-1)?.toolCalls?.at(-1)?.name ?? 'none';
 
@@ -532,13 +533,17 @@ class ConversationHistorySummarizer {
 				"detailedOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "A more detailed error message." },
 				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model ID used for the summarization." },
 				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request ID from the summarization call." },
+				"chatRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat request ID that this summarization ran during." },
 				"numRounds": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The number of tool call rounds before this summarization was triggered." },
 				"numRoundsSinceLastSummarization": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The number of tool call rounds since the last summarization." },
+				"turnIndex": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The index of the current turn." },
+				"curTurnRoundIndex": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The index of the current round within the current turn" },
 				"lastUsedTool": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the last tool used before summarization." },
 				"isDuringToolCalling": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether this summarization was triggered during a tool calling loop." },
 				"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Id for the current chat conversation." },
 				"hasWorkingNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the conversation summary includes a working notebook." },
-				"mode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The mode of the conversation summary." }
+				"mode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The mode of the conversation summary." },
+				"summarizationMode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The mode of the conversation summary." }
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent('summarizedConversationHistory', {
@@ -546,15 +551,19 @@ class ConversationHistorySummarizer {
 			outcome,
 			detailedOutcome,
 			requestId,
+			chatRequestId: this.props.promptContext.conversation?.getLatestTurn().id,
 			model,
 			lastUsedTool,
 			conversationId,
-			mode
+			mode,
+			summarizationMode: mode,
 		}, {
 			numRounds,
 			numRoundsSinceLastSummarization,
+			turnIndex,
+			curTurnRoundIndex,
 			isDuringToolCalling,
-			hasWorkingNotebook
+			hasWorkingNotebook,
 		});
 	}
 }

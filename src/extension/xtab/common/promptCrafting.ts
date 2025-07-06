@@ -6,7 +6,7 @@
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit';
 import { LanguageContextResponse } from '../../../platform/inlineEdits/common/dataTypes/languageContext';
-import { DiffHistoryOptions, PromptingStrategy, PromptOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
+import { CurrentFileOptions, DiffHistoryOptions, PromptingStrategy, PromptOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { StatelessNextEditRequest } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { IXtabHistoryEditEntry, IXtabHistoryEntry } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ContextKind } from '../../../platform/languageServer/common/languageContextService';
@@ -402,7 +402,8 @@ export function buildCodeSnippetsUsingPagedClipping(
 				new OffsetRange(startPos.lineNumber - 1 /* convert from 1-based to 0-based */, endPos.lineNumber),
 				pageSize,
 				maxTokenBudget,
-				computeTokens
+				computeTokens,
+				false,
 			);
 
 			if (budgetLeft === maxTokenBudget) {
@@ -471,14 +472,6 @@ export const N_LINES_ABOVE = 2;
 export const N_LINES_BELOW = 5;
 
 export const N_LINES_AS_CONTEXT = 15;
-/**
- * Maximum number of lines to include if truncating.
- */
-export const MAX_LINES_IF_TRUNCATING = 1000;
-/**
- * Maximum number of tokens to include if truncating.
- */
-export const MAX_TOKENS_IF_TRUNCATING = 2000;
 
 function expandRangeToPageRange(
 	currentDocLines: string[],
@@ -486,6 +479,7 @@ function expandRangeToPageRange(
 	pageSize: number,
 	maxTokens: number,
 	computeTokens: (s: string) => number,
+	prioritizeAboveCursor: boolean,
 ): { firstPageIdx: number; lastPageIdx: number; budgetLeft: number } {
 
 	const totalNOfPages = Math.ceil(currentDocLines.length / pageSize);
@@ -504,30 +498,57 @@ function expandRangeToPageRange(
 		return { firstPageIdx, lastPageIdx, budgetLeft: availableTokenBudget };
 	}
 
-	const halfOfAvailableTokenBudget = Math.floor(availableTokenBudget / 2);
+	let tokenBudget = availableTokenBudget;
 
-	let tokenBudget = halfOfAvailableTokenBudget; // split by 2 to give both above and below areaAroundCode same budget
+	// TODO: this's specifically implemented with some code duplication to not accidentally change existing behavior
+	if (!prioritizeAboveCursor) { // both above and below get the half of budget
+		const halfOfAvailableTokenBudget = Math.floor(availableTokenBudget / 2);
 
-	for (let i = firstPageIdx - 1; i >= 0 && tokenBudget > 0; --i) {
-		const tokenCountForPage = computeTokensForPage(i);
-		const newTokenBudget = tokenBudget - tokenCountForPage;
-		if (newTokenBudget < 0) {
-			break;
+		tokenBudget = halfOfAvailableTokenBudget; // split by 2 to give both above and below areaAroundCode same budget
+
+		for (let i = firstPageIdx - 1; i >= 0 && tokenBudget > 0; --i) {
+			const tokenCountForPage = computeTokensForPage(i);
+			const newTokenBudget = tokenBudget - tokenCountForPage;
+			if (newTokenBudget < 0) {
+				break;
+			}
+			firstPageIdx = i;
+			tokenBudget = newTokenBudget;
 		}
-		firstPageIdx = i;
-		tokenBudget = newTokenBudget;
-	}
 
-	tokenBudget = halfOfAvailableTokenBudget;
+		tokenBudget = halfOfAvailableTokenBudget;
 
-	for (let i = lastPageIdx + 1; i <= totalNOfPages && tokenBudget > 0; ++i) {
-		const tokenCountForPage = computeTokensForPage(i);
-		const newTokenBudget = tokenBudget - tokenCountForPage;
-		if (newTokenBudget < 0) {
-			break;
+		for (let i = lastPageIdx + 1; i <= totalNOfPages && tokenBudget > 0; ++i) {
+			const tokenCountForPage = computeTokensForPage(i);
+			const newTokenBudget = tokenBudget - tokenCountForPage;
+			if (newTokenBudget < 0) {
+				break;
+			}
+			lastPageIdx = i;
+			tokenBudget = newTokenBudget;
 		}
-		lastPageIdx = i;
-		tokenBudget = newTokenBudget;
+	} else { // code above consumes as much as it can and the leftover budget is given to code below
+		tokenBudget = availableTokenBudget;
+
+		for (let i = firstPageIdx - 1; i >= 0 && tokenBudget > 0; --i) {
+			const tokenCountForPage = computeTokensForPage(i);
+			const newTokenBudget = tokenBudget - tokenCountForPage;
+			if (newTokenBudget < 0) {
+				break;
+			}
+			firstPageIdx = i;
+			tokenBudget = newTokenBudget;
+		}
+
+		for (let i = lastPageIdx + 1; i <= totalNOfPages && tokenBudget > 0; ++i) {
+			const tokenCountForPage = computeTokensForPage(i);
+			const newTokenBudget = tokenBudget - tokenCountForPage;
+			if (newTokenBudget < 0) {
+				break;
+			}
+			lastPageIdx = i;
+			tokenBudget = newTokenBudget;
+		}
 	}
 
 	return { firstPageIdx, lastPageIdx, budgetLeft: tokenBudget };
@@ -540,20 +561,21 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 	currentDocLines: string[],
 	areaAroundCodeToEdit: string,
 	areaAroundEditWindowLinesRange: OffsetRange,
-	maxTokens: number,
 	computeTokens: (s: string) => number,
 	pageSize: number,
-): string {
+	opts: CurrentFileOptions
+): { taggedCurrentFileContent: string; nLines: number } {
 
 	// subtract budget consumed by areaAroundCodeToEdit
-	const availableTokenBudget = maxTokens - countTokensForLines(areaAroundCodeToEdit.split(/\r?\n/), computeTokens);
+	const availableTokenBudget = opts.maxTokens - countTokensForLines(areaAroundCodeToEdit.split(/\r?\n/), computeTokens);
 
 	const { firstPageIdx, lastPageIdx } = expandRangeToPageRange(
 		currentDocLines,
 		areaAroundEditWindowLinesRange,
 		pageSize,
 		availableTokenBudget,
-		computeTokens
+		computeTokens,
+		opts.prioritizeAboveCursor,
 	);
 
 	const linesOffsetStart = firstPageIdx * pageSize;
@@ -565,5 +587,5 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 		...currentDocLines.slice(areaAroundEditWindowLinesRange.endExclusive, linesOffsetEnd),
 	];
 
-	return taggedCurrentFileContent.join('\n');
+	return { taggedCurrentFileContent: taggedCurrentFileContent.join('\n'), nLines: taggedCurrentFileContent.length };
 }

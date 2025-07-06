@@ -531,6 +531,30 @@ describe('RunInTerminalTool', () => {
 
 				expect(result).toBe('npm install');
 			});
+
+			it('should ignore any trailing back slash', async () => {
+				const testDir = 'c:\\test\\workspace';
+				const options = createRewriteOptions(`cd ${testDir}\\ && npm install`, 'session-1');
+				vi.spyOn(workspaceService, 'getWorkspaceFolders').mockReturnValue([
+					{ fsPath: testDir } as any
+				]);
+				vi.spyOn(runInTerminalTool['terminalService'], 'getToolTerminalForSession').mockResolvedValue(undefined);
+				const result = await runInTerminalTool.rewriteCommandIfNeeded(options);
+
+				expect(result).toBe('npm install');
+			});
+
+			it('should ignore any trailing forward slash', async () => {
+				const testDir = '/test/workspace';
+				const options = createRewriteOptions(`cd ${testDir}/ && npm install`, 'session-1');
+				vi.spyOn(workspaceService, 'getWorkspaceFolders').mockReturnValue([
+					{ fsPath: testDir } as any
+				]);
+				vi.spyOn(runInTerminalTool['terminalService'], 'getToolTerminalForSession').mockResolvedValue(undefined);
+				const result = await runInTerminalTool.rewriteCommandIfNeeded(options);
+
+				expect(result).toBe('npm install');
+			});
 		});
 	});
 });

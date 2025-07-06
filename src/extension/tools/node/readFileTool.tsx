@@ -65,7 +65,7 @@ export interface IReadFileParamsV2 {
 
 const MAX_LINES_PER_READ = 2000;
 
-type ReadFileParams = IReadFileParamsV1 | IReadFileParamsV2;
+export type ReadFileParams = IReadFileParamsV1 | IReadFileParamsV2;
 
 const isParamsV2 = (params: ReadFileParams): params is IReadFileParamsV2 =>
 	(params as IReadFileParamsV1).startLine === undefined;
@@ -202,7 +202,8 @@ class ReadFileTool implements ICopilotTool<ReadFileParams> {
 				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" },
 				"linesRead": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The number of lines that were read" },
 				"truncated": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The file length was truncated" },
-				"isV2": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the tool is a v2 version" }
+				"isV2": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the tool is a v2 version" },
+				"isEntireFile": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the entire file was read with v2 params" }
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent('readFileToolInvoked',
@@ -211,6 +212,7 @@ class ReadFileTool implements ICopilotTool<ReadFileParams> {
 				interactionId: options.chatRequestId,
 				toolOutcome: outcome, // Props named "outcome" often get stuck in the kusto pipeline
 				isV2: isParamsV2(options.input) ? 'true' : 'false',
+				isEntireFile: isParamsV2(options.input) && options.input.offset === undefined && options.input.limit === undefined ? 'true' : 'false',
 				model
 			},
 			{

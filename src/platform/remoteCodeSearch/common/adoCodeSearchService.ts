@@ -7,6 +7,8 @@ import { Result } from '../../../util/common/result';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { raceCancellationError } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { Emitter, Event } from '../../../util/vs/base/common/event';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Range } from '../../../util/vs/editor/common/core/range';
 import { createDecorator } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -63,6 +65,8 @@ export const IAdoCodeSearchService = createDecorator('IAdoCodeSearchService');
 export interface IAdoCodeSearchService {
 	readonly _serviceBrand: undefined;
 
+	readonly onDidChangeIndexState: Event<void>;
+
 	/**
 	 * Gets the state of the remote index for a given repo.
 	 */
@@ -103,9 +107,12 @@ export interface IAdoCodeSearchService {
  */
 const adoCustomEmbeddingScoreType = new EmbeddingType('adoCustomEmbeddingScore');
 
-export class AdoCodeSearchService implements IAdoCodeSearchService {
+export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchService {
 
 	declare readonly _serviceBrand: undefined;
+
+	private readonly _onDidChangeIndexState = this._register(new Emitter<void>());
+	public readonly onDidChangeIndexState = this._onDidChangeIndexState.event;
 
 	constructor(
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
@@ -116,7 +123,15 @@ export class AdoCodeSearchService implements IAdoCodeSearchService {
 		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-	) { }
+	) {
+		super();
+
+		this._register(this._configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(ConfigKey.Internal.WorkspacePrototypeAdoCodeSearchEnabled.fullyQualifiedId)) {
+				this._onDidChangeIndexState.fire();
+			}
+		}));
+	}
 
 	private getAdoAlmStatusUrl(repoId: AdoRepoId): string {
 		return `https://almsearch.dev.azure.com/${repoId.org}/${repoId.project}/_apis/search/semanticsearchstatus/${repoId.repo}?api-version=7.1-preview`;

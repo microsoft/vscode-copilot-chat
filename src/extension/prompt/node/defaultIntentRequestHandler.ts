@@ -502,7 +502,6 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 				options.intent!,
 				options.location,
 				options.conversation,
-				options.request.prompt,
 				result.messages,
 				promptTokenLength,
 				result.references,

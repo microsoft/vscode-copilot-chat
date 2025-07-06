@@ -265,7 +265,7 @@ export class RequestLogger extends AbstractRequestLogger {
 			}
 			if (prediction) {
 				result.push(`## Prediction`);
-				result.push(createFencedCodeBlock('markdown', prediction));
+				result.push(createFencedCodeBlock('markdown', prediction, false));
 			}
 		}
 		result.push(``);
