@@ -1422,6 +1422,7 @@
 					},
 					{
 						"name": "error",
+						"description": "Make a model request which will result in an error",
 						"when": "github.copilot.chat.debug"
 					}
 				]

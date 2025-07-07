@@ -6,6 +6,24 @@
 		]
 	},
 	{
+		"name": "notebooks (toolCalling) [panel] - New Notebook Tool with EditFile and EditNotebook",
+		"requests": [
+			"0317a8cadc09df3be24841dc49f85ca46011265f0b497d6ff7669f5c6c19b2e2"
+		]
+	},
+	{
+		"name": "notebooks (toolCalling) [panel] - New Notebook Tool without EditFile and with EditNotebook",
+		"requests": [
+			"0317a8cadc09df3be24841dc49f85ca46011265f0b497d6ff7669f5c6c19b2e2"
+		]
+	},
+	{
+		"name": "notebooks (toolCalling) [panel] - New Notebook Tool without EditFile and without EditNotebook",
+		"requests": [
+			"0317a8cadc09df3be24841dc49f85ca46011265f0b497d6ff7669f5c6c19b2e2"
+		]
+	},
+	{
 		"name": "notebooks (toolCalling) [panel] - Run cell at a specific index",
 		"requests": [
 			"29dbbce5e336bea985843bbd8d8aae9d58dbf1398af5d7b4ce41c2244cd20995"

@@ -35,6 +35,8 @@ const debugReportFeedbackContextKey = 'github.copilot.debugReportFeedback';
 const previewFeaturesDisabledContextKey = 'github.copilot.previewFeaturesDisabled';
 const byokEnabledContextKey = 'github.copilot.byokEnabled';
 
+const debugContextKey = 'github.copilot.chat.debug';
+
 export class ContextKeysContribution extends Disposable {
 
 	private _needsOfflineCheck = false;
@@ -64,6 +66,7 @@ export class ContextKeysContribution extends Disposable {
 		this._register(window.onDidChangeWindowState(() => this._runOfflineCheck('Window state change')));
 
 		this._updateShowLogViewContext();
+		this._updateDebugContext();
 
 		const debugReportFeedback = this._configService.getConfigObservable(ConfigKey.Internal.DebugReportFeedback);
 		this._register(autorun(reader => {
@@ -189,6 +192,10 @@ export class ContextKeysContribution extends Disposable {
 		if (this._showLogView) {
 			commands.executeCommand('setContext', showLogViewContextKey, this._showLogView);
 		}
+	}
+
+	private _updateDebugContext() {
+		commands.executeCommand('setContext', debugContextKey, !this._envService.isProduction());
 	}
 
 	private async _onAuthenticationChange() {
