@@ -294,9 +294,11 @@ We have now moved to https://github.com/microsoft/vscode-tree-sitter-wasm for WA
 
 ### Reading requests
 
-To easily see the details of requests made by Copilot Chat, run the command "Show Chat Debug View". This will show a treeview with an entry for each request made. You can see the prompt that was sent to the model, the tools that were enabled, the response, and other key details. Always read the prompt when making any changes, to ensure that it's being rendered as you expect!
+To easily see the details of requests made by Copilot Chat, run the command "Show Chat Debug View". This will show a treeview with an entry for each request made. You can see the prompt that was sent to the model, the tools that were enabled, the response, and other key details. Always read the prompt when making any changes, to ensure that it's being rendered as you expect! You can save the request log with right click > "Export As...".
 
 The view also has entries for tool calls on their own, and a prompt-tsx debug view that opens in the Simple Browser.
+
+> 🚨 **Note**: This log is also very helpful in troubleshooting issues, and we will appreciate if you share it when filing an issue about the agent's behavior. But, this log may contain personal information such as the contents of your files or terminal output. Please review the contents carefully before sharing it with anyone else.
 
 ## API updates
 
