@@ -8,6 +8,10 @@ New to LLM tools? Here are some starting resources
 
 This is aimed at adding tools to vscode-copilot-chat, but much of it would apply to tools in other extensions or MCP servers as well.
 
+### Do we need a new tool?
+
+First, consider whether a new built-in tool is needed. Tools should be built-in if they are related to core VS Code functionality or the core search/edit/terminal agent loop and are needed for common OOB scenarios. Consider whether the tool can be contributed from another extension instead. If the task can be done through normal terminal commands, then it may not need its own tool.
+
 ### Static part
 
 First, add an entry in vscode-copilot's package.json under `contributes.languageModelTools`:
@@ -23,6 +27,7 @@ First, add an entry in vscode-copilot's package.json under `contributes.language
   - Read more [best practices](https://docs.anthropic.com/en/docs/build-with-claude/tool-use/overview#best-practices-for-tool-definitions)
 - If the tool takes input, add an `inputSchema`. This is a JSON schema which must describe an object with the properties that the tool takes. Describe the properties in detail. File paths should be absolute paths. Think carefully about which properties are `required`.
 - In `toolNames.ts`, add entries to `ToolName`, `ContributedToolName`, `contributedToolNameToToolNames`. Follow the naming patterns of other tools. `ToolName` is the real name of your tool that the LLM will see. It should also be clear. A good pattern is to start with a verb, e.g. `read_file`.
+- And remember to look for other tools that do similar things, and try to ensure your tool is aligned with them in the input it takes and the terminology it uses, and doesn't overlap in behavior. That will ensure that an LLM can understand how to use them together.
 
 ### Tool implementation part
 
