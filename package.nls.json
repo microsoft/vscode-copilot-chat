@@ -292,5 +292,8 @@
 	"copilot.toolSet.runNotebook.description": "Run notebook cells",
 	"copilot.toolSet.search.description": "Search and read files in your workspace",
 	"copilot.toolSet.new.description": "Scaffold a new workspace in VS Code",
-	"copilot.toolSet.runTasks.description": "Run tasks in your workspace"
+	"copilot.toolSet.runTasks.description": "Run tasks in your workspace",
+	"github.copilot.config.languageModelProviderId": "Selects the Language Model Provider to use for Copilot Chat features. Requires a reload to take effect.",
+	"github.copilot.config.languageModelProviderId.copilotOfficialDescription": "Uses the official GitHub Copilot language model service.",
+	"github.copilot.config.languageModelProviderId.mockProviderDescription": "Uses a mock provider for testing and development. Returns predefined responses."
 }

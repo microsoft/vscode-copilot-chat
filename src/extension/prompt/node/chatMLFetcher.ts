@@ -32,6 +32,10 @@ import { Emitter } from '../../../util/vs/base/common/event';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { OpenAIEndpoint } from '../../byok/node/openAIEndpoint';
 import { EXTENSION_ID } from '../../common/constants';
+import { ILanguageModelService } from '../../../platform/languageModel/common/languageModelService';
+import { LanguageModelChatRequest, LanguageModelChatMessage, LanguageModelChatResponseChunk, LanguageModelError } from '../../../platform/languageModel/common/languageModelProvider';
+import { RequestId } from '../../../platform/networking/common/fetch';
+
 
 export interface IMadeChatRequestEvent {
 	readonly messages: Raw.ChatMessage[];
@@ -124,10 +128,107 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IInteractionService private readonly _interactionService: IInteractionService,
 		@IChatQuotaService private readonly _chatQuotaService: IChatQuotaService,
+		// New service for pluggable LLMs
+		@ILanguageModelService private readonly _languageModelService: ILanguageModelService,
 		@IConversationOptions options: IConversationOptions,
 	) {
 		super(options);
 	}
+
+	// Placeholder for the adapter function - this will need careful implementation
+	private async adaptLMStreamToChatResults(
+		lmStream: AsyncIterable<LanguageModelChatResponseChunk>,
+		requestId: string,
+		baseTelemetry: TelemetryData,
+		finishedCb: FinishedCallback | undefined,
+		chatEndpoint: IChatEndpoint
+	): Promise<ChatResults | ChatRequestFailed | ChatRequestCanceled> {
+		try {
+			const completionsArray: ChatCompletion[] = [];
+			let currentCompletion: Partial<ChatCompletion> & { messageContentParts: string[] } = {
+				message: { role: 'assistant', content: [] }, // Initialize with an empty array for content parts
+				choiceIndex: 0,
+				requestId: { headerRequestId: requestId, modelDeploymentId: chatEndpoint.modelDeploymentName },
+				tokens: [],
+				blockFinished: false,
+				finishReason: FinishedCompletionReason.ClientDone, // Default, will be updated
+				telemetryData: baseTelemetry.fork(), // Fork telemetry for this specific completion
+				messageContentParts: [],
+			};
+
+			for await (const chunk of lmStream) {
+				if (chunk.content) {
+					currentCompletion.messageContentParts.push(chunk.content);
+				}
+				if (chunk.finishReason) {
+					currentCompletion.finishReason = chunk.finishReason as FinishedCompletionReason; // Assuming direct mapping for now
+					currentCompletion.blockFinished = true;
+					// Finalize message content
+					(currentCompletion.message!.content as Raw.ChatContentPart[]) = [{ type: 'text', text: currentCompletion.messageContentParts.join('') }];
+					completionsArray.push(currentCompletion as ChatCompletion);
+
+					// Reset for potential next choice if the interface supported it (currently doesn't explicitly)
+					currentCompletion = {
+						message: { role: 'assistant', content: [] },
+						choiceIndex: (currentCompletion.choiceIndex ?? 0) + 1,
+						requestId: { headerRequestId: requestId, modelDeploymentId: chatEndpoint.modelDeploymentName },
+						tokens: [],
+						blockFinished: false,
+						finishReason: FinishedCompletionReason.ClientDone,
+						telemetryData: baseTelemetry.fork(),
+						messageContentParts: [],
+					};
+				}
+			}
+
+			if (!currentCompletion.blockFinished && currentCompletion.messageContentParts.length > 0) {
+				// If stream ended without a finishReason but there's content
+				(currentCompletion.message!.content as Raw.ChatContentPart[]) = [{ type: 'text', text: currentCompletion.messageContentParts.join('') }];
+				currentCompletion.blockFinished = true;
+				completionsArray.push(currentCompletion as ChatCompletion);
+			}
+
+			if (completionsArray.length === 0) {
+				// This case might indicate an empty stream or an issue.
+				// For now, let's treat it as a success with no completions,
+				// or decide if it should be an error.
+				this._logService.warn('Language model stream produced no completions.');
+			}
+
+			// Simulate the structure of ChatResults
+			// The original fetchAndStreamChat directly yielded ChatCompletion,
+			// here we need to wrap it.
+			async function* generateChatCompletions(): AsyncIterable<ChatCompletion> {
+				for (const completion of completionsArray) {
+					yield completion;
+				}
+			}
+
+			return {
+				type: FetchResponseKind.Success,
+				chatCompletions: generateChatCompletions(),
+				getProcessingTime: () => 0, // TODO: How to get processing time from new service?
+			};
+
+		} catch (error) {
+			this._logService.error('Error adapting LM stream to ChatResults:', error);
+			if (error instanceof LanguageModelError) {
+				return {
+					type: FetchResponseKind.Failed,
+					modelRequestId: { headerRequestId: requestId, modelDeploymentId: chatEndpoint.modelDeploymentName },
+					failKind: error.errorCode as ChatFailKind || ChatFailKind.Unknown, // Map errorCode
+					reason: error.message,
+				};
+			}
+			return {
+				type: FetchResponseKind.Failed,
+				modelRequestId: { headerRequestId: requestId, modelDeploymentId: chatEndpoint.modelDeploymentName },
+				failKind: ChatFailKind.Unknown,
+				reason: error instanceof Error ? error.message : 'Unknown error during stream adaptation',
+			};
+		}
+	}
+
 
 	/**
 	 * Note: the returned array of strings may be less than `n` (e.g., in case there were errors during streaming)
@@ -196,24 +297,25 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					reason: payloadValidationResult.reason,
 				};
 			} else {
-				response = await fetchAndStreamChat(
-					this._logService,
-					this._telemetryService,
-					this._fetcherService,
-					this._envService,
-					this._chatQuotaService,
-					this._domainService,
-					this._capiClientService,
-					this._authenticationService,
-					this._interactionService,
-					chatEndpoint,
-					chatParams,
-					baseTelemetry,
-					streamRecorder.callback,
-					userInitiatedRequest,
-					token,
-					telemetryProperties
-				);
+				// New logic using ILanguageModelService
+				const languageModelRequestMessages: LanguageModelChatMessage[] = messages.map(msg => ({
+					role: msg.role as LanguageModelChatMessage['role'],
+					content: getTextPart(msg.content) ?? ''
+				}));
+
+				const languageModelRequest: LanguageModelChatRequest = {
+					messages: languageModelRequestMessages,
+					modelId: chatEndpoint.model,
+					temperature: postOptions?.temperature,
+					maxTokens: postOptions?.max_tokens,
+					stop: postOptions?.stop as string[] | undefined,
+					user: postOptions?.user
+				};
+
+				const lmStream = this._languageModelService.streamChatCompletions(languageModelRequest, token);
+				response = await this.adaptLMStreamToChatResults(lmStream, ourRequestId, baseTelemetry, streamRecorder.callback, chatEndpoint);
+				// End of new logic
+
 				tokenCount = await chatEndpoint.acquireTokenizer().countMessagesTokens(messages);
 				const extensionId = source?.extensionId ?? EXTENSION_ID;
 				this._onDidMakeChatMLRequest.fire({

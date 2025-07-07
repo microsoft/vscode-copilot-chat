@@ -26,9 +26,10 @@ import { isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequestEditorData, ChatRequestNotebookData, ChatRequestTurn, ChatResponseAnchorPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseProgressPart2, ChatResponseReferencePart, ChatResponseTurn, ChatLocation as VSChatLocation } from '../../../vscodeTypes';
+import { ChatRequestEditorData, ChatRequestNotebookData, ChatRequestTurn, ChatResponseAnchorPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseProgressPart2, ChatResponseReferencePart, ChatResponseTurn, ChatLocation as VSChatLocation, MarkdownString } from '../../../vscodeTypes';
 import { ICommandService } from '../../commands/node/commandService';
 import { getAgentForIntent, Intent } from '../../common/constants';
+import { ILanguageModelService } from '../../../platform/languageModel/common/languageModelService';
 import { IConversationStore } from '../../conversationStore/node/conversationStore';
 import { IIntentService } from '../../intents/node/intentService';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
@@ -81,7 +82,8 @@ export class ChatParticipantRequestHandler {
 		@ITabsAndEditorsService tabsAndEditorsService: ITabsAndEditorsService,
 		@ILogService private readonly _logService: ILogService,
 		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
-		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService
+		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService,
+		@ILanguageModelService private readonly _languageModelService: ILanguageModelService
 	) {
 		this.location = getLocation(request);
 
@@ -215,6 +217,18 @@ export class ChatParticipantRequestHandler {
 		}
 		this._logService.logger.trace(`[${ChatLocation.toStringShorter(this.location)}] chat request received from extension host`);
 		try {
+			// Display status message
+			try {
+				const provider = await this._languageModelService.getSelectedProvider(this.token);
+				const providerName = provider?.displayName || 'Default Provider';
+				const agentName = this.chatAgentArgs.agentName || 'Copilot';
+				// Make sure this is MarkdownString from vscode not from @vscode/prompt-tsx
+				const statusString = new MarkdownString(`*Mode: **${agentName}** | Provider: **${providerName}** (experimental indicator)*`);
+				statusString.isTrusted = true; // Necessary if using commands/icons in the future
+				this.stream.markdown(statusString);
+			} catch (statusError) {
+				this._logService.warn('Failed to display chat status indicator:', statusError);
+			}
 
 			// sanitize the variables of all requests
 			// this is done here because all intents must honor ignored files

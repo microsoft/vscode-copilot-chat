@@ -2294,6 +2294,17 @@
 						"type": "boolean",
 						"default": true,
 						"description": "%github.copilot.config.autoFix%"
+					},
+					"github.copilot.chat.languageModelProviderId": {
+						"type": "string",
+						"default": "copilot-official",
+						"markdownDescription": "%github.copilot.config.languageModelProviderId%",
+						"scope": "machine-overridable",
+						"enum": ["copilot-official", "mock-provider"],
+						"enumDescriptions": [
+							"%github.copilot.config.languageModelProviderId.copilotOfficialDescription%",
+							"%github.copilot.config.languageModelProviderId.mockProviderDescription%"
+						]
 					}
 				}
 			},

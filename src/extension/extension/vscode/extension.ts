@@ -13,6 +13,10 @@ import { IInstantiationServiceBuilder, InstantiationServiceBuilder } from '../..
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotExtensionApi } from '../../api/vscode/extensionApi';
 import { ContributionCollection, IExtensionContributionFactory } from '../../common/contributions';
+import { ILanguageModelService } from '../../../platform/languageModel/common/languageModelService';
+import { CopilotOfficialLanguageModelProvider } from '../../../platform/languageModel/node/copilotOfficialLanguageModelProvider';
+import { MockLanguageModelProvider } from '../../../platform/languageModel/node/mockLanguageModelProvider';
+import { ILogService } from '../../../platform/log/common/logService';
 
 // ##################################################################################
 // ###                                                                            ###
@@ -105,6 +109,32 @@ export function createInstantiationService(configuration: IExtensionActivationCo
 
 		// force create heatmap service
 		accessor.get(IHeatmapService);
+
+		// Register Language Model Providers
+		// This needs to happen after the instantiationService is sealed and services are available.
+		const logService = accessor.get(ILogService);
+		try {
+			const languageModelService = accessor.get(ILanguageModelService);
+			const envService = accessor.get(IEnvService);
+
+			if (languageModelService) {
+				// Register Official Copilot Provider
+				const copilotProvider = instantiationService.createInstance(CopilotOfficialLanguageModelProvider);
+				languageModelService.registerProvider(copilotProvider);
+				logService.info('Successfully registered CopilotOfficialLanguageModelProvider with LanguageModelService.');
+
+				// Register Mock Provider in development/test modes
+				if (!envService.isProduction() || envService.isTestFromCli()) {
+					const mockProvider = instantiationService.createInstance(MockLanguageModelProvider);
+					languageModelService.registerProvider(mockProvider);
+					logService.info('Successfully registered MockLanguageModelProvider with LanguageModelService.');
+				}
+			} else {
+				logService.error('LanguageModelService not available to register providers.');
+			}
+		} catch (error) {
+			logService.error('Error during Language Model Provider registration in baseActivate:', error);
+		}
 	});
 
 	return instantiationService;
