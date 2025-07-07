@@ -9500,6 +9500,13 @@
     "score": 1
   },
   {
+    "name": "notebooks (toolCalling) [panel] - New Notebook Tool without EditFile and with EditNotebook",
+    "contentFilterCount": 0,
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
+  },
+  {
     "name": "notebooks (toolCalling) [panel] - New Notebook Tool without EditFile and without EditNotebook",
     "contentFilterCount": 0,
     "passCount": 10,
