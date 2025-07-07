@@ -20,6 +20,7 @@ import { NotebookCellData, NotebookCellKind, NotebookData, NotebookEdit, Noteboo
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { EditNotebookTool, IEditNotebookToolParams } from '../editNotebookTool';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 
 describe('Edit Notebook Tool', () => {
 	const disposables = new DisposableStore();
@@ -37,6 +38,7 @@ describe('Edit Notebook Tool', () => {
 			accessor.get(ILogService),
 			accessor.get(ITelemetryService),
 			accessor.get(IEndpointProvider),
+			accessor.get(IFileSystemService),
 		);
 		return [editTool, workspaceService] as const;
 	}
@@ -133,60 +135,6 @@ describe('Edit Notebook Tool', () => {
 		expect(edit.range.end).to.equal(0);
 		expect(edit.newCells.length).to.equal(1);
 		expect(edit.newCells[0].value).to.equal(`print(1)`);
-		expect(edit.newCells[0].kind).to.equal(NotebookCellKind.Code);
-	});
-	// we don't support inserting multiple cells at the same time
-	test.skip(`Insert 3 cells at the top`, async () => {
-		const notebookEdits: (NotebookEdit | [Uri, TextEdit])[] = [];
-		const notebook = createNotebook();
-		const [editTool, workspaceService] = initialize(notebook.document);
-
-		const promise = invokeTool(notebook, editTool, [
-			{ editType: 'insert', newCode: '# header', language: 'markdown', filePath: notebook.uri.toString(), explanation: '', cellId: 'TOP' },
-			{ editType: 'insert', newCode: 'print(1)', language: 'python', filePath: notebook.uri.toString(), explanation: '', cellId: 'TOP' },
-			{ editType: 'insert', newCode: 'print(2)', language: 'python', filePath: notebook.uri.toString(), explanation: '', cellId: 'TOP' },
-		], notebookEdits);
-		await waitForEditCount(1, notebookEdits);
-		workspaceService.didChangeNotebookDocumentEmitter.fire({
-			cellChanges: [],
-			contentChanges: [{
-				addedCells: [
-					{ index: 0 } as any,
-					{ index: 1 } as any,
-					{ index: 2 } as any,
-				],
-				removedCells: [],
-				range: new NotebookRange(0, 0),
-			}
-			],
-			metadata: undefined,
-			notebook: notebook.document,
-		});
-		await promise;
-
-		expect(notebookEdits.length).to.equal(3);
-		expect(notebookEdits[0]).to.be.instanceOf(NotebookEdit);
-		let edit = notebookEdits[0] as NotebookEdit;
-		expect(edit.range.start).to.equal(0);
-		expect(edit.range.end).to.equal(0);
-		expect(edit.newCells.length).to.equal(1);
-		expect(edit.newCells[0].value).to.equal(`# header`);
-		expect(edit.newCells[0].kind).to.equal(NotebookCellKind.Markup);
-
-		expect(notebookEdits[1]).to.be.instanceOf(NotebookEdit);
-		edit = notebookEdits[1] as NotebookEdit;
-		expect(edit.range.start).to.equal(1);
-		expect(edit.range.end).to.equal(1);
-		expect(edit.newCells.length).to.equal(1);
-		expect(edit.newCells[0].value).to.equal(`print(1)`);
-		expect(edit.newCells[0].kind).to.equal(NotebookCellKind.Code);
-
-		expect(notebookEdits[2]).to.be.instanceOf(NotebookEdit);
-		edit = notebookEdits[2] as NotebookEdit;
-		expect(edit.range.start).to.equal(2);
-		expect(edit.range.end).to.equal(2);
-		expect(edit.newCells.length).to.equal(1);
-		expect(edit.newCells[0].value).to.equal(`print(2)`);
 		expect(edit.newCells[0].kind).to.equal(NotebookCellKind.Code);
 	});
 	test(`Insert 3 cells at the bottom`, async () => {
@@ -708,94 +656,6 @@ describe('Edit Notebook Tool', () => {
 		expect(edit.newCells.length).to.equal(1);
 		expect(edit.newCells[0].value).to.equal(`print(3)`);
 	});
-	test.skip(`Insert 3 cells after the first cell (subsequent inserts do not have cell id), then insert cells at the top and bottom`, async () => {
-		const notebookEdits: (NotebookEdit | [Uri, TextEdit])[] = [];
-		const notebook = createNotebook();
-		const [editTool, workspaceService] = initialize(notebook.document);
-		const cellCount = notebook.document.cellCount;
-
-		const promise = invokeTool(notebook, editTool, [
-			{ editType: 'insert', newCode: 'print(1)', language: 'python', filePath: notebook.uri.toString(), explanation: '', cellId: getCellId(notebook.document.cellAt(0)) },
-			{ editType: 'insert', newCode: 'print(2)', language: 'python', filePath: notebook.uri.toString(), explanation: '', cellId: '' },
-			{ editType: 'insert', newCode: 'print(3)', language: 'python', filePath: notebook.uri.toString(), explanation: '', cellId: '' },
-			{ editType: 'insert', newCode: '# header', language: 'markdown', filePath: notebook.uri.toString(), explanation: '', cellId: 'TOP' },
-			{ editType: 'insert', newCode: '## sub header', language: 'markdown', filePath: notebook.uri.toString(), explanation: '', cellId: '' },
-			{ editType: 'insert', newCode: '# footer', language: 'markdown', filePath: notebook.uri.toString(), explanation: '', cellId: 'BOTTOM' },
-			{ editType: 'insert', newCode: '## bye', language: 'markdown', filePath: notebook.uri.toString(), explanation: '', cellId: '' },
-		], notebookEdits);
-		await waitForEditCount(3, notebookEdits);
-		workspaceService.didChangeNotebookDocumentEmitter.fire({
-			cellChanges: [],
-			contentChanges: [{
-				addedCells: [
-					{ index: 0 } as any,
-					{ index: 1 } as any,
-					{ index: 2 } as any,
-					{ index: 3 } as any,
-					{ index: 4 } as any,
-					{ index: cellCount + 5 } as any,
-					{ index: cellCount + 6 } as any,
-				],
-				removedCells: [],
-				range: new NotebookRange(0, 0),
-			}
-			],
-			metadata: undefined,
-			notebook: notebook.document,
-		});
-		await promise;
-
-		expect(notebookEdits.length).to.equal(7);
-		expect(notebookEdits[0]).to.be.instanceOf(NotebookEdit);
-		let edit = notebookEdits[0] as NotebookEdit;
-		expect(edit.range.start).to.equal(1);
-		expect(edit.range.end).to.equal(1);
-		expect(edit.newCells.length).to.equal(1);
-		expect(edit.newCells[0].value).to.equal(`print(1)`);
-
-		expect(notebookEdits[1]).to.be.instanceOf(NotebookEdit);
-		edit = notebookEdits[1] as NotebookEdit;
-		expect(edit.range.start).to.equal(2);
-		expect(edit.range.end).to.equal(2);
-		expect(edit.newCells.length).to.equal(1);
-		expect(edit.newCells[0].value).to.equal(`print(2)`);
-
-		expect(notebookEdits[2]).to.be.instanceOf(NotebookEdit);
-		edit = notebookEdits[2] as NotebookEdit;
-		expect(edit.range.start).to.equal(3);
-		expect(edit.range.end).to.equal(3);
-		expect(edit.newCells.length).to.equal(1);
-		expect(edit.newCells[0].value).to.equal(`print(3)`);
-
-		expect(notebookEdits[3]).to.be.instanceOf(NotebookEdit);
-		edit = notebookEdits[3] as NotebookEdit;
-		expect(edit.range.start).to.equal(0);
-		expect(edit.range.end).to.equal(0);
-		expect(edit.newCells.length).to.equal(1);
-		expect(edit.newCells[0].value).to.equal(`# header`);
-
-		expect(notebookEdits[4]).to.be.instanceOf(NotebookEdit);
-		edit = notebookEdits[4] as NotebookEdit;
-		expect(edit.range.start).to.equal(1);
-		expect(edit.range.end).to.equal(1);
-		expect(edit.newCells.length).to.equal(1);
-		expect(edit.newCells[0].value).to.equal(`## sub header`);
-
-		expect(notebookEdits[5]).to.be.instanceOf(NotebookEdit);
-		edit = notebookEdits[5] as NotebookEdit;
-		expect(edit.range.start).to.equal(cellCount + 5);
-		expect(edit.range.end).to.equal(cellCount + 5);
-		expect(edit.newCells.length).to.equal(1);
-		expect(edit.newCells[0].value).to.equal(`# footer`);
-
-		expect(notebookEdits[6]).to.be.instanceOf(NotebookEdit);
-		edit = notebookEdits[6] as NotebookEdit;
-		expect(edit.range.start).to.equal(cellCount + 6);
-		expect(edit.range.end).to.equal(cellCount + 6);
-		expect(edit.newCells.length).to.equal(1);
-		expect(edit.newCells[0].value).to.equal(`## bye`);
-
-	});
 	test(`Delete 4 cells`, async () => {
 		const notebookEdits: (NotebookEdit | [Uri, TextEdit])[] = [];
 		const notebook = createNotebook();
@@ -907,111 +767,5 @@ describe('Edit Notebook Tool', () => {
 		const edit = notebookEdits[0] as [Uri, TextEdit];
 		expect(edit[0].toString()).to.equal(cell2.document.uri.toString());
 		expect(edit[1].newText).to.include('print("Foo Bar")');
-	});
-	test.skip(`Multiple edits`, async () => {
-		const notebookEdits: (NotebookEdit | [Uri, TextEdit])[] = [];
-		const notebook = createNotebook();
-		const [editTool, workspaceService] = initialize(notebook.document);
-
-		const cell6 = notebook.document.cellAt(6);
-		const removedCells = [
-			notebook.document.cellAt(2),
-			notebook.document.cellAt(3),
-			notebook.document.cellAt(4),
-		];
-		const promise = invokeTool(notebook, editTool, [
-			{ editType: 'insert', newCode: 'print(1)', language: 'python', filePath: notebook.uri.toString(), explanation: '', cellId: getCellId(notebook.document.cellAt(0)) },
-			{ editType: 'insert', newCode: 'print(2)', language: 'python', filePath: notebook.uri.toString(), explanation: '', cellId: '' },
-			{ editType: 'insert', newCode: 'print(3)', language: 'python', filePath: notebook.uri.toString(), explanation: '', cellId: '' },
-			{ editType: 'delete', filePath: notebook.uri.toString(), explanation: '', cellId: getCellId(notebook.document.cellAt(2)) },
-			{ editType: 'delete', filePath: notebook.uri.toString(), explanation: '', cellId: getCellId(notebook.document.cellAt(3)) },
-			{ editType: 'delete', filePath: notebook.uri.toString(), explanation: '', cellId: getCellId(notebook.document.cellAt(4)) },
-			{ editType: 'edit', filePath: notebook.uri.toString(), explanation: '', cellId: getCellId(cell6), newCode: 'print("Foo Bar")' },
-		], notebookEdits);
-		await waitForEditCount(7, notebookEdits);
-		workspaceService.didChangeTextDocumentEmitter.fire({
-			document: cell6.document,
-			contentChanges: [
-				{
-					range: new Range(0, 0, 0, 0),
-					rangeLength: 0,
-					rangeOffset: 0,
-					text: 'print("Foo Bar")',
-				}
-			],
-			reason: undefined,
-		});
-		workspaceService.didChangeNotebookDocumentEmitter.fire({
-			cellChanges: [
-				{
-					cell: cell6,
-					document: cell6.document,
-					metadata: undefined,
-					outputs: [],
-					executionSummary: undefined,
-				}
-			],
-			contentChanges: [{
-				addedCells: [
-					{ index: 1 } as any,
-					{ index: 2 } as any,
-					{ index: 3 } as any,
-				],
-				removedCells,
-				range: new NotebookRange(0, 0),
-			}],
-			metadata: undefined,
-			notebook: notebook.document,
-		});
-		await promise;
-
-		expect(notebookEdits.length).to.equal(7);
-
-		// Inserted cells
-		expect(notebookEdits[0]).to.be.instanceOf(NotebookEdit);
-		let edit = notebookEdits[0] as NotebookEdit;
-		expect(edit.range.start).to.equal(1);
-		expect(edit.range.end).to.equal(1);
-		expect(edit.newCells.length).to.equal(1);
-		expect(edit.newCells[0].value).to.equal(`print(1)`);
-
-		expect(notebookEdits[1]).to.be.instanceOf(NotebookEdit);
-		edit = notebookEdits[1] as NotebookEdit;
-		expect(edit.range.start).to.equal(2);
-		expect(edit.range.end).to.equal(2);
-		expect(edit.newCells.length).to.equal(1);
-		expect(edit.newCells[0].value).to.equal(`print(2)`);
-
-		expect(notebookEdits[2]).to.be.instanceOf(NotebookEdit);
-		edit = notebookEdits[2] as NotebookEdit;
-		expect(edit.range.start).to.equal(3);
-		expect(edit.range.end).to.equal(3);
-		expect(edit.newCells.length).to.equal(1);
-		expect(edit.newCells[0].value).to.equal(`print(3)`);
-
-		// Deleted cells
-		expect(notebookEdits[3]).to.be.instanceOf(NotebookEdit);
-		edit = notebookEdits[3] as NotebookEdit;
-		expect(edit.range.start).to.equal(5);
-		expect(edit.range.end).to.equal(6);
-		expect(edit.newCells.length).to.equal(0);
-
-		expect(notebookEdits[4]).to.be.instanceOf(NotebookEdit);
-		edit = notebookEdits[4] as NotebookEdit;
-		expect(edit.range.start).to.equal(5);
-		expect(edit.range.end).to.equal(6);
-		expect(edit.newCells.length).to.equal(0);
-
-		expect(notebookEdits[5]).to.be.instanceOf(NotebookEdit);
-		edit = notebookEdits[5] as NotebookEdit;
-		expect(edit.range.start).to.equal(5);
-		expect(edit.range.end).to.equal(6);
-		expect(edit.newCells.length).to.equal(0);
-
-		// Update
-		const textEdit = notebookEdits[6] as [Uri, TextEdit];
-		expect(textEdit[0].toString()).to.equal(cell6.document.uri.toString());
-		expect(textEdit[1].newText).to.include('print("Foo Bar")');
-
 	});
 });

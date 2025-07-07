@@ -9,6 +9,7 @@ import { EOL } from 'os';
 import type * as vscode from 'vscode';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
@@ -68,6 +69,7 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 		@ILogService protected readonly logger: ILogService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
+		@IFileSystemService protected readonly fileSystemService: IFileSystemService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IEditNotebookToolParams>, token: vscode.CancellationToken) {
@@ -87,7 +89,22 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 			throw new ErrorWithTelemetrySafeReason(`Invalid input, no stream`, 'invalid_input_no_stream');
 		}
 
-		const notebook = await this.workspaceService.openNotebookDocument(uri);
+		let notebook: vscode.NotebookDocument;
+		try {
+			notebook = await this.workspaceService.openNotebookDocument(uri);
+		} catch (error) {
+			if (await this.fileSystemService.stat(uri).catch(() => false)) {
+				throw error;
+			} else {
+				// Possible the notebook does not exist and model is trying to create a new notebook.
+				// Edit tool doesn't support creating a new notebook.
+				const editFileToolExists = this.promptContext?.tools?.availableTools?.some(t => t.name === ToolName.EditFile);
+				const toolToCreateFile = editFileToolExists ? ToolName.EditFile : ToolName.CreateFile;
+				const message = error.message || error.toString();
+				throw new Error(`${message}\nIf trying to create a Notebook, then first use the ${toolToCreateFile} tool to create an empty notebook.`);
+			}
+		}
+
 		const notebookUri = notebook.uri;
 		const provider = this.alternativeNotebookContent.create(this.alternativeNotebookContent.getFormat(this.promptContext?.request?.model));
 		if (token.isCancellationRequested) {

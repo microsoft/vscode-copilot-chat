@@ -162,6 +162,7 @@ export class NewNotebookResponseProcessor {
 						outline: outline,
 						promptContext: mockContext,
 						originalCreateNotebookQuery: mockContext.query,
+						availableTools: this.context?.tools?.availableTools
 					}
 				);
 
