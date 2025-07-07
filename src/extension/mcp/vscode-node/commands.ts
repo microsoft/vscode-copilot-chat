@@ -19,7 +19,7 @@ import { Conversation, Turn } from '../../prompt/common/conversation';
 import { McpToolCallingLoop } from './mcpToolCallingLoop';
 import { McpPickRef } from './mcpToolCallingTools';
 
-type PackageType = 'npm' | 'pip' | 'docker';
+type PackageType = 'npm' | 'pip' | 'docker' | 'nuget';
 
 interface IValidatePackageArgs {
 	type: PackageType;
@@ -50,6 +50,14 @@ interface PyPiPackageResponse {
 		description?: string;
 		version?: string;
 	};
+}
+
+interface NuGetServiceIndexResponse {
+	resources?: Array<{ "@id": string; "@type": string }>;
+}
+
+interface NuGetSearchResponse {
+	data?: Array<{ id: string; version: string; description?: string; owners?: Array<string> }>;
 }
 
 interface DockerHubResponse {
@@ -194,6 +202,37 @@ export class McpSetupCommands extends Disposable {
 				const version = data.info?.version;
 				this.enqueuePendingSetup(args.targetConfig, args.name, args.type, data.info?.description, version);
 				return { state: 'ok', publisher: data.info?.author || data.info?.author_email || 'unknown', version };
+			} else if (args.type === 'nuget') {
+				// read the service index to find the search URL
+				// https://learn.microsoft.com/en-us/nuget/api/service-index
+				const serviceIndexUrl = `https://api.nuget.org/v3/index.json`;
+				const serviceIndexResponse = await fetch(serviceIndexUrl);
+				if (!serviceIndexResponse.ok) {
+					return { state: 'error', error: `Unable to load the NuGet.org registry service index (${serviceIndexUrl})` };
+				}
+
+				// find the search query URL
+				// https://learn.microsoft.com/en-us/nuget/api/search-query-service-resource
+				const serviceIndex = await serviceIndexResponse.json() as NuGetServiceIndexResponse;
+				const searchBaseUrl = serviceIndex.resources?.find(resource => resource['@type'] === 'SearchQueryService/3.5.0')?.['@id'];
+				if (!searchBaseUrl) {
+					return { state: 'error', error: `Package search URL not found in the NuGet.org registry service index` };
+				}
+
+				// search for the package by ID
+				// https://learn.microsoft.com/en-us/nuget/consume-packages/finding-and-choosing-packages#search-syntax
+				const searchQueryUrl = `${searchBaseUrl}?q=packageid:${encodeURIComponent(args.name)}&semVerLevel=2.0.0`;
+				const searchResponse = await fetch(searchQueryUrl);
+				if (!searchResponse.ok) {
+					return { state: 'error', error: `Failed to search for ${args.name} in then NuGet.org registry` };
+				}
+				const data = await searchResponse.json() as NuGetSearchResponse;
+				const id = data.data?.[0]?.id ?? args.name;
+				const version = data.data?.[0]?.version;
+				const publisher = data.data?.[0]?.owners ? data.data[0].owners.join(', ') : 'unknown';
+
+				this.enqueuePendingSetup(args.targetConfig, id, args.type, data.data?.[0]?.description, version);
+				return { state: 'ok', publisher, version };
 			} else if (args.type === 'docker') {
 				// Docker Hub API uses namespace/repository format
 				// Handle both formats: 'namespace/repository' or just 'repository' (assumes 'library/' namespace)
