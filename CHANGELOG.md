@@ -29,21 +29,21 @@ This milestone, we have made several improvements and bug fixes in this area.
 
 Upon popular request, you can now also specify which language model should be used for a chat mode. Add the `model` metadata property to your `chatmode.md` file and provide the model identifier (we provide IntelliSense for the model info).
 
-![Screenshot that shows the IntelliSense for the model metadata property in chat mode file.](images/1_102/prompt-file-model-code-completion.png)
+![Screenshot that shows the IntelliSense for the model metadata property in chat mode file.](https://code.visualstudio.com/assets/updates/1_102//1_102/prompt-file-model-code-completion.png)
 
 ##### Improved editing support
 
 The editor for [chat modes](https://code.visualstudio.com/docs/copilot/chat/chat-modes), [prompts](https://code.visualstudio.com/docs/copilot/copilot-customization#_prompt-files-experimental), and [instruction files](https://code.visualstudio.com/docs/copilot/copilot-customization#_custom-instructions) now supports completions, validation, and hovers for all supported metadata properties.
 
-![Screenshot that shows the hover information for tools.](images/1_102/tools-hover.png)
+![Screenshot that shows the hover information for tools.](https://code.visualstudio.com/assets/updates/1_102//1_102/tools-hover.png)
 
-![Screenshot that shows the model diagnostics when a model is not available for a specific chat mode.](images/1_102/prompt-file-diagnostics.png)
+![Screenshot that shows the model diagnostics when a model is not available for a specific chat mode.](https://code.visualstudio.com/assets/updates/1_102//1_102/prompt-file-diagnostics.png)
 
 ##### Gear menu in the chat view
 
 The **Configure Chat** action in the Chat view toolbar lets you manage custom modes as well as reusable instructions, prompts, and tool sets:
 
-![Screenshot that shows the Configure Chat menu in the Chat view.](images/1_102/chat-gear.png)
+![Screenshot that shows the Configure Chat menu in the Chat view.](https://code.visualstudio.com/assets/updates/1_102//1_102/chat-gear.png)
 
 Selecting **Modes** shows all currently installed custom modes and enables you to open, create new, or delete modes.
 
@@ -76,17 +76,17 @@ For larger instructions that you want to include conditionally, you can use `.in
 
 New in this release, the large language model can load instructions on demand. Each request gets a list of all instruction files, along with glob pattern and description. In this example, the LLM has no instructions for TypeScript files explicitly added in the context. So, it looks for code style rules before creating a TypeScript file:
 
-![Screenshot showing loading instruction files on demand.](images/1_102/instructions-loading-on-demand.png)
+![Screenshot showing loading instruction files on demand.](https://code.visualstudio.com/assets/updates/1_102//1_102/instructions-loading-on-demand.png)
 
 #### Edit previous requests (Experimental)
 
 You can now click on previous requests to modify the text content, attached context, mode, and model. Upon submitting this change, this will remove all subsequent requests, undo any edits made, and send the new request in chat.
 
-There will be a controlled rollout of different entry points to editing requests, which will help us gather feedback on preferential edit and undo flows. However, users can set their preferred mode with the experimental `setting(chat.editRequests)` setting:
+There will be a controlled rollout of different entry points to editing requests, which will help us gather feedback on preferential edit and undo flows. However, users can set their preferred mode with the experimental `chat.editRequests` setting:
 
-* `setting(chat.editRequests.inline)`: Hover a request and select the text to begin an edit inline with the request.
-* `setting(chat.editRequests.hover)`: Hover a request to reveal a toolbar with a button to begin an edit inline with the request.
-* `setting(chat.editRequests.input)`: Hover a request to reveal a toolbar, which will start edits in the input box at the bottom of chat.
+* `chat.editRequests.inline`: Hover a request and select the text to begin an edit inline with the request.
+* `chat.editRequests.hover`: Hover a request to reveal a toolbar with a button to begin an edit inline with the request.
+* `chat.editRequests.input`: Hover a request to reveal a toolbar, which will start edits in the input box at the bottom of chat.
 
 <video src="images/1_102/edit-previous-requests.mp4" title="Video showing the process of editing a previous request in the Chat view." autoplay loop controls muted></video>
 
@@ -131,13 +131,13 @@ The two major parts we want to add to this feature are a UI entry point to more 
 
 Agent mode sometimes wants to run commands with a `cd` statement, just in case. We now detect this case when it matches the current working directory and simplify the command that is run.
 
-![Screenshot of the terminal, asking to run `cd C:\Github\Tyriar\xterm.js && echo hello` only runs `echo hello` when the current working directory already matches.](images/1_102/terminal-working-dir.png)
+![Screenshot of the terminal, asking to run `cd C:\Github\Tyriar\xterm.js && echo hello` only runs `echo hello` when the current working directory already matches.](https://code.visualstudio.com/assets/updates/1_102//1_102/terminal-working-dir.png)
 
 #### Agent awareness of tasks and terminals
 
 Agent mode now understands which background terminals it has created and which tasks are actively running. The agent can read task output by using the new `GetTaskOutput` tool, which helps prevent running duplicate tasks and improves workspace context.
 
-![Screenshot of VS Code window showing two build tasks running in the terminal panel. The left terminal displays several errors. The chat agent replies to describe status of my build tasks with a summary of each task's output.](images/1_102/task-status.png)
+![Screenshot of VS Code window showing two build tasks running in the terminal panel. The left terminal displays several errors. The chat agent replies to describe status of my build tasks with a summary of each task's output.](https://code.visualstudio.com/assets/updates/1_102//1_102/task-status.png)
 
 #### Maximized chat view
 
@@ -153,7 +153,7 @@ We now show a badge over the application icon in the dock when the window is not
 
 ![Screenshot of the VS Code dock icon showing an agent confirmation as a badge.](./images/1_102/badge.png)
 
-You can enable or disable this badge via the `setting(chat.notifyWindowOnConfirmation)` setting.
+You can enable or disable this badge via the `chat.notifyWindowOnConfirmation` setting.
 
 #### Start chat from the command line
 
@@ -181,7 +181,7 @@ We've reworked the UX around managing extension access to language models provid
 
 To make this clearer, we've removed the **AccountName (GitHub Copilot Chat)** item and replaced it with a new item called **Manage Language Model Access...**. This item opens a Quick Pick that enables you to manage which extensions have access to the language models provided by GitHub Copilot Chat.
 
-![Screenshot that shows the language model access Quick Pick.](images/1_102/lm-access-qp.png)
+![Screenshot that shows the language model access Quick Pick.](https://code.visualstudio.com/assets/updates/1_102//1_102/lm-access-qp.png)
 
 We think this is clearer... That said, in a future release we will explore more granular access control for language models (for example, only allowing specific models rather than _all_ models provided by an extension), so stay tuned for that.
 
@@ -193,7 +193,7 @@ We've have been working on expanding MCP support in VS Code for the past few mon
 
 You can get started by installing some of the [popular MCP servers from our curated list](https://code.visualstudio.com/mcp). Learn more about [using MCP servers in VS Code](https://code.visualstudio.com/docs/copilot/chat/mcp-servers) and how you can use them to extend agent mode.
 
-![Screenshot that shows the MCP Servers page.](images/1_102/mcp-servers-page.png)
+![Screenshot that shows the MCP Servers page.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-servers-page.png)
 
 If you want to build your own MCP server, check our [MCP developer guide](https://code.visualstudio.com/api/extension-guides/ai/mcp) for more details about how to take advantage of the MCP capabilities in VS Code.
 
@@ -215,11 +215,11 @@ Once installed, MCP servers automatically appear in your Extensions view under t
 
 The new **MCP SERVERS - INSTALLED** view in the Extensions view makes it easy to monitor, configure, and control your installed MCP servers.
 
-![Screenshot showing the MCP Servers management view with installed servers.](images/1_102/mcp-servers-installed-view.png)
+![Screenshot showing the MCP Servers management view with installed servers.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-servers-installed-view.png)
 
 The view lists the installed MCP servers and provides several management actions through the context menu:
 
-![Screenshot showing the context menu actions for an MCP server.](images/1_102/mcp-server-context-menu.png)
+![Screenshot showing the context menu actions for an MCP server.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-server-context-menu.png)
 
 * **Start Server** / **Stop Server** / **Restart Server**: Control the server's running state
 * **Disconnect Account**: Remove account access from the server
@@ -232,11 +232,11 @@ The view lists the installed MCP servers and provides several management actions
 
 When you select an installed MCP server, VS Code opens the MCP server editor displaying the server's readme details, manifest, and its runtime configuration. This provides an overview of the server's capabilities and current settings, making it easy to understand what the server does and how it's configured.
 
-![Screenshot showing the MCP server editor with runtime configuration.](images/1_102/mcp-server-editor-configuration.png)
+![Screenshot showing the MCP server editor with runtime configuration.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-server-editor-configuration.png)
 
 The **MCP SERVERS - INSTALLED** view also provides a **Browse MCP Servers...** action that takes you directly to the community website, making server discovery always accessible from within VS Code.
 
-![Screenshot that shows the Browse MCP Servers action in the MCP Servers view.](images/1_102/mcp-servers-browse-action.png)
+![Screenshot that shows the Browse MCP Servers action in the MCP Servers view.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-servers-browse-action.png)
 
 #### MCP servers as first-class resources
 
@@ -274,13 +274,13 @@ These commands provide quick access to your MCP configuration files, making it e
 You are now able to sign out or disconnect accounts from the MCP gear menu and quick picks.
 
 * MCP view gear menu:
-    ![Screenshot showing the Disconnect Account action shown in MCP view gear menu.](images/1_102/mcp-view-signout.png)
+    ![Screenshot showing the Disconnect Account action shown in MCP view gear menu.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-view-signout.png)
 
 * MCP editor gear menu:
-    ![Screenshot showing the Disconnect Account action shown in MCP editor gear menu.](images/1_102/mcp-editor-signout.png)
+    ![Screenshot showing the Disconnect Account action shown in MCP editor gear menu.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-editor-signout.png)
 
 * MCP quick pick:
-    ![Screenshot showing the Disconnect Account action shown in MCP quick pick menu.](images/1_102/mcp-qp-signout.png)
+    ![Screenshot showing the Disconnect Account action shown in MCP quick pick menu.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-qp-signout.png)
 
 The **Disconnect** action is shown when the account is used by either other MCP servers or extensions, while **Sign Out** is shown when the account is only used by the MCP server. The sign out action completely removes the account from VS Code, while disconnect only removes access to the account from the MCP server.
 
@@ -292,7 +292,7 @@ You can now temporarily pause inline suggestions and next edit suggestions (NES)
 
 To snooze suggestions, select the Copilot dashboard in the Status Bar, or run the **Snooze Inline Suggestions** command from the Command Palette and select a duration from the dropdown menu. During the snooze period, no inline suggestions or NES will appear.
 
-![Screenshot showing the Copilot dashboard with the snooze button at the bottom.](images/1_102/nes-snooze.png)
+![Screenshot showing the Copilot dashboard with the snooze button at the bottom.](https://code.visualstudio.com/assets/updates/1_102//1_102/nes-snooze.png)
 
 You can also assign a custom keybinding to quickly snooze suggestions for a specific duration by passing the desired duration as an argument to the command. For example:
 
@@ -308,7 +308,7 @@ You can also assign a custom keybinding to quickly snooze suggestions for a spec
 
 #### Settings search suggestions (Preview)
 
-**Setting**: `setting(workbench.settings.showAISearchToggle:true)`
+**Setting**: `workbench.settings.showAISearchToggle`
 
 This milestone, we modified the sparkle toggle in the Settings editor, so that it acts as a toggle between the AI and non-AI search results. The AI settings search results are semantically similar results instead of results that are based on string matching. For example, `editor.fontSize` appears as an AI settings search result when you search for "increase text size".
 
@@ -598,7 +598,7 @@ Last month, we introduced support for next edit suggestions to automatically sug
 
 #### NES acceptance flow
 
-Accepting next edit suggestions is now more seamless. Once you accept a suggestion, you can continue accepting subsequent suggestions with a single `kbstyle(Tab)` press, as long as you haven't started typing again. If you start typing, you'll need to press `kbstyle(Tab)` to first move the cursor to the next suggestion before you can accept it.
+Accepting next edit suggestions is now more seamless. Once you accept a suggestion, you can continue accepting subsequent suggestions with a single <kbd>Tab</kbd> press, as long as you haven't started typing again. If you start typing, you'll need to press <kbd>Tab</kbd> to first move the cursor to the next suggestion before you can accept it.
 
 ### Notebooks
 
