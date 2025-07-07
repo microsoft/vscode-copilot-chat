@@ -607,7 +607,7 @@
 				"name": "copilot_getTerminalLastCommand",
 				"toolReferenceName": "terminalLastCommand",
 				"displayName": "%github.copilot.tools.terminalLastCommand.name%",
-				"modelDescription": "Get the user's current selection in the active terminal.",
+				"modelDescription": "The active terminal's last run command.",
 				"userDescription": "%github.copilot.tools.terminalLastCommand.description%",
 				"canBeReferencedInPrompt": true,
 				"icon": "$(terminal)"
