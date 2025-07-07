@@ -347,7 +347,6 @@ suite('AgentPrompt', () => {
 			const tasksService: any = {};
 			const terminalService: any = {};
 
-			// Mock getTasks and isTaskActive
 			const uri = URI.from({ path: 'workspace:/', scheme: 'file' });
 			const tasks: any[] = [];
 			tasksService.getTasks = ((workspaceFolder?: URI) => {
@@ -406,7 +405,6 @@ suite('AgentPrompt', () => {
 			const prompt = new TerminalAndTaskStatePromptElement({}, tasksService, terminalService);
 			const rendered = await prompt.render();
 
-			// Convert rendered output to string for assertions
 			const output = typeof rendered === 'string' ? rendered : JSON.stringify(rendered) ?? '';
 			assert(output.includes('No active tasks or terminals found.'));
 		});
