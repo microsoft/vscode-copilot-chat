@@ -513,11 +513,11 @@ class ConversationHistorySummarizer {
 		let numRoundsSinceLastSummarization = reversedCurrentRounds.findIndex(round => round.summary) ?? -1;
 		if (numRoundsSinceLastSummarization === -1) {
 			let count = numRoundsInCurrentTurn;
-			for (const turn of Iterable.reverse(Array.from(this.props.promptContext.history))) {
+			outer: for (const turn of Iterable.reverse(Array.from(this.props.promptContext.history))) {
 				for (const round of Iterable.reverse(Array.from(turn.rounds ?? []))) {
 					if (round.summary) {
 						numRoundsSinceLastSummarization = count;
-						break;
+						break outer;
 					}
 					count++;
 				}
