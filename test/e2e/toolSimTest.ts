@@ -89,7 +89,7 @@ async function validateToolCallExpectation(accessor: ITestingServicesAccessor, t
 	for (const toolCall of toolCalls) {
 		if (expectedAnyOfToolNames) {
 			if (!expectedAnyOfToolNames.has(toolCall.name as ToolName)) {
-				throw new Error(`Tool call name "${toolCall.name}" does not match expected tool call names.`);
+				throw new Error(`Tool call name "${toolCall.name}" does not match expected tool call names (${Array.from(expectedAnyOfToolNames).join(', ')}).`);
 			}
 
 			if (!expectation?.allowParallelToolCalls) {
