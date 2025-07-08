@@ -8,7 +8,6 @@ import tsEslint from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import importEslint from 'eslint-plugin-import';
 import jsdocEslint from 'eslint-plugin-jsdoc';
-import noOnlyTestsEslint from 'eslint-plugin-no-only-tests';
 import fs from 'fs';
 import path from 'path';
 import tseslint from 'typescript-eslint';
@@ -33,25 +32,17 @@ export default tseslint.config(
 			'!**/.eslint-plugin-local/**/*'
 		],
 	},
-	// All TS files
+	// All js/ts files
 	{
 		files: [
-			'**/*.{ts,tsx}',
+			'**/*.{js,jsx,mjs,cjs,ts,tsx}',
 		],
 		languageOptions: {
 			parser: tsParser,
-			parserOptions: {
-				ecmaVersion: 6,
-				sourceType: 'module',
-			},
 		},
 		plugins: {
-			'@typescript-eslint': tsEslint,
 			'@stylistic': stylisticEslint,
-			'jsdoc': jsdocEslint,
 			'header': headerEslint,
-			'no-only-tests': noOnlyTestsEslint,
-			'local': localEslint,
 		},
 		rules: {
 			'indent': [
@@ -102,16 +93,7 @@ export default tseslint.config(
 				'context'
 			], // non-complete list of globals that are easy to access unintentionally
 			'no-var': 'error',
-			'jsdoc/no-types': 'error',
 			'semi': 'error',
-			'@stylistic/member-delimiter-style': 'error',
-			'@typescript-eslint/naming-convention': [
-				'error',
-				{
-					selector: 'class',
-					format: ['PascalCase']
-				}
-			],
 			'header/header': [
 				'error',
 				'block',
@@ -122,6 +104,38 @@ export default tseslint.config(
 					' *--------------------------------------------------------------------------------------------'
 				]
 			]
+		},
+		settings: {
+			'import/resolver': {
+				typescript: {
+					extensions: ['.ts', '.tsx']
+				}
+			}
+		},
+	},
+	// All ts files
+	{
+		files: [
+			'**/*.{ts,tsx}',
+		],
+		languageOptions: {
+			parser: tsParser,
+		},
+		plugins: {
+			'@typescript-eslint': tsEslint,
+			'@stylistic': stylisticEslint,
+			'jsdoc': jsdocEslint,
+		},
+		rules: {
+			'jsdoc/no-types': 'error',
+			'@stylistic/member-delimiter-style': 'error',
+			'@typescript-eslint/naming-convention': [
+				'error',
+				{
+					selector: 'class',
+					format: ['PascalCase']
+				}
+			],
 		},
 		settings: {
 			'import/resolver': {
