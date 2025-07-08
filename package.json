@@ -2821,18 +2821,7 @@
 					},
 					"github.copilot.chat.agent.terminal.allowList": {
 						"type": "object",
-						"default": {
-							"echo": true,
-							"cd": true,
-							"ls": true,
-							"cat": true,
-							"pwd": true,
-							"Write-Host": true,
-							"Set-Location": true,
-							"Get-ChildItem": true,
-							"Get-Content": true,
-							"Get-Location": true
-						},
+						"default": {},
 						"additionalProperties": {
 							"type": "boolean",
 							"enum": [true, false],
