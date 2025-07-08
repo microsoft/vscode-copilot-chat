@@ -347,7 +347,7 @@ suite('AgentPrompt', () => {
 			const tasksService: any = {};
 			const terminalService: any = {};
 
-			const uri = URI.from({ path: 'workspace:/', scheme: 'file' });
+			const uri = URI.from({ path: '/workspace', scheme: 'file' });
 			const tasks: any[] = [];
 			tasksService.getTasks = ((workspaceFolder?: URI) => {
 				if (workspaceFolder) {
