@@ -352,8 +352,8 @@ function printTable(data: AggregatedTest[], { compare, useColoredOutput, filterP
 	console.table(tableData);
 }
 
-const BASELINE_JSON_PATH = path.join(__dirname, '../test/simulation/baseline.json');
-const BASELINE_OLD_JSON_PATH = path.join(__dirname, '../test/simulation/baseline.old.json');
+const DEFAULT_BASELINE_JSON_PATH = path.join(__dirname, '../test/simulation/baseline.json');
+const DEFAULT_BASELINE_OLD_JSON_PATH = path.join(__dirname, '../test/simulation/baseline.old.json');
 
 async function main() {
 	const args = process.argv.slice(2);
@@ -363,6 +363,14 @@ async function main() {
 	const omitEqual = args.includes('--omit-equal');
 	const filterArg = args.find(arg => arg.startsWith('--filter='));
 	const filterProviders = filterArg ? filterArg.split('=')[1].split(',').map(s => s.toLocaleLowerCase()) : undefined;
+	const externalBaselineArg = args.find(arg => arg.startsWith('--external-baseline='));
+	const externalBaselinePath = externalBaselineArg ? externalBaselineArg.split('=')[1] : undefined;
+
+	// Determine baseline paths
+	const BASELINE_JSON_PATH = externalBaselinePath ? path.resolve(externalBaselinePath) : DEFAULT_BASELINE_JSON_PATH;
+	const BASELINE_OLD_JSON_PATH = externalBaselinePath ?
+		path.join(process.cwd(), 'baseline.old.json') :
+		DEFAULT_BASELINE_OLD_JSON_PATH;
 
 	let baselineJson: string;
 	try {
