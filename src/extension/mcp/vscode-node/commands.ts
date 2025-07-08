@@ -221,17 +221,40 @@ export class McpSetupCommands extends Disposable {
 
 				// search for the package by ID
 				// https://learn.microsoft.com/en-us/nuget/consume-packages/finding-and-choosing-packages#search-syntax
-				const searchQueryUrl = `${searchBaseUrl}?q=packageid:${encodeURIComponent(args.name)}&semVerLevel=2.0.0`;
+				const searchQueryUrl = `${searchBaseUrl}?q=packageid:${encodeURIComponent(args.name)}&prerelease=true&semVerLevel=2.0.0`;
 				const searchResponse = await fetch(searchQueryUrl);
 				if (!searchResponse.ok) {
 					return { state: 'error', error: `Failed to search for ${args.name} in then NuGet.org registry` };
 				}
 				const data = await searchResponse.json() as NuGetSearchResponse;
-				const id = data.data?.[0]?.id ?? args.name;
-				const version = data.data?.[0]?.version;
-				const publisher = data.data?.[0]?.owners ? data.data[0].owners.join(', ') : 'unknown';
+				if (!data.data?.[0]) {
+					return { state: 'error', error: `Package ${args.name} not found on NuGet.org` };
+				}
 
-				this.enqueuePendingSetup(args.targetConfig, id, args.type, data.data?.[0]?.description, version);
+				const id = data.data[0].id ?? args.name;
+				let version = data.data[0].version;
+				if (version.indexOf('+') !== -1) {
+					// NuGet versions can have a + sign for build metadata, we strip it for MCP config and API calls
+					// e.g. 1.0.0+build123 -> 1.0.0
+					version = version.split('+')[0];
+				}
+				const publisher = data.data[0].owners ? data.data[0].owners.join(', ') : 'unknown';
+
+				// Try to fetch the package readme
+				// https://learn.microsoft.com/en-us/nuget/api/readme-template-resource
+				const readmeTemplate = serviceIndex.resources?.find(resource => resource['@type'] === 'ReadmeUriTemplate/6.13.0')?.['@id'];
+				let description = data.data[0].description || undefined;
+				if (readmeTemplate) {
+					const readmeUrl = readmeTemplate
+						.replace('{lower_id}', encodeURIComponent(id.toLowerCase()))
+						.replace('{lower_version}', encodeURIComponent(version.toLowerCase()));
+					const readmeResponse = await fetch(readmeUrl);
+					if (readmeResponse.ok) {
+						description = await readmeResponse.text();
+					}
+				}
+
+				this.enqueuePendingSetup(args.targetConfig, id, args.type, description, version);
 				return { state: 'ok', publisher, version };
 			} else if (args.type === 'docker') {
 				// Docker Hub API uses namespace/repository format
