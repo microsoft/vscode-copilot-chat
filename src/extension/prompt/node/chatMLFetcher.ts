@@ -435,7 +435,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 	}
 
 	private filterImageMessages(messages: Raw.ChatMessage[]): boolean {
-		return messages?.some(m => Array.isArray(m.content) ? m.content.some(c => 'image_url' in c) : false);
+		return messages?.some(m => Array.isArray(m.content) ? m.content.some(c => 'imageUrl' in c) : false);
 	}
 
 	private isRepetitive(chatCompletion: ChatCompletion, telemetryProperties?: TelemetryProperties) {
