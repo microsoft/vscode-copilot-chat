@@ -112,7 +112,7 @@ suite('TerminalAndTaskStatePromptElement', () => {
 		assert(output.includes('Active Tasks:'));
 		assert(output.includes('npm: build'));
 		assert(output.includes('npm: watch'));
-		assert(output.includes('No active terminals found.'));
+		assert(output.includes('No active Copilot terminals found.'));
 	});
 	test('Copilot terminals and no active tasks', async () => {
 
@@ -178,6 +178,6 @@ suite('TerminalAndTaskStatePromptElement', () => {
 		const rendered = await prompt.render();
 
 		const output = typeof rendered === 'string' ? rendered : JSON.stringify(rendered) ?? '';
-		assert(output.includes('No active tasks or terminals found.'));
+		assert(output.includes('No active tasks or Copilot terminals found.'));
 	});
 });
