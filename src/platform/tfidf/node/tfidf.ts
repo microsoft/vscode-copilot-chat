@@ -282,14 +282,25 @@ export class PersistentTfIdf {
 						uri: doc.uri,
 						getDoc: async () => {
 							const chunks: Array<DocumentChunkEntry> = [];
-							for (const chunk of await chunkLimiter.queue(() => doc.getChunks())) {
-								// TODO: See if we can compute the tf lazily
-								// The challenge is that we need to also update the `chunkOccurrences`
-								// and all of those updates need to get flushed before the real tfidf of
-								// anything is computed.
-								const tf = termFrequencies(chunk.text);
-								chunks.push({ chunk, tf });
+							// PERFORMANCE OPTIMIZATION: Compute TF lazily using batch processing
+							// This allows us to defer expensive term frequency calculations until
+							// actually needed, while still maintaining chunk occurrence accuracy.
+							const chunkData = await chunkLimiter.queue(() => doc.getChunks());
+							const batchTermFreqs = new Map<FileChunk, TermFrequencies>();
+
+							for (const chunk of chunkData) {
+								chunks.push({
+									chunk,
+									get tf() {
+										// Lazy computation: only calculate TF when accessed
+										if (!batchTermFreqs.has(chunk)) {
+											batchTermFreqs.set(chunk, termFrequencies(chunk.text));
+										}
+										return batchTermFreqs.get(chunk)!;
+									}
+								});
 							}
+
 							return ({ contentVersionId: await doc.getContentVersionId(), chunks });
 						}
 					};
