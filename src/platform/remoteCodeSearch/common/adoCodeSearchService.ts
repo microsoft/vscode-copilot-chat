@@ -4,13 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 import { shouldInclude } from '../../../util/common/glob';
 import { Result } from '../../../util/common/result';
-import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
+import { CallTracker, TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { raceCancellationError } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Range } from '../../../util/vs/editor/common/core/range';
 import { createDecorator } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { FileChunkAndScore } from '../../chunking/common/chunk';
+import { getGithubMetadataHeaders } from '../../chunking/common/chunkingEndpointClientImpl';
 import { stripChunkTextMetadata } from '../../chunking/common/chunkingStringUtils';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { EmbeddingType } from '../../embeddings/common/embeddingsComputer';
@@ -139,6 +140,7 @@ export class AdoCodeSearchService implements IAdoCodeSearchService {
 			Accept: 'application/json',
 			Authorization: `Basic ${authToken}`,
 			'Content-Type': 'application/json',
+			...getGithubMetadataHeaders(new CallTracker('AdoCodeSearchService::getRemoteIndexState'), this._envService)
 		};
 
 		const result = await raceCancellationError(
@@ -221,6 +223,7 @@ export class AdoCodeSearchService implements IAdoCodeSearchService {
 			Accept: 'application/json',
 			Authorization: `Basic ${authToken}`,
 			'Content-Type': 'application/json',
+			...getGithubMetadataHeaders(new CallTracker('AdoCodeSearchService::searchRepo'), this._envService)
 		};
 
 		const response = await raceCancellationError(
