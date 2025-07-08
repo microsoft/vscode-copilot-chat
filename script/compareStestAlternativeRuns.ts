@@ -50,6 +50,7 @@ interface TestResult {
 }
 
 const regexForProviderName = / \(\[(([a-zA-Z0-9\-])+)\]\)/;
+const DEFAULT_PROVIDER_NAME = 'Default Provider';
 
 function getFlavor(testResult: BaselineTestResult): string {
 	const match = testResult.name.match(regexForProviderName);
@@ -62,13 +63,14 @@ function getFlavor(testResult: BaselineTestResult): string {
 				return match[1];
 		}
 	} else {
-		throw new Error(`No flavor found in ${testResult.name}`);
+		return DEFAULT_PROVIDER_NAME;
 	}
 }
 
 function computeTestResultsFromBaseline(baseline: BaselineTestResult[]): TestResult[] {
 
-	const nesTestsWithFlavor = baseline.filter((currentBaselineTestResult) => currentBaselineTestResult.name.startsWith('InlineEdit') && currentBaselineTestResult.name.includes('])'));
+	const nesTestsWithFlavor = baseline.filter((currentBaselineTestResult) =>
+		currentBaselineTestResult.name.startsWith('NES ') || (currentBaselineTestResult.name.startsWith('InlineEdit') && currentBaselineTestResult.name.includes('])')));
 
 	const fullNameToTestName = (fullName: string) => {
 		const indexOfSuiteTestNameSplit = fullName.indexOf(' - ');
