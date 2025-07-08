@@ -1890,17 +1890,16 @@ export class InlineCompletionContribution implements vscode.Disposable {
 	}
 
 	private getSampleTelemetry(activeExperiments: Map<string, string | number | boolean | string[]>): number {
-		return 3;
-		// const value = activeExperiments.get('sampleTelemetry');
-		// if (value === undefined || value === null || value === false) {
-		// 	return 1;
-		// }
-		// if (value === true) {
-		// 	return 10;
-		// }
-		// if (typeof value === 'number') {
-		// 	return Math.max(1, Math.min(100, value));
-		// }
-		// return 1;
+		const value = activeExperiments.get('sampleTelemetry');
+		if (value === undefined || value === null || value === false) {
+			return 1;
+		}
+		if (value === true) {
+			return 10;
+		}
+		if (typeof value === 'number') {
+			return Math.max(1, Math.min(100, value));
+		}
+		return 1;
 	}
 }
