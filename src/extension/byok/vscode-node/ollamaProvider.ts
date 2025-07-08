@@ -20,6 +20,13 @@ interface OllamaModelInfoAPIResponse {
 	};
 }
 
+interface OllamaVersionResponse {
+	version: string;
+}
+
+// Minimum supported Ollama version - versions below this may have compatibility issues
+const MINIMUM_OLLAMA_VERSION = '0.1.7';
+
 export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 
 	constructor(
@@ -40,10 +47,17 @@ export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 
 	override async getAllModels(apiKey: string): Promise<{ id: string; name: string }[]> {
 		try {
+			// Check Ollama server version before proceeding with model operations
+			await this._checkOllamaVersion();
+			
 			const response = await this._fetcherService.fetch(`${this._ollamaBaseUrl}/api/tags`, { method: 'GET' });
 			const models = (await response.json()).models;
 			return models.map((model: { model: string; name: string }) => ({ id: model.model, name: model.name }));
 		} catch (e) {
+			// Check if this is our version check error and preserve it
+			if (e instanceof Error && e.message.includes('Ollama server version')) {
+				throw e;
+			}
 			throw new Error('Failed to fetch models from Ollama. Please ensure Ollama is running. If ollama is on another host, please configure the `"github.copilot.chat.byok.ollamaEndpoint"` setting.');
 		}
 	}
@@ -73,5 +87,95 @@ export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 			body: JSON.stringify({ model: modelId })
 		});
 		return response.json() as unknown as OllamaModelInfoAPIResponse;
+	}
+
+	/**
+	 * Check if the connected Ollama server version meets the minimum requirements
+	 * @throws Error if version is below minimum or version check fails
+	 */
+	private async _checkOllamaVersion(): Promise<void> {
+		try {
+			// Try the standard /api/version endpoint first
+			let response;
+			try {
+				response = await this._fetcherService.fetch(`${this._ollamaBaseUrl}/api/version`, { method: 'GET' });
+			} catch (e) {
+				// Fallback to /version endpoint if /api/version doesn't exist
+				response = await this._fetcherService.fetch(`${this._ollamaBaseUrl}/version`, { method: 'GET' });
+			}
+			
+			const versionInfo = await response.json() as OllamaVersionResponse;
+			
+			if (!this._isVersionSupported(versionInfo.version)) {
+				throw new Error(
+					`Ollama server version ${versionInfo.version} is not supported. ` +
+					`Please upgrade to version ${MINIMUM_OLLAMA_VERSION} or higher. ` +
+					`Visit https://ollama.ai for upgrade instructions.`
+				);
+			}
+		} catch (e) {
+			if (e instanceof Error && e.message.includes('Ollama server version')) {
+				// Re-throw our custom version error
+				throw e;
+			}
+			// If version endpoint fails, try a fallback approach
+			throw new Error(
+				`Unable to verify Ollama server version. Please ensure you have Ollama version ${MINIMUM_OLLAMA_VERSION} or higher installed. ` +
+				`If you're running an older version, please upgrade from https://ollama.ai`
+			);
+		}
+	}
+
+	/**
+	 * Compare version strings to check if current version meets minimum requirements
+	 * @param currentVersion Current Ollama server version
+	 * @returns true if version is supported, false otherwise
+	 */
+	private _isVersionSupported(currentVersion: string): boolean {
+		try {
+			const current = this._parseVersion(currentVersion);
+			const minimum = this._parseVersion(MINIMUM_OLLAMA_VERSION);
+			
+			// Compare major.minor.patch
+			if (current.major > minimum.major) {
+				return true;
+			}
+			if (current.major < minimum.major) {
+				return false;
+			}
+			
+			if (current.minor > minimum.minor) {
+				return true;
+			}
+			if (current.minor < minimum.minor) {
+				return false;
+			}
+			
+			return current.patch >= minimum.patch;
+		} catch (e) {
+			// If we can't parse the version, assume it's not supported
+			return false;
+		}
+	}
+
+	/**
+	 * Parse a semantic version string into components
+	 * @param version Version string like "0.1.23" or "0.1.23-beta"
+	 * @returns Object with major, minor, patch numbers
+	 */
+	private _parseVersion(version: string): { major: number; minor: number; patch: number } {
+		// Remove any pre-release or build metadata (e.g. "0.1.23-beta" -> "0.1.23")
+		const cleanVersion = version.split('-')[0];
+		const parts = cleanVersion.split('.').map(part => parseInt(part, 10));
+		
+		if (parts.length < 3 || parts.some(isNaN)) {
+			throw new Error(`Invalid version format: ${version}`);
+		}
+		
+		return {
+			major: parts[0],
+			minor: parts[1], 
+			patch: parts[2]
+		};
 	}
 }
