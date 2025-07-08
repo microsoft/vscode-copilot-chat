@@ -655,7 +655,7 @@ class HealPatchPrompt extends PromptElement<{ patch: string; explanation: string
 					3. Generate the ENTIRE corrected patch. Do not omit anything.<br />
 				</Tag>
 			</SystemMessage>
-			<UserMessage>
+			<UserMessage priority={1}>
 				The goal of the patch is: {this.props.explanation}<br />
 				<br />
 				The patch I want to apply is:<br />
@@ -665,7 +665,7 @@ class HealPatchPrompt extends PromptElement<{ patch: string; explanation: string
 				<br />
 				The referenced files are:<br />
 				{Object.entries(this.props.docs).map(([file, { text }]) =>
-					<CodeBlock code={text} uri={URI.parse(file)} />
+					<CodeBlock code={text} uri={URI.parse(file)} priority={1} lineBasedPriority={true} />
 				)}
 			</UserMessage>
 		</>;

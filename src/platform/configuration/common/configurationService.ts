@@ -753,18 +753,7 @@ export namespace ConfigKey {
 	export const NewWorkspaceCreationAgentEnabled = defineSetting<boolean>('chat.newWorkspaceCreation.enabled', true);
 	export const SummarizeAgentConversationHistory = defineExpSetting<boolean>('chat.summarizeAgentConversationHistory.enabled', true);
 	export const CurrentEditorAgentContext = defineSetting<boolean>('chat.agent.currentEditorContext.enabled', true);
-	export const TerminalAllowList = defineSetting<{ [key: string]: boolean }>('chat.agent.terminal.allowList', {
-		"echo": true,
-		"cd": true,
-		"ls": true,
-		"cat": true,
-		"pwd": true,
-		"Write-Host": true,
-		"Set-Location": true,
-		"Get-ChildItem": true,
-		"Get-Content": true,
-		"Get-Location": true
-	});
+	export const TerminalAllowList = defineSetting<{ [key: string]: boolean }>('chat.agent.terminal.allowList', {});
 	export const TerminalDenyList = defineSetting<{ [key: string]: boolean }>('chat.agent.terminal.denyList', {
 		"rm": true,
 		"rmdir": true,
