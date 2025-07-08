@@ -22,11 +22,16 @@ import { ITasksService, TaskResult, TaskStatus } from '../common/tasksService';
 export class TasksService implements ITasksService {
 	_serviceBrand: undefined;
 
+	private taskDefinitionToTerminal: Map<vscode.TaskDefinition, vscode.Terminal> = new Map();
 	constructor(
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
-	) { }
+	) {
+		vscode.tasks.onDidStartTask(e => {
+			this.taskDefinitionToTerminal.set(e.execution.task.definition, (e.execution as any).terminal);
+		});
+	}
 
 	private getTasksFromConfig(workspaceFolder: URI): vscode.TaskDefinition[] {
 		const tasks = vscode.workspace.getConfiguration('tasks', workspaceFolder);
@@ -40,6 +45,14 @@ export class TasksService implements ITasksService {
 	hasTask(workspaceFolder: URI, def: vscode.TaskDefinition): boolean {
 		const existingTasks = this.getTasksFromConfig(workspaceFolder);
 		return existingTasks.some(t => this.matchesTask(t, def));
+	}
+
+	/**
+	 * This is needed because when tasks are stopped, they're removed from the taskExecutions
+	 * @param task
+	 */
+	getTerminalForTask(taskDefinition: vscode.TaskDefinition): vscode.Terminal | undefined {
+		return this.taskDefinitionToTerminal.get(taskDefinition);
 	}
 
 	async getTaskConfigPosition(workspaceFolder: URI, def: vscode.TaskDefinition) {
