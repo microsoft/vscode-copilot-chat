@@ -2834,8 +2834,14 @@
 						},
 						"additionalProperties": {
 							"type": "boolean",
-							"enum": [true, false],
-							"enumDescriptions": ["%github.copilot.config.agent.terminal.allowList.value.true%", "%github.copilot.config.agent.terminal.allowList.value.false%"],
+							"enum": [
+								true,
+								false
+							],
+							"enumDescriptions": [
+								"%github.copilot.config.agent.terminal.allowList.value.true%",
+								"%github.copilot.config.agent.terminal.allowList.value.false%"
+							],
 							"description": "%github.copilot.config.agent.terminal.allowList.key%"
 						},
 						"tags": [
@@ -2863,7 +2869,10 @@
 								true,
 								false
 							],
-							"enumDescriptions": ["%github.copilot.config.agent.terminal.denyList.value.true%", "%github.copilot.config.agent.terminal.denyList.value.false%"],
+							"enumDescriptions": [
+								"%github.copilot.config.agent.terminal.denyList.value.true%",
+								"%github.copilot.config.agent.terminal.denyList.value.false%"
+							],
 							"description": "%github.copilot.config.agent.terminal.denyList.key%"
 						},
 						"tags": [
@@ -3695,8 +3704,8 @@
 		"watch:tsc-extension-web": "tsc --noEmit --watch --project tsconfig.worker.json",
 		"watch:tsc-simulation-workbench": "tsc --noEmit --watch --project test/simulation/workbench/tsconfig.json",
 		"typecheck": "tsc --noEmit --project tsconfig.json && tsc --noEmit --project test/simulation/workbench/tsconfig.json && tsc --noEmit --project tsconfig.worker.json",
-		"lint": "eslint . --max-warnings=0 --ext ts --ext tsx",
-		"lint-staged": "eslint --max-warnings=0 --ext ts --ext tsx",
+		"lint": "eslint . --max-warnings=0",
+		"lint-staged": "eslint --max-warnings=0",
 		"tsfmt": "npx tsfmt -r --verify",
 		"test": "npm-run-all test:*",
 		"test:extension": "vscode-test",
@@ -3732,7 +3741,7 @@
 		"@nteract/messaging": "^7.0.20",
 		"@parcel/watcher": "^2.5.1",
 		"@stylistic/eslint-plugin": "^3.0.1",
-		"@types/eslint": "8.44.8",
+		"@types/eslint": "^9.0.0",
 		"@types/google-protobuf": "^3.15.12",
 		"@types/markdown-it": "^14.0.0",
 		"@types/minimist": "^1.2.5",
@@ -3762,12 +3771,11 @@
 		"dotenv": "^16.5.0",
 		"electron": "^37.0.0",
 		"esbuild": "^0.25.5",
-		"eslint": "^8.55.0",
+		"eslint": "^9.30.0",
 		"eslint-import-resolver-typescript": "^4.4.4",
 		"eslint-plugin-header": "^3.1.1",
 		"eslint-plugin-import": "^2.32.0",
 		"eslint-plugin-jsdoc": "^51.2.3",
-		"eslint-plugin-local": "^1.0.0",
 		"eslint-plugin-no-only-tests": "^3.3.0",
 		"fastq": "^1.19.1",
 		"glob": "^11.0.3",
@@ -3794,6 +3802,7 @@
 		"ts-dedent": "^2.2.0",
 		"tsx": "^4.20.3",
 		"typescript": "^5.8.3",
+		"typescript-eslint": "^8.36.0",
 		"typescript-formatter": "github:jrieken/typescript-formatter#497efb26bc40b5fa59a350e6eab17bce650a7e4b",
 		"vite-plugin-top-level-await": "^1.5.0",
 		"vite-plugin-wasm": "^3.4.1",
