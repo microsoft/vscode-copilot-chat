@@ -1073,7 +1073,7 @@
 			{
 				"name": "copilot_readNotebookCellOutput",
 				"displayName": "%copilot.tools.getNotebookCellOutput.name%",
-				"toolReferenceName": "readCellOutput",
+				"toolReferenceName": "readNotebookCellOutput",
 				"canBeReferencedInPrompt": true,
 				"icon": "$(notebook-render-output)",
 				"modelDescription": "This tool will retrieve the output for a notebook cell from its most recent execution or restored from disk. The cell may have output even when it has not been run in the current kernel session. This tool has a higher token limit for output length than the runNotebookCell tool.",
@@ -1236,7 +1236,7 @@
 				"tools": [
 					"runCell",
 					"getNotebookSummary",
-					"readCellOutput"
+					"readNotebookCellOutput"
 				]
 			},
 			{
@@ -1256,7 +1256,7 @@
 					"fileSearch",
 					"textSearch",
 					"listDirectory",
-					"readCellOutput",
+					"readNotebookCellOutput",
 					"readFile"
 				]
 			},
