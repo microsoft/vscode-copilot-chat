@@ -117,7 +117,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			return;
 		}
 		const activeDoc = this._pendingStatelessNextEditRequest.getActiveDocument();
-		if (activeDoc.id === docId && activeDoc.documentAfterEditsNoShortening.value !== docValue.value) {
+		if (activeDoc.id === docId && activeDoc.documentAfterEdits.value !== docValue.value) {
 			this._pendingStatelessNextEditRequest.cancellationTokenSource.cancel();
 		}
 	}
@@ -274,7 +274,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	}
 
 	private async _shortenDocument(doc: DocumentHistory): Promise<ShortendDocument> {
-		const documentAfterEditsNoShortening = doc.lastEdit.getEditedState();
 
 		const { document: projectedDocumentBeforeEdits, clippedRange } = this.getProjectedDocumentNoShortening(doc.lastEdit);
 
@@ -315,11 +314,11 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			lastEditNewRange,
 			base,
 			projectedEdits,
-			documentAfterEditsNoShortening,
 			doc.lastEdit.base.length.lineCount,
 			clippedRange,
 			lastSelectionInProjAfterEdit,
 		);
+
 		return {
 			recentEdit: doc.lastEdit,
 			nextEditDoc,

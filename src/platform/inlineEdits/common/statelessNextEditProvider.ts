@@ -146,7 +146,6 @@ export class StatelessNextEditDocument {
 		public readonly recentlyEditedInLinesAfterEditRange: Range | undefined,
 		public readonly documentBeforeEdits: StringText,
 		public readonly recentEdits: Edits,
-		public readonly documentAfterEditsNoShortening: StringText,
 		public readonly lineCountBeforeClipping: number = documentLinesBeforeEdit.length,
 		public readonly clippingRange: LineRange = new LineRange(1, documentLinesBeforeEdit.length + 1),
 		public readonly lastSelectionInAfterEdit: OffsetRange | undefined = undefined,
@@ -162,7 +161,6 @@ export class StatelessNextEditDocument {
 			v.recentlyEditedInLinesAfterEditRange ? Range.lift(v.recentlyEditedInLinesAfterEditRange) : undefined,
 			new StringText(v.documentBeforeEdits),
 			Edits.deserialize(v.recentEdits),
-			new StringText(v.documentAfterEditsNoShortening),
 			v.lineCountBeforeClipping,
 			LineRange.deserialize(v.clippingRange),
 			v.lastSelectionInAfterEdit ? new OffsetRange(v.lastSelectionInAfterEdit[0], v.lastSelectionInAfterEdit[1]) : undefined,
@@ -179,7 +177,6 @@ export class StatelessNextEditDocument {
 			recentlyEditedInLinesAfterEditRange: this.recentlyEditedInLinesAfterEditRange?.toJSON(),
 			documentBeforeEdits: this.documentBeforeEdits.value,
 			recentEdits: this.recentEdits.serialize(),
-			documentAfterEditsNoShortening: this.documentAfterEditsNoShortening.value,
 			lineCountBeforeClipping: this.lineCountBeforeClipping,
 			clippingRange: this.clippingRange.serialize(),
 			lastSelectionInAfterEdit: this.lastSelectionInAfterEdit === undefined ? undefined : serializeOffsetRange(this.lastSelectionInAfterEdit),
@@ -231,7 +228,6 @@ export interface ISerializedNextEditDocument {
 	recentlyEditedInLinesAfterEditRange: IRange | undefined;
 	documentBeforeEdits: string;
 	recentEdits: SerializedEdit[];
-	documentAfterEditsNoShortening: string;
 	lineCountBeforeClipping: number;
 	clippingRange: ISerializedLineRange;
 	lastSelectionInAfterEdit: ISerializedOffsetRange | undefined;
