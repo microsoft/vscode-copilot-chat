@@ -8,17 +8,17 @@ import { URI } from '../../../../../util/vs/base/common/uri';
 import { TerminalAndTaskStatePromptElement } from '../../base/terminalAndTaskState';
 
 suite('TerminalAndTaskStatePromptElement', () => {
+	const tasksService: any = {};
+	tasksService.getTerminalForTask = (task: any) => {
+		if (task.command === 'build') {
+			return { name: 'Terminal 1', id: '1' };
+		} else if (task.command === 'watch') {
+			return { name: 'Terminal 2', id: '2' };
+		}
+		return undefined;
+	};
 	test('Copilot terminals and active tasks', async () => {
-		const tasksService: any = {};
 		const terminalService: any = {};
-		tasksService.getTerminalForTask = (task: any) => {
-			if (task.command === 'build') {
-				return { name: 'Terminal 1', id: '1' };
-			} else if (task.command === 'watch') {
-				return { name: 'Terminal 2', id: '2' };
-			}
-			return undefined;
-		};
 		tasksService.getTasks = () => [[null, [
 			{
 				label: 'npm: build',
@@ -71,16 +71,7 @@ suite('TerminalAndTaskStatePromptElement', () => {
 		assert(output.includes('/workspace'));
 	});
 	test('Terminals (non-Copilot) and active tasks', async () => {
-		const tasksService: any = {};
 		const terminalService: any = {};
-		tasksService.getTerminalForTask = (task: any) => {
-			if (task.command === 'build') {
-				return { name: 'Terminal 1', id: '1' };
-			} else if (task.command === 'watch') {
-				return { name: 'Terminal 2', id: '2' };
-			}
-			return undefined;
-		};
 		tasksService.getTasks = () => [[null, [
 			{
 				label: 'npm: build',
@@ -127,16 +118,7 @@ suite('TerminalAndTaskStatePromptElement', () => {
 		assert(output.includes('No active Copilot terminals found.'));
 	});
 	test('Terminals (non-Copilot) and inactive tasks', async () => {
-		const tasksService: any = {};
 		const terminalService: any = {};
-		tasksService.getTerminalForTask = (task: any) => {
-			if (task.command === 'build') {
-				return { name: 'Terminal 1', id: '1' };
-			} else if (task.command === 'watch') {
-				return { name: 'Terminal 2', id: '2' };
-			}
-			return undefined;
-		};
 		tasksService.getTasks = () => [[null, [
 			{
 				label: 'npm: build',
