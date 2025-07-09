@@ -49,14 +49,8 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 		this.reviewKind,
 	];
 
-	static getSevereDiagnostics(diagnostics: ReadonlyArray<vscode.Diagnostic>): vscode.Diagnostic[] {
-		const severeDiagnostics = diagnostics.filter(d => d.severity <= vscode.DiagnosticSeverity.Warning);
-
-		if (severeDiagnostics.length === 0) {
-			return [];
-		}
-
-		return severeDiagnostics;
+	static getWarningOrErrorDiagnostics(diagnostics: ReadonlyArray<vscode.Diagnostic>): vscode.Diagnostic[] {
+		return diagnostics.filter(d => d.severity <= vscode.DiagnosticSeverity.Warning);
 	}
 
 	static getDiagnosticsAsText(diagnostics: ReadonlyArray<vscode.Diagnostic>): string {
@@ -105,7 +99,7 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 			codeActions.push(reviewAction);
 		}
 
-		const severeDiagnostics = QuickFixesProvider.getSevereDiagnostics(context.diagnostics);
+		const severeDiagnostics = QuickFixesProvider.getWarningOrErrorDiagnostics(context.diagnostics);
 		if (severeDiagnostics.length === 0) {
 			return codeActions;
 		}
