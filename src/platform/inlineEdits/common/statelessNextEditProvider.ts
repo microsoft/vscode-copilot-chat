@@ -11,8 +11,6 @@ import { CancellationToken, CancellationTokenSource } from '../../../util/vs/bas
 import { URI } from '../../../util/vs/base/common/uri';
 import { LineEdit, LineReplacement, SerializedLineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
-import { IRange, Range } from '../../../util/vs/editor/common/core/range';
-import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { ChatFetchResponseType, FetchResponse } from '../../chat/common/commonTypes';
@@ -115,8 +113,6 @@ export interface ISerializedNextEditRequest {
 }
 
 export class StatelessNextEditDocument {
-	public readonly recentlyEditedInLinesAfterEdit = this.recentlyEditedInLinesAfterEditRange === undefined ? undefined : LineRange.fromRangeInclusive(this.recentlyEditedInLinesAfterEditRange);
-
 	public readonly documentAfterEdits = new StringText(this.recentEdits.apply(this.documentBeforeEdits.value));
 	public readonly documentAfterEditsLines: string[] = this.documentAfterEdits.getLines();
 
@@ -130,11 +126,9 @@ export class StatelessNextEditDocument {
 		public readonly languageId: LanguageId,
 		public readonly documentLinesBeforeEdit: string[],
 		public readonly recentEdit: LineEdit,
-		public readonly recentlyEditedInLinesAfterEditRange: Range | undefined,
 		public readonly documentBeforeEdits: StringText,
 		public readonly recentEdits: Edits,
 		public readonly lineCountBeforeClipping: number = documentLinesBeforeEdit.length,
-		public readonly clippingRange: LineRange = new LineRange(1, documentLinesBeforeEdit.length + 1),
 		public readonly lastSelectionInAfterEdit: OffsetRange | undefined = undefined,
 	) { }
 
@@ -145,11 +139,9 @@ export class StatelessNextEditDocument {
 			languageId: this.languageId,
 			documentLinesBeforeEdit: this.documentLinesBeforeEdit,
 			recentEdit: this.recentEdit.serialize(),
-			recentlyEditedInLinesAfterEditRange: this.recentlyEditedInLinesAfterEditRange?.toJSON(),
 			documentBeforeEdits: this.documentBeforeEdits.value,
 			recentEdits: this.recentEdits.serialize(),
 			lineCountBeforeClipping: this.lineCountBeforeClipping,
-			clippingRange: this.clippingRange.serialize(),
 			lastSelectionInAfterEdit: this.lastSelectionInAfterEdit === undefined ? undefined : serializeOffsetRange(this.lastSelectionInAfterEdit),
 		};
 	}
@@ -177,11 +169,9 @@ export interface ISerializedNextEditDocument {
 	languageId: string;
 	documentLinesBeforeEdit: string[];
 	recentEdit: SerializedLineEdit;
-	recentlyEditedInLinesAfterEditRange: IRange | undefined;
 	documentBeforeEdits: string;
 	recentEdits: SerializedEdit[];
 	lineCountBeforeClipping: number;
-	clippingRange: ISerializedLineRange;
 	lastSelectionInAfterEdit: ISerializedOffsetRange | undefined;
 }
 

@@ -67,7 +67,6 @@ export interface ILlmNESTelemetry extends Partial<IStatelessNextEditTelemetry> {
 	readonly isFromCache: boolean;
 	readonly subsequentEditOrder: number | undefined;
 	readonly activeDocumentOriginalLineCount: number | undefined;
-	readonly activeDocumentShortenedLineCount: number | undefined;
 	readonly activeDocumentEditsCount: number | undefined;
 	readonly activeDocumentLanguageId: string | undefined;
 	readonly activeDocumentRepository: string | undefined;
@@ -122,7 +121,6 @@ export class LlmNESTelemetryBuilder extends Disposable {
 		let activeDocumentEditsCount: number | undefined = undefined;
 		let activeDocumentLanguageId: string | undefined = undefined;
 		let activeDocumentOriginalLineCount: number | undefined = undefined;
-		let activeDocumentShortenedLineCount: number | undefined = undefined;
 		let isNotebook: boolean = false;
 		let activeDocumentRepository: string | undefined = undefined;
 		let repositoryUrls: string[] | undefined = undefined;
@@ -134,7 +132,6 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			activeDocumentEditsCount = activeDoc.recentEdits.edits.length;
 			activeDocumentLanguageId = activeDoc.languageId;
 			activeDocumentOriginalLineCount = activeDoc.lineCountBeforeClipping;
-			activeDocumentShortenedLineCount = activeDoc.clippingRange.length;
 			isNotebook = activeDoc.id.toUri().scheme === Schemas.vscodeNotebookCell;
 			const git = this._gitExtensionService.getExtensionApi();
 			if (git) {
@@ -238,7 +235,6 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			activeDocumentEditsCount,
 			activeDocumentLanguageId,
 			activeDocumentOriginalLineCount,
-			activeDocumentShortenedLineCount,
 			fetchStartedAfterMs,
 			wasPreviouslyRejected: this._wasPreviouslyRejected,
 			isNotebook: isNotebook,
@@ -612,7 +608,6 @@ export class TelemetrySender implements IDisposable {
 			subsequentEditOrder,
 			activeDocumentLanguageId,
 			activeDocumentOriginalLineCount,
-			activeDocumentShortenedLineCount,
 			nLinesOfCurrentFileInPrompt,
 			wasPreviouslyRejected,
 			isShown,
@@ -694,7 +689,6 @@ export class TelemetrySender implements IDisposable {
 		"isFromCache": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit was provided from cache", "isMeasurement": true },
 		"subsequentEditOrder": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Order of the subsequent edit", "isMeasurement": true },
 		"activeDocumentOriginalLineCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of lines in the active document before shortening", "isMeasurement": true },
-		"activeDocumentShortenedLineCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of lines in the active document after shortening", "isMeasurement": true },
 		"activeDocumentNLinesInPrompt": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of lines in the active document included in prompt", "isMeasurement": true },
 		"wasPreviouslyRejected": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit was previously rejected", "isMeasurement": true },
 		"isShown": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit was shown", "isMeasurement": true },
@@ -758,7 +752,6 @@ export class TelemetrySender implements IDisposable {
 				isFromCache: this._boolToNum(isFromCache),
 				subsequentEditOrder,
 				activeDocumentOriginalLineCount,
-				activeDocumentShortenedLineCount,
 				activeDocumentNLinesInPrompt: nLinesOfCurrentFileInPrompt,
 				wasPreviouslyRejected: this._boolToNum(wasPreviouslyRejected),
 				isShown: this._boolToNum(isShown),

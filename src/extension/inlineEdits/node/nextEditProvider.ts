@@ -32,8 +32,6 @@ import { assertType } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { LineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
-import { Range } from '../../../util/vs/editor/common/core/range';
-import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { ProjectedDocument } from '../../prompts/node/inline/summarizedDocument/implementation';
@@ -275,7 +273,11 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	private async _shortenDocument(doc: DocumentHistory): Promise<ShortendDocument> {
 
-		const { document: projectedDocumentBeforeEdits, clippedRange } = this.getProjectedDocumentNoShortening(doc.lastEdit);
+		// no-op projection
+		const projectedDocumentBeforeEdits = new ProjectedDocument(
+			new StringTextDocument(doc.lastEdit.base.value),
+			new StringEdit([])
+		);
 
 		const unprojectBeforeEdits = projectedDocumentBeforeEdits.edits.inverse(projectedDocumentBeforeEdits.originalText);
 
@@ -292,13 +294,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		const lineEditsBeforeRemovingNoopEdits = RootedLineEdit.fromEdit(new RootedEdit(base, composedProjectedEdits));
 		const lineEdit = lineEditsBeforeRemovingNoopEdits.removeCommonSuffixPrefixLines();
 
-		const lastEditNewOffsetRange = projectedEdits.edits.at(-1)?.getNewRanges().at(0);
-		let lastEditNewRange: Range | undefined;
-		if (lastEditNewOffsetRange) {
-			const projectedDocumentAfterEditsDoc = new StringText(projectedDocumentAfterEdits.text);
-			lastEditNewRange = projectedDocumentAfterEditsDoc.getTransformer().getRange(lastEditNewOffsetRange);
-		}
-
 		const lastSelectionInProjAfterEdit = doc.lastSelection
 			? projectedDocumentAfterEdits.projectOffsetRange(doc.lastSelection)
 			: undefined;
@@ -311,11 +306,9 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			doc.languageId,
 			lineEdit.base.getLines(),
 			lineEdit.edit,
-			lastEditNewRange,
 			base,
 			projectedEdits,
 			doc.lastEdit.base.length.lineCount,
-			clippedRange,
 			lastSelectionInProjAfterEdit,
 		);
 
@@ -431,12 +424,12 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		const xtabEditHistory = this._xtabHistoryTracker.getHistory();
 
-		const convertToProjectedEdit = (nextLineEdit: LineEdit, docId: DocumentId) => {
+		function convertLineEditToEdit(nextLineEdit: LineEdit, docId: DocumentId): StringEdit {
 			const doc = projectedDocuments.find(d => d.nextEditDoc.id === docId)!;
-			const editedProjectedDocSuggestedLineEdit = new RootedLineEdit(new StringText(doc.projectedDocument.text), nextLineEdit);
-			const suggestedEdit = projectBackEdit(editedProjectedDocSuggestedLineEdit.toEdit(), doc.projectedDocument);
+			const rootedLineEdit = new RootedLineEdit(new StringText(doc.projectedDocument.text), nextLineEdit);
+			const suggestedEdit = rootedLineEdit.toEdit();
 			return suggestedEdit;
-		};
+		}
 
 		const firstEdit = new DeferredPromise<Result<CachedOrRebasedEdit, NoNextEditReason>>();
 
@@ -550,7 +543,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 				const singleLineEdit = result.val.edit;
 				const lineEdit = new LineEdit([singleLineEdit]);
-				const edit = convertToProjectedEdit(lineEdit, targetDocState.docId);
+				const edit = convertLineEditToEdit(lineEdit, targetDocState.docId);
 				const rebasedEdit = edit.tryRebase(targetDocState.editsSoFar);
 
 				if (rebasedEdit === undefined) {
@@ -682,28 +675,12 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	public handleIgnored(docId: DocumentId, suggestion: NextEditResult, supersededBy: INextEditResult | undefined): void { }
 
-	private getProjectedDocumentNoShortening(recentEdit: RootedEdit): { document: ProjectedDocument; clippedRange: LineRange } {
-		const document = new ProjectedDocument(
-			new StringTextDocument(recentEdit.base.value),
-			new StringEdit([])
-		);
-		return {
-			document,
-			clippedRange: new LineRange(1, recentEdit.base.length.lineCount + 1),
-		};
-	}
-
 	private async runSnippy(docId: DocumentId, suggestion: NextEditResult) {
 		if (suggestion.result === undefined) {
 			return;
 		}
 		this._snippyService.handlePostInsertion(docId.toUri(), suggestion.result.documentBeforeEdits, suggestion.result.edit);
 	}
-}
-
-function projectBackEdit(edit: StringEdit, document: ProjectedDocument): StringEdit {
-	const pEdit = document.projectBackOffsetEdit(edit);
-	return pEdit;
 }
 
 function assertDefined<T>(value: T | undefined): T {
