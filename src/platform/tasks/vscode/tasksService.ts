@@ -64,7 +64,7 @@ export class TasksService extends DisposableStore implements ITasksService {
 	 */
 	getTerminalForTask(taskDefinition: vscode.TaskDefinition): vscode.Terminal | undefined {
 		for (const [key, terminal] of this.taskDefinitionToTerminal.entries()) {
-			if (taskDefinition.type === key.type && (!key.label || taskDefinition.label === key.label) && (!key.script || taskDefinition.script === key.script) && (!key.command || taskDefinition.command === key.command)) {
+			if ((taskDefinition.type === 'shell' && key.type === 'shell' && key.id && key.id === taskDefinition.shell + ',' + taskDefinition.command + ',') || (taskDefinition.type === key.type && (!key.label || taskDefinition.label === key.label) && (!key.script || taskDefinition.script === key.script) && (!key.command || taskDefinition.command === key.command))) {
 				return terminal;
 			}
 		}

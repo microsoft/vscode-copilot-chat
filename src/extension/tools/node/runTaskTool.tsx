@@ -5,12 +5,15 @@
 
 
 import * as l10n from '@vscode/l10n';
+import { ChatCompletionContentPartKind, ChatRole } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
 import type * as vscode from 'vscode';
+import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ITasksService, TaskResult, TaskStatus } from '../../../platform/tasks/common/tasksService';
+import { ITerminalService } from '../../../platform/terminal/common/terminalService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
+import { ChatLocation, LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
 
@@ -27,6 +30,8 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 		@ITasksService private readonly tasksService: ITasksService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
+		@ITerminalService private readonly terminalService: ITerminalService,
+		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IRunTaskToolInput>, token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
@@ -39,6 +44,24 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 		const workspaceFolder = (workspaceFolderRaw && this.workspaceService.getWorkspaceFolder(workspaceFolderRaw)) || this.workspaceService.getWorkspaceFolders()[0];
 
 		const result: TaskResult = task ? await this.tasksService.executeTask(task, token, workspaceFolder) : { status: TaskStatus.Error, error: new Error('Task not found') };
+
+		// Wait for 3 seconds before evaluating output
+		await new Promise(resolve => setTimeout(resolve, 3000));
+
+		if (task) {
+			const terminal = this.tasksService.getTerminalForTask(task);
+			if (terminal) {
+				const buffer = this.terminalService.getBufferForTerminal(terminal, 16000);
+				const inactive = !this.tasksService.isTaskActive(task);
+				if (inactive) {
+					const result = await this._evaluateOutputForErrors(buffer, token);
+					if (result) {
+						return new LanguageModelToolResult([new LanguageModelTextPart(l10n.t`${result}`)]);
+					}
+				}
+			}
+		}
+
 		let output: string;
 		switch (result.status) {
 			case TaskStatus.Started:
@@ -53,6 +76,22 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 		}
 
 		return new LanguageModelToolResult([new LanguageModelTextPart(output)]);
+	}
+
+	private async _evaluateOutputForErrors(output: string, token: CancellationToken): Promise<string> {
+		const endpoint = await this._endpointProvider.getChatEndpoint('gpt-4o-mini');
+
+		const fetchResult = await endpoint.makeChatRequest(
+			'taskOutputEvaluation',
+			[{ role: ChatRole.System, content: [{ type: ChatCompletionContentPartKind.Text, text: `Review this output to determine if the task exited - it exited if there is a non-zero exit code mentioned ${output}. If it has exited, explain why. If it has succeeded, return undefined.` }] }],
+			undefined,
+			token,
+			ChatLocation.Panel
+		);
+		if (fetchResult.type !== 'success') {
+			return 'Error evaluating task output';
+		}
+		return fetchResult.value;
 	}
 
 	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IRunTaskToolInput>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
