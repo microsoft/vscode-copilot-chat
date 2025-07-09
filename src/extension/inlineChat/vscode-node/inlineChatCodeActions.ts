@@ -57,7 +57,7 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 		return diagnostics.map(d => d.message).join(', ');
 	}
 
-	async provideCodeActions(doc: vscode.TextDocument, range: vscode.Range, context: vscode.CodeActionContext) {
+	async provideCodeActions(doc: vscode.TextDocument, range: vscode.Range, context: vscode.CodeActionContext, cancellationToken: vscode.CancellationToken): Promise<vscode.CodeAction[] | undefined> {
 
 		const copilotCodeActionsEnabled = this.configurationService.getConfig(ConfigKey.EnableCodeActions);
 		if (!copilotCodeActionsEnabled) {
@@ -67,6 +67,9 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 		if (await this.ignoreService.isCopilotIgnored(doc.uri)) {
 			return;
 		}
+		if (cancellationToken.isCancellationRequested) {
+			return;
+		}
 
 		const codeActions: vscode.CodeAction[] = [];
 		const activeTextEditor = vscode.window.activeTextEditor;
@@ -74,7 +77,7 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 			return codeActions;
 		}
 
-		const altTextQuickFixes = await this.provideAltTextQuickFix(doc, range);
+		const altTextQuickFixes = this.provideAltTextQuickFix(doc, range);
 		if (altTextQuickFixes) {
 			altTextQuickFixes.command = {
 				title: altTextQuickFixes.title,
@@ -137,7 +140,7 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 		return codeActions;
 	}
 
-	async provideAltTextQuickFix(document: vscode.TextDocument, range: vscode.Range): Promise<ImageCodeAction | undefined> {
+	private provideAltTextQuickFix(document: vscode.TextDocument, range: vscode.Range): ImageCodeAction | undefined {
 		const currentLine = document.lineAt(range.start.line).text;
 		const generateImagePath = extractImageAttributes(currentLine);
 		const refineImagePath = extractImageAttributes(currentLine, true);
