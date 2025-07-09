@@ -22,7 +22,7 @@ import { ITasksService, TaskResult, TaskStatus } from '../common/tasksService';
 export class TasksService extends DisposableStore implements ITasksService {
 	_serviceBrand: undefined;
 
-	private taskDefinitionToTerminal: Map<vscode.TaskDefinition, vscode.Terminal> = new Map();
+	private latestTerminalForTaskDefinition: Map<vscode.TaskDefinition, vscode.Terminal> = new Map();
 	constructor(
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
@@ -34,10 +34,10 @@ export class TasksService extends DisposableStore implements ITasksService {
 			if (!terminal) {
 				return;
 			}
-			this.taskDefinitionToTerminal.set(e.execution.task.definition, terminal);
+			this.latestTerminalForTaskDefinition.set(e.execution.task.definition, terminal);
 			const closeListener = vscode.window.onDidCloseTerminal(closedTerminal => {
-				if (closedTerminal === terminal && this.taskDefinitionToTerminal.has(e.execution.task.definition)) {
-					this.taskDefinitionToTerminal.delete(e.execution.task.definition);
+				if (closedTerminal === terminal && this.latestTerminalForTaskDefinition.has(e.execution.task.definition)) {
+					this.latestTerminalForTaskDefinition.delete(e.execution.task.definition);
 					closeListener.dispose();
 				}
 			});
@@ -73,10 +73,10 @@ export class TasksService extends DisposableStore implements ITasksService {
 	 * @param task
 	 */
 	getTerminalForTask(taskDefinition: vscode.TaskDefinition): vscode.Terminal | undefined {
-		for (const [key, terminal] of this.taskDefinitionToTerminal.entries()) {
+		for (const [key, terminal] of this.latestTerminalForTaskDefinition.entries()) {
 			if (key.id) {
 				// Only some task definitions have IDs
-				const taskId = this.getTaskId(key);
+				const taskId = this._getTaskId(key);
 				if (taskId === key.id) {
 					return terminal;
 				}
@@ -90,13 +90,13 @@ export class TasksService extends DisposableStore implements ITasksService {
 		}
 	}
 
-	getTaskId(taskDefinition: vscode.TaskDefinition): string | undefined {
+	private _getTaskId(taskDefinition: vscode.TaskDefinition): string | undefined {
 		const keys = Object.keys(taskDefinition).sort();
 		let result: string = '';
 		for (const key of keys) {
 			let stringified = taskDefinition[key];
 			if (stringified instanceof Object) {
-				stringified = this.getTaskId(stringified);
+				stringified = this._getTaskId(stringified);
 			} else if (typeof stringified === 'string') {
 				stringified = stringified.replace(/,/g, ',,');
 			}

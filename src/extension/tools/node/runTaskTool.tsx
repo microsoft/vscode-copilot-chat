@@ -12,6 +12,7 @@ import { IPromptPathRepresentationService } from '../../../platform/prompts/comm
 import { ITasksService, TaskResult, TaskStatus } from '../../../platform/tasks/common/tasksService';
 import { ITerminalService } from '../../../platform/terminal/common/terminalService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { ChatLocation, LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { ToolName } from '../common/toolNames';
@@ -53,7 +54,7 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 			let terminal: vscode.Terminal | undefined;
 			let idleCount = 0;
 			for (const interval of checkIntervals) {
-				await new Promise(resolve => setTimeout(resolve, interval));
+				await timeout(interval);
 				if (!terminal) {
 					terminal = this.tasksService.getTerminalForTask(task);
 					if (!terminal) {
