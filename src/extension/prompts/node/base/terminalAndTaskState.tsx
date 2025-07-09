@@ -27,7 +27,7 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 		const resultTasks: { name: string; isBackground: boolean; type?: string; command?: string; problemMatcher?: string; group?: { isDefault?: boolean; kind?: string }; script?: string; dependsOn?: string; isActive?: boolean }[] = [];
 		const allTasks = this.tasksService.getTasks()?.[0]?.[1] ?? [];
 		const tasks = Array.isArray(allTasks) ? allTasks : [];
-		for (const exec of tasks) {
+		for (const exec of tasks.filter(t => this.tasksService.getTerminalForTask(t))) {
 			if (exec.label) {
 				resultTasks.push({
 					name: exec.label,
