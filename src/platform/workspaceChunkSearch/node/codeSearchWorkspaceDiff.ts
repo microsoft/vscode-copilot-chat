@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { DeferredPromise, IntervalTimer } from '../../../util/vs/base/common/async';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
@@ -163,7 +164,7 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 
 		const initialChanges = new ResourceSet();
 		await Promise.all(diff.changes.map(async change => {
-			if (await this._instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, change.uri))) {
+			if (await this._instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, change.uri, CancellationToken.None))) {
 				initialChanges.add(change.uri);
 			}
 		}));

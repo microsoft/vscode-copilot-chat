@@ -11,6 +11,7 @@ import { getLanguageForResource } from '../../../util/common/languages';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { Limiter, raceCancellationError } from '../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
+import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Lazy } from '../../../util/vs/base/common/lazy';
 import { Disposable, dispose, IDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -229,10 +230,10 @@ function shouldPotentiallyIndexFile(accessor: ServicesAccessor, resource: URI): 
  *
  * Caller should still look at file content to make sure the file is not binary.
  */
-export async function shouldIndexFile(accessor: ServicesAccessor, resource: URI): Promise<boolean> {
+export async function shouldIndexFile(accessor: ServicesAccessor, resource: URI, token: CancellationToken): Promise<boolean> {
 	const ignoreService = accessor.get(IIgnoreService);
 	return shouldPotentiallyIndexFile(accessor, resource)
-		&& !await ignoreService.isCopilotIgnored(resource);
+		&& !await ignoreService.isCopilotIgnored(resource, token);
 }
 
 async function getWorkspaceFilesToIndex(accessor: ServicesAccessor, maxResults: number, token: CancellationToken): Promise<Iterable<URI>> {
@@ -244,26 +245,47 @@ async function getWorkspaceFilesToIndex(accessor: ServicesAccessor, maxResults: 
 	await raceCancellationError(ignoreService.init(), token);
 
 	const resourcesToIndex = new ResourceMap<void>();
-	for (const folder of workspaceService.getWorkspaceFolders() ?? []) {
-		if (resourcesToIndex.size >= maxResults) {
-			break;
-		}
 
-		const paths = await searchService.findFilesWithDefaultExcludes(new RelativePattern(folder, `**/*`), maxResults - resourcesToIndex.size, token);
-		if (token.isCancellationRequested) {
-			return [];
-		}
+	const cts = new CancellationTokenSource(token);
+	const limiter = new Limiter<void>(20);
 
-		for (const uri of paths) {
-			if (resourcesToIndex.size >= maxResults || token.isCancellationRequested) {
-				break;
+	try {
+		for (const folder of workspaceService.getWorkspaceFolders() ?? []) {
+			const paths = await raceCancellationError(
+				searchService.findFilesWithDefaultExcludes(new RelativePattern(folder, `**/*`), maxResults - resourcesToIndex.size, cts.token),
+				cts.token);
+
+			const tasks = paths.map(uri => limiter.queue(async () => {
+				if (await instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, uri, cts.token))) {
+					if (resourcesToIndex.size < maxResults) {
+						resourcesToIndex.set(uri);
+					}
+
+					if (resourcesToIndex.size >= maxResults) {
+						cts.cancel();
+					}
+				}
+			}));
+			await raceCancellationError(Promise.all(tasks), cts.token);
+		}
+	} catch (e) {
+		if (isCancellationError(e)) {
+			// If outer token was cancelled, rethrow
+			if (token.isCancellationRequested) {
+				throw e;
 			}
 
-			if (await instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, uri))) {
-				resourcesToIndex.set(uri);
-			}
+			// Otherwise ignore
+
+		} else {
+			// Rethrow all non-cancellation errors
+			throw e;
 		}
+	} finally {
+		cts.dispose();
+		limiter.dispose();
 	}
+
 	return resourcesToIndex.keys();
 }
 
@@ -631,7 +653,7 @@ export class WorkspaceFileIndex extends Disposable implements IWorkspaceFileInde
 
 		this._register(
 			watcher.onDidChange(async uri => {
-				if (!await this._instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, uri))) {
+				if (!await this._instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, uri, this._disposeCts.token))) {
 					return;
 				}
 
@@ -650,7 +672,7 @@ export class WorkspaceFileIndex extends Disposable implements IWorkspaceFileInde
 
 		this._register(
 			watcher.onDidCreate(async uri => {
-				if (!await this._instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, uri))) {
+				if (!await this._instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, uri, this._disposeCts.token))) {
 					return;
 				}
 
@@ -750,7 +772,7 @@ export class WorkspaceFileIndex extends Disposable implements IWorkspaceFileInde
 	}
 
 	private async addOrUpdateTextDocumentEntry(doc: vscode.TextDocument, skipEmit = false): Promise<void> {
-		if (!await this._instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, doc.uri))) {
+		if (!await this._instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, doc.uri, this._disposeCts.token))) {
 			return;
 		}
 
