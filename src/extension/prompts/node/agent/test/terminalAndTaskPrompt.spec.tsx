@@ -201,7 +201,7 @@ suite('TerminalAndTaskStatePromptElement', () => {
 
 		// Convert rendered output to string for assertions
 		const output = typeof rendered === 'string' ? rendered : JSON.stringify(rendered) ?? '';
-		assert(output.includes('No active tasks found.'));
+		assert(output.includes('No tasks found.'));
 		assert(output.includes('Terminal 1'));
 		assert(output.includes('Terminal 2'));
 		assert(output.includes('npm run build'));
@@ -228,6 +228,6 @@ suite('TerminalAndTaskStatePromptElement', () => {
 		const rendered = await prompt.render();
 
 		const output = typeof rendered === 'string' ? rendered : JSON.stringify(rendered) ?? '';
-		assert(output.includes('No active tasks or Copilot terminals found.'));
+		assert(output.includes('No tasks or Copilot terminals found.'));
 	});
 });
