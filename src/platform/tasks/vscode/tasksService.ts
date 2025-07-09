@@ -68,7 +68,7 @@ export class TasksService extends DisposableStore implements ITasksService {
 				// Only some task definitions have IDs
 				const taskId = this.getTaskId(key)
 				if (taskId === key.id) {
-					return;
+					return terminal;
 				}
 			}
 			if ((taskDefinition.type === key.type &&
