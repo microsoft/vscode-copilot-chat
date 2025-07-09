@@ -46,12 +46,12 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 
 		const result: TaskResult = task ? await this.tasksService.executeTask(task, token, workspaceFolder) : { status: TaskStatus.Error, error: new Error('Task not found') };
 
-		// Waits a maximum of 10 seconds
 		// If it times out, just says the task has started
-		const checkIntervals = [1000, 1000, 1000, 1000, 1000, 1000];
+		const checkIntervals = [100, 100, 100, 100, 100, 100];
 
 		if (task) {
 			let terminal: vscode.Terminal | undefined;
+			let idleCount = 0;
 			for (const interval of checkIntervals) {
 				await new Promise(resolve => setTimeout(resolve, interval));
 				if (!terminal) {
@@ -63,17 +63,20 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 				const buffer = this.terminalService.getBufferForTerminal(terminal, 16000);
 				const inactive = !this.tasksService.isTaskActive(task);
 
-				// Only keep polling if the terminal output is changing (not idle)
-				if (!this._lastBufferLength) {
-					this._lastBufferLength = 0;
-				}
 				const currentBufferLength = buffer.length;
-				const isIdle = currentBufferLength === this._lastBufferLength;
 				this._lastBufferLength = currentBufferLength;
-				if (isIdle || inactive) {
-					const result = await this._evaluateOutputForErrors(buffer, token);
-					if (result) {
-						return new LanguageModelToolResult([new LanguageModelTextPart(l10n.t`${result}`)]);
+
+				if (currentBufferLength === this._lastBufferLength) {
+					idleCount++;
+				} else {
+					idleCount = 0;
+				}
+
+				// If buffer is idle for threshold or task is inactive, evaluate output
+				if (idleCount >= 2 || inactive) {
+					const evalResult = await this._evaluateOutputForErrors(buffer, token);
+					if (evalResult) {
+						return new LanguageModelToolResult([new LanguageModelTextPart(l10n.t`${evalResult}`)]);
 					}
 					break;
 				}
