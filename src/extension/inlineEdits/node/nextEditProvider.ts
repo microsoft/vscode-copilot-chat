@@ -306,21 +306,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		const workspaceRoot = this._workspace.getWorkspaceRoot(doc.docId);
 
-		const toEditOnDocumentAfterEditsNoShortening = (lineEdit: LineEdit) => {
-			const editedProjectedDocSuggestedLineEdit = new RootedLineEdit(new StringText(projectedDocumentAfterEdits.text), lineEdit);
-			const editedProjectedDocSuggestedEdit = editedProjectedDocSuggestedLineEdit.toEdit();
-			const suggestedEdit = projectBackEdit(editedProjectedDocSuggestedEdit, projectedDocumentAfterEdits);
-			return suggestedEdit;
-		};
-
-		const toOffsetOnDocumentAfterEditsNoShortening = (projectedOffset: number): number => {
-			return projectedDocumentAfterEdits.projectBack(projectedOffset);
-		};
-
-		const toProjectedOffset = (offsetOnDocumentAfterEditsNoShortening: number): number => {
-			return projectedDocumentAfterEdits.project(offsetOnDocumentAfterEditsNoShortening);
-		};
-
 		const nextEditDoc = new StatelessNextEditDocument(
 			doc.docId,
 			workspaceRoot,
@@ -331,9 +316,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			base,
 			projectedEdits,
 			documentAfterEditsNoShortening,
-			toEditOnDocumentAfterEditsNoShortening,
-			toOffsetOnDocumentAfterEditsNoShortening,
-			toProjectedOffset,
 			doc.lastEdit.base.length.lineCount,
 			clippedRange,
 			lastSelectionInProjAfterEdit,
