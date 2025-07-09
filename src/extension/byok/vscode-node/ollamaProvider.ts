@@ -25,7 +25,7 @@ interface OllamaVersionResponse {
 }
 
 // Minimum supported Ollama version - versions below this may have compatibility issues
-const MINIMUM_OLLAMA_VERSION = '0.1.7';
+const MINIMUM_OLLAMA_VERSION = 'v0.6.4-rc0';
 
 export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 
@@ -160,12 +160,14 @@ export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 
 	/**
 	 * Parse a semantic version string into components
-	 * @param version Version string like "0.1.23" or "0.1.23-beta"
+	 * @param version Version string like "0.1.23", "v0.1.23" or "v0.1.23-beta"
 	 * @returns Object with major, minor, patch numbers
 	 */
 	private _parseVersion(version: string): { major: number; minor: number; patch: number } {
+		// Remove "v" prefix if present
+		let cleanVersion = version.startsWith('v') ? version.slice(1) : version;
 		// Remove any pre-release or build metadata (e.g. "0.1.23-beta" -> "0.1.23")
-		const cleanVersion = version.split('-')[0];
+		cleanVersion = cleanVersion.split('-')[0];
 		const parts = cleanVersion.split('.').map(part => parseInt(part, 10));
 		
 		if (parts.length < 3 || parts.some(isNaN)) {
