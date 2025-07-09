@@ -1,10 +1,5 @@
 {
   "features": {
-    "ghcr.io/devcontainers-contrib/features/pylint:2": {
-      "version": "2.0.17",
-      "resolved": "ghcr.io/devcontainers-contrib/features/pylint@sha256:a0ccbde6abc1d3e5f4d347b8c6beef563a6f511a9e376a0bc40042aee22bac77",
-      "integrity": "sha256:a0ccbde6abc1d3e5f4d347b8c6beef563a6f511a9e376a0bc40042aee22bac77"
-    },
     "ghcr.io/devcontainers/features/azure-cli:1": {
       "version": "1.2.7",
       "resolved": "ghcr.io/devcontainers/features/azure-cli@sha256:91ffef641dbe5045b9982921487d743f7a3047cc05efd9226345833f446c8bce",

@@ -2,7 +2,7 @@
 	"name": "copilot-chat",
 	"displayName": "GitHub Copilot Chat",
 	"description": "AI chat features powered by Copilot",
-	"version": "0.29.0",
+	"version": "0.30.0",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
 	"internalLargeStorageAriaKey": "ec712b3202c5462fb6877acae7f1f9d7-c19ad55e-3e3c-4f99-984b-827f6d95bd9e-6917",
@@ -13,7 +13,7 @@
 	"license": "SEE LICENSE IN LICENSE.txt",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/microsoft/vscode-copilot-release"
+		"url": "https://github.com/microsoft/vscode-copilot-chat"
 	},
 	"bugs": {
 		"url": "https://github.com/microsoft/vscode/issues"
@@ -420,7 +420,7 @@
 				"name": "copilot_getTerminalOutput",
 				"toolReferenceName": "getTerminalOutput",
 				"displayName": "%copilot.tools.getTerminalOutput.name%",
-				"modelDescription": "Get the output of a terminal command previous started with copilot_runInTerminal",
+				"modelDescription": "Get the output of a terminal command previously started with runInTerminal",
 				"tags": [],
 				"inputSchema": {
 					"type": "object",
@@ -432,6 +432,34 @@
 					},
 					"required": [
 						"id"
+					]
+				}
+			},
+			{
+				"name": "copilot_getTaskOutput",
+				"toolReferenceName": "getTaskOutput",
+				"displayName": "%copilot.tools.getTaskOutput.name%",
+				"modelDescription": "Retrieves the output of a running VS Code task.\n- Use this tool when the user is trying to understand the current project state, debug issues, or analyze task-related errors, output, or status.",
+				"tags": [],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"workspaceFolder": {
+							"type": "string",
+							"description": "The workspace folder path containing the task"
+						},
+						"id": {
+							"type": "string",
+							"description": "The task ID to run."
+						},
+						"maxCharsToRetrieve": {
+							"type": "number",
+							"description": "The maximum number of characters to retrieve from the terminal output."
+						}
+					},
+					"required": [
+						"id",
+						"workspaceFolder"
 					]
 				}
 			},
@@ -579,7 +607,7 @@
 				"name": "copilot_getTerminalLastCommand",
 				"toolReferenceName": "terminalLastCommand",
 				"displayName": "%github.copilot.tools.terminalLastCommand.name%",
-				"modelDescription": "Get the user's current selection in the active terminal.",
+				"modelDescription": "Get the active terminal's last run command.",
 				"userDescription": "%github.copilot.tools.terminalLastCommand.description%",
 				"canBeReferencedInPrompt": true,
 				"icon": "$(terminal)"
@@ -1045,7 +1073,7 @@
 			{
 				"name": "copilot_readNotebookCellOutput",
 				"displayName": "%copilot.tools.getNotebookCellOutput.name%",
-				"toolReferenceName": "readCellOutput",
+				"toolReferenceName": "readNotebookCellOutput",
 				"canBeReferencedInPrompt": true,
 				"icon": "$(notebook-render-output)",
 				"modelDescription": "This tool will retrieve the output for a notebook cell from its most recent execution or restored from disk. The cell may have output even when it has not been run in the current kernel session. This tool has a higher token limit for output length than the runNotebookCell tool.",
@@ -1208,7 +1236,7 @@
 				"tools": [
 					"runCell",
 					"getNotebookSummary",
-					"readCellOutput"
+					"readNotebookCellOutput"
 				]
 			},
 			{
@@ -1228,7 +1256,7 @@
 					"fileSearch",
 					"textSearch",
 					"listDirectory",
-					"readCellOutput",
+					"readNotebookCellOutput",
 					"readFile"
 				]
 			},
@@ -1248,7 +1276,8 @@
 				"description": "%copilot.toolSet.runTasks.description%",
 				"tools": [
 					"createAndRunTask",
-					"runTask"
+					"runTask",
+					"getTaskOutput"
 				]
 			}
 		],
@@ -1393,6 +1422,7 @@
 					},
 					{
 						"name": "error",
+						"description": "Make a model request which will result in an error",
 						"when": "github.copilot.chat.debug"
 					}
 				]
@@ -2427,6 +2457,7 @@
 						"markdownDescription": "%github.copilot.chat.edits.suggestRelatedFilesForTests%"
 					},
 					"github.copilot.chat.codeGeneration.instructions": {
+						"markdownDeprecationMessage": "%github.copilot.config.codeGeneration.instructions.deprecated%",
 						"type": "array",
 						"items": {
 							"oneOf": [
@@ -2498,6 +2529,7 @@
 						]
 					},
 					"github.copilot.chat.testGeneration.instructions": {
+						"markdownDeprecationMessage": "%github.copilot.config.testGeneration.instructions.deprecated%",
 						"type": "array",
 						"items": {
 							"oneOf": [
@@ -2780,21 +2812,19 @@
 						"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
 					},
 					"github.copilot.chat.agent.terminal.allowList": {
-						"type": "array",
-						"default": [
-							"echo",
-							"Write-Host",
-							"ls",
-							"Get-ChildItem",
-							"cat",
-							"Get-Content",
-							"pwd",
-							"Get-Location",
-							"cd",
-							"Set-Location"
-						],
-						"items": {
-							"type": "string"
+						"type": "object",
+						"default": {},
+						"additionalProperties": {
+							"type": "boolean",
+							"enum": [
+								true,
+								false
+							],
+							"enumDescriptions": [
+								"%github.copilot.config.agent.terminal.allowList.value.true%",
+								"%github.copilot.config.agent.terminal.allowList.value.false%"
+							],
+							"description": "%github.copilot.config.agent.terminal.allowList.key%"
 						},
 						"tags": [
 							"experimental"
@@ -2802,21 +2832,30 @@
 						"markdownDescription": "%github.copilot.config.agent.terminal.allowList%"
 					},
 					"github.copilot.chat.agent.terminal.denyList": {
-						"type": "array",
-						"default": [
-							"rm",
-							"rmdir",
-							"del",
-							"Remove-Item",
-							"kill",
-							"curl",
-							"wget",
-							"eval",
-							"chmod",
-							"chown"
-						],
-						"items": {
-							"type": "string"
+						"type": "object",
+						"default": {
+							"rm": true,
+							"rmdir": true,
+							"del": true,
+							"kill": true,
+							"curl": true,
+							"wget": true,
+							"eval": true,
+							"chmod": true,
+							"chown": true,
+							"Remove-Item": true
+						},
+						"additionalProperties": {
+							"type": "boolean",
+							"enum": [
+								true,
+								false
+							],
+							"enumDescriptions": [
+								"%github.copilot.config.agent.terminal.denyList.value.true%",
+								"%github.copilot.config.agent.terminal.denyList.value.false%"
+							],
+							"description": "%github.copilot.config.agent.terminal.denyList.key%"
 						},
 						"tags": [
 							"experimental"
@@ -3648,8 +3687,7 @@
 	},
 	"scripts": {
 		"postinstall": "tsx ./script/postinstall.ts",
-		"prepare": "tsx ./script/prepare.ts",
-		"husky:install": "husky install",
+		"prepare": "husky",
 		"vscode-dts:dev": "node node_modules/@vscode/dts/index.js dev && mv vscode.proposed.*.ts src/extension",
 		"vscode-dts:main": "node node_modules/@vscode/dts/index.js main && mv vscode.d.ts src/extension",
 		"build": "tsx .esbuild.ts",
@@ -3660,8 +3698,8 @@
 		"watch:tsc-extension-web": "tsc --noEmit --watch --project tsconfig.worker.json",
 		"watch:tsc-simulation-workbench": "tsc --noEmit --watch --project test/simulation/workbench/tsconfig.json",
 		"typecheck": "tsc --noEmit --project tsconfig.json && tsc --noEmit --project test/simulation/workbench/tsconfig.json && tsc --noEmit --project tsconfig.worker.json",
-		"lint": "eslint . --max-warnings=0 --ext ts --ext tsx",
-		"lint-staged": "eslint --max-warnings=0 --ext ts --ext tsx",
+		"lint": "eslint . --max-warnings=0",
+		"lint-staged": "eslint --max-warnings=0",
 		"tsfmt": "npx tsfmt -r --verify",
 		"test": "npm-run-all test:*",
 		"test:extension": "vscode-test",
@@ -3697,7 +3735,7 @@
 		"@nteract/messaging": "^7.0.20",
 		"@parcel/watcher": "^2.5.1",
 		"@stylistic/eslint-plugin": "^3.0.1",
-		"@types/eslint": "8.44.8",
+		"@types/eslint": "^9.0.0",
 		"@types/google-protobuf": "^3.15.12",
 		"@types/markdown-it": "^14.0.0",
 		"@types/minimist": "^1.2.5",
@@ -3727,12 +3765,11 @@
 		"dotenv": "^16.5.0",
 		"electron": "^37.0.0",
 		"esbuild": "^0.25.5",
-		"eslint": "^8.55.0",
+		"eslint": "^9.30.0",
 		"eslint-import-resolver-typescript": "^4.4.4",
 		"eslint-plugin-header": "^3.1.1",
 		"eslint-plugin-import": "^2.32.0",
 		"eslint-plugin-jsdoc": "^51.2.3",
-		"eslint-plugin-local": "^1.0.0",
 		"eslint-plugin-no-only-tests": "^3.3.0",
 		"fastq": "^1.19.1",
 		"glob": "^11.0.3",
@@ -3759,6 +3796,7 @@
 		"ts-dedent": "^2.2.0",
 		"tsx": "^4.20.3",
 		"typescript": "^5.8.3",
+		"typescript-eslint": "^8.36.0",
 		"typescript-formatter": "github:jrieken/typescript-formatter#497efb26bc40b5fa59a350e6eab17bce650a7e4b",
 		"vite-plugin-top-level-await": "^1.5.0",
 		"vite-plugin-wasm": "^3.4.1",

@@ -32,6 +32,7 @@
 		"src/platform/parser/test/node/fixtures/**/*",
 		"src/extension/test/node/fixtures/**/*",
 		"src/extension/prompts/node/test/fixtures/**/*",
-		"src/extension/typescriptContext/serverPlugin/fixtures/**"
+		"src/extension/typescriptContext/serverPlugin/fixtures/**",
+		"test/aml/out"
 	]
 }
