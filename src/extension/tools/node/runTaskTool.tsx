@@ -50,19 +50,23 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 		const checkIntervals = [1000, 2000, 3000, 4000];
 
 		if (task) {
-			const terminal = this.tasksService.getTerminalForTask(task);
-			if (terminal) {
-				for (const interval of checkIntervals) {
-					await new Promise(resolve => setTimeout(resolve, interval));
-					const buffer = this.terminalService.getBufferForTerminal(terminal, 16000);
-					const inactive = !this.tasksService.isTaskActive(task);
-					if (inactive) {
-						const result = await this._evaluateOutputForErrors(buffer, token);
-						if (result) {
-							return new LanguageModelToolResult([new LanguageModelTextPart(l10n.t`${result}`)]);
-						}
-						break;
+			let terminal: vscode.Terminal | undefined;
+			for (const interval of checkIntervals) {
+				await new Promise(resolve => setTimeout(resolve, interval));
+				if (!terminal) {
+					terminal = this.tasksService.getTerminalForTask(task);
+					if (!terminal) {
+						continue;
 					}
+				}
+				const buffer = this.terminalService.getBufferForTerminal(terminal, 16000);
+				const inactive = !this.tasksService.isTaskActive(task);
+				if (inactive) {
+					const result = await this._evaluateOutputForErrors(buffer, token);
+					if (result) {
+						return new LanguageModelToolResult([new LanguageModelTextPart(l10n.t`${result}`)]);
+					}
+					break;
 				}
 			}
 		}
