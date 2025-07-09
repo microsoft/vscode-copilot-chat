@@ -58,7 +58,8 @@ export class TasksService extends DisposableStore implements ITasksService {
 	}
 
 	/**
-	 * This is needed because when tasks are stopped, they're removed from the taskExecutions
+	 * This is needed because when tasks exit, they're removed from the taskExecutions, but we might want to review the output of the task
+	 * after it has exited. This allows us to get the terminal for a task definition.
 	 * @param task
 	 */
 	getTerminalForTask(taskDefinition: vscode.TaskDefinition): vscode.Terminal | undefined {
