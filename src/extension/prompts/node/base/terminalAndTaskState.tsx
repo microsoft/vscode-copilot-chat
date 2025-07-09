@@ -64,8 +64,8 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 						Tasks:<br />
 						{resultTasks.map((t) => (
 							<>
-								Task: {t.name} (background: {String(t.isBackground)}
-								{t.isActive ? ', is running' : ''}
+								Task: {t.name} ({t.isBackground && `is background: ${String(t.isBackground)}`}
+								{t.isActive ? ', is running' : 'is inactive'}
 								{t.type ? `, type: ${t.type}` : ''}
 								{t.command ? `, command: ${t.command}` : ''}
 								{t.script ? `, script: ${t.script}` : ''}
