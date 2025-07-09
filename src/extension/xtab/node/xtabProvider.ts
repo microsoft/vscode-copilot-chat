@@ -15,7 +15,7 @@ import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTyp
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
 import { NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
-import { ChainedStatelessNextEditProvider, IgnoreEditsAtClippingBorderAspect, IgnoreTriviaWhitespaceChangesAspect } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
+import { ChainedStatelessNextEditProvider, IgnoreTriviaWhitespaceChangesAspect } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ILanguageContextService, KnownSources, RequestContext } from '../../../platform/languageServer/common/languageContextService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -94,7 +94,6 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		super(XtabProvider.ID, [
 			base => new IgnoreImportChangesAspect(base),
 			base => new IgnoreTriviaWhitespaceChangesAspect(base),
-			base => new IgnoreEditsAtClippingBorderAspect(base),
 		]);
 
 		this.delayer = new Delayer(this.configService, this.expService);
