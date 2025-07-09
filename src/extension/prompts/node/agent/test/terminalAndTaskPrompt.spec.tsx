@@ -126,6 +126,62 @@ suite('TerminalAndTaskStatePromptElement', () => {
 		assert(output.includes('npm: watch'));
 		assert(output.includes('No active Copilot terminals found.'));
 	});
+	test('Terminals (non-Copilot) and inactive tasks', async () => {
+		const tasksService: any = {};
+		const terminalService: any = {};
+		tasksService.getTerminalForTask = (task: any) => {
+			if (task.command === 'build') {
+				return { name: 'Terminal 1', id: '1' };
+			} else if (task.command === 'watch') {
+				return { name: 'Terminal 2', id: '2' };
+			}
+			return undefined;
+		}
+		tasksService.getTasks = () => [[null, [
+			{
+				label: 'npm: build',
+				isBackground: false,
+				type: 'npm',
+				command: 'build',
+				script: 'build',
+				problemMatcher: ['matcher1'],
+				group: { isDefault: true, kind: 'build' },
+				dependsOn: 'prebuild',
+			},
+			{
+				label: 'npm: watch',
+				isBackground: true,
+				type: 'npm',
+				command: 'watch',
+				script: 'watch',
+				problemMatcher: [],
+				group: { isDefault: false, kind: 'test' },
+			},
+		]]];
+		tasksService.isTaskActive = () => false;
+
+		terminalService.terminals = [
+			{ name: 'Terminal 1', id: '1' },
+			{ name: 'Terminal 2', id: '2' },
+		];
+		terminalService.getCopilotTerminals = async () => [];
+		terminalService.getLastCommandForTerminal = (term: { id: string }) => {
+			if (term.id === '1') {
+				return { commandLine: 'npm run build', cwd: '/workspace', exitCode: 0 };
+			} else if (term.id === '2') {
+				return { commandLine: 'npm test', cwd: '/workspace', exitCode: 1 };
+			}
+			return undefined;
+		};
+
+		const prompt = new TerminalAndTaskStatePromptElement({}, tasksService, terminalService);
+		const rendered = await prompt.render();
+
+		const output = typeof rendered === 'string' ? rendered : JSON.stringify(rendered) ?? '';
+		assert(output.includes('npm: build'));
+		assert(output.includes('npm: watch'));
+		assert(output.includes('No active Copilot terminals found.'));
+	});
 	test('Copilot terminals and no active tasks', async () => {
 
 		const tasksService: any = {};
