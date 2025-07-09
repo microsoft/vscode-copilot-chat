@@ -89,7 +89,7 @@ export class TasksService extends DisposableStore implements ITasksService {
 			}
 		}
 	}
-
+	// This comes from: src/vs/workbench/contrib/tasks/common/tasks.ts#L1296-L1317
 	private _getTaskId(taskDefinition: vscode.TaskDefinition): string | undefined {
 		const keys = Object.keys(taskDefinition).sort();
 		let result: string = '';
