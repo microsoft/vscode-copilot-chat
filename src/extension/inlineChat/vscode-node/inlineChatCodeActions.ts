@@ -5,11 +5,10 @@
 
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { TreeSitterOffsetRange } from '../../../platform/parser/node/nodes';
-import { IParserService, treeSitterOffsetRangeToVSCodeRange } from '../../../platform/parser/node/parserService';
+import { IParserService } from '../../../platform/parser/node/parserService';
 import { TestableNode } from '../../../platform/parser/node/testGenParsing';
 import { IReviewService } from '../../../platform/review/common/reviewService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -289,19 +288,22 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 	 */
 	private async provideDocGenCodeAction(doc: vscode.TextDocument, range: vscode.Range, cancellationToken: vscode.CancellationToken): Promise<vscode.CodeAction | undefined> {
 
-		const startIndex = doc.offsetAt(range.start);
-		const endIndex = doc.offsetAt(range.end);
-		const offsetRange = { startIndex, endIndex };
+		const offsetRange: TreeSitterOffsetRange = {
+			startIndex: doc.offsetAt(range.start),
+			endIndex: doc.offsetAt(range.end)
+		};
+
+		const treeSitterAST = this.parserService.getTreeSitterAST(doc);
+		if (treeSitterAST === undefined) {
+			return;
+		}
 
 		let documentableNode: { identifier: string; nodeRange?: TreeSitterOffsetRange } | undefined;
-		const treeSitterAST = this.parserService.getTreeSitterAST(doc);
-		if (treeSitterAST) {
-			try {
-				documentableNode = await treeSitterAST.getDocumentableNodeIfOnIdentifier(offsetRange);
-			} catch (e) {
-				this.logger.logger.error(e, 'RefactorsProvider: getDocumentableNodeIfOnIdentifier failed');
-				this.telemetryService.sendGHTelemetryException(e, 'RefactorsProvider: getDocumentableNodeIfOnIdentifier failed');
-			}
+		try {
+			documentableNode = await treeSitterAST.getDocumentableNodeIfOnIdentifier(offsetRange);
+		} catch (e) {
+			this.logger.logger.error(e, 'RefactorsProvider: getDocumentableNodeIfOnIdentifier failed');
+			this.telemetryService.sendGHTelemetryException(e, 'RefactorsProvider: getDocumentableNodeIfOnIdentifier failed');
 		}
 
 		if (documentableNode === undefined || cancellationToken.isCancellationRequested) {
@@ -318,7 +320,8 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 				? undefined
 				: new Range(
 					doc.positionAt(documentableNode.nodeRange.startIndex),
-					doc.positionAt(documentableNode.nodeRange.endIndex));
+					doc.positionAt(documentableNode.nodeRange.endIndex)
+				);
 
 		codeAction.command = {
 			title,
@@ -335,28 +338,34 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 		return codeAction;
 	}
 
-	private async provideTestGenCodeAction(_doc: vscode.TextDocument, range: vscode.Range, cancellationToken: vscode.CancellationToken): Promise<vscode.CodeAction | undefined> {
-		const doc = TextDocumentSnapshot.create(_doc);
-		const startIndex = doc.offsetAt(range.start);
-		const endIndex = doc.offsetAt(range.end);
-		const offsetRange = { startIndex, endIndex };
+	private async provideTestGenCodeAction(doc: vscode.TextDocument, range: vscode.Range, cancellationToken: vscode.CancellationToken): Promise<vscode.CodeAction | undefined> {
+
+		const offsetRange: TreeSitterOffsetRange = {
+			startIndex: doc.offsetAt(range.start),
+			endIndex: doc.offsetAt(range.end),
+		};
+
+		const treeSitterAST = this.parserService.getTreeSitterAST(doc);
+		if (treeSitterAST === undefined) {
+			return;
+		}
 
 		let testableNode: TestableNode | null = null;
-		const treeSitterAST = this.parserService.getTreeSitterAST(doc);
-		if (treeSitterAST) {
-			try {
-				testableNode = await treeSitterAST.getTestableNode(offsetRange);
-			} catch (e) {
-				this.logger.logger.error(e, 'RefactorsProvider: getTestableNode failed');
-				this.telemetryService.sendGHTelemetryException(e, 'RefactorsProvider: getTestableNode failed');
-			}
+		try {
+			testableNode = await treeSitterAST.getTestableNode(offsetRange);
+		} catch (e) {
+			this.logger.logger.error(e, 'RefactorsProvider: getTestableNode failed');
+			this.telemetryService.sendGHTelemetryException(e, 'RefactorsProvider: getTestableNode failed');
 		}
 
 		if (!testableNode || cancellationToken.isCancellationRequested) {
 			return undefined;
 		}
 
-		const identifierRange = treeSitterOffsetRangeToVSCodeRange(doc, testableNode.identifier.range);
+		const identifierRange = new Range(
+			doc.positionAt(testableNode.identifier.range.startIndex),
+			doc.positionAt(testableNode.identifier.range.endIndex)
+		);
 		if (!identifierRange.contains(range)) {
 			return undefined;
 		}
