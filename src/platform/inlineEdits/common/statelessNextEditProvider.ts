@@ -8,7 +8,6 @@ import { Result } from '../../../util/common/result';
 import { assert, assertNever } from '../../../util/vs/base/common/assert';
 import { DeferredPromise } from '../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
-import { win32 } from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
 import { LineEdit, LineReplacement, SerializedLineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
@@ -153,25 +152,6 @@ export class StatelessNextEditDocument {
 			clippingRange: this.clippingRange.serialize(),
 			lastSelectionInAfterEdit: this.lastSelectionInAfterEdit === undefined ? undefined : serializeOffsetRange(this.lastSelectionInAfterEdit),
 		};
-	}
-
-	getDisplayPath(): string {
-		const path = this._getPathRelativeToWorkspaceRootOrAbsolutePath();
-		if (this.id.fragment) {
-			return `${path}#${this.id.fragment}`;
-		}
-		return path;
-	}
-
-	private _getPathRelativeToWorkspaceRootOrAbsolutePath(): string {
-		if (this.workspaceRoot) {
-			// win32 solves all current case-normalization issues in stests.
-			// Because path is within the root, this does not matter when running inside of VS Code.
-			const result = win32.relative(this.workspaceRoot.path, this.id.path).replaceAll('\\', '/');
-			return result;
-		} else {
-			return this.id.path;
-		}
 	}
 
 	toString(): string {
