@@ -271,7 +271,7 @@ class TelemetrySender {
 		this.sendRequestTelemetryCounter++;
 		if (shouldSendTelemetry) {
 			/* __GDPR__
-				"typescript-context-plugin.completion-context.ok.2" : {
+				"typescript-context-plugin.completion-context.request" : {
 					"owner": "dirkb",
 					"comment": "Telemetry for copilot inline completion context",
 					"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
@@ -300,7 +300,7 @@ class TelemetrySender {
 				}
 			*/
 			this.telemetryService.sendMSFTTelemetryEvent(
-				'typescript-context-plugin.completion-context.ok.2',
+				'typescript-context-plugin.completion-context.request',
 				{
 					requestId: context.requestId,
 					source: context.source ?? KnownSources.unknown,
