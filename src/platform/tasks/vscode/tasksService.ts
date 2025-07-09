@@ -64,10 +64,35 @@ export class TasksService extends DisposableStore implements ITasksService {
 	 */
 	getTerminalForTask(taskDefinition: vscode.TaskDefinition): vscode.Terminal | undefined {
 		for (const [key, terminal] of this.taskDefinitionToTerminal.entries()) {
-			if ((taskDefinition.type === 'shell' && key.type === 'shell' && key.id && key.id === taskDefinition.shell + ',' + taskDefinition.command + ',') || (taskDefinition.type === key.type && (!key.label || taskDefinition.label === key.label) && (!key.script || taskDefinition.script === key.script) && (!key.command || taskDefinition.command === key.command))) {
+			if (key.id) {
+				// Only some task definitions have IDs
+				const taskId = this.getTaskId(key)
+				if (taskId === key.id) {
+					return;
+				}
+			}
+			if ((taskDefinition.type === key.type &&
+				(!key.label || taskDefinition.label === key.label) &&
+				(!key.script || taskDefinition.script === key.script) &&
+				(!key.command || taskDefinition.command === key.command))) {
 				return terminal;
 			}
 		}
+	}
+
+	getTaskId(taskDefinition: vscode.TaskDefinition): string | undefined {
+		const keys = Object.keys(taskDefinition).sort();
+		let result: string = '';
+		for (const key of keys) {
+			let stringified = taskDefinition[key];
+			if (stringified instanceof Object) {
+				stringified = this.getTaskId(stringified);
+			} else if (typeof stringified === 'string') {
+				stringified = stringified.replace(/,/g, ',,');
+			}
+			result += key + ',' + stringified + ',';
+		}
+		return result;
 	}
 
 	async getTaskConfigPosition(workspaceFolder: URI, def: vscode.TaskDefinition) {

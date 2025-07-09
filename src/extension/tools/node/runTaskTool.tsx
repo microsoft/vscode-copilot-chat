@@ -88,7 +88,7 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 
 		const fetchResult = await endpoint.makeChatRequest(
 			'taskOutputEvaluation',
-			[{ role: ChatRole.System, content: [{ type: ChatCompletionContentPartKind.Text, text: `Review this output to determine if the task exited - it exited if there is a non-zero exit code mentioned ${output}. If it has exited, explain why. If it has succeeded, return undefined.` }] }],
+			[{ role: ChatRole.System, content: [{ type: ChatCompletionContentPartKind.Text, text: `Review this output to determine if the task exited or if there are errors ${output}. If it has exited, explain why.` }] }],
 			undefined,
 			token,
 			ChatLocation.Panel
