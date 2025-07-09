@@ -4,8 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 import type tt from 'typescript/lib/tsserverlibrary';
 import { computeContext } from '../common/api';
-import { ContextResult, LanguageServerSession, TokenBudget, TokenBudgetExhaustedError } from '../common/contextProvider';
-import { ErrorCode, type ComputeContextRequest, type ComputeContextResponse, type PingResponse } from '../common/protocol';
+import { ContextResult, LanguageServerSession, RequestContext, TokenBudget, TokenBudgetExhaustedError } from '../common/contextProvider';
+import { ErrorCode, type CachedContextRunnableResult, type ComputeContextRequest, type ComputeContextResponse, type ContextRunnableResultId, type PingResponse } from '../common/protocol';
 import { CancellationTokenWithTimer } from '../common/typescripts';
 
 import TS from '../common/typescript';
@@ -60,14 +60,19 @@ const computeContextHandler = (request: ComputeContextRequest): ComputeContextHa
 
 	const computeStart = Date.now();
 	const tokenBudget = new TokenBudget(typeof args.tokenBudget === 'number' ? args.tokenBudget : 7 * 1024);
-	const knownContextItems = args.knownContextItems ?? [];
-	const computationStates = args.computationStates ?? [];
+	const normalizedPaths: tt.server.NormalizedPath[] = [];
+	if (args.neighborFiles !== undefined) {
+		for (const file of args.neighborFiles) {
+			normalizedPaths.push(ts.server.toNormalizedPath(file));
+		}
+	}
+	const clientSideRunnableResults: Map<ContextRunnableResultId, CachedContextRunnableResult> = args.clientSideRunnableResults !== undefined ? new Map(args.clientSideRunnableResults.map(item => [item.id, item])) : new Map();
 	const cancellationToken = new CancellationTokenWithTimer(languageServiceHost?.getCancellationToken ? languageServiceHost.getCancellationToken() : undefined, startTime, timeBudget, computeContextSession?.host.isDebugging() ?? false);
-	const result: ContextResult = new ContextResult(tokenBudget);
+	const requestContext = new RequestContext(computeContextSession!, normalizedPaths, clientSideRunnableResults);
+	const result: ContextResult = new ContextResult(tokenBudget, requestContext);
 	try {
 		cancellationToken.throwIfCancellationRequested();
-		computeContextSession!.applyComputationStates(computationStates);
-		computeContext(result, computeContextSession!, languageService, file, pos, args.neighborFiles, knownContextItems, cancellationToken);
+		computeContext(result, computeContextSession!, languageService, file, pos, cancellationToken);
 	} catch (error) {
 		if (!(error instanceof ts.OperationCanceledException) && !(error instanceof TokenBudgetExhaustedError)) {
 			if (error instanceof Error) {
@@ -79,7 +84,7 @@ const computeContextHandler = (request: ComputeContextRequest): ComputeContextHa
 	}
 	const endTime = Date.now();
 	result.addTimings(endTime - totalStart, endTime - computeStart);
-	return { response: { items: result.items, timedOut: cancellationToken.isTimedOut(), tokenBudgetExhausted: tokenBudget.isExhausted() }, responseRequired: true };
+	return { response: result.toJson(), responseRequired: true };
 };
 
 export function create(info: tt.server.PluginCreateInfo): tt.LanguageService {

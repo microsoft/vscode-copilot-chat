@@ -211,6 +211,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		}
 
 		const result: string[] = [];
+		result.push(`> 🚨 Note: This log may contain personal information such as the contents of your files or terminal output. Please review the contents carefully before sharing.`);
 		result.push(`# ${entry.debugName} - ${id}`);
 		result.push(``);
 
@@ -265,7 +266,7 @@ export class RequestLogger extends AbstractRequestLogger {
 			}
 			if (prediction) {
 				result.push(`## Prediction`);
-				result.push(createFencedCodeBlock('markdown', prediction));
+				result.push(createFencedCodeBlock('markdown', prediction, false));
 			}
 		}
 		result.push(``);
