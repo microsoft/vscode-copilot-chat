@@ -40,7 +40,6 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 			this.logService.logger.debug('getTaskOutputTool returning undefined: no matching label for task ' + options.input.id);
 			return;
 		}
-		// TODO:@meganrogge when there's API to determine if a terminal is a task, improve this vscode#234440
 		const terminal = taskDefinition.terminal ?? this.tasksService.getTerminalForTask(taskDefinition.task);
 		if (!terminal) {
 			this.logService.logger.debug('getTaskOutputTool returning undefined: no terminal for task: ' + options.input.id + ' label: ' + taskDefinition.taskLabel + ' terminal names: ' + this.terminalService.terminals.map(t => t.name).join(', '));
