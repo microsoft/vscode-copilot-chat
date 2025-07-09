@@ -29,7 +29,16 @@ export class TasksService implements ITasksService {
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
 	) {
 		vscode.tasks.onDidStartTask(e => {
-			this.taskDefinitionToTerminal.set(e.execution.task.definition, (e.execution as any).terminal);
+			const terminal: vscode.Terminal | undefined = (e.execution as any).terminal;
+			if (!terminal) {
+				return;
+			}
+			this.taskDefinitionToTerminal.set(e.execution.task.definition, terminal);
+			vscode.window.onDidCloseTerminal(closedTerminal => {
+				if (closedTerminal === terminal && this.taskDefinitionToTerminal.has(e.execution.task.definition)) {
+					this.taskDefinitionToTerminal.delete(e.execution.task.definition);
+				}
+			});
 		});
 	}
 
@@ -52,7 +61,11 @@ export class TasksService implements ITasksService {
 	 * @param task
 	 */
 	getTerminalForTask(taskDefinition: vscode.TaskDefinition): vscode.Terminal | undefined {
-		return this.taskDefinitionToTerminal.get(taskDefinition);
+		for (const [key, terminal] of this.taskDefinitionToTerminal.entries()) {
+			if (taskDefinition.type === key.type && (!key.label || taskDefinition.label === key.label) && (!key.script || taskDefinition.script === key.script) && (!key.command || taskDefinition.command === key.command)) {
+				return terminal;
+			}
+		}
 	}
 
 	async getTaskConfigPosition(workspaceFolder: URI, def: vscode.TaskDefinition) {
