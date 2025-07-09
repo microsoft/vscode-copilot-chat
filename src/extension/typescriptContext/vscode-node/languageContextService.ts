@@ -1522,15 +1522,170 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 	}
 }
 
+interface TokenBudgetProvider {
+	getTokenBudget(document: vscode.TextDocument): number;
+}
+
+class CachePopulationTrigger implements vscode.Disposable {
+
+	private readonly languageContextService: ILanguageContextService;
+	private readonly tokenBudgetProvider: TokenBudgetProvider;
+	private readonly disposables: DisposableStore;
+	private readonly selectionChangeDebouncer: ThrottledDebouncer;
+
+	private lastDocumentChange: { document: string; time: number } | undefined;
+
+	constructor(languageContextService: ILanguageContextService, tokenBudgetProvider: TokenBudgetProvider) {
+		this.languageContextService = languageContextService;
+		this.tokenBudgetProvider = tokenBudgetProvider;
+		this.disposables = new DisposableStore();
+		this.lastDocumentChange = undefined;
+
+		this.selectionChangeDebouncer = this.disposables.add(new ThrottledDebouncer());
+		this.disposables.add(vscode.workspace.onDidChangeTextDocument((event) => {
+			this.didChangeTextDocument(event);
+		}));
+
+		this.disposables.add(vscode.window.onDidChangeActiveTextEditor((editor) => {
+			this.didChangeActiveTextEditor(editor);
+		}));
+
+		this.disposables.add(vscode.window.onDidChangeTextEditorSelection(async (event) => {
+			this.didChangeTextEditorSelection(event);
+		}));
+
+	}
+
+	public dispose() {
+		this.disposables.dispose();
+	}
+
+	private didChangeTextDocument(event: vscode.TextDocumentChangeEvent): void {
+		const time = Date.now();
+		this.lastDocumentChange = undefined;
+		const document = event.document;
+		if (document.languageId !== 'typescript' && document.languageId !== 'typescriptreact') {
+			return;
+		}
+		if (event.contentChanges.length === 0) {
+			return;
+		}
+		const activeEditor = vscode.window.activeTextEditor;
+		if (activeEditor === undefined || activeEditor.document.uri.toString() !== document.uri.toString()) {
+			return;
+		}
+		this.lastDocumentChange = { document: document.uri.toString(), time: time };
+	}
+
+	private didChangeActiveTextEditor(editor: vscode.TextEditor | undefined): void {
+		if (this.lastDocumentChange === undefined) {
+			return;
+		}
+		if (editor === undefined) {
+			this.lastDocumentChange = undefined;
+			return;
+		}
+		const document = editor.document;
+		if (this.lastDocumentChange.document !== document.uri.toString()) {
+			this.lastDocumentChange = undefined;
+		}
+	}
+
+	private didChangeTextEditorSelection(event: vscode.TextEditorSelectionChangeEvent): void {
+		const document = event.textEditor.document;
+		const tokenBudget = this.tokenBudgetProvider.getTokenBudget(document);
+		if (tokenBudget <= 0) {
+			// There is no token budget left, so we don't want to trigger the cache population.
+			return;
+		}
+		const position = this.getPosition(event);
+		if (position === undefined) {
+			this.selectionChangeDebouncer.cancel();
+			return;
+		}
+
+		try {
+			if (event.kind === vscode.TextEditorSelectionChangeKind.Command || event.kind === vscode.TextEditorSelectionChangeKind.Mouse) {
+				this.selectionChangeDebouncer.cancel();
+				this.populateCache(document, position, tokenBudget, false);
+			}
+			this.selectionChangeDebouncer.trigger(() => {
+				this.populateCache(document, position, tokenBudget, true);
+			});
+		} catch (error) {
+			console.error(error);
+		}
+	}
+
+	private getPosition(event: vscode.TextEditorSelectionChangeEvent): vscode.Position | undefined {
+		const time = Date.now();
+		const activeEditor = vscode.window.activeTextEditor;
+		if (event.textEditor !== activeEditor) {
+			return undefined;
+		}
+		const document = event.textEditor.document;
+		if (document.languageId !== 'typescript' && document.languageId !== 'typescriptreact') {
+			return;
+		}
+		if (event.selections.length !== 1) {
+			return undefined;
+		}
+		const range = event.selections[0];
+		if (!range.isEmpty) {
+			return undefined;
+		}
+		const line = document.lineAt(range.start.line);
+		const end = line.text.substring(range.start.character);
+		// If we are not on an empty line or the end of the line is not empty, we don't want to trigger the context request.
+		if (line.text.trim().length !== 0 && end.length > 0) {
+			return undefined;
+		}
+
+		// If the last document change was within 500 ms, we don't want to trigger the context request. Instead we wait for the next change or
+		// a normal inline completion request.
+		if (this.lastDocumentChange !== undefined && this.lastDocumentChange.document === document.uri.toString() && time - this.lastDocumentChange.time < 500) {
+			return undefined;
+		}
+		return range.start;
+	}
+
+	private populateCache(document: vscode.TextDocument, position: vscode.Position, tokenBudget: number, check: boolean): void {
+		if (check) {
+			const activeTextEditor = vscode.window.activeTextEditor;
+			if (activeTextEditor === undefined || activeTextEditor.document.uri.toString() !== document.uri.toString()) {
+				return;
+			}
+			const selections = activeTextEditor.selections;
+			if (selections === undefined || selections.length !== 1) {
+				return;
+			}
+			const selection = selections[0];
+			if (!selection.isEmpty || selection.start.line !== position.line || selection.start.character !== position.character) {
+				return;
+			}
+		}
+		const context: RequestContext = {
+			requestId: generateUuid(),
+			timeBudget: 50,
+			tokenBudget: tokenBudget,
+			source: KnownSources.populateCache,
+			proposedEdits: undefined
+		};
+		this.languageContextService.populateCache(document, position, context).catch(() => {
+			// Error got log inside the cache population call.
+		});
+	}
+}
+
 const showContextInspectorViewContextKey = `github.copilot.chat.showContextInspectorView`;
-export class InlineCompletionContribution implements vscode.Disposable {
+export class InlineCompletionContribution implements vscode.Disposable, TokenBudgetProvider {
 
 	private disposables: DisposableStore;
+
 	private registrations: DisposableStore | undefined;
 	private readonly registrationQueue: Queue<void>;
 
 	private readonly telemetrySender: TelemetrySender;
-	private readonly selectionChangeDebouncer: ThrottledDebouncer;
 
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,
@@ -1542,7 +1697,6 @@ export class InlineCompletionContribution implements vscode.Disposable {
 		this.registrations = undefined;
 		this.telemetrySender = new TelemetrySender(telemetryService, logService);
 		this.registrationQueue = new Queue<void>();
-		this.selectionChangeDebouncer = new ThrottledDebouncer();
 
 		this.disposables = new DisposableStore();
 		if (languageContextService instanceof LanguageContextServiceImpl) {
@@ -1571,7 +1725,6 @@ export class InlineCompletionContribution implements vscode.Disposable {
 		this.registrations?.dispose();
 		this.disposables.dispose();
 		this.registrationQueue.dispose();
-		this.selectionChangeDebouncer.dispose();
 	}
 
 	private typeScriptFileOpen(): void {
@@ -1616,118 +1769,9 @@ export class InlineCompletionContribution implements vscode.Disposable {
 				this.registrations.dispose();
 				this.registrations = undefined;
 			}
+
 			this.registrations = new DisposableStore();
-			let lastDocumentChange: { document: string; time: number } | undefined = undefined;
-			this.registrations.add(vscode.workspace.onDidChangeTextDocument((event) => {
-				const time = Date.now();
-				lastDocumentChange = undefined;
-				const document = event.document;
-				if (document.languageId !== 'typescript' && document.languageId !== 'typescriptreact') {
-					return;
-				}
-				if (event.contentChanges.length === 0) {
-					return;
-				}
-				const activeEditor = vscode.window.activeTextEditor;
-				if (activeEditor === undefined || activeEditor.document.uri.toString() !== document.uri.toString()) {
-					return;
-				}
-				lastDocumentChange = { document: document.uri.toString(), time: time };
-			}));
-
-			this.registrations.add(vscode.window.onDidChangeActiveTextEditor((editor) => {
-				if (lastDocumentChange === undefined) {
-					return;
-				}
-				if (editor === undefined) {
-					lastDocumentChange = undefined;
-					return;
-				}
-				const document = editor.document;
-				if (lastDocumentChange.document !== document.uri.toString()) {
-					lastDocumentChange = undefined;
-				}
-			}));
-
-			this.registrations.add(vscode.window.onDidChangeTextEditorSelection(async (event) => {
-				const time = Date.now();
-				const document = event.textEditor.document;
-
-				function getPosition(tokenBudget: number): vscode.Position | undefined {
-					const activeEditor = vscode.window.activeTextEditor;
-					if (event.textEditor !== activeEditor) {
-						return undefined;
-					}
-					if (document.languageId !== 'typescript' && document.languageId !== 'typescriptreact') {
-						return;
-					}
-					if (event.selections.length !== 1) {
-						return undefined;
-					}
-					const range = event.selections[0];
-					if (!range.isEmpty) {
-						return undefined;
-					}
-					const line = document.lineAt(range.start.line);
-					const end = line.text.substring(range.start.character);
-					// If we are not on an empty line or the end of the line is not empty, we don't want to trigger the context request.
-					if (line.text.trim().length !== 0 && end.length > 0) {
-						return undefined;
-					}
-
-					// If the last document change was within 500 ms, we don't want to trigger the context request. Instead we wait for the next change or
-					// a normal inline completion request.
-					if (lastDocumentChange !== undefined && lastDocumentChange.document === document.uri.toString() && time - lastDocumentChange.time < 500) {
-						return undefined;
-					}
-					if (tokenBudget <= 0) {
-						return undefined;
-					}
-					return range.start;
-				}
-				const tokenBudget = this.getTokenBudget(document);
-				const position = getPosition(tokenBudget);
-				if (position === undefined) {
-					this.selectionChangeDebouncer.cancel();
-					return;
-				}
-
-				const populateCache = async (document: vscode.TextDocument, position: vscode.Position, check: boolean) => {
-					if (check) {
-						const activeTextEditor = vscode.window.activeTextEditor;
-						if (activeTextEditor === undefined || activeTextEditor.document.uri.toString() !== document.uri.toString()) {
-							return;
-						}
-						const selections = activeTextEditor.selections;
-						if (selections === undefined || selections.length !== 1) {
-							return;
-						}
-						const selection = selections[0];
-						if (!selection.isEmpty || selection.start.line !== position.line || selection.start.character !== position.character) {
-							return;
-						}
-					}
-					const context: RequestContext = {
-						requestId: generateUuid(),
-						timeBudget: 50,
-						tokenBudget: tokenBudget,
-						source: KnownSources.populateCache,
-						proposedEdits: undefined
-					};
-					languageContextService.populateCache(event.textEditor.document, position, context).catch(() => {
-						// Error got log inside the cache population call.
-					});
-				};
-				try {
-					if (event.kind === vscode.TextEditorSelectionChangeKind.Command || event.kind === vscode.TextEditorSelectionChangeKind.Mouse) {
-						this.selectionChangeDebouncer.cancel();
-						populateCache(document, position, false);
-					}
-					this.selectionChangeDebouncer.trigger(populateCache, document, position, true);
-				} catch (error) {
-					console.error(error);
-				}
-			}));
+			this.registrations.add(new CachePopulationTrigger(this.languageContextService, this));
 
 			const telemetrySender = this.telemetrySender;
 			const self = this;
@@ -1907,7 +1951,7 @@ export class InlineCompletionContribution implements vscode.Disposable {
 		return expFlag === true ? 'on' : 'off';
 	}
 
-	private getTokenBudget(document: vscode.TextDocument): number {
+	public getTokenBudget(document: vscode.TextDocument): number {
 		return Math.trunc((8 * 1024) - (document.getText().length / 4) - 256);
 	}
 
