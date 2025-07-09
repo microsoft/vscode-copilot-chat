@@ -3682,7 +3682,7 @@
 	},
 	"scripts": {
 		"postinstall": "tsx ./script/postinstall.ts",
-		"prepare": "tsx ./script/prepare.ts",
+		"prepare": "husky",
 		"vscode-dts:dev": "node node_modules/@vscode/dts/index.js dev && mv vscode.proposed.*.ts src/extension",
 		"vscode-dts:main": "node node_modules/@vscode/dts/index.js main && mv vscode.d.ts src/extension",
 		"build": "tsx .esbuild.ts",
