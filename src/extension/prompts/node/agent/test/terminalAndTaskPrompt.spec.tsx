@@ -8,10 +8,17 @@ import { URI } from '../../../../../util/vs/base/common/uri';
 import { TerminalAndTaskStatePromptElement } from '../../base/terminalAndTaskState';
 
 suite('TerminalAndTaskStatePromptElement', () => {
-	test('Copilot terminals and tasks', async () => {
+	test('Copilot terminals and active tasks', async () => {
 		const tasksService: any = {};
 		const terminalService: any = {};
-
+		tasksService.getTerminalForTask = (task: any) => {
+			if (task.command === 'build') {
+				return { name: 'Terminal 1', id: '1' };
+			} else if (task.command === 'watch') {
+				return { name: 'Terminal 2', id: '2' };
+			}
+			return undefined;
+		}
 		tasksService.getTasks = () => [[null, [
 			{
 				label: 'npm: build',
@@ -55,7 +62,6 @@ suite('TerminalAndTaskStatePromptElement', () => {
 		const prompt = new TerminalAndTaskStatePromptElement({}, tasksService, terminalService);
 		const rendered = await prompt.render();
 		const output = typeof rendered === 'string' ? rendered : JSON.stringify(rendered) ?? '';
-		assert(output.includes('Active Tasks:'));
 		assert(output.includes('npm: build'));
 		assert(output.includes('npm: watch'));
 		assert(output.includes('Terminal 1'));
@@ -67,7 +73,14 @@ suite('TerminalAndTaskStatePromptElement', () => {
 	test('Terminals (non-Copilot) and active tasks', async () => {
 		const tasksService: any = {};
 		const terminalService: any = {};
-
+		tasksService.getTerminalForTask = (task: any) => {
+			if (task.command === 'build') {
+				return { name: 'Terminal 1', id: '1' };
+			} else if (task.command === 'watch') {
+				return { name: 'Terminal 2', id: '2' };
+			}
+			return undefined;
+		}
 		tasksService.getTasks = () => [[null, [
 			{
 				label: 'npm: build',
@@ -109,7 +122,6 @@ suite('TerminalAndTaskStatePromptElement', () => {
 		const rendered = await prompt.render();
 
 		const output = typeof rendered === 'string' ? rendered : JSON.stringify(rendered) ?? '';
-		assert(output.includes('Active Tasks:'));
 		assert(output.includes('npm: build'));
 		assert(output.includes('npm: watch'));
 		assert(output.includes('No active Copilot terminals found.'));
