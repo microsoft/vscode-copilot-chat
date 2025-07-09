@@ -5,16 +5,16 @@
 
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { TreeSitterOffsetRange } from '../../../platform/parser/node/nodes';
-import { IParserService, treeSitterOffsetRangeToVSCodeRange } from '../../../platform/parser/node/parserService';
+import { IParserService } from '../../../platform/parser/node/parserService';
 import { TestableNode } from '../../../platform/parser/node/testGenParsing';
 import { IReviewService } from '../../../platform/review/common/reviewService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { filterMap } from '../../../util/common/arrays';
 import { extractImageAttributes } from '../../../util/common/imageUtils';
-import * as arrays from '../../../util/vs/base/common/arrays';
+import { raceCancellation } from '../../../util/vs/base/common/async';
 import * as path from '../../../util/vs/base/common/path';
 import { Range } from '../../../vscodeTypes';
 import { Intent } from '../../common/constants';
@@ -49,21 +49,15 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 		this.reviewKind,
 	];
 
-	static getSevereDiagnostics(diagnostics: ReadonlyArray<vscode.Diagnostic>): vscode.Diagnostic[] {
-		const severeDiagnostics = diagnostics.filter(d => d.severity <= vscode.DiagnosticSeverity.Warning);
-
-		if (severeDiagnostics.length === 0) {
-			return [];
-		}
-
-		return severeDiagnostics;
+	static getWarningOrErrorDiagnostics(diagnostics: ReadonlyArray<vscode.Diagnostic>): vscode.Diagnostic[] {
+		return diagnostics.filter(d => d.severity <= vscode.DiagnosticSeverity.Warning);
 	}
 
 	static getDiagnosticsAsText(diagnostics: ReadonlyArray<vscode.Diagnostic>): string {
 		return diagnostics.map(d => d.message).join(', ');
 	}
 
-	async provideCodeActions(doc: vscode.TextDocument, range: vscode.Range, context: vscode.CodeActionContext) {
+	async provideCodeActions(doc: vscode.TextDocument, range: vscode.Range, context: vscode.CodeActionContext, cancellationToken: vscode.CancellationToken): Promise<vscode.CodeAction[] | undefined> {
 
 		const copilotCodeActionsEnabled = this.configurationService.getConfig(ConfigKey.EnableCodeActions);
 		if (!copilotCodeActionsEnabled) {
@@ -73,6 +67,9 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 		if (await this.ignoreService.isCopilotIgnored(doc.uri)) {
 			return;
 		}
+		if (cancellationToken.isCancellationRequested) {
+			return;
+		}
 
 		const codeActions: vscode.CodeAction[] = [];
 		const activeTextEditor = vscode.window.activeTextEditor;
@@ -80,7 +77,7 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 			return codeActions;
 		}
 
-		const altTextQuickFixes = await this.provideAltTextQuickFix(doc, range);
+		const altTextQuickFixes = this.provideAltTextQuickFix(doc, range);
 		if (altTextQuickFixes) {
 			altTextQuickFixes.command = {
 				title: altTextQuickFixes.title,
@@ -105,7 +102,7 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 			codeActions.push(reviewAction);
 		}
 
-		const severeDiagnostics = QuickFixesProvider.getSevereDiagnostics(context.diagnostics);
+		const severeDiagnostics = QuickFixesProvider.getWarningOrErrorDiagnostics(context.diagnostics);
 		if (severeDiagnostics.length === 0) {
 			return codeActions;
 		}
@@ -143,7 +140,7 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 		return codeActions;
 	}
 
-	async provideAltTextQuickFix(document: vscode.TextDocument, range: vscode.Range): Promise<ImageCodeAction | undefined> {
+	private provideAltTextQuickFix(document: vscode.TextDocument, range: vscode.Range): ImageCodeAction | undefined {
 		const currentLine = document.lineAt(range.start.line).text;
 		const generateImagePath = extractImageAttributes(currentLine);
 		const refineImagePath = extractImageAttributes(currentLine, true);
@@ -191,6 +188,8 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 
 export class RefactorsProvider implements vscode.CodeActionProvider {
 
+	private static readonly MAX_FILE_SIZE = 1024 * 1024; // 1 MB
+
 	private static readonly generateOrModifyKind = vscode.CodeActionKind.RefactorRewrite.append('copilot');
 	private static readonly generateDocsKind = vscode.CodeActionKind.RefactorRewrite.append('generateDocs').append('copilot');
 	private static readonly generateTestsKind = vscode.CodeActionKind.RefactorRewrite.append('generateTests').append('copilot');
@@ -213,20 +212,30 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 	async provideCodeActions(
 		doc: vscode.TextDocument,
 		range: vscode.Range,
-		_ctx: vscode.CodeActionContext
+		_ctx: vscode.CodeActionContext,
+		cancellationToken: vscode.CancellationToken
 	): Promise<vscode.CodeAction[] | undefined> {
 
 		const copilotCodeActionsEnabled = this.configurationService.getConfig(ConfigKey.EnableCodeActions);
 		if (!copilotCodeActionsEnabled) {
 			return;
 		}
+
 		if (await this.ignoreService.isCopilotIgnored(doc.uri)) {
 			return;
 		}
-		const generateUsingCopilotCodeAction = this.provideGenerateUsingCopilotCodeAction(doc, range);
-		const documentUsingCopilotCodeAction = await this.provideDocGenCodeAction(doc, range);
-		const testUsingCopilotCodeAction = await this.provideTestGenCodeAction(doc, range);
-		return arrays.coalesce([documentUsingCopilotCodeAction, generateUsingCopilotCodeAction, testUsingCopilotCodeAction]);
+
+		if (cancellationToken.isCancellationRequested) {
+			return;
+		}
+
+		const codeActions = await raceCancellation(Promise.allSettled([
+			this.provideGenerateUsingCopilotCodeAction(doc, range),
+			this.provideDocGenCodeAction(doc, range, cancellationToken),
+			this.provideTestGenCodeAction(doc, range, cancellationToken),
+		]), cancellationToken);
+
+		return codeActions === undefined ? undefined : filterMap(codeActions, r => (r.status === 'fulfilled' && r.value !== undefined) ? r.value : undefined);
 	}
 
 	/**
@@ -279,24 +288,31 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 	 * The code action invokes the inline chat, expanding the inline chat's "wholeRange" (blue region)
 	 * to the whole documentable node.
 	 */
-	private async provideDocGenCodeAction(doc: vscode.TextDocument, range: vscode.Range): Promise<vscode.CodeAction | undefined> {
+	private async provideDocGenCodeAction(doc: vscode.TextDocument, range: vscode.Range, cancellationToken: vscode.CancellationToken): Promise<vscode.CodeAction | undefined> {
 
-		const startIndex = doc.offsetAt(range.start);
-		const endIndex = doc.offsetAt(range.end);
-		const offsetRange = { startIndex, endIndex };
-
-		let documentableNode: { identifier: string; nodeRange?: TreeSitterOffsetRange } | undefined;
-		const treeSitterAST = this.parserService.getTreeSitterAST(doc);
-		if (treeSitterAST) {
-			try {
-				documentableNode = await treeSitterAST.getDocumentableNodeIfOnIdentifier(offsetRange);
-			} catch (e) {
-				this.logger.logger.error(e, 'RefactorsProvider: getDocumentableNodeIfOnIdentifier failed');
-				this.telemetryService.sendGHTelemetryException(e, 'RefactorsProvider: getDocumentableNodeIfOnIdentifier failed');
-			}
+		if (doc.getText().length > RefactorsProvider.MAX_FILE_SIZE) {
+			return;
 		}
 
-		if (documentableNode === undefined) {
+		const offsetRange: TreeSitterOffsetRange = {
+			startIndex: doc.offsetAt(range.start),
+			endIndex: doc.offsetAt(range.end)
+		};
+
+		const treeSitterAST = this.parserService.getTreeSitterAST(doc);
+		if (treeSitterAST === undefined) {
+			return;
+		}
+
+		let documentableNode: { identifier: string; nodeRange?: TreeSitterOffsetRange } | undefined;
+		try {
+			documentableNode = await treeSitterAST.getDocumentableNodeIfOnIdentifier(offsetRange);
+		} catch (e) {
+			this.logger.logger.error(e, 'RefactorsProvider: getDocumentableNodeIfOnIdentifier failed');
+			this.telemetryService.sendGHTelemetryException(e, 'RefactorsProvider: getDocumentableNodeIfOnIdentifier failed');
+		}
+
+		if (documentableNode === undefined || cancellationToken.isCancellationRequested) {
 			return undefined;
 		}
 
@@ -310,7 +326,8 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 				? undefined
 				: new Range(
 					doc.positionAt(documentableNode.nodeRange.startIndex),
-					doc.positionAt(documentableNode.nodeRange.endIndex));
+					doc.positionAt(documentableNode.nodeRange.endIndex)
+				);
 
 		codeAction.command = {
 			title,
@@ -327,28 +344,38 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 		return codeAction;
 	}
 
-	private async provideTestGenCodeAction(_doc: vscode.TextDocument, range: vscode.Range): Promise<vscode.CodeAction | undefined> {
-		const doc = TextDocumentSnapshot.create(_doc);
-		const startIndex = doc.offsetAt(range.start);
-		const endIndex = doc.offsetAt(range.end);
-		const offsetRange = { startIndex, endIndex };
+	private async provideTestGenCodeAction(doc: vscode.TextDocument, range: vscode.Range, cancellationToken: vscode.CancellationToken): Promise<vscode.CodeAction | undefined> {
 
-		let testableNode: TestableNode | null = null;
-		const treeSitterAST = this.parserService.getTreeSitterAST(doc);
-		if (treeSitterAST) {
-			try {
-				testableNode = await treeSitterAST.getTestableNode(offsetRange);
-			} catch (e) {
-				this.logger.logger.error(e, 'RefactorsProvider: getTestableNode failed');
-				this.telemetryService.sendGHTelemetryException(e, 'RefactorsProvider: getTestableNode failed');
-			}
+		if (doc.getText().length > RefactorsProvider.MAX_FILE_SIZE) {
+			return;
 		}
 
-		if (!testableNode) {
+		const offsetRange: TreeSitterOffsetRange = {
+			startIndex: doc.offsetAt(range.start),
+			endIndex: doc.offsetAt(range.end),
+		};
+
+		const treeSitterAST = this.parserService.getTreeSitterAST(doc);
+		if (treeSitterAST === undefined) {
+			return;
+		}
+
+		let testableNode: TestableNode | null = null;
+		try {
+			testableNode = await treeSitterAST.getTestableNode(offsetRange);
+		} catch (e) {
+			this.logger.logger.error(e, 'RefactorsProvider: getTestableNode failed');
+			this.telemetryService.sendGHTelemetryException(e, 'RefactorsProvider: getTestableNode failed');
+		}
+
+		if (!testableNode || cancellationToken.isCancellationRequested) {
 			return undefined;
 		}
 
-		const identifierRange = treeSitterOffsetRangeToVSCodeRange(doc, testableNode.identifier.range);
+		const identifierRange = new Range(
+			doc.positionAt(testableNode.identifier.range.startIndex),
+			doc.positionAt(testableNode.identifier.range.endIndex)
+		);
 		if (!identifierRange.contains(range)) {
 			return undefined;
 		}

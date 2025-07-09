@@ -222,7 +222,7 @@ export async function activate(context: vscode.ExtensionContext) {
 				args: args,
 				revealAvailablePropertiesView: true,
 			}
-		)
+		);
 	});
 	context.subscriptions.push(visualizeDebugProfile);
 

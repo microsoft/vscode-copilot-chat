@@ -77,6 +77,7 @@
 	},
 	"github.copilot.command.logWorkbenchState": "Log Workbench State",
 	"github.copilot.command.showChatLogView": "Show Chat Debug View",
+	"github.copilot.command.showContextInspectorView": "Inspect Language Context",
 	"github.copilot.command.applySuggestionWithCopilot": "Apply Suggestion with Copilot",
 	"github.copilot.command.explainTerminalSelection": "Explain Terminal Selection",
 	"github.copilot.command.explainTerminalSelectionContextMenu": "Explain",

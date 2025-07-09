@@ -68,6 +68,7 @@ Please include the following with each issue:
 ## Requirements
 - Node 22.x
 - Python >= 3.10, <= 3.12
+- Git Large File Storage (LFS) - for running tests
 
 ### First-time setup
 - on Windows you need to run `Set-ExecutionPolicy Unrestricted` as admin in Powershell.
@@ -80,6 +81,7 @@ Please include the following with each issue:
 **Note:** Setup and running under Windows Subsystem for Linux (WSL) is supported.
 
 ### Testing
+If you hit errors while running tests, ensure that you are using the correct Node version and that git lfs is properly installed (run `git lfs pull` to validate).
 
 There are unit tests which run in Node.JS:
 

@@ -74,7 +74,7 @@ export function registerInlineChatCommands(accessor: ServicesAccessor): IDisposa
 			if (emptySelection) {
 				const severeDiagnostics = vscode.languages.getDiagnostics(emptySelection.activeDocument.uri);
 				const diagnosticsInSelection = severeDiagnostics.filter(d => !!d.range.intersection(emptySelection.range));
-				const filteredDiagnostics = QuickFixesProvider.getSevereDiagnostics(diagnosticsInSelection);
+				const filteredDiagnostics = QuickFixesProvider.getWarningOrErrorDiagnostics(diagnosticsInSelection);
 				if (filteredDiagnostics.length) {
 					message += QuickFixesProvider.getDiagnosticsAsText(severeDiagnostics);
 					explainingDiagnostics = true;
