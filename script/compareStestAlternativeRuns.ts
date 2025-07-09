@@ -370,9 +370,7 @@ async function main() {
 
 	// Determine baseline paths
 	const BASELINE_JSON_PATH = externalBaselinePath ? path.resolve(externalBaselinePath) : DEFAULT_BASELINE_JSON_PATH;
-	const BASELINE_OLD_JSON_PATH = externalBaselinePath ?
-		path.join(process.cwd(), 'baseline.old.json') :
-		DEFAULT_BASELINE_OLD_JSON_PATH;
+	const BASELINE_OLD_JSON_PATH = path.join(path.dirname(BASELINE_JSON_PATH), 'baseline.old.json');
 
 	let baselineJson: string;
 	try {
