@@ -145,8 +145,6 @@ export interface IResponseDelta {
 	beginToolCalls?: ICopilotBeginToolCall[];
 	_deprecatedCopilotFunctionCalls?: ICopilotFunctionCall[];
 	copilotConfirmation?: ICopilotConfirmation;
-	thinkingTokenId?: string;
-	thinkingText?: string;
 }
 
 export interface FinishedCallback {

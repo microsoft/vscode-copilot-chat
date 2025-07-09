@@ -81,6 +81,7 @@ import { IExperimentationService, NullExperimentationService } from '../../telem
 import { NullTelemetryService } from '../../telemetry/common/nullTelemetryService';
 import { ITelemetryService, ITelemetryUserConfig, TelemetryUserConfigImpl } from '../../telemetry/common/telemetry';
 import { ITerminalService, NullTerminalService } from '../../terminal/common/terminalService';
+import { IThinkingDataService, ThinkingDataImpl } from '../../thinking/node/thinkingDataService';
 import { ITokenizerProvider, TokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { IWorkbenchService } from '../../workbench/common/workbenchService';
 import { IWorkspaceService } from '../../workspace/common/workspaceService';
@@ -278,6 +279,7 @@ export function createPlatformServices(): TestingServiceCollection {
 	}));
 
 	testingServiceCollection.define(ITasksService, new SyncDescriptor(TestTasksService));
+	testingServiceCollection.define(IThinkingDataService, new SyncDescriptor(ThinkingDataImpl));
 
 	return testingServiceCollection;
 }

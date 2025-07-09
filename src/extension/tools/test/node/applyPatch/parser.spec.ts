@@ -10,9 +10,26 @@ import { expect, it, suite } from 'vitest';
 import { StringTextDocumentWithLanguageId } from '../../../../../platform/editing/common/abstractText';
 import { findLast } from '../../../../../util/vs/base/common/arraysFind';
 import { URI } from '../../../../../util/vs/base/common/uri';
-import { patch_to_commit, text_to_patch } from '../../../node/applyPatch/parser';
+import { patch_to_commit, replace_explicit_tabs, text_to_patch } from '../../../node/applyPatch/parser';
 
 suite('applyPatch parser', () => {
+	it('replace_explicit_tabs', () => {
+		expect(replace_explicit_tabs('')).toBe('');
+		expect(replace_explicit_tabs('foo')).toBe('foo');
+		expect(replace_explicit_tabs('\\tfoo')).toBe('\tfoo');
+		expect(replace_explicit_tabs('  \\tfoo')).toBe('  \tfoo');
+		expect(replace_explicit_tabs('\\t\\tfoo')).toBe('\t\tfoo');
+		expect(replace_explicit_tabs('\\tfoo\\tbar')).toBe('\tfoo\\tbar');
+		expect(replace_explicit_tabs('  \\t\\tfoo')).toBe('  \t\tfoo');
+		expect(replace_explicit_tabs('#\\tfoo')).toBe('#\tfoo');
+		expect(replace_explicit_tabs('////\\tfoo')).toBe('////\tfoo');
+		expect(replace_explicit_tabs('  #////\\tfoo')).toBe('  #////\tfoo');
+		expect(replace_explicit_tabs('\\tfoo\n\\tbar')).toBe('\tfoo\n\tbar');
+		expect(replace_explicit_tabs('  \\tfoo\n  \\tbar')).toBe('  \tfoo\n  \tbar');
+		expect(replace_explicit_tabs('\\t\\tfoo\n  #\\tbar')).toBe('\t\tfoo\n  #\tbar');
+		expect(replace_explicit_tabs('\\t\\tfoo\n\\tbar\n#\\tbaz')).toBe('\t\tfoo\n\tbar\n#\tbaz');
+	});
+
 	it('fixes an issue', () => {
 		const input = `*** Begin Patch\n*** Update File: /path/to/file.ts\n@@section1\n-[old code1]\n+[new code1}\n@@section2\n-[old code2]\n+[new code2}\n*** End Patch`;
 
@@ -200,7 +217,7 @@ suite('applyPatch parser', () => {
 			            "insLines": [
 			              "",
 			              "def greet():",
-			              "  print("Hello, world!")",
+			              "	print("Hello, world!")",
 			            ],
 			            "origIndex": 1,
 			          },

@@ -95,4 +95,26 @@ export class VsCodeCodeSearchAuthenticationService implements ICodeSearchAuthent
 			}
 		}
 	}
+
+	async promptForExpandedLocalIndexing(fileCount: number): Promise<boolean> {
+		const confirmButton: vscode.MessageItem = {
+			title: t`Enable`,
+		};
+		const cancelButton: vscode.MessageItem = {
+			title: t`Cancel`,
+			isCloseAffordance: true
+		};
+
+		const result = await vscode.window.showWarningMessage(
+			t`Build local index for this workspace?`,
+			{
+				modal: true,
+				detail: t`This workspace contains ${fileCount} files. Building a local index may take a while but will improve search performance.`,
+			},
+			confirmButton,
+			cancelButton
+		);
+
+		return result === confirmButton;
+	}
 }

@@ -89,6 +89,7 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 				case TokenErrorNotificationId.ServerError:
 				case TokenErrorNotificationId.FeatureFlagBlocked:
 				case TokenErrorNotificationId.SpammyUser:
+				case TokenErrorNotificationId.SnippyNotConfigured:
 					throw new ContactSupportError(message);
 			}
 		}

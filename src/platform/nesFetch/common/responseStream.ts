@@ -140,10 +140,7 @@ export class ResponseStream {
 		};
 
 		const aggregatedCompletion: Completion = {
-			id: completion.id,
 			choices: [choice],
-			created: 0,
-			model: completion.model,
 			system_fingerprint: completion.system_fingerprint,
 			object: completion.object,
 			usage: aggregatedUsage,

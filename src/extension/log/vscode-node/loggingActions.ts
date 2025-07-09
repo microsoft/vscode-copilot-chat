@@ -33,6 +33,7 @@ import { ServiceCollection } from '../../../util/vs/platform/instantiation/commo
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { FetcherService } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
 import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
+import { shuffle } from '../../../util/vs/base/common/arrays';
 
 export interface ProxyAgentLog {
 	trace(message: string, ...args: any[]): void;
@@ -365,18 +366,32 @@ export function collectFetcherTelemetry(accessor: ServicesAccessor): void {
 	const now = Date.now();
 	const previous = extensionContext.globalState.get<number>('lastCollectFetcherTelemetryTime', 0);
 	if (now - previous < 26 * 60 * 60 * 1000) {
+		logService.logger.debug(`Refetch model metadata: Skipped.`);
 		return;
 	}
 
 	(async () => {
 		await extensionContext.globalState.update('lastCollectFetcherTelemetryTime', now);
 
-		const userAgentSuffix = `after-${currentUserAgentLibrary}`;
+		logService.logger.debug(`Refetch model metadata: Exclude other windows.`);
+		const windowUUID = generateUuid();
+		await extensionContext.globalState.update('lastCollectFetcherTelemetryUUID', windowUUID);
+		await timeout(5000);
+		if (extensionContext.globalState.get<string>('lastCollectFetcherTelemetryUUID') !== windowUUID) {
+			logService.logger.debug(`Refetch model metadata: Other window won.`);
+			return;
+		}
+		logService.logger.debug(`Refetch model metadata: This window won.`);
+
+		const userAgentLibraryUpdate = (original: string) => `${vscode.env.remoteName || 'local'}-on-${process.platform}-after-${currentUserAgentLibrary}-using-${original}`;
 		const fetchers = [
-			ElectronFetcher.create(envService, userAgentSuffix),
-			new NodeFetchFetcher(envService, userAgentSuffix),
-			new NodeFetcher(envService, userAgentSuffix),
+			ElectronFetcher.create(envService, userAgentLibraryUpdate),
+			new NodeFetchFetcher(envService, userAgentLibraryUpdate),
+			new NodeFetcher(envService, userAgentLibraryUpdate),
 		].filter(fetcher => fetcher) as IFetcher[];
+
+		// Randomize to offset any order dependency in telemetry.
+		shuffle(fetchers);
 
 		for (const fetcher of fetchers) {
 			const requestId = generateUuid();
@@ -406,9 +421,9 @@ export function collectFetcherTelemetry(accessor: ServicesAccessor): void {
 					await response.json();
 				}
 
-				logService.logger.info(`Refetched model metadata in ${Date.now() - requestStartTime}ms ${requestId} (${response.headers.get('x-github-request-id')}) using ${fetcher.getUserAgentLibrary()} with status ${response.status}.`);
+				logService.logger.info(`Refetch model metadata: Succeeded in ${Date.now() - requestStartTime}ms ${requestId} (${response.headers.get('x-github-request-id')}) using ${fetcher.getUserAgentLibrary()} with status ${response.status}.`);
 			} catch (e) {
-				logService.logger.info(`Failed to refetch model metadata in ${Date.now() - requestStartTime}ms ${requestId} using ${fetcher.getUserAgentLibrary()}.`);
+				logService.logger.info(`Refetch model metadata: Failed in ${Date.now() - requestStartTime}ms ${requestId} using ${fetcher.getUserAgentLibrary()}.`);
 			} finally {
 				modifiedInstaService.dispose();
 			}

@@ -4,8 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Terminal as XtermTerminal } from '@xterm/headless';
+import { basename as basenamePosix } from 'path/posix';
+import { basename as basenameWin32 } from 'path/win32';
 import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IEnvService, OperatingSystem } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITerminalService, ShellIntegrationQuality } from '../../../platform/terminal/common/terminalService';
 import { DeferredPromise, disposableTimeout, RunOnceScheduler, timeout } from '../../../util/vs/base/common/async';
@@ -42,7 +45,7 @@ export class ToolTerminalCreator {
 	) {
 	}
 
-	async createTerminal(sessionId: string, token: vscode.CancellationToken, isBackground?: boolean): Promise<IToolTerminal> {
+	async createTerminal(sessionId: string, id: string, token: vscode.CancellationToken, isBackground?: boolean): Promise<IToolTerminal> {
 		const terminal = this._createCopilotTerminal();
 		const toolTerminal: IToolTerminal = {
 			terminal,
@@ -60,11 +63,11 @@ export class ToolTerminalCreator {
 			if (shellIntegrationQuality !== ShellIntegrationQuality.None) {
 				ToolTerminalCreator._lastSuccessfulShell = ShellLaunchType.Default;
 				toolTerminal.shellIntegrationQuality = shellIntegrationQuality;
-				this.terminalService.associateTerminalWithSession(terminal, sessionId, shellIntegrationQuality, isBackground);
+				this.terminalService.associateTerminalWithSession(terminal, sessionId, id, shellIntegrationQuality, isBackground);
 				return toolTerminal;
 			}
 		}
-		this.terminalService.associateTerminalWithSession(terminal, sessionId, ShellIntegrationQuality.None, isBackground);
+		this.terminalService.associateTerminalWithSession(terminal, sessionId, id, ShellIntegrationQuality.None, isBackground);
 		// Fallback case: No shell integration in default profile
 		ToolTerminalCreator._lastSuccessfulShell = ShellLaunchType.Fallback;
 		return toolTerminal;
@@ -570,7 +573,8 @@ export class CommandLineAutoApprover extends Disposable {
 	private _allowListRegexes: RegExp[] = [];
 
 	constructor(
-		@IConfigurationService private readonly configurationService: IConfigurationService
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IEnvService private readonly envService: IEnvService
 	) {
 		super();
 		this.updateConfiguration();
@@ -582,27 +586,51 @@ export class CommandLineAutoApprover extends Disposable {
 	}
 
 	updateConfiguration() {
-		const denyList = this.configurationService.getConfig(ConfigKey.TerminalDenyList);
-		this._denyListRegexes = denyList.map(e => this.convertAutoApproveEntryToRegex(e));
-		const allowList = this.configurationService.getConfig(ConfigKey.TerminalAllowList);
-		this._allowListRegexes = allowList.map(e => this.convertAutoApproveEntryToRegex(e));
+		this._denyListRegexes = this.mapAutoApproveConfigToRegexList(this.configurationService.getConfig(ConfigKey.TerminalDenyList));
+		this._allowListRegexes = this.mapAutoApproveConfigToRegexList(this.configurationService.getConfig(ConfigKey.TerminalAllowList));
 	}
 
-	isAutoApproved(commandLine: string): boolean {
+	isAutoApproved(command: string): boolean {
 		// Check the deny list to see if this command requires explicit approval
-		if (this._denyListRegexes.some(e => e.test(commandLine))) {
-			return false;
+		for (const regex of this._denyListRegexes) {
+			if (this.commandMatchesRegex(regex, command)) {
+				return false;
+			}
 		}
 
 		// Check the allow list to see if the command is allowed to run without explicit approval
-		if (this._allowListRegexes.some(e => e.test(commandLine))) {
-			return true;
+		for (const regex of this._allowListRegexes) {
+			if (this.commandMatchesRegex(regex, command)) {
+				return true;
+			}
 		}
 
 		// TODO: LLM-based auto-approval
 
 		// Fallback is always to require approval
 		return false;
+	}
+
+	private commandMatchesRegex(regex: RegExp, command: string): boolean {
+		if (regex.test(command)) {
+			return true;
+		} else if (isPowerShell(this.envService.shell, this.envService.OS) && command.startsWith('(')) {
+			// Allow ignoring of the leading ( for PowerShell commands as it's a command pattern to
+			// operate on the output of a command. For example `(Get-Content README.md) ...`
+			if (regex.test(command.slice(1))) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private mapAutoApproveConfigToRegexList(config: unknown): RegExp[] {
+		if (!config || typeof config !== 'object') {
+			return [];
+		}
+		return Object.entries(config)
+			.map(([key, value]) => value ? this.convertAutoApproveEntryToRegex(key) : undefined)
+			.filter(e => !!e);
 	}
 
 	private convertAutoApproveEntryToRegex(value: string): RegExp {
@@ -623,15 +651,15 @@ export class CommandLineAutoApprover extends Disposable {
 // Some of these can match the same string, so the order matters. Always put the more specific one
 // first (eg. >> before >)
 const shellTypeResetChars = new Map<'sh' | 'zsh' | 'pwsh', string[]>([
-	['sh', ['&>>', '2>>', '>>', '2>', '&>', '||', '&&', '|&', '<<', '&', ';', '(', '{', '>', '<', '|']],
-	['zsh', ['<<<', '2>>', '&>>', '>>', '2>', '&>', '<(', '<>', '||', '&&', '|&', '&', ';', '(', '{', '<<', '<(', '>', '<', '|']],
+	['sh', ['&>>', '2>>', '>>', '2>', '&>', '||', '&&', '|&', '<<', '&', ';', '{', '>', '<', '|']],
+	['zsh', ['<<<', '2>>', '&>>', '>>', '2>', '&>', '<(', '<>', '||', '&&', '|&', '&', ';', '{', '<<', '<(', '>', '<', '|']],
 	['pwsh', ['*>>', '2>>', '>>', '2>', '&&', '*>', '>', '<', '|', ';', '!', '&']],
 ]);
 
-export function splitCommandLineIntoSubCommands(commandLine: string, envShell: string): string[] {
+export function splitCommandLineIntoSubCommands(commandLine: string, envShell: string, envOS: OperatingSystem): string[] {
 	let shellType: 'sh' | 'zsh' | 'pwsh';
 	const envShellWithoutExe = envShell.replace(/\.exe$/, '');
-	if (isPowerShell(envShell)) {
+	if (isPowerShell(envShell, envOS)) {
 		shellType = 'pwsh';
 	} else {
 		switch (envShellWithoutExe) {
@@ -655,9 +683,9 @@ export function splitCommandLineIntoSubCommands(commandLine: string, envShell: s
 	return subCommands;
 }
 
-export function extractInlineSubCommands(commandLine: string, envShell: string): Set<string> {
+export function extractInlineSubCommands(commandLine: string, envShell: string, envOS: OperatingSystem): Set<string> {
 	const inlineCommands: string[] = [];
-	const shellType = isPowerShell(envShell) ? 'pwsh' : 'sh';
+	const shellType = isPowerShell(envShell, envOS) ? 'pwsh' : 'sh';
 
 	/**
 	 * Extract command substitutions that start with a specific prefix and are enclosed in parentheses
@@ -698,7 +726,7 @@ export function extractInlineSubCommands(commandLine: string, envShell: string):
 				if (innerCommand) {
 					results.push(innerCommand);
 					// Recursively extract nested inline commands
-					results.push(...extractInlineSubCommands(innerCommand, envShell));
+					results.push(...extractInlineSubCommands(innerCommand, envShell, envOS));
 				}
 			}
 
@@ -730,7 +758,7 @@ export function extractInlineSubCommands(commandLine: string, envShell: string):
 			if (innerCommand) {
 				results.push(innerCommand);
 				// Recursively extract nested inline commands
-				results.push(...extractInlineSubCommands(innerCommand, envShell));
+				results.push(...extractInlineSubCommands(innerCommand, envShell, envOS));
 			}
 
 			i = endIndex + 1;
@@ -755,6 +783,10 @@ export function extractInlineSubCommands(commandLine: string, envShell: string):
 	return new Set(inlineCommands);
 }
 
-export function isPowerShell(envShell: string): boolean {
-	return /(?:powershell|pwsh)(?:-preview)?/.test(envShell.replace(/\.exe$/, ''));
+export function isPowerShell(envShell: string, os: OperatingSystem): boolean {
+	if (os === OperatingSystem.Windows) {
+		return /^(?:powershell|pwsh)(?:-preview)?$/i.test(basenameWin32(envShell).replace(/\.exe$/i, ''));
+
+	}
+	return /^(?:powershell|pwsh)(?:-preview)?$/.test(basenamePosix(envShell));
 }

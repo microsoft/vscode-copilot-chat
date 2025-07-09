@@ -33,6 +33,7 @@ import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/
 import { ToolFailureEncountered, ToolResultMetadata } from '../../prompts/node/panel/toolCalling';
 import { ToolName } from '../../tools/common/toolNames';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
+import { ReadFileParams } from '../../tools/node/readFileTool';
 import { PauseController } from './pauseController';
 
 
@@ -194,7 +195,94 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			}
 		}
 
+		this.emitReadFileTrajectories().catch(err => {
+			this._logService.logger.error('Error emitting read file trajectories', err);
+		});
+
 		return { ...lastResult, toolCallRounds: this.toolCallRounds, toolCallResults: this.toolCallResults };
+	}
+
+	private async emitReadFileTrajectories() {
+		// We are tuning our `read_file` tool to read files more effectively and efficiently.
+		// This is a likely-temporary function that emits trajectory telemetry read_files
+		// at the end of each agentic loop so that we can do so, in addition to the
+		// per-call telemetry in ReadFileTool
+
+		function tryGetRFArgs(call: IToolCall): ReadFileParams | undefined {
+			if (call.name !== ToolName.ReadFile) {
+				return undefined;
+			}
+			try {
+				return JSON.parse(call.arguments);
+			} catch {
+				return undefined;
+			}
+		}
+
+		const consumed = new Set<string>();
+		const tcrs = this.toolCallRounds;
+		for (let i = 0; i < tcrs.length; i++) {
+			const { toolCalls } = tcrs[i];
+			for (const call of toolCalls) {
+				if (consumed.has(call.id)) {
+					continue;
+				}
+				const args = tryGetRFArgs(call);
+				if (!args) {
+					continue;
+				}
+
+				const seqArgs = [args];
+				consumed.add(call.id);
+
+				for (let k = i + 1; k < tcrs.length; k++) {
+					for (const call2 of tcrs[k].toolCalls) {
+						if (consumed.has(call2.id)) {
+							continue;
+						}
+
+						const args2 = tryGetRFArgs(call2);
+						if (!args2 || args2.filePath !== args.filePath) {
+							continue;
+						}
+
+						consumed.add(call2.id);
+						seqArgs.push(args2);
+					}
+				}
+
+				let chunkSizeTotal = 0;
+				let chunkSizeNo = 0;
+				for (const arg of seqArgs) {
+					if ('startLine' in arg) {
+						chunkSizeNo++;
+						chunkSizeTotal += arg.endLine - arg.startLine + 1;
+					} else if (arg.limit) {
+						chunkSizeNo++;
+						chunkSizeTotal += arg.limit;
+					}
+				}
+
+				/* __GDPR__
+					"readFileTrajectory" : {
+						"owner": "connor4312",
+						"comment": "read_file tool invokation trajectory",
+						"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" },
+						"rounds": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The number of times the file was read sequentially" },
+						"avgChunkSize": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The number of lines read at a time" }
+					}
+				*/
+				this._telemetryService.sendMSFTTelemetryEvent('readFileTrajectory',
+					{
+						model: this.options.request.model.id,
+					},
+					{
+						rounds: seqArgs.length,
+						avgChunkSize: chunkSizeNo > 0 ? Math.round(chunkSizeTotal / chunkSizeNo) : -1,
+					}
+				);
+			}
+		}
 	}
 
 	private hitToolCallLimit(stream: ChatResponseStream | undefined, lastResult: IToolCallSingleResult) {
@@ -314,8 +402,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			} satisfies OpenAiFunctionDef;
 		}) : undefined;
 		const toolCalls: IToolCall[] = [];
-		let currentThinkingTokenId: string | undefined;
-		let currentThinkingText: string | undefined;
 		const fixedMessages = this.applyMessagePostProcessing(buildPromptResult.messages);
 		const fetchResult = await this.fetch(
 			fixedMessages,
@@ -327,13 +413,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						id: this.createInternalToolCallId(call.id),
 						arguments: call.arguments === '' ? '{}' : call.arguments
 					})));
-				}
-
-				if (delta.thinkingTokenId) {
-					currentThinkingTokenId = delta.thinkingTokenId;
-				}
-				if (delta.thinkingText) {
-					currentThinkingText += delta.thinkingText;
 				}
 
 				return stopEarly ? text.length : undefined;
@@ -377,9 +456,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					fetchResult.value,
 					toolCalls,
 					toolInputRetry,
-					undefined,
-					currentThinkingTokenId,
-					currentThinkingText
+					undefined
 				),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
@@ -393,7 +470,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
 			lastRequestMessages: buildPromptResult.messages,
 			availableToolCount: availableTools.length,
-			round: new ToolCallRound('', toolCalls, toolInputRetry, undefined, currentThinkingTokenId, currentThinkingText)
+			round: new ToolCallRound('', toolCalls, toolInputRetry, undefined)
 		};
 	}
 

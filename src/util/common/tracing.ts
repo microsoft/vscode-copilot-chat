@@ -5,7 +5,7 @@
 
 export interface ITracer {
 	trace(message: string, ...payload: unknown[]): void;
-	sub(name: string): ITracer;
+	sub(name: string | string[]): ITracer;
 	throws(message?: string, ...payload: unknown[]): void;
 	returns(message?: string, ...payload: unknown[]): void;
 }
@@ -34,8 +34,8 @@ export function createTracer(section: string | string[], logFn: (message: string
 			const payloadStr = payload.length ? ` ${stringify(payload)}` : '';
 			logFn(`[${sectionStr}] ${message}` + payloadStr);
 		},
-		sub: (name: string) => {
-			const subSection = Array.isArray(section) ? section.concat(name) : [section, name];
+		sub: (name: string | string[]) => {
+			const subSection = Array.isArray(section) ? section.concat(name) : [section, ...(Array.isArray(name) ? name : [name])];
 			const sub = createTracer(subSection, logFn);
 			sub.trace('created');
 			return sub;

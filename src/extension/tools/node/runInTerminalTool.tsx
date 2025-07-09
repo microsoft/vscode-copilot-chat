@@ -86,10 +86,11 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 		let error: string | undefined;
 
 		const timingStart = Date.now();
+		const termId = generateUuid();
 
 		if (options.input.isBackground) {
-			this.logService.logger.debug(`RunInTerminalTool: Creating background terminal`);
-			const toolTerminal = await this.instantiationService.createInstance(ToolTerminalCreator).createTerminal(sessionId, token, true);
+			this.logService.logger.debug(`RunInTerminalTool: Creating background terminal with ID=${termId}`);
+			const toolTerminal = await this.instantiationService.createInstance(ToolTerminalCreator).createTerminal(sessionId, termId, token, true);
 			if (token.isCancellationRequested) {
 				toolTerminal.terminal.dispose();
 				throw new CancellationError();
@@ -98,11 +99,9 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 			toolTerminal.terminal.show(true);
 			const timingConnectMs = Date.now() - timingStart;
 
-			let termId: string | undefined;
 			try {
 				this.logService.logger.debug(`RunInTerminalTool: Starting background execution \`${command}\``);
 				const execution = new BackgroundTerminalExecution(toolTerminal.terminal, command);
-				const termId = generateUuid();
 				RunInTerminalTool.executions.set(termId, execution);
 				const resultText = (
 					didUserEditCommand
@@ -140,7 +139,7 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 				this.logService.logger.debug(`RunInTerminalTool: Using existing terminal with session ID \`${sessionId}\``);
 			} else {
 				this.logService.logger.debug(`RunInTerminalTool: Creating terminal with session ID \`${sessionId}\``);
-				toolTerminal = await this.instantiationService.createInstance(ToolTerminalCreator).createTerminal(sessionId, token);
+				toolTerminal = await this.instantiationService.createInstance(ToolTerminalCreator).createTerminal(sessionId, termId, token);
 				if (token.isCancellationRequested) {
 					toolTerminal.terminal.dispose();
 					throw new CancellationError();
@@ -209,7 +208,7 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 				new LanguageModelPromptTsxPart(
 					await renderPromptElementJSON(this.instantiationService, RunInTerminalResult, {
 						result: terminalResult,
-						newCommand: command,
+						newCommand: didUserEditCommand || didToolEditCommand ? command : undefined,
 						newCommandReason: didUserEditCommand ? 'user' : didToolEditCommand ? 'tool' : undefined
 					}, options.tokenizationOptions, token)
 				)
@@ -274,8 +273,8 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 		if (this.alternativeRecommendation || this.simulationTestContext.isInSimulationTests) {
 			confirmationMessages = undefined;
 		} else {
-			const subCommands = splitCommandLineIntoSubCommands(options.input.command, this.envService.shell);
-			const inlineSubCommands = subCommands.map(e => Array.from(extractInlineSubCommands(e, this.envService.shell))).flat();
+			const subCommands = splitCommandLineIntoSubCommands(options.input.command, this.envService.shell, this.envService.OS);
+			const inlineSubCommands = subCommands.map(e => Array.from(extractInlineSubCommands(e, this.envService.shell, this.envService.OS))).flat();
 			const allSubCommands = [...subCommands, ...inlineSubCommands];
 			if (allSubCommands.every(e => this._commandLineAutoApprover.isAutoApproved(e))) {
 				confirmationMessages = undefined;
@@ -291,10 +290,15 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 			}
 		}
 
-		this.rewrittenCommand = await this._rewriteCommandIfNeeded(options);
+		const rewrittenCommand = await this._rewriteCommandIfNeeded(options);
+		if (rewrittenCommand && rewrittenCommand !== options.input.command) {
+			this.rewrittenCommand = rewrittenCommand;
+		} else {
+			this.rewrittenCommand = undefined;
+		}
 
 		return new PreparedTerminalToolInvocation(
-			this.rewrittenCommand,
+			this.rewrittenCommand ?? options.input.command,
 			shellId,
 			confirmationMessages,
 			presentation);
@@ -306,10 +310,10 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 		// Re-write the command if it starts with `cd <dir> && <suffix>` or `cd <dir>; <suffix>`
 		// to just `<suffix>` if the directory matches the current terminal's cwd. This simplifies
 		// the result in the chat by removing redundancies that some models like to add.
-		const isPwsh = isPowerShell(this.envService.shell);
+		const isPwsh = isPowerShell(this.envService.shell, this.envService.OS);
 		const cdPrefixMatch = commandLine.match(
 			isPwsh
-				? /^cd (?<dir>[^\s]+) ?(?:&&|;)\s+(?<suffix>.+)$/
+				? /^(?:cd|Set-Location(?: -Path)?) (?<dir>[^\s]+) ?(?:&&|;)\s+(?<suffix>.+)$/i
 				: /^cd (?<dir>[^\s]+) &&\s+(?<suffix>.+)$/
 		);
 		const cdDir = cdPrefixMatch?.groups?.dir;
@@ -335,8 +339,15 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 
 			// Re-write the command if it matches the cwd
 			if (cwd) {
+				// Remove any surrounding quotes
 				let cdDirPath = cdDir;
-				let cwdFsPath = cwd.fsPath;
+				if (cdDirPath.startsWith('"') && cdDirPath.endsWith('"')) {
+					cdDirPath = cdDirPath.slice(1, -1);
+				}
+				// Normalize trailing slashes
+				cdDirPath = cdDirPath.replace(/(?:[\\\/])$/, '');
+				let cwdFsPath = cwd.fsPath.replace(/(?:[\\\/])$/, '');
+				// Case-insensitive comparison on Windows
 				if (this.envService.OS === OperatingSystem.Windows) {
 					cdDirPath = cdDirPath.toLowerCase();
 					cwdFsPath = cwdFsPath.toLowerCase();

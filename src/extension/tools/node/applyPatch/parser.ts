@@ -20,6 +20,9 @@ import type { TextDocument } from 'vscode';
 import { AbstractDocumentWithLanguageId } from '../../../../platform/editing/common/abstractText';
 import { getFilepathComment } from '../../../../util/common/markdown';
 import { computeLevenshteinDistance } from '../../../../util/vs/base/common/diff/diff';
+import { isFalsyOrWhitespace } from '../../../../util/vs/base/common/strings';
+import { Lines } from '../../../prompt/node/editGeneration';
+import { computeIndentLevel2, getIndentationChar, guessIndentation, IGuessedIndentation, transformIndentation } from '../../../prompt/node/indentationGuesser';
 import {
 	ADD_FILE_PREFIX,
 	DELETE_FILE_PREFIX,
@@ -77,6 +80,11 @@ export const enum Fuzz {
 	IgnoredEofSignal = 1 << 5,
 	/** Surrounding operations were removed in patch context (see docs on peek_next_section) */
 	MergedOperatorSection = 1 << 6,
+}
+
+interface FuzzMatch {
+	line: number;
+	fuzz: Fuzz;
 }
 
 export function assemble_changes(
@@ -153,14 +161,18 @@ export class InvalidPatchFormatError extends DiffError {
 
 export class Parser {
 	current_files: Record<string, AbstractDocumentWithLanguageId | TextDocument>;
+	indent_styles: Record<string, IGuessedIndentation> = {};
 	lines: Array<string>;
 	index = 0;
 	patch: Patch = { actions: {} };
 	fuzz = 0;
 
-	constructor(currentFiles: Record<string, AbstractDocumentWithLanguageId | TextDocument>, lines: Array<string>) {
+	constructor(currentFiles: Record<string, AbstractDocumentWithLanguageId | TextDocument>, lines: Array<string>, private readonly fixIndentationDuringMatch: boolean) {
 		this.current_files = currentFiles;
 		this.lines = lines;
+		for (const [path, doc] of Object.entries(currentFiles)) {
+			this.indent_styles[path] = guessIndentation(Lines.fromString(doc.getText()), 4, false);
+		}
 	}
 
 	private is_done(prefixes?: Array<string>): boolean {
@@ -207,8 +219,9 @@ export class Parser {
 					throw new DiffError(`Update File Error: Missing File: ${path}`);
 				}
 				const textDocument = this.current_files[path];
+				const indentStyle = this.indent_styles[path];
 				const text = textDocument.getText();
-				const action = this.parse_update_file(getFilepathComment(textDocument.languageId, path), text ?? "");
+				const action = this.parse_update_file(getFilepathComment(textDocument.languageId, path), text ?? "", indentStyle);
 				action.movePath = moveTo || undefined;
 				this.patch.actions[path] = action;
 				continue;
@@ -243,7 +256,7 @@ export class Parser {
 		this.index += 1;
 	}
 
-	private parse_update_file(path: string, text: string): PatchAction {
+	private parse_update_file(path: string, text: string, targetIndentStyle: IGuessedIndentation): PatchAction {
 		const action: PatchAction = { type: ActionType.UPDATE, chunks: [] };
 		const fileLines = text.split("\n");
 		let index = 0;
@@ -334,23 +347,22 @@ export class Parser {
 				this.index,
 			);
 
-			let newIndex = -1;
-			let fuzz = 0;
-			for (let i = 0; i <= nextSection.fuzzMerges && newIndex === -1; i++) {
+			let match: FuzzMatch | undefined;
+			for (let i = 0; i <= nextSection.fuzzMerges && !match; i++) {
 				if (i > 0) {
 					nextSection = peek_next_section(this.lines, this.index, i);
 				}
-				[newIndex, fuzz] = find_context(
+				match = find_context(
 					path,
 					fileLines,
 					nextSection.nextChunkContext,
 					index,
 					nextSection.eof,
 				);
-				if (newIndex === -1) {
+				if (!match) {
 					// The model sometimes returns patches out of order,
 					// so start searching from the beginning of the file.
-					[newIndex, fuzz] = find_context(
+					match = find_context(
 						path,
 						fileLines,
 						nextSection.nextChunkContext,
@@ -359,12 +371,12 @@ export class Parser {
 					);
 				}
 
-				if (i > 0) {
-					fuzz |= Fuzz.MergedOperatorSection;
+				if (i > 0 && match) {
+					match.fuzz |= Fuzz.MergedOperatorSection;
 				}
 			}
 
-			if (newIndex === -1) {
+			if (!match) {
 				const ctxText = nextSection.nextChunkContext.join("\n");
 				if (nextSection.eof) {
 					throw new InvalidContextError(`Invalid EOF context at character ${index}:\n${ctxText}`, text, 'invalidContext-eof');
@@ -377,10 +389,30 @@ export class Parser {
 					throw new InvalidContextError(`Invalid context at character ${index}:\n${ctxText}`, text, kindForTelemetry);
 				}
 			}
-			this.fuzz += fuzz;
+			this.fuzz += match.fuzz;
+
+			const srcIndentStyle = guessIndentation(
+				nextSection.chunks.flatMap(c => c.insLines),
+				targetIndentStyle.tabSize,
+				targetIndentStyle.insertSpaces
+			);
+
+			let additionalIndentation = '';
+			if (match.fuzz & Fuzz.IgnoredWhitespace) {
+				const matchedLineIndent = computeIndentLevel2(fileLines[match.line], targetIndentStyle.tabSize);
+				const contextLineIndent = computeIndentLevel2(nextSection.nextChunkContext[0], targetIndentStyle.tabSize);
+				if (matchedLineIndent > contextLineIndent) {
+					additionalIndentation = getIndentationChar(targetIndentStyle).repeat(matchedLineIndent - contextLineIndent);
+				}
+			}
+
 			for (const ch of nextSection.chunks) {
-				ch.origIndex += newIndex;
-				if (fuzz & Fuzz.NormalizedExplicitTab) {
+				ch.origIndex += match.line;
+				if (this.fixIndentationDuringMatch) {
+					ch.insLines = ch.insLines.map(ins => isFalsyOrWhitespace(ins) ? ins : additionalIndentation + transformIndentation(ins, srcIndentStyle, targetIndentStyle));
+				}
+
+				if (match.fuzz & Fuzz.NormalizedExplicitTab) {
 					action.chunks.push({
 						delLines: ch.delLines.map(replace_explicit_tabs),
 						insLines: ch.insLines.map(replace_explicit_tabs),
@@ -390,7 +422,7 @@ export class Parser {
 					action.chunks.push(ch);
 				}
 			}
-			index = newIndex + nextSection.nextChunkContext.length;
+			index = match.line + nextSection.nextChunkContext.length;
 			this.index = nextSection.endPatchIndex;
 		}
 		return action;
@@ -420,15 +452,15 @@ export class Parser {
 	}
 }
 
-function replace_explicit_tabs(s: string) {
-	return s.replace(/^(\\t)+/gm, r => '\t'.repeat(r.length / 2));
+export function replace_explicit_tabs(s: string) {
+	return s.replace(/^(?:\s|\\t|\/|#)*/gm, r => r.replaceAll('\\t', '\t'));
 }
 
 function find_context_core(
 	lines: Array<string>,
 	context: Array<string>,
 	start: number,
-): [number, Fuzz] {
+): { line: number; fuzz: Fuzz; indent?: string } | undefined {
 	// ---------------------------------------------------------------------------
 	// Helpers – Unicode punctuation normalisation
 	// ---------------------------------------------------------------------------
@@ -482,7 +514,7 @@ function find_context_core(
 			// Replace punctuation look-alikes
 			.replace(/./gu, (c) => PUNCT_EQUIV[c] ?? c);
 	if (context.length === 0) {
-		return [start, Fuzz.None];
+		return { line: start, fuzz: Fuzz.None };
 	}
 
 
@@ -492,7 +524,7 @@ function find_context_core(
 	for (let i = start; i < workingLines.length; i++) {
 		const segment = workingLines.slice(i, i + context.length).join("\n");
 		if (segment === ctxPass1) {
-			return [i, Fuzz.None];
+			return { line: i, fuzz: Fuzz.None };
 		}
 	}
 
@@ -504,7 +536,7 @@ function find_context_core(
 	}
 	for (let i = start; i < lines.length; i++) {
 		if (workingLines.slice(i, i + context.length).join('\n') === ctxPass2) {
-			return [i, fuzz];
+			return { line: i, fuzz };
 		}
 	}
 
@@ -514,7 +546,7 @@ function find_context_core(
 		fuzz |= Fuzz.NormalizedExplicitTab;
 		for (let i = start; i < lines.length; i++) {
 			if (workingLines.slice(i, i + context.length).join('\n') === ctxPass3) {
-				return [i, Fuzz.NormalizedExplicitTab];
+				return { line: i, fuzz: Fuzz.NormalizedExplicitTab };
 			}
 		}
 	}
@@ -527,7 +559,7 @@ function find_context_core(
 	}
 	for (let i = start; i < lines.length; i++) {
 		if (workingLines.slice(i, i + context.length).join('\n') === ctxPass4) {
-			return [i, fuzz];
+			return { line: i, fuzz, indent: workingLines[i] };
 		}
 	}
 
@@ -542,12 +574,10 @@ function find_context_core(
 				totalDistance += computeLevenshteinDistance(workingLines[i + j], ctxPass5[j]);
 			}
 			if (totalDistance <= maxDistance) {
-				return [i, fuzz];
+				return { line: i, fuzz };
 			}
 		}
 	}
-
-	return [-1, 0];
 }
 
 function find_context(
@@ -556,7 +586,7 @@ function find_context(
 	context: Array<string>,
 	start: number,
 	eof: boolean,
-): [number, Fuzz] {
+) {
 	// Skip filepath comments in provided context
 	path = path.trim();
 	if (lines[0]?.includes(path)) {
@@ -567,16 +597,19 @@ function find_context(
 	}
 
 	if (eof) {
-		let [newIndex, fuzz] = find_context_core(
+		const match1 = find_context_core(
 			lines,
 			context,
 			lines.length - context.length,
 		);
-		if (newIndex !== -1) {
-			return [newIndex, fuzz];
+		if (match1) {
+			return match1;
 		}
-		[newIndex, fuzz] = find_context_core(lines, context, start);
-		return [newIndex, fuzz | Fuzz.IgnoredEofSignal];
+		const match2 = find_context_core(lines, context, start);
+		if (match2) {
+			match2.fuzz |= Fuzz.IgnoredEofSignal;
+			return match2;
+		}
 	}
 	return find_context_core(lines, context, start);
 }
@@ -708,6 +741,7 @@ function peek_next_section(
 export function text_to_patch(
 	text: string,
 	orig: Record<string, AbstractDocumentWithLanguageId | TextDocument>,
+	fixIndentationDuringMatch = true,
 ): [Patch, number] {
 	const lines = text.trim().split("\n");
 	if (lines.length < 2) {
@@ -721,7 +755,7 @@ export function text_to_patch(
 	if (lines[lines.length - 1] !== patchSuffix) {
 		lines.push(patchSuffix);
 	}
-	const parser = new Parser(orig, lines);
+	const parser = new Parser(orig, lines, fixIndentationDuringMatch);
 	parser.index = 1;
 	parser.parse();
 	return [parser.patch, parser.fuzz];
@@ -865,12 +899,13 @@ export function apply_commit(
 export async function processPatch(
 	text: string,
 	openFn: (p: string) => Promise<AbstractDocumentWithLanguageId | TextDocument>,
+	fixIndentationDuringMatch: boolean,
 ): Promise<Commit> {
 	if (!text.startsWith(PATCH_PREFIX)) {
 		throw new InvalidPatchFormatError("Patch must start with *** Begin Patch\\n", 'patchMustStartWithBeginPatch');
 	}
 	const paths = identify_files_needed(text);
 	const orig = await load_files(paths, openFn);
-	const [patch, _fuzz] = text_to_patch(text, orig);
+	const [patch, _fuzz] = text_to_patch(text, orig, fixIndentationDuringMatch);
 	return patch_to_commit(patch, orig);
 }
