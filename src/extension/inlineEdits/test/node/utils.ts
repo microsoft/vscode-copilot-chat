@@ -18,7 +18,6 @@ import { DocumentHistory, HistoryContext } from '../../../../platform/inlineEdit
 import { NesXtabHistoryTracker } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { StaticWorkspaceTracker } from '../../../../platform/inlineEdits/common/workspaceEditTracker/staticWorkspaceEditTracker';
 import { LogServiceImpl } from '../../../../platform/log/common/logService';
-import { ParserServiceImpl } from '../../../../platform/parser/node/parserServiceImpl';
 import { NulSimulationTestContext } from '../../../../platform/simulationTestContext/common/simulationTestContext';
 import { NullSnippyService } from '../../../../platform/snippy/common/snippyService';
 import { NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
@@ -64,14 +63,13 @@ export async function runNextEditProviderTest(data: INextEditProviderTest): Prom
 		doc.applyEdit(e.lastEdit.edit);
 	}
 
-	const parserService = new ParserServiceImpl(false);
 	const configService = new DefaultsOnlyConfigurationService();
 	const snippyService = new NullSnippyService();
 	const xtabEditTracker = new NesXtabHistoryTracker(observableWorkspace);
 	const gitExtensionService = new NullGitExtensionService();
 	const logService = new LogServiceImpl([], new NulSimulationTestContext(), new MockExtensionContext() as any);
 	const expService = new NullExperimentationService();
-	const nextEditProvider = new NextEditProvider(observableWorkspace, statelessNextEditProvider, tracker, xtabEditTracker, undefined, parserService, configService, snippyService, logService, expService);
+	const nextEditProvider = new NextEditProvider(observableWorkspace, statelessNextEditProvider, tracker, xtabEditTracker, undefined, configService, snippyService, logService, expService);
 
 	const activeDocument = recentEdit.getMostRecentDocument(); // TODO
 

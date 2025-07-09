@@ -36,21 +36,11 @@ export type PushEdit = (edit: Result<{ edit: LineReplacement; window?: OffsetRan
 
 export interface IStatelessNextEditProvider {
 	readonly ID: string;
-	/**
-	 * This strategy will be used by the caller of `provideNextEdit`. If undefined, the caller will use the strategy from user configuration.
-	 */
-	readonly documentShorteningStrategy?: DocumentShorteningStrategy;
 	readonly dependsOnSelection?: boolean;
 	readonly showNextEditPreference?: ShowNextEditPreference;
 	provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult>;
 	handleAcceptance?(): void;
 	handleRejection?(): void;
-}
-
-export enum DocumentShorteningStrategy {
-	NoShortening = 'noShortening',
-	Clipping = 'clipping',
-	Summarization = 'summarization',
 }
 
 export class StatelessNextEditRequest<TFirstEdit = any> {

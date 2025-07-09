@@ -66,7 +66,6 @@ export interface ILlmNESTelemetry extends Partial<IStatelessNextEditTelemetry> {
 	readonly fetchStartedAfterMs: number | undefined;
 	readonly isFromCache: boolean;
 	readonly subsequentEditOrder: number | undefined;
-	readonly documentShorteningStrategy: string | undefined;
 	readonly activeDocumentOriginalLineCount: number | undefined;
 	readonly activeDocumentShortenedLineCount: number | undefined;
 	readonly activeDocumentEditsCount: number | undefined;
@@ -234,7 +233,6 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			nextEditProviderDuration: this._duration || 0,
 			isFromCache: this._isFromCache,
 			subsequentEditOrder: this._subsequentEditOrder,
-			documentShorteningStrategy: this._documentShorteningStrategy,
 			documentsCount,
 			editsCount,
 			activeDocumentEditsCount,
@@ -308,12 +306,6 @@ export class LlmNESTelemetryBuilder extends Disposable {
 	private _subsequentEditOrder: number | undefined;
 	public setSubsequentEditOrder(subsequentEditOrder: number | undefined): this {
 		this._subsequentEditOrder = subsequentEditOrder;
-		return this;
-	}
-
-	private _documentShorteningStrategy: string | undefined;
-	public setDocumentShorteningStrategy(documentShorteningStrategy: string): this {
-		this._documentShorteningStrategy = documentShorteningStrategy;
 		return this;
 	}
 
@@ -618,7 +610,6 @@ export class TelemetrySender implements IDisposable {
 			nextEditProviderDuration,
 			isFromCache,
 			subsequentEditOrder,
-			documentShorteningStrategy,
 			activeDocumentLanguageId,
 			activeDocumentOriginalLineCount,
 			activeDocumentShortenedLineCount,
@@ -684,7 +675,6 @@ export class TelemetrySender implements IDisposable {
 		"headerRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Unique identifier of the network request which is also included in the fetch request header." },
 		"providerId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "NES provider identifier (StatelessNextEditProvider)" },
 		"modelName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Name of the model used to provide the NES" },
-		"documentShorteningStrategy": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Document shortening strategy, eg clipping or summarization" },
 		"activeDocumentLanguageId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "LanguageId of the active document" },
 		"acceptance": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "User acceptance of the edit" },
 		"disposalReason": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Reason for disposal of NES" },
@@ -749,7 +739,6 @@ export class TelemetrySender implements IDisposable {
 				headerRequestId,
 				providerId,
 				modelName,
-				documentShorteningStrategy,
 				activeDocumentLanguageId,
 				acceptance,
 				disposalReason,
