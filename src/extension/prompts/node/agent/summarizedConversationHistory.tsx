@@ -489,7 +489,7 @@ class ConversationHistorySummarizer {
 				stripCacheBreakpoints(summarizationPrompt);
 			}
 
-			summaryResponse = await endpoint.makeChatRequest('summarizeConversationHistory', ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt), undefined, this.token ?? CancellationToken.None, ChatLocation.Other, undefined, {
+			summaryResponse = await endpoint.makeChatRequest(`summarizeConversationHistory-${mode}`, ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt), undefined, this.token ?? CancellationToken.None, ChatLocation.Other, undefined, {
 				temperature: 0,
 				stream: false,
 				...toolOpts
