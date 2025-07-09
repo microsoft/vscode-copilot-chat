@@ -308,7 +308,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			lineEdit.edit,
 			base,
 			projectedEdits,
-			doc.lastEdit.base.length.lineCount,
 			lastSelectionInProjAfterEdit,
 		);
 

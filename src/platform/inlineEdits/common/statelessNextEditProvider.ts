@@ -128,7 +128,6 @@ export class StatelessNextEditDocument {
 		public readonly recentEdit: LineEdit,
 		public readonly documentBeforeEdits: StringText,
 		public readonly recentEdits: Edits,
-		public readonly lineCountBeforeClipping: number = documentLinesBeforeEdit.length,
 		public readonly lastSelectionInAfterEdit: OffsetRange | undefined = undefined,
 	) { }
 
@@ -141,7 +140,6 @@ export class StatelessNextEditDocument {
 			recentEdit: this.recentEdit.serialize(),
 			documentBeforeEdits: this.documentBeforeEdits.value,
 			recentEdits: this.recentEdits.serialize(),
-			lineCountBeforeClipping: this.lineCountBeforeClipping,
 			lastSelectionInAfterEdit: this.lastSelectionInAfterEdit === undefined ? undefined : serializeOffsetRange(this.lastSelectionInAfterEdit),
 		};
 	}
@@ -171,7 +169,6 @@ export interface ISerializedNextEditDocument {
 	recentEdit: SerializedLineEdit;
 	documentBeforeEdits: string;
 	recentEdits: SerializedEdit[];
-	lineCountBeforeClipping: number;
 	lastSelectionInAfterEdit: ISerializedOffsetRange | undefined;
 }
 

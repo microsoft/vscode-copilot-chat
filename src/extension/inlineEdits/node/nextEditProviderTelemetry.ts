@@ -131,7 +131,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			editsCount = this._request.documents.reduce((acc, doc) => acc + doc.recentEdits.edits.length, 0);
 			activeDocumentEditsCount = activeDoc.recentEdits.edits.length;
 			activeDocumentLanguageId = activeDoc.languageId;
-			activeDocumentOriginalLineCount = activeDoc.lineCountBeforeClipping;
+			activeDocumentOriginalLineCount = activeDoc.documentAfterEditsLines.length;
 			isNotebook = activeDoc.id.toUri().scheme === Schemas.vscodeNotebookCell;
 			const git = this._gitExtensionService.getExtensionApi();
 			if (git) {
