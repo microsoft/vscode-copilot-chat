@@ -188,6 +188,8 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 
 export class RefactorsProvider implements vscode.CodeActionProvider {
 
+	private static readonly MAX_FILE_SIZE = 1024 * 1024; // 1 MB
+
 	private static readonly generateOrModifyKind = vscode.CodeActionKind.RefactorRewrite.append('copilot');
 	private static readonly generateDocsKind = vscode.CodeActionKind.RefactorRewrite.append('generateDocs').append('copilot');
 	private static readonly generateTestsKind = vscode.CodeActionKind.RefactorRewrite.append('generateTests').append('copilot');
@@ -288,6 +290,10 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 	 */
 	private async provideDocGenCodeAction(doc: vscode.TextDocument, range: vscode.Range, cancellationToken: vscode.CancellationToken): Promise<vscode.CodeAction | undefined> {
 
+		if (doc.getText().length > RefactorsProvider.MAX_FILE_SIZE) {
+			return;
+		}
+
 		const offsetRange: TreeSitterOffsetRange = {
 			startIndex: doc.offsetAt(range.start),
 			endIndex: doc.offsetAt(range.end)
@@ -339,6 +345,10 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 	}
 
 	private async provideTestGenCodeAction(doc: vscode.TextDocument, range: vscode.Range, cancellationToken: vscode.CancellationToken): Promise<vscode.CodeAction | undefined> {
+
+		if (doc.getText().length > RefactorsProvider.MAX_FILE_SIZE) {
+			return;
+		}
 
 		const offsetRange: TreeSitterOffsetRange = {
 			startIndex: doc.offsetAt(range.start),
