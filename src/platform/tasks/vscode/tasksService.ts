@@ -19,7 +19,7 @@ import { IWorkspaceService } from '../../workspace/common/workspaceService';
 import { ITasksService, TaskResult, TaskStatus } from '../common/tasksService';
 
 
-export class TasksService implements ITasksService {
+export class TasksService extends DisposableStore implements ITasksService {
 	_serviceBrand: undefined;
 
 	private taskDefinitionToTerminal: Map<vscode.TaskDefinition, vscode.Terminal> = new Map();
@@ -28,18 +28,19 @@ export class TasksService implements ITasksService {
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
 	) {
-		vscode.tasks.onDidStartTask(e => {
+		super();
+		this.add(vscode.tasks.onDidStartTask(e => {
 			const terminal: vscode.Terminal | undefined = (e.execution as any).terminal;
 			if (!terminal) {
 				return;
 			}
 			this.taskDefinitionToTerminal.set(e.execution.task.definition, terminal);
-			vscode.window.onDidCloseTerminal(closedTerminal => {
+			this.add(vscode.window.onDidCloseTerminal(closedTerminal => {
 				if (closedTerminal === terminal && this.taskDefinitionToTerminal.has(e.execution.task.definition)) {
 					this.taskDefinitionToTerminal.delete(e.execution.task.definition);
 				}
-			});
-		});
+			}));
+		}));
 	}
 
 	private getTasksFromConfig(workspaceFolder: URI): vscode.TaskDefinition[] {
