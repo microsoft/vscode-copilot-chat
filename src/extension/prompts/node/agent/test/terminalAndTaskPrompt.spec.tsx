@@ -18,7 +18,7 @@ suite('TerminalAndTaskStatePromptElement', () => {
 				return { name: 'Terminal 2', id: '2' };
 			}
 			return undefined;
-		}
+		};
 		tasksService.getTasks = () => [[null, [
 			{
 				label: 'npm: build',
@@ -80,7 +80,7 @@ suite('TerminalAndTaskStatePromptElement', () => {
 				return { name: 'Terminal 2', id: '2' };
 			}
 			return undefined;
-		}
+		};
 		tasksService.getTasks = () => [[null, [
 			{
 				label: 'npm: build',
@@ -136,7 +136,7 @@ suite('TerminalAndTaskStatePromptElement', () => {
 				return { name: 'Terminal 2', id: '2' };
 			}
 			return undefined;
-		}
+		};
 		tasksService.getTasks = () => [[null, [
 			{
 				label: 'npm: build',
