@@ -702,6 +702,8 @@ export namespace ConfigKey {
 
 		export const SummarizeAgentConversationHistoryThreshold = defineSetting<number | undefined>('chat.advanced.summarizeAgentConversationHistoryThreshold', undefined, INTERNAL_RESTRICTED);
 		export const AgentHistorySummarizationMode = defineSetting<string | undefined>('chat.advanced.agentHistorySummarizationMode', undefined, INTERNAL_RESTRICTED);
+		export const AgentHistorySummarizationWithPromptCache = defineExpSetting<boolean | undefined>('chat.advanced.agentHistorySummarizationWithPromptCache', false, INTERNAL_RESTRICTED);
+		export const AgentHistorySummarizationForceGpt41 = defineExpSetting<boolean | undefined>('chat.advanced.agentHistorySummarizationForceGpt41', false, INTERNAL_RESTRICTED);
 
 		export const EnableApplyPatchTool = defineExpSetting<boolean>('chat.advanced.enableApplyPatchTool', isPreRelease, INTERNAL_RESTRICTED);
 		export const EnableReadFileV2 = defineExpSetting<boolean>('chat.advanced.enableReadFileV2', isPreRelease, INTERNAL_RESTRICTED);
@@ -729,7 +731,6 @@ export namespace ConfigKey {
 	export const TypeScriptLanguageContextCacheTimeout = defineExpSetting<number>('chat.languageContext.typescript.cacheTimeout', 500);
 	export const TypeScriptLanguageContextFix = defineExpSetting<boolean>('chat.languageContext.fix.typescript.enabled', false);
 	export const TypeScriptLanguageContextInline = defineExpSetting<boolean>('chat.languageContext.inline.typescript.enabled', false);
-	export const TypeScriptContextProvider = defineSetting<string>('chat.completionContext.typescript.mode', { defaultValue: 'off', teamDefaultValue: 'sidecar' });
 	/** Enables the start debugging intent */
 	export const StartDebuggingIntent = defineSetting('chat.startDebugging.enabled', true);
 	export const UseInstructionFiles = defineSetting('chat.codeGeneration.useInstructionFiles', true);
