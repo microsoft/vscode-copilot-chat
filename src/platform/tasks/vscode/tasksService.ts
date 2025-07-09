@@ -35,11 +35,21 @@ export class TasksService extends DisposableStore implements ITasksService {
 				return;
 			}
 			this.taskDefinitionToTerminal.set(e.execution.task.definition, terminal);
-			this.add(vscode.window.onDidCloseTerminal(closedTerminal => {
+			const closeListener = vscode.window.onDidCloseTerminal(closedTerminal => {
 				if (closedTerminal === terminal && this.taskDefinitionToTerminal.has(e.execution.task.definition)) {
 					this.taskDefinitionToTerminal.delete(e.execution.task.definition);
+					closeListener.dispose();
 				}
-			}));
+			});
+			this.add(closeListener);
+
+			const endListener = vscode.tasks.onDidEndTask(ev => {
+				if (ev.execution.task.definition === e.execution.task.definition) {
+					closeListener.dispose();
+					endListener.dispose();
+				}
+			});
+			this.add(endListener);
 		}));
 	}
 
