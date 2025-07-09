@@ -25,6 +25,7 @@ interface IRunTaskToolInput {
 class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 
 	public static readonly toolName = ToolName.RunTask;
+	private _lastBufferLength: number | undefined;
 
 	constructor(
 		@ITasksService private readonly tasksService: ITasksService,
@@ -47,7 +48,7 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 
 		// Waits a maximum of 10 seconds
 		// If it times out, just says the task has started
-		const checkIntervals = [1000, 2000, 3000, 4000];
+		const checkIntervals = [1000, 1000, 1000, 1000, 1000, 1000];
 
 		if (task) {
 			let terminal: vscode.Terminal | undefined;
@@ -61,7 +62,15 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 				}
 				const buffer = this.terminalService.getBufferForTerminal(terminal, 16000);
 				const inactive = !this.tasksService.isTaskActive(task);
-				if (inactive) {
+
+				// Only keep polling if the terminal output is changing (not idle)
+				if (!this._lastBufferLength) {
+					this._lastBufferLength = 0;
+				}
+				const currentBufferLength = buffer.length;
+				const isIdle = currentBufferLength === this._lastBufferLength;
+				this._lastBufferLength = currentBufferLength;
+				if (isIdle || inactive) {
 					const result = await this._evaluateOutputForErrors(buffer, token);
 					if (result) {
 						return new LanguageModelToolResult([new LanguageModelTextPart(l10n.t`${result}`)]);
