@@ -25,7 +25,7 @@ interface OllamaVersionResponse {
 }
 
 // Minimum supported Ollama version - versions below this may have compatibility issues
-const MINIMUM_OLLAMA_VERSION = 'v0.6.4-rc0';
+const MINIMUM_OLLAMA_VERSION = '0.6.4';
 
 export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 
@@ -95,15 +95,7 @@ export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 	 */
 	private async _checkOllamaVersion(): Promise<void> {
 		try {
-			// Try the standard /api/version endpoint first
-			let response;
-			try {
-				response = await this._fetcherService.fetch(`${this._ollamaBaseUrl}/api/version`, { method: 'GET' });
-			} catch (e) {
-				// Fallback to /version endpoint if /api/version doesn't exist
-				response = await this._fetcherService.fetch(`${this._ollamaBaseUrl}/version`, { method: 'GET' });
-			}
-			
+			const response = await this._fetcherService.fetch(`${this._ollamaBaseUrl}/api/version`, { method: 'GET' });
 			const versionInfo = await response.json() as OllamaVersionResponse;
 			
 			if (!this._isVersionSupported(versionInfo.version)) {
@@ -118,7 +110,7 @@ export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 				// Re-throw our custom version error
 				throw e;
 			}
-			// If version endpoint fails, try a fallback approach
+			// If version endpoint fails
 			throw new Error(
 				`Unable to verify Ollama server version. Please ensure you have Ollama version ${MINIMUM_OLLAMA_VERSION} or higher installed. ` +
 				`If you're running an older version, please upgrade from https://ollama.ai`
@@ -132,52 +124,22 @@ export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 	 * @returns true if version is supported, false otherwise
 	 */
 	private _isVersionSupported(currentVersion: string): boolean {
-		try {
-			const current = this._parseVersion(currentVersion);
-			const minimum = this._parseVersion(MINIMUM_OLLAMA_VERSION);
+		// Simple version comparison: split by dots and compare numerically
+		const currentParts = currentVersion.split('.').map(n => parseInt(n, 10));
+		const minimumParts = MINIMUM_OLLAMA_VERSION.split('.').map(n => parseInt(n, 10));
+		
+		for (let i = 0; i < Math.max(currentParts.length, minimumParts.length); i++) {
+			const current = currentParts[i] || 0;
+			const minimum = minimumParts[i] || 0;
 			
-			// Compare major.minor.patch
-			if (current.major > minimum.major) {
+			if (current > minimum) {
 				return true;
 			}
-			if (current.major < minimum.major) {
+			if (current < minimum) {
 				return false;
 			}
-			
-			if (current.minor > minimum.minor) {
-				return true;
-			}
-			if (current.minor < minimum.minor) {
-				return false;
-			}
-			
-			return current.patch >= minimum.patch;
-		} catch (e) {
-			// If we can't parse the version, assume it's not supported
-			return false;
-		}
-	}
-
-	/**
-	 * Parse a semantic version string into components
-	 * @param version Version string like "0.1.23", "v0.1.23" or "v0.1.23-beta"
-	 * @returns Object with major, minor, patch numbers
-	 */
-	private _parseVersion(version: string): { major: number; minor: number; patch: number } {
-		// Remove "v" prefix if present
-		let cleanVersion = version.startsWith('v') ? version.slice(1) : version;
-		// Remove any pre-release or build metadata (e.g. "0.1.23-beta" -> "0.1.23")
-		cleanVersion = cleanVersion.split('-')[0];
-		const parts = cleanVersion.split('.').map(part => parseInt(part, 10));
-		
-		if (parts.length < 3 || parts.some(isNaN)) {
-			throw new Error(`Invalid version format: ${version}`);
 		}
 		
-		return {
-			major: parts[0],
-			minor: parts[1], 
-			patch: parts[2]
-		};
+		return true; // versions are equal
 	}
 }
