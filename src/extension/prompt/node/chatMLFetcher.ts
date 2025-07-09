@@ -363,7 +363,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			*/
 			this._telemetryService.sendTelemetryEvent('response.success', { github: true, microsoft: true }, {
 				reason: chatCompletion.finishReason,
-				filterReason: chatCompletion.filterReason,
+				filterReason: chatCompletion.filterReason ?? (chatCompletion.finishReason === FinishedCompletionReason.ContentFilter ? FilterReason.Copyright : undefined),
 				source: baseTelemetry?.properties.messageSource ?? 'unknown',
 				initiatorType: userInitiatedRequest ? 'user' : 'agent',
 				model: chatEndpointInfo?.model,
