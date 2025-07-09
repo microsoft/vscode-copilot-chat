@@ -13,8 +13,9 @@ import { IParserService, treeSitterOffsetRangeToVSCodeRange } from '../../../pla
 import { TestableNode } from '../../../platform/parser/node/testGenParsing';
 import { IReviewService } from '../../../platform/review/common/reviewService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { filterMap } from '../../../util/common/arrays';
 import { extractImageAttributes } from '../../../util/common/imageUtils';
-import * as arrays from '../../../util/vs/base/common/arrays';
+import { raceCancellation } from '../../../util/vs/base/common/async';
 import * as path from '../../../util/vs/base/common/path';
 import { Range } from '../../../vscodeTypes';
 import { Intent } from '../../common/constants';
@@ -210,20 +211,30 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 	async provideCodeActions(
 		doc: vscode.TextDocument,
 		range: vscode.Range,
-		_ctx: vscode.CodeActionContext
+		_ctx: vscode.CodeActionContext,
+		cancellationToken: vscode.CancellationToken
 	): Promise<vscode.CodeAction[] | undefined> {
 
 		const copilotCodeActionsEnabled = this.configurationService.getConfig(ConfigKey.EnableCodeActions);
 		if (!copilotCodeActionsEnabled) {
 			return;
 		}
+
 		if (await this.ignoreService.isCopilotIgnored(doc.uri)) {
 			return;
 		}
-		const generateUsingCopilotCodeAction = this.provideGenerateUsingCopilotCodeAction(doc, range);
-		const documentUsingCopilotCodeAction = await this.provideDocGenCodeAction(doc, range);
-		const testUsingCopilotCodeAction = await this.provideTestGenCodeAction(doc, range);
-		return arrays.coalesce([documentUsingCopilotCodeAction, generateUsingCopilotCodeAction, testUsingCopilotCodeAction]);
+
+		if (cancellationToken.isCancellationRequested) {
+			return;
+		}
+
+		const codeActions = await raceCancellation(Promise.allSettled([
+			this.provideGenerateUsingCopilotCodeAction(doc, range),
+			this.provideDocGenCodeAction(doc, range, cancellationToken),
+			this.provideTestGenCodeAction(doc, range, cancellationToken),
+		]), cancellationToken);
+
+		return codeActions === undefined ? undefined : filterMap(codeActions, r => (r.status === 'fulfilled' && r.value !== undefined) ? r.value : undefined);
 	}
 
 	/**
@@ -276,7 +287,7 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 	 * The code action invokes the inline chat, expanding the inline chat's "wholeRange" (blue region)
 	 * to the whole documentable node.
 	 */
-	private async provideDocGenCodeAction(doc: vscode.TextDocument, range: vscode.Range): Promise<vscode.CodeAction | undefined> {
+	private async provideDocGenCodeAction(doc: vscode.TextDocument, range: vscode.Range, cancellationToken: vscode.CancellationToken): Promise<vscode.CodeAction | undefined> {
 
 		const startIndex = doc.offsetAt(range.start);
 		const endIndex = doc.offsetAt(range.end);
@@ -293,7 +304,7 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 			}
 		}
 
-		if (documentableNode === undefined) {
+		if (documentableNode === undefined || cancellationToken.isCancellationRequested) {
 			return undefined;
 		}
 
@@ -324,7 +335,7 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 		return codeAction;
 	}
 
-	private async provideTestGenCodeAction(_doc: vscode.TextDocument, range: vscode.Range): Promise<vscode.CodeAction | undefined> {
+	private async provideTestGenCodeAction(_doc: vscode.TextDocument, range: vscode.Range, cancellationToken: vscode.CancellationToken): Promise<vscode.CodeAction | undefined> {
 		const doc = TextDocumentSnapshot.create(_doc);
 		const startIndex = doc.offsetAt(range.start);
 		const endIndex = doc.offsetAt(range.end);
@@ -341,7 +352,7 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 			}
 		}
 
-		if (!testableNode) {
+		if (!testableNode || cancellationToken.isCancellationRequested) {
 			return undefined;
 		}
 
