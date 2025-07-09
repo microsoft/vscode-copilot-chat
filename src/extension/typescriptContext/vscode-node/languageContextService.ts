@@ -366,34 +366,46 @@ class TelemetrySender {
 
 	private readonly telemetryService: ITelemetryService;
 	private readonly logService: ILogService;
+	private sendRequestTelemetryCounter: number;
+	private sendSpeculativeRequestTelemetryCounter: number;
 
 	constructor(telemetryService: ITelemetryService, logService: ILogService) {
 		this.telemetryService = telemetryService;
 		this.logService = logService;
+		this.sendRequestTelemetryCounter = 0;
+		this.sendSpeculativeRequestTelemetryCounter = 0;
 	}
 
 	public sendSpeculativeRequestTelemetry(context: RequestContext, originalRequestId: string, numberOfItems: number): void {
-		/* __GDPR__
-			"typescript-context-plugin.completion-context.speculative" : {
-				"owner": "dirkb",
-				"comment": "Telemetry for copilot inline completion context",
-				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
-				"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The source of the request" },
-				"originalRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The original request id for which this is a speculative request" },
-				"numberOfItems": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of items in the speculative request", "isMeasurement": true }
-			}
-		*/
-		this.telemetryService.sendMSFTTelemetryEvent(
-			'typescript-context-plugin.completion-context.speculative',
-			{
-				requestId: context.requestId,
-				source: context.source ?? KnownSources.unknown,
-				originalRequestId: originalRequestId
-			},
-			{
-				numberOfItems: numberOfItems
-			}
-		);
+		const sampleTelemetry = context.sampleTelemetry ?? 1;
+		const shouldSendTelemetry = sampleTelemetry === 1 || this.sendSpeculativeRequestTelemetryCounter % sampleTelemetry === 0;
+		this.sendSpeculativeRequestTelemetryCounter++;
+
+		if (shouldSendTelemetry) {
+			/* __GDPR__
+				"typescript-context-plugin.completion-context.speculative" : {
+					"owner": "dirkb",
+					"comment": "Telemetry for copilot inline completion context",
+					"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
+					"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The source of the request" },
+					"originalRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The original request id for which this is a speculative request" },
+					"numberOfItems": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of items in the speculative request", "isMeasurement": true },
+					"sampleTelemetry": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The sampling rate for telemetry. A value of 1 means every request is logged, a value of 5 means every 5th request is logged, etc.", "isMeasurement": true }
+				}
+			*/
+			this.telemetryService.sendMSFTTelemetryEvent(
+				'typescript-context-plugin.completion-context.speculative',
+				{
+					requestId: context.requestId,
+					source: context.source ?? KnownSources.unknown,
+					originalRequestId: originalRequestId
+				},
+				{
+					numberOfItems: numberOfItems,
+					sampleTelemetry: sampleTelemetry
+				}
+			);
+		}
 		this.logService.logger.info(`TypeScript Copilot context speculative request: [${context.requestId} - ${originalRequestId}, numberOfItems: ${numberOfItems}]`);
 	}
 
@@ -408,77 +420,85 @@ class TelemetrySender {
 		const tokenBudgetExhausted = totalSize > (context.tokenBudget ?? 7 * 1024);
 		const fileSize = document.getText().length;
 		const cachedItemsForSpeculativeRequest = data.cachedItemsForSpeculativeRequest;
-		/* __GDPR__
-			"typescript-context-plugin.completion-context.ok" : {
-				"owner": "dirkb",
-				"comment": "Telemetry for copilot inline completion context",
-				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
-				"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The source of the request" },
-				"fileSize": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The size of the file", "isMeasurement": true },
-				"completionContext": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Kind of completion context" },
-				"nodePath": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The syntax kind path to the AST node the position resolved to." },
-				"cancelled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request got cancelled on the client side" },
-				"timedOut": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request timed out on the server side" },
-				"serverTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Time taken on the server side", "isMeasurement": true },
-				"contextComputeTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Time taken on the server side to compute the context", "isMeasurement": true },
-				"timeTaken": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Time taken to provide the completion", "isMeasurement": true },
-				"tokenBudgetExhausted": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the token budget was exhausted" },
-				"blueprints": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of blueprints", "isMeasurement": true },
-				"signatures": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of signatures", "isMeasurement": true },
-				"superClasses": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of super classes", "isMeasurement": true },
-				"generalScopes": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of general scopes", "isMeasurement": true },
-				"completions": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of traditional completion scopes", "isMeasurement": true },
-				"neighborFiles": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of neighbor files", "isMeasurement": true },
-				"module": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of modules", "isMeasurement": true },
-				"moduleResolution": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of moduleResolutions", "isMeasurement": true },
-				"lib": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of libs", "isMeasurement": true },
-				"target": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of targets", "isMeasurement": true },
-				"version": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of versions", "isMeasurement": true },
-				"totalSize": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Total size of all context items", "isMeasurement": true },
-				"items": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Detailed information about each context item delivered." },
-				"cacheHits": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of cache hits", "isMeasurement": true },
-				"isSpeculative": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was speculative" },
-				"beforeCacheState": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The cache state before the request was sent" },
-				"afterCacheState": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The cache state after the request was sent" },
-				"cachedItemsForSpeculativeRequest": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was cached for a speculative request", "isMeasurement": true }
-			}
-		*/
-		this.telemetryService.sendMSFTTelemetryEvent(
-			'typescript-context-plugin.completion-context.ok',
-			{
-				requestId: context.requestId,
-				source: context.source ?? KnownSources.unknown,
-				completionContext: completionContext,
-				nodePath: nodePath,
-				cancelled: data.cancelled.toString(),
-				timedOut: data.timedOut.toString(),
-				tokenBudgetExhausted: tokenBudgetExhausted.toString(),
-				items: JSON.stringify(items),
-				isSpeculative: (context.proposedEdits !== undefined && context.proposedEdits.length > 0 ? true : false).toString(),
-				beforeCacheState: cacheState?.before.toString(),
-				afterCacheState: cacheState?.after.toString(),
-			},
-			{
-				fileSize: fileSize,
-				serverTime: data.serverTime,
-				contextComputeTime: data.contextComputeTime,
-				timeTaken,
-				blueprints: snippetStats.blueprints,
-				signatures: snippetStats.signatures,
-				superClasses: snippetStats.superClasses,
-				generalScopes: snippetStats.generalScopes,
-				completions: snippetStats.completions,
-				neighborFiles: snippetStats.neighborFiles,
-				module: traitsStats.module,
-				moduleResolution: traitsStats.moduleResolution,
-				lib: traitsStats.lib,
-				target: traitsStats.target,
-				version: traitsStats.version,
-				totalSize: totalSize,
-				cacheHits: data.cacheHits,
-				cachedItemsForSpeculativeRequest,
-			}
-		);
+
+		const sampleTelemetry = context.sampleTelemetry ?? 1;
+		const shouldSendTelemetry = sampleTelemetry === 1 || this.sendRequestTelemetryCounter % sampleTelemetry === 0;
+		this.sendRequestTelemetryCounter++;
+		if (shouldSendTelemetry) {
+			/* __GDPR__
+				"typescript-context-plugin.completion-context.ok" : {
+					"owner": "dirkb",
+					"comment": "Telemetry for copilot inline completion context",
+					"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
+					"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The source of the request" },
+					"fileSize": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The size of the file", "isMeasurement": true },
+					"completionContext": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Kind of completion context" },
+					"nodePath": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The syntax kind path to the AST node the position resolved to." },
+					"cancelled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request got cancelled on the client side" },
+					"timedOut": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request timed out on the server side" },
+					"serverTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Time taken on the server side", "isMeasurement": true },
+					"contextComputeTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Time taken on the server side to compute the context", "isMeasurement": true },
+					"timeTaken": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Time taken to provide the completion", "isMeasurement": true },
+					"tokenBudgetExhausted": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the token budget was exhausted" },
+					"blueprints": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of blueprints", "isMeasurement": true },
+					"signatures": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of signatures", "isMeasurement": true },
+					"superClasses": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of super classes", "isMeasurement": true },
+					"generalScopes": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of general scopes", "isMeasurement": true },
+					"completions": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of traditional completion scopes", "isMeasurement": true },
+					"neighborFiles": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of neighbor files", "isMeasurement": true },
+					"module": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of modules", "isMeasurement": true },
+					"moduleResolution": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of moduleResolutions", "isMeasurement": true },
+					"lib": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of libs", "isMeasurement": true },
+					"target": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of targets", "isMeasurement": true },
+					"version": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of versions", "isMeasurement": true },
+					"totalSize": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Total size of all context items", "isMeasurement": true },
+					"items": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Detailed information about each context item delivered." },
+					"cacheHits": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of cache hits", "isMeasurement": true },
+					"isSpeculative": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was speculative" },
+					"beforeCacheState": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The cache state before the request was sent" },
+					"afterCacheState": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The cache state after the request was sent" },
+					"cachedItemsForSpeculativeRequest": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was cached for a speculative request", "isMeasurement": true },
+					"sampleTelemetry": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The sampling rate for telemetry. A value of 1 means every request is logged, a value of 5 means every 5th request is logged, etc.", "isMeasurement": true }
+				}
+			*/
+			this.telemetryService.sendMSFTTelemetryEvent(
+				'typescript-context-plugin.completion-context.ok',
+				{
+					requestId: context.requestId,
+					source: context.source ?? KnownSources.unknown,
+					completionContext: completionContext,
+					nodePath: nodePath,
+					cancelled: data.cancelled.toString(),
+					timedOut: data.timedOut.toString(),
+					tokenBudgetExhausted: tokenBudgetExhausted.toString(),
+					items: JSON.stringify(items),
+					isSpeculative: (context.proposedEdits !== undefined && context.proposedEdits.length > 0 ? true : false).toString(),
+					beforeCacheState: cacheState?.before.toString(),
+					afterCacheState: cacheState?.after.toString(),
+				},
+				{
+					fileSize: fileSize,
+					serverTime: data.serverTime,
+					contextComputeTime: data.contextComputeTime,
+					timeTaken,
+					blueprints: snippetStats.blueprints,
+					signatures: snippetStats.signatures,
+					superClasses: snippetStats.superClasses,
+					generalScopes: snippetStats.generalScopes,
+					completions: snippetStats.completions,
+					neighborFiles: snippetStats.neighborFiles,
+					module: traitsStats.module,
+					moduleResolution: traitsStats.moduleResolution,
+					lib: traitsStats.lib,
+					target: traitsStats.target,
+					version: traitsStats.version,
+					totalSize: totalSize,
+					cacheHits: data.cacheHits,
+					cachedItemsForSpeculativeRequest,
+					sampleTelemetry: sampleTelemetry
+				}
+			);
+		}
 		this.logService.logger.info(`TypeScript Copilot context: [${context.requestId}, ${completionContext}, ${meta?.path ? JSON.stringify(meta.path, undefined, 0) : ''}, ${JSON.stringify(snippetStats, undefined, 0)}, ${JSON.stringify(traitsStats, undefined, 0)}, cacheHits:${data.cacheHits} budgetExhausted:${data.tokenBudgetExhausted}, cancelled: ${data.cancelled}, timedOut:${data.timedOut}, fileSize:${fileSize}] in [${timeTaken},${data.serverTime},${data.contextComputeTime}]ms.${data.timedOut ? ' Timed out.' : ''}`);
 		if (data.errorData !== undefined && data.errorData.length > 0) {
 			const errorData = data.errorData;
@@ -1648,6 +1668,7 @@ export class InlineCompletionContribution implements vscode.Disposable {
 				const copilotAPI = await this.getCopilotApi();
 				if (copilotAPI !== undefined) {
 					const telemetrySender = this.telemetrySender;
+					const self = this;
 					const resolver: Copilot.ContextResolver<Copilot.SupportedContextItem> = {
 						async *resolve(request: Copilot.ResolveRequest, token: vscode.CancellationToken): AsyncIterable<Copilot.SupportedContextItem> {
 							const isSpeculativeRequest = request.documentContext.proposedEdits !== undefined;
@@ -1683,7 +1704,8 @@ export class InlineCompletionContribution implements vscode.Disposable {
 								timeBudget: request.timeBudget,
 								tokenBudget: tokenBudget,
 								source: KnownSources.completion,
-								proposedEdits: isSpeculativeRequest ? [] : undefined
+								proposedEdits: isSpeculativeRequest ? [] : undefined,
+								sampleTelemetry: self.getSampleTelemetry(request.activeExperiments)
 							};
 							const items = languageContextService.getContext(document, position, context, token);
 							for await (const item of items) {
@@ -1865,5 +1887,19 @@ export class InlineCompletionContribution implements vscode.Disposable {
 			return value;
 		}
 		return 'off';
+	}
+
+	private getSampleTelemetry(activeExperiments: Map<string, string | number | boolean | string[]>): number {
+		const value = activeExperiments.get('sampleTelemetry');
+		if (value === undefined || value === null || value === false) {
+			return 1;
+		}
+		if (value === true) {
+			return 10;
+		}
+		if (typeof value === 'number') {
+			return Math.max(1, Math.min(100, value));
+		}
+		return 1;
 	}
 }

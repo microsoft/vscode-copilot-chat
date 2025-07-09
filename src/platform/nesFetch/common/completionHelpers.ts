@@ -22,27 +22,17 @@ namespace LineOfText {
 export function streamLines(completions: AsyncIterable<Completion>, initialBuffer = ''): AsyncIterableObject<{
 	line: LineOfText.LineOfText;
 	finishReason: Completion.FinishReason | null;
-
-	completionId: string;
-	created: number;
 }> {
 
 	async function splitLines(emitter: AsyncIterableEmitter<{
 		line: LineOfText.LineOfText;
 		finishReason: Completion.FinishReason | null;
-		completionId: string;
-		created: number;
 	}>) {
 
 		let buffer = initialBuffer;
-		let created = 0;
-		let completionId = '';
 		let finishReason: Completion.FinishReason | null = null;
 
 		for await (const completion of completions) {
-
-			created = completion.created;
-			completionId = completion.id;
 
 			const choice = completion.choices.at(0);
 			assertType(choice !== undefined, 'we should have choices[0] to be defined');
@@ -60,13 +50,13 @@ export function streamLines(completions: AsyncIterable<Completion>, initialBuffe
 				const line = buffer.substring(0, newlineIndex);
 				buffer = buffer.substring(newlineIndex + 1);
 
-				emitter.emitOne({ line: LineOfText.make(line), completionId, created, finishReason });
+				emitter.emitOne({ line: LineOfText.make(line), finishReason });
 			} while (true);
 		}
 
 		if (buffer.length > 0) {
 			// last line which doesn't end with \n
-			emitter.emitOne({ line: LineOfText.make(buffer), completionId, created, finishReason });
+			emitter.emitOne({ line: LineOfText.make(buffer), finishReason });
 		}
 	}
 

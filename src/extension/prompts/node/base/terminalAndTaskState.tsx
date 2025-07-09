@@ -54,7 +54,7 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 			});
 
 			if (terminals.length === 0 && tasks.length === 0) {
-				return 'No active tasks or terminals found.';
+				return 'No active tasks or Copilot terminals found.';
 			}
 
 			const renderTasks = () =>
@@ -66,10 +66,10 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 								Task: {t.name} (background: {String(t.isBackground)}
 								{t.type ? `, type: ${t.type}` : ''}
 								{t.command ? `, command: ${t.command}` : ''}
-								{t.script ? `, script: ${t.script}` : ''})<br />
-								{t.problemMatcher ? `Problem Matchers: ${t.problemMatcher}` : ''}<br />
-								{t.group ? `Group: ${t.group.isDefault ? 'isDefault ' + (t.group.kind ?? '') : (t.group.kind ?? '')} ` : ''}<br />
-								{t.dependsOn ? `Depends On: ${t.dependsOn}` : ''}<br />
+								{t.script ? `, script: ${t.script}` : ''}
+								{t.problemMatcher ? `Problem Matchers: ${t.problemMatcher}` : ''}
+								{t.group?.kind ? `Group: ${t.group.isDefault ? 'isDefault ' + t.group.kind : t.group.kind} ` : ''}
+								{t.dependsOn ? `Depends On: ${t.dependsOn}` : ''})
 								<br />
 							</>
 						))}
@@ -98,8 +98,8 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 
 			return (
 				<>
-					{tasks.length > 0 ? renderTasks() : 'No active tasks found.'}
-					{terminals.length > 0 ? renderTerminals() : 'No active terminals found.'}
+					{tasks.length > 0 ? renderTasks() : 'Tasks: No active tasks found.'}
+					{terminals.length > 0 ? renderTerminals() : 'Copilot Terminals: No active Copilot terminals found.'}
 				</>
 			);
 		}

@@ -68,6 +68,7 @@ Please include the following with each issue:
 ## Requirements
 - Node 22.x
 - Python >= 3.10, <= 3.12
+- Git Large File Storage (LFS) - for running tests
 
 ### First-time setup
 - on Windows you need to run `Set-ExecutionPolicy Unrestricted` as admin in Powershell.
@@ -80,6 +81,7 @@ Please include the following with each issue:
 **Note:** Setup and running under Windows Subsystem for Linux (WSL) is supported.
 
 ### Testing
+If you hit errors while running tests, ensure that you are using the correct Node version and that git lfs is properly installed (run `git lfs pull` to validate).
 
 There are unit tests which run in Node.JS:
 
@@ -286,6 +288,8 @@ Tools are registered through VS Code's normal [Language Model Tool API](https://
 - [`toolNames.ts`](src/extension/tools/common/toolNames.ts): Contains the model-facing tool names.
 - [`tools/`](src/extension/tools/node/): Tool implementations are in this folder. For the most part, they are implementations of the standard `vscode.LanguageModelTool` interface, but since some have additional custom behavior, they can implement the extended `ICopilotTool` interface.
 
+See the [tools.md](docs/tools.md) document for more important details on how to develop tools. Please read it before adding a new tool!
+
 ## Tree Sitter
 
 We have now moved to https://github.com/microsoft/vscode-tree-sitter-wasm for WASM prebuilds.
@@ -294,9 +298,11 @@ We have now moved to https://github.com/microsoft/vscode-tree-sitter-wasm for WA
 
 ### Reading requests
 
-To easily see the details of requests made by Copilot Chat, run the command "Show Chat Debug View". This will show a treeview with an entry for each request made. You can see the prompt that was sent to the model, the tools that were enabled, the response, and other key details. Always read the prompt when making any changes, to ensure that it's being rendered as you expect!
+To easily see the details of requests made by Copilot Chat, run the command "Show Chat Debug View". This will show a treeview with an entry for each request made. You can see the prompt that was sent to the model, the tools that were enabled, the response, and other key details. Always read the prompt when making any changes, to ensure that it's being rendered as you expect! You can save the request log with right click > "Export As...".
 
 The view also has entries for tool calls on their own, and a prompt-tsx debug view that opens in the Simple Browser.
+
+> 🚨 **Note**: This log is also very helpful in troubleshooting issues, and we will appreciate if you share it when filing an issue about the agent's behavior. But, this log may contain personal information such as the contents of your files or terminal output. Please review the contents carefully before sharing it with anyone else.
 
 ## API updates
 

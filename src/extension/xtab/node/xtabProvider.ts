@@ -161,6 +161,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 
 		const endpoint = this.getEndpoint();
 		logContext.setEndpointInfo(typeof endpoint.urlOrRequestMetadata === 'string' ? endpoint.urlOrRequestMetadata : endpoint.urlOrRequestMetadata.type, endpoint.model);
+		telemetryBuilder.setModelName(endpoint.model);
 
 		const computeTokens = (s: string) => Math.floor(s.length / 4);
 

@@ -59,7 +59,9 @@ const testBundlePlugin: esbuild.Plugin = {
 	name: 'testBundlePlugin',
 	setup(build) {
 		build.onResolve({ filter: /[\/\\]test-extension\.ts$/ }, args => {
-			if (args.kind !== 'entry-point') return;
+			if (args.kind !== 'entry-point') {
+				return;
+			}
 			return { path: path.resolve(args.path) };
 		});
 		build.onLoad({ filter: /[\/\\]test-extension\.ts$/ }, async args => {
@@ -87,7 +89,9 @@ const sanityTestBundlePlugin: esbuild.Plugin = {
 	name: 'sanityTestBundlePlugin',
 	setup(build) {
 		build.onResolve({ filter: /[\/\\]sanity-test-extension\.ts$/ }, args => {
-			if (args.kind !== 'entry-point') return;
+			if (args.kind !== 'entry-point') {
+				return;
+			}
 			return { path: path.resolve(args.path) };
 		});
 		build.onLoad({ filter: /[\/\\]sanity-test-extension\.ts$/ }, async args => {
@@ -218,7 +222,7 @@ const nodeSimulationWorkbenchUIBuildOptions = {
 
 async function typeScriptServerPluginPackageJsonInstall(): Promise<void> {
 	await mkdir('./node_modules/@vscode/copilot-typescript-server-plugin', { recursive: true });
-	const source = path.join(__dirname, './src/extension/typescriptContext/serverPlugin/package.json')
+	const source = path.join(__dirname, './src/extension/typescriptContext/serverPlugin/package.json');
 	const destination = path.join(__dirname, './node_modules/@vscode/copilot-typescript-server-plugin/package.json');
 	try {
 		await copyFile(source, destination);
@@ -270,7 +274,7 @@ async function main() {
 		const nodeSimulationWorkbenchUIContext = await esbuild.context(nodeSimulationWorkbenchUIBuildOptions);
 		contexts.push(nodeSimulationWorkbenchUIContext);
 
-		const nodeExtHostSimulationContext = await esbuild.context(nodeExtHostSimulationTestOptions)
+		const nodeExtHostSimulationContext = await esbuild.context(nodeExtHostSimulationTestOptions);
 		contexts.push(nodeExtHostSimulationContext);
 
 		const typeScriptServerPluginContext = await esbuild.context(typeScriptServerPluginBuildOptions);

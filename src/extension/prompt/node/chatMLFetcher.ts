@@ -435,7 +435,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 	}
 
 	private filterImageMessages(messages: Raw.ChatMessage[]): boolean {
-		return messages?.some(m => Array.isArray(m.content) ? m.content.some(c => 'image_url' in c) : false);
+		return messages?.some(m => Array.isArray(m.content) ? m.content.some(c => 'imageUrl' in c) : false);
 	}
 
 	private isRepetitive(chatCompletion: ChatCompletion, telemetryProperties?: TelemetryProperties) {
@@ -587,7 +587,7 @@ function isValidChatPayload(params: ChatParams): { isValid: boolean; reason: str
 	}
 
 	if (params.postOptions?.tools && params.postOptions.tools.length > HARD_TOOL_LIMIT) {
-		return { isValid: false, reason: `You may not include more than ${HARD_TOOL_LIMIT} tools in your request.` };
+		return { isValid: false, reason: `Tool limit exceeded (${params.postOptions.tools.length}/${HARD_TOOL_LIMIT}). Click "Configure Tools" in the chat input to disable ${params.postOptions.tools.length - HARD_TOOL_LIMIT} tools and retry.` };
 	}
 
 	return { isValid: true, reason: '' };

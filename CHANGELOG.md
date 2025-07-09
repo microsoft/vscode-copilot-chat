@@ -1,3 +1,322 @@
+## 0.29 (2025-07-09)
+
+GitHub Copilot updates from [June 2025](https://code.visualstudio.com/updates/v1_102):
+
+### Chat
+
+#### Copilot Chat is open source
+
+We're excited to announce that we've open sourced the GitHub Copilot Chat extension! The source code is now available at [`microsoft/vscode-copilot-chat`](https://github.com/microsoft/vscode-copilot-chat) under the MIT license.
+
+This marks a significant milestone in our commitment to transparency and community collaboration. By open sourcing the extension, we're enabling the community to:
+
+* **Contribute directly** to the development of AI-powered chat experiences in VS Code
+* **Understand the implementation** of chat modes, custom instructions, and AI integrations
+* **Build upon our work** to create even better AI developer tools
+* **Participate in shaping the future** of AI-assisted coding
+
+You can explore the repository to see how features like [agent mode](https://github.com/microsoft/vscode-copilot-chat/blob/e1222084830244174e6aa64683286561fa7e7607/src/extension/prompts/node/agent/agentPrompt.tsx), [inline chat](https://github.com/microsoft/vscode-copilot-chat/blob/e1222084830244174e6aa64683286561fa7e7607/src/extension/prompts/node/inline/inlineChatEditCodePrompt.tsx), and [MCP integration](https://github.com/microsoft/vscode-copilot-chat/blob/e1222084830244174e6aa64683286561fa7e7607/src/extension/mcp/vscode-node/mcpToolCallingLoop.tsx) are implemented. We welcome contributions, feedback, and collaboration from the community.
+
+To learn more about this milestone and our broader vision for open source AI editor tooling, read our detailed blog post: [Open Source AI Editor - First Milestone](https://code.visualstudio.com/blogs/2025/06/30/openSourceAIEditorFirstMilestone).
+
+#### Chat mode improvements
+
+Last milestone, we previewed [custom chat modes](https://code.visualstudio.com/docs/copilot/chat/chat-modes#_custom-chat-modes). In addition to the built-in chat modes 'Ask', 'Edit' and 'Agent', you can define your own chat modes with specific instructions and a set of allowed tools that you want the LLM to follow when replying to a request.
+
+This milestone, we have made several improvements and bug fixes in this area.
+
+##### Configure language model
+
+Upon popular request, you can now also specify which language model should be used for a chat mode. Add the `model` metadata property to your `chatmode.md` file and provide the model identifier (we provide IntelliSense for the model info).
+
+![Screenshot that shows the IntelliSense for the model metadata property in chat mode file.](https://code.visualstudio.com/assets/updates/1_102//1_102/prompt-file-model-code-completion.png)
+
+##### Improved editing support
+
+The editor for [chat modes](https://code.visualstudio.com/docs/copilot/chat/chat-modes), [prompts](https://code.visualstudio.com/docs/copilot/copilot-customization#_prompt-files-experimental), and [instruction files](https://code.visualstudio.com/docs/copilot/copilot-customization#_custom-instructions) now supports completions, validation, and hovers for all supported metadata properties.
+
+![Screenshot that shows the hover information for tools.](https://code.visualstudio.com/assets/updates/1_102//1_102/tools-hover.png)
+
+![Screenshot that shows the model diagnostics when a model is not available for a specific chat mode.](https://code.visualstudio.com/assets/updates/1_102//1_102/prompt-file-diagnostics.png)
+
+##### Gear menu in the chat view
+
+The **Configure Chat** action in the Chat view toolbar lets you manage custom modes as well as reusable instructions, prompts, and tool sets:
+
+![Screenshot that shows the Configure Chat menu in the Chat view.](https://code.visualstudio.com/assets/updates/1_102//1_102/chat-gear.png)
+
+Selecting **Modes** shows all currently installed custom modes and enables you to open, create new, or delete modes.
+
+##### Import modes via a `vscode` link
+
+You can now import a chat mode file from an external link, such as a gist. For example, the following link will import the chat mode file for Burke's GPT 4.1 Beast Mode:
+
+[Burke's GPT 4.1 Beast Mode (VS Code)](vscode:chat-mode/install?url=https://gist.githubusercontent.com/burkeholland/a232b706994aa2f4b2ddd3d97b11f9a7/raw/6e497f4b4ef5e7ea36787ef38fdf4385433591c1/4.1.chatmode.md)
+
+This will prompt for a destination folder and a name for the mode and then import the mode file from the URL in the link. The same mechanism is also available for prompt and instruction files.
+
+#### Generate custom instructions
+
+Setting up [custom instructions](https://code.visualstudio.com/docs/copilot/copilot-customization) for your project can significantly improve AI suggestions by providing context about your coding standards and project conventions. However, creating effective instructions from scratch might be challenging.
+
+This milestone, we're introducing the **Chat: Generate Instructions** command to help you bootstrap custom instructions for your workspace. Run this command from the Command Palette or the Configure menu in the Chat view, and agent mode will analyze your codebase to generate tailored instructions that reflect your project's structure, technologies, and patterns.
+
+The command creates a `copilot-instructions.md` file in your `.github` folder or suggests improvements to existing instruction files. You can then review and customize the generated instructions to match your team's specific needs.
+
+Learn more about [customizing AI responses with instructions](https://code.visualstudio.com/docs/copilot/copilot-customization).
+
+
+#### Load instruction files on demand
+
+Instruction files can be used to describe coding practices and project requirements. Instructions can be manually or automatically included as context to chat requests.
+
+There are various mechanisms supported, see the [Custom Instructions](https://code.visualstudio.com/docs/copilot/copilot-customization#_custom-instructions) section in our documentation.
+
+For larger instructions that you want to include conditionally, you can use `.instructions.md` files in combination with glob patterns defined in the `applyTo` header. The file is automatically added when the glob pattern matches one or more of the files in the context of the chat.
+
+New in this release, the large language model can load instructions on demand. Each request gets a list of all instruction files, along with glob pattern and description. In this example, the LLM has no instructions for TypeScript files explicitly added in the context. So, it looks for code style rules before creating a TypeScript file:
+
+![Screenshot showing loading instruction files on demand.](https://code.visualstudio.com/assets/updates/1_102//1_102/instructions-loading-on-demand.png)
+
+#### Edit previous requests (Experimental)
+
+You can now click on previous requests to modify the text content, attached context, mode, and model. Upon submitting this change, this will remove all subsequent requests, undo any edits made, and send the new request in chat.
+
+There will be a controlled rollout of different entry points to editing requests, which will help us gather feedback on preferential edit and undo flows. However, users can set their preferred mode with the experimental `chat.editRequests` setting:
+
+* `chat.editRequests.inline`: Hover a request and select the text to begin an edit inline with the request.
+* `chat.editRequests.hover`: Hover a request to reveal a toolbar with a button to begin an edit inline with the request.
+* `chat.editRequests.input`: Hover a request to reveal a toolbar, which will start edits in the input box at the bottom of chat.
+
+<video src="images/1_102/edit-previous-requests.mp4" title="Video showing the process of editing a previous request in the Chat view." autoplay loop controls muted></video>
+
+#### Terminal auto-approval (Experimental)
+
+Agent mode now has a mechanism for auto approving commands in the terminal. Here's a demo of it using the defaults:
+
+<video src="images/1_102/terminal-auto-approve.mp4" title="Video showing terminal commands like 'echo' and 'ls' being auto-approved in the Chat view." autoplay loop controls muted></video>
+
+There are currently two settings: the allow list and the deny list. The allow list is a list of command _prefixes_ or regular expressions that when matched allows the command to be run without explicit approval. For example, the following will allow any command starting with `npm run test` to be run, as well as _exactly_ `git status` or `git log`:
+
+```json
+"github.copilot.chat.agent.terminal.allow list": {
+  "npm run test": true,
+  "/^git (status|log)$/": true
+}
+```
+
+These settings are merged across setting scopes, such that you can have a set of user-approved commands, as well as workspace-specific approved commands.
+
+As for chained commands, we try to detect these cases based on the shell and require all sub-commands to be approved. So `foo && bar` we check that both `foo` and `bar` are allowed, only at that point will it run without approval. We also try to detect inline commands such as `echo $(pwd)`, which would check both `echo $(pwd)` and `pwd`.
+
+The deny list has the same format as the allow list but will override it and force approval. For now this is mostly of use if you have a broad entry in the allow list and want to block certain commands that it may include. For example the following will allow all commands starting with `npm run` except if it starts with `npm run danger`:
+
+```json
+"github.copilot.chat.agent.terminal.allow list": {
+  "npm run": true
+},
+"github.copilot.chat.agent.terminal.denyList": {
+  "npm run danger": true
+}
+```
+
+Thanks to the protections that we gain against prompt injection from [workspace trust](https://code.visualstudio.com/docs/editing/workspaces/workspace-trust), the philosophy we've approached when implementing this feature with regards to security is to include a small set of innocuous commands in the allow list, and a set of particularly dangerous ones in the deny list just in case they manage to slip through. We're still considering what should be the defaults but here is the current lists:
+
+* Allow list: `echo`, `cd`, `ls`, `cat`, `pwd`, `Write-Host`, `Set-Location`, `Get-ChildItem`, `Get-Content`, `Get-Location`
+* Deny list: `rm`, `rmdir`, `del`, `kill`, `curl`, `wget`, `eval`, `chmod`, `chown`, `Remove-Item`
+
+The two major parts we want to add to this feature are a UI entry point to more easily add new commands to the list ([#253268](https://github.com/microsoft/vscode/issues/253268)) and an opt-in option to allow an LLM to evaluate the command(s) safety ([#253267](https://github.com/microsoft/vscode/issues/253267)). We are also planning on both removing the `github.copilot.` prefix of these settings ([#253314](https://github.com/microsoft/vscode/issues/253314)) as well as merging them together ([#253472](https://github.com/microsoft/vscode/issues/253472)) in the next release before it becomes a preview setting.
+
+#### Terminal command simplification
+
+Agent mode sometimes wants to run commands with a `cd` statement, just in case. We now detect this case when it matches the current working directory and simplify the command that is run.
+
+![Screenshot of the terminal, asking to run `cd C:\Github\Tyriar\xterm.js && echo hello` only runs `echo hello` when the current working directory already matches.](https://code.visualstudio.com/assets/updates/1_102//1_102/terminal-working-dir.png)
+
+#### Agent awareness of tasks and terminals
+
+Agent mode now understands which background terminals it has created and which tasks are actively running. The agent can read task output by using the new `GetTaskOutput` tool, which helps prevent running duplicate tasks and improves workspace context.
+
+![Screenshot of VS Code window showing two build tasks running in the terminal panel. The left terminal displays several errors. The chat agent replies to describe status of my build tasks with a summary of each task's output.](https://code.visualstudio.com/assets/updates/1_102//1_102/task-status.png)
+
+#### Maximized chat view
+
+You can now maximize the Secondary Side Bar to span the editor area and hide the Primary Side Bar and panel area. VS Code will remember this state between restarts and will restore the Chat view when you open an editor or view.
+
+<video src="images/1_102/auxmax.mp4" title="Video showing maximizing the Secondary Side Bar." autoplay loop controls muted></video>
+
+You can toggle in and out of the maximized state by using the new icon next to the close button, or use the new command `workbench.action.toggleMaximizedAuxiliaryBar` from the Command Palette.
+
+#### Agent mode badge indicator
+
+We now show a badge over the application icon in the dock when the window is not focused and the agent needs user confirmation to continue. The badge will disappear as soon as the related window that triggered it receives focus.
+
+![Screenshot of the VS Code dock icon showing an agent confirmation as a badge.](./images/1_102/badge.png)
+
+You can enable or disable this badge via the `chat.notifyWindowOnConfirmation` setting.
+
+#### Start chat from the command line
+
+A new subcommand `chat` is added to the VS Code CLI that enables you to start a chat session in the current working directory with the prompt provided.
+
+<video src="images/1_102/chatcli.mp4" title="Video showing the Chat CLI in action to open the Chat view from the command line and run a prompt." autoplay loop controls muted></video>
+
+The basic syntax is `code chat [options] [prompt]` and options can be any of:
+
+* `-m --mode <mode>`: The mode to use for the chat session. Available options: 'ask', 'edit', 'agent', or the identifier of a custom mode. Defaults to 'agent'
+* `-a --add-file <path>`: Add files as context to the chat session
+* `--maximize`: Maximize the chat session view
+* `-r --reuse-window`: Force to use the last active window for the chat session
+* `-n --new-window`: Force to open an empty window for the chat session
+
+Reading from stdin is supported, provided you pass in `-` at the end, for example `ps aux | grep code | code chat <prompt> -`
+
+#### Fetch tool supports non-HTTP URLs
+
+We've seen that, on occasion, models want to call the Fetch tool with non-HTTP URLs, such as `file://` URLs. Rather than disallowing this, the Fetch tool now supports these URLs and returns the content of the file or resource at the URL. Images are also supported.
+
+#### Clearer language model access management
+
+We've reworked the UX around managing extension access to language models provided by extensions. Previously, you saw an item in the Account menu that said **AccountName (GitHub Copilot Chat)**, which had nothing to do with what account GitHub Copilot Chat was using. Rather, it allowed you to manage which extensions had access to the language models provided by Copilot Chat.
+
+To make this clearer, we've removed the **AccountName (GitHub Copilot Chat)** item and replaced it with a new item called **Manage Language Model Access...**. This item opens a Quick Pick that enables you to manage which extensions have access to the language models provided by GitHub Copilot Chat.
+
+![Screenshot that shows the language model access Quick Pick.](https://code.visualstudio.com/assets/updates/1_102//1_102/lm-access-qp.png)
+
+We think this is clearer... That said, in a future release we will explore more granular access control for language models (for example, only allowing specific models rather than _all_ models provided by an extension), so stay tuned for that.
+
+### MCP
+
+#### MCP support in VS Code is generally available
+
+We've have been working on expanding MCP support in VS Code for the past few months, and [support the full range of MCP features in the specification](https://code.visualstudio.com/blogs/2025/06/12/full-mcp-spec-support). As of this release, MCP support is now generally available in VS Code!
+
+You can get started by installing some of the [popular MCP servers from our curated list](https://code.visualstudio.com/mcp). Learn more about [using MCP servers in VS Code](https://code.visualstudio.com/docs/copilot/chat/mcp-servers) and how you can use them to extend agent mode.
+
+![Screenshot that shows the MCP Servers page.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-servers-page.png)
+
+If you want to build your own MCP server, check our [MCP developer guide](https://code.visualstudio.com/api/extension-guides/ai/mcp) for more details about how to take advantage of the MCP capabilities in VS Code.
+
+#### Support for elicitations
+
+The latest MCP specification added support for [Elicitations](https://modelcontextprotocol.io/specification/2025-06-18/client/elicitation) as a way for MCP servers to request input from MCP clients. The latest version of VS Code adopts this specification and includes support for elicitations.
+
+<video src="images/1_102/mcp-server-elicit.mp4" autoplay loop controls muted></video>
+
+#### MCP server discovery and installation
+
+The new **MCP Servers** section in the Extensions view includes welcome content that links directly to the [popular MCP servers from our curated list](https://code.visualstudio.com/mcp). Visit the website to explore available MCP servers and select **Install** on any MCP server. This automatically launches VS Code and opens the MCP server editor that displays the server's readme and manifest information. You can review the server details and select **Install** to add the server to your VS Code instance.
+
+Once installed, MCP servers automatically appear in your Extensions view under the **MCP SERVERS - INSTALLED** section, and their tools become available in the Chat view's tools Quick Pick. This makes it easy to verify that your MCP server is working correctly and access its capabilities immediately.
+
+<video src="images/1_102/mcp-servers-discovery-install.mp4" title="Video showing installing an MCP server from the MCP page on the VS Code website." autoplay loop controls muted></video>
+
+#### MCP server management view
+
+The new **MCP SERVERS - INSTALLED** view in the Extensions view makes it easy to monitor, configure, and control your installed MCP servers.
+
+![Screenshot showing the MCP Servers management view with installed servers.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-servers-installed-view.png)
+
+The view lists the installed MCP servers and provides several management actions through the context menu:
+
+![Screenshot showing the context menu actions for an MCP server.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-server-context-menu.png)
+
+* **Start Server** / **Stop Server** / **Restart Server**: Control the server's running state
+* **Disconnect Account**: Remove account access from the server
+* **Show Output**: View the server's output logs for troubleshooting
+* **Show Configuration**: Open the server's runtime configuration
+* **Configure Model Access**: Manage which language models the server can access
+* **Show Sampling Requests**: View sampling requests for debugging
+* **Browse Resources**: Explore resources provided by the server
+* **Uninstall**: Remove the server from your VS Code instance
+
+When you select an installed MCP server, VS Code opens the MCP server editor displaying the server's readme details, manifest, and its runtime configuration. This provides an overview of the server's capabilities and current settings, making it easy to understand what the server does and how it's configured.
+
+![Screenshot showing the MCP server editor with runtime configuration.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-server-editor-configuration.png)
+
+The **MCP SERVERS - INSTALLED** view also provides a **Browse MCP Servers...** action that takes you directly to the community website, making server discovery always accessible from within VS Code.
+
+![Screenshot that shows the Browse MCP Servers action in the MCP Servers view.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-servers-browse-action.png)
+
+#### MCP servers as first-class resources
+
+MCP servers are now treated as first-class resources in VS Code, similar to user tasks and other profile-specific configurations. This represents a significant architectural improvement from the previous approach where MCP servers were stored in user settings. This change makes MCP server management more robust and provides better separation of concerns between your general VS Code settings and your MCP server configurations. When you install or configure MCP servers, they're automatically stored in the appropriate [profile](https://code.visualstudio.com/docs/configure/profiles)-specific location to ensure that your main settings file stays clean and focused.
+
+* **Dedicated storage**: MCP servers are now stored in a dedicated `mcp.json` file within each profile, rather than cluttering your user settings file
+* **Profile-specific**: Each VS Code profile maintains its own set of MCP servers, enabling you to have different server configurations for different workflows or projects
+* **Settings Sync integration**: MCP servers sync seamlessly across your devices through [Settings Sync](https://code.visualstudio.com/docs/configure/settings-sync), with granular control over what gets synchronized
+
+##### MCP migration support
+
+With MCP servers being first-class resources and the associated change to their configuration, VS Code provides comprehensive migration support for users upgrading from the previous MCP server configuration format:
+
+* **Automatic detection**: Existing MCP servers in `settings.json` are automatically detected and migrated to the new profile-specific `mcp.json` format
+* **Real-time migration**: When you add MCP servers to user settings, VS Code immediately migrates them with a helpful notification explaining the change
+* **Cross-platform support**: Migration works seamlessly across all development scenarios including local, remote, WSL, and Codespaces environments
+
+This migration ensures that your existing MCP server configurations continue to work without any manual intervention while providing the enhanced management capabilities of the new architecture.
+
+##### Dev Container support for MCP configuration
+
+The Dev Container configuration `devcontainer.json` and the Dev Container Feature configuration `devcontainer-feature.json` support MCP server configurations at the path `customizations.vscode.mcp`. When a Dev Container is created the collected MCP server configurations are written to the remote MCP configuration file `mcp.json`.
+
+##### Commands to access MCP resources
+
+To make working with MCP servers more accessible, we've added commands to help you manage and access your MCP configuration files:
+
+* **MCP: Open User Configuration** - Direct access to your user-level `mcp.json` file
+* **MCP: Open Remote User Configuration** - Direct access to your remote user-level `mcp.json` file
+
+These commands provide quick access to your MCP configuration files, making it easy to view and manage your server configurations directly.
+
+#### Quick management of MCP authentication
+
+You are now able to sign out or disconnect accounts from the MCP gear menu and quick picks.
+
+* MCP view gear menu:
+    ![Screenshot showing the Disconnect Account action shown in MCP view gear menu.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-view-signout.png)
+
+* MCP editor gear menu:
+    ![Screenshot showing the Disconnect Account action shown in MCP editor gear menu.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-editor-signout.png)
+
+* MCP quick pick:
+    ![Screenshot showing the Disconnect Account action shown in MCP quick pick menu.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-qp-signout.png)
+
+The **Disconnect** action is shown when the account is used by either other MCP servers or extensions, while **Sign Out** is shown when the account is only used by the MCP server. The sign out action completely removes the account from VS Code, while disconnect only removes access to the account from the MCP server.
+
+### Code Editing
+
+#### Snooze code completions
+
+You can now temporarily pause inline suggestions and next edit suggestions (NES) by using the new **Snooze** feature. This is helpful when you want to focus without distraction from suggestions.
+
+To snooze suggestions, select the Copilot dashboard in the Status Bar, or run the **Snooze Inline Suggestions** command from the Command Palette and select a duration from the dropdown menu. During the snooze period, no inline suggestions or NES will appear.
+
+![Screenshot showing the Copilot dashboard with the snooze button at the bottom.](https://code.visualstudio.com/assets/updates/1_102//1_102/nes-snooze.png)
+
+You can also assign a custom keybinding to quickly snooze suggestions for a specific duration by passing the desired duration as an argument to the command. For example:
+
+```json
+{
+  "key": "...",
+  "command": "editor.action.inlineSuggest.snooze",
+  "args": 10
+}
+```
+
+### Editor Experience
+
+#### Settings search suggestions (Preview)
+
+**Setting**: `workbench.settings.showAISearchToggle`
+
+This milestone, we modified the sparkle toggle in the Settings editor, so that it acts as a toggle between the AI and non-AI search results. The AI settings search results are semantically similar results instead of results that are based on string matching. For example, `editor.fontSize` appears as an AI settings search result when you search for "increase text size".
+
+The toggle is enabled only when there are AI results available. We welcome feedback on when the AI settings search did not find an expected setting, and we plan to enable the setting by default over the next iteration.
+
+<video src="images/1_102/settings-search-toggle-stable.mp4" title="Switching between AI and non-AI results using the AI results toggle in the Settings editor" autoplay loop controls muted></video>
+
+
 ## 0.28 (2025-06-12)
 
 GitHub Copilot updates from [May 2025](https://code.visualstudio.com/updates/v1_101):
@@ -279,7 +598,7 @@ Last month, we introduced support for next edit suggestions to automatically sug
 
 #### NES acceptance flow
 
-Accepting next edit suggestions is now more seamless. Once you accept a suggestion, you can continue accepting subsequent suggestions with a single `kbstyle(Tab)` press, as long as you haven't started typing again. If you start typing, you'll need to press `kbstyle(Tab)` to first move the cursor to the next suggestion before you can accept it.
+Accepting next edit suggestions is now more seamless. Once you accept a suggestion, you can continue accepting subsequent suggestions with a single <kbd>Tab</kbd> press, as long as you haven't started typing again. If you start typing, you'll need to press <kbd>Tab</kbd> to first move the cursor to the next suggestion before you can accept it.
 
 ### Notebooks
 

@@ -8,16 +8,11 @@
  *
  * Based (updated 31.10.2024) on https://platform.openai.com/docs/api-reference/completions/object
  * 		(! except `Choice#finish_reason` can be a null during streaming)
+ *      (! omits `id`, `model`, and `created` for performance)
  */
 export interface Completion {
-	/** A unique identifier for the completion. */
-	id: string;
 	/** The list of completion choices the model generated for the input prompt. */
 	choices: Completion.Choice[];
-	/** The Unix timestamp (in seconds) of when the completion was created. */
-	created: number;
-	/** The model used for completion. */
-	model: string;
 	/** This fingerprint represents the backend configuration that the model runs with. */
 	system_fingerprint: string;
 	/** The object type, which is always "text_completion". */

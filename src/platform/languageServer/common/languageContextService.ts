@@ -102,6 +102,13 @@ export type RequestContext = {
 	 * A list of proposed edits that should be applied before computing the context.
 	 */
 	proposedEdits?: { edit: vscode.TextEdit; source?: 'selectedCompletionInfo' }[];
+
+	/**
+	 * If provided the telemetry will be sampled. A value of 1 will log every request, a value of
+	 * 5 will log every 5th request, a value of 10 will log every 10th request, etc. If not provided
+	 * all telemetry will be logged.
+	 */
+	sampleTelemetry?: number;
 };
 
 export interface ILanguageContextService {
