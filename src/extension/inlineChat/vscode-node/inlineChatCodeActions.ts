@@ -94,7 +94,7 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 		}
 
 		if (this.reviewService.isCodeFeedbackEnabled() && !activeTextEditor.selection.isEmpty) {
-			const reviewAction = new AICodeAction(vscode.l10n.t('Review using Copilot'), QuickFixesProvider.reviewKind);
+			const reviewAction = new AICodeAction(vscode.l10n.t('Review'), QuickFixesProvider.reviewKind);
 			reviewAction.command = {
 				title: reviewAction.title,
 				command: 'github.copilot.chat.review',
@@ -111,7 +111,7 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 		const initialSelection = new vscode.Selection(initialRange.start, initialRange.end);
 		const diagnostics = QuickFixesProvider.getDiagnosticsAsText(severeDiagnostics);
 
-		const fixAction = new AICodeAction(vscode.l10n.t('Fix using Copilot'), QuickFixesProvider.fixKind);
+		const fixAction = new AICodeAction(vscode.l10n.t('Fix'), QuickFixesProvider.fixKind);
 		fixAction.diagnostics = severeDiagnostics;
 		fixAction.command = {
 			title: fixAction.title,
@@ -127,7 +127,7 @@ export class QuickFixesProvider implements vscode.CodeActionProvider {
 			],
 		};
 
-		const explainAction = new AICodeAction(vscode.l10n.t('Explain using Copilot'), QuickFixesProvider.explainKind);
+		const explainAction = new AICodeAction(vscode.l10n.t('Explain'), QuickFixesProvider.explainKind);
 		explainAction.diagnostics = severeDiagnostics;
 		const query = `@${workspaceIntentId} /${Intent.Explain} ${diagnostics}`;
 		explainAction.command = {
@@ -250,12 +250,12 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 		if (range.isEmpty) {
 			const textAtLine = doc.lineAt(range.start.line).text;
 			if (range.end.character === textAtLine.length && /^\s*$/g.test(textAtLine)) {
-				codeActionTitle = vscode.l10n.t('Generate using Copilot');
+				codeActionTitle = vscode.l10n.t('Generate');
 			}
 		} else {
 			const textInSelection = doc.getText(range);
 			if (!/^\s*$/g.test(textInSelection)) {
-				codeActionTitle = vscode.l10n.t('Modify using Copilot');
+				codeActionTitle = vscode.l10n.t('Modify');
 			}
 		}
 
@@ -316,7 +316,7 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 			return undefined;
 		}
 
-		const title = vscode.l10n.t('Generate Documentation using Copilot');
+		const title = vscode.l10n.t('Generate Documentation');
 
 		const codeAction = new AICodeAction(title, RefactorsProvider.generateDocsKind);
 
@@ -380,7 +380,7 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 			return undefined;
 		}
 
-		const title = vscode.l10n.t('Generate Tests using Copilot');
+		const title = vscode.l10n.t('Generate Tests');
 		const codeAction = new AICodeAction(title, RefactorsProvider.generateTestsKind);
 
 		codeAction.command = {
