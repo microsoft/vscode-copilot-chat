@@ -3,11 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { Disposable } from 'vscode';
+
 /**
  * Adaptive debounce class that starts with a short delay and increases
  * the debounce time for subsequent events until reaching a maximum threshold.
  */
-export class ThrottledDebouncer {
+export class ThrottledDebouncer implements Disposable {
+
 	private static readonly INITIAL_DELAY = 100;
 	private static readonly DELAY_INCREMENT = 10;
 	private static readonly MAX_DELAY = 500;

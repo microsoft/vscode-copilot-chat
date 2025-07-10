@@ -22,7 +22,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.102.0-20250627",
+		"vscode": "^1.103.0-insider",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -128,7 +128,8 @@
 		"taskProblemMatcherStatus",
 		"contribLanguageModelToolSets",
 		"textDocumentChangeReason",
-		"resolvers"
+		"resolvers",
+		"taskExecutionTerminal"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -439,7 +440,7 @@
 				"name": "copilot_getTaskOutput",
 				"toolReferenceName": "getTaskOutput",
 				"displayName": "%copilot.tools.getTaskOutput.name%",
-				"modelDescription": "Retrieves the output of a running VS Code task.\n- Use this tool when the user is trying to understand the current project state, debug issues, or analyze task-related errors, output, or status.",
+				"modelDescription": "Retrieves the output of a VS Code task.\n- Use this tool when the user is trying to understand the current project state, debug issues, or analyze task-related errors, output, or status.",
 				"tags": [],
 				"inputSchema": {
 					"type": "object",

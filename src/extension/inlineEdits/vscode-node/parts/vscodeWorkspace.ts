@@ -3,9 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { EndOfLine, Range, TextDocument, TextDocumentChangeEvent, TextDocumentContentChangeEvent, window, workspace } from 'vscode';
+import { Diagnostic, DiagnosticSeverity, EndOfLine, languages, Range, TextDocument, TextDocumentChangeEvent, TextDocumentContentChangeEvent, Uri, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
+import { DiagnosticData } from '../../../../platform/inlineEdits/common/dataTypes/diagnosticData';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { LanguageId } from '../../../../platform/inlineEdits/common/dataTypes/languageId';
 import { EditReason } from '../../../../platform/inlineEdits/common/editReason';
@@ -63,7 +64,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 		}));
 
 		this._store.add(workspace.onDidChangeTextDocument(e => {
-			const doc = this._getDocumentByTextDocumentAndUpdateShouldTrack(e.document);
+			const doc = this._getDocumentByTextDocumentAndUpdateShouldTrack(e.document.uri);
 			if (!doc) {
 				return;
 			}
@@ -77,7 +78,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 		}));
 
 		this._store.add(window.onDidChangeTextEditorSelection(e => {
-			const doc = this._getDocumentByTextDocumentAndUpdateShouldTrack(e.textEditor.document);
+			const doc = this._getDocumentByTextDocumentAndUpdateShouldTrack(e.textEditor.document.uri);
 			if (!doc) {
 				return;
 			}
@@ -85,11 +86,22 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 		}));
 
 		this._store.add(window.onDidChangeTextEditorVisibleRanges(e => {
-			const doc = this._getDocumentByTextDocumentAndUpdateShouldTrack(e.textEditor.document);
+			const doc = this._getDocumentByTextDocumentAndUpdateShouldTrack(e.textEditor.document.uri);
 			if (!doc) {
 				return;
 			}
 			doc.visibleRanges.set(e.visibleRanges.map(r => rangeToOffsetRange(r, e.textEditor.document)), undefined);
+		}));
+
+		this._store.add(languages.onDidChangeDiagnostics(e => {
+			e.uris.forEach(uri => {
+				const document = this._getDocumentByTextDocumentAndUpdateShouldTrack(uri);
+				if (!document) {
+					return;
+				}
+				const diagnostics = languages.getDiagnostics(uri).map(d => this._createDiagnosticData(d, document.textDocument)).filter(isDefined);
+				document.diagnostics.set(diagnostics, undefined);
+			});
 		}));
 	}
 
@@ -125,7 +137,8 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 			const openedTextEditor = window.visibleTextEditors.find(e => e.document.uri.toString() === doc.uri.toString());
 			const selections = openedTextEditor?.selections.map(s => rangeToOffsetRange(s, doc));
 			const visibleRanges = openedTextEditor?.visibleRanges.map(r => rangeToOffsetRange(r, doc));
-			const document = new VSCodeObservableDocument(documentId, stringValueFromDoc(doc), doc.version, selections ?? [], visibleRanges ?? [], LanguageId.create(doc.languageId), doc);
+			const diagnostics = languages.getDiagnostics(doc.uri).map(d => this._createDiagnosticData(d, doc)).filter(isDefined);
+			const document = new VSCodeObservableDocument(documentId, stringValueFromDoc(doc), doc.version, selections ?? [], visibleRanges ?? [], LanguageId.create(doc.languageId), diagnostics, doc);
 			return document;
 		}).recomputeInitiallyAndOnChange(store);
 
@@ -137,8 +150,8 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 		};
 	});
 
-	private _getDocumentByTextDocumentAndUpdateShouldTrack(doc: TextDocument): VSCodeObservableDocument | undefined {
-		const internalDoc = this._getInternalDocument(doc);
+	private _getDocumentByTextDocumentAndUpdateShouldTrack(uri: URI): VSCodeObservableDocument | undefined {
+		const internalDoc = this._getInternalDocument(uri);
 		if (!internalDoc) {
 			return undefined;
 		}
@@ -146,9 +159,22 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 		return internalDoc.obsDoc.get();
 	}
 
-	private _getInternalDocument(doc: TextDocument, reader?: IReader) {
-		const document = this._obsDocsWithUpdateIgnored.read(reader).get(doc.uri.toString());
+	private _getInternalDocument(uri: Uri, reader?: IReader) {
+		const document = this._obsDocsWithUpdateIgnored.read(reader).get(uri.toString());
 		return document;
+	}
+
+	private _createDiagnosticData(diagnostic: Diagnostic, doc: TextDocument): DiagnosticData | undefined {
+		if (!diagnostic.source || (diagnostic.severity !== DiagnosticSeverity.Error && diagnostic.severity !== DiagnosticSeverity.Warning)) {
+			return undefined;
+		}
+		const diag: DiagnosticData = new DiagnosticData(
+			doc.uri,
+			diagnostic.message,
+			diagnostic.severity === DiagnosticSeverity.Error ? 'error' : 'warning',
+			rangeToOffsetRange(diagnostic.range, doc)
+		);
+		return diag;
 	}
 
 	private readonly _obsDocsWithUpdateIgnored = derived(this, reader => {
@@ -162,7 +188,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 	public getDocumentByTextDocument(doc: TextDocument, reader?: IReader): IVSCodeObservableDocument | undefined {
 		this._store.assertNotDisposed();
 
-		const internalDoc = this._getInternalDocument(doc, reader);
+		const internalDoc = this._getInternalDocument(doc.uri, reader);
 		if (!internalDoc) {
 			return undefined;
 		}
@@ -191,6 +217,7 @@ class VSCodeObservableDocument implements IVSCodeObservableDocument {
 	public readonly selection: ISettableObservable<readonly OffsetRange[]>;
 	public readonly visibleRanges: ISettableObservable<readonly OffsetRange[]>;
 	public readonly languageId: ISettableObservable<LanguageId>;
+	public readonly diagnostics: ISettableObservable<readonly DiagnosticData[]>;
 
 	constructor(
 		public readonly id: DocumentId,
@@ -199,6 +226,7 @@ class VSCodeObservableDocument implements IVSCodeObservableDocument {
 		selection: readonly OffsetRange[],
 		visibleRanges: readonly OffsetRange[],
 		languageId: LanguageId,
+		diagnostics: DiagnosticData[],
 		public readonly textDocument: TextDocument,
 	) {
 		this.value = observableValue(this, value);
@@ -206,6 +234,7 @@ class VSCodeObservableDocument implements IVSCodeObservableDocument {
 		this.selection = observableValue(this, selection);
 		this.visibleRanges = observableValue(this, visibleRanges);
 		this.languageId = observableValue(this, languageId);
+		this.diagnostics = observableValue(this, diagnostics);
 	}
 }
 
