@@ -13,16 +13,11 @@ import { ResponseStream } from './responseStream';
 export interface ModelParams {
 	prompt: string;
 	stop?: string[];
-	// eslint-disable-next-line @typescript-eslint/naming-convention
 	top_p?: number;
-	// eslint-disable-next-line @typescript-eslint/naming-convention
 	best_of?: number;
-	// eslint-disable-next-line @typescript-eslint/naming-convention
 	max_tokens?: number;
 	temperature?: number;
-	// eslint-disable-next-line @typescript-eslint/naming-convention
 	presence_penalty?: number;
-	// eslint-disable-next-line @typescript-eslint/naming-convention
 	frequency_penalty?: number;
 	// required to access certain experimental models
 	model?: string;

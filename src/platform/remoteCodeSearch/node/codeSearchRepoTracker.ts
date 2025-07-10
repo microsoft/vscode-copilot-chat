@@ -307,6 +307,7 @@ export class CodeSearchRepoTracker extends Disposable {
 		this._register(Event.any(
 			this._authenticationService.onDidAuthenticationChange,
 			this._authenticationService.onDidAdoAuthenticationChange,
+			this._adoCodeSearchService.onDidChangeIndexState
 		)(() => {
 			this.updateAllRepoStatuses();
 		}));
@@ -786,6 +787,7 @@ export class CodeSearchRepoTracker extends Disposable {
 					return;
 
 				case RepoStatus.NotYetIndexed:
+				case RepoStatus.NotIndexable:
 				case RepoStatus.BuildingIndex:
 				case RepoStatus.Ready:
 				case RepoStatus.CouldNotCheckIndexStatus:

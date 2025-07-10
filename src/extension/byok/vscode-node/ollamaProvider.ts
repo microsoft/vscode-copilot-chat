@@ -20,6 +20,13 @@ interface OllamaModelInfoAPIResponse {
 	};
 }
 
+interface OllamaVersionResponse {
+	version: string;
+}
+
+// Minimum supported Ollama version - versions below this may have compatibility issues
+const MINIMUM_OLLAMA_VERSION = '0.6.4';
+
 export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 
 	constructor(
@@ -40,10 +47,17 @@ export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 
 	override async getAllModels(apiKey: string): Promise<{ id: string; name: string }[]> {
 		try {
+			// Check Ollama server version before proceeding with model operations
+			await this._checkOllamaVersion();
+			
 			const response = await this._fetcherService.fetch(`${this._ollamaBaseUrl}/api/tags`, { method: 'GET' });
 			const models = (await response.json()).models;
 			return models.map((model: { model: string; name: string }) => ({ id: model.model, name: model.name }));
 		} catch (e) {
+			// Check if this is our version check error and preserve it
+			if (e instanceof Error && e.message.includes('Ollama server version')) {
+				throw e;
+			}
 			throw new Error('Failed to fetch models from Ollama. Please ensure Ollama is running. If ollama is on another host, please configure the `"github.copilot.chat.byok.ollamaEndpoint"` setting.');
 		}
 	}
@@ -73,5 +87,59 @@ export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 			body: JSON.stringify({ model: modelId })
 		});
 		return response.json() as unknown as OllamaModelInfoAPIResponse;
+	}
+
+	/**
+	 * Check if the connected Ollama server version meets the minimum requirements
+	 * @throws Error if version is below minimum or version check fails
+	 */
+	private async _checkOllamaVersion(): Promise<void> {
+		try {
+			const response = await this._fetcherService.fetch(`${this._ollamaBaseUrl}/api/version`, { method: 'GET' });
+			const versionInfo = await response.json() as OllamaVersionResponse;
+			
+			if (!this._isVersionSupported(versionInfo.version)) {
+				throw new Error(
+					`Ollama server version ${versionInfo.version} is not supported. ` +
+					`Please upgrade to version ${MINIMUM_OLLAMA_VERSION} or higher. ` +
+					`Visit https://ollama.ai for upgrade instructions.`
+				);
+			}
+		} catch (e) {
+			if (e instanceof Error && e.message.includes('Ollama server version')) {
+				// Re-throw our custom version error
+				throw e;
+			}
+			// If version endpoint fails
+			throw new Error(
+				`Unable to verify Ollama server version. Please ensure you have Ollama version ${MINIMUM_OLLAMA_VERSION} or higher installed. ` +
+				`If you're running an older version, please upgrade from https://ollama.ai`
+			);
+		}
+	}
+
+	/**
+	 * Compare version strings to check if current version meets minimum requirements
+	 * @param currentVersion Current Ollama server version
+	 * @returns true if version is supported, false otherwise
+	 */
+	private _isVersionSupported(currentVersion: string): boolean {
+		// Simple version comparison: split by dots and compare numerically
+		const currentParts = currentVersion.split('.').map(n => parseInt(n, 10));
+		const minimumParts = MINIMUM_OLLAMA_VERSION.split('.').map(n => parseInt(n, 10));
+		
+		for (let i = 0; i < Math.max(currentParts.length, minimumParts.length); i++) {
+			const current = currentParts[i] || 0;
+			const minimum = minimumParts[i] || 0;
+			
+			if (current > minimum) {
+				return true;
+			}
+			if (current < minimum) {
+				return false;
+			}
+		}
+		
+		return true; // versions are equal
 	}
 }

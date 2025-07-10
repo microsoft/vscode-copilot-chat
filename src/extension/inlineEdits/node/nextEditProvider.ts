@@ -5,19 +5,16 @@
 
 import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { StringTextDocument } from '../../../platform/editing/common/abstractText';
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit';
-import { LanguageId } from '../../../platform/inlineEdits/common/dataTypes/languageId';
 import { RootedLineEdit } from '../../../platform/inlineEdits/common/dataTypes/rootedLineEdit';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IObservableDocument, ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
-import { DocumentShorteningStrategy, IStatelessNextEditProvider, NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { IStatelessNextEditProvider, NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { autorunWithChanges } from '../../../platform/inlineEdits/common/utils/observable';
 import { DocumentHistory, HistoryContext, IHistoryContextProvider } from '../../../platform/inlineEdits/common/workspaceEditTracker/historyContextProvider';
 import { NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ILogService } from '../../../platform/log/common/logService';
-import { IParserService } from '../../../platform/parser/node/parserService';
 import { ISnippyService } from '../../../platform/snippy/common/snippyService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Result } from '../../../util/common/result';
@@ -34,11 +31,8 @@ import { assertType } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { LineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
-import { Range } from '../../../util/vs/editor/common/core/range';
-import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
-import { ProjectedDocument, summarizeDocumentsSyncImpl } from '../../prompts/node/inline/summarizedDocument/implementation';
 import { checkEditConsistency } from '../common/editRebase';
 import { RejectionCollector } from '../common/rejectionCollector';
 import { DebugRecorder } from './debugRecorder';
@@ -60,15 +54,13 @@ export interface INextEditProvider<T extends INextEditResult, TTelemetry, TData 
 	lastTriggerTime: number;
 }
 
-interface ShortendDocument {
+interface ProcessedDoc {
 	recentEdit: RootedEdit<StringEdit>;
 	nextEditDoc: StatelessNextEditDocument;
-	projectedDocument: ProjectedDocument<StringTextDocument>;
+	documentAfterEdits: StringText;
 }
 
 export class NextEditProvider extends Disposable implements INextEditProvider<NextEditResult, LlmNESTelemetryBuilder> {
-
-	private static DEFAULT_DOCUMENT_SHORTENING_STRATEGY = DocumentShorteningStrategy.Clipping;
 
 	public readonly ID = this._statelessNextEditProvider.ID;
 
@@ -98,7 +90,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		private readonly _historyContextProvider: IHistoryContextProvider,
 		private readonly _xtabHistoryTracker: NesXtabHistoryTracker,
 		private readonly _debugRecorder: DebugRecorder | undefined,
-		@IParserService private readonly _parseService: IParserService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@ISnippyService private readonly _snippyService: ISnippyService,
 		@ILogService private readonly _logService: ILogService,
@@ -122,7 +113,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			return;
 		}
 		const activeDoc = this._pendingStatelessNextEditRequest.getActiveDocument();
-		if (activeDoc.id === docId && activeDoc.documentAfterEditsNoShortening.value !== docValue.value) {
+		if (activeDoc.id === docId && activeDoc.documentAfterEdits.value !== docValue.value) {
 			this._pendingStatelessNextEditRequest.cancellationTokenSource.cancel();
 		}
 	}
@@ -278,80 +269,34 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		return nextEditResult;
 	}
 
-	private async _shortenDocument(doc: DocumentHistory, documentShorteningStrategy: DocumentShorteningStrategy): Promise<ShortendDocument> {
-		const documentAfterEditsNoShortening = doc.lastEdit.getEditedState();
+	private _processDoc(doc: DocumentHistory): ProcessedDoc {
+		const documentLinesBeforeEdit = doc.lastEdit.base.getLines();
 
-		const { document: projectedDocumentBeforeEdits, clippedRange } =
-			documentShorteningStrategy === DocumentShorteningStrategy.NoShortening
-				? this.getProjectedDocumentNoShortening(doc.lastEdit)
-				: documentShorteningStrategy === DocumentShorteningStrategy.Clipping
-					? this.getProjectedDocumentClipping(doc.lastEdit)
-					: await this.getProjectedDocumentSummarizedDocument(doc.languageId, doc.lastEdit);
+		const recentEdits = doc.lastEdits;
 
-		const unprojectBeforeEdits = projectedDocumentBeforeEdits.edits.inverse(projectedDocumentBeforeEdits.originalText);
+		const recentEdit = RootedLineEdit.fromEdit(new RootedEdit(doc.lastEdit.base, doc.lastEdits.compose())).removeCommonSuffixPrefixLines().edit;
 
-		const { edits: projectedEdits, editLast: unprojectAfterEdits } = assertDefined(doc.lastEdits.swap(unprojectBeforeEdits));
-		const composedProjectedEdits = projectedEdits.compose();
+		const documentBeforeEdits = doc.lastEdit.base;
 
-		const projectedDocumentAfterEdits = new ProjectedDocument(
-			new StringTextDocument(doc.lastEdits.apply(projectedDocumentBeforeEdits.originalText)),
-			unprojectAfterEdits.inverse(projectedEdits.apply(projectedDocumentBeforeEdits.text)),
-		);
-
-		const base = new StringText(projectedDocumentBeforeEdits.text);
-
-		const lineEditsBeforeRemovingNoopEdits = RootedLineEdit.fromEdit(new RootedEdit(base, composedProjectedEdits));
-		const lineEdit = lineEditsBeforeRemovingNoopEdits.removeCommonSuffixPrefixLines();
-
-		const lastEditNewOffsetRange = projectedEdits.edits.at(-1)?.getNewRanges().at(0);
-		let lastEditNewRange: Range | undefined;
-		if (lastEditNewOffsetRange) {
-			const projectedDocumentAfterEditsDoc = new StringText(projectedDocumentAfterEdits.text);
-			lastEditNewRange = projectedDocumentAfterEditsDoc.getTransformer().getRange(lastEditNewOffsetRange);
-		}
-
-		const lastSelectionInProjAfterEdit = doc.lastSelection
-			? projectedDocumentAfterEdits.projectOffsetRange(doc.lastSelection)
-			: undefined;
+		const lastSelectionInAfterEdits = doc.lastSelection;
 
 		const workspaceRoot = this._workspace.getWorkspaceRoot(doc.docId);
-
-		const toEditOnDocumentAfterEditsNoShortening = (lineEdit: LineEdit) => {
-			const editedProjectedDocSuggestedLineEdit = new RootedLineEdit(new StringText(projectedDocumentAfterEdits.text), lineEdit);
-			const editedProjectedDocSuggestedEdit = editedProjectedDocSuggestedLineEdit.toEdit();
-			const suggestedEdit = projectBackEdit(editedProjectedDocSuggestedEdit, projectedDocumentAfterEdits);
-			return suggestedEdit;
-		};
-
-		const toOffsetOnDocumentAfterEditsNoShortening = (projectedOffset: number): number => {
-			return projectedDocumentAfterEdits.projectBack(projectedOffset);
-		};
-
-		const toProjectedOffset = (offsetOnDocumentAfterEditsNoShortening: number): number => {
-			return projectedDocumentAfterEdits.project(offsetOnDocumentAfterEditsNoShortening);
-		};
 
 		const nextEditDoc = new StatelessNextEditDocument(
 			doc.docId,
 			workspaceRoot,
 			doc.languageId,
-			lineEdit.base.getLines(),
-			lineEdit.edit,
-			lastEditNewRange,
-			base,
-			projectedEdits,
-			documentAfterEditsNoShortening,
-			toEditOnDocumentAfterEditsNoShortening,
-			toOffsetOnDocumentAfterEditsNoShortening,
-			toProjectedOffset,
-			doc.lastEdit.base.length.lineCount,
-			clippedRange,
-			lastSelectionInProjAfterEdit,
+			documentLinesBeforeEdit,
+			recentEdit,
+			documentBeforeEdits,
+			recentEdits,
+			lastSelectionInAfterEdits,
 		);
+
 		return {
 			recentEdit: doc.lastEdit,
 			nextEditDoc,
-			projectedDocument: projectedDocumentAfterEdits,
+			documentAfterEdits: nextEditDoc.documentAfterEdits,
 		};
 	}
 
@@ -454,20 +399,18 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		const logContext = req.log;
 
 		const activeDocAndIdx = assertDefined(historyContext.getDocumentAndIdx(curDocId));
+		const activeDocSelection = doc.selection.get()[0] as OffsetRange | undefined;
 
-		const documentShorteningStrategy = this.getDocumentShorteningStrategy();
-		telemetryBuilder.setDocumentShorteningStrategy(documentShorteningStrategy);
-
-		const projectedDocuments = await Promise.all(historyContext.documents.map(doc => this._shortenDocument(doc, documentShorteningStrategy)));
+		const projectedDocuments = historyContext.documents.map(doc => this._processDoc(doc));
 
 		const xtabEditHistory = this._xtabHistoryTracker.getHistory();
 
-		const convertToProjectedEdit = (nextLineEdit: LineEdit, docId: DocumentId) => {
+		function convertLineEditToEdit(nextLineEdit: LineEdit, docId: DocumentId): StringEdit {
 			const doc = projectedDocuments.find(d => d.nextEditDoc.id === docId)!;
-			const editedProjectedDocSuggestedLineEdit = new RootedLineEdit(new StringText(doc.projectedDocument.text), nextLineEdit);
-			const suggestedEdit = projectBackEdit(editedProjectedDocSuggestedLineEdit.toEdit(), doc.projectedDocument);
+			const rootedLineEdit = new RootedLineEdit(doc.documentAfterEdits, nextLineEdit);
+			const suggestedEdit = rootedLineEdit.toEdit();
 			return suggestedEdit;
-		};
+		}
 
 		const firstEdit = new DeferredPromise<Result<CachedOrRebasedEdit, NoNextEditReason>>();
 
@@ -530,7 +473,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 					throw new BugIndicatingError();
 				}
 				return {
-					docContents: new StringText(doc.projectedDocument.originalText),
+					docContents: doc.documentAfterEdits,
 					editsSoFar: StringEdit.empty,
 					nextEdits: [] as StringReplacement[],
 					docId: id,
@@ -548,7 +491,23 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 					} else {
 						tracer.returns(`no edit, reason: ${result.err.kind}`);
 						if (result.err instanceof NoNextEditReason.NoSuggestions) {
-							this._nextEditCache.setNoNextEdit(curDocId, result.err.documentBeforeEdits, result.err.window, req, nesConfigs);
+							const { documentBeforeEdits, window } = result.err;
+							let reducedWindow = window;
+							if (activeDocSelection && window) {
+								const cursorOffset = activeDocSelection.endExclusive;
+								const t = documentBeforeEdits.getTransformer();
+								const cursorPosition = t.getPosition(cursorOffset);
+								const lineOffset = t.getOffset(cursorPosition.with(undefined, 1));
+								const lineEndOffset = t.getOffset(cursorPosition.with(undefined, t.getLineLength(cursorPosition.lineNumber) + 1));
+								const reducedOffset = t.getOffset(t.getPosition(window.start).delta(1));
+								const reducedEndPosition = t.getPosition(window.endExclusive).delta(-2);
+								const reducedEndOffset = t.getOffset(reducedEndPosition.column > 1 ? reducedEndPosition.with(undefined, t.getLineLength(reducedEndPosition.lineNumber) + 1) : reducedEndPosition);
+								reducedWindow = new OffsetRange(
+									Math.min(reducedOffset, lineOffset),
+									Math.max(reducedEndOffset, lineEndOffset)
+								);
+							}
+							this._nextEditCache.setNoNextEdit(curDocId, documentBeforeEdits, reducedWindow, req, nesConfigs);
 						}
 					}
 					{
@@ -565,7 +524,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 				const singleLineEdit = result.val.edit;
 				const lineEdit = new LineEdit([singleLineEdit]);
-				const edit = convertToProjectedEdit(lineEdit, targetDocState.docId);
+				const edit = convertLineEditToEdit(lineEdit, targetDocState.docId);
 				const rebasedEdit = edit.tryRebase(targetDocState.editsSoFar);
 
 				if (rebasedEdit === undefined) {
@@ -697,122 +656,12 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	public handleIgnored(docId: DocumentId, suggestion: NextEditResult, supersededBy: INextEditResult | undefined): void { }
 
-	private getProjectedDocumentNoShortening(recentEdit: RootedEdit): { document: ProjectedDocument; clippedRange: LineRange } {
-		const document = new ProjectedDocument(
-			new StringTextDocument(recentEdit.base.value),
-			new StringEdit([])
-		);
-		return {
-			document,
-			clippedRange: new LineRange(1, recentEdit.base.length.lineCount + 1),
-		};
-	}
-
-	private getProjectedDocumentClipping(recentEdit: RootedEdit): { document: ProjectedDocument; clippedRange: LineRange } {
-		const t = recentEdit.base.getTransformer();
-		const range = t.getRange(recentEdit.edit.getJoinedReplaceRange() ?? new OffsetRange(0, 0) /* TODO@ulugbekna: `getRange()` returns undefined when there're no edits */);
-		const lineRange = LineRange.fromRange(range);
-
-		function extendRange(range: LineRange, extendLineCount: number): LineRange {
-			return new LineRange(range.startLineNumber - extendLineCount, range.endLineNumberExclusive + extendLineCount);
-		}
-
-		const docRange = new LineRange(1, t.textLength.lineCount + 1);
-		const clippedRange = assertDefined(docRange.intersect(extendRange(lineRange, 100)));
-
-		const partsToDelete = LineRange.subtract(docRange, clippedRange);
-
-		const document = new ProjectedDocument(
-			new StringTextDocument(recentEdit.base.value),
-			new StringEdit(partsToDelete.map(range => StringReplacement.delete(
-				t.getOffsetRange(new Range(range.startLineNumber, 1, range.endLineNumberExclusive, 1)),
-			)))
-		);
-		return {
-			document,
-			clippedRange: clippedRange,
-		};
-	}
-
-	private getDocumentShorteningStrategy() {
-		const providerDesiredStrategy = this._statelessNextEditProvider.documentShorteningStrategy;
-		return providerDesiredStrategy ?? NextEditProvider.DEFAULT_DOCUMENT_SHORTENING_STRATEGY;
-	}
-
-	private async getProjectedDocumentSummarizedDocument(languageId: LanguageId, recentEdit: RootedEdit): Promise<{ document: ProjectedDocument; clippedRange: LineRange }> {
-		const structure = await getStructure(this._parseService, {
-			getText: () => recentEdit.base.value,
-			languageId
-		});
-		if (!structure) {
-			// TODO: should we fall back here to indentation based structure?
-			return this.getProjectedDocumentClipping(recentEdit);
-		}
-		const document = new StringTextDocument(recentEdit.base.value);
-		const recentEditRange = recentEdit.edit.replacements.at(0)?.replaceRange ?? new OffsetRange(0, 0);
-
-		// take top-most edit start and bottom-most edit end as selection range
-		// 	to avoid summarizing that range:
-		// 	1) the information in that range should be important
-		// 	2) touching that range results in project/unprojection edit rebase issues
-		let wholeEditRange: vscode.Range | undefined;
-		if (recentEdit.edit.replacements.length !== 0) {
-			const topmostSingleEdit = recentEdit.edit.replacements.at(0);
-			const bottomMostSingleEdit = recentEdit.edit.replacements.at(-1);
-			wholeEditRange = document.offsetRangeToRange(new OffsetRange(topmostSingleEdit!.replaceRange.start, bottomMostSingleEdit!.replaceRange.endExclusive));
-		}
-
-		const editRange = lineRangeFromVSCodeRange(document.offsetRangeToRange(recentEditRange));
-		const result = summarizeDocumentsSyncImpl(200 * 50, {
-			costFnOverride: (node, currentCost, document) => {
-				const nodeLineRange = lineRangeFromVSCodeRange(document.offsetRangeToRange(node.range));
-				const dist = lineRangeDist(editRange, nodeLineRange);
-				if (dist > 100) { return false; }
-				return dist;
-			},
-		}, [{
-			overlayNodeRoot: structure,
-			document,
-			selection: wholeEditRange,
-		}])[0];
-
-		const originalOffset = result.projectBack(1) - 1;
-		const lineNumber = recentEdit.base.getTransformer().getPosition(originalOffset).lineNumber;
-		const clippedRange = new LineRange(lineNumber, lineNumber + result.lineCount);
-
-		return { document: result, clippedRange };
-	}
-
 	private async runSnippy(docId: DocumentId, suggestion: NextEditResult) {
 		if (suggestion.result === undefined) {
 			return;
 		}
 		this._snippyService.handlePostInsertion(docId.toUri(), suggestion.result.documentBeforeEdits, suggestion.result.edit);
 	}
-}
-
-function projectBackEdit(edit: StringEdit, document: ProjectedDocument): StringEdit {
-	const pEdit = document.projectBackOffsetEdit(edit);
-	return pEdit;
-}
-
-function lineRangeFromVSCodeRange(range: vscode.Range): LineRange {
-	return new LineRange(range.start.line + 1, range.end.line + 1);
-}
-
-function lineRangeDist(lineRange1: LineRange, lineRange2: LineRange): number {
-	if (lineRange1.endLineNumberExclusive <= lineRange2.startLineNumber) {
-		return lineRange2.startLineNumber - lineRange1.endLineNumberExclusive;
-	} else if (lineRange2.endLineNumberExclusive <= lineRange1.startLineNumber) {
-		return lineRange1.startLineNumber - lineRange2.endLineNumberExclusive;
-	}
-	return 0;
-}
-
-async function getStructure(parserService: IParserService, document: { getText: () => string; languageId: string }) {
-	const currentDocAST = parserService.getTreeSitterAST(document);
-	const structure = await currentDocAST?.getStructure();
-	return structure;
 }
 
 function assertDefined<T>(value: T | undefined): T {

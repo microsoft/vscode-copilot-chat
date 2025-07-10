@@ -4,15 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 import type tt from 'typescript/lib/tsserverlibrary';
 
-import { ContextProvider, type ComputeContextSession, type ContextComputeRunnableCollector, type RequestContext } from './contextProvider';
-import { CompletionContextKind } from './protocol';
+import { ContextProvider, type ComputeContextSession, type ContextRunnableCollector, type RequestContext } from './contextProvider';
 
 export class NullContextProvider extends ContextProvider {
 
 	constructor() {
-		super(CompletionContextKind.None);
+		super();
 	}
 
-	public provide(_result: ContextComputeRunnableCollector, _session: ComputeContextSession, _languageService: tt.LanguageService, _context: RequestContext, _token: tt.CancellationToken): void {
+	public provide(_result: ContextRunnableCollector, _session: ComputeContextSession, _languageService: tt.LanguageService, _context: RequestContext, _token: tt.CancellationToken): void {
 	}
 }

@@ -72,6 +72,7 @@ export enum KnownSources {
 	unknown = 'unknown',
 	sideCar = 'sideCar',
 	completion = 'completion',
+	populateCache = 'populateCache',
 	nes = 'nes',
 	chat = 'chat',
 	fix = 'fix'
@@ -102,6 +103,13 @@ export type RequestContext = {
 	 * A list of proposed edits that should be applied before computing the context.
 	 */
 	proposedEdits?: { edit: vscode.TextEdit; source?: 'selectedCompletionInfo' }[];
+
+	/**
+	 * If provided the telemetry will be sampled. A value of 1 will log every request, a value of
+	 * 5 will log every 5th request, a value of 10 will log every 10th request, etc. If not provided
+	 * all telemetry will be logged.
+	 */
+	sampleTelemetry?: number;
 };
 
 export interface ILanguageContextService {
@@ -112,6 +120,15 @@ export interface ILanguageContextService {
 	 * given text document or language.
 	 */
 	isActivated(documentOrLanguageId: vscode.TextDocument | string): Promise<boolean>;
+
+	/**
+	 * Populates the cache with context information for the given document and position.
+	 *
+	 * @param document The document to populate the cache for.
+	 * @param position The position in the document to populate the cache for.
+	 * @param context The context for the request.
+	 */
+	populateCache(document: vscode.TextDocument, position: vscode.Position, context: RequestContext): Promise<void>;
 
 	/**
 	 * Retrieves the context for the given document and position.
@@ -137,7 +154,7 @@ export interface ILanguageContextService {
 	 * @param context The context for the request.
 	 * @returns An array of `ContextItem` or `undefined`.
 	 */
-	getContextOnTimeout?(document: vscode.TextDocument, position: vscode.Position, context: RequestContext): readonly ContextItem[] | undefined;
+	getContextOnTimeout(document: vscode.TextDocument, position: vscode.Position, context: RequestContext): readonly ContextItem[] | undefined;
 }
 
 class EmptyAsyncIterable<T> implements AsyncIterable<T> {
@@ -147,5 +164,7 @@ class EmptyAsyncIterable<T> implements AsyncIterable<T> {
 export const NullLanguageContextService: ILanguageContextService = {
 	_serviceBrand: undefined,
 	isActivated: async () => false,
+	populateCache: async () => { },
 	getContext: () => new EmptyAsyncIterable<ContextItem>(),
+	getContextOnTimeout: () => [],
 };

@@ -2,25 +2,43 @@
 	{
 		"name": "notebooks (toolCalling) [panel] - Edit cell tool",
 		"requests": [
-			"8ba5c6db2cfbfff1996b28931ece449aef63547cd9349c00b57b46fed189d3dd"
+			"8afbb6077d47793283e22f219d8ab5344f493f9a5673bec3338e8232e22f6617"
+		]
+	},
+	{
+		"name": "notebooks (toolCalling) [panel] - New Notebook Tool with EditFile and EditNotebook",
+		"requests": [
+			"383bb541dd3774acd531c3ee6b68ff308d8b9fad6956a405636a66b20316e711"
+		]
+	},
+	{
+		"name": "notebooks (toolCalling) [panel] - New Notebook Tool without EditFile and with EditNotebook",
+		"requests": [
+			"383bb541dd3774acd531c3ee6b68ff308d8b9fad6956a405636a66b20316e711"
+		]
+	},
+	{
+		"name": "notebooks (toolCalling) [panel] - New Notebook Tool without EditFile and without EditNotebook",
+		"requests": [
+			"383bb541dd3774acd531c3ee6b68ff308d8b9fad6956a405636a66b20316e711"
 		]
 	},
 	{
 		"name": "notebooks (toolCalling) [panel] - Run cell at a specific index",
 		"requests": [
-			"e7f13de2a448608de9e87b43f4e34f39b3d586b44d13b0b270fe585aae298b97"
+			"fb0eff86e636993bca65e453d58f04e7bbd137a0c3333dd83260c5a776b1be08"
 		]
 	},
 	{
 		"name": "notebooks (toolCalling) [panel] - Run cell tool",
 		"requests": [
-			"ab5e19cd0a7d2f8b909b5283aa63ca25613a4deffe3ba865dca54f611cbedbdc"
+			"c394ccc7a2247e3e7f15f4beadc3f0509a62f8603933cdeb912ff9d3134f5256"
 		]
 	},
 	{
 		"name": "notebooks (toolCalling) [panel] - Run cell tool should avoid running markdown cells",
 		"requests": [
-			"035d5a1adde110689771c2d5ea068e00cc25e279485e04dc3f606462fa82c265"
+			"fb1bcf74c25e3118efbafc23c7a999d9e0a69378c032ad4a11f0c1890d9dc2bc"
 		]
 	}
 ]
