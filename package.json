@@ -22,7 +22,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.102.0-20250627",
+		"vscode": "^1.103.0-insider",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -128,7 +128,8 @@
 		"taskProblemMatcherStatus",
 		"contribLanguageModelToolSets",
 		"textDocumentChangeReason",
-		"resolvers"
+		"resolvers",
+		"taskExecutionTerminal"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -439,7 +440,7 @@
 				"name": "copilot_getTaskOutput",
 				"toolReferenceName": "getTaskOutput",
 				"displayName": "%copilot.tools.getTaskOutput.name%",
-				"modelDescription": "Retrieves the output of a running VS Code task.\n- Use this tool when the user is trying to understand the current project state, debug issues, or analyze task-related errors, output, or status.",
+				"modelDescription": "Retrieves the output of a VS Code task.\n- Use this tool when the user is trying to understand the current project state, debug issues, or analyze task-related errors, output, or status.",
 				"tags": [],
 				"inputSchema": {
 					"type": "object",
@@ -1986,6 +1987,12 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.debug.showContextInspectorView",
+				"title": "%github.copilot.command.showContextInspectorView%",
+				"icon": "$(inspect)",
+				"category": "Developer"
+			},
+			{
 				"command": "github.copilot.terminal.explainTerminalSelection",
 				"title": "%github.copilot.command.explainTerminalSelection%",
 				"category": "GitHub Copilot"
@@ -2749,20 +2756,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.completionContext.typescript.mode": {
-						"type": "string",
-						"scope": "resource",
-						"default": "off",
-						"enum": [
-							"off",
-							"sidecar",
-							"on"
-						],
-						"tags": [
-							"experimental"
-						],
-						"markdownDescription": "%github.copilot.chat.completionContext.typescript.mode%"
-					},
 					"github.copilot.chat.languageContext.typescript.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -3475,6 +3468,14 @@
 					"icon": "assets/debug-icon.svg",
 					"when": "github.copilot.chat.showLogView"
 				}
+			],
+			"context-inspector": [
+				{
+					"id": "context-inspector",
+					"name": "Language Context Inspector",
+					"icon": "$(inspect)",
+					"when": "github.copilot.chat.showContextInspectorView"
+				}
 			]
 		},
 		"viewsContainers": {
@@ -3483,6 +3484,11 @@
 					"id": "copilot-chat",
 					"title": "Copilot Chat Debug",
 					"icon": "assets/debug-icon.svg"
+				},
+				{
+					"id": "context-inspector",
+					"title": "Language Context Inspector",
+					"icon": "$(inspect)"
 				}
 			]
 		},

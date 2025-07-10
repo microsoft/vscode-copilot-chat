@@ -7,7 +7,8 @@ import { RequestType } from '@vscode/copilot-api';
 import { minimatch } from 'minimatch';
 import { createSha256Hash } from '../../../util/common/crypto';
 import { coalesce } from '../../../util/vs/base/common/arrays';
-import { Limiter } from '../../../util/vs/base/common/async';
+import { Limiter, raceCancellationError } from '../../../util/vs/base/common/async';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -76,7 +77,7 @@ export class RemoteContentExclusion implements IDisposable {
 		this._disposables.push(this._fileReadLimiter);
 	}
 
-	public async isIgnored(file: URI): Promise<boolean> {
+	public async isIgnored(file: URI, token: CancellationToken = CancellationToken.None): Promise<boolean> {
 		// 1. If glob is not ignored, but there is no regex we can return false as the URI will not change
 		// 2. If glob is not ignored, but there are regex we need to read file content which will happen lower in the regex code.
 		// 3. If glob is ignored, it will return true despite regex since the most restrictive exclusion takes the cake
@@ -85,11 +86,11 @@ export class RemoteContentExclusion implements IDisposable {
 		}
 		// Any pending requests that may be in flight should be awaited before returning a result
 		if (this._contentExclusionFetchPromise) {
-			await this._contentExclusionFetchPromise;
+			await raceCancellationError(this._contentExclusionFetchPromise, token);
 		}
 
 		// Open the repository to get the repo associated with the file and the fetch urls
-		const repo = await this._gitService.getRepositoryFetchUrls(file);
+		const repo = await raceCancellationError(this._gitService.getRepositoryFetchUrls(file), token);
 		let repoMetadata = this.getRepositoryInfo(repo);
 
 		// No repository is associated with this file, so we set it to the 'virtual' non-git file repo / key
@@ -103,7 +104,7 @@ export class RemoteContentExclusion implements IDisposable {
 		// We're missing entries for this repository in the cache, so we fetch it.
 		// Or it has been more than 30 minutes so the current rules are stale
 		if (this.shouldFetchContentExclusionRules(repoMetadata) || (Date.now() - this._lastRuleFetch > 30 * 60 * 1000)) {
-			await this.makeContentExclusionRequest();
+			await raceCancellationError(this.makeContentExclusionRequest(), token);
 		}
 
 		const minimatchConfig = {

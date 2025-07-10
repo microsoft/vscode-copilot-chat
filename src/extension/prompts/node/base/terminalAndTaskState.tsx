@@ -24,12 +24,12 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 		super(props);
 	}
 	async render() {
-		const runningTasks: { name: string; isBackground: boolean; type?: string; command?: string; problemMatcher?: string; group?: { isDefault?: boolean; kind?: string }; script?: string; dependsOn?: string }[] = [];
-		const running = this.tasksService.getTasks();
-		const tasks = Array.isArray(running?.[0]?.[1]) ? running[0][1].filter(t => this.tasksService.isTaskActive(t)) : [];
-		for (const exec of tasks) {
+		const resultTasks: { name: string; isBackground: boolean; type?: string; command?: string; problemMatcher?: string; group?: { isDefault?: boolean; kind?: string }; script?: string; dependsOn?: string; isActive?: boolean }[] = [];
+		const allTasks = this.tasksService.getTasks()?.[0]?.[1] ?? [];
+		const tasks = Array.isArray(allTasks) ? allTasks : [];
+		for (const exec of tasks.filter(t => this.tasksService.getTerminalForTask(t))) {
 			if (exec.label) {
-				runningTasks.push({
+				resultTasks.push({
 					name: exec.label,
 					isBackground: exec.isBackground,
 					type: exec?.type,
@@ -38,6 +38,7 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 					problemMatcher: Array.isArray(exec.problemMatcher) && exec.problemMatcher.length > 0 ? exec.problemMatcher.join(', ') : '',
 					group: exec.group,
 					dependsOn: exec.dependsOn,
+					isActive: this.tasksService.isTaskActive(exec),
 				});
 			}
 		}
@@ -54,16 +55,17 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 			});
 
 			if (terminals.length === 0 && tasks.length === 0) {
-				return 'No active tasks or Copilot terminals found.';
+				return 'No tasks or Copilot terminals found.';
 			}
 
 			const renderTasks = () =>
-				runningTasks.length > 0 && (
+				resultTasks.length > 0 && (
 					<>
-						Active Tasks:<br />
-						{runningTasks.map((t) => (
+						Tasks:<br />
+						{resultTasks.map((t) => (
 							<>
-								Task: {t.name} (background: {String(t.isBackground)}
+								Task: {t.name} ({t.isBackground && `is background: ${String(t.isBackground)}`}
+								{t.isActive ? ', is running' : 'is inactive'}
 								{t.type ? `, type: ${t.type}` : ''}
 								{t.command ? `, command: ${t.command}` : ''}
 								{t.script ? `, script: ${t.script}` : ''}
@@ -98,7 +100,7 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 
 			return (
 				<>
-					{tasks.length > 0 ? renderTasks() : 'Tasks: No active tasks found.'}
+					{tasks.length > 0 ? renderTasks() : 'Tasks: No tasks found.'}
 					{terminals.length > 0 ? renderTerminals() : 'Copilot Terminals: No active Copilot terminals found.'}
 				</>
 			);
