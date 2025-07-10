@@ -9,7 +9,7 @@ const ts = TS();
 import { FunctionLikeContextProvider, FunctionLikeContextRunnable } from './baseContextProviders';
 import { CodeSnippetBuilder } from './code';
 import {
-	AbstractContextRunnable, ComputeCost, ContextResult, RecoverableError, Search, type ComputeContextSession, type ContextRunnableCollector, type ProviderComputeContext, type RequestContext,
+	AbstractContextRunnable, ComputeCost, ContextResult, RecoverableError, RunnableResultContext, Search, type ComputeContextSession, type ContextRunnableCollector, type ProviderComputeContext, type RequestContext,
 	type RunnableResult
 } from './contextProvider';
 import { EmitMode, Priorities, SpeculativeKind, type CacheInfo } from './protocol';
@@ -435,7 +435,7 @@ abstract class SimilarPropertyRunnable<T extends tt.MethodDeclaration | tt.Const
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const scope = this.getCacheScope();
 		const cacheInfo: CacheInfo | undefined = scope !== undefined ? { emitMode: EmitMode.ClientBased, scope } : undefined;
-		return result.createRunnableResult(this.id, SpeculativeKind.emit, cacheInfo);
+		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, cacheInfo);
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {
@@ -516,7 +516,7 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheInfo: CacheInfo | undefined = { emitMode: EmitMode.ClientBased, scope: this.createCacheScope(this.declaration) };
-		return result.createRunnableResult(this.id, SpeculativeKind.emit, cacheInfo);
+		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, cacheInfo);
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {

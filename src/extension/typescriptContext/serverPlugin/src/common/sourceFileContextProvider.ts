@@ -8,7 +8,7 @@ const ts = TS();
 
 import { ImportsRunnable, TypeOfExpressionRunnable, TypeOfLocalsRunnable, TypesOfNeighborFilesRunnable } from './baseContextProviders';
 import { CodeSnippetBuilder } from './code';
-import { AbstractContextRunnable, ComputeCost, ContextProvider, ContextResult, type ComputeContextSession, type ContextRunnableCollector, type ProviderComputeContext, type RequestContext, type RunnableResult } from './contextProvider';
+import { AbstractContextRunnable, ComputeCost, ContextProvider, ContextResult, RunnableResultContext, type ComputeContextSession, type ContextRunnableCollector, type ProviderComputeContext, type RequestContext, type RunnableResult } from './contextProvider';
 import { CacheScopeKind, EmitMode, Priorities, SpeculativeKind } from './protocol';
 import tss, { type TokenInfo } from './typescripts';
 
@@ -31,7 +31,7 @@ export class GlobalsRunnable extends AbstractContextRunnable {
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
-		return result.createRunnableResult(this.id, SpeculativeKind.emit, { emitMode: EmitMode.ClientBased, scope: { kind: CacheScopeKind.File } });
+		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, { emitMode: EmitMode.ClientBased, scope: { kind: CacheScopeKind.File } });
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {

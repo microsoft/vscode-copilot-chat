@@ -7,7 +7,7 @@ import TS from './typescript';
 const ts = TS();
 
 import { CodeSnippetBuilder } from './code';
-import { AbstractContextRunnable, ComputeCost, ContextProvider, ContextResult, Search, type ComputeContextSession, type ContextRunnableCollector, type RequestContext, type RunnableResult } from './contextProvider';
+import { AbstractContextRunnable, ComputeCost, ContextProvider, ContextResult, RunnableResultContext, Search, type ComputeContextSession, type ContextRunnableCollector, type RequestContext, type RunnableResult } from './contextProvider';
 import { EmitMode, Priorities, SpeculativeKind } from './protocol';
 import tss, { ClassDeclarations, ReferencedByVisitor, Symbols } from './typescripts';
 
@@ -270,7 +270,7 @@ export class SuperClassRunnable extends AbstractContextRunnable {
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheScope = this.createCacheScope(this.classDeclaration.members, this.classDeclaration.getSourceFile());
-		return result.createRunnableResult(this.id, SpeculativeKind.emit, { emitMode: EmitMode.ClientBased, scope: cacheScope });
+		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, { emitMode: EmitMode.ClientBased, scope: cacheScope });
 	}
 
 	protected override run(result: RunnableResult, _token: tt.CancellationToken): void {
@@ -304,7 +304,7 @@ class SimilarClassRunnable extends AbstractContextRunnable {
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
-		return result.createRunnableResult(this.id, SpeculativeKind.emit);
+		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit);
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {

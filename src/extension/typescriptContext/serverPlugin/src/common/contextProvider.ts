@@ -479,8 +479,8 @@ export class RunnableResult {
 
 	public readonly items: ContextItem[];
 
-	constructor(id: string, tokenBudget: TokenBudget, context: RunnableResultContext, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined) {
-		this.id = id;
+	constructor(context: RunnableResultContext, tokenBudget: TokenBudget, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined) {
+		this.id = context.getId();
 		this.tokenBudget = tokenBudget;
 		this.context = context;
 		this.state = ContextRunnableState.Created;
@@ -598,13 +598,38 @@ class RunnableResultReference {
 	}
 }
 
-export interface RunnableResultContext {
-	createContextItemReference(key: ContextItemKey): ContextItemReference | undefined;
-	manageContextItem(item: FullContextItem): ContextItem;
-	getSession(): ComputeContextSession;
+export class RunnableResultContext {
+
+	public readonly contextResult: ContextResult;
+	public readonly runnable: AbstractContextRunnable;
+
+	constructor(contextResult: ContextResult, runnable: AbstractContextRunnable) {
+		this.contextResult = contextResult;
+		this.runnable = runnable;
+	}
+
+	public createContextItemReference(key: ContextItemKey): ContextItemReference | undefined {
+		return this.contextResult.createContextItemReference(key);
+	}
+
+	public manageContextItem(item: FullContextItem): ContextItem {
+		return this.contextResult.manageContextItem(item);
+	}
+
+	public getSession(): ComputeContextSession {
+		return this.runnable.session;
+	}
+
+	public getSymbols(): Symbols {
+		return this.runnable.symbols;
+	}
+
+	public getId(): ContextRunnableResultId {
+		return this.runnable.id;
+	}
 }
 
-export class ContextResult implements RunnableResultContext {
+export class ContextResult {
 
 	public readonly tokenBudget: TokenBudget;
 	public readonly context: RequestContext;
@@ -649,9 +674,9 @@ export class ContextResult implements RunnableResultContext {
 		this.timedOut = timedOut;
 	}
 
-	public createRunnableResult(id: string, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined): RunnableResult {
+	public createRunnableResult(context: RunnableResultContext, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined): RunnableResult {
 		this.state = ContextRequestResultState.InProgress;
-		const result = new RunnableResult(id, this.tokenBudget, this, speculativeKind, cache);
+		const result = new RunnableResult(context, this.tokenBudget, speculativeKind, cache);
 		this.runnableResults.push(result);
 		return result;
 	}
@@ -848,19 +873,19 @@ class CacheBasedContextRunnable implements ContextRunnable {
 
 export abstract class AbstractContextRunnable implements ContextRunnable {
 
-	protected readonly session: ComputeContextSession;
-	protected readonly languageService: tt.LanguageService;
-	private readonly program: tt.Program | undefined;
-	protected readonly context: RequestContext;
-	protected readonly symbols: Symbols;
+	public readonly session: ComputeContextSession;
+	public readonly symbols: Symbols;
 
 	public readonly id: ContextRunnableResultId;
 	public readonly priority: number;
 	public readonly cost: ComputeCost;
 
+	protected readonly languageService: tt.LanguageService;
+	protected readonly context: RequestContext;
+	private readonly program: tt.Program | undefined;
 	private result: RunnableResult | undefined;
 
-	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, id: string, priority: number, cost: ComputeCost) {
+	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, id: ContextRunnableResultId, priority: number, cost: ComputeCost) {
 		this.session = session;
 		this.languageService = languageService;
 		this.program = languageService.getProgram();
@@ -870,6 +895,7 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 		this.priority = priority;
 		this.cost = cost;
 	}
+
 
 	public initialize(result: ContextResult): void {
 		if (this.result !== undefined) {

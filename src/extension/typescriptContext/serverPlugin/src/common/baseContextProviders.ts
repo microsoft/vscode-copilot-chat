@@ -8,7 +8,7 @@ const ts = TS();
 
 import { CodeSnippetBuilder } from './code';
 import {
-	AbstractContextRunnable, CacheScopes, ComputeCost, ContextProvider, type ComputeContextSession,
+	AbstractContextRunnable, CacheScopes, ComputeCost, ContextProvider, RunnableResultContext, type ComputeContextSession,
 	type ContextResult,
 	type ContextRunnableCollector,
 	type ProviderComputeContext, type RequestContext, type RunnableResult, type SymbolEmitData
@@ -40,7 +40,7 @@ export class CompilerOptionsRunnable extends AbstractContextRunnable {
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheInfo: CacheInfo = { emitMode: EmitMode.ClientBased, scope: { kind: CacheScopeKind.File } };
-		return result.createRunnableResult(this.id, SpeculativeKind.emit, cacheInfo);
+		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, cacheInfo);
 	}
 
 	protected override run(result: RunnableResult, _token: tt.CancellationToken): void {
@@ -100,7 +100,7 @@ export class SignatureRunnable extends FunctionLikeContextRunnable {
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const scope = this.getCacheScope();
 		const cacheInfo: CacheInfo | undefined = scope !== undefined ? { emitMode: EmitMode.ClientBased, scope } : undefined;
-		return result.createRunnableResult(this.id, SpeculativeKind.emit, cacheInfo);
+		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, cacheInfo);
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {
@@ -175,7 +175,7 @@ export class TypeOfLocalsRunnable extends AbstractContextRunnable {
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheInfo: CacheInfo | undefined = this.cacheScope !== undefined ? { emitMode: EmitMode.ClientBasedOnTimeout, scope: this.cacheScope } : undefined;
-		this.runnableResult = result.createRunnableResult(this.id, SpeculativeKind.emit, cacheInfo);
+		this.runnableResult = result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, cacheInfo);
 		return this.runnableResult;
 	}
 
@@ -251,7 +251,7 @@ export class TypesOfNeighborFilesRunnable extends AbstractContextRunnable {
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheInfo: CacheInfo = { emitMode: EmitMode.ClientBased, scope: { kind: CacheScopeKind.NeighborFiles } };
-		return result.createRunnableResult(this.id, SpeculativeKind.emit, cacheInfo);
+		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, cacheInfo);
 	}
 
 	protected override run(result: RunnableResult, cancellationToken: tt.CancellationToken): void {
@@ -343,7 +343,7 @@ export class ImportsRunnable extends AbstractContextRunnable {
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
-		this.runnableResult = result.createRunnableResult(this.id, SpeculativeKind.emit, this.cacheInfo);
+		this.runnableResult = result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, this.cacheInfo);
 		return this.runnableResult;
 	}
 
@@ -512,7 +512,7 @@ export class TypeOfExpressionRunnable extends AbstractContextRunnable {
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
-		return result.createRunnableResult(this.id, SpeculativeKind.ignore);
+		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.ignore);
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {
