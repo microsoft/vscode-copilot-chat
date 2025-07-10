@@ -30,6 +30,10 @@ export class GlobalsRunnable extends AbstractContextRunnable {
 		this.tokenInfo = tokenInfo;
 	}
 
+	public override getActiveSourceFile(): tt.SourceFile {
+		return this.tokenInfo.token.getSourceFile();
+	}
+
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, { emitMode: EmitMode.ClientBased, scope: { kind: CacheScopeKind.File } });
 	}

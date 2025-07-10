@@ -517,10 +517,10 @@ export class RunnableResult {
 		return true;
 	}
 
-	public addSymbol(symbol: tt.Symbol, priority: number): void;
-	public addSymbol(symbol: tt.Symbol, priority: number, ifRoom: false): void;
-	public addSymbol(symbol: tt.Symbol, priority: number, ifRoom: true): boolean;
-	public addSymbol(symbol: tt.Symbol, priority: number, ifRoom: boolean = false): boolean {
+	public addSymbol(symbol: tt.Symbol, name: string | undefined, priority: number): void;
+	public addSymbol(symbol: tt.Symbol, name: string | undefined, priority: number, ifRoom: false): void;
+	public addSymbol(symbol: tt.Symbol, name: string | undefined, priority: number, ifRoom: true): boolean;
+	public addSymbol(symbol: tt.Symbol, name: string | undefined, priority: number, ifRoom: boolean = false): boolean {
 		this.state = ContextRunnableState.InProgress;
 
 		const key = Symbols.createKey(symbol, this.context.getSession().host);
@@ -528,10 +528,8 @@ export class RunnableResult {
 			return true;
 		}
 
-		const snippetBuilder = new CodeSnippetBuilder(this.context.getSession(), this.symbols, this.sourceFile);
-
-		snippetBuilder.addTypeSymbol(symbol, symbolEmitData.name);
-
+		const snippetBuilder = new CodeSnippetBuilder(this.context.getSession(), this.context.getSymbols(), this.context.getActiveSourceFile());
+		snippetBuilder.addTypeSymbol(symbol, name);
 		return this.addSnippet(snippetBuilder, key, priority, ifRoom);
 	}
 
@@ -626,6 +624,10 @@ export class RunnableResultContext {
 
 	public getId(): ContextRunnableResultId {
 		return this.runnable.id;
+	}
+
+	public getActiveSourceFile(): tt.SourceFile {
+		return this.runnable.getActiveSourceFile();
 	}
 }
 
@@ -928,13 +930,7 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 		this.result.done();
 	}
 
-	public addExtraSnipper(snippet: CodeSnippetBuilder, key: string | undefined): void {
-		if (this.result === undefined || snippet.isEmpty()) {
-			return;
-		}
-
-		this.result!.addSnippet(snippet, key, this.priority);
-	}
+	public abstract getActiveSourceFile(): tt.SourceFile;
 
 	protected abstract createRunnableResult(result: ContextResult): RunnableResult;
 

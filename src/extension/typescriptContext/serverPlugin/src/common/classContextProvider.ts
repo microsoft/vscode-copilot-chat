@@ -268,6 +268,10 @@ export class SuperClassRunnable extends AbstractContextRunnable {
 		this.classDeclaration = classDeclaration;
 	}
 
+	public override getActiveSourceFile(): tt.SourceFile {
+		return this.classDeclaration.getSourceFile();
+	}
+
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheScope = this.createCacheScope(this.classDeclaration.members, this.classDeclaration.getSourceFile());
 		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, { emitMode: EmitMode.ClientBased, scope: cacheScope });
@@ -301,6 +305,10 @@ class SimilarClassRunnable extends AbstractContextRunnable {
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, classDeclaration: tt.ClassDeclaration, priority: number = Priorities.Blueprints) {
 		super(session, languageService, context, SimilarClassRunnable.name, priority, ComputeCost.High);
 		this.classDeclaration = classDeclaration;
+	}
+
+	public override getActiveSourceFile(): tt.SourceFile {
+		return this.classDeclaration.getSourceFile();
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {

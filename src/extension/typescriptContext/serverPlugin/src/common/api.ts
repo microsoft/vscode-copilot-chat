@@ -87,7 +87,7 @@ class ContextProviders {
 
 	private getContextRunnables(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, token: tt.CancellationToken): ContextRunnableCollector {
 		const result: ContextRunnableCollector = new ContextRunnableCollector(context.clientSideRunnableResults);
-		result.addPrimary(new CompilerOptionsRunnable(session, languageService, context));
+		result.addPrimary(new CompilerOptionsRunnable(session, languageService, context, this.tokenInfo.token.getSourceFile()));
 		const providers = this.computeProviders();
 		for (const provider of providers) {
 			provider.provide(result, session, languageService, context, token);

@@ -34,10 +34,16 @@ export class CompilerOptionsRunnable extends AbstractContextRunnable {
 		[TraitKind.Lib, 'Library files that should be included in TypeScript compilation are ', Priorities.Traits, Trait.createContextItemKey(TraitKind.Lib), undefined],
 	];
 
-	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext) {
+	private readonly sourceFile: tt.SourceFile;
+
+	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, sourceFile: tt.SourceFile) {
 		super(session, languageService, context, CompilerOptionsRunnable.name, Priorities.Traits, ComputeCost.Low);
+		this.sourceFile = sourceFile;
 	}
 
+	public override getActiveSourceFile(): tt.SourceFile {
+		return this.sourceFile;
+	}
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheInfo: CacheInfo = { emitMode: EmitMode.ClientBased, scope: { kind: CacheScopeKind.File } };
 		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, cacheInfo);
@@ -81,7 +87,9 @@ export abstract class FunctionLikeContextRunnable<T extends tt.FunctionLikeDecla
 		this.sourceFile = declaration.getSourceFile();
 	}
 
-
+	public override getActiveSourceFile(): tt.SourceFile {
+		return this.sourceFile;
+	}
 	protected getCacheScope(): CacheScope | undefined {
 		const body = this.declaration.body;
 		if (body === undefined || !ts.isBlock(body)) {
@@ -164,13 +172,16 @@ export class TypeOfLocalsRunnable extends AbstractContextRunnable {
 	private readonly cacheScope: CacheScope | undefined;
 	private runnableResult: RunnableResult | undefined;
 
-
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: tss.TokenInfo, excludes: Set<tt.Symbol>, cacheScope: CacheScope | undefined, priority: number = Priorities.Locals) {
 		super(session, languageService, context, TypeOfLocalsRunnable.name, priority, ComputeCost.Medium);
 		this.tokenInfo = tokenInfo;
 		this.excludes = excludes;
 		this.cacheScope = cacheScope;
 		this.runnableResult = undefined;
+	}
+
+	public override getActiveSourceFile(): tt.SourceFile {
+		return this.tokenInfo.token.getSourceFile();
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
@@ -249,6 +260,10 @@ export class TypesOfNeighborFilesRunnable extends AbstractContextRunnable {
 		this.tokenInfo = tokenInfo;
 	}
 
+	public override getActiveSourceFile(): tt.SourceFile {
+		return this.tokenInfo.token.getSourceFile();
+	}
+
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheInfo: CacheInfo = { emitMode: EmitMode.ClientBased, scope: { kind: CacheScopeKind.NeighborFiles } };
 		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, cacheInfo);
@@ -322,6 +337,10 @@ export class ImportsRunnable extends AbstractContextRunnable {
 		this.cacheInfo = scopeNode === undefined
 			? undefined
 			: { emitMode: EmitMode.ClientBased, scope: this.createCacheScope(scopeNode) };
+	}
+
+	public override getActiveSourceFile(): tt.SourceFile {
+		return this.tokenInfo.token.getSourceFile();
 	}
 
 	public override useCachedResult(cached: CachedContextRunnableResult): boolean {
@@ -476,6 +495,10 @@ export class TypeOfExpressionRunnable extends AbstractContextRunnable {
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, expression: tt.Expression, priority: number = Priorities.Locals) {
 		super(session, languageService, context, TypeOfExpressionRunnable.name, priority, ComputeCost.Low);
 		this.expression = expression;
+	}
+
+	public override getActiveSourceFile(): tt.SourceFile {
+		return this.expression.getSourceFile();
 	}
 
 	public static create(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: tss.TokenInfo, _token: tt.CancellationToken): TypeOfExpressionRunnable | undefined {

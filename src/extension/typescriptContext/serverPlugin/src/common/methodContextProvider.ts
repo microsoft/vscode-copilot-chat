@@ -514,6 +514,10 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 		this.declaration = declaration;
 	}
 
+	public override getActiveSourceFile(): tt.SourceFile {
+		return this.declaration.getSourceFile();
+	}
+
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheInfo: CacheInfo | undefined = { emitMode: EmitMode.ClientBased, scope: this.createCacheScope(this.declaration) };
 		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, cacheInfo);
