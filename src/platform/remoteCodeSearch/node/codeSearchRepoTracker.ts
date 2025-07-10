@@ -456,7 +456,7 @@ export class CodeSearchRepoTracker extends Disposable {
 			if (remoteInfos.length) {
 				const primaryRemote = remoteInfos[0];
 				const remoteHost = primaryRemote.fetchUrl ? parseRemoteUrl(primaryRemote.fetchUrl) : undefined;
-				remoteTelemetryType = remoteHost ? getRemoteTypeForTelemetry(remoteHost.host) : GitRemoteTypeForTelemetry.Github;
+				remoteTelemetryType = remoteHost ? getRemoteTypeForTelemetry(remoteHost.host) : GitRemoteTypeForTelemetry.Unknown;
 			} else {
 				const allRemotes = Array.from(getOrderedRemoteUrlsFromContext(repo));
 				if (allRemotes.length === 0) {
