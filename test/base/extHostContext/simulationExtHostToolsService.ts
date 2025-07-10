@@ -9,6 +9,7 @@ import type { CancellationToken, ChatRequest, LanguageModelTool, LanguageModelTo
 import { getToolName, ToolName } from '../../../src/extension/tools/common/toolNames';
 import { ICopilotTool } from '../../../src/extension/tools/common/toolsRegistry';
 import { BaseToolsService, IToolsService } from '../../../src/extension/tools/common/toolsService';
+import { McpToolsService } from '../../../src/extension/tools/vscode-node/mcpToolsService';
 import { ToolsContribution } from '../../../src/extension/tools/vscode-node/tools';
 import { ToolsService } from '../../../src/extension/tools/vscode-node/toolsService';
 import { packageJson } from '../../../src/platform/env/common/packagejson';
@@ -24,8 +25,10 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 	declare readonly _serviceBrand: undefined;
 
 	private readonly _inner: IToolsService;
+	private readonly _mcpToolService: IToolsService;
 	private readonly _overrides = new Map<ToolName | string, { info: LanguageModelToolInformation; tool: ICopilotTool<any> }>();
 	private _lmToolRegistration?: ToolsContribution;
+	private counter: number;
 
 	override get onWillInvokeTool() {
 		return this._inner.onWillInvokeTool;
@@ -36,6 +39,7 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 		return [
 			...this._inner.tools.filter(t => !this._disabledTools.has(t.name) && !this._overrides.has(t.name)),
 			...Iterable.map(this._overrides.values(), i => i.info),
+			...this._mcpToolService.tools.filter(t => !this._disabledTools.has(t.name) && !this._overrides.has(t.name)),
 		];
 	}
 
@@ -57,9 +61,11 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 	) {
 		super(logService);
 		this._inner = instantiationService.createInstance(ToolsService);
+		this._mcpToolService = instantiationService.createInstance(McpToolsService);
 
 		// register the contribution so that our tools are on vscode.lm.tools
 		setImmediate(() => this.ensureToolsRegistered());
+		this.counter = 0;
 	}
 
 	private ensureToolsRegistered() {
@@ -67,7 +73,7 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 	}
 
 	getCopilotTool(name: string): ICopilotTool<any> | undefined {
-		return this._disabledTools.has(name) ? undefined : (this._overrides.get(name)?.tool || this._inner.getCopilotTool(name));
+		return this._disabledTools.has(name) ? undefined : (this._overrides.get(name)?.tool || this._inner.getCopilotTool(name) || this._mcpToolService.getCopilotTool(name));
 	}
 
 	async invokeTool(name: string, options: LanguageModelToolInvocationOptions<unknown>, token: CancellationToken): Promise<LanguageModelToolResult> {
@@ -87,9 +93,21 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 				return result;
 			}
 
-			const r = await raceTimeout(Promise.resolve(this._inner.invokeTool(name, options, token)), 60_000);
+			const mcpTool = this._mcpToolService.getTool(name);
+			if (mcpTool) {
+				const result = await this._mcpToolService.invokeTool(name, options, token);
+				if (!result) {
+					throw new CancellationError();
+				}
+
+				return result;
+			}
+
+			const invokeToolTimeout = process.env.SIMULATION_INVOKE_TOOL_TIMEOUT || 60_000;
+			logger.debug('SimulationExtHostToolsService.invokeToolTimeout', invokeToolTimeout);
+			const r = await raceTimeout(Promise.resolve(this._inner.invokeTool(name, options, token)), <number>invokeToolTimeout);
 			if (!r) {
-				throw new Error(`Tool call timed out after 60 seconds`);
+				throw new Error(`Tool call timed out after ${invokeToolTimeout} minutes`);
 			}
 			return r;
 		} catch (e) {
@@ -101,7 +119,7 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 	}
 
 	getTool(name: string): LanguageModelToolInformation | undefined {
-		return this._disabledTools.has(name) ? undefined : (this._overrides.get(name)?.info || this._inner.getTool(name));
+		return this._disabledTools.has(name) ? undefined : (this._overrides.get(name)?.info || this._inner.getTool(name) || this._mcpToolService.getTool(name));
 	}
 
 	getToolByToolReferenceName(toolReferenceName: string): LanguageModelToolInformation | undefined {
@@ -120,7 +138,19 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 
 	getEnabledTools(request: ChatRequest, filter?: (tool: LanguageModelToolInformation) => boolean | undefined): LanguageModelToolInformation[] {
 		const packageJsonTools = getPackagejsonToolsForTest();
-		return this.tools.filter(tool => filter?.(tool) ?? (!this._disabledTools.has(getToolName(tool.name)) && packageJsonTools.has(tool.name)));
+		const tools = this.tools.filter(tool => filter?.(tool) ?? (!this._disabledTools.has(getToolName(tool.name)) && packageJsonTools.has(tool.name)));
+		const mcpTools = this._mcpToolService.tools.filter(tool => filter?.(tool) ?? (!this._disabledTools.has(getToolName(tool.name))));
+		const result = [
+			...tools,
+			...mcpTools
+		];
+		if (this.counter === 0) {
+			result.forEach(tool => {
+				logger.debug('SimulationExtHostToolsService.getEnabledTool', tool.name, JSON.stringify(tool));
+			});
+			this.counter += 1;
+		}
+		return result;
 	}
 
 	addTestToolOverride(info: LanguageModelToolInformation, tool: LanguageModelTool<unknown>): void {

@@ -347,7 +347,7 @@ export function addHistoryToConversation(accessor: ServicesAccessor, history: Re
 			}
 
 			const copilotResult = entry.result as ICopilotChatResultIn;
-			if (typeof copilotResult.metadata?.sessionId === 'string') {
+			if (typeof copilotResult?.metadata?.sessionId === 'string') {
 				sessionId = copilotResult.metadata.sessionId;
 			}
 		}
