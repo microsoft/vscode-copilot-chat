@@ -31,7 +31,7 @@ export class GlobalsRunnable extends AbstractContextRunnable {
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
-		return result.createRunnableResult(this.id, { emitMode: EmitMode.ClientBased, scope: { kind: CacheScopeKind.File } });
+		return result.createRunnableResult(this.id, SpeculativeKind.emit, { emitMode: EmitMode.ClientBased, scope: { kind: CacheScopeKind.File } });
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {
@@ -44,13 +44,13 @@ export class GlobalsRunnable extends AbstractContextRunnable {
 		// Add functions in scope
 		for (const symbol of inScope) {
 			token.throwIfCancellationRequested();
-			const [handled, key] = this.handleSymbolIfKnown(result, symbol);
+			const [handled, key] = this.handleSymbolIfKnown(symbol);
 			if (handled) {
 				continue;
 			}
 			const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile);
 			snippetBuilder.addTypeSymbol(symbol);
-			if (!result.addSnippet(snippetBuilder, key, this.priority, SpeculativeKind.emit, true)) {
+			if (!result.addSnippet(snippetBuilder, key, this.priority, true)) {
 				break;
 			}
 		}

@@ -270,7 +270,7 @@ export class SuperClassRunnable extends AbstractContextRunnable {
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheScope = this.createCacheScope(this.classDeclaration.members, this.classDeclaration.getSourceFile());
-		return result.createRunnableResult(this.id, { emitMode: EmitMode.ClientBased, scope: cacheScope });
+		return result.createRunnableResult(this.id, SpeculativeKind.emit, { emitMode: EmitMode.ClientBased, scope: cacheScope });
 	}
 
 	protected override run(result: RunnableResult, _token: tt.CancellationToken): void {
@@ -282,14 +282,14 @@ export class SuperClassRunnable extends AbstractContextRunnable {
 
 		const [extendsClass, extendsName] = symbols.getExtendsSymbol(clazz);
 		if (extendsClass !== undefined && extendsName !== undefined) {
-			const [handled, key] = this.handleSymbolIfKnown(result, extendsClass);
+			const [handled, key] = this.handleSymbolIfKnown(extendsClass);
 			if (handled) {
 				return;
 			}
 			const sourceFile = this.classDeclaration.getSourceFile();
 			const snippetBuilder: CodeSnippetBuilder = new CodeSnippetBuilder(this.session, symbols, sourceFile);
 			snippetBuilder.addClassSymbol(extendsClass, extendsName, true, false);
-			result.addSnippet(snippetBuilder, key, this.priority, SpeculativeKind.emit);
+			result.addSnippet(snippetBuilder, key, this.priority);
 		}
 	}
 }
@@ -304,7 +304,7 @@ class SimilarClassRunnable extends AbstractContextRunnable {
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
-		return result.createRunnableResult(this.id);
+		return result.createRunnableResult(this.id, SpeculativeKind.emit);
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {
@@ -324,7 +324,7 @@ class SimilarClassRunnable extends AbstractContextRunnable {
 		}
 		const code = new CodeSnippetBuilder(this.session, this.context.getSymbols(foundInProgram), classDeclaration.getSourceFile());
 		code.addDeclaration(similarClass.declaration);
-		result.addSnippet(code, undefined, this.priority, SpeculativeKind.emit);
+		result.addSnippet(code, undefined, this.priority);
 	}
 }
 

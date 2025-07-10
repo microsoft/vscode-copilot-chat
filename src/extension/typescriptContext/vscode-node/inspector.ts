@@ -395,6 +395,8 @@ class TreeContextRequest {
 		this.label = `${label} - ${timeString} - [${this.position.line + 1}:${this.position.character + 1}]`;
 		if (this.summary.serverComputed && this.summary.serverComputed.size > 0) {
 			this.label += ` - ⏳ ${this.summary.totalTime}ms`;
+		} else {
+			this.label += ` - ${this.summary.totalTime}ms`;
 		}
 	}
 

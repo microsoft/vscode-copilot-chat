@@ -7,7 +7,7 @@ import TS from './typescript';
 const ts = TS();
 
 import { ProgramContext, RecoverableError, type ComputeContextSession, type SnippetProvider } from './contextProvider';
-import { CodeSnippet, type SpeculativeKind } from './protocol';
+import { CodeSnippet } from './protocol';
 import { Symbols } from './typescripts';
 
 namespace Nodes {
@@ -513,6 +513,18 @@ class TypeLiteralEmitter extends TypeEmitter {
 	}
 }
 
+class TypeAliasEmitter extends TypeEmitter {
+
+	public readonly key: string | undefined;
+
+	constructor(session: ComputeContextSession, source: tt.SourceFile, type: tt.Symbol, name: string) {
+		super(session, source, type, name);
+	}
+
+	public emit(): void {
+	}
+}
+
 class FunctionEmitter extends AbstractEmitter {
 
 	private readonly func: tt.Symbol;
@@ -595,6 +607,10 @@ class ModuleEmitter extends AbstractEmitter {
 	}
 }
 
+interface SnippetCollector {
+	handleSymbol(symbol: tt.Symbol): void;
+}
+
 export class CodeSnippetBuilder extends ProgramContext implements SnippetProvider {
 
 	private readonly lines: string[];
@@ -605,8 +621,9 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 	private readonly session: ComputeContextSession;
 	private readonly symbols: Symbols;
 	private readonly currentSourceFile: tt.SourceFile;
+	private readonly snippetCollector?: SnippetCollector;
 
-	constructor(session: ComputeContextSession, symbols: Symbols, currentSourceFile: tt.SourceFile) {
+	constructor(session: ComputeContextSession, symbols: Symbols, currentSourceFile: tt.SourceFile, snippetCollector?: SnippetCollector) {
 		super();
 		this.lines = [];
 		this.source = undefined;
@@ -614,6 +631,7 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 		this.session = session;
 		this.symbols = symbols;
 		this.currentSourceFile = currentSourceFile;
+		this.snippetCollector = snippetCollector;
 	}
 
 	protected override getSymbolInfo(symbol: tt.Symbol): { skip: true } | { skip: false; primary: tt.SourceFile } {
@@ -658,12 +676,12 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 		return this.lines.length === 0 || this.source === undefined;
 	}
 
-	public snippet(key: string | undefined, priority: number, speculativeKind: SpeculativeKind): CodeSnippet {
+	public snippet(key: string | undefined, priority: number): CodeSnippet {
 		if (this.source === undefined) {
 			throw new RecoverableError('No source', RecoverableError.NoSourceFile);
 		}
 		this.additionalSources.delete(this.source);
-		return CodeSnippet.create(key, this.source, this.additionalSources.size === 0 ? undefined : [...this.additionalSources], this.lines.join('\n'), priority, speculativeKind);
+		return CodeSnippet.create(key, this.source, this.additionalSources.size === 0 ? undefined : [...this.additionalSources], this.lines.join('\n'), priority);
 	}
 
 	public addDeclaration(declaration: tt.Declaration): void {
@@ -838,7 +856,7 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 					}
 				} else if (ts.isTypeReferenceNode(type)) {
 					const symbol = this.symbols.getLeafSymbolAtLocation(type.typeName);
-					if (Symbols.isInterface(symbol) || Symbols.isTypeLiteral(symbol) || Symbols.isTypeLiteral(symbol)) {
+					if (Symbols.isInterface(symbol) || Symbols.isClass(symbol) || Symbols.isTypeLiteral(symbol)) {
 						return symbol;
 					}
 				}

@@ -435,7 +435,7 @@ abstract class SimilarPropertyRunnable<T extends tt.MethodDeclaration | tt.Const
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const scope = this.getCacheScope();
 		const cacheInfo: CacheInfo | undefined = scope !== undefined ? { emitMode: EmitMode.ClientBased, scope } : undefined;
-		return result.createRunnableResult(this.id, cacheInfo);
+		return result.createRunnableResult(this.id, SpeculativeKind.emit, cacheInfo);
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {
@@ -450,7 +450,7 @@ abstract class SimilarPropertyRunnable<T extends tt.MethodDeclaration | tt.Const
 				const sourceFile = this.declaration.getSourceFile();
 				const snippetBuilder = new CodeSnippetBuilder(this.session, this.context.getSymbols(program), sourceFile);
 				snippetBuilder.addDeclaration(candidate);
-				result.addSnippet(snippetBuilder, undefined, this.priority, SpeculativeKind.emit);
+				result.addSnippet(snippetBuilder, undefined, this.priority);
 			}
 		}
 	}
@@ -516,7 +516,7 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheInfo: CacheInfo | undefined = { emitMode: EmitMode.ClientBased, scope: this.createCacheScope(this.declaration) };
-		return result.createRunnableResult(this.id, cacheInfo);
+		return result.createRunnableResult(this.id, SpeculativeKind.emit, cacheInfo);
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {
@@ -574,11 +574,11 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 			if (typeSymbol === undefined) {
 				continue;
 			}
-			const [handled, key] = this.handleSymbolIfKnown(result, typeSymbol);
+			const [handled, key] = this.handleSymbolIfKnown(typeSymbol);
 			if (!handled) {
 				const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile);
 				snippetBuilder.addTypeSymbol(typeSymbol, name);
-				continueResult = continueResult && result.addSnippet(snippetBuilder, key, this.priority, SpeculativeKind.emit, true);
+				continueResult = continueResult && result.addSnippet(snippetBuilder, key, this.priority, true);
 			}
 			if (!continueResult) {
 				break;

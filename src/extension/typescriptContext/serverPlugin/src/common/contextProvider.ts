@@ -6,6 +6,7 @@ import type tt from 'typescript/lib/tsserverlibrary';
 import TS from './typescript';
 const ts = TS();
 
+import { CodeSnippetBuilder } from './code';
 import type { Host } from './host';
 import {
 	CacheScopeKind, CodeSnippet,
@@ -15,7 +16,7 @@ import {
 	ContextRequestResultState,
 	ContextRunnableResultKind,
 	ContextRunnableState,
-	EmitMode, ErrorData, Timings, Trait, TraitKind,
+	EmitMode, ErrorData, SpeculativeKind, Timings, Trait, TraitKind,
 	type CachedContextItem,
 	type CachedContextRunnableResult,
 	type CacheInfo, type CacheScope,
@@ -25,7 +26,7 @@ import {
 	type ContextRunnableResultId,
 	type ContextRunnableResultReference,
 	type ContextRunnableResultTypes,
-	type FullContextItem, type Range, type SpeculativeKind
+	type FullContextItem, type Range
 } from './protocol';
 import tss, { ImportedByState, Sessions, Symbols, Types } from './typescripts';
 import { LRUCache } from './utils';
@@ -77,7 +78,7 @@ export abstract class ProgramContext {
 
 	protected skipDeclaration(declaration: tt.Declaration, sourceFile: tt.SourceFile = declaration.getSourceFile()): boolean {
 		const program = this.getProgram();
-		return program.isSourceFileDefaultLibrary(sourceFile) || program.isSourceFileFromExternalLibrary(sourceFile) || sourceFile.isDeclarationFile;
+		return program.isSourceFileDefaultLibrary(sourceFile) || program.isSourceFileFromExternalLibrary(sourceFile);
 	}
 
 	protected abstract getProgram(): tt.Program;
@@ -92,7 +93,10 @@ export class RequestContext {
 	public readonly clientSideRunnableResults: Map<ContextRunnableResultId, CachedContextRunnableResult>;
 	private readonly clientSideContextItems: Map<ContextItemKey, CachedContextItem>;
 
-	constructor(_session: ComputeContextSession, neighborFiles: tt.server.NormalizedPath[], clientSideRunnableResults: Map<ContextRunnableResultId, CachedContextRunnableResult>) {
+	public readonly session: ComputeContextSession;
+
+	constructor(session: ComputeContextSession, neighborFiles: tt.server.NormalizedPath[], clientSideRunnableResults: Map<ContextRunnableResultId, CachedContextRunnableResult>) {
+		this.session = session;
 		this.symbols = new Map();
 		this.neighborFiles = neighborFiles;
 		this.clientSideRunnableResults = clientSideRunnableResults;
@@ -461,24 +465,26 @@ export class SingleLanguageServiceSession extends ComputeContextSession {
 
 export interface SnippetProvider {
 	isEmpty(): boolean;
-	snippet(key: string | undefined, priority: number, speculativeKind: SpeculativeKind): CodeSnippet;
+	snippet(key: string | undefined, priority: number): CodeSnippet;
 }
-
 
 export class RunnableResult {
 
 	private readonly id: string;
 	private readonly tokenBudget: TokenBudget;
-	private readonly contextItemManager: ContextItemManager;
+	private readonly context: RunnableResultContext;
 	private state: ContextRunnableState;
+	private speculativeKind: SpeculativeKind;
 	private cache: CacheInfo | undefined;
+
 	public readonly items: ContextItem[];
 
-	constructor(id: string, tokenBudget: TokenBudget, contextItemManager: ContextItemManager, cache?: CacheInfo | undefined) {
+	constructor(id: string, tokenBudget: TokenBudget, context: RunnableResultContext, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined) {
 		this.id = id;
 		this.tokenBudget = tokenBudget;
-		this.contextItemManager = contextItemManager;
+		this.context = context;
 		this.state = ContextRunnableState.Created;
+		this.speculativeKind = speculativeKind;
 		this.cache = cache;
 		this.items = [];
 	}
@@ -503,7 +509,7 @@ export class RunnableResult {
 
 	public addFromKnownItems(key: string): boolean {
 		this.state = ContextRunnableState.InProgress;
-		const reference = this.contextItemManager.createContextItemReference(key);
+		const reference = this.context.createContextItemReference(key);
 		if (reference === undefined) {
 			return false;
 		}
@@ -511,21 +517,40 @@ export class RunnableResult {
 		return true;
 	}
 
+	public addSymbol(symbol: tt.Symbol, priority: number): void;
+	public addSymbol(symbol: tt.Symbol, priority: number, ifRoom: false): void;
+	public addSymbol(symbol: tt.Symbol, priority: number, ifRoom: true): boolean;
+	public addSymbol(symbol: tt.Symbol, priority: number, ifRoom: boolean = false): boolean {
+		this.state = ContextRunnableState.InProgress;
+
+		const key = Symbols.createKey(symbol, this.context.getSession().host);
+		if (key !== undefined && this.addFromKnownItems(key)) {
+			return true;
+		}
+
+		const snippetBuilder = new CodeSnippetBuilder(this.context.getSession(), this.symbols, this.sourceFile);
+
+		snippetBuilder.addTypeSymbol(symbol, symbolEmitData.name);
+
+		return this.addSnippet(snippetBuilder, key, priority, ifRoom);
+	}
+
 	public addTrait(traitKind: TraitKind, priority: number, name: string, value: string): void {
 		this.state = ContextRunnableState.InProgress;
 		const trait = Trait.create(traitKind, priority, name, value);
-		this.items.push(this.contextItemManager.manageContextItem(trait));
+		this.items.push(this.context.manageContextItem(trait));
 		this.tokenBudget.spent(Trait.sizeInChars(trait));
 	}
 
-	public addSnippet(code: SnippetProvider, key: string | undefined, priority: number, speculativeKind: SpeculativeKind): void;
-	public addSnippet(code: SnippetProvider, key: string | undefined, priority: number, speculativeKind: SpeculativeKind, ifRoom: false): void;
-	public addSnippet(code: SnippetProvider, key: string | undefined, priority: number, speculativeKind: SpeculativeKind, ifRoom: true): boolean;
-	public addSnippet(code: SnippetProvider, key: string | undefined, priority: number, speculativeKind: SpeculativeKind, ifRoom: boolean = false): boolean {
+	public addSnippet(code: SnippetProvider, key: string | undefined, priority: number): void;
+	public addSnippet(code: SnippetProvider, key: string | undefined, priority: number, ifRoom: false): void;
+	public addSnippet(code: SnippetProvider, key: string | undefined, priority: number, ifRoom: true): boolean;
+	public addSnippet(code: SnippetProvider, key: string | undefined, priority: number, ifRoom: boolean): boolean
+	public addSnippet(code: SnippetProvider, key: string | undefined, priority: number, ifRoom: boolean = false): boolean {
 		if (code.isEmpty()) {
 			return true;
 		}
-		const snippet: CodeSnippet = code.snippet(key, priority, speculativeKind);
+		const snippet: CodeSnippet = code.snippet(key, priority);
 		const size = CodeSnippet.sizeInChars(snippet);
 		if (ifRoom && !this.tokenBudget.hasRoom(size)) {
 			this.state = ContextRunnableState.IsFull;
@@ -533,7 +558,7 @@ export class RunnableResult {
 		}
 		this.state = ContextRunnableState.InProgress;
 		this.tokenBudget.spent(size);
-		this.items.push(this.contextItemManager.manageContextItem(snippet));
+		this.items.push(this.context.manageContextItem(snippet));
 		return true;
 	}
 
@@ -543,7 +568,8 @@ export class RunnableResult {
 			id: this.id,
 			state: this.state,
 			items: this.items,
-			cache: this.cache
+			cache: this.cache,
+			speculativeKind: this.speculativeKind
 		};
 	}
 }
@@ -572,12 +598,13 @@ class RunnableResultReference {
 	}
 }
 
-export interface ContextItemManager {
+export interface RunnableResultContext {
 	createContextItemReference(key: ContextItemKey): ContextItemReference | undefined;
 	manageContextItem(item: FullContextItem): ContextItem;
+	getSession(): ComputeContextSession;
 }
 
-export class ContextResult implements ContextItemManager {
+export class ContextResult implements RunnableResultContext {
 
 	public readonly tokenBudget: TokenBudget;
 	public readonly context: RequestContext;
@@ -602,6 +629,10 @@ export class ContextResult implements ContextItemManager {
 		this.contextItems = new Map<ContextItemKey, FullContextItem>();
 	}
 
+	public getSession(): ComputeContextSession {
+		return this.context.session;
+	}
+
 	public addPath(path: number[]): void {
 		this.path = path;
 	}
@@ -618,9 +649,9 @@ export class ContextResult implements ContextItemManager {
 		this.timedOut = timedOut;
 	}
 
-	public createRunnableResult(id: string, cache?: CacheInfo | undefined): RunnableResult {
+	public createRunnableResult(id: string, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined): RunnableResult {
 		this.state = ContextRequestResultState.InProgress;
-		const result = new RunnableResult(id, this.tokenBudget, this, cache);
+		const result = new RunnableResult(id, this.tokenBudget, this, speculativeKind, cache);
 		this.runnableResults.push(result);
 		return result;
 	}
@@ -871,6 +902,14 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 		this.result.done();
 	}
 
+	public addExtraSnipper(snippet: CodeSnippetBuilder, key: string | undefined): void {
+		if (this.result === undefined || snippet.isEmpty()) {
+			return;
+		}
+
+		this.result!.addSnippet(snippet, key, this.priority);
+	}
+
 	protected abstract createRunnableResult(result: ContextResult): RunnableResult;
 
 	protected abstract run(result: RunnableResult, token: tt.CancellationToken): void;
@@ -924,13 +963,16 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 		return cacheScope !== undefined ? { emitMode, scope: cacheScope } : undefined;
 	}
 
-	protected handleSymbolIfKnown(result: RunnableResult, symbol: tt.Symbol): [boolean, string | undefined] {
+	protected handleSymbolIfKnown(symbol: tt.Symbol): [boolean, string | undefined] {
+		if (this.result === undefined) {
+			throw new Error('Runnable not initialized');
+		}
 		const key = Symbols.createKey(symbol, this.session.host);
 		if (key === undefined) {
 			return [false, undefined];
 		}
 
-		if (result.addFromKnownItems(key)) {
+		if (this.result.addFromKnownItems(key)) {
 			return [true, key];
 		}
 
