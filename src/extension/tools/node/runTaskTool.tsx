@@ -98,7 +98,7 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 					const evalDurationMs = evalEndTime - evalStartTime;
 					lastEvalDurationMs = evalDurationMs;
 					totalDurationMs = Date.now() - totalStartTime;
-					this.telemetryService.sendGHTelemetryEvent?.('copilotChat.runTaskTool.run', {
+					this.telemetryService.sendMSFTTelemetryEvent?.('copilotChat.runTaskTool.run', {
 						taskType: task.type,
 						taskLabel: task.label,
 						reason: idleOrInactive,
@@ -111,7 +111,7 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 
 		if (!pollDurationMs) {
 			totalDurationMs = Date.now() - totalStartTime;
-			this.telemetryService.sendGHTelemetryEvent?.('copilotChat.runTaskTool.run', {
+			this.telemetryService.sendMSFTTelemetryEvent?.('copilotChat.runTaskTool.run', {
 				taskType: task?.type,
 				taskLabel: task?.label,
 				result: 'running',
