@@ -20,7 +20,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { Result } from '../../../util/common/result';
 import { createTracer, ITracer } from '../../../util/common/tracing';
 import { assert } from '../../../util/vs/base/common/assert';
-import { DeferredPromise, timeout, TimeoutTimer } from '../../../util/vs/base/common/async';
+import { DeferredPromise, TimeoutTimer } from '../../../util/vs/base/common/async';
 import { CachedFunction } from '../../../util/vs/base/common/cache';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { BugIndicatingError } from '../../../util/vs/base/common/errors';
@@ -40,8 +40,8 @@ import { INesConfigs } from './nesConfigs';
 import { CachedOrRebasedEdit, NextEditCache } from './nextEditCache';
 import { LlmNESTelemetryBuilder } from './nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from './nextEditResult';
+import { OptimisticNextEditFetcher } from './optimisticNextEditFetcher';
 
-const ARTIFICIAL_CACHE_HIT_DELAY = 300; // delay cache hits by 300ms to make it more like a regular request and to reduce flicker ;)
 
 export interface INextEditProvider<T extends INextEditResult, TTelemetry, TData = void> extends IDisposable {
 	readonly ID: string;
@@ -67,6 +67,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	private readonly _rejectionCollector = new RejectionCollector(this._workspace, s => this._logService.logger.trace(s));
 	private readonly _nextEditCache: NextEditCache;
 	private readonly _recentlyShownCache = new RecentlyShownCache();
+	private readonly _optimisticFetcher: OptimisticNextEditFetcher;
 
 	private _pendingStatelessNextEditRequest: StatelessNextEditRequest<CachedOrRebasedEdit> | null = null;
 
@@ -100,6 +101,13 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		this._tracer = createTracer(['NES', 'NextEditProvider'], (s) => this._logService.logger.trace(s));
 		this._nextEditCache = new NextEditCache(this._workspace, this._logService);
 
+		this._optimisticFetcher = new OptimisticNextEditFetcher(
+			this,
+			this._nextEditCache,
+			this._logService
+		);
+		this._register(this._optimisticFetcher);
+
 		mapObservableArrayCached(this, this._workspace.openDocuments, (doc, store) => {
 			store.add(runOnChange(doc.value, (value) => {
 				this._cancelPendingRequestDueToDocChange(doc.id, value);
@@ -119,6 +127,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	}
 
 	public async getNextEdit(docId: DocumentId, context: vscode.InlineCompletionContext, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, telemetryBuilder: LlmNESTelemetryBuilder): Promise<NextEditResult> {
+		const startTime = Date.now();
 		const tracer = this._tracer.sub('getNextEdit');
 
 		this._lastTriggerTime = Date.now();
@@ -142,6 +151,17 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		telemetryBuilder.setNESConfigs({ ...nesConfigs });
 		logContext.addCodeblockToLog(JSON.stringify(nesConfigs, null, '\t'));
+
+		// Check for optimistic predictions first
+		const optimisticPrediction = this._optimisticFetcher.getOptimisticPredictionForDocument(docId, documentAtInvocationTime);
+		if (optimisticPrediction && optimisticPrediction.resolvedValue) {
+			const timeElapsed = Date.now() - startTime;
+			tracer.trace(`returning pre-resolved optimistic prediction (${timeElapsed}ms)`);
+			telemetryBuilder.setStatus('notAccepted'); // From optimistic prediction
+			telemetryBuilder.setIsFromCache();
+			// INSTANT return - no await needed!
+			return optimisticPrediction.resolvedValue;
+		}
 
 		const recentlyShownCachedEdit = this._recentlyShownCache.get(docId, documentAtInvocationTime);
 		const cachedEdit = this._nextEditCache.lookupNextEdit(docId, documentAtInvocationTime, doc.selection.get(), nesConfigs);
@@ -173,7 +193,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			// back-date the recording bookmark of the cached edit to the bookmark of the original request.
 			logContext.recordingBookmark = req.log.recordingBookmark;
 
-			await timeout(ARTIFICIAL_CACHE_HIT_DELAY);
+			// No artificial delay for cache hits
 
 		} else if (cachedEdit) {
 			tracer.trace('using cached edit');
@@ -187,7 +207,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			// back-date the recording bookmark of the cached edit to the bookmark of the original request.
 			logContext.recordingBookmark = req.log.recordingBookmark;
 
-			await timeout(ARTIFICIAL_CACHE_HIT_DELAY);
+			// No artificial delay for cache hits
 
 		} else {
 			tracer.trace('fetching next edit');
@@ -303,6 +323,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	private async fetchNextEdit(req: NextEditFetchRequest, doc: IObservableDocument, nesConfigs: INesConfigs, telemetryBuilder: LlmNESTelemetryBuilder, cancellationToken: CancellationToken): Promise<Result<CachedOrRebasedEdit, NoNextEditReason>> {
 		const curDocId = doc.id;
 		const tracer = this._tracer.sub('fetchNextEdit');
+
 		const historyContext = this._historyContextProvider.getHistoryContext(curDocId);
 
 		if (!historyContext) {
@@ -633,6 +654,16 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	public handleAcceptance(docId: DocumentId, suggestion: NextEditResult) {
 		this.runSnippy(docId, suggestion);
 		this._statelessNextEditProvider.handleAcceptance?.();
+
+		// Trigger optimistic fetching for the next edit
+		const doc = this._workspace.getDocument(docId);
+		if (doc && suggestion.result?.edit) {
+			this._optimisticFetcher.triggerOptimisticFetch(
+				docId,
+				suggestion,
+				doc.value.get()
+			);
+		}
 	}
 
 	public handleRejection(docId: DocumentId, suggestion: NextEditResult) {
@@ -654,7 +685,91 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		this._statelessNextEditProvider.handleRejection?.();
 	}
 
-	public handleIgnored(docId: DocumentId, suggestion: NextEditResult, supersededBy: INextEditResult | undefined): void { }
+	public handleIgnored(_docId: DocumentId, _suggestion: NextEditResult, _supersededBy: INextEditResult | undefined): void {
+		// No-op for now
+	}
+
+	/**
+	 * Internal method for optimistic fetching that bypasses cooldown checks
+	 */
+	public async fetchOptimisticNextEdit(
+		docId: DocumentId,
+		_documentContent: StringText,
+		context: vscode.InlineCompletionContext,
+		cancellationToken: CancellationToken
+	): Promise<NextEditResult | undefined> {
+		const doc = this._workspace.getDocument(docId);
+		if (!doc) {
+			return undefined;
+		}
+
+		const nesConfigs: INesConfigs = {
+			isAsyncCompletions: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsAsyncCompletions, this._expService),
+			isRevisedCacheStrategy: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRevisedCacheStrategy, this._expService),
+			isCacheTracksRejections: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheTracksRejections, this._expService),
+			isRecentlyShownCacheEnabled: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRecentlyShownCacheEnabled, this._expService),
+		};
+
+		// Create a stub telemetry builder for optimistic fetches
+		// We don't need full telemetry for prefetching
+		const telemetryBuilder = {
+			setStatus: () => { },
+			setNESConfigs: () => { },
+			setNesResponse: () => { },
+			setIsSanitized: () => { },
+			setNesStartTime: () => { },
+			setComputedNesEdits: () => { },
+			setWasPreviouslyRejected: () => { },
+			setRequest: () => { },
+			setStatelessNextEditTelemetry: () => { },
+			setNesRequest: () => { },
+			setCacheHit: () => { },
+			setCacheRebaseSucceeded: () => { },
+			setHeaderRequestId: () => { },
+			setStatelessEditRequest: () => { },
+			setIsNextEditProviderAsync: () => { },
+			setIsFromCache: () => { },
+			markEndTime: () => { },
+			setSubsequentEditOrder: () => { },
+			setError: () => { },
+			setResponse: () => { },
+			setResponseResults: () => { },
+			setRecordingBookmark: () => { },
+			setIsCachedResult: () => { },
+			setIsSkipped: () => { },
+			setIsOptimistic: () => { },
+		} as any;
+
+		// Create log context for optimistic fetch
+		const logContext = new InlineEditRequestLogContext(docId.toUri().toString(), 0, context);
+
+		const req = new NextEditFetchRequest(logContext, Date.now());
+
+		try {
+			const result = await this.fetchNextEdit(req, doc, nesConfigs, telemetryBuilder, cancellationToken);
+
+			if (result.isOk()) {
+				const cachedEdit = result.val;
+				if (!cachedEdit.edit) {
+					return undefined;
+				}
+
+				const nextEditResult = new NextEditResult(
+					logContext.requestId,
+					req,
+					{
+						edit: cachedEdit.edit,
+						documentBeforeEdits: cachedEdit.documentBeforeEdit,
+					}
+				);
+				return nextEditResult;
+			}
+		} catch (err) {
+			this._logService.logger.trace('Optimistic fetch error: ' + String(err));
+		}
+
+		return undefined;
+	}
 
 	private async runSnippy(docId: DocumentId, suggestion: NextEditResult) {
 		if (suggestion.result === undefined) {
