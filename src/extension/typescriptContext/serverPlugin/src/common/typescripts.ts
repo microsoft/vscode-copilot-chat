@@ -7,6 +7,7 @@ import TS from './typescript';
 const ts = TS();
 
 import type { Hash } from './host';
+import type { KeyComputationContext } from './types';
 
 const EmptyIterator = (function* () { })();
 namespace tss {
@@ -632,7 +633,7 @@ namespace tss {
 		 * @param hashProvider Provides a hash function to create the key.
 		 * @returns A versioned key for the symbol or `undefined` if the key could not be created.
 		 */
-		public static createVersionedKey(symbol: tt.Symbol, versionProvider: { getScriptVersion(sourceFile: tt.SourceFile): string | undefined }, hashProvider: { createHash(algorithm: string): Hash }): string | undefined {
+		public static createVersionedKey(symbol: tt.Symbol, context: KeyComputationContext): string | undefined {
 			const declarations = symbol.getDeclarations();
 			if (declarations === undefined) {
 				return undefined;
@@ -640,7 +641,7 @@ namespace tss {
 			const fragments: { f: string; v: string; s: number; e: number; k: number }[] = [];
 			for (const declaration of declarations) {
 				const sourceFile = declaration.getSourceFile();
-				const scriptVersion = versionProvider.getScriptVersion(sourceFile);
+				const scriptVersion = context.getScriptVersion(sourceFile);
 				if (scriptVersion === undefined) {
 					return undefined;
 				}
@@ -673,7 +674,7 @@ namespace tss {
 					return a.k - b.k;
 				});
 			}
-			const hash = hashProvider.createHash('md5'); // CodeQL [SM04514] The 'md5' algorithm is used to compute a shorter string to represent a symbol in a map. It has no security implications.
+			const hash = context.host.createHash('md5'); // CodeQL [SM04514] The 'md5' algorithm is used to compute a shorter string to represent a symbol in a map. It has no security implications.
 			if ((symbol.flags & ts.SymbolFlags.Transient) !== 0) {
 				hash.update(JSON.stringify({ trans: true }, undefined, 0));
 			}

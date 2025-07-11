@@ -28,62 +28,10 @@ import {
 	type ContextRunnableResultTypes,
 	type FullContextItem, type Range
 } from './protocol';
+import { ProgramContext, RecoverableError, type CodeCacheItem, type EmitterContext, type SnippetCollector, type SnippetProvider } from './types';
 import tss, { ImportedByState, Sessions, Symbols, Types } from './typescripts';
 import { LRUCache } from './utils';
 
-
-export class RecoverableError extends Error {
-
-	public static readonly SourceFileNotFound: number = 1;
-	public static readonly NodeNotFound: number = 2;
-	public static readonly NodeKindMismatch: number = 3;
-	public static readonly SymbolNotFound: number = 4;
-	public static readonly NoDeclaration: number = 5;
-	public static readonly NoProgram: number = 6;
-	public static readonly NoSourceFile: number = 7;
-
-	public readonly code: number;
-
-	constructor(message: string, code: number) {
-		super(message);
-		this.code = code;
-	}
-}
-
-export abstract class ProgramContext {
-
-	/**
-	 * The symbol is skipped if it has no declarations or if one declaration
-	 * comes from a default or external library.
-	 */
-	protected getSymbolInfo(symbol: tt.Symbol): { skip: true } | { skip: false; primary: tt.SourceFile } {
-		const declarations = symbol.declarations;
-		if (declarations === undefined || declarations.length === 0) {
-			return { skip: true };
-		}
-		let primary: tt.SourceFile | undefined;
-		let skipCount = 0;
-		const program = this.getProgram();
-		for (const declaration of declarations) {
-			const sourceFile = declaration.getSourceFile();
-			if (primary === undefined) {
-				primary = sourceFile;
-			}
-			if (program.isSourceFileDefaultLibrary(sourceFile) || program.isSourceFileFromExternalLibrary(sourceFile)) {
-				skipCount++;
-			}
-		}
-		return skipCount > 0 ? { skip: true } : { skip: false, primary: primary! };
-	}
-
-	protected skipDeclaration(declaration: tt.Declaration, sourceFile: tt.SourceFile = declaration.getSourceFile()): boolean {
-		const program = this.getProgram();
-		return program.isSourceFileDefaultLibrary(sourceFile) || program.isSourceFileFromExternalLibrary(sourceFile);
-	}
-
-	protected abstract getProgram(): tt.Program;
-
-}
 
 export class RequestContext {
 
@@ -251,13 +199,7 @@ export class NullLogger implements Logger {
 	}
 }
 
-export type CodeCacheItem = {
-	value: string[];
-	uri: string;
-	additionalUris?: Set<string>;
-};
-
-export abstract class ComputeContextSession implements tss.StateProvider {
+export abstract class ComputeContextSession implements tss.StateProvider, EmitterContext {
 
 	public readonly host: Host;
 
@@ -317,7 +259,7 @@ export abstract class ComputeContextSession implements tss.StateProvider {
 		if (typeof symbolOrKey === 'string') {
 			return this.codeCache.get(symbolOrKey);
 		} else {
-			const key = Symbols.createVersionedKey(symbol!, this, this.host);
+			const key = Symbols.createVersionedKey(symbol!, this);
 			return key === undefined ? undefined : this.codeCache.get(key);
 		}
 	}
@@ -331,7 +273,7 @@ export abstract class ComputeContextSession implements tss.StateProvider {
 		if (typeof symbolOrKey === 'string') {
 			this.codeCache.set(symbolOrKey as string, code);
 		} else {
-			const key = Symbols.createVersionedKey(symbolOrKey, this, this.host);
+			const key = Symbols.createVersionedKey(symbolOrKey, this);
 			if (key !== undefined) {
 				this.codeCache.set(key, code!);
 			}
@@ -463,12 +405,7 @@ export class SingleLanguageServiceSession extends ComputeContextSession {
 	}
 }
 
-export interface SnippetProvider {
-	isEmpty(): boolean;
-	snippet(key: string | undefined, priority: number): CodeSnippet;
-}
-
-export class RunnableResult {
+export class RunnableResult implements SnippetCollector {
 
 	private readonly id: string;
 	private readonly tokenBudget: TokenBudget;

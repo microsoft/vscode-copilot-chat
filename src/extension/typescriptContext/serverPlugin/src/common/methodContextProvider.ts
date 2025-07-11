@@ -9,10 +9,11 @@ const ts = TS();
 import { FunctionLikeContextProvider, FunctionLikeContextRunnable } from './baseContextProviders';
 import { CodeSnippetBuilder } from './code';
 import {
-	AbstractContextRunnable, ComputeCost, ContextResult, RecoverableError, RunnableResultContext, Search, type ComputeContextSession, type ContextRunnableCollector, type ProviderComputeContext, type RequestContext,
+	AbstractContextRunnable, ComputeCost, ContextResult, RunnableResultContext, Search, type ComputeContextSession, type ContextRunnableCollector, type ProviderComputeContext, type RequestContext,
 	type RunnableResult
 } from './contextProvider';
 import { EmitMode, Priorities, SpeculativeKind, type CacheInfo } from './protocol';
+import { RecoverableError } from './types';
 import tss, { ClassDeclarations, Declarations, Symbols, Traversal, type StateProvider, type TokenInfo } from './typescripts';
 
 abstract class ClassPropertyBlueprintSearch<T extends tt.MethodDeclaration | tt.ConstructorDeclaration> extends Search<tt.ClassDeclaration> {
