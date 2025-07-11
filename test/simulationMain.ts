@@ -35,7 +35,7 @@ import { CompletionsSQLiteCache, ICompletionsCache } from './base/completionsCac
 import { usedEmbeddingsCaches } from './base/embeddingsCache';
 import { TestingCacheSalts } from './base/salts';
 import { ICompleteBaselineComparison, IModifiedScenario, SimulationBaseline } from './base/simulationBaseline';
-import { CacheMode, SimulationServicesOptions, createSimulationChatModelThrottlingTaskLaunchers } from './base/simulationContext';
+import { CacheMode, CurrentTestRunInfo, SimulationServicesOptions, createSimulationChatModelThrottlingTaskLaunchers } from './base/simulationContext';
 import { ProxiedSimulationEndpointHealth, SimulationEndpointHealthImpl } from './base/simulationEndpointHealth';
 import { BASELINE_RUN_COUNT, SimulationOptions } from './base/simulationOptions';
 import { ProxiedSimulationOutcome, SimulationOutcomeImpl } from './base/simulationOutcome';
@@ -537,21 +537,21 @@ function createSimulationTestContext(
 ) {
 	const simulationEndpointHealth = rpcInExtensionHost ? new ProxiedSimulationEndpointHealth(rpcInExtensionHost) : new SimulationEndpointHealthImpl();
 
-	let chatMLCache: IChatMLCache | undefined;
-	let nesFetchCache: ICompletionsCache | undefined;
+	let createChatMLCache: ((info: CurrentTestRunInfo) => IChatMLCache) | undefined;
+	let createNesFetchCache: ((info: CurrentTestRunInfo) => ICompletionsCache) | undefined;
 
 	if (opts.lmCacheMode === CacheMode.Disable) {
 		console.warn('❗ Not using any cache');
-		chatMLCache = undefined;
-		nesFetchCache = undefined;
+		createChatMLCache = undefined;
+		createNesFetchCache = undefined;
 	} else {
-		chatMLCache = new ChatMLSQLiteCache(TestingCacheSalts.requestCacheSalt);
-		nesFetchCache = new CompletionsSQLiteCache(TestingCacheSalts.nesFetchCacheSalt);
+		createChatMLCache = (info: CurrentTestRunInfo) => new ChatMLSQLiteCache(TestingCacheSalts.requestCacheSalt, info);
+		createNesFetchCache = (info: CurrentTestRunInfo) => new CompletionsSQLiteCache(TestingCacheSalts.nesFetchCacheSalt, info);
 	}
 
 	const simulationServicesOptions: SimulationServicesOptions = {
-		chatMLCache,
-		nesFetchCache,
+		createChatMLCache,
+		createNesFetchCache,
 		chatModelThrottlingTaskLaunchers: createSimulationChatModelThrottlingTaskLaunchers(opts.boost),
 		isNoFetchModeEnabled: opts.noFetch,
 		languageModelCacheMode: opts.lmCacheMode,

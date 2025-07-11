@@ -6,8 +6,8 @@ import type tt from 'typescript/lib/tsserverlibrary';
 import TS from './typescript';
 const ts = TS();
 
-import { ProgramContext, RecoverableError, type ComputeContextSession, type SeenSymbols, type SnippetProvider } from './contextProvider';
-import { CodeSnippet, type CacheInfo, type SnippetKind, type SpeculativeKind } from './protocol';
+import { ProgramContext, RecoverableError, type ComputeContextSession, type SnippetProvider } from './contextProvider';
+import { CodeSnippet, type SpeculativeKind } from './protocol';
 import { Symbols } from './typescripts';
 
 namespace Nodes {
@@ -549,13 +549,11 @@ class FunctionEmitter extends AbstractEmitter {
 class ModuleEmitter extends AbstractEmitter {
 
 	private readonly module: tt.Symbol;
-	private readonly seen: SeenSymbols;
 	private readonly name: string;
 
-	constructor(session: ComputeContextSession, source: tt.SourceFile, module: tt.Symbol, seen: SeenSymbols, name?: string) {
+	constructor(session: ComputeContextSession, source: tt.SourceFile, module: tt.Symbol, name?: string) {
 		super(session, source);
 		this.module = module;
-		this.seen = seen;
 		this.name = name ?? module.getName();
 	}
 
@@ -576,9 +574,6 @@ class ModuleEmitter extends AbstractEmitter {
 
 	private addExports(members: tt.SymbolTable, currentSourceFile: tt.SourceFile): void {
 		for (const [_name, member] of members) {
-			if (this.seen.has(member)) {
-				continue;
-			}
 			const declarations = member.declarations;
 			if (declarations === undefined) {
 				continue;
@@ -593,7 +588,6 @@ class ModuleEmitter extends AbstractEmitter {
 					if (ts.isFunctionDeclaration(declaration)) {
 						this.addFunctionDeclaration(declaration, undefined, 'declare');
 						this.additionalSources.add(fileName);
-						this.seen.add(member);
 					}
 				}
 			}
@@ -611,9 +605,8 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 	private readonly session: ComputeContextSession;
 	private readonly symbols: Symbols;
 	private readonly currentSourceFile: tt.SourceFile;
-	private readonly seen: SeenSymbols;
 
-	constructor(session: ComputeContextSession, symbols: Symbols, currentSourceFile: tt.SourceFile, seen: SeenSymbols) {
+	constructor(session: ComputeContextSession, symbols: Symbols, currentSourceFile: tt.SourceFile) {
 		super();
 		this.lines = [];
 		this.source = undefined;
@@ -621,7 +614,6 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 		this.session = session;
 		this.symbols = symbols;
 		this.currentSourceFile = currentSourceFile;
-		this.seen = seen;
 	}
 
 	protected override getSymbolInfo(symbol: tt.Symbol): { skip: true } | { skip: false; primary: tt.SourceFile } {
@@ -666,12 +658,12 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 		return this.lines.length === 0 || this.source === undefined;
 	}
 
-	public snippet(snippetKind: SnippetKind, priority: number, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined): CodeSnippet {
+	public snippet(key: string | undefined, priority: number, speculativeKind: SpeculativeKind): CodeSnippet {
 		if (this.source === undefined) {
 			throw new RecoverableError('No source', RecoverableError.NoSourceFile);
 		}
 		this.additionalSources.delete(this.source);
-		return CodeSnippet.create(this.source, this.additionalSources.size === 0 ? undefined : [...this.additionalSources], this.lines.join('\n'), snippetKind, priority, speculativeKind, cache);
+		return CodeSnippet.create(key, this.source, this.additionalSources.size === 0 ? undefined : [...this.additionalSources], this.lines.join('\n'), priority, speculativeKind);
 	}
 
 	public addDeclaration(declaration: tt.Declaration): void {
@@ -689,7 +681,7 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 	}
 
 	public addClassSymbol(clazz: tt.Symbol, name: string, includeSuperClasses: boolean = true, includePrivates: boolean = false): void {
-		if (!Symbols.isClass(clazz) || this.seen.manages(clazz)) {
+		if (!Symbols.isClass(clazz)) {
 			return;
 		}
 		const info = this.getSymbolInfo(clazz);
@@ -700,7 +692,7 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 	}
 
 	public addTypeLiteralSymbol(type: tt.Symbol, name: string): void {
-		if (!Symbols.isTypeLiteral(type) || this.seen.manages(type)) {
+		if (!Symbols.isTypeLiteral(type)) {
 			return;
 		}
 		const info = this.getSymbolInfo(type);
@@ -711,7 +703,7 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 	}
 
 	public addInterfaceSymbol(iface: tt.Symbol, name: string): void {
-		if (!Symbols.isInterface(iface) || this.seen.manages(iface)) {
+		if (!Symbols.isInterface(iface)) {
 			return;
 		}
 		const info = this.getSymbolInfo(iface);
@@ -722,11 +714,11 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 	}
 
 	public addTypeAliasSymbol(type: tt.Symbol, name: string): void {
-		if (!Symbols.isTypeAlias(type) || this.seen.manages(type)) {
+		if (!Symbols.isTypeAlias(type)) {
 			return;
 		}
 		const typeToEmit = this.getTypeToEmit(type);
-		if (typeToEmit === undefined || this.seen.manages(typeToEmit)) {
+		if (typeToEmit === undefined) {
 			return;
 		}
 		const info = this.getSymbolInfo(typeToEmit);
@@ -744,7 +736,7 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 	}
 
 	public addEnumSymbol(enm: tt.Symbol, name: string): void {
-		if (!Symbols.isEnum(enm) || this.seen.manages(enm)) {
+		if (!Symbols.isEnum(enm)) {
 			return;
 		}
 		const info = this.getSymbolInfo(enm);
@@ -755,7 +747,7 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 	}
 
 	public addFunctionSymbol(func: tt.Symbol, name?: string): void {
-		if (!Symbols.isFunction(func) || this.seen.manages(func)) {
+		if (!Symbols.isFunction(func)) {
 			return;
 		}
 		const info = this.getSymbolInfo(func);
@@ -766,14 +758,14 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 	}
 
 	public addModuleSymbol(module: tt.Symbol, name?: string): void {
-		if (!Symbols.isValueModule(module) || this.seen.manages(module)) {
+		if (!Symbols.isValueModule(module)) {
 			return;
 		}
 		const info = this.getSymbolInfo(module);
 		if (info.skip) {
 			return;
 		}
-		this.addEmitter(new ModuleEmitter(this.session, info.primary, module, this.seen, name));
+		this.addEmitter(new ModuleEmitter(this.session, info.primary, module, name));
 	}
 
 	public addTypeSymbol(type: tt.Symbol, name?: string): void {
@@ -840,7 +832,7 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 			if (ts.isTypeAliasDeclaration(declaration)) {
 				const type = declaration.type;
 				if (ts.isTypeLiteralNode(type)) {
-					const symbol = this.symbols.getSymbolAtLocation(type);
+					const symbol = this.symbols.getLeafSymbolAtLocation(type);
 					if (Symbols.isTypeLiteral(symbol)) {
 						return symbol;
 					}

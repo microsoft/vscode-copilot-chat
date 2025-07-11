@@ -14,6 +14,7 @@ import { SQLiteSlottedCache } from './cache';
 import { CachedResponseMetadata } from './cachingChatMLFetcher';
 import { CacheableCompletionRequest } from './cachingCompletionsFetchService';
 import { readFileIfExists } from './fileUtils';
+import { CurrentTestRunInfo } from './simulationContext';
 
 export interface ICacheableCompletionsResponse {
 	readonly requestId: string;
@@ -163,7 +164,7 @@ export class CompletionsCache implements ICompletionsCache {
 }
 
 export class CompletionsSQLiteCache extends SQLiteSlottedCache<CacheableCompletionRequest, ICacheableCompletionsResponse> implements ICompletionsCache {
-	constructor(salt: string) {
-		super('completions', salt);
+	constructor(salt: string, info: CurrentTestRunInfo) {
+		super('completions', salt, info);
 	}
 }

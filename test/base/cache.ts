@@ -13,6 +13,7 @@ import { promisify } from 'util';
 import zlib from 'zlib';
 import { LockMap } from '../../src/util/common/lock';
 import { generateUuid } from '../../src/util/vs/base/common/uuid';
+import { CurrentTestRunInfo } from './simulationContext';
 
 const compress = promisify(zlib.brotliCompress);
 const decompress = promisify(zlib.brotliDecompress);
@@ -268,7 +269,7 @@ export class SQLiteCache<TRequest extends CacheableRequest, TResponse> implement
 	private readonly namespace: string;
 	private readonly locks = new LockMap();
 
-	constructor(name: string, salt?: string) {
+	constructor(name: string, salt?: string, info?: CurrentTestRunInfo) {
 		this.namespace = `${name}${salt ? `|${salt}` : ''}`;
 	}
 
@@ -315,7 +316,7 @@ export class SQLiteSlottedCache<TRequest extends CacheableRequest, TResponse> im
 	private readonly namespace: string;
 	private readonly locks = new LockMap();
 
-	constructor(name: string, salt: string) {
+	constructor(name: string, salt: string, info?: CurrentTestRunInfo) {
 		this.namespace = `${name}|${salt}`;
 	}
 

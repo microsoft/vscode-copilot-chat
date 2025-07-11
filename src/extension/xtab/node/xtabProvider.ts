@@ -14,8 +14,8 @@ import { LanguageContextEntry, LanguageContextResponse } from '../../../platform
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
-import { DocumentShorteningStrategy, NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
-import { ChainedStatelessNextEditProvider, IgnoreEditsAtClippingBorderAspect, IgnoreTriviaWhitespaceChangesAspect } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
+import { NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { ChainedStatelessNextEditProvider, IgnoreTriviaWhitespaceChangesAspect } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ILanguageContextService, KnownSources, RequestContext } from '../../../platform/languageServer/common/languageContextService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -27,7 +27,6 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import * as errors from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { createTracer, ITracer } from '../../../util/common/tracing';
-import { assertNever } from '../../../util/vs/base/common/assert';
 import { AsyncIterableObject, DeferredPromise, raceTimeout, timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
@@ -72,7 +71,6 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 
 	public static readonly ID = XTabProviderId;
 
-	public readonly documentShorteningStrategy = DocumentShorteningStrategy.NoShortening;
 	public readonly dependsOnSelection = true;
 	public readonly showNextEditPreference = ShowNextEditPreference.Always;
 
@@ -95,7 +93,6 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		super(XtabProvider.ID, [
 			base => new IgnoreImportChangesAspect(base),
 			base => new IgnoreTriviaWhitespaceChangesAspect(base),
-			base => new IgnoreEditsAtClippingBorderAspect(base),
 		]);
 
 		this.delayer = new Delayer(this.configService, this.expService);
@@ -161,6 +158,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 
 		const endpoint = this.getEndpoint();
 		logContext.setEndpointInfo(typeof endpoint.urlOrRequestMetadata === 'string' ? endpoint.urlOrRequestMetadata : endpoint.urlOrRequestMetadata.type, endpoint.model);
+		telemetryBuilder.setModelName(endpoint.model);
 
 		const computeTokens = (s: string) => Math.floor(s.length / 4);
 
@@ -217,7 +215,8 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 			promptOptions = xtabPromptOptions.DEFAULT_OPTIONS;
 		} else {
 			const promptingStrategy = this.determinePromptingStrategy({
-				isUnifiedModel: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabUseUnifiedModel, this.expService),
+				isXtabUnifiedModel: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabUseUnifiedModel, this.expService),
+				isCodexV21NesUnified: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabCodexV21NesUnified, this.expService),
 				useSimplifiedPrompt: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseSimplifiedPrompt, this.expService),
 				useXtab275Prompting: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseXtab275Prompting, this.expService),
 			});
@@ -523,9 +522,10 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 
 		if (opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.Xtab275) {
 			cleanedLinesStream = linesStream;
-		} else if (opts.promptingStrategy !== xtabPromptOptions.PromptingStrategy.UnifiedModel) {
-			cleanedLinesStream = linesWithBackticksRemoved(linesStream);
-		} else if (opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.UnifiedModel) {
+		} else if (
+			opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.UnifiedModel ||
+			opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.Codexv21NesUnified
+		) {
 			const linesIter = linesStream[Symbol.asyncIterator]();
 			const firstLine = await linesIter.next();
 
@@ -598,7 +598,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 				return;
 			}
 		} else {
-			assertNever(opts.promptingStrategy);
+			cleanedLinesStream = linesWithBackticksRemoved(linesStream);
 		}
 
 		const diffOptions: ResponseProcessor.DiffParams = {
@@ -783,9 +783,11 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		}
 	}
 
-	private determinePromptingStrategy({ isUnifiedModel, useSimplifiedPrompt, useXtab275Prompting }: { isUnifiedModel: boolean; useSimplifiedPrompt: boolean; useXtab275Prompting: boolean }): xtabPromptOptions.PromptingStrategy | undefined {
-		if (isUnifiedModel) {
+	private determinePromptingStrategy({ isXtabUnifiedModel, isCodexV21NesUnified, useSimplifiedPrompt, useXtab275Prompting }: { isXtabUnifiedModel: boolean; isCodexV21NesUnified: boolean; useSimplifiedPrompt: boolean; useXtab275Prompting: boolean }): xtabPromptOptions.PromptingStrategy | undefined {
+		if (isXtabUnifiedModel) {
 			return xtabPromptOptions.PromptingStrategy.UnifiedModel;
+		} else if (isCodexV21NesUnified) {
+			return xtabPromptOptions.PromptingStrategy.Codexv21NesUnified;
 		} else if (useSimplifiedPrompt) {
 			return xtabPromptOptions.PromptingStrategy.SimplifiedSystemPrompt;
 		} else if (useXtab275Prompting) {
@@ -799,6 +801,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		switch (promptingStrategy) {
 			case xtabPromptOptions.PromptingStrategy.UnifiedModel:
 				return unifiedModelSystemPrompt;
+			case xtabPromptOptions.PromptingStrategy.Codexv21NesUnified:
 			case xtabPromptOptions.PromptingStrategy.SimplifiedSystemPrompt:
 				return simplifiedPrompt;
 			case xtabPromptOptions.PromptingStrategy.Xtab275:
@@ -834,7 +837,11 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 	}
 
 	private static getPredictionContents(editWindowLines: readonly string[], promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined): string {
-		if (promptingStrategy === xtabPromptOptions.PromptingStrategy.UnifiedModel) {
+		if (promptingStrategy === xtabPromptOptions.PromptingStrategy.UnifiedModel ||
+			promptingStrategy === xtabPromptOptions.PromptingStrategy.Codexv21NesUnified
+		) {
+			return editWindowLines.join('\n');
+		} else if (promptingStrategy === xtabPromptOptions.PromptingStrategy.SimplifiedSystemPrompt) {
 			return ['<EDIT>', ...editWindowLines, '</EDIT>'].join('\n');
 		} else if (promptingStrategy === xtabPromptOptions.PromptingStrategy.Xtab275) {
 			return editWindowLines.join('\n');

@@ -51,7 +51,6 @@ class DebugSessionTracker implements DebugAdapterTracker {
 
 // taken from https://github.com/microsoft/vscode/blob/499fb52ae8c985485e6503669f3711ee0d6f31dc/src/vs/base/common/strings.ts#L731
 function removeAnsiEscapeCodes(str: string): string {
-	// eslint-disable-next-line no-control-regex
 	const CSI_SEQUENCE = /(:?\x1b\[|\x9B)[=?>!]?[\d;:]*["$#'* ]?[a-zA-Z@^`{}|~]/g;
 	if (str) {
 		str = str.replace(CSI_SEQUENCE, '');

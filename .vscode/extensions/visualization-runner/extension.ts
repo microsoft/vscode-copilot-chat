@@ -74,7 +74,7 @@ function getTests(document: string): TestInfo[] {
 		return [];
 	}
 
-	function parseTest(node: ts.Node): { testName: string, node: ts.Node } | undefined {
+	function parseTest(node: ts.Node): { testName: string; node: ts.Node } | undefined {
 		if (!ts.isCallExpression(node)) { return undefined; }
 		if (!ts.isIdentifier(node.expression)) { return undefined; }
 		if (node.expression.text !== 'test') { return undefined; }
@@ -86,7 +86,7 @@ function getTests(document: string): TestInfo[] {
 		};
 	}
 
-	function parseDescribeOrSuite(node: ts.Node): { describeName: string, node: ts.Node } | undefined {
+	function parseDescribeOrSuite(node: ts.Node): { describeName: string; node: ts.Node } | undefined {
 		if (!ts.isCallExpression(node)) { return undefined; }
 		if (!ts.isIdentifier(node.expression)) { return undefined; }
 		if (node.expression.text !== 'describe' && node.expression.text !== 'suite') { return undefined; }

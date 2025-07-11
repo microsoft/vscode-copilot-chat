@@ -66,9 +66,7 @@ export interface ILlmNESTelemetry extends Partial<IStatelessNextEditTelemetry> {
 	readonly fetchStartedAfterMs: number | undefined;
 	readonly isFromCache: boolean;
 	readonly subsequentEditOrder: number | undefined;
-	readonly documentShorteningStrategy: string | undefined;
 	readonly activeDocumentOriginalLineCount: number | undefined;
-	readonly activeDocumentShortenedLineCount: number | undefined;
 	readonly activeDocumentEditsCount: number | undefined;
 	readonly activeDocumentLanguageId: string | undefined;
 	readonly activeDocumentRepository: string | undefined;
@@ -123,7 +121,6 @@ export class LlmNESTelemetryBuilder extends Disposable {
 		let activeDocumentEditsCount: number | undefined = undefined;
 		let activeDocumentLanguageId: string | undefined = undefined;
 		let activeDocumentOriginalLineCount: number | undefined = undefined;
-		let activeDocumentShortenedLineCount: number | undefined = undefined;
 		let isNotebook: boolean = false;
 		let activeDocumentRepository: string | undefined = undefined;
 		let repositoryUrls: string[] | undefined = undefined;
@@ -134,8 +131,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			editsCount = this._request.documents.reduce((acc, doc) => acc + doc.recentEdits.edits.length, 0);
 			activeDocumentEditsCount = activeDoc.recentEdits.edits.length;
 			activeDocumentLanguageId = activeDoc.languageId;
-			activeDocumentOriginalLineCount = activeDoc.lineCountBeforeClipping;
-			activeDocumentShortenedLineCount = activeDoc.clippingRange.length;
+			activeDocumentOriginalLineCount = activeDoc.documentAfterEditsLines.length;
 			isNotebook = activeDoc.id.toUri().scheme === Schemas.vscodeNotebookCell;
 			const git = this._gitExtensionService.getExtensionApi();
 			if (git) {
@@ -234,13 +230,11 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			nextEditProviderDuration: this._duration || 0,
 			isFromCache: this._isFromCache,
 			subsequentEditOrder: this._subsequentEditOrder,
-			documentShorteningStrategy: this._documentShorteningStrategy,
 			documentsCount,
 			editsCount,
 			activeDocumentEditsCount,
 			activeDocumentLanguageId,
 			activeDocumentOriginalLineCount,
-			activeDocumentShortenedLineCount,
 			fetchStartedAfterMs,
 			wasPreviouslyRejected: this._wasPreviouslyRejected,
 			isNotebook: isNotebook,
@@ -308,12 +302,6 @@ export class LlmNESTelemetryBuilder extends Disposable {
 	private _subsequentEditOrder: number | undefined;
 	public setSubsequentEditOrder(subsequentEditOrder: number | undefined): this {
 		this._subsequentEditOrder = subsequentEditOrder;
-		return this;
-	}
-
-	private _documentShorteningStrategy: string | undefined;
-	public setDocumentShorteningStrategy(documentShorteningStrategy: string): this {
-		this._documentShorteningStrategy = documentShorteningStrategy;
 		return this;
 	}
 
@@ -612,15 +600,14 @@ export class TelemetrySender implements IDisposable {
 			headerRequestId,
 			requestN,
 			providerId,
+			modelName,
 			hadStatelessNextEditProviderCall,
 			statelessNextEditProviderDuration,
 			nextEditProviderDuration,
 			isFromCache,
 			subsequentEditOrder,
-			documentShorteningStrategy,
 			activeDocumentLanguageId,
 			activeDocumentOriginalLineCount,
-			activeDocumentShortenedLineCount,
 			nLinesOfCurrentFileInPrompt,
 			wasPreviouslyRejected,
 			isShown,
@@ -682,7 +669,7 @@ export class TelemetrySender implements IDisposable {
 		"opportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Unique identifier for an opportunity to show an NES." },
 		"headerRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Unique identifier of the network request which is also included in the fetch request header." },
 		"providerId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "NES provider identifier (StatelessNextEditProvider)" },
-		"documentShorteningStrategy": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Document shortening strategy, eg clipping or summarization" },
+		"modelName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Name of the model used to provide the NES" },
 		"activeDocumentLanguageId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "LanguageId of the active document" },
 		"acceptance": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "User acceptance of the edit" },
 		"disposalReason": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Reason for disposal of NES" },
@@ -702,7 +689,6 @@ export class TelemetrySender implements IDisposable {
 		"isFromCache": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit was provided from cache", "isMeasurement": true },
 		"subsequentEditOrder": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Order of the subsequent edit", "isMeasurement": true },
 		"activeDocumentOriginalLineCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of lines in the active document before shortening", "isMeasurement": true },
-		"activeDocumentShortenedLineCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of lines in the active document after shortening", "isMeasurement": true },
 		"activeDocumentNLinesInPrompt": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of lines in the active document included in prompt", "isMeasurement": true },
 		"wasPreviouslyRejected": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit was previously rejected", "isMeasurement": true },
 		"isShown": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit was shown", "isMeasurement": true },
@@ -746,7 +732,7 @@ export class TelemetrySender implements IDisposable {
 				opportunityId,
 				headerRequestId,
 				providerId,
-				documentShorteningStrategy,
+				modelName,
 				activeDocumentLanguageId,
 				acceptance,
 				disposalReason,
@@ -766,7 +752,6 @@ export class TelemetrySender implements IDisposable {
 				isFromCache: this._boolToNum(isFromCache),
 				subsequentEditOrder,
 				activeDocumentOriginalLineCount,
-				activeDocumentShortenedLineCount,
 				activeDocumentNLinesInPrompt: nLinesOfCurrentFileInPrompt,
 				wasPreviouslyRejected: this._boolToNum(wasPreviouslyRejected),
 				isShown: this._boolToNum(isShown),
