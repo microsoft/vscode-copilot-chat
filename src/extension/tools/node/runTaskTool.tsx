@@ -10,6 +10,7 @@ import type * as vscode from 'vscode';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ITasksService, TaskResult, TaskStatus } from '../../../platform/tasks/common/tasksService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ITerminalService } from '../../../platform/terminal/common/terminalService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { timeout } from '../../../util/vs/base/common/async';
@@ -33,7 +34,8 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 		@ITerminalService private readonly terminalService: ITerminalService,
-		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider
+		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
+		@ITelemetryService private readonly telemetryService: ITelemetryService
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IRunTaskToolInput>, token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
@@ -45,14 +47,26 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 		const workspaceFolderRaw = this.promptPathRepresentationService.resolveFilePath(options.input.workspaceFolder);
 		const workspaceFolder = (workspaceFolderRaw && this.workspaceService.getWorkspaceFolder(workspaceFolderRaw)) || this.workspaceService.getWorkspaceFolders()[0];
 
+		const totalStartTime = Date.now();
+		const taskStartTime = totalStartTime;
 		const result: TaskResult = task ? await this.tasksService.executeTask(task, token, workspaceFolder) : { status: TaskStatus.Error, error: new Error('Task not found') };
+		const taskEndTime = Date.now();
+		const taskRunDurationMs = taskEndTime - taskStartTime;
+		let totalDurationMs: number | undefined;
 
-		// If it times out, just says the task has started
-		const checkIntervals = [100, 100, 100, 100, 100, 100];
+		// Start with 500 to ensure the buffer has content
+		const checkIntervals = [1000, 100, 100, 100, 100, 100];
 
+		let pollStartTime: number | undefined;
+		let pollEndTime: number | undefined;
+		let pollDurationMs: number | undefined;
+		let idleOrInactive: 'idle' | 'inactive' | undefined;
+
+		let lastEvalDurationMs: number | undefined;
 		if (task) {
 			let terminal: vscode.Terminal | undefined;
 			let idleCount = 0;
+			pollStartTime = Date.now();
 			for (const interval of checkIntervals) {
 				await timeout(interval);
 				if (!terminal) {
@@ -75,13 +89,33 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 
 				// If buffer is idle for threshold or task is inactive, evaluate output
 				if (idleCount >= 2 || inactive) {
+					pollEndTime = Date.now();
+					pollDurationMs = pollEndTime - (pollStartTime ?? pollEndTime);
+					idleOrInactive = inactive ? 'inactive' : 'idle';
+					const evalStartTime = Date.now();
 					const evalResult = await this._evaluateOutputForErrors(buffer, token);
-					if (evalResult) {
-						return new LanguageModelToolResult([new LanguageModelTextPart(l10n.t`${evalResult}`)]);
-					}
-					break;
+					const evalEndTime = Date.now();
+					const evalDurationMs = evalEndTime - evalStartTime;
+					lastEvalDurationMs = evalDurationMs;
+					totalDurationMs = Date.now() - totalStartTime;
+					this.telemetryService.sendMSFTTelemetryEvent?.('copilotChat.runTaskTool.run', {
+						taskType: task.type,
+						taskLabel: task.label,
+						reason: idleOrInactive,
+						bufferLength: String(buffer.length)
+					}, { taskRunDurationMs, pollDurationMs, totalDuration: totalDurationMs, evalDurationMs });
+					return new LanguageModelToolResult([new LanguageModelTextPart(l10n.t`${evalResult}`)]);
 				}
 			}
+		}
+
+		if (!pollDurationMs) {
+			totalDurationMs = Date.now() - totalStartTime;
+			this.telemetryService.sendMSFTTelemetryEvent?.('copilotChat.runTaskTool.run', {
+				taskType: task?.type,
+				taskLabel: task?.label,
+				result: 'running',
+			}, { taskRunDurationMs, totalDuration: totalDurationMs, evalDurationMs: lastEvalDurationMs });
 		}
 
 		let output: string;

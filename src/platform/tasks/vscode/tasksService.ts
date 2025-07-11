@@ -271,7 +271,7 @@ export class TasksService extends DisposableStore implements ITasksService {
 								if (!resolved) {
 									resolve({ status: TaskStatus.Started });
 								}
-							}, 10000);
+							}, task?.isBackground && task.problemMatchers.length ? 10000 : 0);
 						} else {
 							resolve({ status: TaskStatus.Started });
 						}
