@@ -107,6 +107,7 @@
 		"terminalQuickFixProvider",
 		"mappedEditsProvider",
 		"aiRelatedInformation",
+		"aiSettingsSearch",
 		"chatParticipantAdditions",
 		"chatEditing",
 		"defaultChatParticipant@4",
