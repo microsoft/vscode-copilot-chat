@@ -26,7 +26,7 @@ export class GlobalsRunnable extends AbstractContextRunnable {
 	private readonly tokenInfo: TokenInfo;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: TokenInfo) {
-		super(session, languageService, context, GlobalsRunnable.name, Priorities.Globals, ComputeCost.Medium);
+		super(session, languageService, context, 'GlobalsRunnable', Priorities.Globals, ComputeCost.Medium);
 		this.tokenInfo = tokenInfo;
 	}
 

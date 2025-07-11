@@ -228,7 +228,7 @@ class TreeRunnableResult {
 			id = id.substring(1); // Remove leading underscore for display purposes
 		}
 		const cacheInfo = this.from.cache !== undefined ? 1 : 0;
-		let label = `${id} - ${this.items.length} items`;
+		let label = `${id} - ${this.items.length} items - ${this.from.state}`;
 		if (this.parent.summary.serverComputed?.has(this.from.id)) {
 			label += ' - ⏳';
 		}

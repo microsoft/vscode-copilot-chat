@@ -264,7 +264,7 @@ export class SuperClassRunnable extends AbstractContextRunnable {
 	private readonly classDeclaration: tt.ClassDeclaration;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, classDeclaration: tt.ClassDeclaration, priority: number = Priorities.Inherited) {
-		super(session, languageService, context, SuperClassRunnable.name, priority, ComputeCost.Medium);
+		super(session, languageService, context, 'SuperClassRunnable', priority, ComputeCost.Medium);
 		this.classDeclaration = classDeclaration;
 	}
 
@@ -299,7 +299,7 @@ class SimilarClassRunnable extends AbstractContextRunnable {
 	private readonly classDeclaration: tt.ClassDeclaration;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, classDeclaration: tt.ClassDeclaration, priority: number = Priorities.Blueprints) {
-		super(session, languageService, context, SimilarClassRunnable.name, priority, ComputeCost.High);
+		super(session, languageService, context, 'SimilarClassRunnable', priority, ComputeCost.High);
 		this.classDeclaration = classDeclaration;
 	}
 

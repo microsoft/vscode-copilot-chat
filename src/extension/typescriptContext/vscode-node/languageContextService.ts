@@ -867,6 +867,16 @@ class RunnableResultManager implements vscode.Disposable {
 				client.push(item);
 			}
 		} else {
+			const canSkipItems = (rr: ResolvedRunnableResult, cache: protocol.CacheInfo): boolean => {
+				if (rr.state === protocol.ContextRunnableState.Finished) {
+					return true;
+				}
+				if (rr.state === protocol.ContextRunnableState.IsFull) {
+					const kind = cache.scope.kind;
+					return kind === protocol.CacheScopeKind.WithinRange || kind === protocol.CacheScopeKind.NeighborFiles || kind === protocol.CacheScopeKind.File;
+				}
+				return false;
+			};
 			const handleRunnableResult = (id: string, rr: ResolvedRunnableResult) => {
 				const cache = rr.cache;
 				const cachedResult: protocol.CachedContextRunnableResult = {
@@ -881,7 +891,7 @@ class RunnableResultManager implements vscode.Disposable {
 					const emitMode = cache.emitMode;
 					if (emitMode === protocol.EmitMode.ClientBased) {
 						client.push(rr);
-						skipItems = rr.state !== protocol.ContextRunnableState.Finished;
+						skipItems = canSkipItems(rr, cache);
 					} else if (emitMode === protocol.EmitMode.ClientBasedOnTimeout) {
 						clientOnTimeout.push(rr);
 					}
