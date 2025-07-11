@@ -335,7 +335,6 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	}
 
 	private _handleAcceptance(item: NesCompletionItem) {
-		console.log('[InlineCompletionProvider] _handleAcceptance called');
 		this.logContextRecorder?.handleAcceptance(item.info.suggestion);
 
 		item.telemetryBuilder.setAcceptance('accepted');
@@ -343,7 +342,6 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 		const info = item.info;
 		if (isLlmCompletionInfo(info)) {
-			console.log('[InlineCompletionProvider] Calling nextEditProvider.handleAcceptance');
 			this.model.nextEditProvider.handleAcceptance(info.documentId, info.suggestion);
 			this._trackSurvivalRate(info);
 		} else {
