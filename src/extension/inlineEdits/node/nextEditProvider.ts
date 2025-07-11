@@ -10,7 +10,7 @@ import { RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit'
 import { RootedLineEdit } from '../../../platform/inlineEdits/common/dataTypes/rootedLineEdit';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { IObservableDocument, ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
-import { IStatelessNextEditProvider, NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { IStatelessNextEditProvider, IStatelessNextEditTelemetry, NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { autorunWithChanges } from '../../../platform/inlineEdits/common/utils/observable';
 import { DocumentHistory, HistoryContext, IHistoryContextProvider } from '../../../platform/inlineEdits/common/workspaceEditTracker/historyContextProvider';
 import { NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
@@ -38,7 +38,7 @@ import { RejectionCollector } from '../common/rejectionCollector';
 import { DebugRecorder } from './debugRecorder';
 import { INesConfigs } from './nesConfigs';
 import { CachedOrRebasedEdit, NextEditCache } from './nextEditCache';
-import { LlmNESTelemetryBuilder } from './nextEditProviderTelemetry';
+import { LlmNESTelemetryBuilder, NextEditTelemetryStatus } from './nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from './nextEditResult';
 import { OptimisticNextEditFetcher } from './optimisticNextEditFetcher';
 
@@ -710,35 +710,9 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			isRecentlyShownCacheEnabled: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRecentlyShownCacheEnabled, this._expService),
 		};
 
-		// Create a stub telemetry builder for optimistic fetches
-		// We don't need full telemetry for prefetching
-		const telemetryBuilder = {
-			setStatus: () => { },
-			setNESConfigs: () => { },
-			setNesResponse: () => { },
-			setIsSanitized: () => { },
-			setNesStartTime: () => { },
-			setComputedNesEdits: () => { },
-			setWasPreviouslyRejected: () => { },
-			setRequest: () => { },
-			setStatelessNextEditTelemetry: () => { },
-			setNesRequest: () => { },
-			setCacheHit: () => { },
-			setCacheRebaseSucceeded: () => { },
-			setHeaderRequestId: () => { },
-			setStatelessEditRequest: () => { },
-			setIsNextEditProviderAsync: () => { },
-			setIsFromCache: () => { },
-			markEndTime: () => { },
-			setSubsequentEditOrder: () => { },
-			setError: () => { },
-			setResponse: () => { },
-			setResponseResults: () => { },
-			setRecordingBookmark: () => { },
-			setIsCachedResult: () => { },
-			setIsSkipped: () => { },
-			setIsOptimistic: () => { },
-		} as any;
+		// Create a minimal telemetry builder for optimistic fetches
+		// Optimistic fetches don't need full telemetry since they're speculative
+		const telemetryBuilder = new OptimisticFetchTelemetryBuilder();
 
 		// Create log context for optimistic fetch
 		const logContext = new InlineEditRequestLogContext(docId.toUri().toString(), 0, context);
@@ -819,5 +793,33 @@ class RecentlyShownCache {
 
 	private _key(docId: DocumentId, documentContent: StringText) {
 		return docId.uri + ';' + documentContent.value;
+	}
+}
+
+/**
+ * A minimal telemetry builder for optimistic fetches.
+ * Since optimistic fetches are speculative and may not be used,
+ * we don't collect detailed telemetry for them.
+ * This implements the interface without actually recording telemetry.
+ */
+class OptimisticFetchTelemetryBuilder implements Partial<LlmNESTelemetryBuilder> {
+	// Implement all required methods as no-ops that return this for chaining
+	setStatus(status: NextEditTelemetryStatus): this { return this; }
+	setNESConfigs(nesConfigs: INesConfigs): this { return this; }
+	setWasPreviouslyRejected(): this { return this; }
+	setRequest(request: StatelessNextEditRequest): this { return this; }
+	setStatelessNextEditTelemetry(telemetry: IStatelessNextEditTelemetry): this { return this; }
+	setHeaderRequestId(uuid: string): this { return this; }
+	setIsFromCache(): this { return this; }
+	markEndTime(): this { return this; }
+	setSubsequentEditOrder(order: number | undefined): this { return this; }
+	setError(error: any): this { return this; }
+	setResponse(response: any): this { return this; }
+	setResponseResults(results: any): this { return this; }
+	setRecordingBookmark(bookmark: any): this { return this; }
+	setIsCachedResult(result: any): this { return this; }
+	setIsSkipped(): this { return this; }
+	dispose(): void {
+		// No resources to dispose
 	}
 }
