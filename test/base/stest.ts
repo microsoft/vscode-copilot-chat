@@ -638,27 +638,3 @@ export function toDirname(testName: string): string {
 	}
 	return filename;
 }
-
-/**
- * Returns a function that calls the inner function for each combination of the given arguments.
- * Useful to mass-create tests.
-*/
-export function forEachCombination<T extends Record<string, any[]>>(arg: T, fn: (m: { [K in keyof T]: T[K][number] }) => void): () => void {
-	return () => {
-		const keys = Object.keys(arg) as (keyof T)[];
-		const values = keys.map(key => arg[key]);
-		const max = values.reduce((p, c) => p * c.length, 1);
-		for (let i = 0; i < max; i++) {
-			const m: { [K in keyof T]: T[K][number] } = {} as any;
-			let rem = i;
-			for (let j = 0; j < keys.length; j++) {
-				const key = keys[j];
-				const value = values[j];
-				const idx = rem % value.length;
-				rem = Math.floor(rem / value.length);
-				m[key] = value[idx];
-			}
-			fn(m);
-		}
-	};
-}
