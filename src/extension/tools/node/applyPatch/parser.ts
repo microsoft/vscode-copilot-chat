@@ -408,19 +408,17 @@ export class Parser {
 
 			for (const ch of nextSection.chunks) {
 				ch.origIndex += match.line;
+				ch.insLines = ch.insLines.map(replace_explicit_tabs);
+
 				if (this.fixIndentationDuringMatch) {
 					ch.insLines = ch.insLines.map(ins => isFalsyOrWhitespace(ins) ? ins : additionalIndentation + transformIndentation(ins, srcIndentStyle, targetIndentStyle));
 				}
 
 				if (match.fuzz & Fuzz.NormalizedExplicitTab) {
-					action.chunks.push({
-						delLines: ch.delLines.map(replace_explicit_tabs),
-						insLines: ch.insLines.map(replace_explicit_tabs),
-						origIndex: ch.origIndex,
-					});
-				} else {
-					action.chunks.push(ch);
+					ch.delLines = ch.delLines.map(replace_explicit_tabs);
 				}
+
+				action.chunks.push(ch);
 			}
 			index = match.line + nextSection.nextChunkContext.length;
 			this.index = nextSection.endPatchIndex;

@@ -286,6 +286,38 @@ suite('applyPatch parser', () => {
 		]);
 	});
 
+	it('always normalizes explicit \\t tab chars in replacement', () => {
+		// 4.1 likes to explicitly put tabs as `\\t` in its patches
+		const input = `*** Begin Patch\n*** Update File: a.txt\n@@\n-hello\n+\\t\\tworld\n*** End Patch`;
+
+		expect(text_to_patch(input, {
+			'a.txt': new StringTextDocumentWithLanguageId('hello', 'text/plain')
+		})).toMatchInlineSnapshot(`
+			[
+			  {
+			    "actions": {
+			      "a.txt": {
+			        "chunks": [
+			          {
+			            "delLines": [
+			              "hello",
+			            ],
+			            "insLines": [
+			              "		world",
+			            ],
+			            "origIndex": 0,
+			          },
+			        ],
+			        "movePath": undefined,
+			        "type": "update",
+			      },
+			    },
+			  },
+			  0,
+			]
+		`);
+	});
+
 
 	suite('corpus', () => {
 		const corpusPath = path.join(__dirname, 'corpus');
