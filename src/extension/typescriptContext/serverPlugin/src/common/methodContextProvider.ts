@@ -449,7 +449,7 @@ abstract class SimilarPropertyRunnable<T extends tt.MethodDeclaration | tt.Const
 					return;
 				}
 				const sourceFile = this.declaration.getSourceFile();
-				const snippetBuilder = new CodeSnippetBuilder(this.session, this.context.getSymbols(program), sourceFile);
+				const snippetBuilder = new CodeSnippetBuilder(this.session, this.context.getSymbols(program), sourceFile, result);
 				snippetBuilder.addDeclaration(candidate);
 				result.addSnippet(snippetBuilder, undefined, this.priority);
 			}
@@ -581,7 +581,7 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 			}
 			const [handled, key] = this.handleSymbolIfKnown(typeSymbol);
 			if (!handled) {
-				const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile);
+				const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile, result);
 				snippetBuilder.addTypeSymbol(typeSymbol, name);
 				continueResult = continueResult && result.addSnippet(snippetBuilder, key, this.priority, true);
 			}

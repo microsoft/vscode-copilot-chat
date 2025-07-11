@@ -465,7 +465,7 @@ export class RunnableResult implements SnippetCollector {
 			return true;
 		}
 
-		const snippetBuilder = new CodeSnippetBuilder(this.context.getSession(), this.context.getSymbols(), this.context.getActiveSourceFile());
+		const snippetBuilder = new CodeSnippetBuilder(this.context.getSession(), this.context.getSymbols(), this.context.getActiveSourceFile(), this);
 		snippetBuilder.addTypeSymbol(symbol, name);
 		return this.addSnippet(snippetBuilder, key, priority, ifRoom);
 	}

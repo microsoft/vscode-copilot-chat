@@ -517,11 +517,28 @@ class TypeAliasEmitter extends TypeEmitter {
 
 	public readonly key: string | undefined;
 
-	constructor(context: EmitterContext, source: tt.SourceFile, type: tt.Symbol, name: string) {
+	private readonly snippetCollector: SnippetCollector;
+
+	constructor(context: EmitterContext, source: tt.SourceFile, type: tt.Symbol, name: string, snippetCollector: SnippetCollector) {
 		super(context, source, type, name);
+		this.snippetCollector = snippetCollector;
 	}
 
 	public emit(): void {
+		const declarations = this.type.declarations;
+		if (declarations === undefined || declarations.length === 0) {
+			return;
+		}
+		let declaration: tt.TypeAliasDeclaration | undefined;
+		for (const d of declarations) {
+			if (ts.isTypeAliasDeclaration(d)) {
+				declaration = d;
+				break;
+			}
+		}
+		if (declaration === undefined) {
+			return;
+		}
 	}
 }
 
@@ -617,9 +634,9 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 	private readonly context: EmitterContext;
 	private readonly symbols: Symbols;
 	private readonly currentSourceFile: tt.SourceFile;
-	private readonly snippetCollector?: SnippetCollector;
+	private readonly snippetCollector: SnippetCollector;
 
-	constructor(context: EmitterContext, symbols: Symbols, currentSourceFile: tt.SourceFile, snippetCollector?: SnippetCollector) {
+	constructor(context: EmitterContext, symbols: Symbols, currentSourceFile: tt.SourceFile, snippetCollector: SnippetCollector) {
 		super();
 		this.lines = [];
 		this.source = undefined;
@@ -685,13 +702,19 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 		if (sourceFile.fileName === this.currentSourceFile.fileName || this.skipDeclaration(declaration, sourceFile)) {
 			return;
 		}
-		const lines = Nodes.getLines(declaration, sourceFile);
+		this.addLines(Nodes.getLines(declaration, sourceFile));
+		this.addSource(sourceFile.fileName);
+	}
+
+	public addLines(lines: string[]): void {
+		if (lines.length === 0) {
+			return;
+		}
 		if (this.indent === 0) {
 			this.lines.push(...lines);
 		} else {
-			this.lines.push(...lines.map(line => `${'\t'.repeat(this.indent)}${line})`));
+			this.lines.push(...lines.map(line => `${'\t'.repeat(this.indent)}${line}`));
 		}
-		this.addSource(sourceFile.fileName);
 	}
 
 	public addClassSymbol(clazz: tt.Symbol, name: string, includeSuperClasses: boolean = true, includePrivates: boolean = false): void {
@@ -727,25 +750,55 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 		this.addEmitter(new InterfaceEmitter(this.context, this.symbols, info.primary, iface, name));
 	}
 
-	public addTypeAliasSymbol(type: tt.Symbol, name: string): void {
-		if (!Symbols.isTypeAlias(type)) {
+	public addTypeAliasSymbol(symbol: tt.Symbol, name: string): void {
+		if (!Symbols.isTypeAlias(symbol)) {
 			return;
 		}
-		const typeToEmit = this.getTypeToEmit(type);
-		if (typeToEmit === undefined) {
-			return;
-		}
-		const info = this.getSymbolInfo(typeToEmit);
+		const info = this.getSymbolInfo(symbol);
 		if (info.skip) {
 			return;
 		}
-		const source = info.primary;
-		if (Symbols.isClass(typeToEmit)) {
-			this.addEmitter(new ClassEmitter(this.context, this.symbols, source, typeToEmit, name, true, false));
-		} else if (Symbols.isInterface(typeToEmit)) {
-			this.addEmitter(new InterfaceEmitter(this.context, this.symbols, source, typeToEmit, name));
-		} else if (Symbols.isTypeLiteral(typeToEmit)) {
-			this.addEmitter(new TypeLiteralEmitter(this.context, source, typeToEmit, name));
+		const declarations = symbol.declarations;
+		if (declarations === undefined || declarations.length === 0) {
+			return;
+		}
+		let declaration: tt.TypeAliasDeclaration | undefined;
+		for (const d of declarations) {
+			if (ts.isTypeAliasDeclaration(d)) {
+				declaration = d;
+				break;
+			}
+		}
+		if (declaration === undefined) {
+			return;
+		}
+		const type = declaration.type;
+		if (ts.isTypeLiteralNode(type)) {
+			const symbol = this.symbols.getLeafSymbolAtLocation(type);
+			if (symbol !== undefined && Symbols.isTypeLiteral(symbol)) {
+				this.addEmitter(new TypeLiteralEmitter(this.context, info.primary, symbol, name));
+				return;
+			}
+		} else if (ts.isTypeReferenceNode(type)) {
+			// We are very careful with recursion here and we only emit types where we can override the name.
+			const symbol = this.symbols.getLeafSymbolAtLocation(type.typeName);
+			if (symbol !== undefined && (Symbols.isInterface(symbol) || Symbols.isClass(symbol) || Symbols.isEnum(symbol))) {
+				this.addTypeSymbol(symbol, name);
+				return;
+			} else if (symbol !== undefined && Symbols.isTypeAlias(symbol)) {
+				const declaration = symbol.declarations?.[0];
+				if (declaration && ts.isTypeAliasDeclaration(declaration)) {
+					const lines = Nodes.getLines(declaration.type);
+					if (lines.length > 0) {
+						lines[0] = `type ${name} = ${lines[0]}`;
+					}
+					this.addLines(lines);
+					this.addSource(declaration.getSourceFile().fileName);
+				}
+			}
+		} else if (ts.isUnionTypeNode(type) || ts.isIntersectionTypeNode(type)) {
+			this.addDeclaration(declaration);
+			return;
 		}
 	}
 
@@ -832,32 +885,5 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 		}
 		this.addSource(uri);
 		this.addAdditionalSource(additionalUris);
-	}
-
-	private getTypeToEmit(type: tt.Symbol): tt.Symbol | undefined {
-		if (!Symbols.isTypeAlias(type)) {
-			return undefined;
-		}
-		const declarations = type.declarations;
-		if (declarations === undefined) {
-			return undefined;
-		}
-		for (const declaration of declarations) {
-			if (ts.isTypeAliasDeclaration(declaration)) {
-				const type = declaration.type;
-				if (ts.isTypeLiteralNode(type)) {
-					const symbol = this.symbols.getLeafSymbolAtLocation(type);
-					if (Symbols.isTypeLiteral(symbol)) {
-						return symbol;
-					}
-				} else if (ts.isTypeReferenceNode(type)) {
-					const symbol = this.symbols.getLeafSymbolAtLocation(type.typeName);
-					if (Symbols.isInterface(symbol) || Symbols.isClass(symbol) || Symbols.isTypeLiteral(symbol)) {
-						return symbol;
-					}
-				}
-			}
-		}
-		return undefined;
 	}
 }

@@ -52,7 +52,7 @@ export class GlobalsRunnable extends AbstractContextRunnable {
 			if (handled) {
 				continue;
 			}
-			const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile);
+			const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile, result);
 			snippetBuilder.addTypeSymbol(symbol);
 			if (!result.addSnippet(snippetBuilder, key, this.priority, true)) {
 				break;

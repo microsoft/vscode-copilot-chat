@@ -140,7 +140,7 @@ export class SignatureRunnable extends FunctionLikeContextRunnable {
 			if (handled) {
 				continue;
 			}
-			const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, this.sourceFile);
+			const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, this.sourceFile, result);
 			snippetBuilder.addTypeSymbol(symbol, symbolEmitData.name);
 			result.addSnippet(snippetBuilder, key, this.priority);
 		}
@@ -236,7 +236,7 @@ export class TypeOfLocalsRunnable extends AbstractContextRunnable {
 				if (handled) {
 					continue;
 				}
-				const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile);
+				const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile, result);
 				snippetBuilder.addTypeSymbol(symbol, symbolEmitData.name);
 				result.addSnippet(snippetBuilder, key, this.priority);
 			}
@@ -299,7 +299,7 @@ export class TypesOfNeighborFilesRunnable extends AbstractContextRunnable {
 						continue;
 					}
 
-					const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile);
+					const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile, result);
 					snippetBuilder.addTypeSymbol(memberSymbol, member[0] as string);
 					if (!result.addSnippet(snippetBuilder, key, Priorities.NeighborFiles, true)) {
 						return;
@@ -424,7 +424,7 @@ export class ImportsRunnable extends AbstractContextRunnable {
 				continue;
 			}
 
-			const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile);
+			const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile, result);
 			snippetBuilder.addTypeSymbol(symbol, name);
 			const full = !result.addSnippet(snippetBuilder, key, this.priority, true);
 			if (full) {
@@ -554,7 +554,7 @@ export class TypeOfExpressionRunnable extends AbstractContextRunnable {
 			if (returnTypeSymbol === undefined) {
 				continue;
 			}
-			const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile);
+			const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile, result);
 			snippetBuilder.addTypeSymbol(returnTypeSymbol, returnTypeSymbol.name);
 			result.addSnippet(snippetBuilder, undefined, this.priority);
 		}
@@ -562,7 +562,7 @@ export class TypeOfExpressionRunnable extends AbstractContextRunnable {
 		if (typeSymbol === undefined) {
 			return;
 		}
-		const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile);
+		const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile, result);
 		snippetBuilder.addTypeSymbol(typeSymbol, typeSymbol.name);
 		result.addSnippet(snippetBuilder, undefined, this.priority);
 	}

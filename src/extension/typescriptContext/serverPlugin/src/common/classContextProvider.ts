@@ -291,7 +291,7 @@ export class SuperClassRunnable extends AbstractContextRunnable {
 				return;
 			}
 			const sourceFile = this.classDeclaration.getSourceFile();
-			const snippetBuilder: CodeSnippetBuilder = new CodeSnippetBuilder(this.session, symbols, sourceFile);
+			const snippetBuilder: CodeSnippetBuilder = new CodeSnippetBuilder(this.session, symbols, sourceFile, result);
 			snippetBuilder.addClassSymbol(extendsClass, extendsName, true, false);
 			result.addSnippet(snippetBuilder, key, this.priority);
 		}
@@ -330,7 +330,7 @@ class SimilarClassRunnable extends AbstractContextRunnable {
 		if (foundInProgram === undefined || similarClass === undefined) {
 			return;
 		}
-		const code = new CodeSnippetBuilder(this.session, this.context.getSymbols(foundInProgram), classDeclaration.getSourceFile());
+		const code = new CodeSnippetBuilder(this.session, this.context.getSymbols(foundInProgram), classDeclaration.getSourceFile(), result);
 		code.addDeclaration(similarClass.declaration);
 		result.addSnippet(code, undefined, this.priority);
 	}
