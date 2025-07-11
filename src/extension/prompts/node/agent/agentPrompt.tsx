@@ -558,6 +558,7 @@ class AgentTasksInstructions extends PromptElement {
 							<Tag name='task' attrs={{ id: `${t.type}: ${t.label || i}` }}>
 								{this.makeTaskPresentation(t)}
 								{isActive && <> (This task is currently running. You can use the {ToolName.GetTaskOutput} tool to view its output.)</>}
+								{!isActive && <> (This task is not running. Use the {ToolName.GetTaskOutput} tool to view its output and check its status.)</>}
 							</Tag>
 						);
 					})}

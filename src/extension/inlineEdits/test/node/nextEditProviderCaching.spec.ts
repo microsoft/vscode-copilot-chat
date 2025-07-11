@@ -17,12 +17,11 @@ import { IStatelessNextEditProvider, NoNextEditReason, PushEdit, StatelessNextEd
 import { NesHistoryContextProvider } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { NesXtabHistoryTracker } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ILogService, LogServiceImpl } from '../../../../platform/log/common/logService';
-import { IParserService } from '../../../../platform/parser/node/parserService';
-import { ParserServiceImpl } from '../../../../platform/parser/node/parserServiceImpl';
 import { NulSimulationTestContext } from '../../../../platform/simulationTestContext/common/simulationTestContext';
 import { ISnippyService, NullSnippyService } from '../../../../platform/snippy/common/snippyService';
 import { IExperimentationService, NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { MockExtensionContext } from '../../../../platform/test/node/extensionContext';
+import { Result } from '../../../../util/common/result';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
@@ -32,11 +31,9 @@ import { LineRange } from '../../../../util/vs/editor/common/core/ranges/lineRan
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { NextEditProvider } from '../../node/nextEditProvider';
 import { NextEditProviderTelemetryBuilder } from '../../node/nextEditProviderTelemetry';
-import { Result } from '../../../../util/common/result';
 
 describe('NextEditProvider Caching', () => {
 
-	let parserService: IParserService;
 	let configService: IConfigurationService;
 	let snippyService: ISnippyService;
 	let gitExtensionService: IGitExtensionService;
@@ -44,7 +41,6 @@ describe('NextEditProvider Caching', () => {
 	let expService: IExperimentationService;
 
 	beforeAll(() => {
-		parserService = new ParserServiceImpl(false);
 		configService = new DefaultsOnlyConfigurationService();
 		snippyService = new NullSnippyService();
 		gitExtensionService = new NullGitExtensionService();
@@ -85,7 +81,7 @@ describe('NextEditProvider Caching', () => {
 			}
 		};
 
-		const nextEditProvider: NextEditProvider = new NextEditProvider(obsWorkspace, statelessNextEditProvider, new NesHistoryContextProvider(obsWorkspace, obsGit), new NesXtabHistoryTracker(obsWorkspace), undefined, parserService, configService, snippyService, logService, expService);
+		const nextEditProvider: NextEditProvider = new NextEditProvider(obsWorkspace, statelessNextEditProvider, new NesHistoryContextProvider(obsWorkspace, obsGit), new NesXtabHistoryTracker(obsWorkspace), undefined, configService, snippyService, logService, expService);
 
 		const doc = obsWorkspace.addDocument({
 			id: DocumentId.create(URI.file('/test/test.ts').toString()),

@@ -5,8 +5,8 @@
 
 
 import type * as vscode from 'vscode';
-import { ITasksService, TaskResult, TaskStatus } from './tasksService';
 import { URI } from '../../../util/vs/base/common/uri';
+import { ITasksService, TaskResult, TaskStatus } from './tasksService';
 
 export class TestTasksService implements ITasksService {
 	_serviceBrand: undefined;
@@ -36,5 +36,9 @@ export class TestTasksService implements ITasksService {
 
 	isTaskActive(def: vscode.TaskDefinition): boolean {
 		return false;
+	}
+
+	getTerminalForTask(task: vscode.TaskDefinition): vscode.Terminal | undefined {
+		return undefined;
 	}
 }

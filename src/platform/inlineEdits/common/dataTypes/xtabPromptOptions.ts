@@ -38,7 +38,11 @@ export type PromptOptions = {
 }
 
 export enum PromptingStrategy {
-	UnifiedModel = 'unifiedModel',
+	/**
+	 * Original Xtab unified model prompting strategy.
+	 */
+	UnifiedModel = 'xtabUnifiedModel',
+	Codexv21NesUnified = 'codexv21nesUnified',
 	SimplifiedSystemPrompt = 'simplifiedSystemPrompt',
 	Xtab275 = 'xtab275',
 }

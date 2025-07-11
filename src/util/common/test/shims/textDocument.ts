@@ -273,7 +273,6 @@ export class ExtHostDocumentData extends MirrorTextModel {
 
 	get document(): vscode.TextDocument {
 		if (!this._document) {
-			// eslint-disable-next-line @typescript-eslint/no-this-alias
 			const that = this;
 			this._document = {
 				get uri() {

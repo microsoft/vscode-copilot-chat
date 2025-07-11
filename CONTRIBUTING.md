@@ -68,6 +68,7 @@ Please include the following with each issue:
 ## Requirements
 - Node 22.x
 - Python >= 3.10, <= 3.12
+- Git Large File Storage (LFS) - for running tests
 
 ### First-time setup
 - on Windows you need to run `Set-ExecutionPolicy Unrestricted` as admin in Powershell.
@@ -80,6 +81,7 @@ Please include the following with each issue:
 **Note:** Setup and running under Windows Subsystem for Linux (WSL) is supported.
 
 ### Testing
+If you hit errors while running tests, ensure that you are using the correct Node version and that git lfs is properly installed (run `git lfs pull` to validate).
 
 There are unit tests which run in Node.JS:
 
@@ -93,7 +95,7 @@ There are also integration tests that run within VS Code itself:
 npm run test:extension
 ```
 
-Finally, there are **simulation tests**. These tests reach out to Copilot API endpoints, invoke LLMs and require expensive computations to run. Each test runs 10 times, to accomodate for the stochastic nature of LLMs themselves. The results of all runs of all tests are snapshotted in the baseline file, [`test/simulation/baseline.json`](test/simulation/baseline.json), which encodes the quality of the test suite at any given point in time.
+Finally, there are **simulation tests**. These tests reach out to Copilot API endpoints, invoke LLMs and require expensive computations to run. Each test runs 10 times, to accommodate for the stochastic nature of LLMs themselves. The results of all runs of all tests are snapshotted in the baseline file, [`test/simulation/baseline.json`](test/simulation/baseline.json), which encodes the quality of the test suite at any given point in time.
 
 Because LLM results are both random and costly, they are cached within the repo in `test/simulation/cache`. This means rerunning the simulation tests and benefiting from the cache will make the test run be both faster as well as deterministic.
 
