@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
+import { equals as arraysEqual } from '../../../util/vs/base/common/arrays';
 import { Lazy } from '../../../util/vs/base/common/lazy';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { getContributedToolName, getToolName, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolName } from '../common/toolNames';
@@ -15,9 +16,18 @@ export class ToolsService extends BaseToolsService {
 	declare _serviceBrand: undefined;
 
 	private readonly _copilotTools: Lazy<Map<ToolName, ICopilotTool<any>>>;
+	private readonly _contributedToolCache: {
+		input: readonly vscode.LanguageModelToolInformation[];
+		output: readonly vscode.LanguageModelToolInformation[];
+	} = { input: [], output: [] };
 
 	get tools(): ReadonlyArray<vscode.LanguageModelToolInformation> {
-		const contributedTools = [...vscode.lm.tools]
+		if (arraysEqual(this._contributedToolCache.input, vscode.lm.tools)) {
+			return this._contributedToolCache.output;
+		}
+
+		const input = [...vscode.lm.tools];
+		const contributedTools = [...input]
 			.sort((a, b) => {
 				// Sort builtin tools to the top
 				const aIsBuiltin = a.name.startsWith('vscode_') || a.name.startsWith('copilot_');
@@ -35,7 +45,7 @@ export class ToolsService extends BaseToolsService {
 				return owned?.alternativeDefinition?.() ?? tool;
 			});
 
-		return contributedTools.map(tool => {
+		const result: vscode.LanguageModelToolInformation[] = contributedTools.map(tool => {
 			return {
 				...tool,
 				name: getToolName(tool.name),
@@ -43,6 +53,11 @@ export class ToolsService extends BaseToolsService {
 				inputSchema: tool.inputSchema && mapContributedToolNamesInSchema(tool.inputSchema),
 			};
 		});
+
+		this._contributedToolCache.input = input;
+		this._contributedToolCache.output = result;
+
+		return result;
 	}
 
 	public get copilotTools() {
