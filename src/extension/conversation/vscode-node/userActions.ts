@@ -5,6 +5,7 @@
 
 
 import * as vscode from 'vscode';
+import { editsAgentName, getChatParticipantIdFromName } from '../../../platform/chat/common/chatAgents';
 import { ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { EditSurvivalResult } from '../../../platform/editSurvivalTracking/common/editSurvivalReporter';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
@@ -19,12 +20,12 @@ import { Intent } from '../../common/constants';
 import { IConversationStore } from '../../conversationStore/node/conversationStore';
 import { findDiagnosticsTelemetry } from '../../inlineChat/node/diagnosticsTelemetry';
 import { CopilotInteractiveEditorResponse, InteractionOutcome } from '../../inlineChat/node/promptCraftingTypes';
+import { participantIdToModeName } from '../../intents/common/intents';
 import { EditCodeStepTurnMetaData } from '../../intents/node/editCodeStep';
 import { Conversation, ICopilotChatResultIn } from '../../prompt/common/conversation';
 import { IntentInvocationMetadata } from '../../prompt/node/conversation';
 import { IFeedbackReporter } from '../../prompt/node/feedbackReporter';
 import { sendUserActionTelemetry } from '../../prompt/node/telemetry';
-import { ParticipantIds, participantIdToName } from '../../intents/common/intents';
 
 export const IUserFeedbackService = createServiceIdentifier<IUserFeedbackService>('IUserFeedbackService');
 export interface IUserFeedbackService {
@@ -222,7 +223,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 			measurements = {
 				totalCharacters: e.action.totalCharacters,
 				totalLines: e.action.totalLines,
-				isAgent: agentId === ParticipantIds.Agent ? 1 : 0,
+				isAgent: agentId === getChatParticipantIdFromName(editsAgentName) ? 1 : 0,
 			};
 
 			// Copy actions have a copiedCharacters/Lines property since this includes manual copying which can be partial
@@ -256,7 +257,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 					languageId: e.action.languageId ?? '',
 					modelId: e.action.modelId ?? '',
 					comp_type: compType,
-					mode: participantIdToName(agentId),
+					mode: participantIdToModeName(agentId),
 				},
 				measurements,
 				e.action.kind === 'copy' ? 'conversation.acceptedCopy' : 'conversation.acceptedInsert'
@@ -264,6 +265,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 		}
 
 		if (e.action.kind === 'apply') {
+			// Note- this event is fired after a "keep"
 			this.handleApplyAction(e.action, agentId, result);
 		}
 	}
@@ -279,10 +281,10 @@ export class UserFeedbackService implements IUserFeedbackService {
 				participant: agentId,
 				languageId: e.languageId ?? '',
 				modelId: e.modelId,
-				mode: participantIdToName(agentId),
+				mode: participantIdToModeName(agentId),
 			},
 			{
-				isAgent: agentId === ParticipantIds.Agent ? 1 : 0,
+				isAgent: agentId === getChatParticipantIdFromName(editsAgentName) ? 1 : 0,
 				totalLines: e.totalLines,
 			},
 			'conversation.appliedCodeblock'

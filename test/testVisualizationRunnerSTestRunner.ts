@@ -31,9 +31,15 @@ export async function run(fullPath: string, testFullName: string) {
 		return;
 	}
 
+	const currentTestRunInfo: CurrentTestRunInfo = {
+		test,
+		testRunNumber: 0,
+		fetchRequestCollector: new FetchRequestCollector(),
+		isInRealExtensionHost: false,
+	};
 	const simulationServicesOptions: SimulationServicesOptions = {
 		chatModelThrottlingTaskLaunchers: createSimulationChatModelThrottlingTaskLaunchers(false),
-		chatMLCache: new ChatMLSQLiteCache(TestingCacheSalts.requestCacheSalt),
+		createChatMLCache: (info: CurrentTestRunInfo) => new ChatMLSQLiteCache(TestingCacheSalts.requestCacheSalt, info),
 		isNoFetchModeEnabled: false,
 		languageModelCacheMode: CacheMode.Default,
 		resourcesCacheMode: CacheMode.Default,
@@ -42,12 +48,6 @@ export async function run(fullPath: string, testFullName: string) {
 		summarizeHistory: true,
 		useExperimentalCodeSearchService: false,
 		configs: undefined,
-	};
-	const currentTestRunInfo: CurrentTestRunInfo = {
-		test,
-		testRunNumber: 0,
-		fetchRequestCollector: new FetchRequestCollector(),
-		isInRealExtensionHost: false,
 	};
 	const testingServiceCollection = await createSimulationAccessor(
 		{ chatModel: test.model, embeddingModel: test.embeddingsModel },

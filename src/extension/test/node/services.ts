@@ -44,7 +44,7 @@ export interface ISimulationModelConfig {
 	fastRewriteModel?: string;
 }
 
-export function createExtensionUnitTestingServices(modelConfig?: ISimulationModelConfig): TestingServiceCollection {
+export function createExtensionUnitTestingServices(currentTestRunInfo?: any, modelConfig?: ISimulationModelConfig): TestingServiceCollection {
 	const testingServiceCollection = createPlatformServices();
 	testingServiceCollection.define(
 		IEndpointProvider,
@@ -52,7 +52,8 @@ export function createExtensionUnitTestingServices(modelConfig?: ISimulationMode
 			modelConfig?.smartChatModel ?? modelConfig?.chatModel,
 			modelConfig?.fastChatModel ?? modelConfig?.chatModel,
 			modelConfig?.embeddingModel,
-			modelConfig?.fastRewriteModel
+			modelConfig?.fastRewriteModel,
+			currentTestRunInfo,
 		])
 	);
 	testingServiceCollection.define(IGithubCodeSearchService, new SyncDescriptor(GithubCodeSearchService));

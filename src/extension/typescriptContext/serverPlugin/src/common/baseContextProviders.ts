@@ -34,7 +34,7 @@ export class CompilerOptionsRunnable extends AbstractContextRunnable {
 	];
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext) {
-		super(session, languageService, context, CompilerOptionsRunnable.name, Priorities.Traits, ComputeCost.Low);
+		super(session, languageService, context, 'CompilerOptionsRunnable', Priorities.Traits, ComputeCost.Low);
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
@@ -165,7 +165,7 @@ export class TypeOfLocalsRunnable extends AbstractContextRunnable {
 
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: tss.TokenInfo, excludes: Set<tt.Symbol>, cacheScope: CacheScope | undefined, priority: number = Priorities.Locals) {
-		super(session, languageService, context, TypeOfLocalsRunnable.name, priority, ComputeCost.Medium);
+		super(session, languageService, context, 'TypeOfLocalsRunnable', priority, ComputeCost.Medium);
 		this.tokenInfo = tokenInfo;
 		this.excludes = excludes;
 		this.cacheScope = cacheScope;
@@ -244,7 +244,7 @@ export class TypesOfNeighborFilesRunnable extends AbstractContextRunnable {
 	private readonly tokenInfo: tss.TokenInfo;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: tss.TokenInfo, priority: number = Priorities.NeighborFiles) {
-		super(session, languageService, context, TypesOfNeighborFilesRunnable.name, priority, ComputeCost.Medium);
+		super(session, languageService, context, 'TypesOfNeighborFilesRunnable', priority, ComputeCost.Medium);
 		this.tokenInfo = tokenInfo;
 	}
 
@@ -313,7 +313,7 @@ export class ImportsRunnable extends AbstractContextRunnable {
 	]);
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: tss.TokenInfo, excludes: Set<tt.Symbol>, priority: number = Priorities.Imports) {
-		super(session, languageService, context, ImportsRunnable.name, priority, ComputeCost.Medium);
+		super(session, languageService, context, 'ImportsRunnable', priority, ComputeCost.Medium);
 		this.tokenInfo = tokenInfo;
 		this.excludes = excludes;
 		this.runnableResult = undefined;
@@ -473,7 +473,7 @@ export class TypeOfExpressionRunnable extends AbstractContextRunnable {
 	private readonly expression: tt.Expression;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, expression: tt.Expression, priority: number = Priorities.Locals) {
-		super(session, languageService, context, TypeOfExpressionRunnable.name, priority, ComputeCost.Low);
+		super(session, languageService, context, 'TypeOfExpressionRunnable', priority, ComputeCost.Low);
 		this.expression = expression;
 	}
 

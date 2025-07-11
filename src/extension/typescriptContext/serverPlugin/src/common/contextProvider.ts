@@ -852,11 +852,18 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 		if (cacheInfo === undefined) {
 			return false;
 		}
-		if (cacheInfo.emitMode === EmitMode.ClientBased && cached.state === ContextRunnableState.Finished) {
-			return true;
-		} else {
-			return false;
+		if (cacheInfo.emitMode === EmitMode.ClientBased) {
+			if (cached.state === ContextRunnableState.Finished) {
+				return true;
+			}
+			if (cached.state === ContextRunnableState.IsFull) {
+				const kind = cached.cache?.scope.kind;
+				if (kind === CacheScopeKind.WithinRange || kind === CacheScopeKind.NeighborFiles || kind === CacheScopeKind.File) {
+					return true;
+				}
+			}
 		}
+		return false;
 	}
 
 	public compute(token: tt.CancellationToken): void {

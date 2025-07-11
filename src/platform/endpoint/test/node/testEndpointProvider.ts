@@ -3,16 +3,31 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+/* eslint-disable import/no-restricted-paths */
+
 import type { ChatRequest, LanguageModelChat } from 'vscode';
-import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { CHAT_MODEL, EMBEDDING_MODEL } from '../../../configuration/common/configurationService';
+import { CacheableRequest, SQLiteCache } from '../../../../../test/base/cache';
+import { TestingCacheSalts } from '../../../../../test/base/salts';
+import { CurrentTestRunInfo } from '../../../../../test/base/simulationContext';
+import { SequencerByKey } from '../../../../util/vs/base/common/async';
+import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { IAuthenticationService } from '../../../authentication/common/authentication';
+import { CHAT_MODEL, EMBEDDING_MODEL, IConfigurationService } from '../../../configuration/common/configurationService';
+import { IEnvService } from '../../../env/common/envService';
+import { ILogService } from '../../../log/common/logService';
+import { IFetcherService } from '../../../networking/common/fetcherService';
 import { IChatEndpoint, IEmbeddingEndpoint } from '../../../networking/common/networking';
+import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../../telemetry/common/telemetry';
+import { ICAPIClientService } from '../../common/capiClient';
+import { IDomainService } from '../../common/domainService';
 import { ChatEndpointFamily, EmbeddingsEndpointFamily, IChatModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../common/endpointProvider';
 import { EmbeddingEndpoint } from '../../node/embeddingsEndpoint';
+import { ModelMetadataFetcher } from '../../node/modelMetadataFetcher';
 import { AzureTestEndpoint } from './azureEndpoint';
 import { CAPITestEndpoint, modelIdToTokenizer } from './capiEndpoint';
 import { CustomNesEndpoint } from './customNesEndpoint';
-import { TestModelMetadataFetcher } from './testModelMetadataFetcher';
+
 
 async function getModelMetadataMap(modelMetadataFetcher: TestModelMetadataFetcher): Promise<Map<string, IChatModelInformation>> {
 	let metadataArray: IChatModelInformation[] = [];
@@ -32,6 +47,71 @@ async function getModelMetadataMap(modelMetadataFetcher: TestModelMetadataFetche
 	return metadataMap;
 }
 
+type ModelMetadataType = 'prod' | 'modelLab';
+
+class ModelMetadataRequest implements CacheableRequest {
+	constructor(readonly hash: string) { }
+}
+
+export class TestModelMetadataFetcher extends ModelMetadataFetcher {
+
+	private static Queues = new SequencerByKey<ModelMetadataType>();
+
+	get isModelLab(): boolean { return this._isModelLab; }
+
+	private readonly cache: SQLiteCache<ModelMetadataRequest, IChatModelInformation[]>;
+
+	constructor(
+		collectFetcherTelemetry: ((accessor: ServicesAccessor) => void) | undefined,
+		_isModelLab: boolean,
+		info: CurrentTestRunInfo | undefined,
+		@IFetcherService _fetcher: IFetcherService,
+		@IDomainService _domainService: IDomainService,
+		@ICAPIClientService _capiClientService: ICAPIClientService,
+		@IConfigurationService _configService: IConfigurationService,
+		@IExperimentationService _expService: IExperimentationService,
+		@IEnvService _envService: IEnvService,
+		@IAuthenticationService _authService: IAuthenticationService,
+		@ITelemetryService _telemetryService: ITelemetryService,
+		@ILogService _logService: ILogService,
+		@IInstantiationService _instantiationService: IInstantiationService,
+	) {
+		super(
+			collectFetcherTelemetry,
+			_isModelLab,
+			_fetcher,
+			_domainService,
+			_capiClientService,
+			_configService,
+			_expService,
+			_envService,
+			_authService,
+			_telemetryService,
+			_logService,
+			_instantiationService
+		);
+
+		this.cache = new SQLiteCache<ModelMetadataRequest, IChatModelInformation[]>('modelMetadata', TestingCacheSalts.modelMetadata, info);
+	}
+
+	override async getAllChatModels(): Promise<IChatModelInformation[]> {
+		const type = this._isModelLab ? 'modelLab' : 'prod';
+		const req = new ModelMetadataRequest(type);
+
+		return await TestModelMetadataFetcher.Queues.queue(type, async () => {
+			const result = await this.cache.get(req);
+			if (result) {
+				return result;
+			}
+
+			// If the cache doesn't have the result, we need to fetch it
+			const modelInfo = await super.getAllChatModels();
+			await this.cache.set(req, modelInfo);
+			return modelInfo;
+		});
+	}
+}
+
 export class TestEndpointProvider implements IEndpointProvider {
 
 	declare readonly _serviceBrand: undefined;
@@ -46,13 +126,13 @@ export class TestEndpointProvider implements IEndpointProvider {
 		private readonly gpt4oMiniModelToRunAgainst: string | undefined,
 		private readonly embeddingModelToRunAgainst: EMBEDDING_MODEL | undefined,
 		_fastRewriteModelToRunAgainst: string | undefined,
+		info: CurrentTestRunInfo | undefined,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService
 	) {
-		const prodModelMetadata = this._instantiationService.createInstance(TestModelMetadataFetcher, undefined, false);
-		const modelLabModelMetadata = this._instantiationService.createInstance(TestModelMetadataFetcher, undefined, true);
+		const prodModelMetadata = this._instantiationService.createInstance(TestModelMetadataFetcher, undefined, false, info);
+		const modelLabModelMetadata = this._instantiationService.createInstance(TestModelMetadataFetcher, undefined, true, info);
 		this._prodChatModelMetadata = getModelMetadataMap(prodModelMetadata);
 		this._modelLabChatModelMetadata = getModelMetadataMap(modelLabModelMetadata);
-
 	}
 
 	private async getChatEndpointInfo(model: string, modelLabMetadata: Map<string, IChatModelInformation>, prodMetadata: Map<string, IChatModelInformation>): Promise<IChatEndpoint> {
