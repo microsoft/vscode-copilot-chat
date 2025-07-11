@@ -10,10 +10,12 @@ dotenv.config();
 import 'source-map-support/register';
 
 // Load other imports
+import { exec } from 'child_process';
 import * as fs from 'fs';
 import minimist from 'minimist';
 import { createConnection } from 'net';
 import * as path from 'path';
+import { promisify } from 'util';
 import * as v8 from 'v8';
 import type * as vscodeType from 'vscode';
 import { SimpleRPC } from '../src/extension/onboardDebug/node/copilotDebugWorker/rpc';
@@ -79,6 +81,7 @@ async function main() {
 	}
 
 	if (errors.length > 0) {
+		await reportMSBenchErrors(errors);
 		console.error(`\n${red("⚠️⚠️⚠️  Command failed with:")}\n\n`);
 
 		for (let i = 0; i < errors.length; i++) {
@@ -773,6 +776,139 @@ function toCsv(rows: object[]): string {
 	const rowsStr = rows.map(obj => Object.values(obj).join(',') + '\n').join('');
 
 	return header + rowsStr;
+}
+
+async function reportMSBenchErrors(errors: unknown[]): Promise<void> {
+	// Check if we're running in MSBench environment
+	const outputDir = process.env.OUTPUT_DIR;
+	if (!outputDir) {
+		// Not in MSBench environment, skip structured error reporting
+		return;
+	}
+
+	const execAsync = promisify(exec);
+
+	try {
+		if (errors.length === 0) {
+			return;
+		}
+
+		const errorMessages: string[] = errors.map((error: unknown) => {
+			if (error instanceof Error) {
+				return error.message ?? error.stack ?? error.toString();
+			} else if (typeof error === 'string') {
+				return error;
+			} else {
+				return String(error);
+			}
+		});
+
+		// Analyze ALL error messages to determine the most appropriate primary error type
+		type MSBenchErrorType = 'ERROR' | 'DEPENDENCY' | 'FILESYSTEM' | 'RATE_LIMIT' | 'AGENT_TIMEOUT' | 'INTERNAL_ERROR';
+		let errorType: MSBenchErrorType = 'ERROR';
+		let errorMessage = errorMessages[0]; // Default to first error message
+
+		// Priority order for error types (higher priority errors override lower ones)
+		const errorTypePriority: Record<MSBenchErrorType, number> = {
+			'ERROR': 0,
+			'DEPENDENCY': 1,
+			'FILESYSTEM': 2,
+			'RATE_LIMIT': 3,
+			'AGENT_TIMEOUT': 4,
+			'INTERNAL_ERROR': 5
+		};
+
+		let currentPriority = 0;
+
+		for (const errorStr of errorMessages) {
+			let detectedType: MSBenchErrorType = 'ERROR';
+			const lowerErrorStr = errorStr.toLowerCase();
+
+			// Check for specific error patterns in order of priority (case insensitive)
+			if (lowerErrorStr.includes('unhandled rejection')) {
+				detectedType = 'INTERNAL_ERROR';
+			} else if (lowerErrorStr.includes('timeout')) {
+				detectedType = 'AGENT_TIMEOUT';
+			} else if (lowerErrorStr.includes('rate limit') || lowerErrorStr.includes('429') || lowerErrorStr.includes('rate limited responses')) {
+				detectedType = 'RATE_LIMIT';
+			} else if (lowerErrorStr.includes('enoent') || lowerErrorStr.includes('file not found') || lowerErrorStr.includes('permission')) {
+				detectedType = 'FILESYSTEM';
+			} else if (lowerErrorStr.includes('dependency') || lowerErrorStr.includes('module not found') || lowerErrorStr.includes('package')) {
+				detectedType = 'DEPENDENCY';
+			} else if (lowerErrorStr.includes('test failed:')) {
+				detectedType = 'ERROR'; // Test failures are general errors
+			} else if (lowerErrorStr.includes('cannot update baseline') || lowerErrorStr.includes('some scenarios have')) {
+				detectedType = 'ERROR'; // Baseline/scenario issues are general errors
+			} else if (lowerErrorStr.includes('server failures') || lowerErrorStr.includes('encountered server failures')) {
+				detectedType = 'RATE_LIMIT'; // Server failures are often rate limit related
+			}
+
+			// Use error with highest priority as primary error
+			if (errorTypePriority[detectedType] > currentPriority) {
+				errorType = detectedType;
+				errorMessage = errorStr;
+				currentPriority = errorTypePriority[detectedType];
+			}
+		}
+
+		// Collect trace information
+		const trace: string = errorMessages
+			.map((error: string) => {
+				// Escape double quotes for shell safety
+				return error.replace(/"/g, '\\"');
+			})
+			.join('\n');
+
+		// Build msbench-report-error command
+		const args = [
+			'msbench-report-error',
+			'--output-dir', `"${outputDir}"`,
+			'--type', errorType,
+			'--message', `"${errorMessage.replace(/"/g, '\\"')}"`,
+			'--trace', `"${trace.replace(/"/g, '\\"')}"`
+		];
+
+		// Add warnings for additional errors if there are multiple
+		if (errorMessages.length > 1) {
+			for (let i = 0; i < errorMessages.length; i++) {
+				const errorStr: string = errorMessages[i];
+
+				// Skip the error that was used as the primary error
+				if (errorStr === errorMessage) {
+					continue;
+				}
+
+				let warningType: MSBenchErrorType = 'ERROR';
+				const lowerErrorStr = errorStr.toLowerCase();
+
+				// Determine warning type based on error content using same logic as primary error (case insensitive)
+				if (lowerErrorStr.includes('unhandled rejection')) {
+					warningType = 'INTERNAL_ERROR';
+				} else if (lowerErrorStr.includes('timeout')) {
+					warningType = 'AGENT_TIMEOUT';
+				} else if (lowerErrorStr.includes('rate limit') || lowerErrorStr.includes('429') || lowerErrorStr.includes('rate limited responses')) {
+					warningType = 'RATE_LIMIT';
+				} else if (lowerErrorStr.includes('enoent') || lowerErrorStr.includes('file not found') || lowerErrorStr.includes('permission')) {
+					warningType = 'FILESYSTEM';
+				} else if (lowerErrorStr.includes('dependency') || lowerErrorStr.includes('module not found') || lowerErrorStr.includes('package')) {
+					warningType = 'DEPENDENCY';
+				} else if (lowerErrorStr.includes('server failures') || lowerErrorStr.includes('encountered server failures')) {
+					warningType = 'RATE_LIMIT';
+				}
+
+				// Escape the error message for shell safety and truncate if needed
+				const escapedError = errorStr.replace(/"/g, '\\"').substring(0, 200);
+				args.push('--warning', `"${warningType}:${escapedError}"`);
+			}
+		}
+
+		// Execute msbench-report-error
+		await execAsync(args.join(' '));
+
+	} catch (reportError) {
+		// If MSBench error reporting fails, log but don't fail the entire process
+		console.warn(`Failed to report structured error to MSBench: ${reportError}`);
+	}
 }
 
 (async () => main())();
