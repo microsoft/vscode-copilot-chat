@@ -429,7 +429,7 @@ class FindMethodInHierarchySearch extends MethodBlueprintSearch {
 abstract class SimilarPropertyRunnable<T extends tt.MethodDeclaration | tt.ConstructorDeclaration> extends FunctionLikeContextRunnable<T> {
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, declaration: T, priority: number = Priorities.Blueprints) {
-		super(session, languageService, context, SimilarPropertyRunnable.name, declaration, priority, ComputeCost.High);
+		super(session, languageService, context, 'SimilarPropertyRunnable', declaration, priority, ComputeCost.High);
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
@@ -510,7 +510,7 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 	private readonly declaration: tt.MethodDeclaration | tt.ConstructorDeclaration;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, declaration: tt.MethodDeclaration | tt.ConstructorDeclaration, priority: number = Priorities.Properties) {
-		super(session, languageService, context, PropertiesTypeRunnable.name, priority, ComputeCost.Medium);
+		super(session, languageService, context, 'PropertiesTypeRunnable', priority, ComputeCost.Medium);
 		this.declaration = declaration;
 	}
 
