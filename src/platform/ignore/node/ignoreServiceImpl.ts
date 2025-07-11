@@ -85,11 +85,11 @@ export class BaseIgnoreService implements IIgnoreService {
 		return this._remoteContentExclusions?.isRegexContextExclusionsEnabled ?? false;
 	}
 
-	public async isCopilotIgnored(file: URI): Promise<boolean> {
+	public async isCopilotIgnored(file: URI, token?: CancellationToken): Promise<boolean> {
 		let copilotIgnored = false;
 		if (this._copilotIgnoreEnabled) {
 			const localCopilotIgnored = this._copilotIgnoreFiles.isIgnored(file);
-			copilotIgnored = localCopilotIgnored || await (this._remoteContentExclusions?.isIgnored(file) ?? false);
+			copilotIgnored = localCopilotIgnored || await (this._remoteContentExclusions?.isIgnored(file, token) ?? false);
 		}
 		return copilotIgnored;
 	}

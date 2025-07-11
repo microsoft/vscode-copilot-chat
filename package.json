@@ -22,7 +22,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.102.0-20250627",
+		"vscode": "^1.103.0-insider",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -128,7 +128,8 @@
 		"taskProblemMatcherStatus",
 		"contribLanguageModelToolSets",
 		"textDocumentChangeReason",
-		"resolvers"
+		"resolvers",
+		"taskExecutionTerminal"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -439,7 +440,7 @@
 				"name": "copilot_getTaskOutput",
 				"toolReferenceName": "getTaskOutput",
 				"displayName": "%copilot.tools.getTaskOutput.name%",
-				"modelDescription": "Retrieves the output of a running VS Code task.\n- Use this tool when the user is trying to understand the current project state, debug issues, or analyze task-related errors, output, or status.",
+				"modelDescription": "Retrieves the output of a VS Code task.\n- Use this tool when the user is trying to understand the current project state, debug issues, or analyze task-related errors, output, or status.",
 				"tags": [],
 				"inputSchema": {
 					"type": "object",
@@ -1986,6 +1987,12 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.debug.showContextInspectorView",
+				"title": "%github.copilot.command.showContextInspectorView%",
+				"icon": "$(inspect)",
+				"category": "Developer"
+			},
+			{
 				"command": "github.copilot.terminal.explainTerminalSelection",
 				"title": "%github.copilot.command.explainTerminalSelection%",
 				"category": "GitHub Copilot"
@@ -2749,20 +2756,6 @@
 							"experimental"
 						]
 					},
-					"github.copilot.chat.completionContext.typescript.mode": {
-						"type": "string",
-						"scope": "resource",
-						"default": "off",
-						"enum": [
-							"off",
-							"sidecar",
-							"on"
-						],
-						"tags": [
-							"experimental"
-						],
-						"markdownDescription": "%github.copilot.chat.completionContext.typescript.mode%"
-					},
 					"github.copilot.chat.languageContext.typescript.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -3475,6 +3468,14 @@
 					"icon": "assets/debug-icon.svg",
 					"when": "github.copilot.chat.showLogView"
 				}
+			],
+			"context-inspector": [
+				{
+					"id": "context-inspector",
+					"name": "Language Context Inspector",
+					"icon": "$(inspect)",
+					"when": "github.copilot.chat.showContextInspectorView"
+				}
 			]
 		},
 		"viewsContainers": {
@@ -3483,6 +3484,11 @@
 					"id": "copilot-chat",
 					"title": "Copilot Chat Debug",
 					"icon": "assets/debug-icon.svg"
+				},
+				{
+					"id": "context-inspector",
+					"title": "Language Context Inspector",
+					"icon": "$(inspect)"
 				}
 			]
 		},
@@ -3682,8 +3688,7 @@
 	},
 	"scripts": {
 		"postinstall": "tsx ./script/postinstall.ts",
-		"prepare": "tsx ./script/prepare.ts",
-		"husky:install": "husky install",
+		"prepare": "husky",
 		"vscode-dts:dev": "node node_modules/@vscode/dts/index.js dev && mv vscode.proposed.*.ts src/extension",
 		"vscode-dts:main": "node node_modules/@vscode/dts/index.js main && mv vscode.d.ts src/extension",
 		"build": "tsx .esbuild.ts",
@@ -3722,10 +3727,10 @@
 	"devDependencies": {
 		"@azure/identity": "4.9.1",
 		"@azure/keyvault-secrets": "^4.10.0",
-		"@azure/msal-node": "^3.6.1",
+		"@azure/msal-node": "^3.6.3",
 		"@c4312/scip": "^0.1.0",
-		"@fluentui/react-components": "^9.66.3",
-		"@fluentui/react-icons": "^2.0.304",
+		"@fluentui/react-components": "^9.66.6",
+		"@fluentui/react-icons": "^2.0.305",
 		"@hediet/node-reload": "^0.8.0",
 		"@keyv/sqlite": "^4.0.5",
 		"@nteract/messaging": "^7.0.20",
@@ -3736,7 +3741,7 @@
 		"@types/markdown-it": "^14.0.0",
 		"@types/minimist": "^1.2.5",
 		"@types/mocha": "^10.0.10",
-		"@types/node": "^22.15.33",
+		"@types/node": "^22.16.3",
 		"@types/picomatch": "^4.0.0",
 		"@types/react": "17.0.44",
 		"@types/react-dom": "^18.2.17",
@@ -3754,18 +3759,18 @@
 		"@vscode/lsif-language-service": "^0.1.0-pre.4",
 		"@vscode/test-cli": "^0.0.11",
 		"@vscode/test-electron": "^2.5.2",
-		"@vscode/test-web": "^0.0.70",
+		"@vscode/test-web": "^0.0.71",
 		"@vscode/vsce": "3.6.0",
 		"@vscode/zeromq": "0.2.7",
-		"csv-parse": "^5.6.0",
-		"dotenv": "^16.5.0",
-		"electron": "^37.0.0",
-		"esbuild": "^0.25.5",
+		"csv-parse": "^6.0.0",
+		"dotenv": "^17.2.0",
+		"electron": "^37.2.1",
+		"esbuild": "^0.25.6",
 		"eslint": "^9.30.0",
 		"eslint-import-resolver-typescript": "^4.4.4",
 		"eslint-plugin-header": "^3.1.1",
 		"eslint-plugin-import": "^2.32.0",
-		"eslint-plugin-jsdoc": "^51.2.3",
+		"eslint-plugin-jsdoc": "^51.3.4",
 		"eslint-plugin-no-only-tests": "^3.3.0",
 		"fastq": "^1.19.1",
 		"glob": "^11.0.3",
@@ -3781,8 +3786,8 @@
 		"open": "^10.1.2",
 		"outdent": "^0.8.0",
 		"picomatch": "^4.0.2",
-		"playwright": "^1.53.1",
-		"prettier": "^3.6.1",
+		"playwright": "^1.54.0",
+		"prettier": "^3.6.2",
 		"react": "^17.0.2",
 		"react-dom": "17.0.2",
 		"run-script-os": "^1.1.6",
@@ -3795,13 +3800,13 @@
 		"typescript-eslint": "^8.36.0",
 		"typescript-formatter": "github:jrieken/typescript-formatter#497efb26bc40b5fa59a350e6eab17bce650a7e4b",
 		"vite-plugin-top-level-await": "^1.5.0",
-		"vite-plugin-wasm": "^3.4.1",
+		"vite-plugin-wasm": "^3.5.0",
 		"vitest": "^3.0.5",
 		"yaml": "^2.8.0",
 		"zeromq": "github:rebornix/zeromq.js#a19e8e373b3abc677f91b936d3f00d49b1b61792"
 	},
 	"dependencies": {
-		"@anthropic-ai/sdk": "^0.55.0",
+		"@anthropic-ai/sdk": "^0.56.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@roamhq/mac-ca": "^1.0.7",
@@ -3819,7 +3824,7 @@
 		"lru-cache": "^11.1.0",
 		"markdown-it": "^14.1.0",
 		"minimatch": "^10.0.3",
-		"undici": "^7.10.0",
+		"undici": "^7.11.0",
 		"vscode-languageserver-textdocument": "^1.0.12",
 		"vscode-tas-client": "^0.1.84",
 		"web-tree-sitter": "^0.23.0"

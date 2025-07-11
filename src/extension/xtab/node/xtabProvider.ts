@@ -14,8 +14,8 @@ import { LanguageContextEntry, LanguageContextResponse } from '../../../platform
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
-import { DocumentShorteningStrategy, NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
-import { ChainedStatelessNextEditProvider, IgnoreEditsAtClippingBorderAspect, IgnoreTriviaWhitespaceChangesAspect } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
+import { NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { ChainedStatelessNextEditProvider, IgnoreTriviaWhitespaceChangesAspect } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ILanguageContextService, KnownSources, RequestContext } from '../../../platform/languageServer/common/languageContextService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -72,7 +72,6 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 
 	public static readonly ID = XTabProviderId;
 
-	public readonly documentShorteningStrategy = DocumentShorteningStrategy.NoShortening;
 	public readonly dependsOnSelection = true;
 	public readonly showNextEditPreference = ShowNextEditPreference.Always;
 
@@ -95,7 +94,6 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		super(XtabProvider.ID, [
 			base => new IgnoreImportChangesAspect(base),
 			base => new IgnoreTriviaWhitespaceChangesAspect(base),
-			base => new IgnoreEditsAtClippingBorderAspect(base),
 		]);
 
 		this.delayer = new Delayer(this.configService, this.expService);

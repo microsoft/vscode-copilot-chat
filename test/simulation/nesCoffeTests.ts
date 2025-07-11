@@ -30,7 +30,9 @@ export async function discoverCoffeTests(rootFolder: string, options: Simulation
 
 	const rootSuite = new SimulationSuite({ title: 'NES', location: 'external' });
 
-	const tests = recordingFiles.map((file) => generateExternalStestFromRecording(file, rootSuite, tester, configurations));
+	let tests = recordingFiles.map((file) => generateExternalStestFromRecording(file, rootSuite, tester, configurations));
+
+	tests = tests.sort((a, b) => a.fullName.localeCompare(b.fullName));
 
 	rootSuite.tests.push(...tests);
 

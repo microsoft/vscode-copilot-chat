@@ -10,7 +10,6 @@ import * as errors from '../../../util/common/errors';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { ThemeIcon } from '../../../util/vs/base/common/themables';
 import { SerializedLineEdit } from '../../../util/vs/editor/common/core/edits/lineEdit';
-import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { SerializedEdit } from './dataTypes/editUtils';
 import { FetchCancellationError } from './dataTypes/fetchCancellationError';
 import { LanguageContextResponse, SerializedContextResponse, SerializedDiagnostic, serializeFileDiagnostics, serializeLanguageContext } from './dataTypes/languageContext';
@@ -184,11 +183,6 @@ export class InlineEditRequestLogContext {
 	}
 
 	private _nextEditRequest: StatelessNextEditRequest | undefined = undefined;
-
-	public get inputEdit(): RootedLineEdit | undefined {
-		if (!this._nextEditRequest) { return undefined; }
-		return new RootedLineEdit(new StringText(this._nextEditRequest.documents[0].documentLinesBeforeEdit.join('\n')), this._nextEditRequest.documents[0].recentEdit);
-	}
 
 	setRequestInput(nextEditRequest: StatelessNextEditRequest): void {
 		this._isVisible = true;

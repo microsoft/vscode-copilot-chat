@@ -15,7 +15,6 @@ import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Iterable } from '../../../util/vs/base/common/iterator';
 import { Lazy } from '../../../util/vs/base/common/lazy';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { ResourceSet } from '../../../util/vs/base/common/map';
 import { isEqual, isEqualOrParent } from '../../../util/vs/base/common/resources';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -34,7 +33,7 @@ import { ILogService } from '../../log/common/logService';
 import { IAdoCodeSearchService } from '../../remoteCodeSearch/common/adoCodeSearchService';
 import { IGithubCodeSearchService } from '../../remoteCodeSearch/common/githubCodeSearchService';
 import { CodeSearchResult } from '../../remoteCodeSearch/common/remoteCodeSearch';
-import { BuildIndexTriggerReason, CodeSearchRepoInfo, CodeSearchRepoTracker, IndexedRepoEntry, RepoStatus, ResolvedRepoEntry, TriggerIndexingError } from '../../remoteCodeSearch/node/codeSearchRepoTracker';
+import { BuildIndexTriggerReason, CodeSearchRepoTracker, IndexedRepoEntry, RepoEntry, RepoStatus, ResolvedRepoEntry, TriggerIndexingError } from '../../remoteCodeSearch/node/codeSearchRepoTracker';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { IWorkspaceService } from '../../workspace/common/workspaceService';
@@ -42,29 +41,7 @@ import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizi
 import { CodeSearchWorkspaceDiffTracker } from './codeSearchWorkspaceDiff';
 import { EmbeddingsChunkSearch } from './embeddingsChunkSearch';
 import { TfIdfWithSemanticChunkSearch } from './tfidfWithSemanticChunkSearch';
-import { WorkspaceChunkEmbeddingsIndex } from './workspaceChunkEmbeddingsIndex';
 import { IWorkspaceFileIndex } from './workspaceFileIndex';
-
-export enum CodeSearchRemoteIndexStatus {
-	/** We are still loading the state */
-	Initializing,
-
-	/** There are no indexable repos */
-	NoRepos,
-
-	/** Code search is available but the repo is not indexed  */
-	NotYetIndexed,
-
-	/**
-	 * We have at least one github repo but could not check the status, either because we couldn't auth or the repo
-	 * no longer exists.
-	 */
-	CouldNotCheckIndexStatus,
-
-	Indexing,
-
-	Indexed,
-}
 
 export interface CodeSearchDiffState {
 	readonly totalFileCount: number;
@@ -78,11 +55,9 @@ export interface CodeSearchDiffState {
 }
 
 export interface CodeSearchRemoteIndexState {
-	readonly status: CodeSearchRemoteIndexStatus;
+	readonly status: 'disabled' | 'initializing' | 'loaded';
 
-	readonly repos: readonly CodeSearchRepoInfo[];
-
-	getDiffState(): Promise<CodeSearchDiffState | undefined>;
+	readonly repos: readonly RepoEntry[];
 }
 
 type DiffSearchResult = StrategySearchResult & {
@@ -91,8 +66,8 @@ type DiffSearchResult = StrategySearchResult & {
 };
 
 interface AvailableSuccessMetadata {
-	readonly indexedRepos: CodeSearchRepoInfo[];
-	readonly notYetIndexedRepos: CodeSearchRepoInfo[];
+	readonly indexedRepos: RepoEntry[];
+	readonly notYetIndexedRepos: RepoEntry[];
 	readonly repoStatuses: Record<string, number>;
 }
 
@@ -141,7 +116,6 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	private readonly _repoTracker: CodeSearchRepoTracker;
 	private readonly _workspaceDiffTracker: Lazy<CodeSearchWorkspaceDiffTracker>;
 
-	private readonly _embeddingsIndex: WorkspaceChunkEmbeddingsIndex;
 	private readonly _embeddingsChunkSearch: EmbeddingsChunkSearch;
 	private readonly _tfIdfChunkSearch: TfIdfWithSemanticChunkSearch;
 
@@ -152,7 +126,6 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 
 	constructor(
 		private readonly _embeddingType: EmbeddingType,
-		embeddingsIndex: WorkspaceChunkEmbeddingsIndex,
 		embeddingsChunkSearch: EmbeddingsChunkSearch,
 		tfIdfChunkSearch: TfIdfWithSemanticChunkSearch,
 		@IInstantiationService instantiationService: IInstantiationService,
@@ -169,7 +142,6 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	) {
 		super();
 
-		this._embeddingsIndex = embeddingsIndex;
 		this._embeddingsChunkSearch = embeddingsChunkSearch;
 		this._tfIdfChunkSearch = tfIdfChunkSearch;
 
@@ -340,88 +312,30 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	getRemoteIndexState(): CodeSearchRemoteIndexState {
 		if (!this.isCodeSearchEnabled()) {
 			return {
-				status: CodeSearchRemoteIndexStatus.NoRepos,
+				status: 'disabled',
 				repos: [],
-				getDiffState: async () => { return undefined; }
 			};
 		}
 
-		return {
-			status: this.getRemoteIndexStatus(),
-			repos: Array.from(this._repoTracker.getAllRepos()),
-			getDiffState: async () => {
-				const diffArray = await this.getLocalDiff();
-				if (this._isDisposed) {
-					return;
-				}
-
-				if (!Array.isArray(diffArray)) {
-					return undefined;
-				}
-
-				if (diffArray.length < this.maxEmbeddingsDiffSize) {
-					const outdatedFiles = await this.getOutdatedDiffs(diffArray);
-					return {
-						outdatedFileCount: outdatedFiles.length,
-						totalFileCount: diffArray.length,
-					};
-				} else {
-					return {
-						outdatedFileCount: undefined,
-						totalFileCount: diffArray.length,
-					};
-				}
-			},
-		};
-	}
-
-	private async getOutdatedDiffs(diffArray: readonly URI[]): Promise<Array<URI>> {
-		const outdatedFiles = new ResourceSet();
-		await Promise.all(diffArray.map(async (uri) => {
-			if (!await this._embeddingsIndex.isUpToDateAndIndexed(uri)) {
-				outdatedFiles.add(uri);
-			}
-		}));
-		return Array.from(outdatedFiles);
-	}
-
-	private getRemoteIndexStatus(): CodeSearchRemoteIndexStatus {
 		// Kick of request but do not wait for it to finish
 		this._repoTracker.initialize();
 
 		if (this._repoTracker.isInitializing()) {
-			return CodeSearchRemoteIndexStatus.Initializing;
+			return {
+				status: 'initializing',
+				repos: [],
+			};
 		}
 
-		const allPotentialRepos = Array.from(this._repoTracker.getAllRepos())
+		const allResolvedRepos = Array.from(this._repoTracker.getAllRepos())
 			.filter(repo => repo.status !== RepoStatus.NotResolvable);
 
-		if (!allPotentialRepos.length) {
-			return CodeSearchRemoteIndexStatus.NoRepos;
-		}
-
-		if (allPotentialRepos.every(repo => repo.status === RepoStatus.Ready)) {
-			return CodeSearchRemoteIndexStatus.Indexed;
-		}
-
-		if (allPotentialRepos.some(repo => repo.status === RepoStatus.CheckingStatus)) {
-			return CodeSearchRemoteIndexStatus.Initializing;
-		}
-
-		if (allPotentialRepos.some(repo => repo.status === RepoStatus.NotYetIndexed)) {
-			return CodeSearchRemoteIndexStatus.NotYetIndexed;
-		}
-
-		if (allPotentialRepos.some(repo => repo.status === RepoStatus.BuildingIndex)) {
-			return CodeSearchRemoteIndexStatus.Indexing;
-		}
-
-		if (allPotentialRepos.some(repo => repo.status === RepoStatus.CouldNotCheckIndexStatus || repo.status === RepoStatus.NotAuthorized)) {
-			return CodeSearchRemoteIndexStatus.CouldNotCheckIndexStatus;
-		}
-
-		return CodeSearchRemoteIndexStatus.NoRepos;
+		return {
+			status: 'loaded',
+			repos: allResolvedRepos,
+		};
 	}
+
 
 	private didRunPrepare = false;
 	async prepareSearchWorkspace(telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<undefined> {

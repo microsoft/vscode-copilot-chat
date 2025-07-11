@@ -13,6 +13,7 @@ import { AutoChatEndpoint, resolveAutoChatEndpoint } from '../../../platform/end
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { EmbeddingEndpoint } from '../../../platform/endpoint/node/embeddingsEndpoint';
 import { IModelMetadataFetcher, ModelMetadataFetcher } from '../../../platform/endpoint/node/modelMetadataFetcher';
+import { ProxyExperimentEndpoint } from '../../../platform/endpoint/node/proxyExperimentEndpoint';
 import { ExtensionContributedChatEndpoint } from '../../../platform/endpoint/vscode-node/extChatEndpoint';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -27,7 +28,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 
 	declare readonly _serviceBrand: undefined;
 
-	private _chatEndpoints: Map<string, ChatEndpoint> = new Map();
+	private _chatEndpoints: Map<string, IChatEndpoint> = new Map();
 	private _embeddingEndpoints: Map<EMBEDDING_MODEL, IEmbeddingEndpoint> = new Map();
 	private readonly _modelFetcher: IModelMetadataFetcher;
 
@@ -86,6 +87,15 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		return chatEndpoint;
 	}
 
+	private getOrCreateProxyExperimentEndpointInstance(name: string, id: string, endpoint: IChatEndpoint): IChatEndpoint {
+		let chatEndpoint = this._chatEndpoints.get(id);
+		if (!chatEndpoint) {
+			chatEndpoint = new ProxyExperimentEndpoint(name, id, endpoint);
+			this._chatEndpoints.set(id, chatEndpoint);
+		}
+		return chatEndpoint;
+	}
+
 	private async getOrCreateEmbeddingEndpointInstance(modelMetadata: IEmbeddingModelInformation): Promise<IEmbeddingEndpoint> {
 		const modelId = modelMetadata.id as EMBEDDING_MODEL;
 		let embeddingEndpoint = this._embeddingEndpoints.get(modelId);
@@ -97,8 +107,20 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 
 	}
 
+	private getExperimentData(): { selected: string; name: string; id: string } | undefined {
+		const selected = this._expService.getTreatmentVariable<string>('vscode', 'custommodel1');
+		const id = this._expService.getTreatmentVariable<string>('vscode', 'custommodel1.id');
+		const name = this._expService.getTreatmentVariable<string>('vscode', 'custommodel1.name');
+		if (selected && id && name) {
+			return { selected, id, name };
+		}
+		return undefined;
+	}
+
 	async getChatEndpoint(requestOrFamilyOrModel: LanguageModelChat | ChatRequest | ChatEndpointFamily): Promise<IChatEndpoint> {
 		this._logService.logger.trace(`Resolving chat model`);
+		const experimentModelConfig = this.getExperimentData();
+
 		if (this._overridenChatModel) {
 			// Override, only allowed by internal users. Sets model based on setting
 			this._logService.logger.trace(`Using overriden chat model`);
@@ -124,7 +146,9 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 			endpoint = this.getOrCreateChatEndpointInstance(modelMetadata);
 		} else {
 			const model = 'model' in requestOrFamilyOrModel ? requestOrFamilyOrModel.model : requestOrFamilyOrModel;
-			if (model && model.vendor === 'copilot' && model.id === AutoChatEndpoint.id) {
+			if (experimentModelConfig && model && model.id === experimentModelConfig.id) {
+				endpoint = (await this.getAllChatEndpoints()).find(e => e.model === experimentModelConfig.selected) || await this.getChatEndpoint('gpt-4.1');
+			} else if (model && model.vendor === 'copilot' && model.id === AutoChatEndpoint.id) {
 				return resolveAutoChatEndpoint(this, this._expService, (requestOrFamilyOrModel as ChatRequest)?.prompt);
 			} else if (model && model.vendor === 'copilot') {
 				const modelMetadata = await this._modelFetcher.getChatModelFromApiModel(model);
@@ -169,10 +193,17 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 	async getAllChatEndpoints(): Promise<IChatEndpoint[]> {
 		const models: IChatModelInformation[] = await this._modelFetcher.getAllChatModels();
 		const chatEndpoints = [];
+
+		const experimentModelConfig = this.getExperimentData();
+
 		for (const model of models) {
 			const chatEndpoint = this.getOrCreateChatEndpointInstance(model);
 			chatEndpoints.push(chatEndpoint);
+			if (experimentModelConfig && chatEndpoint.model === experimentModelConfig.selected) {
+				chatEndpoints.push(this.getOrCreateProxyExperimentEndpointInstance(experimentModelConfig.name, experimentModelConfig.id, chatEndpoint));
+			}
 		}
+
 		return chatEndpoints;
 	}
 }

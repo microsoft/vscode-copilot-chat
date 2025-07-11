@@ -34,7 +34,7 @@ namespace tss {
 	};
 
 	export function getRelevantTokens(sourceFile: tt.SourceFile, position: number): TokenInfo {
-		// We first get the token at the position. This will be the leave token even if
+		// We first get the token at the position. This will be the leaf token even if
 		// position denotes a white space. In this case the next token after the while space
 		// will be considered.
 		const token = tss.getTokenAtPosition(sourceFile, position);
@@ -71,19 +71,19 @@ namespace tss {
 		if (needsPrevious) {
 			let current = token;
 			while (current.parent) {
-				const children = getChildren(current.parent, sourceFile);
+				const children = Nodes.getChildren(current.parent, sourceFile);
 				const currentIndex = findNodeIndex(children, current);
 				if (currentIndex > 0) {
 					// Found a previous sibling, now get its rightmost token
 					let previousNode = children[currentIndex - 1];
-					let previousChildren = getChildren(previousNode, sourceFile);
+					let previousChildren = Nodes.getChildren(previousNode, sourceFile);
 					while (previousChildren.length > 0) {
 						const lastChild = previousChildren[previousChildren.length - 1];
 						if (lastChild.kind === ts.SyntaxKind.EndOfFileToken) {
 							break;
 						}
 						previousNode = lastChild;
-						previousChildren = getChildren(previousNode, sourceFile);
+						previousChildren = Nodes.getChildren(previousNode, sourceFile);
 					}
 					if (previousNode.kind !== ts.SyntaxKind.EndOfFileToken) {
 						result.previous = previousNode;
@@ -95,21 +95,6 @@ namespace tss {
 		}
 
 		return result;
-	}
-
-	export function getChildren(node: tt.Node, sourceFile: tt.SourceFile): readonly tt.Node[] {
-		// If you ask a source file for its children you get an array
-		// with [SyntaxList, EndOfFileToken]
-		if (ts.isSourceFile(node)) {
-			const children = node.getChildren(sourceFile);
-			if (children.length > 0 && children[0].kind === ts.SyntaxKind.SyntaxList) {
-				return children[0].getChildren(sourceFile);
-			} else {
-				return node.statements;
-			}
-		} else {
-			return node.getChildren(sourceFile);
-		}
 	}
 
 	function findNodeIndex(nodes: readonly tt.Node[], target: tt.Node): number {
@@ -194,6 +179,22 @@ namespace tss {
 	}
 
 	export namespace Nodes {
+
+		export function getChildren(node: tt.Node, sourceFile: tt.SourceFile): readonly tt.Node[] {
+			// If you ask a source file for its children you get an array
+			// with [SyntaxList, EndOfFileToken]
+			if (ts.isSourceFile(node)) {
+				const children = node.getChildren(sourceFile);
+				if (children.length > 0 && children[0].kind === ts.SyntaxKind.SyntaxList) {
+					return children[0].getChildren(sourceFile);
+				} else {
+					return node.statements;
+				}
+			} else {
+				return node.getChildren(sourceFile);
+			}
+		}
+
 
 		export function getSymbol(node: tt.Node): tt.Symbol | undefined {
 			return (node as InternalNode).symbol;
@@ -776,7 +777,7 @@ namespace tss {
 			return [undefined, undefined];
 		}
 
-		public getLeafSymbolAtLocation(node: tt.Node): tt.Symbol | undefined {
+		public getAliasedSymbolAtLocation(node: tt.Node): tt.Symbol | undefined {
 			const symbol = this.getSymbolAtLocation(node);
 			if (symbol === undefined) {
 				return undefined;
@@ -785,6 +786,14 @@ namespace tss {
 				return this.typeChecker.getAliasedSymbol(symbol);
 			}
 			return symbol;
+		}
+
+		public getLeafSymbolAtLocation(node: tt.Node): tt.Symbol | undefined {
+			const symbol = this.getSymbolAtLocation(node);
+			if (symbol === undefined) {
+				return undefined;
+			}
+			return this.getLeafSymbol(symbol);
 		}
 
 		public getSymbolAtTypeNodeLocation(node: tt.TypeNode): tt.Symbol | undefined {
@@ -797,14 +806,29 @@ namespace tss {
 			}
 		}
 
-		public getAliasedSymbol(symbol: tt.Symbol): tt.Symbol {
-			return this.typeChecker.getAliasedSymbol(symbol);
+		public getAliasedSymbol(symbol: tt.Symbol): tt.Symbol | undefined {
+			return Symbols.isAlias(symbol) ? this.typeChecker.getAliasedSymbol(symbol) : symbol;
 		}
 
-		public getLeafAliasedSymbol(symbol: tt.Symbol): tt.Symbol {
+		public getLeafSymbol(symbol: tt.Symbol): tt.Symbol {
 			let count = 0;
 			while (Symbols.isAlias(symbol) && count++ < 10) {
-				symbol = this.getAliasedSymbol(symbol);
+				symbol = this.typeChecker.getAliasedSymbol(symbol);
+			}
+			while (Symbols.isTypeAlias(symbol) && count++ < 10) {
+				const declarations = symbol.declarations;
+				if (declarations === undefined || declarations.length !== 1) {
+					break;
+				}
+				const declaration = declarations[0];
+				if (!ts.isTypeAliasDeclaration(declaration)) {
+					break;
+				}
+				const typeSymbol = this.getSymbolAtLocation(declaration.type);
+				if (typeSymbol === undefined) {
+					break;
+				}
+				symbol = typeSymbol;
 			}
 			return symbol;
 		}
@@ -850,7 +874,9 @@ namespace tss {
 						// In TS classes must come first.
 						for (const heritageClause of heritageClauses) {
 							for (const type of heritageClause.types) {
-								const superType = this.getLeafSymbolAtLocation(type.expression);
+								// We can't reach to the leave symbol here since in a hierarchy we need to
+								// reference Type References by name.
+								const superType = this.getAliasedSymbolAtLocation(type.expression);
 								if (superType !== undefined && !seen.has(superType)) {
 									seen.add(superType);
 									yield includePath ? [symbol, superType] : superType;
@@ -873,13 +899,13 @@ namespace tss {
 						if (ts.isTypeAliasDeclaration(declaration)) {
 							const type = declaration.type;
 							if (ts.isTypeLiteralNode(type)) {
-								const superType = this.getSymbolAtLocation(type);
+								const superType = this.getAliasedSymbolAtLocation(type);
 								if (superType !== undefined && !seen.has(superType)) {
 									seen.add(superType);
 									yield includePath ? [symbol, superType] : superType;
 								}
 							} else if (ts.isTypeReferenceNode(type)) {
-								const superType = this.getLeafSymbolAtLocation(type.typeName);
+								const superType = this.getAliasedSymbolAtLocation(type.typeName);
 								if (superType !== undefined && !seen.has(superType)) {
 									// This is something like type _NameLength = NameLength
 									// Yield NameLength since it could represent and interface.
@@ -952,7 +978,7 @@ namespace tss {
 						}
 						// TypeScript has exactly one extends clause.
 						const type = heritageClause.types[0];
-						const superClass = this.getLeafSymbolAtLocation(type.expression);
+						const superClass = this.getAliasedSymbolAtLocation(type.expression);
 						if (superClass !== undefined && !seen.has(superClass)) {
 							seen.add(superClass);
 							yield superClass;
@@ -969,7 +995,7 @@ namespace tss {
 			}
 			for (const heritageClause of declaration.heritageClauses) {
 				for (const type of heritageClause.types) {
-					const superType = this.getLeafSymbolAtLocation(type.expression);
+					const superType = this.getAliasedSymbolAtLocation(type.expression);
 					if (superType !== undefined && superType === symbol) {
 						return true;
 					}
@@ -990,7 +1016,7 @@ namespace tss {
 				if (heritageClause.types.length < 1) {
 					return false;
 				}
-				const superType = this.getLeafSymbolAtLocation(heritageClause.types[0].expression);
+				const superType = this.getAliasedSymbolAtLocation(heritageClause.types[0].expression);
 				if (superType !== undefined && superType === symbol) {
 					return true;
 				}
@@ -1039,7 +1065,7 @@ namespace tss {
 					const referencedBy = new ReferencedByVisitor(this.program, declaration.getSourceFile(), preferredSourceFiles, stateProvider, token);
 					for (const sourceFile of referencedBy) {
 						for (const typeDeclaration of traversal.getDeclarations(sourceFile)) {
-							const symbol = this.getLeafSymbolAtLocation(typeDeclaration.name ? typeDeclaration.name : typeDeclaration);
+							const symbol = this.getAliasedSymbolAtLocation(typeDeclaration.name ? typeDeclaration.name : typeDeclaration);
 							if (symbol === undefined || seen.has(symbol)) {
 								continue;
 							}

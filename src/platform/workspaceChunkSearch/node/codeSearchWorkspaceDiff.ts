@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { DeferredPromise, IntervalTimer } from '../../../util/vs/base/common/async';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
@@ -12,7 +13,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LogExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
-import { CodeSearchDiff, CodeSearchRepoInfo, CodeSearchRepoTracker, RepoStatus } from '../../remoteCodeSearch/node/codeSearchRepoTracker';
+import { CodeSearchDiff, CodeSearchRepoTracker, RepoEntry, RepoStatus } from '../../remoteCodeSearch/node/codeSearchRepoTracker';
 import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
 import { IWorkspaceFileIndex, shouldIndexFile } from './workspaceFileIndex';
 
@@ -24,7 +25,7 @@ enum RepoState {
 
 interface RepoDiffState {
 	state: RepoState;
-	readonly info: CodeSearchRepoInfo;
+	readonly info: RepoEntry;
 	readonly initialChanges: ResourceSet;
 }
 
@@ -138,7 +139,7 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 		return seenFiles;
 	}
 
-	private async openRepo(info: CodeSearchRepoInfo) {
+	private async openRepo(info: RepoEntry) {
 		this._repos.delete(info.repo.rootUri);
 
 		const repoEntry: RepoDiffState = {
@@ -151,11 +152,11 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 		this.refreshRepoDiff(repoEntry);
 	}
 
-	private closeRepo(info: CodeSearchRepoInfo) {
+	private closeRepo(info: RepoEntry) {
 		this._repos.delete(info.repo.rootUri);
 	}
 
-	private async tryGetDiffedIndexedFiles(info: CodeSearchRepoInfo): Promise<URI[] | undefined> {
+	private async tryGetDiffedIndexedFiles(info: RepoEntry): Promise<URI[] | undefined> {
 		const diff = await this.tryGetDiff(info);
 		if (!diff) {
 			return;
@@ -163,14 +164,14 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 
 		const initialChanges = new ResourceSet();
 		await Promise.all(diff.changes.map(async change => {
-			if (await this._instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, change.uri))) {
+			if (await this._instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, change.uri, CancellationToken.None))) {
 				initialChanges.add(change.uri);
 			}
 		}));
 		return Array.from(initialChanges);
 	}
 
-	private async tryGetDiff(repoInfo: CodeSearchRepoInfo): Promise<CodeSearchDiff | undefined> {
+	private async tryGetDiff(repoInfo: RepoEntry): Promise<CodeSearchDiff | undefined> {
 		return this._repoTracker.diffWithIndexedCommit(repoInfo);
 	}
 

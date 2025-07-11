@@ -40,8 +40,7 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 			this.logService.logger.debug('getTaskOutputTool returning undefined: no matching label for task ' + options.input.id);
 			return;
 		}
-		// TODO:@meganrogge when there's API to determine if a terminal is a task, improve this vscode#234440
-		const terminal = this.terminalService.terminals.find(t => t.name === this.getTaskTerminalName(taskDefinition.task));
+		const terminal = taskDefinition.terminal ?? this.tasksService.getTerminalForTask(taskDefinition.task);
 		if (!terminal) {
 			this.logService.logger.debug('getTaskOutputTool returning undefined: no terminal for task: ' + options.input.id + ' label: ' + taskDefinition.taskLabel + ' terminal names: ' + this.terminalService.terminals.map(t => t.name).join(', '));
 			return;
@@ -53,28 +52,8 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 		]);
 	}
 
-
-	private getTaskTerminalName(task: vscode.TaskDefinition): string {
-		if ('label' in task) {
-			return task.label;
-		} else if ('script' in task) {
-			return task.type + ': ' + task.script;
-		} else if ('command' in task) {
-			return task.type + ': ' + task.command;
-		}
-		return '';
-	}
-
-
 	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ITaskOptions>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
 		const { task, workspaceFolder, taskLabel } = this.getTaskDefinition(options.input) || {};
-		if (task && !this.tasksService.isTaskActive(task)) {
-			return {
-				invocationMessage: l10n.t`${taskLabel ?? options.input.id} is not running.`,
-				pastTenseMessage: l10n.t`${taskLabel ?? options.input.id} is not running.`,
-				confirmationMessages: undefined
-			};
-		}
 		const position = workspaceFolder && task && await this.tasksService.getTaskConfigPosition(workspaceFolder, task);
 		const link = (s: string) => position ? `[${s}](${position.uri.toString()}#${position.range.startLineNumber}-${position.range.endLineNumber})` : s;
 		const trustedMark = (value: string) => {
@@ -106,7 +85,7 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 				taskLabel = input.id;
 			}
 		} catch { }
-		return { workspaceFolder, task, taskLabel };
+		return { workspaceFolder, task, taskLabel, terminal: task.terminal ?? this.tasksService.getTerminalForTask(task) };
 	}
 }
 

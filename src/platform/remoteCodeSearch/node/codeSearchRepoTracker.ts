@@ -110,10 +110,8 @@ export type RepoEntry =
 		readonly initTask: InitTask;
 	}
 	| ResolvedRepoEntry
-	| IndexedRepoEntry;
-
-export type CodeSearchRepoInfo = Readonly<RepoEntry>;
-
+	| IndexedRepoEntry
+	;
 
 export type BuildIndexTriggerReason = 'auto' | 'manual';
 
@@ -229,10 +227,10 @@ export class CodeSearchRepoTracker extends Disposable {
 	private readonly _onDidFinishInitialization = this._register(new Emitter<void>());
 	public readonly onDidFinishInitialization = this._onDidFinishInitialization.event;
 
-	private readonly _onDidAddOrUpdateRepo = this._register(new Emitter<CodeSearchRepoInfo>());
+	private readonly _onDidAddOrUpdateRepo = this._register(new Emitter<RepoEntry>());
 	public readonly onDidAddOrUpdateRepo = this._onDidAddOrUpdateRepo.event;
 
-	private readonly _onDidRemoveRepo = this._register(new Emitter<CodeSearchRepoInfo>());
+	private readonly _onDidRemoveRepo = this._register(new Emitter<RepoEntry>());
 	public readonly onDidRemoveRepo = this._onDidRemoveRepo.event;
 
 	private readonly _initializedGitReposP: CancelablePromise<void>;
@@ -380,7 +378,7 @@ export class CodeSearchRepoTracker extends Disposable {
 		this._initializedGitHubRemoteReposP.cancel();
 	}
 
-	getAllRepos(): Iterable<CodeSearchRepoInfo> {
+	getAllRepos(): Iterable<RepoEntry> {
 		return this._repos.values();
 	}
 
@@ -942,7 +940,7 @@ export class CodeSearchRepoTracker extends Disposable {
 		return deferredP.p;
 	}
 
-	public async diffWithIndexedCommit(repoInfo: CodeSearchRepoInfo): Promise<CodeSearchDiff | undefined> {
+	public async diffWithIndexedCommit(repoInfo: RepoEntry): Promise<CodeSearchDiff | undefined> {
 		if (isGitHubRemoteRepository(repoInfo.repo.rootUri)) {
 			// TODO: always assumes no diff. Can we get a real diff somehow?
 			return { changes: [] };

@@ -5,7 +5,6 @@
 
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
-import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange';
 import { InlineEditRequestLogContext } from './inlineEditLogContext';
 import { IStatelessNextEditProvider, PushEdit, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult } from './statelessNextEditProvider';
 
@@ -103,22 +102,5 @@ export class IgnoreTriviaWhitespaceChangesAspect extends EditFilterAspect {
 			}
 		}
 		return true;
-	}
-}
-
-export class IgnoreEditsAtClippingBorderAspect extends EditFilterAspect {
-	override filterEdit(resultDocument: StatelessNextEditDocument, singleEdits: readonly LineReplacement[]): readonly LineReplacement[] {
-		const filteredEdits = singleEdits.filter(e => !this._isAtClippingBorder(e, resultDocument.clippingRange, resultDocument.lineCountBeforeClipping));
-		return filteredEdits;
-	}
-
-	private _isAtClippingBorder(edit: LineReplacement, clippingRange: LineRange, lineCountBeforeClipping: number): boolean {
-		if (clippingRange.startLineNumber > 1 && edit.lineRange.startLineNumber === 1) {
-			return true;
-		}
-		if (clippingRange.endLineNumberExclusive < lineCountBeforeClipping && edit.lineRange.endLineNumberExclusive === clippingRange.length) {
-			return true;
-		}
-		return false;
 	}
 }

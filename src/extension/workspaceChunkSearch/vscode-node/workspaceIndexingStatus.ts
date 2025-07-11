@@ -5,10 +5,8 @@
 
 import { t } from '@vscode/l10n';
 import * as vscode from 'vscode';
-import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ICodeSearchAuthenticationService } from '../../../platform/remoteCodeSearch/node/codeSearchRepoAuth';
 import { RepoStatus, ResolvedRepoEntry } from '../../../platform/remoteCodeSearch/node/codeSearchRepoTracker';
-import { CodeSearchRemoteIndexStatus } from '../../../platform/workspaceChunkSearch/node/codeSearchChunkSearch';
 import { LocalEmbeddingsIndexStatus } from '../../../platform/workspaceChunkSearch/node/embeddingsChunkSearch';
 import { IWorkspaceChunkSearchService, WorkspaceIndexState } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { coalesce } from '../../../util/vs/base/common/arrays';
@@ -50,12 +48,12 @@ export class MockWorkspaceIndexStateReporter extends Disposable implements Works
 }
 
 interface ChatStatusItemState {
-	readonly indexKind: {
+	readonly title: {
 		readonly title: string;
 		readonly learnMoreLink: string;
 		readonly busy?: boolean;
 	};
-	readonly progress: {
+	readonly details: {
 		readonly message: string;
 		readonly busy: boolean;
 	} | undefined;
@@ -80,7 +78,6 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 	private readonly minOutdatedFileCountToShow = 20;
 
 	constructor(
-		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@ICodeSearchAuthenticationService private readonly _codeSearchAuthService: ICodeSearchAuthenticationService,
 		@IWorkspaceChunkSearchService _workspaceChunkSearch: IWorkspaceChunkSearchService,
 	) {
@@ -97,12 +94,12 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 
 		// Write an initial status
 		this._writeStatusItem({
-			indexKind: {
+			title: {
 				title: t`Checking index status`,
 				learnMoreLink: 'https://aka.ms/copilot-chat-workspace-remote-index', // Top level overview of index
 				busy: true
 			},
-			progress: undefined
+			details: undefined
 		});
 
 		// And kick off async update to get the real status
@@ -126,86 +123,84 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 			learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
 		};
 
-		// If we have remote index info, priority showing information related to it
+		// If we have remote index info, prioritize showing information related to it
 		switch (state.remoteIndexState.status) {
-			case CodeSearchRemoteIndexStatus.Indexed: {
-				return this._writeStatusItem({
-					indexKind: remoteIndexMessage,
-					progress: undefined
-				});
-			}
-			case CodeSearchRemoteIndexStatus.Indexing: {
-				return this._writeStatusItem({
-					indexKind: remoteIndexMessage,
-					progress: {
-						message: t('Building'),
-						busy: true,
-					},
-				});
-			}
-			case CodeSearchRemoteIndexStatus.NotYetIndexed: {
-				const local = await this.getLocalIndexStatusItem(state);
-				if (id !== this.currentUpdateRequestId) {
-					return;
-				}
+			case 'initializing':
+				return this._writeInitializingStatus();
 
-				return this._writeStatusItem({
-					indexKind: local ? local.indexKind : {
-						title: t('Remote index not yet built'),
-						learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
-					},
-					progress: {
-						message: (local?.progress?.message ? local?.progress?.message + ' ' : '') + `[${t`Build remote index`}](command:${buildRemoteIndexCommandId} "${t('Build Remote Workspace Index')}")`,
-						busy: local?.progress?.busy ?? false,
+			case 'loaded': {
+				if (state.remoteIndexState.repos.length > 0) {
+					if (state.remoteIndexState.repos.every(repo => repo.status === RepoStatus.NotIndexable)) {
+						break;
 					}
-				});
-			}
-			case CodeSearchRemoteIndexStatus.Initializing:
-				return this._writeStatusItem({
-					indexKind: {
-						title: t('Remote index'),
-						learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
-					},
-					progress: {
-						message: t('Checking status'),
-						busy: true,
-					},
-				});
 
-			case CodeSearchRemoteIndexStatus.CouldNotCheckIndexStatus: {
-				const inaccessibleRepo = state.remoteIndexState.repos.find(repo =>
-					repo.status === RepoStatus.CouldNotCheckIndexStatus || repo.status === RepoStatus.NotAuthorized) as ResolvedRepoEntry | undefined;
+					if (state.remoteIndexState.repos.every(repo => repo.status === RepoStatus.Ready)) {
+						return this._writeStatusItem({
+							title: remoteIndexMessage,
+							details: undefined
+						});
+					}
 
-				// Not signed in at all
-				if (!this._authService.getAnyGitHubSession({ silent: true })) {
-					return this._writeStatusItem({
-						indexKind: {
-							title: t('Remote index unavailable'),
-							learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
-						},
-						progress: {
-							message: t(`[Sign in](${commandUri(signInFirstTimeCommandId, [inaccessibleRepo])} "${t('Sign in to access the remote workspace index')}")`),
-							busy: false,
-						},
-					});
+					if (state.remoteIndexState.repos.some(repo => repo.status === RepoStatus.CheckingStatus || RepoStatus.Initializing)) {
+						return this._writeInitializingStatus();
+					}
+
+					if (state.remoteIndexState.repos.some(repo => repo.status === RepoStatus.BuildingIndex)) {
+						return this._writeStatusItem({
+							title: remoteIndexMessage,
+							details: {
+								message: t('Building'),
+								busy: true,
+							},
+						});
+					}
+
+					if (state.remoteIndexState.repos.some(repo => repo.status === RepoStatus.NotYetIndexed)) {
+						const local = await this.getLocalIndexStatusItem(state);
+						if (id !== this.currentUpdateRequestId) {
+							return;
+						}
+
+						return this._writeStatusItem({
+							title: local ? local.title : {
+								title: state.remoteIndexState.repos.every(repo => repo.status === RepoStatus.NotYetIndexed)
+									? t('Remote index not yet built')
+									: t('Remote index not yet built for a repo in the workspace'),
+								learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
+							},
+							details: {
+								message: (local?.details?.message ? local?.details?.message + ' ' : '') + `[${t`Build remote index`}](command:${buildRemoteIndexCommandId} "${t('Build Remote Workspace Index')}")`,
+								busy: local?.details?.busy ?? false,
+							}
+						});
+					}
+
+					// We have a potential mix of statuses
+					const readyRepos = state.remoteIndexState.repos.filter(repo => repo.status === RepoStatus.Ready);
+					const errorRepos = state.remoteIndexState.repos.filter(repo => repo.status === RepoStatus.CouldNotCheckIndexStatus || repo.status === RepoStatus.NotAuthorized);
+
+					if (errorRepos.length > 0) {
+						const inaccessibleRepo = errorRepos[0] as ResolvedRepoEntry;
+
+						return this._writeStatusItem({
+							title: {
+								title: readyRepos.length
+									? t('{0} repos with remote indexes', readyRepos.length)
+									: t('Remote index unavailable'),
+								learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
+							},
+							details: {
+								message: readyRepos.length
+									? t(`[Try re-authenticating for {0} additional repos](${commandUri(reauthenticateCommandId, [inaccessibleRepo])} "${t('Try signing in again to access the remote workspace index')}")`, errorRepos.length)
+									: t(`[Try re-authenticating](${commandUri(reauthenticateCommandId, [inaccessibleRepo])} "${t('Try signing in again to access the remote workspace index ')}")`),
+								busy: false,
+							},
+						});
+					}
 				}
 
-				// We either need to update auth or switch accounts
-				return this._writeStatusItem({
-					indexKind: {
-						title: t('Remote index unavailable'),
-						learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
-					},
-					progress: {
-						message: t(`[Try re-authenticating](${commandUri(reauthenticateCommandId, [inaccessibleRepo])} "${t('Try signing in again to access the remote workspace index')}")`),
-						busy: false,
-					},
-				});
-			}
-
-			case CodeSearchRemoteIndexStatus.NoRepos:
-				// Fall through to local indexing
 				break;
+			}
 		}
 
 		// For local indexing
@@ -215,6 +210,19 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 		}
 
 		this._writeStatusItem(localStatus);
+	}
+
+	private _writeInitializingStatus(): void | PromiseLike<void> {
+		return this._writeStatusItem({
+			title: {
+				title: t('Remote index'),
+				learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
+			},
+			details: {
+				message: t('Checking status'),
+				busy: true,
+			},
+		});
 	}
 
 	private async getLocalIndexStatusItem(state: WorkspaceIndexState): Promise<ChatStatusItemState | undefined> {
@@ -236,20 +244,20 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 			case LocalEmbeddingsIndexStatus.Ready:
 			case LocalEmbeddingsIndexStatus.UpdatingIndex:
 				return {
-					indexKind: {
+					title: {
 						title: t('Locally indexed'),
 						learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-local-index',
 					},
-					progress: await getProgress()
+					details: await getProgress()
 				};
 
 			case LocalEmbeddingsIndexStatus.TooManyFilesForAutomaticIndexing:
 				return {
-					indexKind: {
+					title: {
 						title: t`Basic index`,
 						learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-basic-index'
 					},
-					progress: {
+					details: {
 						message: `[${t`Build local index`}](command:${buildLocalIndexCommandId} "${t('Try to build a more advanced local index of the workspace.')}")`,
 						busy: false
 					},
@@ -258,11 +266,11 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 			case LocalEmbeddingsIndexStatus.TooManyFilesForAnyIndexing:
 			default:
 				return {
-					indexKind: {
+					title: {
 						title: t`Basic index`,
 						learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-basic-index'
 					},
-					progress: undefined
+					details: undefined
 				};
 		}
 	}
@@ -277,18 +285,18 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 
 		this._statusItem.title = {
 			label: statusTitle,
-			link: values.indexKind.learnMoreLink
+			link: values.title.learnMoreLink
 		};
 
 		this._statusItem.description = coalesce([
-			values.indexKind.title,
-			values.indexKind.busy ? spinnerCodicon : undefined,
+			values.title.title,
+			values.title.busy ? spinnerCodicon : undefined,
 		]).join(' ');
 
-		if (values.progress) {
+		if (values.details) {
 			this._statusItem.detail = coalesce([
-				values.progress.message,
-				values.progress.busy ? spinnerCodicon : undefined
+				values.details.message,
+				values.details.busy ? spinnerCodicon : undefined
 			]).join(' ');
 		} else {
 			this._statusItem.detail = '';

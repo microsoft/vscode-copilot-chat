@@ -84,7 +84,7 @@ function isLlmCompletionInfo(item: NesCompletionInfo): item is LlmCompletionInfo
 
 
 export class InlineCompletionProviderImpl implements InlineCompletionItemProvider {
-	public readonly displayName = 'Copilot next edit suggestion';
+	public readonly displayName = 'Next edit suggestion';
 
 	private readonly _tracer: ITracer;
 
