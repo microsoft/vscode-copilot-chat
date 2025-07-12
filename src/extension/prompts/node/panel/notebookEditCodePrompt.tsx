@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { BasePromptElementProps, PromptElement, PromptSizing } from '@vscode/prompt-tsx';
-import type { Uri } from 'vscode';
+import type { LanguageModelToolInformation, Uri } from 'vscode';
 import { IAlternativeNotebookContentService } from '../../../../platform/notebook/common/alternativeContent';
 import { INotebookService } from '../../../../platform/notebook/common/notebookService';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
@@ -22,11 +22,13 @@ import { isNotebookWorkingSetEntry, IWorkingSet } from '../../../prompt/common/i
 import { IPromptEndpoint } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 import { ExampleCodeBlock } from './safeElements';
+import { ToolName } from '../../../tools/common/toolNames';
 
 
 export interface NotebookFormatPromptProps extends BasePromptElementProps {
 	readonly chatVariables: ChatVariablesCollection | IWorkingSet;
 	readonly query: string;
+	readonly availableTools?: readonly LanguageModelToolInformation[];
 }
 
 export class NotebookReminderInstructions extends PromptElement<NotebookFormatPromptProps> {
@@ -39,12 +41,15 @@ export class NotebookReminderInstructions extends PromptElement<NotebookFormatPr
 	}
 
 	public override render(_state: void, _sizing: PromptSizing) {
+		const hasCreateNotebookTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CreateNewJupyterNotebook);
 		const notebookRelatedUris = this.props.chatVariables instanceof ChatVariablesCollection ?
 			getNotebookUrisFromChatVariables(this.props.chatVariables, this._workspaceService, this.notebookService) :
 			this.props.chatVariables.filter(entry => isNotebookWorkingSetEntry(entry)).map(entry => entry.document.uri);
-		if (notebookRelatedUris.length || queryContainsNotebookSpecificKeywords(this.props.query)) {
-			return <>Do not show Cell IDs to the user.<br /></>;
-		}
+		const includeCellIdReminder = notebookRelatedUris.length || queryContainsNotebookSpecificKeywords(this.props.query);
+		return <>
+			{includeCellIdReminder && <>Do not show Notebook Cell IDs to the user.<br /></>}
+			{hasCreateNotebookTool && <>Never use the {ToolName.CreateNewJupyterNotebook} tool to create Notebooks unless user explicitly requests creation of Notebooks.<br /></>}
+		</>;
 	}
 }
 

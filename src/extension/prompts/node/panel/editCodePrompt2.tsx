@@ -149,7 +149,7 @@ export class EditCode2UserMessage extends PromptElement<AgentPromptProps> {
 					<ChatVariables flexGrow={3} priority={898} chatVariables={chatVariables} />
 					<Tag name='reminder'>
 						{getEditingReminder(hasEditFileTool, hasReplaceStringTool)}
-						<NotebookReminderInstructions chatVariables={chatVariables} query={query} />
+						<NotebookReminderInstructions availableTools={this.props.promptContext.tools?.availableTools} chatVariables={chatVariables} query={query} />
 						<NewFilesLocationHint />
 					</Tag>
 					<Tag name='prompt'><UserQuery flexGrow={7} priority={900} chatVariables={chatVariables} query={query} /></Tag>
