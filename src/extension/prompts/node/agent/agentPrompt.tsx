@@ -11,6 +11,7 @@ import { ConfigKey, IConfigurationService } from '../../../../platform/configura
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IEnvService, OperatingSystem } from '../../../../platform/env/common/envService';
 import { getGitHubRepoInfoFromContext, IGitService } from '../../../../platform/git/common/gitService';
+import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IAlternativeNotebookContentService } from '../../../../platform/notebook/common/alternativeContent';
@@ -410,6 +411,7 @@ class CurrentEditorContext extends PromptElement<CurrentEditorContextProps> {
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IAlternativeNotebookContentService private readonly alternativeNotebookContent: IAlternativeNotebookContentService,
+		@IIgnoreService private readonly ignoreService: IIgnoreService,
 	) {
 		super(props);
 	}
@@ -421,12 +423,12 @@ class CurrentEditorContext extends PromptElement<CurrentEditorContextProps> {
 
 		let context: PromptElement | undefined;
 		const activeEditor = this.tabsAndEditorsService.activeTextEditor;
-		if (activeEditor) {
+		if (activeEditor && !(await this.ignoreService.isCopilotIgnored(this.tabsAndEditorsService.activeTextEditor.document.uri))) {
 			context = this.renderActiveTextEditor(activeEditor);
 		}
 
 		const activeNotebookEditor = this.tabsAndEditorsService.activeNotebookEditor;
-		if (activeNotebookEditor) {
+		if (activeNotebookEditor && !(await this.ignoreService.isCopilotIgnored(activeNotebookEditor.notebook.uri))) {
 			context = this.renderActiveNotebookEditor(activeNotebookEditor);
 		}
 

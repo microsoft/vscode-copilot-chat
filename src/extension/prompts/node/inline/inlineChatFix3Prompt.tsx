@@ -28,6 +28,7 @@ import { getStructure } from '../../../context/node/resolvers/selectionContextHe
 import { OutcomeAnnotation, OutcomeAnnotationLabel } from '../../../inlineChat/node/promptCraftingTypes';
 import { IResponseProcessorContext, ReplyInterpreter, ReplyInterpreterMetaData } from '../../../prompt/node/intents';
 import { CompositeElement } from '../base/common';
+import { IgnoredFiles } from '../base/ignoredFiles';
 import { InstructionMessage } from '../base/instructionMessage';
 import { LegacySafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
@@ -61,7 +62,7 @@ export class InlineFix3Prompt extends PromptElement<InlineFixProps> {
 		const { document, wholeRange, fileIndentInfo, selection, language } = this.props.documentContext;
 		const isIgnored = await this.ignoreService.isCopilotIgnored(document.uri);
 		if (isIgnored) {
-			return <ignoredFiles value={[document.uri]} />;
+			return <IgnoredFiles uris={document.uri} reason={isIgnored} />;
 		}
 		if (isNotebookCellOrNotebookChatInput(document.uri)) {
 			throw illegalArgument('InlineFix3PlusPrompt should not be used with a notebook!');

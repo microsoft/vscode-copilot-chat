@@ -6,7 +6,7 @@
 import { BasePromptElementProps, PromptElement, PromptSizing, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
-import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
+import { IgnoreReason, IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILanguageDiagnosticsService, rangeSpanningDiagnostics } from '../../../../platform/languages/common/languageDiagnosticsService';
 import { IParserService } from '../../../../platform/parser/node/parserService';
 import { ITabsAndEditorsService } from '../../../../platform/tabs/common/tabsAndEditorsService';
@@ -26,6 +26,7 @@ import { CodeContextRegion } from '../../../inlineChat/node/codeContextRegion';
 import { IDocumentContext } from '../../../prompt/node/documentContext';
 import { ReplyInterpreterMetaData } from '../../../prompt/node/intents';
 import { CompositeElement } from '../base/common';
+import { IgnoredFiles } from '../base/ignoredFiles';
 import { InstructionMessage } from '../base/instructionMessage';
 import { IPromptEndpoint } from '../base/promptRenderer';
 import { LegacySafetyRules } from '../base/safetyRules';
@@ -44,7 +45,7 @@ import { summarizeDocumentSync } from './summarizedDocument/summarizeDocumentHel
 
 const FIX_SELECTION_LENGTH_THRESHOLD = 15;
 interface InlineChatNotebookFixPromptState {
-	isIgnored: boolean;
+	isIgnored: IgnoreReason;
 	priorities: NotebookPromptPriority;
 }
 
@@ -82,7 +83,7 @@ export class InlineFixNotebookPrompt extends PromptElement<InlineFixProps, Inlin
 		}
 
 		if (state.isIgnored) {
-			return <ignoredFiles value={[documentContext.document.uri]} />;
+			return <IgnoredFiles uris={documentContext.document.uri} reason={state.isIgnored} />;
 		}
 
 		const { query, history, chatVariables } = this.props.promptContext;

@@ -17,6 +17,7 @@ import { ServicesAccessor } from '../../../../util/vs/platform/instantiation/com
 import { getStructure } from '../../../context/node/resolvers/selectionContextHelpers';
 import { EarlyStopping, LeadingMarkdownStreaming, ReplyInterpreter, ReplyInterpreterMetaData } from '../../../prompt/node/intents';
 import { TextPieceClassifiers } from '../../../prompt/node/streamingEdits';
+import { IgnoredFiles } from '../../../prompts/node/base/ignoredFiles';
 import { Tag } from '../../../prompts/node/base/tag';
 import { getAdjustedSelection } from '../../../prompts/node/inline/adjustSelection';
 import { MarkdownBlock } from '../../../prompts/node/inline/inlineChatGenerateMarkdownPrompt';
@@ -156,7 +157,7 @@ export class SummarizedDocumentWithSelection extends PromptElement<SummarizedDoc
 		const isIgnored = await this.ignoreService.isCopilotIgnored(documentData.document.uri);
 
 		if (isIgnored) {
-			return <ignoredFiles value={[documentData.document.uri]} />;
+			return <IgnoredFiles uris={documentData.document.uri} reason={isIgnored} />;
 		}
 
 		let { tokenBudget } = this.props;

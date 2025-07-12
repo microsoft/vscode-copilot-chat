@@ -28,6 +28,7 @@ import { InlineChatEditCodePromptProps } from './inlineChatEditCodePrompt';
 import { promptPriorities } from './inlineChatNotebookCommon';
 import { generateSelectionContextInNotebook, InlineChatCustomNotebookCellsContextRenderer, InlineChatCustomNotebookInfoRenderer, InlineChatJupyterNotebookCellsContextRenderer, InlineChatNotebookBasePromptState, InlineChatNotebookSelectionCommonProps, InlineChatNotebookSelectionState, InlineChatNotebookVariables } from './inlineChatNotebookCommonPromptElements';
 import { createPromptingSummarizedDocument } from './promptingSummarizedDocument';
+import { IgnoredFiles } from '../base/ignoredFiles';
 
 interface InlineChatNotebookEditSelectionProps extends InlineChatNotebookSelectionCommonProps {
 	hasCodeWithoutSelection: boolean;
@@ -200,7 +201,7 @@ export class InlineChatNotebookEditPrompt extends PromptElement<InlineChatEditCo
 			throw illegalArgument('InlineChatNotebookEditPrompt should be used only with a notebook!');
 		}
 		if (state.isIgnored) {
-			return <ignoredFiles value={[context.document.uri]} />;
+			return <IgnoredFiles uris={context.document.uri} reason={state.isIgnored} />;
 		}
 
 		const tagBasedDocumentSummary = state.tagBasedDocumentSummary;

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import { BasePromptElementProps, PromptElement, PromptReference, PromptSizing } from '@vscode/prompt-tsx';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
-import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
+import { IgnoreReason, IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IParserService, treeSitterOffsetRangeToVSCodeRange, treeSitterToVSCodeRange, vscodeToTreeSitterOffsetRange, vscodeToTreeSitterRange } from '../../../../platform/parser/node/parserService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
@@ -12,6 +12,7 @@ import { IWorkspaceService } from '../../../../platform/workspace/common/workspa
 import { Diagnostic, Location, Range, Uri } from '../../../../vscodeTypes';
 import { asyncComputeWithTimeBudget } from '../../../context/node/resolvers/selectionContextHelpers';
 import { IDocumentContext } from '../../../prompt/node/documentContext';
+import { IgnoredFiles } from '../base/ignoredFiles';
 import { Tag } from '../base/tag';
 import { ReferencesAtPosition } from '../panel/referencesAtPosition';
 import { CodeBlock } from '../panel/safeElements';
@@ -44,7 +45,7 @@ export class Diagnostics extends PromptElement<DiagnosticsProps> {
 		const { diagnostics, documentContext } = this.props;
 		const isIgnored = await this.ignoreService.isCopilotIgnored(documentContext.document.uri);
 		if (isIgnored) {
-			return <ignoredFiles value={[documentContext.document.uri]} />;
+			return <IgnoredFiles uris={documentContext.document.uri} reason={isIgnored} />;
 		}
 
 		return (
@@ -141,7 +142,7 @@ export class DiagnosticRelatedInfo extends PromptElement<DiagnosticRelatedInfoPr
 	async render(_state: void, sizing: PromptSizing) {
 		const { infos, ignoredFiles, definitionRanges } = await this.getRelatedInfos();
 		if (!infos.length && !definitionRanges.length) {
-			return <ignoredFiles value={ignoredFiles} />;
+			return <IgnoredFiles uris={ignoredFiles} reason={IgnoreReason.ContentExclusion} />;
 		}
 		return <>
 			This diagnostic has some related code:<br />
@@ -151,7 +152,7 @@ export class DiagnosticRelatedInfo extends PromptElement<DiagnosticRelatedInfoPr
 			{
 				definitionRanges.map(range => <ReferencesAtPosition document={this.props.document} position={range.start} />)
 			}
-			<ignoredFiles value={ignoredFiles} />
+			<IgnoredFiles uris={ignoredFiles} reason={IgnoreReason.ContentExclusion} />
 		</>;
 	}
 

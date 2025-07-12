@@ -14,7 +14,7 @@ import { RemoteAgentChatEndpoint } from '../../../platform/endpoint/node/chatEnd
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitService, getGitHubRepoInfoFromContext, toGithubNwo } from '../../../platform/git/common/gitService';
 import { IGithubRepositoryService } from '../../../platform/github/common/githubService';
-import { HAS_IGNORED_FILES_MESSAGE, IIgnoreService } from '../../../platform/ignore/common/ignoreService';
+import { HAS_IGNORED_FILES_MESSAGE, IIgnoreService, IgnoreReason } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ICopilotKnowledgeBaseReference, ICopilotReference } from '../../../platform/networking/common/fetch';
 import { IFetcherService, Response } from '../../../platform/networking/common/fetcherService';
@@ -374,10 +374,10 @@ export class RemoteAgentContribution implements IDisposable {
 					copilotReferences.push(...copilotSkillReferences);
 				}
 
-				let hasIgnoredFiles = false;
+				let hasContentExcluded = false;
 				try {
 					const result = await this.prepareClientPlatformReferences([...request.references], slug);
-					hasIgnoredFiles = result.hasIgnoredFiles;
+					hasContentExcluded = result.hasContentExcluded;
 
 					if (result.clientReferences) {
 						copilotReferences.push(...result.clientReferences);
@@ -549,7 +549,7 @@ export class RemoteAgentContribution implements IDisposable {
 				);
 
 				metadata['copilot_references'] = [...new Set(reportedReferences.values()).values(), ...agentReferences];
-				if (response.type === ChatFetchResponseType.Success && hasIgnoredFiles) {
+				if (response.type === ChatFetchResponseType.Success && hasContentExcluded) {
 					responseStream.markdown(HAS_IGNORED_FILES_MESSAGE);
 				}
 
@@ -648,15 +648,18 @@ export class RemoteAgentContribution implements IDisposable {
 			variableName: string;
 			value?: Uri | Location | undefined;
 		} | Location | Uri)[] = [];
-		let hasIgnoredFiles = false;
+		let hasContentExcluded = false;
 		let hasSentImplicitSelectionReference = false;
 
 		const redactFileContents = async (document: TextDocument, range?: Range) => {
 			const filename = path.basename(document.uri.toString());
 			let content = document.getText(range);
-			if (await this.ignoreService.isCopilotIgnored(document.uri)) {
-				hasIgnoredFiles = true;
+			const ignored = await this.ignoreService.isCopilotIgnored(document.uri);
+			if (ignored === IgnoreReason.ContentExclusion) {
+				hasContentExcluded = true;
 				content = 'content-exclusion';
+			} else if (ignored === IgnoreReason.BehavioralExclusion) {
+				content = 'excluded';
 			} else if (filename.startsWith('.')) {
 				content = 'hidden-file'; // e.g. .env
 			} else if (Buffer.byteLength(content, 'utf8') > 1024 ** 3) {
@@ -774,7 +777,7 @@ export class RemoteAgentContribution implements IDisposable {
 			}
 		}
 
-		return { clientReferences, vscodeReferences, hasIgnoredFiles };
+		return { clientReferences, vscodeReferences, hasContentExcluded };
 	}
 
 	private async listEnabledSkills(authToken: string) {
