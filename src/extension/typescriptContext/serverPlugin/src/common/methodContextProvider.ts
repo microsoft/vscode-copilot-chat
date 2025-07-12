@@ -9,7 +9,7 @@ const ts = TS();
 import { FunctionLikeContextProvider, FunctionLikeContextRunnable } from './baseContextProviders';
 import { CodeSnippetBuilder } from './code';
 import {
-	AbstractContextRunnable, ComputeCost, ContextResult, RunnableResultContext, Search, type ComputeContextSession, type ContextRunnableCollector, type ProviderComputeContext, type RequestContext,
+	AbstractContextRunnable, ComputeCost, ContextResult, Search, type ComputeContextSession, type ContextRunnableCollector, type ProviderComputeContext, type RequestContext,
 	type RunnableResult
 } from './contextProvider';
 import { EmitMode, Priorities, SpeculativeKind, type CacheInfo } from './protocol';
@@ -436,7 +436,7 @@ abstract class SimilarPropertyRunnable<T extends tt.MethodDeclaration | tt.Const
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const scope = this.getCacheScope();
 		const cacheInfo: CacheInfo | undefined = scope !== undefined ? { emitMode: EmitMode.ClientBased, scope } : undefined;
-		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, cacheInfo);
+		return result.createRunnableResult(this.id, SpeculativeKind.emit, cacheInfo);
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {
@@ -449,7 +449,7 @@ abstract class SimilarPropertyRunnable<T extends tt.MethodDeclaration | tt.Const
 					return;
 				}
 				const sourceFile = this.declaration.getSourceFile();
-				const snippetBuilder = new CodeSnippetBuilder(this.session, this.context.getSymbols(program), sourceFile, result);
+				const snippetBuilder = new CodeSnippetBuilder(this.session, this.context.getSymbols(program), sourceFile);
 				snippetBuilder.addDeclaration(candidate);
 				result.addSnippet(snippetBuilder, undefined, this.priority);
 			}
@@ -521,7 +521,7 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheInfo: CacheInfo | undefined = { emitMode: EmitMode.ClientBased, scope: this.createCacheScope(this.declaration) };
-		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, cacheInfo);
+		return result.createRunnableResult(this.id, SpeculativeKind.emit, cacheInfo);
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {
@@ -548,7 +548,7 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 				if (member === methodSymbol) {
 					continue;
 				}
-				if (!this.handleSymbol(result, member, symbols, ts.ModifierFlags.Private | ts.ModifierFlags.Protected)) {
+				if (!this.handleMember(result, member, symbols, ts.ModifierFlags.Private | ts.ModifierFlags.Protected)) {
 					return;
 				}
 			}
@@ -561,30 +561,24 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 			}
 			for (const member of type.members.values()) {
 				token.throwIfCancellationRequested();
-				if (!this.handleSymbol(result, member, symbols, ts.ModifierFlags.Protected)) {
+				if (!this.handleMember(result, member, symbols, ts.ModifierFlags.Protected)) {
 					return;
 				}
 			}
 		}
 	}
 
-	private handleSymbol(result: RunnableResult, symbol: tt.Symbol, symbols: Symbols, flags: tt.ModifierFlags): boolean {
+	private handleMember(_result: RunnableResult, symbol: tt.Symbol, symbols: Symbols, flags: tt.ModifierFlags): boolean {
 		if (!Symbols.hasModifierFlags(symbol, flags)) {
 			return true;
 		}
 
-		const sourceFile = this.declaration.getSourceFile();
 		let continueResult: boolean = true;
-		for (const [typeSymbol, name] of this.getEmitData(symbol, symbols)) {
+		for (const [typeSymbol, name] of this.getEmitMemberData(symbol, symbols)) {
 			if (typeSymbol === undefined) {
 				continue;
 			}
-			const [handled, key] = this.handleSymbolIfKnown(typeSymbol);
-			if (!handled) {
-				const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile, result);
-				snippetBuilder.addTypeSymbol(typeSymbol, name);
-				continueResult = continueResult && result.addSnippet(snippetBuilder, key, this.priority, true);
-			}
+			continueResult = continueResult && this.handleSymbol(typeSymbol, name, true);
 			if (!continueResult) {
 				break;
 			}
@@ -593,7 +587,7 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 	}
 
 	private static readonly NoEmitData: readonly [tt.Symbol | undefined, string | undefined] = Object.freeze<[tt.Symbol | undefined, string | undefined]>([undefined, undefined]);
-	private *getEmitData(symbol: tt.Symbol, symbols: Symbols): IterableIterator<readonly [tt.Symbol | undefined, string | undefined]> {
+	private *getEmitMemberData(symbol: tt.Symbol, symbols: Symbols): IterableIterator<readonly [tt.Symbol | undefined, string | undefined]> {
 		if (Symbols.isProperty(symbol)) {
 			const type = symbols.getTypeChecker().getTypeOfSymbol(symbol);
 			let typeSymbol = type.symbol;

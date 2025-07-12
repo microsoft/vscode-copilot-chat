@@ -7,8 +7,7 @@ import TS from './typescript';
 const ts = TS();
 
 import { ImportsRunnable, TypeOfExpressionRunnable, TypeOfLocalsRunnable, TypesOfNeighborFilesRunnable } from './baseContextProviders';
-import { CodeSnippetBuilder } from './code';
-import { AbstractContextRunnable, ComputeCost, ContextProvider, ContextResult, RunnableResultContext, type ComputeContextSession, type ContextRunnableCollector, type ProviderComputeContext, type RequestContext, type RunnableResult } from './contextProvider';
+import { AbstractContextRunnable, ComputeCost, ContextProvider, ContextResult, type ComputeContextSession, type ContextRunnableCollector, type ProviderComputeContext, type RequestContext, type RunnableResult } from './contextProvider';
 import { CacheScopeKind, EmitMode, Priorities, SpeculativeKind } from './protocol';
 import tss, { type TokenInfo } from './typescripts';
 
@@ -35,10 +34,10 @@ export class GlobalsRunnable extends AbstractContextRunnable {
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
-		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, { emitMode: EmitMode.ClientBased, scope: { kind: CacheScopeKind.File } });
+		return result.createRunnableResult(this.id, SpeculativeKind.emit, { emitMode: EmitMode.ClientBased, scope: { kind: CacheScopeKind.File } });
 	}
 
-	protected override run(result: RunnableResult, token: tt.CancellationToken): void {
+	protected override run(_result: RunnableResult, token: tt.CancellationToken): void {
 		const symbols = this.symbols;
 		const sourceFile = this.tokenInfo.token.getSourceFile();
 
@@ -48,13 +47,7 @@ export class GlobalsRunnable extends AbstractContextRunnable {
 		// Add functions in scope
 		for (const symbol of inScope) {
 			token.throwIfCancellationRequested();
-			const [handled, key] = this.handleSymbolIfKnown(symbol);
-			if (handled) {
-				continue;
-			}
-			const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile, result);
-			snippetBuilder.addTypeSymbol(symbol);
-			if (!result.addSnippet(snippetBuilder, key, this.priority, true)) {
+			if (!this.handleSymbol(symbol, undefined, true)) {
 				break;
 			}
 		}
@@ -64,27 +57,12 @@ export class GlobalsRunnable extends AbstractContextRunnable {
 		const result: tt.Symbol[] = [];
 		const symbols = typeChecker.getSymbolsInScope(sourceFile, ts.SymbolFlags.Function | ts.SymbolFlags.Class | ts.SymbolFlags.Interface | ts.SymbolFlags.TypeAlias | ts.SymbolFlags.ValueModule);
 		for (const symbol of symbols) {
-			if (this.skipSymbol(symbol, sourceFile)) {
+			if (this.skipSymbol(symbol)) {
 				continue;
 			}
 			result.push(this.symbols.getLeafSymbol(symbol));
 		}
 		return result;
-	}
-
-	private skipSymbol(symbol: tt.Symbol, sourceFile: tt.SourceFile): boolean {
-		if (symbol.declarations === undefined || symbol.declarations.length === 0) {
-			return true;
-		}
-		for (const declaration of symbol.declarations) {
-			if (this.skipSourceFile(declaration.getSourceFile())) {
-				return true;
-			}
-			if (declaration.getSourceFile() === sourceFile) {
-				return true;
-			}
-		}
-		return false;
 	}
 }
 

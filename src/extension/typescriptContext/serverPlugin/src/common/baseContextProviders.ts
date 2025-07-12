@@ -8,10 +8,11 @@ const ts = TS();
 
 import { CodeSnippetBuilder } from './code';
 import {
-	AbstractContextRunnable, CacheScopes, ComputeCost, ContextProvider, RunnableResultContext, type ComputeContextSession,
+	AbstractContextRunnable, CacheScopes, ComputeCost, ContextProvider, type ComputeContextSession,
 	type ContextResult,
 	type ContextRunnableCollector,
-	type ProviderComputeContext, type RequestContext, type RunnableResult, type SymbolEmitData
+	type ProviderComputeContext, type RequestContext, type RunnableResult,
+	type SymbolData
 } from './contextProvider';
 import {
 	CacheScopeKind, ContextRunnableState, EmitMode, Priorities,
@@ -46,7 +47,7 @@ export class CompilerOptionsRunnable extends AbstractContextRunnable {
 	}
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheInfo: CacheInfo = { emitMode: EmitMode.ClientBased, scope: { kind: CacheScopeKind.File } };
-		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, cacheInfo);
+		return result.createRunnableResult(this.id, SpeculativeKind.emit, cacheInfo);
 	}
 
 	protected override run(result: RunnableResult, _token: tt.CancellationToken): void {
@@ -108,7 +109,7 @@ export class SignatureRunnable extends FunctionLikeContextRunnable {
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const scope = this.getCacheScope();
 		const cacheInfo: CacheInfo | undefined = scope !== undefined ? { emitMode: EmitMode.ClientBased, scope } : undefined;
-		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, cacheInfo);
+		return result.createRunnableResult(this.id, SpeculativeKind.emit, cacheInfo);
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {
@@ -120,29 +121,23 @@ export class SignatureRunnable extends FunctionLikeContextRunnable {
 			if (type === undefined) {
 				continue;
 			}
-			this.processType(result, type);
+			this.processType(result, type, token);
 		}
 		const returnType = this.declaration.type;
 		if (returnType !== undefined) {
 			token.throwIfCancellationRequested();
-			this.processType(result, returnType);
+			this.processType(result, returnType, token);
 		}
 	}
 
-	private processType(result: RunnableResult, type: tt.TypeNode): void {
-		const symbolsToEmit = this.getSymbolsToEmitForTypeNode(type);
+	private processType(_result: RunnableResult, type: tt.TypeNode, token: tt.CancellationToken): void {
+		const symbolsToEmit = this.getSymbolsForTypeNode(type);
 		if (symbolsToEmit.length === 0) {
 			return;
 		}
 		for (const symbolEmitData of symbolsToEmit) {
-			const symbol = symbolEmitData.symbol;
-			const [handled, key] = this.handleSymbolIfKnown(symbol);
-			if (handled) {
-				continue;
-			}
-			const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, this.sourceFile, result);
-			snippetBuilder.addTypeSymbol(symbol, symbolEmitData.name);
-			result.addSnippet(snippetBuilder, key, this.priority);
+			token.throwIfCancellationRequested();
+			this.handleSymbol(symbolEmitData.symbol, symbolEmitData.name);
 		}
 	}
 
@@ -186,11 +181,11 @@ export class TypeOfLocalsRunnable extends AbstractContextRunnable {
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheInfo: CacheInfo | undefined = this.cacheScope !== undefined ? { emitMode: EmitMode.ClientBasedOnTimeout, scope: this.cacheScope } : undefined;
-		this.runnableResult = result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, cacheInfo);
+		this.runnableResult = result.createRunnableResult(this.id, SpeculativeKind.emit, cacheInfo);
 		return this.runnableResult;
 	}
 
-	protected override run(result: RunnableResult, cancellationToken: tt.CancellationToken): void {
+	protected override run(_result: RunnableResult, cancellationToken: tt.CancellationToken): void {
 		const token = this.tokenInfo.previous ?? this.tokenInfo.token ?? this.tokenInfo.touching;
 		const symbols = this.symbols;
 		const typeChecker = symbols.getTypeChecker();
@@ -217,9 +212,9 @@ export class TypeOfLocalsRunnable extends AbstractContextRunnable {
 			if (declaration === undefined) {
 				continue;
 			}
-			let symbolsToEmit: SymbolEmitData[] | undefined = undefined;
+			let symbolsToEmit: SymbolData[] | undefined = undefined;
 			if (declaration.type !== undefined) {
-				symbolsToEmit = this.getSymbolsToEmitForTypeNode(declaration.type);
+				symbolsToEmit = this.getSymbolsForTypeNode(declaration.type);
 			} else {
 				const type = typeChecker.getTypeAtLocation(declaration.type ?? declaration);
 				if (type !== undefined) {
@@ -229,16 +224,9 @@ export class TypeOfLocalsRunnable extends AbstractContextRunnable {
 			if (symbolsToEmit === undefined || symbolsToEmit.length === 0) {
 				continue;
 			}
-			for (const symbolEmitData of symbolsToEmit) {
+			for (const { symbol, name } of symbolsToEmit) {
 				cancellationToken.throwIfCancellationRequested();
-				const symbol = symbolEmitData.symbol;
-				const [handled, key] = this.handleSymbolIfKnown(symbol);
-				if (handled) {
-					continue;
-				}
-				const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile, result);
-				snippetBuilder.addTypeSymbol(symbol, symbolEmitData.name);
-				result.addSnippet(snippetBuilder, key, this.priority);
+				this.handleSymbol(symbol, name);
 			}
 
 			if (variableDeclarations !== undefined) {
@@ -266,13 +254,11 @@ export class TypesOfNeighborFilesRunnable extends AbstractContextRunnable {
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheInfo: CacheInfo = { emitMode: EmitMode.ClientBased, scope: { kind: CacheScopeKind.NeighborFiles } };
-		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, cacheInfo);
+		return result.createRunnableResult(this.id, SpeculativeKind.emit, cacheInfo);
 	}
 
 	protected override run(result: RunnableResult, cancellationToken: tt.CancellationToken): void {
 		const symbols = this.symbols;
-		const token = this.tokenInfo.previous ?? this.tokenInfo.token ?? this.tokenInfo.touching;
-		const sourceFile = token.getSourceFile();
 		for (const neighborFile of this.context.neighborFiles) {
 			cancellationToken.throwIfCancellationRequested();
 			if (result.isTokenBudgetExhausted()) {
@@ -294,14 +280,7 @@ export class TypesOfNeighborFilesRunnable extends AbstractContextRunnable {
 					if ((memberSymbol.flags & (ts.SymbolFlags.Class | ts.SymbolFlags.Interface | ts.SymbolFlags.TypeAlias | ts.SymbolFlags.Enum | ts.SymbolFlags.Function)) === 0) {
 						continue;
 					}
-					const [handled, key] = this.handleSymbolIfKnown(memberSymbol);
-					if (handled) {
-						continue;
-					}
-
-					const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile, result);
-					snippetBuilder.addTypeSymbol(memberSymbol, member[0] as string);
-					if (!result.addSnippet(snippetBuilder, key, Priorities.NeighborFiles, true)) {
+					if (!this.handleSymbol(memberSymbol, member[0] as string, true)) {
 						return;
 					}
 				}
@@ -362,7 +341,7 @@ export class ImportsRunnable extends AbstractContextRunnable {
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
-		this.runnableResult = result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.emit, this.cacheInfo);
+		this.runnableResult = result.createRunnableResult(this.id, SpeculativeKind.emit, this.cacheInfo);
 		return this.runnableResult;
 	}
 
@@ -419,15 +398,7 @@ export class ImportsRunnable extends AbstractContextRunnable {
 				continue;
 			}
 
-			const [handled, key] = this.handleSymbolIfKnown(symbol);
-			if (handled) {
-				continue;
-			}
-
-			const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile, result);
-			snippetBuilder.addTypeSymbol(symbol, name);
-			const full = !result.addSnippet(snippetBuilder, key, this.priority, true);
-			if (full) {
+			if (!this.handleSymbol(symbol, name, true)) {
 				break;
 			}
 		}
@@ -535,7 +506,7 @@ export class TypeOfExpressionRunnable extends AbstractContextRunnable {
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
-		return result.createRunnableResult(new RunnableResultContext(result, this), SpeculativeKind.ignore);
+		return result.createRunnableResult(this.id, SpeculativeKind.ignore);
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {
@@ -554,7 +525,7 @@ export class TypeOfExpressionRunnable extends AbstractContextRunnable {
 			if (returnTypeSymbol === undefined) {
 				continue;
 			}
-			const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile, result);
+			const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile);
 			snippetBuilder.addTypeSymbol(returnTypeSymbol, returnTypeSymbol.name);
 			result.addSnippet(snippetBuilder, undefined, this.priority);
 		}
@@ -562,7 +533,7 @@ export class TypeOfExpressionRunnable extends AbstractContextRunnable {
 		if (typeSymbol === undefined) {
 			return;
 		}
-		const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile, result);
+		const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile);
 		snippetBuilder.addTypeSymbol(typeSymbol, typeSymbol.name);
 		result.addSnippet(snippetBuilder, undefined, this.priority);
 	}

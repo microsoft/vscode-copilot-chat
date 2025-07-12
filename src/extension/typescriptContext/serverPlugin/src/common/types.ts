@@ -12,12 +12,6 @@ export interface SnippetProvider {
 	snippet(key: string | undefined, priority: number): CodeSnippet;
 }
 
-export interface SnippetCollector {
-	addSymbol(symbol: tt.Symbol, name: string | undefined, priority: number): void;
-	addSymbol(symbol: tt.Symbol, name: string | undefined, priority: number, ifRoom: false): void;
-	addSymbol(symbol: tt.Symbol, name: string | undefined, priority: number, ifRoom: true): boolean;
-}
-
 export interface KeyComputationContext {
 	host: Host;
 	getScriptVersion(sourceFile: tt.SourceFile): string | undefined;

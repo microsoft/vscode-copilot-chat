@@ -90,6 +90,14 @@ suite('Type Alias', () => {
 			kind: ContextKind.Snippet,
 			value: 'export type Both = Name & NameLength;',
 			fileName: /p4\/source\/f1.ts$/
+		}, {
+			kind: ContextKind.Snippet,
+			value: 'interface Name { name(): string; }',
+			fileName: /p4\/source\/f1.ts$/
+		}, {
+			kind: ContextKind.Snippet,
+			value: 'type NameLength = { length(): number; }',
+			fileName: /p4\/source\/f1.ts$/
 		}];
 		const context = computeContext(session, path.join(root, 'p4/source/f5.ts'), { line: 3, character: 0 }, ContextKind.Snippet);
 		assertContextItems(context, expected);

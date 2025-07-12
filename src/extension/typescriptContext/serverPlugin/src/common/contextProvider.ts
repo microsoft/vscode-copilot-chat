@@ -28,7 +28,7 @@ import {
 	type ContextRunnableResultTypes,
 	type FullContextItem, type Range
 } from './protocol';
-import { ProgramContext, RecoverableError, type CodeCacheItem, type EmitterContext, type SnippetCollector, type SnippetProvider } from './types';
+import { ProgramContext, RecoverableError, type CodeCacheItem, type EmitterContext, type SnippetProvider } from './types';
 import tss, { ImportedByState, Sessions, Symbols, Types } from './typescripts';
 import { LRUCache } from './utils';
 
@@ -405,21 +405,26 @@ export class SingleLanguageServiceSession extends ComputeContextSession {
 	}
 }
 
-export class RunnableResult implements SnippetCollector {
+export interface RunnableResultContext {
+	createContextItemReference(key: ContextItemKey): ContextItemReference | undefined;
+	manageContextItem(item: FullContextItem): ContextItem;
+}
+
+export class RunnableResult {
 
 	private readonly id: string;
+	private readonly runnableResultContext: RunnableResultContext;
 	private readonly tokenBudget: TokenBudget;
-	private readonly context: RunnableResultContext;
 	private state: ContextRunnableState;
 	private speculativeKind: SpeculativeKind;
 	private cache: CacheInfo | undefined;
 
 	public readonly items: ContextItem[];
 
-	constructor(context: RunnableResultContext, tokenBudget: TokenBudget, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined) {
-		this.id = context.getId();
+	constructor(id: ContextRunnableResultId, runnableResultContext: RunnableResultContext, tokenBudget: TokenBudget, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined) {
+		this.id = id;
+		this.runnableResultContext = runnableResultContext;
 		this.tokenBudget = tokenBudget;
-		this.context = context;
 		this.state = ContextRunnableState.Created;
 		this.speculativeKind = speculativeKind;
 		this.cache = cache;
@@ -446,7 +451,7 @@ export class RunnableResult implements SnippetCollector {
 
 	public addFromKnownItems(key: string): boolean {
 		this.state = ContextRunnableState.InProgress;
-		const reference = this.context.createContextItemReference(key);
+		const reference = this.runnableResultContext.createContextItemReference(key);
 		if (reference === undefined) {
 			return false;
 		}
@@ -454,26 +459,10 @@ export class RunnableResult implements SnippetCollector {
 		return true;
 	}
 
-	public addSymbol(symbol: tt.Symbol, name: string | undefined, priority: number): void;
-	public addSymbol(symbol: tt.Symbol, name: string | undefined, priority: number, ifRoom: false): void;
-	public addSymbol(symbol: tt.Symbol, name: string | undefined, priority: number, ifRoom: true): boolean;
-	public addSymbol(symbol: tt.Symbol, name: string | undefined, priority: number, ifRoom: boolean = false): boolean {
-		this.state = ContextRunnableState.InProgress;
-
-		const key = Symbols.createKey(symbol, this.context.getSession().host);
-		if (key !== undefined && this.addFromKnownItems(key)) {
-			return true;
-		}
-
-		const snippetBuilder = new CodeSnippetBuilder(this.context.getSession(), this.context.getSymbols(), this.context.getActiveSourceFile(), this);
-		snippetBuilder.addTypeSymbol(symbol, name);
-		return this.addSnippet(snippetBuilder, key, priority, ifRoom);
-	}
-
 	public addTrait(traitKind: TraitKind, priority: number, name: string, value: string): void {
 		this.state = ContextRunnableState.InProgress;
 		const trait = Trait.create(traitKind, priority, name, value);
-		this.items.push(this.context.manageContextItem(trait));
+		this.items.push(this.runnableResultContext.manageContextItem(trait));
 		this.tokenBudget.spent(Trait.sizeInChars(trait));
 	}
 
@@ -493,7 +482,7 @@ export class RunnableResult implements SnippetCollector {
 		}
 		this.state = ContextRunnableState.InProgress;
 		this.tokenBudget.spent(size);
-		this.items.push(this.context.manageContextItem(snippet));
+		this.items.push(this.runnableResultContext.manageContextItem(snippet));
 		return true;
 	}
 
@@ -530,41 +519,6 @@ class RunnableResultReference {
 			kind: ContextRunnableResultKind.Reference,
 			id: this.cached.id,
 		};
-	}
-}
-
-export class RunnableResultContext {
-
-	public readonly contextResult: ContextResult;
-	public readonly runnable: AbstractContextRunnable;
-
-	constructor(contextResult: ContextResult, runnable: AbstractContextRunnable) {
-		this.contextResult = contextResult;
-		this.runnable = runnable;
-	}
-
-	public createContextItemReference(key: ContextItemKey): ContextItemReference | undefined {
-		return this.contextResult.createContextItemReference(key);
-	}
-
-	public manageContextItem(item: FullContextItem): ContextItem {
-		return this.contextResult.manageContextItem(item);
-	}
-
-	public getSession(): ComputeContextSession {
-		return this.runnable.session;
-	}
-
-	public getSymbols(): Symbols {
-		return this.runnable.symbols;
-	}
-
-	public getId(): ContextRunnableResultId {
-		return this.runnable.id;
-	}
-
-	public getActiveSourceFile(): tt.SourceFile {
-		return this.runnable.getActiveSourceFile();
 	}
 }
 
@@ -613,9 +567,9 @@ export class ContextResult {
 		this.timedOut = timedOut;
 	}
 
-	public createRunnableResult(context: RunnableResultContext, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined): RunnableResult {
+	public createRunnableResult(id: ContextRunnableResultId, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined): RunnableResult {
 		this.state = ContextRequestResultState.InProgress;
-		const result = new RunnableResult(context, this.tokenBudget, speculativeKind, cache);
+		const result = new RunnableResult(id, this, this.tokenBudget, speculativeKind, cache);
 		this.runnableResults.push(result);
 		return result;
 	}
@@ -703,11 +657,6 @@ export enum ComputeCost {
 	Low = 1,
 	Medium = 2,
 	High = 3
-}
-
-export type SymbolEmitData = {
-	symbol: tt.Symbol;
-	name?: string;
 }
 
 export namespace CacheScopes {
@@ -809,6 +758,29 @@ class CacheBasedContextRunnable implements ContextRunnable {
 		}
 	}
 }
+
+export type SymbolData = {
+	symbol: tt.Symbol;
+	name?: string;
+}
+
+enum SymbolEmitDataKind {
+	symbol = 'symbol',
+	typeAlias = 'typeAlias',
+}
+
+type SymbolEmitData = {
+	kind: SymbolEmitDataKind.symbol;
+	symbol: tt.Symbol;
+	name?: string;
+}
+
+type TypeAliasEmitData = {
+	kind: SymbolEmitDataKind.typeAlias;
+	node: tt.TypeAliasDeclaration;
+}
+
+type EmitData = SymbolEmitData | TypeAliasEmitData;
 
 export abstract class AbstractContextRunnable implements ContextRunnable {
 
@@ -929,38 +901,87 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 		return cacheScope !== undefined ? { emitMode, scope: cacheScope } : undefined;
 	}
 
-	protected handleSymbolIfKnown(symbol: tt.Symbol): [boolean, string | undefined] {
+	protected handleSymbol(symbol: tt.Symbol, name?: string, ifRoom?: boolean): boolean {
 		if (this.result === undefined) {
-			throw new Error('Runnable not initialized');
+			return true;
 		}
-		const key = Symbols.createKey(symbol, this.session.host);
-		if (key === undefined) {
-			return [false, undefined];
+		const symbolsToEmit = this.getEmitDataForSymbol(symbol, name);
+		if (symbolsToEmit.length === 0) {
+			return true;
 		}
-
-		if (this.result.addFromKnownItems(key)) {
-			return [true, key];
+		for (const emitData of symbolsToEmit) {
+			if (emitData.kind === SymbolEmitDataKind.typeAlias) {
+				if (this.skipNode(emitData.node)) {
+					continue;
+				}
+				const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, this.getActiveSourceFile());
+				snippetBuilder.addDeclaration(emitData.node);
+				if (ifRoom === undefined || ifRoom === false) {
+					this.result.addSnippet(snippetBuilder, undefined, this.priority);
+				} else {
+					if (!this.result.addSnippet(snippetBuilder, undefined, this.priority, ifRoom)) {
+						return false;
+					}
+				}
+			} else if (emitData.kind === SymbolEmitDataKind.symbol) {
+				const { symbol, name } = emitData;
+				if (this.skipSymbol(symbol)) {
+					continue;
+				}
+				const key = Symbols.createKey(symbol, this.session.host);
+				if (key !== undefined && this.result.addFromKnownItems(key)) {
+					continue;
+				}
+				const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, this.getActiveSourceFile());
+				snippetBuilder.addTypeSymbol(symbol, name);
+				if (ifRoom === undefined || ifRoom === false) {
+					this.result.addSnippet(snippetBuilder, key, this.priority);
+				} else {
+					if (!this.result.addSnippet(snippetBuilder, key, this.priority, ifRoom)) {
+						return false;
+					}
+				}
+			}
 		}
-
-		return [false, key];
+		return true;
 	}
 
 	protected isNodeArray(node: tt.Node | tt.NodeArray<tt.Node>): node is tt.NodeArray<tt.Node> {
 		return Array.isArray(node);
 	}
 
+	protected skipNode(node: tt.Node): boolean {
+		return this.skipSourceFile(node.getSourceFile());
+	}
+
 	protected skipSourceFile(sourceFile: tt.SourceFile): boolean {
+		if (this.getActiveSourceFile().fileName === sourceFile.fileName) {
+			return true;
+		}
 		const program = this.getProgram();
 		return program.isSourceFileDefaultLibrary(sourceFile) || program.isSourceFileFromExternalLibrary(sourceFile);
 	}
 
-	protected getSymbolsToEmitForTypeNode(node: tt.TypeNode): SymbolEmitData[] {
-		const result: SymbolEmitData[] = [];
-		this.doGetSymbolsToEmitForTypeNode(result, node);
+	protected skipSymbol(symbol: tt.Symbol): boolean {
+		const declarations = symbol.getDeclarations();
+		if (declarations === undefined || declarations.length === 0) {
+			return false;
+		}
+		for (const declaration of declarations) {
+			if (this.skipSourceFile(declaration.getSourceFile())) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	protected getSymbolsForTypeNode(node: tt.TypeNode): SymbolData[] {
+		const result: SymbolData[] = [];
+		this.doGetSymbolsForTypeNode(result, node);
 		return result;
 	}
 
-	private doGetSymbolsToEmitForTypeNode(result: SymbolEmitData[], node: tt.TypeNode): void {
+	private doGetSymbolsForTypeNode(result: SymbolData[], node: tt.TypeNode): void {
 		if (ts.isTypeReferenceNode(node)) {
 			const symbol = this.symbols.getLeafSymbolAtLocation(node.typeName);
 			if (symbol !== undefined) {
@@ -968,28 +989,111 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 			}
 		} else if (ts.isUnionTypeNode(node) || ts.isIntersectionTypeNode(node)) {
 			for (const type of node.types) {
-				this.doGetSymbolsToEmitForTypeNode(result, type);
+				this.doGetSymbolsForTypeNode(result, type);
 			}
 		}
 	}
 
-	protected getSymbolsToEmitForType(type: tt.Type): SymbolEmitData[] {
-		const result: SymbolEmitData[] = [];
-		this.doGetSymbolsToEmitForType(result, type);
+	protected getSymbolsToEmitForType(type: tt.Type): SymbolData[] {
+		const result: SymbolData[] = [];
+		this.doGetSymbolsForType(result, type);
 		return result;
 	}
 
-	private doGetSymbolsToEmitForType(result: SymbolEmitData[], type: tt.Type): void {
+	private doGetSymbolsForType(result: SymbolData[], type: tt.Type): void {
 		const symbol = type.getSymbol();
 		if (symbol !== undefined) {
 			result.push({ symbol, name: symbol.getName() });
 		} else if (Types.isIntersection(type) || Types.isUnion(type)) {
 			for (const item of type.types) {
-				this.doGetSymbolsToEmitForType(result, item);
+				this.doGetSymbolsForType(result, item);
 			}
 		}
 	}
+
+	protected getEmitDataForSymbol(symbol: tt.Symbol, name?: string): EmitData[] {
+		const result: EmitData[] = [];
+		this.doGetEmitDataForSymbol(result, new Set<tt.Symbol>(), 0, symbol, name);
+		return result;
+	}
+
+	private doGetEmitDataForSymbol(result: EmitData[], seen: Set<tt.Symbol>, level: number, symbol: tt.Symbol, name?: string): void {
+		if (Symbols.isAlias(symbol)) {
+			symbol = this.symbols.getLeafSymbol(symbol);
+		}
+		if (seen.has(symbol) || level > 2) {
+			return;
+		}
+		seen.add(symbol);
+
+		if (Symbols.isTypeAlias(symbol)) {
+			const declarations = symbol.getDeclarations();
+			if (declarations === undefined || declarations.length === 0) {
+				return;
+			}
+			let declaration: tt.TypeAliasDeclaration | undefined = undefined;
+			for (const decl of declarations) {
+				if (ts.isTypeAliasDeclaration(decl)) {
+					declaration = decl;
+					// Multiple type aliases declarations with the same name
+					// and different types are not possible.
+					break;
+				}
+			}
+			if (declaration === undefined) {
+				return;
+			}
+			name = name ?? declaration.name.getText();
+			const type = declaration.type;
+			if (ts.isTypeLiteralNode(type)) {
+				const symbol = this.symbols.getLeafSymbolAtLocation(type);
+				if (symbol !== undefined) {
+					if (seen.has(symbol)) {
+						return;
+					}
+					result.push({ kind: SymbolEmitDataKind.symbol, symbol, name });
+				}
+			} else if (ts.isTypeReferenceNode(type)) {
+				const symbol = this.symbols.getLeafSymbolAtLocation(type.typeName);
+				if (symbol !== undefined) {
+					if (seen.has(symbol)) {
+						return;
+					}
+					this.doGetEmitDataForSymbol(result, seen, level + 1, symbol, name);
+				}
+			} else if (ts.isUnionTypeNode(type) || ts.isIntersectionTypeNode(type)) {
+				result.push({ kind: SymbolEmitDataKind.typeAlias, node: declaration });
+				if (level >= 2) {
+					return;
+				}
+				for (const item of type.types) {
+					const symbol = this.symbols.getLeafSymbolAtLocation(item);
+					if (symbol !== undefined) {
+						if (seen.has(symbol)) {
+							continue;
+						}
+						// We can't name type literals on that level and we have included
+						// the type alias itself, so we don't need to emit it again.
+						if (!Symbols.isTypeLiteral(symbol)) {
+							this.doGetEmitDataForSymbol(result, seen, level + 1, symbol, name);
+						}
+					} else {
+						const symbolData = this.getSymbolsForTypeNode(item);
+						for (const { symbol, name } of symbolData) {
+							if (seen.has(symbol)) {
+								continue;
+							}
+							this.doGetEmitDataForSymbol(result, seen, level + 1, symbol, name);
+						}
+					}
+				}
+			}
+		} else {
+			result.push({ kind: SymbolEmitDataKind.symbol, symbol, name });
+		}
+	}
 }
+
 
 export class ContextRunnableCollector {
 

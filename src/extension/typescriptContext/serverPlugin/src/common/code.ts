@@ -7,7 +7,7 @@ import TS from './typescript';
 const ts = TS();
 
 import { CodeSnippet } from './protocol';
-import { type EmitterContext, ProgramContext, RecoverableError, type SnippetCollector, SnippetProvider } from './types';
+import { type EmitterContext, ProgramContext, RecoverableError, SnippetProvider } from './types';
 import { Symbols } from './typescripts';
 
 namespace Nodes {
@@ -513,35 +513,6 @@ class TypeLiteralEmitter extends TypeEmitter {
 	}
 }
 
-class TypeAliasEmitter extends TypeEmitter {
-
-	public readonly key: string | undefined;
-
-	private readonly snippetCollector: SnippetCollector;
-
-	constructor(context: EmitterContext, source: tt.SourceFile, type: tt.Symbol, name: string, snippetCollector: SnippetCollector) {
-		super(context, source, type, name);
-		this.snippetCollector = snippetCollector;
-	}
-
-	public emit(): void {
-		const declarations = this.type.declarations;
-		if (declarations === undefined || declarations.length === 0) {
-			return;
-		}
-		let declaration: tt.TypeAliasDeclaration | undefined;
-		for (const d of declarations) {
-			if (ts.isTypeAliasDeclaration(d)) {
-				declaration = d;
-				break;
-			}
-		}
-		if (declaration === undefined) {
-			return;
-		}
-	}
-}
-
 class FunctionEmitter extends AbstractEmitter {
 
 	private readonly func: tt.Symbol;
@@ -635,7 +606,7 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 	private readonly symbols: Symbols;
 	private readonly currentSourceFile: tt.SourceFile;
 
-	constructor(context: EmitterContext, symbols: Symbols, currentSourceFile: tt.SourceFile, _snippetCollector: SnippetCollector) {
+	constructor(context: EmitterContext, symbols: Symbols, currentSourceFile: tt.SourceFile) {
 		super();
 		this.lines = [];
 		this.source = undefined;
@@ -748,56 +719,11 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 		this.addEmitter(new InterfaceEmitter(this.context, this.symbols, info.primary, iface, name));
 	}
 
-	public addTypeAliasSymbol(symbol: tt.Symbol, name: string): void {
+	public addTypeAliasSymbol(symbol: tt.Symbol, _name: string): void {
 		if (!Symbols.isTypeAlias(symbol)) {
 			return;
 		}
-		const info = this.getSymbolInfo(symbol);
-		if (info.skip) {
-			return;
-		}
-		const declarations = symbol.declarations;
-		if (declarations === undefined || declarations.length === 0) {
-			return;
-		}
-		let declaration: tt.TypeAliasDeclaration | undefined;
-		for (const d of declarations) {
-			if (ts.isTypeAliasDeclaration(d)) {
-				declaration = d;
-				break;
-			}
-		}
-		if (declaration === undefined) {
-			return;
-		}
-		const type = declaration.type;
-		if (ts.isTypeLiteralNode(type)) {
-			const symbol = this.symbols.getLeafSymbolAtLocation(type);
-			if (symbol !== undefined && Symbols.isTypeLiteral(symbol)) {
-				this.addEmitter(new TypeLiteralEmitter(this.context, info.primary, symbol, name));
-				return;
-			}
-		} else if (ts.isTypeReferenceNode(type)) {
-			// We are very careful with recursion here and we only emit types where we can override the name.
-			const symbol = this.symbols.getLeafSymbolAtLocation(type.typeName);
-			if (symbol !== undefined && (Symbols.isInterface(symbol) || Symbols.isClass(symbol) || Symbols.isEnum(symbol))) {
-				this.addTypeSymbol(symbol, name);
-				return;
-			} else if (symbol !== undefined && Symbols.isTypeAlias(symbol)) {
-				const declaration = symbol.declarations?.[0];
-				if (declaration && ts.isTypeAliasDeclaration(declaration)) {
-					const lines = Nodes.getLines(declaration.type);
-					if (lines.length > 0) {
-						lines[0] = `type ${name} = ${lines[0]}`;
-					}
-					this.addLines(lines);
-					this.addSource(declaration.getSourceFile().fileName);
-				}
-			}
-		} else if (ts.isUnionTypeNode(type) || ts.isIntersectionTypeNode(type)) {
-			this.addDeclaration(declaration);
-			return;
-		}
+		// This should not happens since we flatten the type aliases in the symbols.
 	}
 
 	public addEnumSymbol(enm: tt.Symbol, name: string): void {
