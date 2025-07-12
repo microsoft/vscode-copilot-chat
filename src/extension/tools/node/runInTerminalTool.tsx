@@ -290,12 +290,7 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 			}
 		}
 
-		const rewrittenCommand = await this._rewriteCommandIfNeeded(options);
-		if (rewrittenCommand && rewrittenCommand !== options.input.command) {
-			this.rewrittenCommand = rewrittenCommand;
-		} else {
-			this.rewrittenCommand = undefined;
-		}
+		this.rewrittenCommand = await this._rewriteCommandIfNeeded(options);
 
 		return new PreparedTerminalToolInvocation(
 			this.rewrittenCommand ?? options.input.command,
@@ -304,7 +299,7 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 			presentation);
 	}
 
-	protected async _rewriteCommandIfNeeded(options: vscode.LanguageModelToolInvocationPrepareOptions<IRunInTerminalParams>): Promise<string> {
+	protected async _rewriteCommandIfNeeded(options: vscode.LanguageModelToolInvocationPrepareOptions<IRunInTerminalParams>): Promise<string | undefined> {
 		const commandLine = options.input.command;
 
 		// Re-write the command if it starts with `cd <dir> && <suffix>` or `cd <dir>; <suffix>`
@@ -358,7 +353,7 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 			}
 		}
 
-		return commandLine;
+		return undefined;
 	}
 }
 
