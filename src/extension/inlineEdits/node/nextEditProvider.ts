@@ -5,6 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit';
 import { RootedLineEdit } from '../../../platform/inlineEdits/common/dataTypes/rootedLineEdit';
@@ -20,9 +21,9 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { Result } from '../../../util/common/result';
 import { createTracer, ITracer } from '../../../util/common/tracing';
 import { assert } from '../../../util/vs/base/common/assert';
-import { DeferredPromise, timeout, TimeoutTimer } from '../../../util/vs/base/common/async';
+import { DeferredPromise, TimeoutTimer } from '../../../util/vs/base/common/async';
 import { CachedFunction } from '../../../util/vs/base/common/cache';
-import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { BugIndicatingError } from '../../../util/vs/base/common/errors';
 import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { LRUCache } from '../../../util/vs/base/common/map';
@@ -38,10 +39,10 @@ import { RejectionCollector } from '../common/rejectionCollector';
 import { DebugRecorder } from './debugRecorder';
 import { INesConfigs } from './nesConfigs';
 import { CachedOrRebasedEdit, NextEditCache } from './nextEditCache';
-import { LlmNESTelemetryBuilder } from './nextEditProviderTelemetry';
+import { LlmNESTelemetryBuilder, NextEditProviderTelemetryBuilder } from './nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from './nextEditResult';
+// Removed OptimisticNextEditFetcher import - using existing cache infrastructure
 
-const ARTIFICIAL_CACHE_HIT_DELAY = 300; // delay cache hits by 300ms to make it more like a regular request and to reduce flicker ;)
 
 export interface INextEditProvider<T extends INextEditResult, TTelemetry, TData = void> extends IDisposable {
 	readonly ID: string;
@@ -67,6 +68,10 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	private readonly _rejectionCollector = new RejectionCollector(this._workspace, s => this._logService.logger.trace(s));
 	private readonly _nextEditCache: NextEditCache;
 	private readonly _recentlyShownCache = new RecentlyShownCache();
+
+	// Track active prefetch requests to avoid duplicates
+	private readonly _activePrefetches = new Map<string, CancellationTokenSource>();
+	private readonly _prefetchChainDepth = 3; // Maximum depth for prediction chain
 
 	private _pendingStatelessNextEditRequest: StatelessNextEditRequest<CachedOrRebasedEdit> | null = null;
 
@@ -94,6 +99,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		@ISnippyService private readonly _snippyService: ISnippyService,
 		@ILogService private readonly _logService: ILogService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
+		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
 	) {
 		super();
 
@@ -119,6 +125,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	}
 
 	public async getNextEdit(docId: DocumentId, context: vscode.InlineCompletionContext, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, telemetryBuilder: LlmNESTelemetryBuilder): Promise<NextEditResult> {
+		const startTime = Date.now();
 		const tracer = this._tracer.sub('getNextEdit');
 
 		this._lastTriggerTime = Date.now();
@@ -142,6 +149,9 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		telemetryBuilder.setNESConfigs({ ...nesConfigs });
 		logContext.addCodeblockToLog(JSON.stringify(nesConfigs, null, '\t'));
+
+		// The existing cache lookup will now find our prefetched results!
+
 
 		const recentlyShownCachedEdit = this._recentlyShownCache.get(docId, documentAtInvocationTime);
 		const cachedEdit = this._nextEditCache.lookupNextEdit(docId, documentAtInvocationTime, doc.selection.get(), nesConfigs);
@@ -173,10 +183,12 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			// back-date the recording bookmark of the cached edit to the bookmark of the original request.
 			logContext.recordingBookmark = req.log.recordingBookmark;
 
-			await timeout(ARTIFICIAL_CACHE_HIT_DELAY);
+			// No artificial delay for cache hits
 
 		} else if (cachedEdit) {
+			const timeElapsed = Date.now() - startTime;
 			tracer.trace('using cached edit');
+			this._logService.logger.info(`[NextEditProvider] CACHE HIT (prefetched) - ${timeElapsed}ms, subsequentN=${cachedEdit.subsequentN}`);
 			edit = cachedEdit.rebasedEdit || cachedEdit.edit;
 			req = cachedEdit.source;
 			logContext.setIsCachedResult(cachedEdit.source.log);
@@ -187,7 +199,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			// back-date the recording bookmark of the cached edit to the bookmark of the original request.
 			logContext.recordingBookmark = req.log.recordingBookmark;
 
-			await timeout(ARTIFICIAL_CACHE_HIT_DELAY);
+			// No artificial delay for cache hits
 
 		} else {
 			tracer.trace('fetching next edit');
@@ -303,6 +315,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	private async fetchNextEdit(req: NextEditFetchRequest, doc: IObservableDocument, nesConfigs: INesConfigs, telemetryBuilder: LlmNESTelemetryBuilder, cancellationToken: CancellationToken): Promise<Result<CachedOrRebasedEdit, NoNextEditReason>> {
 		const curDocId = doc.id;
 		const tracer = this._tracer.sub('fetchNextEdit');
+
 		const historyContext = this._historyContextProvider.getHistoryContext(curDocId);
 
 		if (!historyContext) {
@@ -628,11 +641,144 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	public handleShown(suggestion: NextEditResult) {
 		this._lastShownTime = Date.now();
+
+		// Trigger optimistic prefetching as soon as the edit is shown
+		// This assumes the user will accept it and pre-fetches the next edits
+		if (suggestion.result?.edit) {
+			const docId = suggestion.result.targetDocumentId ||
+				DocumentId.create(suggestion.source.log.filePath);
+			const doc = this._workspace.getDocument(docId);
+			if (!doc) {
+				return;
+			}
+
+			// Calculate what the document state would be AFTER accepting this edit
+			const baseDocState = suggestion.result.documentBeforeEdits;
+			const stringEdit = StringEdit.create([suggestion.result.edit]);
+			const futureDocState = stringEdit.applyOnText(baseDocState);
+
+			// Start the prefetch chain
+			this._startPrefetchChain(docId, futureDocState, 0);
+		}
+	}
+
+	private async _startPrefetchChain(docId: DocumentId, documentState: StringText, depth: number): Promise<void> {
+		if (depth >= this._prefetchChainDepth) {
+			return;
+		}
+
+		// Create a unique key for this prefetch based on document state
+		const prefetchKey = `${docId}:${documentState.value.length}:${depth}`;
+
+		// Cancel any existing prefetch for this state
+		const existingPrefetch = this._activePrefetches.get(prefetchKey);
+		if (existingPrefetch) {
+			existingPrefetch.cancel();
+			this._activePrefetches.delete(prefetchKey);
+		}
+
+		const cancellationSource = new CancellationTokenSource();
+		this._activePrefetches.set(prefetchKey, cancellationSource);
+
+		try {
+
+			// Create a synthetic document that represents the future state
+			const syntheticDoc = this._workspace.getDocument(docId);
+			if (!syntheticDoc || cancellationSource.token.isCancellationRequested) {
+				return;
+			}
+
+			// Perform the prefetch - this will populate the cache
+			const result = await this._performPrefetch(docId, documentState, cancellationSource.token);
+
+			if (result && result.result?.edit && !cancellationSource.token.isCancellationRequested) {
+				// Apply the edit to get the next document state
+				const nextEdit = StringEdit.create([result.result.edit]);
+				const nextDocumentState = nextEdit.applyOnText(documentState);
+
+				// Check if the document actually changed
+				if (nextDocumentState.value === documentState.value) {
+					// Edit made no changes, no point in continuing the chain
+					return;
+				}
+
+				// Continue the chain only if the document changed
+				await this._startPrefetchChain(docId, nextDocumentState, depth + 1);
+			}
+		} catch (err) {
+			this._logService.logger.trace(`[Prefetch] Error at depth ${depth}: ${err}`);
+		} finally {
+			this._activePrefetches.delete(prefetchKey);
+		}
+	}
+
+	private async _performPrefetch(docId: DocumentId, futureDocumentState: StringText, cancellationToken: CancellationToken): Promise<NextEditResult | undefined> {
+		const doc = this._workspace.getDocument(docId);
+		if (!doc) {
+			return undefined;
+		}
+
+		// Create synthetic context and telemetry for the prefetch
+		const syntheticContext: vscode.InlineCompletionContext = {
+			triggerKind: 0 as vscode.InlineCompletionTriggerKind,
+			selectedCompletionInfo: undefined,
+			requestUuid: generateUuid()
+		};
+
+		const logContext = new InlineEditRequestLogContext(docId.toUri().toString(), 0, syntheticContext);
+		const req = new NextEditFetchRequest(logContext, Date.now());
+
+		// Create a proper telemetry builder for prefetch
+		const telemetryBuilder = new NextEditProviderTelemetryBuilder(this._gitExtensionService, this.ID, doc);
+		telemetryBuilder.nesBuilder.setHeaderRequestId(req.headerRequestId);
+		telemetryBuilder.nesBuilder.setIsFromCache(); // Mark as prefetched
+
+		const nesConfigs: INesConfigs = {
+			isAsyncCompletions: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsAsyncCompletions, this._expService),
+			isRevisedCacheStrategy: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRevisedCacheStrategy, this._expService),
+			isCacheTracksRejections: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheTracksRejections, this._expService),
+			isRecentlyShownCacheEnabled: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRecentlyShownCacheEnabled, this._expService),
+		};
+
+		// Create a synthetic document wrapper that returns our future state
+		const syntheticDocWrapper = {
+			...doc,
+			value: {
+				get: () => futureDocumentState
+			}
+		};
+
+		try {
+			// This will fetch the edit and populate the cache via pushEdit
+			const result = await this.fetchNextEdit(req, syntheticDocWrapper as IObservableDocument, nesConfigs, telemetryBuilder.nesBuilder, cancellationToken);
+
+			if (result.isOk() && result.val.edit) {
+				const nextEditResult = new NextEditResult(
+					logContext.requestId,
+					req,
+					{
+						edit: result.val.edit,
+						documentBeforeEdits: futureDocumentState,
+						showRangePreference: this._statelessNextEditProvider.showNextEditPreference ?? ShowNextEditPreference.AroundEdit,
+						targetDocumentId: docId
+					}
+				);
+				return nextEditResult;
+			}
+		} catch (err) {
+			this._logService.logger.trace(`[Prefetch] Error during fetch: ${err}`);
+		} finally {
+			telemetryBuilder.dispose();
+		}
+
+		return undefined;
 	}
 
 	public handleAcceptance(docId: DocumentId, suggestion: NextEditResult) {
 		this.runSnippy(docId, suggestion);
 		this._statelessNextEditProvider.handleAcceptance?.();
+
+		// Optimistic fetching already triggered in handleShown
 	}
 
 	public handleRejection(docId: DocumentId, suggestion: NextEditResult) {
@@ -654,7 +800,19 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		this._statelessNextEditProvider.handleRejection?.();
 	}
 
-	public handleIgnored(docId: DocumentId, suggestion: NextEditResult, supersededBy: INextEditResult | undefined): void { }
+	public handleIgnored(_docId: DocumentId, _suggestion: NextEditResult, _supersededBy: INextEditResult | undefined): void {
+		// No-op for now
+	}
+
+	public override dispose(): void {
+		// Cancel all active prefetches
+		for (const [, cancellationSource] of this._activePrefetches) {
+			cancellationSource.cancel();
+		}
+		this._activePrefetches.clear();
+
+		super.dispose();
+	}
 
 	private async runSnippy(docId: DocumentId, suggestion: NextEditResult) {
 		if (suggestion.result === undefined) {
@@ -706,3 +864,4 @@ class RecentlyShownCache {
 		return docId.uri + ';' + documentContent.value;
 	}
 }
+
