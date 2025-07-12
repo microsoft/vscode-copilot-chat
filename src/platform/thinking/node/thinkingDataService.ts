@@ -92,6 +92,7 @@ export class ThinkingDataImpl implements IThinkingDataService {
 			if (data.cot_id) {
 				return {
 					cot_id: data.cot_id,
+					cot_summary: data.cot_summary
 				};
 			}
 			if (data.reasoning_opaque) {
