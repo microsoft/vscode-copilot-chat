@@ -11,6 +11,7 @@ import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { Tag } from '../base/tag';
 import { CodeBlockFormattingRules, EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
+import { MathIntegrationRules } from '../panel/editorIntegrationRules';
 import { getKeepGoingReminder } from './agentPrompt';
 
 interface DefaultAgentPromptProps extends BasePromptElementProps {
@@ -115,6 +116,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				<Tag name='example'>
 					The class `Person` is in `src/models/person.ts`.
 				</Tag>
+				<MathIntegrationRules />
 			</Tag>
 			<ResponseTranslationRules />
 		</InstructionMessage>;
