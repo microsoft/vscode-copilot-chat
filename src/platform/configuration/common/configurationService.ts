@@ -715,6 +715,9 @@ export namespace ConfigKey {
 
 	export const AgentThinkingTool = defineSetting<boolean>('chat.agent.thinkingTool', false);
 
+	/** Enable semantic tool filtering based on query similarity */
+	export const ToolsSemanticSearchEnabled = defineSetting<boolean>('chat.tools.semanticSearch.enabled', false);
+
 	/** Add context from recently used files */
 	export const TemporalContextInlineChatEnabled = defineExpSetting<boolean>('chat.editor.temporalContext.enabled', false);
 	export const TemporalContextEditsEnabled = defineExpSetting<boolean>('chat.edits.temporalContext.enabled', false);
