@@ -80,7 +80,11 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	}
 
 	get supportsToolCalls(): boolean {
-		return this.languageModel.capabilities?.supportsToolCalling ?? false;
+		const result = this.languageModel.capabilities?.supportsToolCalling ?? false;
+		console.log(`[BYOK DEBUG] ExtChatEndpoint.supportsToolCalls for ${this.languageModel.id}:`);
+		console.log(`  - languageModel.capabilities: ${JSON.stringify(this.languageModel.capabilities)}`);
+		console.log(`  - supportsToolCalling: ${result}`);
+		return result;
 	}
 
 	get supportsVision(): boolean {

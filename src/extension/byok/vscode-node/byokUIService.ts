@@ -14,6 +14,7 @@ enum ConfigurationStep {
 	ModelSelection,
 	ModelId,
 	DeploymentUrl,
+	ApiModelSelection, // New step for selecting from API-fetched models
 	AdvancedConfig,
 	FriendlyName,
 	InputTokens,
@@ -170,8 +171,24 @@ function createQuickPickWithBackButton<T extends QuickPickItem>(
 
 
 async function createErrorModal(errorMessage: string, currentStep: ConfigurationStep): Promise<StateResult> {
-	const result = await window.showErrorMessage('Unexpected Error - Manage Models - Preview', { detail: errorMessage, modal: true }, 'Retry', 'Go Back');
-	if (result === 'Retry') {
+	// Enhanced error modal with better categorization and user guidance
+	let title = 'Configuration Error - Manage Models - Preview';
+	let actions = ['Retry', 'Go Back'];
+
+	// Provide specific guidance based on error type
+	if (errorMessage.includes('API key') || errorMessage.includes('authentication') || errorMessage.includes('unauthorized')) {
+		title = 'API Key Error - Manage Models - Preview';
+		actions = ['Check API Key', 'Go Back'];
+	} else if (errorMessage.includes('endpoint') || errorMessage.includes('URL') || errorMessage.includes('connection')) {
+		title = 'Connection Error - Manage Models - Preview';
+		actions = ['Check Endpoint', 'Go Back'];
+	} else if (errorMessage.includes('model') && errorMessage.includes('not found')) {
+		title = 'Model Error - Manage Models - Preview';
+		actions = ['Check Model ID', 'Go Back'];
+	}
+
+	const result = await window.showErrorMessage(title, { detail: errorMessage, modal: true }, ...actions);
+	if (result === 'Retry' || result === 'Check API Key' || result === 'Check Endpoint' || result === 'Check Model ID') {
 		return { nextStep: currentStep };
 	} else if (result === 'Go Back') {
 		return { back: true };
@@ -225,12 +242,17 @@ export class BYOKUIService {
 						result = await this._handleModelId(state);
 						break;
 					case ConfigurationStep.DeploymentUrl:
-						state.previousStep = ConfigurationStep.ModelId;
+						state.previousStep = ConfigurationStep.ModelSelection;
 						result = await this._handleDeploymentUrl(state);
 						break;
+					case ConfigurationStep.ApiModelSelection:
+						state.previousStep = ConfigurationStep.DeploymentUrl;
+						result = await this._handleApiModelSelection(state);
+						break;
 					case ConfigurationStep.AdvancedConfig:
-						// Previous step depends on whether deployment URL was entered
-						state.previousStep = state.deploymentUrl ? ConfigurationStep.DeploymentUrl : ConfigurationStep.ModelId;
+						// Previous step depends on the flow taken
+						state.previousStep = state.modelId && state.deploymentUrl ? ConfigurationStep.ApiModelSelection :
+							state.deploymentUrl ? ConfigurationStep.DeploymentUrl : ConfigurationStep.ModelId;
 						result = await this._handleAdvancedConfig(state);
 						break;
 					case ConfigurationStep.FriendlyName:
@@ -308,8 +330,10 @@ export class BYOKUIService {
 
 		for (const registry of this._modelRegistries) {
 			const apiKey = await this._storageService.getAPIKey(registry.name);
+			const isCustomProvider = registry.name === 'Custom';
 			quickPickItems.push({
 				label: registry.name,
+				description: isCustomProvider ? 'Configure your own OpenAI-compatible API endpoint' : undefined,
 				providerName: registry.name,
 				authType: registry.authType,
 				// Add gear icon for providers that use global API key
@@ -382,6 +406,12 @@ export class BYOKUIService {
 			throw new Error('Selected provider registry not found.');
 		}
 
+		// Set appropriate defaults for Custom OpenAI models to enable Edit mode
+		if (state.selectedProviderRegistry.name === 'Custom') {
+			state.toolCalling = true; // Enable tool calling by default for custom OpenAI models
+			state.vision = false; // Default to no vision support (user can change in advanced config)
+		}
+
 		// Get API key for providers that need it (if not already set by reconfigure)
 		if (state.selectedProviderRegistry.authType === BYOKAuthType.GlobalApiKey && !state.modelApiKey) {
 			state.modelApiKey = await this._storageService.getAPIKey(state.providerName);
@@ -431,15 +461,27 @@ export class BYOKUIService {
 				}
 			});
 
-			// If no models (neither available nor registered), go directly to custom model flow
+			// If no models (neither available nor registered), handle appropriately
 			if (availableModels.size === 0) {
+				const isCustomProvider = state.selectedProviderRegistry.name === 'Custom';
+
 				quickPick.hide();
 
 				if (state.navigatingBack) {
 					// If we're navigating back and there are no models, go back to provider selection
 					return { nextStep: ConfigurationStep.ProviderSelection };
 				}
-				return { nextStep: ConfigurationStep.ModelId };
+
+				if (isCustomProvider) {
+					// For custom providers with no models, go directly to custom model flow
+					// since they need to configure their endpoint first anyway
+					const nextStep = state.selectedProviderRegistry.authType === BYOKAuthType.PerModelDeployment ?
+						ConfigurationStep.DeploymentUrl : ConfigurationStep.ModelId;
+					return { nextStep: nextStep };
+				} else {
+					// For non-custom providers, go to model ID entry
+					return { nextStep: ConfigurationStep.ModelId };
+				}
 			}
 
 			const modelItems: ModelQuickPickItem[] = Array.from(availableModels.values()).map(model => ({
@@ -522,7 +564,10 @@ export class BYOKUIService {
 			state.selectedModels = modelResult.selectedModels;
 
 			if (modelResult.customModel) {
-				// Move to custom model flow (ModelId or DeploymentUrl based on provider)
+				// Move to custom model flow
+				// For custom OpenAI providers, always go to DeploymentUrl to collect API URL first
+				// For other PerModelDeployment providers (like Azure), also go to DeploymentUrl
+				// For others (like OpenRouter), go to ModelId
 				const nextStep = state.selectedProviderRegistry.authType === BYOKAuthType.PerModelDeployment ?
 					ConfigurationStep.DeploymentUrl : ConfigurationStep.ModelId;
 				return { nextStep: nextStep };
@@ -570,21 +615,68 @@ export class BYOKUIService {
 		if (!state.selectedProviderRegistry) { throw new Error('Provider information is missing.'); }
 
 		const isAzure = state.selectedProviderRegistry.name === 'Azure';
-		const prompt = isAzure ? 'Enter the Azure OpenAI deployment endpoint URL' : 'Enter the deployment URL';
-		const placeHolder = isAzure ? 'e.g., https://YOUR_RESOURCE_NAME.openai.azure.com/' : 'Enter deployment URL';
+		const isCustomOpenAI = state.selectedProviderRegistry.name === 'Custom';
+
+		let prompt: string;
+		let placeHolder: string;
+
+		if (isAzure) {
+			prompt = 'Enter the Azure OpenAI deployment endpoint URL';
+			placeHolder = 'e.g., https://YOUR_RESOURCE_NAME.openai.azure.com/';
+		} else if (isCustomOpenAI) {
+			prompt = 'Enter the API endpoint URL (without /chat/completions)\n\nSupported providers: OpenAI and other OpenAI-compatible APIs';
+			placeHolder = 'e.g., https://api.openai.com/v1 or https://your-api-endpoint/v1';
+		} else {
+			prompt = 'Enter the deployment URL';
+			placeHolder = 'Enter deployment URL';
+		}
 
 		const urlResult = await createInputBoxWithBackButton({
 			title: `Custom Model - ${state.providerName}`,
 			ignoreFocusOut: true,
 			placeHolder: placeHolder,
 			prompt: prompt,
-			validateInput: (value) => value.trim().length > 0 ? null : 'Deployment URL cannot be empty'
+			validateInput: (value) => {
+				if (value.trim().length === 0) {
+					return 'Deployment URL cannot be empty';
+				}
+				if (isCustomOpenAI) {
+					try {
+						const url = new URL(value.trim());
+						if (!url.protocol.startsWith('http')) {
+							return 'URL must use HTTP or HTTPS protocol';
+						}
+						if (value.trim().endsWith('/chat/completions')) {
+							return 'Please enter the base URL without /chat/completions (it will be added automatically)';
+						}
+						// Additional validation for common endpoints
+						if (url.hostname === 'localhost' || url.hostname.startsWith('127.') || url.hostname.startsWith('192.168.') || url.hostname.startsWith('10.')) {
+							// Allow local endpoints but show warning in placeholder
+							return null;
+						}
+						// Validate common API endpoint patterns
+						if (!url.pathname || url.pathname === '/') {
+							return 'API endpoint should include a version path (e.g., /v1)';
+						}
+					} catch {
+						return 'Please enter a valid URL (e.g., https://api.example.com/v1)';
+					}
+				}
+				return null;
+			}
 		});
 
 		if (!urlResult) { return undefined; } // Cancelled
 		if (isBackButtonClick(urlResult)) { return { back: true }; }
 
-		state.deploymentUrl = isAzure ? resolveAzureUrl(state.modelId!, urlResult) : urlResult;
+		if (isAzure) {
+			state.deploymentUrl = resolveAzureUrl(state.modelId!, urlResult);
+		} else if (isCustomOpenAI) {
+			// Ensure the URL doesn't end with a slash for consistency
+			state.deploymentUrl = urlResult.trim().replace(/\/$/, '');
+		} else {
+			state.deploymentUrl = urlResult;
+		}
 
 		// Always need an API key for per-model deployments (unless already provided e.g. via reconfigure)
 		if (!state.modelApiKey) {
@@ -594,6 +686,11 @@ export class BYOKUIService {
 				return { back: true };
 			}
 			// Note: We don't store per-model keys globally here, they are part of the final ModelConfig
+		}
+
+		// For custom OpenAI providers, try to fetch available models
+		if (isCustomOpenAI) {
+			return { nextStep: ConfigurationStep.ApiModelSelection };
 		}
 
 		return { nextStep: ConfigurationStep.AdvancedConfig };
@@ -623,6 +720,22 @@ export class BYOKUIService {
 		if (advancedResult[0].label === 'Yes') {
 			return { nextStep: ConfigurationStep.FriendlyName };
 		} else {
+			// Set reasonable defaults for custom OpenAI models when advanced config is skipped
+			// This ensures Edit mode works properly
+			const isCustomOpenAI = state.selectedProviderRegistry?.name === 'Custom';
+			if (isCustomOpenAI) {
+				state.maxInputTokens = 100000; // Default input tokens for custom models
+				state.maxOutputTokens = 8192; // Default output tokens for custom models
+				state.toolCalling = true; // Enable tool calling by default for custom OpenAI models
+				state.vision = false; // Default to no vision support
+				state.modelCapabilities = {
+					name: state.modelId!,
+					maxInputTokens: state.maxInputTokens,
+					maxOutputTokens: state.maxOutputTokens,
+					toolCalling: state.toolCalling,
+					vision: state.vision
+				};
+			}
 			return {
 				nextStep: ConfigurationStep.Complete
 			};
@@ -697,6 +810,7 @@ export class BYOKUIService {
 	private async _handleToolCalling(state: StateData): Promise<StateResult> {
 		if (!state.modelId) { throw new Error('Model information is missing.'); }
 
+		const isCustomOpenAI = state.selectedProviderRegistry?.name === 'Custom';
 		const items = [
 			{ label: 'Yes', value: true },
 			{ label: 'No', value: false }
@@ -706,9 +820,13 @@ export class BYOKUIService {
 			items,
 			{
 				title: `Advanced Configuration - ${state.modelId}`,
-				placeholder: 'Does this model support tool calling?',
+				placeholder: isCustomOpenAI ?
+					'Does this model support tool calling? (Required for Edit mode)' :
+					'Does this model support tool calling?',
 				includeBackButton: true,
 				ignoreFocusOut: true,
+				// Pre-select "Yes" for Custom OpenAI models since most OpenAI-compatible models support tool calling
+				selectedItems: isCustomOpenAI ? [items[0]] : undefined
 			}
 		);
 
@@ -757,18 +875,47 @@ export class BYOKUIService {
 	// --- Helper Methods ---
 
 	private async promptForAPIKey(contextName: string, reconfigure: boolean = false): Promise<string | undefined> {
-		const prompt = reconfigure ? `Enter new ${contextName} API Key or leave blank to delete saved key` : `Enter ${contextName} API Key`;
+		const isCustomProvider = contextName.includes('Custom');
+
+		let prompt = reconfigure ? `Enter new ${contextName} API Key or leave blank to delete saved key` : `Enter ${contextName} API Key`;
+		let placeHolder = `${contextName} API Key`;
+
+		// Enhanced prompts for custom providers
+		if (isCustomProvider) {
+			prompt = reconfigure ?
+				`Enter new API Key for your custom endpoint or leave blank to delete saved key` :
+				`Enter API Key for your custom endpoint\n\nThis will be securely stored and used only for this model configuration.`;
+			placeHolder = 'API Key (e.g., sk-... for OpenAI-compatible APIs)';
+		}
+
 		const title = reconfigure ? `Reconfigure ${contextName} API Key - Preview` : `Enter ${contextName} API Key - Preview`;
 
 		const result = await createInputBoxWithBackButton({
 			prompt: prompt,
 			title: title,
-			placeHolder: `${contextName} API Key`,
+			placeHolder: placeHolder,
 			ignoreFocusOut: true,
 			password: true,
 			validateInput: (value) => {
 				// Allow empty input only when reconfiguring (to delete the key)
-				return (value.trim().length > 0 || reconfigure) ? null : 'API Key cannot be empty';
+				if (!value.trim() && !reconfigure) {
+					return 'API Key cannot be empty';
+				}
+
+				// Enhanced validation for custom providers
+				if (value.trim() && isCustomProvider) {
+					if (value.trim().length < 10) {
+						return 'API Key appears to be too short. Please verify you\'ve entered the complete key.';
+					}
+
+					// Check for common placeholder values
+					const placeholders = ['your-api-key', 'api-key-here', 'replace-me', 'example-key'];
+					if (placeholders.some(placeholder => value.toLowerCase().includes(placeholder))) {
+						return 'Please replace the placeholder with your actual API key.';
+					}
+				}
+
+				return null;
 			}
 		});
 
@@ -777,5 +924,113 @@ export class BYOKUIService {
 		}
 
 		return result;
+	}
+
+	private async _handleApiModelSelection(state: StateData): Promise<StateResult> {
+		if (!state.selectedProviderRegistry || !state.deploymentUrl || !state.modelApiKey) {
+			throw new Error('Provider, deployment URL, or API key information is missing.');
+		}
+
+		const quickPick = window.createQuickPick();
+		quickPick.title = `Select Model - ${state.providerName}`;
+		quickPick.placeholder = 'Loading available models...';
+		quickPick.enabled = false;
+		quickPick.busy = true;
+		quickPick.buttons = [QuickInputButtons.Back];
+		quickPick.ignoreFocusOut = true;
+		quickPick.show();
+
+		try {
+			// Fetch available models from the API
+			const availableModels = await this._fetchModelsFromAPI(state.deploymentUrl, state.modelApiKey);
+
+			if (availableModels.length === 0) {
+				// No models available, fall back to manual entry
+				quickPick.hide();
+				return { nextStep: ConfigurationStep.ModelId };
+			}
+
+			// Create quick pick items for available models
+			const modelItems = availableModels.map(model => ({
+				label: model.name || model.id,
+				description: model.id !== model.name ? model.id : undefined,
+				detail: `Available model from ${state.providerName}`,
+				modelId: model.id
+			}));
+
+			quickPick.items = modelItems;
+			quickPick.placeholder = 'Select a model or go back to enter manually';
+			quickPick.enabled = true;
+			quickPick.busy = false;
+
+			// Add manual entry option
+			const manualEntryItem = {
+				label: '$(add) Enter model ID manually',
+				description: 'Custom model ID',
+				detail: 'Enter a custom model ID if not listed above',
+				modelId: '__manual__'
+			};
+			quickPick.items = [...modelItems, manualEntryItem];
+
+			return new Promise<StateResult>((resolve) => {
+				quickPick.onDidTriggerButton(button => {
+					if (button === QuickInputButtons.Back) {
+						quickPick.hide();
+						resolve({ back: true });
+					}
+				});
+
+				quickPick.onDidAccept(() => {
+					const selected = quickPick.selectedItems[0];
+					if (!selected) {
+						quickPick.hide();
+						resolve(undefined);
+						return;
+					} const selectedModelId = (selected as any).modelId;
+
+					if (selectedModelId === '__manual__') {
+						// User wants to enter manually
+						quickPick.hide();
+						resolve({ nextStep: ConfigurationStep.ModelId });
+					} else {
+						// User selected a model
+						state.modelId = selectedModelId;
+						quickPick.hide();
+						resolve({ nextStep: ConfigurationStep.AdvancedConfig });
+					}
+				});
+
+				quickPick.onDidHide(() => {
+					resolve(undefined);
+				});
+			});
+
+		} catch (error) {
+			// If fetching models fails, fall back to manual entry
+			quickPick.hide();
+
+			// Show error message but continue with manual entry
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+			window.showWarningMessage(
+				`Could not fetch available models: ${errorMessage}. You can still enter a model ID manually.`
+			);
+
+			return { nextStep: ConfigurationStep.ModelId };
+		}
+	}
+
+	/**
+	 * Fetches available models from the API endpoint
+	 */
+	private async _fetchModelsFromAPI(deploymentUrl: string, apiKey: string): Promise<{ id: string; name: string }[]> {
+		// Use the registry to fetch models if it's a custom provider
+		const customProvider = this._modelRegistries.find(registry => registry.name === 'Custom');
+
+		if (customProvider && (customProvider as any).fetchModelsFromEndpoint) {
+			return await (customProvider as any).fetchModelsFromEndpoint(deploymentUrl, apiKey);
+		}
+
+		// This should not happen in our case, but provide a fallback
+		throw new Error('Custom provider not found or does not support model fetching');
 	}
 }

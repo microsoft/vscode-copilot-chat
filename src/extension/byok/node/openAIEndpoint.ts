@@ -75,10 +75,12 @@ export class OpenAIEndpoint extends ChatEndpoint {
 
 	override interceptBody(body: IEndpointBody | undefined): void {
 		super.interceptBody(body);
+
 		// TODO @lramos15 - We should do this for all models and not just here
 		if (body?.tools?.length === 0) {
 			delete body.tools;
 		}
+
 		if (body) {
 			// Removing max tokens defaults to the maximum which is what we want for BYOK
 			delete body.max_tokens;

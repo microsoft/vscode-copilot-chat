@@ -41,6 +41,7 @@ export interface IBYOKStorageService {
 		providerName: string,
 		config: {
 			apiKey: string;
+			isCustomModel: boolean;
 			deploymentUrl?: string;
 			modelCapabilities?: BYOKModelCapabilities;
 		},

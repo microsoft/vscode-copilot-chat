@@ -88,14 +88,16 @@ export class ConversationFeature implements IExtensionContribution {
 		const activationBlockerDeferred = new DeferredPromise<void>();
 		this.activationBlocker = activationBlockerDeferred.p;
 		if (authenticationService.copilotToken) {
-			this.logService.logger.debug(`ConversationFeature: Copilot token already available`);
+			this.logService.logger.info(`ConversationFeature: Copilot token already available, activating immediately`);
 			this.activated = true;
 			activationBlockerDeferred.complete();
+		} else {
+			this.logService.logger.info(`ConversationFeature: No copilot token yet, waiting for authentication`);
 		}
 
 		this._disposables.add(authenticationService.onDidAuthenticationChange(async () => {
 			const hasSession = !!authenticationService.copilotToken;
-			this.logService.logger.debug(`ConversationFeature: onDidAuthenticationChange has token: ${hasSession}`);
+			this.logService.logger.info(`ConversationFeature: onDidAuthenticationChange has token: ${hasSession}`);
 			if (hasSession) {
 				this.activated = true;
 			} else {
@@ -125,21 +127,27 @@ export class ConversationFeature implements IExtensionContribution {
 	}
 
 	set activated(value: boolean) {
+		this.logService.logger.info(`ConversationFeature: Setting activated to ${value} (current: ${this._activated})`);
 		if (this._activated === value) {
+			this.logService.logger.info(`ConversationFeature: Already activated=${value}, skipping`);
 			return;
 		}
 		this._activated = value;
 
 		if (!value) {
+			this.logService.logger.info(`ConversationFeature: Deactivating - clearing disposables`);
 			this._activatedDisposables.clear();
 		} else {
+			this.logService.logger.info(`ConversationFeature: Activating chat contributions`);
 			const options: IConversationOptions = this.conversationOptions;
 
 			this._activatedDisposables.add(this.registerProviders());
 			this._activatedDisposables.add(this.registerCommands(options));
 			this._activatedDisposables.add(this.registerRelatedInformationProviders());
 			this._activatedDisposables.add(this.registerParticipants(options));
+			this.logService.logger.info(`ConversationFeature: Creating chat contributions collection (including BYOK)`);
 			this._activatedDisposables.add(this.instantiationService.createInstance(ContributionCollection, vscodeNodeChatContributions));
+			this.logService.logger.info(`ConversationFeature: Chat contributions activated`);
 		}
 	}
 
