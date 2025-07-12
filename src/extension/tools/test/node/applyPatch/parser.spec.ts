@@ -282,8 +282,82 @@ suite('applyPatch parser', () => {
 					}
 				}
 			},
-			4
+			6
 		]);
+	});
+
+	it('matches explicit \\n and \\t tab chars', () => {
+		const input = [
+			'*** Begin Patch',
+			'*** Update File: a.txt',
+			'@@',
+			'-hello\\n\\tworld\\nwoo',
+			'+hello\\n\\tcode!\\nwoo',
+			'*** End Patch'
+		].join('\n');
+
+		expect(text_to_patch(input, {
+			'a.txt': new StringTextDocumentWithLanguageId('prefix\nhello\n\tworld\nwoo\nsuffix', 'text/plain')
+		})).toMatchInlineSnapshot(`
+			[
+			  {
+			    "actions": {
+			      "a.txt": {
+			        "chunks": [
+			          {
+			            "delLines": [
+			              "hello
+				world
+			woo",
+			            ],
+			            "insLines": [
+			              "hello
+				code!
+			woo",
+			            ],
+			            "origIndex": 1,
+			          },
+			        ],
+			        "movePath": undefined,
+			        "type": "update",
+			      },
+			    },
+			  },
+			  134,
+			]
+		`);
+	});
+
+	it('always normalizes explicit \\t tab chars in replacement', () => {
+		// 4.1 likes to explicitly put tabs as `\\t` in its patches
+		const input = `*** Begin Patch\n*** Update File: a.txt\n@@\n-hello\n+\\t\\tworld\n*** End Patch`;
+
+		expect(text_to_patch(input, {
+			'a.txt': new StringTextDocumentWithLanguageId('hello', 'text/plain')
+		})).toMatchInlineSnapshot(`
+			[
+			  {
+			    "actions": {
+			      "a.txt": {
+			        "chunks": [
+			          {
+			            "delLines": [
+			              "hello",
+			            ],
+			            "insLines": [
+			              "		world",
+			            ],
+			            "origIndex": 0,
+			          },
+			        ],
+			        "movePath": undefined,
+			        "type": "update",
+			      },
+			    },
+			  },
+			  0,
+			]
+		`);
 	});
 
 
