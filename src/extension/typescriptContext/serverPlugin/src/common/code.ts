@@ -634,9 +634,8 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 	private readonly context: EmitterContext;
 	private readonly symbols: Symbols;
 	private readonly currentSourceFile: tt.SourceFile;
-	private readonly snippetCollector: SnippetCollector;
 
-	constructor(context: EmitterContext, symbols: Symbols, currentSourceFile: tt.SourceFile, snippetCollector: SnippetCollector) {
+	constructor(context: EmitterContext, symbols: Symbols, currentSourceFile: tt.SourceFile, _snippetCollector: SnippetCollector) {
 		super();
 		this.lines = [];
 		this.source = undefined;
@@ -644,7 +643,6 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 		this.context = context;
 		this.symbols = symbols;
 		this.currentSourceFile = currentSourceFile;
-		this.snippetCollector = snippetCollector;
 	}
 
 	protected override getSymbolInfo(symbol: tt.Symbol): { skip: true } | { skip: false; primary: tt.SourceFile } {

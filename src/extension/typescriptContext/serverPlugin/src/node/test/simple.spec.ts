@@ -86,6 +86,10 @@ suite('Type Alias', () => {
 			kind: ContextKind.Snippet,
 			value: 'export class W implements Both { name() { return \'w\'; } length() { return \'w\'.length; } }',
 			fileName: /p4\/source\/f2.ts$/
+		}, {
+			kind: ContextKind.Snippet,
+			value: 'export type Both = Name & NameLength;',
+			fileName: /p4\/source\/f1.ts$/
 		}];
 		const context = computeContext(session, path.join(root, 'p4/source/f5.ts'), { line: 3, character: 0 }, ContextKind.Snippet);
 		assertContextItems(context, expected);
