@@ -24,6 +24,7 @@ import { GeminiBYOKModelRegistry } from './geminiProvider';
 import { GroqModelRegistry } from './groqProvider';
 import { OllamaModelRegistry } from './ollamaProvider';
 import { OpenRouterBYOKModelRegistry } from './openRouterProvider';
+import { AIMEBYOKModelRegistry } from './aimeProvider';
 
 export class BYOKContrib extends Disposable implements IExtensionContribution {
 	public readonly id: string = 'byok-contribution';
@@ -77,6 +78,7 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			this._modelRegistries.push(instantiationService.createInstance(OAIBYOKModelRegistry));
 			this._modelRegistries.push(instantiationService.createInstance(OllamaModelRegistry, this._configurationService.getConfig(ConfigKey.OllamaEndpoint)));
 			this._modelRegistries.push(instantiationService.createInstance(OpenRouterBYOKModelRegistry));
+			this._modelRegistries.push(instantiationService.createInstance(AIMEBYOKModelRegistry));
 			// Update known models list from CDN so all providers have the same list
 			await this.fetchKnownModelList(this._fetcherService);
 		}
