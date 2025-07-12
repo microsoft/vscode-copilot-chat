@@ -6,6 +6,7 @@
 import { commands, window } from 'vscode';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { IIntentDetectionModelManagementService } from '../common/intentDetectionModelManagementService';
 
@@ -18,6 +19,7 @@ export class IntentDetectionModelManagementService implements IIntentDetectionMo
 	constructor(
 		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
+		@ILogService private readonly _logService: ILogService,
 	) { }
 
 	getRegisteredIntentDetectionModels(): { intentModelName: string; intentModelVendor: string; intentModelEndpoint: IChatEndpoint }[] {
@@ -28,6 +30,7 @@ export class IntentDetectionModelManagementService implements IIntentDetectionMo
 	}
 
 	registerIntentDetectionModel(intentModelName: string, intentModelVendor: string, intentModelEndpoint: IChatEndpoint): void {
+		this._logService.logger.debug(`Registered intent detection model ${intentModelVendor} - ${intentModelName}`);
 		this.registeredIntentModels[intentModelName] = { intentModelEndpoint, intentModelVendor };
 	}
 
@@ -36,24 +39,31 @@ export class IntentDetectionModelManagementService implements IIntentDetectionMo
 			return this.endpointProvider.getChatEndpoint('gpt-4o-mini');
 		}
 
-		const intentModel = this._extensionContext.globalState.get<string>(INTENT_MODEL_KEY);
-		if (intentModel === undefined) {
-			// If no intent model is defined for the current chat model, show an error and prompt the user to set one.
-			return await window.showErrorMessage(
-				`An intent detection model must be configured for the current chat model (${modelName}).`,
-				{
-					modal: true,
-					detail: 'Please select a BYOK model to use for intent detection. This helps Copilot understand your requests better.'
-				},
-				'Manage Intent Detection Model'
-			).then(async (selection) => {
-				if (selection === 'Manage Intent Detection Model') {
-					return await commands.executeCommand<Promise<IChatEndpoint | undefined>>('github.copilot.chat.manageIntentDetectionModel');
-				}
-			});
+		const intentModelName = this._extensionContext.globalState.get<string>(INTENT_MODEL_KEY);
+		if (intentModelName === undefined) {
+			return await this.promptToSelectIntentModel();
 		}
 
-		return this.registeredIntentModels[intentModel].intentModelEndpoint;
+		const intentModel = this.registeredIntentModels[intentModelName];
+		if (!intentModel) {
+			return await this.promptToSelectIntentModel();
+		}
+		return intentModel.intentModelEndpoint;
+	}
+
+	private async promptToSelectIntentModel(): Promise<IChatEndpoint | undefined> {
+		return await window.showErrorMessage(
+			`An intent detection model must be configured`,
+			{
+				modal: true,
+				detail: 'Please select a BYOK model to use for intent detection. This helps Copilot understand your requests better.'
+			},
+			'Manage Intent Detection Model'
+		).then(async (selection) => {
+			if (selection === 'Manage Intent Detection Model') {
+				return await commands.executeCommand<Promise<IChatEndpoint | undefined>>('github.copilot.chat.manageIntentDetectionModel');
+			}
+		});
 	}
 
 	async setIntentDetectionModel(modelName: string, modelVendor: string, intentModelName: string): Promise<IChatEndpoint> {
