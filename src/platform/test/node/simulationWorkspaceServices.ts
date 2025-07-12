@@ -825,6 +825,9 @@ export class TestingTerminalService extends Disposable implements ITerminalServi
 	getBufferForTerminal(terminal: vscode.Terminal, maxChars?: number): string {
 		return '';
 	}
+	getBufferWithPid(pid: number, maxChars?: number): Promise<string> {
+		throw new Error('Method not implemented.');
+	}
 }
 
 class SimulationTerminal extends Disposable implements vscode.Terminal {

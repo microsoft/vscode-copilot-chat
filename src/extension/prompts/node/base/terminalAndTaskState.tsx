@@ -45,16 +45,24 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 
 		if (this.terminalService && Array.isArray(this.terminalService.terminals)) {
 			const copilotTerminals = await this.terminalService.getCopilotTerminals(this.props.sessionId, true);
-			const terminals = copilotTerminals.map((term) => {
+			const otherTerminals = this.terminalService.terminals.filter(term => !copilotTerminals.find(t => t.id === term.id));
+			const mappedCopilotTerminals = copilotTerminals.map((term) => {
 				const lastCommand = this.terminalService.getLastCommandForTerminal(term);
 				return {
 					name: term.name,
 					lastCommand,
 					id: term.id,
+					isCopilotTerminal: true
 				};
 			});
+			const mappedOtherTerminals = await Promise.all(otherTerminals.map(async (term) => {
+				return {
+					name: term.name,
+					pid: await term.processId,
+				};
+			}));
 
-			if (terminals.length === 0 && tasks.length === 0) {
+			if (mappedCopilotTerminals.length === 0 && mappedOtherTerminals.length === 0 && tasks.length === 0) {
 				return 'No tasks or Copilot terminals found.';
 			}
 
@@ -78,30 +86,44 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 					</>
 				);
 
-			const renderTerminals = () =>
-				terminals.length > 0 && (
-					<>
-						Active Terminals:<br />
-						{terminals.map((term) => (
-							<>
-								Terminal: {term.name}<br />
-								{term.lastCommand ? (
-									<>
-										Last Command: {term.lastCommand.commandLine ?? '(no last command)'}<br />
-										Cwd: {term.lastCommand.cwd ?? '(unknown)'}<br />
-										Exit Code: {term.lastCommand.exitCode ?? '(unknown)'}<br />
-									</>
-								) : ''}
-								Output: {'{'}Use {ToolName.GetTerminalOutput} for terminal with ID: {term.id}.{'}'}<br />
-							</>
-						))}
-					</>
-				);
+			const renderTerminals = () => (
+				<>
+					{mappedCopilotTerminals.length > 0 && (
+						<>
+							Active Copilot Terminals:<br />
+							{mappedCopilotTerminals.map((term) => (
+								<>
+									Terminal: {term.name}<br />
+									{term.lastCommand ? (
+										<>
+											Last Command: {term.lastCommand.commandLine ?? '(no last command)'}<br />
+											Cwd: {term.lastCommand.cwd ?? '(unknown)'}<br />
+											Exit Code: {term.lastCommand.exitCode ?? '(unknown)'}<br />
+										</>
+									) : ''}
+									Output: {'{'}Use {ToolName.GetTerminalOutput} for terminal with ID: {term.id}.{'}'}<br />
+								</>
+							))}
+						</>
+					)}
+					{mappedOtherTerminals.length > 0 && (
+						<>
+							User created Terminals:<br />
+							{mappedOtherTerminals.map((term) => (
+								<>
+									Terminal: {term.name}<br />
+									Output: {'{'}Use {ToolName.GetTerminalOutput} for terminal with pid: {term.pid}.{'}'}<br />
+								</>
+							))}
+						</>
+					)}
+				</>
+			);
 
 			return (
 				<>
 					{tasks.length > 0 ? renderTasks() : 'Tasks: No tasks found.'}
-					{terminals.length > 0 ? renderTerminals() : 'Copilot Terminals: No active Copilot terminals found.'}
+					{mappedCopilotTerminals.length > 0 || mappedOtherTerminals.length > 0 ? renderTerminals() : 'Copilot Terminals: No active Copilot terminals found.'}
 				</>
 			);
 		}
