@@ -778,4 +778,28 @@ export class BYOKUIService {
 
 		return result;
 	}
+
+	public async pickIntentDetectionModel(models: { intentModelName: string }[]): Promise<string | undefined> {
+
+		const items: QuickPickItem[] = models.map(model => ({
+			label: model.intentModelName,
+		}));
+
+		const result = await createQuickPickWithBackButton(
+			items,
+			{
+				title: 'Select Intent Detection Model',
+				placeholder: 'Select a model to use for intent detection. The default for the copilot models is gpt-4o-mini.',
+				includeBackButton: false,
+				ignoreFocusOut: true,
+				canPickMany: false,
+			}
+		);
+
+		if (!result || isBackButtonClick(result)) {
+			return undefined;
+		}
+
+		return result[0].label;
+	}
 }

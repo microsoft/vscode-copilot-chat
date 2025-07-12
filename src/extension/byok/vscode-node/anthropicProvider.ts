@@ -6,6 +6,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { CancellationToken, ChatResponseFragment2, ChatResponseProviderMetadata, Disposable, LanguageModelChatMessage, LanguageModelChatProvider, LanguageModelChatRequestOptions, LanguageModelTextPart, LanguageModelToolCallPart, lm, Progress } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
+import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage, rawMessageToCAPI } from '../../../platform/networking/common/openai';
@@ -26,6 +27,11 @@ export class AnthropicBYOKModelRegistry implements BYOKModelRegistry {
 		@ILogService private readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) { }
+
+	async createEndpoint(config: BYOKModelConfig): Promise<ChatEndpoint | undefined> {
+		// Doesn't define an implementation of Endpoint
+		return undefined;
+	}
 
 	async getAllModels(apiKey: string): Promise<{ id: string; name: string }[]> {
 		try {

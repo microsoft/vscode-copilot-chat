@@ -32,6 +32,7 @@ import { getToolName } from '../../tools/common/toolNames';
 import { CodebaseTool } from '../../tools/node/codebaseTool';
 import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 import { Turn } from '../common/conversation';
+import { IIntentDetectionModelManagementService } from '../common/intentDetectionModelManagementService';
 import { addHistoryToConversation } from './chatParticipantRequestHandler';
 import { IDocumentContext } from './documentContext';
 import { IIntent } from './intents';
@@ -48,6 +49,7 @@ export class IntentDetector implements ChatParticipantDetectionProvider {
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ITabsAndEditorsService private readonly tabsAndEditorsService: ITabsAndEditorsService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
+		@IIntentDetectionModelManagementService private readonly intentDetectionModelManagementService: IIntentDetectionModelManagementService,
 	) { }
 
 	async provideParticipantDetection(chatRequest: ChatRequest, context: ChatContext, options: { participants?: ChatParticipantMetadata[]; location: VscodeChatLocation }, token: CancellationToken): Promise<ChatParticipantDetectionResult | null | undefined> {
@@ -73,7 +75,7 @@ export class IntentDetector implements ChatParticipantDetectionProvider {
 			const detectedIntent = await this.detectIntent(
 				options.location,
 				IDocumentContext.inferDocumentContext(chatRequest, this.tabsAndEditorsService.activeTextEditor, turns),
-				chatRequest.prompt,
+				chatRequest,
 				token,
 				undefined,
 				chatVariables,
@@ -114,7 +116,7 @@ export class IntentDetector implements ChatParticipantDetectionProvider {
 				const detectedIntent = await this.detectIntent(
 					options.location,
 					undefined,
-					chatRequest.prompt,
+					chatRequest,
 					token,
 					undefined,
 					new ChatVariablesCollection(chatRequest.references),
@@ -170,7 +172,7 @@ export class IntentDetector implements ChatParticipantDetectionProvider {
 	async detectIntent(
 		location: ChatLocation,
 		documentContext: IDocumentContext | undefined,
-		messageText: string,
+		chatRequest: ChatRequest,
 		token: CancellationToken,
 		baseUserTelemetry: ConversationalBaseTelemetryData | undefined,
 		chatVariables: ChatVariablesCollection,
@@ -181,8 +183,12 @@ export class IntentDetector implements ChatParticipantDetectionProvider {
 
 		this.logService.logger.trace('Building intent detector');
 
-		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-4o-mini');
+		const endpoint = await this.intentDetectionModelManagementService.getIntentDetectionModel(chatRequest.model.name, chatRequest.model.vendor);
+		if (!endpoint) {
+			return undefined;
+		}
 
+		const messageText = chatRequest.prompt;
 		const preferredIntent = await this.getPreferredIntent(location, documentContext, history, messageText);
 
 		const promptRenderer = PromptRenderer.create(

@@ -2121,6 +2121,13 @@
 				"enablement": "github.copilot.byokEnabled"
 			},
 			{
+				"command": "github.copilot.chat.manageIntentDetectionModel",
+				"title": "Choose Intent Detection Model...",
+				"icon": "$(settings-gear)",
+				"category": "GitHub Copilot",
+				"enablement": "github.copilot.byokEnabled"
+			},
+			{
 				"command": "github.copilot.chat.debug.showElements",
 				"title": "Show Rendered Elements"
 			},

@@ -6,6 +6,7 @@ import type { ChatResponseProviderMetadata, Disposable } from 'vscode';
 import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
+import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { localize } from '../../../util/vs/nls';
 
@@ -58,6 +59,7 @@ export interface BYOKModelRegistry {
 	updateKnownModelsList(knownModels: BYOKKnownModels | undefined): void;
 	getAllModels(apiKey?: string): Promise<{ id: string; name: string }[]>;
 	registerModel(config: BYOKModelConfig): Promise<Disposable>;
+	createEndpoint(config: BYOKModelConfig): Promise<IChatEndpoint | undefined>;
 }
 
 // Many model providers don't have robust model lists. This allows us to map id -> information about models, and then if we don't know the model just let the user enter a custom id

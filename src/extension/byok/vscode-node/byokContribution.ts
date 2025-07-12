@@ -9,6 +9,7 @@ import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -17,6 +18,7 @@ import { AnthropicBYOKModelRegistry } from '../../byok/vscode-node/anthropicProv
 import { AzureBYOKModelRegistry } from '../../byok/vscode-node/azureProvider';
 import { OAIBYOKModelRegistry } from '../../byok/vscode-node/openAIProvider';
 import { IExtensionContribution } from '../../common/contributions';
+import { IIntentDetectionModelManagementService } from '../../prompt/common/intentDetectionModelManagementService';
 import { BYOKStorageService, IBYOKStorageService } from './byokStorageService';
 import { BYOKUIService, ModelConfig } from './byokUIService';
 import { CerebrasModelRegistry } from './cerebrasProvider';
@@ -40,7 +42,8 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 		@IVSCodeExtensionContext extensionContext: IVSCodeExtensionContext,
 		@IAuthenticationService authService: IAuthenticationService,
 		@IInstantiationService instantiationService: IInstantiationService,
-		@ITelemetryService private readonly _telemetryService: ITelemetryService
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
+		@IIntentDetectionModelManagementService private readonly _intentModelManagementService: IIntentDetectionModelManagementService,
 	) {
 		super();
 		this._byokStorageService = new BYOKStorageService(extensionContext);
@@ -57,6 +60,7 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 		}));
 
 		this._register(commands.registerCommand('github.copilot.chat.manageModels', () => this.registerModelCommand()));
+		this._register(commands.registerCommand('github.copilot.chat.manageIntentDetectionModel', () => this.manageIntentDetectionModelCommand()));
 	}
 
 	private async _authChange(authService: IAuthenticationService, instantiationService: IInstantiationService) {
@@ -79,6 +83,23 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			this._modelRegistries.push(instantiationService.createInstance(OpenRouterBYOKModelRegistry));
 			// Update known models list from CDN so all providers have the same list
 			await this.fetchKnownModelList(this._fetcherService);
+			for (const registry of this._modelRegistries) {
+				try {
+					const modelConfigs = await this._byokStorageService.getStoredModelConfigs(registry.name);
+					for (const [modelId, modelConfig] of Object.entries(modelConfigs)) {
+						const endpoint = await registry.createEndpoint({
+							...modelConfig,
+							apiKey: await this._byokStorageService.getAPIKey(registry.name, modelId),
+							modelId: modelId
+						});
+						if (endpoint) {
+							this._intentModelManagementService.registerIntentDetectionModel(modelId, registry.name, endpoint);
+						}
+					}
+				} catch (error) {
+					this._logService.logger.error(`Failed to get models from registry ${registry.name}: ${error}`);
+				}
+			}
 		}
 		this._byokUIService = new BYOKUIService(this._byokStorageService, this._modelRegistries);
 		this.restoreModels(true);
@@ -179,7 +200,46 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 		}
 	}
 
+	private async manageIntentDetectionModelCommand(): Promise<IChatEndpoint | undefined> {
+		const intentDetectionModels = this._intentModelManagementService.getRegisteredIntentDetectionModels();
 
+		if (intentDetectionModels.length === 0) {
+			const result = await window.showInformationMessage(
+				'No models are configured. Please add a model first.',
+				'Manage Models'
+			);
+			if (result === 'Manage Models') {
+				await commands.executeCommand('github.copilot.chat.manageModels');
+			}
+			return;
+		}
+
+		// Currently it is only possible to configure a single intent model for all models so we just find a model to retrieve it
+		let modelName: string | undefined = undefined;
+		let modelVendor: string | undefined = undefined;
+
+		for (const registry of this._modelRegistries) {
+			const modelConfigs = await this._byokStorageService.getStoredModelConfigs(registry.name);
+			for (const modelId of Object.keys(modelConfigs)) {
+				modelName = modelId;
+				modelVendor = registry.name;
+				break;
+			}
+		}
+
+		if (!modelName || !modelVendor) {
+			// This shouldn't happen because we return if there are no models configured
+			throw new Error(`Did not find any model config`);
+		}
+
+		const selectedIntentModelName = await this._byokUIService.pickIntentDetectionModel(intentDetectionModels);
+
+		if (selectedIntentModelName !== undefined) {
+			const selectedIntentDetectionModelEndpoint = await this._intentModelManagementService.setIntentDetectionModel(modelName, modelVendor, selectedIntentModelName);
+			window.showInformationMessage(`Intent detection model for set to ${selectedIntentModelName || 'default'}.`);
+			return selectedIntentDetectionModelEndpoint;
+		}
+	}
 
 	private async registerModel(
 		modelId: string,
@@ -215,6 +275,11 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			}
 
 			const disposable = await providerInfo.registerModel(modelConfig);
+
+			const endpoint = await providerInfo.createEndpoint(modelConfig);
+			if (endpoint) {
+				this._intentModelManagementService.registerIntentDetectionModel(modelId, providerName, endpoint);
+			}
 
 			this._registeredModelDisposables.set(`${providerName}-${modelId}`, disposable);
 			this._register(disposable);
