@@ -28,6 +28,8 @@ import { IWorkspaceChunkSearchService, NullWorkspaceChunkSearchService } from '.
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { CommandServiceImpl, ICommandService } from '../../commands/node/commandService';
 import { ILinkifyService, LinkifyService } from '../../linkify/common/linkifyService';
+import { IIntentDetectionModelManagementService } from '../../prompt/common/intentDetectionModelManagementService';
+import { IntentDetectionModelManagementService } from '../../prompt/common/intentDetectionModelManagementServiceImpl';
 import { IFeedbackReporter, NullFeedbackReporterImpl } from '../../prompt/node/feedbackReporter';
 import { IPromptVariablesService, NullPromptVariablesService } from '../../prompt/node/promptVariablesService';
 import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
@@ -76,5 +78,6 @@ export function createExtensionUnitTestingServices(modelConfig?: ISimulationMode
 	testingServiceCollection.define(INotebookService, new SyncDescriptor(SimulationNotebookService));
 	testingServiceCollection.define(INotebookSummaryTracker, new SyncDescriptor(SimulationNotebookSummaryTracker));
 	testingServiceCollection.define(ITerminalService, new SyncDescriptor(NullTerminalService));
+	testingServiceCollection.define(IIntentDetectionModelManagementService, new SyncDescriptor(IntentDetectionModelManagementService));
 	return testingServiceCollection;
 }

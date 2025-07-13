@@ -3,12 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { commands, window } from 'vscode';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
-import { IIntentDetectionModelManagementService } from '../common/intentDetectionModelManagementService';
+import { IIntentDetectionModelManagementService } from './intentDetectionModelManagementService';
 
 const INTENT_MODEL_KEY = 'copilot.intentDetectionModel';
 
@@ -52,18 +51,24 @@ export class IntentDetectionModelManagementService implements IIntentDetectionMo
 	}
 
 	private async promptToSelectIntentModel(): Promise<IChatEndpoint | undefined> {
-		return await window.showErrorMessage(
-			`An intent detection model must be configured`,
-			{
-				modal: true,
-				detail: 'Please select a BYOK model to use for intent detection. This helps Copilot understand your requests better.'
-			},
-			'Manage Intent Detection Model'
-		).then(async (selection) => {
-			if (selection === 'Manage Intent Detection Model') {
-				return await commands.executeCommand<Promise<IChatEndpoint | undefined>>('github.copilot.chat.manageIntentDetectionModel');
-			}
-		});
+		try {
+			const vscode = await import('vscode');
+			return await vscode.window.showErrorMessage(
+				`An intent detection model must be configured`,
+				{
+					modal: true,
+					detail: 'Please select a BYOK model to use for intent detection. This helps Copilot understand your requests better.'
+				},
+				'Manage Intent Detection Model'
+			).then(async (selection) => {
+				if (selection === 'Manage Intent Detection Model') {
+					return await vscode.commands.executeCommand<Promise<IChatEndpoint | undefined>>('github.copilot.chat.manageIntentDetectionModel');
+				}
+			});
+		} catch (e) {
+			this._logService.logger.error(`An error occurred showing an error message for the missing intent configuration model`);
+			return undefined;
+		}
 	}
 
 	async setIntentDetectionModel(modelName: string, modelVendor: string, intentModelName: string): Promise<IChatEndpoint> {

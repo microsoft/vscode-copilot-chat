@@ -91,6 +91,8 @@ import { IInstantiationServiceBuilder } from '../../../util/common/services';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { ILaunchConfigService } from '../../onboardDebug/common/launchConfigService';
 import { LaunchConfigService } from '../../onboardDebug/vscode/launchConfigService';
+import { IIntentDetectionModelManagementService } from '../../prompt/common/intentDetectionModelManagementService';
+import { IntentDetectionModelManagementService } from '../../prompt/common/intentDetectionModelManagementServiceImpl';
 
 // ##########################################################################
 // ###                                                                    ###
@@ -160,4 +162,5 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IInteractiveSessionService, new InteractiveSessionServiceImpl());
 	builder.define(IAuthenticationChatUpgradeService, new SyncDescriptor(AuthenticationChatUpgradeService));
 	builder.define(IEmbeddingsComputer, new SyncDescriptor(RemoteEmbeddingsComputer));
+	builder.define(IIntentDetectionModelManagementService, new SyncDescriptor(IntentDetectionModelManagementService));
 }
