@@ -43,7 +43,7 @@ export interface CorrectedEditResult {
 
 function matchAndCount(currentContent: string, oldString: string, eol: string) {
 	const r = findAndReplaceOne(currentContent, oldString, '<none>', eol);
-	return r.type === 'multiple' ? r.matchInfo!.matchPositions!.length : r.type === 'none' ? 0 : 1;
+	return r.type === 'multiple' ? r.matchPositions.length : r.editPosition.length;
 }
 
 /**
