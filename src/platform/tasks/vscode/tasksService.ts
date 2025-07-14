@@ -15,6 +15,7 @@ import { Range } from '../../../util/vs/editor/common/core/range';
 import { OffsetLineColumnConverter } from '../../editing/common/offsetLineColumnConverter';
 import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { ILanguageDiagnosticsService } from '../../languages/common/languageDiagnosticsService';
+import { ILogService } from '../../log/common/logService';
 import { IWorkspaceService } from '../../workspace/common/workspaceService';
 import { ITasksService, TaskResult, TaskStatus } from '../common/tasksService';
 
@@ -27,6 +28,7 @@ export class TasksService extends DisposableStore implements ITasksService {
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
+		@ILogService private readonly logService: ILogService
 	) {
 		super();
 		this.add(vscode.tasks.onDidStartTask(e => {
@@ -87,6 +89,8 @@ export class TasksService extends DisposableStore implements ITasksService {
 				(!key.command || taskDefinition.command === key.command))) {
 				return terminal;
 			}
+			this.logService.logger.debug(`getTerminalForTask: no terminal found for task definition: ${JSON.stringify(taskDefinition)} matching ${JSON.stringify(key)}`);
+			this.logService.logger.debug(`getTerminalForTask: current stored terminals: ${[...this.latestTerminalForTaskDefinition.values()].map(t => t.name).join(', ')}`);
 		}
 	}
 	// This comes from: src/vs/workbench/contrib/tasks/common/tasks.ts#L1296-L1317
