@@ -208,7 +208,7 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 				new LanguageModelPromptTsxPart(
 					await renderPromptElementJSON(this.instantiationService, RunInTerminalResult, {
 						result: terminalResult,
-						newCommand: command,
+						newCommand: didUserEditCommand || didToolEditCommand ? command : undefined,
 						newCommandReason: didUserEditCommand ? 'user' : didToolEditCommand ? 'tool' : undefined
 					}, options.tokenizationOptions, token)
 				)
@@ -273,8 +273,8 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 		if (this.alternativeRecommendation || this.simulationTestContext.isInSimulationTests) {
 			confirmationMessages = undefined;
 		} else {
-			const subCommands = splitCommandLineIntoSubCommands(options.input.command, this.envService.shell);
-			const inlineSubCommands = subCommands.map(e => Array.from(extractInlineSubCommands(e, this.envService.shell))).flat();
+			const subCommands = splitCommandLineIntoSubCommands(options.input.command, this.envService.shell, this.envService.OS);
+			const inlineSubCommands = subCommands.map(e => Array.from(extractInlineSubCommands(e, this.envService.shell, this.envService.OS))).flat();
 			const allSubCommands = [...subCommands, ...inlineSubCommands];
 			if (allSubCommands.every(e => this._commandLineAutoApprover.isAutoApproved(e))) {
 				confirmationMessages = undefined;
@@ -290,10 +290,15 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 			}
 		}
 
-		this.rewrittenCommand = await this._rewriteCommandIfNeeded(options);
+		const rewrittenCommand = await this._rewriteCommandIfNeeded(options);
+		if (rewrittenCommand && rewrittenCommand !== options.input.command) {
+			this.rewrittenCommand = rewrittenCommand;
+		} else {
+			this.rewrittenCommand = undefined;
+		}
 
 		return new PreparedTerminalToolInvocation(
-			this.rewrittenCommand,
+			this.rewrittenCommand ?? options.input.command,
 			shellId,
 			confirmationMessages,
 			presentation);
@@ -305,7 +310,7 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 		// Re-write the command if it starts with `cd <dir> && <suffix>` or `cd <dir>; <suffix>`
 		// to just `<suffix>` if the directory matches the current terminal's cwd. This simplifies
 		// the result in the chat by removing redundancies that some models like to add.
-		const isPwsh = isPowerShell(this.envService.shell);
+		const isPwsh = isPowerShell(this.envService.shell, this.envService.OS);
 		const cdPrefixMatch = commandLine.match(
 			isPwsh
 				? /^(?:cd|Set-Location(?: -Path)?) (?<dir>[^\s]+) ?(?:&&|;)\s+(?<suffix>.+)$/i
@@ -334,11 +339,15 @@ export class RunInTerminalTool extends Disposable implements ICopilotTool<IRunIn
 
 			// Re-write the command if it matches the cwd
 			if (cwd) {
+				// Remove any surrounding quotes
 				let cdDirPath = cdDir;
 				if (cdDirPath.startsWith('"') && cdDirPath.endsWith('"')) {
 					cdDirPath = cdDirPath.slice(1, -1);
 				}
-				let cwdFsPath = cwd.fsPath;
+				// Normalize trailing slashes
+				cdDirPath = cdDirPath.replace(/(?:[\\\/])$/, '');
+				let cwdFsPath = cwd.fsPath.replace(/(?:[\\\/])$/, '');
+				// Case-insensitive comparison on Windows
 				if (this.envService.OS === OperatingSystem.Windows) {
 					cdDirPath = cdDirPath.toLowerCase();
 					cwdFsPath = cwdFsPath.toLowerCase();

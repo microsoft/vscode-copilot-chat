@@ -11,10 +11,10 @@
 	"github.copilot.command.discardReviewSuggestion": "Discard",
 	"github.copilot.command.discardReviewSuggestionAndNext": "Discard and Go to Next",
 	"github.copilot.command.discardAllReviewSuggestion": "Discard All",
-	"github.copilot.command.reviewStagedChanges": "Copilot Code Review - Staged Changes",
-	"github.copilot.command.reviewUnstagedChanges": "Copilot Code Review - Unstaged Changes",
-	"github.copilot.command.reviewChanges": "Copilot Code Review - Uncommitted Changes",
-	"github.copilot.command.reviewChanges.cancel": "Copilot Code Review - Cancel",
+	"github.copilot.command.reviewStagedChanges": "Code review - Staged changes",
+	"github.copilot.command.reviewUnstagedChanges": "Code review - Unstaged changes",
+	"github.copilot.command.reviewChanges": "Code review - Uncommitted changes",
+	"github.copilot.command.reviewChanges.cancel": "Code review - Cancel",
 	"github.copilot.command.gotoPreviousReviewSuggestion": "Previous Suggestion",
 	"github.copilot.command.gotoNextReviewSuggestion": "Next Suggestion",
 	"github.copilot.command.continueReviewInInlineChat": "Discard and Copy to Inline Chat",
@@ -30,7 +30,7 @@
 	"github.copilot.command.buildLocalWorkspaceIndex": "Build Local Workspace Index",
 	"github.copilot.command.buildRemoteWorkspaceIndex": "Build Remote Workspace Index",
 	"github.copilot.viewsWelcome.signIn": {
-		"message": "Sign in to use Copilot AI features.\n\n[Sign in to use Copilot](command:workbench.action.chat.triggerSetup)",
+		"message": "Sign in to enable features powered by Github Copilot.\n\n[Sign in](command:workbench.action.chat.triggerSetup)",
 		"comment": [
 			"{Locked='['}",
 			"{Locked='](command:workbench.action.chat.triggerSetup)'}"
@@ -68,7 +68,7 @@
 		]
 	},
 	"github.copilot.viewsWelcome.debug": {
-		"message": "GitHub Copilot Chat can help you start debugging, either based on a [terminal command](command:github.copilot.chat.startCopilotDebugCommand) or with [interactive chat](command:workbench.action.chat.open?%7B%22query%22%3A%22%40vscode%20%2FstartDebugging%20%22%2C%22isPartialQuery%22%3Atrue%7D).",
+		"message": "Debug with [terminal commands](command:github.copilot.chat.startCopilotDebugCommand) or in an [interactive chat](command:workbench.action.chat.open?%7B%22query%22%3A%22%40vscode%20%2FstartDebugging%20%22%2C%22isPartialQuery%22%3Atrue%7D).",
 		"comment": [
 			"{Locked='['}",
 			"{Locked='](command:github.copilot.chat.startCopilotDebugCommand)'}",
@@ -77,14 +77,15 @@
 	},
 	"github.copilot.command.logWorkbenchState": "Log Workbench State",
 	"github.copilot.command.showChatLogView": "Show Chat Debug View",
-	"github.copilot.command.applySuggestionWithCopilot": "Apply Suggestion with Copilot",
+	"github.copilot.command.showContextInspectorView": "Inspect Language Context",
+	"github.copilot.command.applySuggestionWithCopilot": "Apply Suggestion",
 	"github.copilot.command.explainTerminalSelection": "Explain Terminal Selection",
 	"github.copilot.command.explainTerminalSelectionContextMenu": "Explain",
 	"github.copilot.command.explainTerminalLastCommand": "Explain Last Terminal Command",
 	"github.copilot.command.attachTerminalSelection": "Add Terminal Selection to Chat",
 	"github.copilot.command.collectWorkspaceIndexDiagnostics": "Collect Workspace Index Diagnostics",
-	"github.copilot.git.generateCommitMessage": "Generate Commit Message with Copilot",
-	"github.copilot.devcontainer.generateDevContainerConfig": "Generate Dev Container Configuration with Copilot",
+	"github.copilot.git.generateCommitMessage": "Generate Commit Message",
+	"github.copilot.devcontainer.generateDevContainerConfig": "Generate Dev Container Configuration",
 	"github.copilot.config.enableCodeActions": "Controls if Copilot commands are shown as Code Actions when available",
 	"github.copilot.config.renameSuggestions.triggerAutomatically": "Controls whether Copilot generates suggestions for renaming",
 	"github.copilot.config.localeOverride": "Specify a locale that Copilot should respond in, e.g. `en` or `fr`. By default, Copilot will respond using VS Code's configured display language locale.",

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { ICache, SQLiteCache } from './cache';
-import { CacheMode, CacheScope, ICachingResourceFetcher } from './simulationContext';
+import { CacheMode, CacheScope, CurrentTestRunInfo, ICachingResourceFetcher } from './simulationContext';
 
 export const usedResourceCaches = new Set<string>();
 
@@ -27,8 +27,8 @@ class Request<T> {
 }
 
 class ResourceFetcherSQLiteCache<I, R> extends SQLiteCache<Request<I>, R> {
-	constructor() {
-		super('resource');
+	constructor(currentTestRunInfo: CurrentTestRunInfo) {
+		super('resource', undefined, currentTestRunInfo);
 	}
 }
 
@@ -43,10 +43,11 @@ export class CachingResourceFetcher implements ICachingResourceFetcher {
 	private static Queues = new Map</* cache key */string, Promise<unknown>>();
 
 	constructor(
+		currentTestRunInfo: CurrentTestRunInfo,
 		cacheMode: CacheMode
 	) {
 		this.cache = cacheMode !== CacheMode.Disable
-			? new ResourceFetcherSQLiteCache()
+			? new ResourceFetcherSQLiteCache(currentTestRunInfo)
 			: undefined;
 	}
 

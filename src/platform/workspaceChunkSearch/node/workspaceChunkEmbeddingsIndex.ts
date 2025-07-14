@@ -60,8 +60,9 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 		this._cacheRoot = vsExtensionContext.storageUri;
 
 		this._cache = new Lazy(async () => {
-			const cache = await _instantiationService.invokeFunction(accessor => createWorkspaceChunkAndEmbeddingCache(accessor, this._embeddingType, this._cacheRoot, this._workspaceIndex));
-			return this._register(cache);
+			const cache = this._register(await _instantiationService.invokeFunction(accessor => createWorkspaceChunkAndEmbeddingCache(accessor, this._embeddingType, this._cacheRoot, this._workspaceIndex)));
+			this._onDidChangeWorkspaceIndexState.fire();
+			return cache;
 		});
 
 		this._register(Event.any(
@@ -137,7 +138,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 	}
 
 	async triggerIndexingOfFile(uri: URI, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<void> {
-		if (!await this._instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, uri))) {
+		if (!await this._instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, uri, token))) {
 			return;
 		}
 

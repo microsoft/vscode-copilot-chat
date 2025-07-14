@@ -137,8 +137,8 @@ export interface SimulationServicesOptions {
 	chatModelThrottlingTaskLaunchers: ChatModelThrottlingTaskLaunchers;
 	isNoFetchModeEnabled: boolean;
 	languageModelCacheMode: CacheMode;
-	chatMLCache?: IChatMLCache;
-	nesFetchCache?: ICompletionsCache;
+	createChatMLCache?: (info: CurrentTestRunInfo) => IChatMLCache;
+	createNesFetchCache?: (info: CurrentTestRunInfo) => ICompletionsCache;
 	resourcesCacheMode: CacheMode;
 	disabledTools: Set<string>;
 	swebenchPrompt: boolean;
@@ -202,7 +202,7 @@ export async function createSimulationAccessor(
 	opts: SimulationServicesOptions,
 	currentTestRunInfo: CurrentTestRunInfo
 ): Promise<TestingServiceCollection> {
-	const testingServiceCollection = createExtensionUnitTestingServices(modelConfig);
+	const testingServiceCollection = createExtensionUnitTestingServices(currentTestRunInfo, modelConfig);
 	if (currentTestRunInfo.isInRealExtensionHost) {
 		const { addExtensionHostSimulationServices } = await import('./extHostContext/simulationExtHostContext');
 		await addExtensionHostSimulationServices(testingServiceCollection);
@@ -240,7 +240,7 @@ export async function createSimulationAccessor(
 
 	testingServiceCollection.define(ISimulationEndpointHealth, new SyncDescriptor(SimulationEndpointHealthImpl));
 	testingServiceCollection.define(IJSONOutputPrinter, new SyncDescriptor(NoopJSONOutputPrinter));
-	testingServiceCollection.define(ICachingResourceFetcher, new SyncDescriptor(CachingResourceFetcher, [opts.resourcesCacheMode]));
+	testingServiceCollection.define(ICachingResourceFetcher, new SyncDescriptor(CachingResourceFetcher, [currentTestRunInfo, opts.resourcesCacheMode]));
 	testingServiceCollection.define(IVSCodeExtensionContext, new SyncDescriptor(MockExtensionContext, [globalStoragePath, constructGlobalStateMemento(globalStatePath)]));
 	testingServiceCollection.define(IIntentService, new SyncDescriptor(IntentService));
 
@@ -258,10 +258,10 @@ export async function createSimulationAccessor(
 				new SyncDescriptor(ChatMLFetcherImpl),
 				opts.chatModelThrottlingTaskLaunchers
 			]);
-	if (opts.chatMLCache) {
+	if (opts.createChatMLCache) {
 		chatMLFetcher = new SyncDescriptor(CachingChatMLFetcher, [
 			chatMLFetcher,
-			opts.chatMLCache,
+			opts.createChatMLCache(currentTestRunInfo),
 			cacheTestInfo,
 			{ endpointVersion: 'CAPI' },
 			opts.languageModelCacheMode ?? CacheMode.Default
@@ -273,13 +273,13 @@ export async function createSimulationAccessor(
 
 	testingServiceCollection.define(IChatMLFetcher, chatMLFetcher);
 
-	if (opts.nesFetchCache === undefined || cacheTestInfo === undefined) {
+	if (opts.createNesFetchCache === undefined || cacheTestInfo === undefined) {
 		testingServiceCollection.define(ICompletionsFetchService, new SyncDescriptor(CompletionsFetchService));
 	} else {
 		testingServiceCollection.define(ICompletionsFetchService, new SyncDescriptor(
 			CachingCompletionsFetchService,
 			[
-				opts.nesFetchCache,
+				opts.createNesFetchCache(currentTestRunInfo),
 				cacheTestInfo,
 				opts.languageModelCacheMode ?? CacheMode.Default,
 				currentTestRunInfo.fetchRequestCollector,
@@ -296,11 +296,11 @@ export async function createSimulationAccessor(
 		testingServiceCollection.define(IApiEmbeddingsIndex, new SyncDescriptor(ApiEmbeddingsIndex, [/*useRemoteCache*/ true]));
 		testingServiceCollection.define(IProjectTemplatesIndex, new SyncDescriptor(ProjectTemplatesIndex, [/*useRemoteCache*/ true]));
 	} else {
-		const embeddingCache = new EmbeddingsSQLiteCache(TestingCacheSalts.embeddingsCacheSalt);
+		const embeddingCache = new EmbeddingsSQLiteCache(TestingCacheSalts.embeddingsCacheSalt, currentTestRunInfo);
 		testingServiceCollection.define(IEmbeddingsComputer, new SyncDescriptor(CachingEmbeddingsComputer, [embeddingCache]));
 
-		const codeOrDocSearchCache = new CodeOrDocSearchSQLiteCache(TestingCacheSalts.codeSearchCacheSalt);
-		const chunksEndpointCache = new ChunkingEndpointClientSQLiteCache(TestingCacheSalts.chunksEndpointCacheSalt);
+		const codeOrDocSearchCache = new CodeOrDocSearchSQLiteCache(TestingCacheSalts.codeSearchCacheSalt, currentTestRunInfo);
+		const chunksEndpointCache = new ChunkingEndpointClientSQLiteCache(TestingCacheSalts.chunksEndpointCacheSalt, currentTestRunInfo);
 		testingServiceCollection.define(IDocsSearchClient, new SyncDescriptor(CachingCodeOrDocSearchClient, [docsSearchClient, codeOrDocSearchCache]));
 		testingServiceCollection.define(ICombinedEmbeddingIndex, new SyncDescriptor(VSCodeCombinedIndexImpl, [/*useRemoteCache*/ false]));
 		testingServiceCollection.define(IApiEmbeddingsIndex, new SyncDescriptor(ApiEmbeddingsIndex, [/*useRemoteCache*/ false]));

@@ -57,7 +57,7 @@ export class OpenRouterBYOKModelRegistry extends BaseOpenAICompatibleBYOKRegistr
 	}
 
 	override async getAllModels(apiKey: string): Promise<{ id: string; name: string }[]> {
-		const response = await this._fetcherService.fetch('https://openrouter.ai/api/v1/models?category=programming', { method: 'GET' });
+		const response = await this._fetcherService.fetch('https://openrouter.ai/api/v1/models?supported_parameters=tools', { method: 'GET' });
 		const data: any = await response.json();
 		return data.data;
 	}

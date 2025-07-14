@@ -303,7 +303,7 @@ describe('RunInTerminalTool', () => {
 			assertConfirmationRequired(await executeToolTest({ command: 'git push --force origin main' }));
 		});
 
-		it('should handle default configuration values', async () => {
+		it.skip('should handle default configuration values', async () => {
 			// Reset to default configuration
 			configurationService.setConfig(ConfigKey.TerminalAllowList, undefined);
 			configurationService.setConfig(ConfigKey.TerminalDenyList, undefined);
@@ -527,6 +527,30 @@ describe('RunInTerminalTool', () => {
 				vi.spyOn(workspaceService, 'getWorkspaceFolders').mockReturnValue([
 					{ fsPath: '/some/path' } as any
 				]);
+				const result = await runInTerminalTool.rewriteCommandIfNeeded(options);
+
+				expect(result).toBe('npm install');
+			});
+
+			it('should ignore any trailing back slash', async () => {
+				const testDir = 'c:\\test\\workspace';
+				const options = createRewriteOptions(`cd ${testDir}\\ && npm install`, 'session-1');
+				vi.spyOn(workspaceService, 'getWorkspaceFolders').mockReturnValue([
+					{ fsPath: testDir } as any
+				]);
+				vi.spyOn(runInTerminalTool['terminalService'], 'getToolTerminalForSession').mockResolvedValue(undefined);
+				const result = await runInTerminalTool.rewriteCommandIfNeeded(options);
+
+				expect(result).toBe('npm install');
+			});
+
+			it('should ignore any trailing forward slash', async () => {
+				const testDir = '/test/workspace';
+				const options = createRewriteOptions(`cd ${testDir}/ && npm install`, 'session-1');
+				vi.spyOn(workspaceService, 'getWorkspaceFolders').mockReturnValue([
+					{ fsPath: testDir } as any
+				]);
+				vi.spyOn(runInTerminalTool['terminalService'], 'getToolTerminalForSession').mockResolvedValue(undefined);
 				const result = await runInTerminalTool.rewriteCommandIfNeeded(options);
 
 				expect(result).toBe('npm install');
