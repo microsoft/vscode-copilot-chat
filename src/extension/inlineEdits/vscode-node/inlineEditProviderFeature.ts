@@ -116,7 +116,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 
 			let diagnosticsProvider: DiagnosticsNextEditProvider | undefined = undefined;
 			if (this._enableDiagnosticsProvider.read(reader)) {
-				diagnosticsProvider = reader.store.add(this._instantiationService.createInstance(DiagnosticsNextEditProvider, workspace, historyContextProvider));
+				diagnosticsProvider = reader.store.add(this._instantiationService.createInstance(DiagnosticsNextEditProvider, workspace, git));
 			}
 
 			const model = reader.store.add(this._instantiationService.createInstance(InlineEditModel, statelessProviderId, workspace, historyContextProvider, diagnosticsProvider));

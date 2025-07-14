@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { DocumentId } from '../../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { LanguageId } from '../../../../../platform/inlineEdits/common/dataTypes/languageId';
 import { RootedLineEdit } from '../../../../../platform/inlineEdits/common/dataTypes/rootedLineEdit';
+import { IObservableDocument } from '../../../../../platform/inlineEdits/common/observableWorkspace';
 import { min } from '../../../../../util/common/arrays';
 import * as errors from '../../../../../util/common/errors';
 import { ITracer } from '../../../../../util/common/tracing';
@@ -52,8 +53,12 @@ export abstract class DiagnosticCompletionItem implements vscode.InlineCompletio
 	get insertText(): string {
 		return this._edit.text;
 	}
+	get nextEditDisplayLocation(): INextEditDisplayLocation | undefined {
+		return this._getDisplayLocation();
+	}
 	get displayLocation(): vscode.InlineCompletionDisplayLocation | undefined {
-		return this.nextEditDisplayLocation ? { range: toExternalRange(this.nextEditDisplayLocation.range), label: this.nextEditDisplayLocation.label } : undefined;
+		const displayLocation = this.nextEditDisplayLocation;
+		return displayLocation ? { range: toExternalRange(displayLocation.range), label: displayLocation.label } : undefined;
 	}
 	get documentId(): DocumentId {
 		return this._workspaceDocument.id;
@@ -63,7 +68,6 @@ export abstract class DiagnosticCompletionItem implements vscode.InlineCompletio
 		public readonly type: string,
 		public readonly diagnostic: Diagnostic,
 		private readonly _edit: TextReplacement,
-		public readonly nextEditDisplayLocation: INextEditDisplayLocation | undefined,
 		protected readonly _workspaceDocument: IVSCodeObservableDocument,
 	) { }
 
@@ -91,6 +95,11 @@ export abstract class DiagnosticCompletionItem implements vscode.InlineCompletio
 		const transformer = this._workspaceDocument.value.get().getTransformer();
 		return transformer.getOffsetRange(range);
 	}
+
+	// TODO: rethink if this needs to be updatable
+	protected _getDisplayLocation(): INextEditDisplayLocation | undefined {
+		return undefined;
+	}
 }
 
 function displayLocationEquals(a: INextEditDisplayLocation | undefined, b: INextEditDisplayLocation | undefined): boolean {
@@ -102,7 +111,7 @@ export interface IDiagnosticCompletionProvider<T extends DiagnosticCompletionIte
 	providesCompletionsForDiagnostic(diagnostic: Diagnostic, language: LanguageId, pos: Position): boolean;
 	provideDiagnosticCompletionItem(workspaceDocument: IVSCodeObservableDocument, sortedDiagnostics: Diagnostic[], pos: Position, logContext: DiagnosticInlineEditRequestLogContext, token: CancellationToken): Promise<T | null>;
 	completionItemRejected?(item: T): void;
-	isCompletionItemStillValid?(item: T): boolean;
+	isCompletionItemStillValid?(item: T, workspaceDocument: IObservableDocument): boolean;
 }
 
 // TODO: Better incorporate diagnostics logging
@@ -209,25 +218,43 @@ export class Diagnostic {
 		return a.equals(b);
 	}
 
+	get range(): Range {
+		return this._range;
+	}
+
+	private _isValid: boolean = true;
+	isValid(): boolean {
+		return this._isValid;
+	}
+
 	private constructor(
 		public readonly message: string,
 		public readonly severity: DiagnosticSeverity,
 		public readonly source: string | undefined,
-		public readonly range: Range,
+		private _range: Range,
 		public readonly code: string | number | undefined,
 		public readonly reference: vscode.Diagnostic
 	) { }
 
 	equals(other: Diagnostic): boolean {
 		return this.code === other.code
+			&& this.isValid() === other.isValid()
 			&& this.severity === other.severity
 			&& this.source === other.source
 			&& this.message === other.message
-			&& Range.equalsRange(this.range, other.range);
+			&& Range.equalsRange(this._range, other._range);
 	}
 
 	toString(): string {
-		return `\`${this.message}\` at \`${this.range.toString()}\``;
+		return `\`${this.message}\` at \`${this._range.toString()}\``;
+	}
+
+	updateRange(range: Range): void {
+		this._range = range;
+	}
+
+	invalidate(): void {
+		this._isValid = false;
 	}
 }
 
