@@ -265,6 +265,11 @@ class TelemetrySender {
 		this.logService.logger.debug(`TypeScript Copilot context speculative request: [${context.requestId} - ${originalRequestId}, numberOfItems: ${numberOfItems}]`);
 	}
 
+	public willLogRequestTelemetry(context: RequestContext): boolean {
+		const sampleTelemetry = RequestContext.getSampleTelemetry(context);
+		return sampleTelemetry === 1 || this.sendRequestTelemetryCounter % sampleTelemetry === 0;
+	}
+
 	public sendRequestTelemetry(document: vscode.TextDocument, position: vscode.Position, context: RequestContext, data: ContextItemSummary, timeTaken: number, cacheState: { before: CacheState; after: CacheState } | undefined): void {
 		const stats = data.stats;
 		const nodePath = data?.path ? JSON.stringify(data.path) : JSON.stringify([0]);
@@ -1230,7 +1235,7 @@ type ComputeContextRequestArgs = {
 	$traceId?: string;
 };
 namespace ComputeContextRequestArgs {
-	export function create(document: vscode.TextDocument, position: vscode.Position, context: RequestContext, startTime: number, timeBudget: number, neighborFiles: readonly string[] | undefined, clientSideRunnableResults: readonly protocol.CachedContextRunnableResult[] | undefined): ComputeContextRequestArgs {
+	export function create(document: vscode.TextDocument, position: vscode.Position, context: RequestContext, startTime: number, timeBudget: number, willLogRequestTelemetry: boolean, neighborFiles: readonly string[] | undefined, clientSideRunnableResults: readonly protocol.CachedContextRunnableResult[] | undefined): ComputeContextRequestArgs {
 		return {
 			file: vscode.Uri.file(document.fileName),
 			line: position.line + 1,
@@ -1240,7 +1245,7 @@ namespace ComputeContextRequestArgs {
 			tokenBudget: context.tokenBudget ?? 7 * 1024,
 			neighborFiles: neighborFiles !== undefined && neighborFiles.length > 0 ? neighborFiles : undefined,
 			clientSideRunnableResults: clientSideRunnableResults,
-			$traceId: context.requestId
+			$traceId: willLogRequestTelemetry ? context.requestId : undefined
 		};
 	}
 }
@@ -1418,7 +1423,8 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 		}
 		const neighborFiles: string[] = this.neighborFileModel.getNeighborFiles(document);
 		const timeBudget = this.cachePopulationTimeout;
-		const args: ComputeContextRequestArgs = ComputeContextRequestArgs.create(document, position, context, startTime, timeBudget, neighborFiles, contextRequestState?.server);
+		const willLogRequestTelemetry = this.telemetrySender.willLogRequestTelemetry(context);
+		const args: ComputeContextRequestArgs = ComputeContextRequestArgs.create(document, position, context, startTime, timeBudget, willLogRequestTelemetry, neighborFiles, contextRequestState?.server);
 		try {
 			const isDebugging = this.isDebugging;
 			const forDebugging: ContextItem[] | undefined = isDebugging ? [] : undefined;
@@ -1523,7 +1529,8 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 			}
 		}
 
-		const args: ComputeContextRequestArgs = ComputeContextRequestArgs.create(document, position, context, startTime, timeBudget, neighborFiles, contextRequestState?.server);
+		const willLogRequestTelemetry = this.telemetrySender.willLogRequestTelemetry(context);
+		const args: ComputeContextRequestArgs = ComputeContextRequestArgs.create(document, position, context, startTime, timeBudget, willLogRequestTelemetry, neighborFiles, contextRequestState?.server);
 		try {
 			if (this.inflightRequest !== undefined) {
 				// We have an inflight request. Cancel it.
