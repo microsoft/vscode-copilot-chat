@@ -47,7 +47,6 @@ import { ActionType, Commit, DiffError, FileChange, InvalidContextError, Invalid
 import { EditFileResult, IEditedFile } from './editFileToolResult';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileOkForTool, resolveToolInputPath } from './toolUtils';
-import { guessIndentation, normalizeIndentation } from '../../prompt/node/indentationGuesser';
 
 export const applyPatchWithNotebookSupportDescription: vscode.LanguageModelToolInformation = {
 	name: ToolName.ApplyPatch,
@@ -126,39 +125,10 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		return trailingEmptyLines;
 	}
 
-
-	/**
-	 * Normalize the indentation of the content to match the original document's style
-	 * @param document The original document
-	 * @param content The content to normalize
-	 * @returns The normalized content
-	 */
-	private normalizeIndentationStyle(document: vscode.TextDocument, content: string): string {
-		// Detect the indentation style of the original document
-		const indentInfo = guessIndentation(document, 4, true);
-
-		// Split into lines, normalize each line, and then join back
-		const lines = content.split('\n');
-		const normalizedLines = lines.map(line => {
-			// Only process lines that have indentation
-			if (line.match(/^\s+/)) {
-				return normalizeIndentation(line, indentInfo.tabSize, indentInfo.insertSpaces);
-			}
-			return line;
-		});
-
-		return normalizedLines.join('\n');
-	}
-
-
-	private async generateUpdateTextDocumentEdit(file: string, change: FileChange, workspaceEdit: WorkspaceEdit, applyIndentationFix: boolean) {
+	private async generateUpdateTextDocumentEdit(file: string, change: FileChange, workspaceEdit: WorkspaceEdit) {
 		const uri = resolveToolInputPath(file, this.promptPathRepresentationService);
 		const textDocument = await this.workspaceService.openTextDocument(uri);
-		let newContent = removeLeadingFilepathComment(change.newContent ?? '', textDocument.languageId, file);
-
-		if (!applyIndentationFix) { // the 'old way' of normalizing the edit once it's created
-			newContent = this.normalizeIndentationStyle(textDocument, newContent);
-		}
+		const newContent = removeLeadingFilepathComment(change.newContent ?? '', textDocument.languageId, file);
 
 		const lines = newContent?.split('\n') ?? [];
 		let path = uri;
@@ -242,13 +212,11 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 			throw new Error('Missing patch text or stream');
 		}
 
-		const useIndentationFix = !!this.experimentationService.getTreatmentVariable<boolean>('vscode', 'copilotchat.applyPatchIndentationFix');
-
 		let commit: Commit | undefined;
 		let healed: string | undefined;
 		const docText: DocText = {};
 		try {
-			({ commit, healed } = await this.buildCommitWithHealing(options.input.input, docText, options.input.explanation, useIndentationFix, token));
+			({ commit, healed } = await this.buildCommitWithHealing(options.input.input, docText, options.input.explanation, token));
 		} catch (error) {
 			if (error instanceof HealedError) {
 				healed = error.healedPatch;
@@ -335,7 +303,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 							}
 						}
 						else {
-							path = await this.generateUpdateTextDocumentEdit(file, changes, workspaceEdit, useIndentationFix);
+							path = await this.generateUpdateTextDocumentEdit(file, changes, workspaceEdit);
 						}
 						resourceToOperation.set(path, ActionType.UPDATE);
 						break;
@@ -502,9 +470,9 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		return patchEnd === -1 ? fetchResult.value.slice(patchStart) : fetchResult.value.slice(patchStart, patchEnd + PATCH_SUFFIX.length);
 	}
 
-	private async buildCommitWithHealing(patch: string, docText: DocText, explanation: string, useIndentationFix: boolean, token: CancellationToken): Promise<{ commit: Commit; healed?: string }> {
+	private async buildCommitWithHealing(patch: string, docText: DocText, explanation: string, token: CancellationToken): Promise<{ commit: Commit; healed?: string }> {
 		try {
-			return await this.buildCommit(patch, docText, useIndentationFix);
+			return await this.buildCommit(patch, docText);
 		} catch (error) {
 			if (!(error instanceof DiffError)) {
 				throw error;
@@ -519,7 +487,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 					throw error;
 				}
 
-				const { commit } = await this.buildCommit(healed, docText, useIndentationFix);
+				const { commit } = await this.buildCommit(healed, docText);
 				return { commit, healed };
 			} catch (healedError) {
 				success = false;
@@ -543,7 +511,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		}
 	}
 
-	private async buildCommit(patch: string, docText: DocText, useIndentationFix: boolean): Promise<{ commit: Commit }> {
+	private async buildCommit(patch: string, docText: DocText): Promise<{ commit: Commit }> {
 		const commit = await processPatch(patch, async (uri) => {
 			const vscodeUri = resolveToolInputPath(uri, this.promptPathRepresentationService);
 			if (this.notebookService.hasSupportedNotebooks(vscodeUri)) {
@@ -556,7 +524,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 				docText[vscodeUri.toString()] = { text: textDocument.getText() };
 				return textDocument;
 			}
-		}, useIndentationFix);
+		});
 		return { commit };
 	}
 

@@ -10,7 +10,7 @@ import { BudgetExceededError } from '@vscode/prompt-tsx/dist/base/materialized';
 import type * as vscode from 'vscode';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { modelMightUseReplaceStringExclusively, modelSupportsApplyPatch, modelSupportsReplaceString } from '../../../platform/endpoint/common/chatModelCapabilities';
+import { modelCanUseReplaceStringExclusively, modelSupportsApplyPatch, modelSupportsReplaceString } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -57,16 +57,12 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 		const endpointProvider = accessor.get<IEndpointProvider>(IEndpointProvider);
 		const model = await endpointProvider.getChatEndpoint(request);
 
-		// Claude: replace_string AND insert_edits
-		// 4.1/o4-mini: apply_patch AND insert_edits
 		const allowTools: Record<string, boolean> = {};
-		const applyPatchConfigEnabled = configurationService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.EnableApplyPatchTool, experimentationService); // (can't use extension exp config in package.json "when" clause)
-		const useApplyPatch = !!(modelSupportsApplyPatch(model) && applyPatchConfigEnabled && toolsService.getTool(ToolName.ApplyPatch));
 		allowTools[ToolName.EditFile] = true;
 		allowTools[ToolName.ReplaceString] = modelSupportsReplaceString(model) || !!(model.family.includes('gemini') && experimentationService.getTreatmentVariable<boolean>('vscode', 'copilotchat.geminiReplaceString'));
-		allowTools[ToolName.ApplyPatch] = useApplyPatch;
+		allowTools[ToolName.ApplyPatch] = modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
 
-		if (modelMightUseReplaceStringExclusively(model) && experimentationService.getTreatmentVariable<boolean>('vscode', 'copilotchat.claudeReplaceStringExclusively')) {
+		if (modelCanUseReplaceStringExclusively(model)) {
 			allowTools[ToolName.ReplaceString] = true;
 			allowTools[ToolName.EditFile] = false;
 		}
