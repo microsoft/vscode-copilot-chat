@@ -8,8 +8,6 @@ import type { ChatRequest, ChatRequestTurn2, ChatResponseStream, ChatResult, Loc
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { getChatParticipantIdFromName, getChatParticipantNameFromId, workspaceAgentName } from '../../../platform/chat/common/chatAgents';
 import { CanceledMessage, ChatLocation } from '../../../platform/chat/common/commonTypes';
-import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
-import { FileType } from '../../../platform/filesystem/common/fileTypes';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
@@ -32,7 +30,7 @@ import { getAgentForIntent, Intent } from '../../common/constants';
 import { IConversationStore } from '../../conversationStore/node/conversationStore';
 import { IIntentService } from '../../intents/node/intentService';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
-import { ContributedToolName, ToolName } from '../../tools/common/toolNames';
+import { ContributedToolName } from '../../tools/common/toolNames';
 import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 import { Conversation, GlobalContextMessageMetadata, ICopilotChatResult, ICopilotChatResultIn, normalizeSummariesOnRounds, RenderedUserMessageMetadata, Turn, TurnStatus } from '../common/conversation';
 import { InternalToolReference } from '../common/intents';
@@ -80,7 +78,6 @@ export class ChatParticipantRequestHandler {
 		@IConversationStore private readonly _conversationStore: IConversationStore,
 		@ITabsAndEditorsService tabsAndEditorsService: ITabsAndEditorsService,
 		@ILogService private readonly _logService: ILogService,
-		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
 		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService
 	) {
 		this.location = getLocation(request);
@@ -133,8 +130,6 @@ export class ChatParticipantRequestHandler {
 	}
 
 	private async sanitizeVariables(): Promise<ChatRequest> {
-		const directories: string[] = [];
-
 		const variablePromises = this.request.references.map(async (ref) => {
 			const uri = isLocation(ref.value) ? ref.value.uri : URI.isUri(ref.value) ? ref.value : undefined;
 			if (!uri) {
@@ -145,13 +140,10 @@ export class ChatParticipantRequestHandler {
 				return ref;
 			}
 
-			let removeVariable, stat;
+			let removeVariable;
 			try {
-				[removeVariable, stat] = await Promise.all([
-					// Filter out variables which contain paths which are ignored
-					this._ignoreService.isCopilotIgnored(uri),
-					this._fileSystemService.stat(uri)
-				]);
+				// Filter out variables which contain paths which are ignored
+				removeVariable = await this._ignoreService.isCopilotIgnored(uri);
 			} catch {
 				// Non-existent files will be handled elsewhere. This might be a virtual document so it's ok if the fs service can't find it.
 			}
@@ -161,23 +153,12 @@ export class ChatParticipantRequestHandler {
 				this.turn.request.message = this.turn.request.message.slice(0, ref.range[0]) + this.turn.request.message.slice(ref.range[1]);
 			}
 
-			// Check if the variable is a directory. Directories will be turned into a codebase tool reference
-			if (!removeVariable && stat?.type === FileType.Directory) {
-				removeVariable = true;
-				directories.push(uri.fsPath);
-			}
-
 			return removeVariable ? null : ref;
 		});
 
 		const newVariables = coalesce(await Promise.all(variablePromises));
 
-		const newToolReferences: InternalToolReference[] = this.request.toolReferences.map(InternalToolReference.from);
-		if (directories.length > 0) {
-			newToolReferences.push({ name: ToolName.Codebase, id: generateUuid(), input: { scopedDirectories: directories, includeFileStructure: true } });
-		}
-
-		return { ...this.request, references: newVariables, toolReferences: newToolReferences };
+		return { ...this.request, references: newVariables };
 	}
 
 	private async _shouldAskForPermissiveAuth(): Promise<boolean> {

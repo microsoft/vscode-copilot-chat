@@ -8,6 +8,7 @@ import type { CancellationToken, ChatResponseStream, ChatVulnerability, Markdown
 import { IResponsePart } from '../../../../platform/chat/common/chatMLFetcher';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILanguageDiagnosticsService } from '../../../../platform/languages/common/languageDiagnosticsService';
 import { KnownSources } from '../../../../platform/languageServer/common/languageContextService';
@@ -49,6 +50,7 @@ export class InlineFix3Prompt extends PromptElement<InlineFixProps> {
 
 	constructor(props: InlineFixProps,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@IParserService private readonly parserService: IParserService,
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
@@ -96,7 +98,7 @@ export class InlineFix3Prompt extends PromptElement<InlineFixProps> {
 		const GenerationRulesAndExample = enableCodeMapper ? CodeMapperRulesAndExample : PatchEditFixRulesAndExample;
 		const InputCodeBlock = enableCodeMapper ? CodeMapperInputCodeBlock : PatchEditInputCodeBlock;
 
-		const renderedChatVariables = await renderChatVariables(chatVariables);
+		const renderedChatVariables = await renderChatVariables(chatVariables, this.fileSystemService);
 
 		return (
 			<>
