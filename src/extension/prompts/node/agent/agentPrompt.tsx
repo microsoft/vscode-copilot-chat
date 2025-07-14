@@ -286,7 +286,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						{/* Critical reminders that are effective when repeated right next to the user message */}
 						{getKeepGoingReminder(this.props.endpoint.family)}
 						{getEditingReminder(hasEditFileTool, hasReplaceStringTool)}
-						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
+						<NotebookReminderInstructions availableTools={this.props.availableTools} chatVariables={this.props.chatVariables} query={this.props.request} />
 					</Tag>
 					{query && <Tag name='userRequest' priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
