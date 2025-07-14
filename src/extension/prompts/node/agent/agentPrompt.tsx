@@ -46,6 +46,7 @@ import { MultirootWorkspaceStructure } from '../panel/workspace/workspaceStructu
 import { AgentConversationHistory } from './agentConversationHistory';
 import { DefaultAgentPrompt, SweBenchAgentPrompt } from './agentInstructions';
 import { SummarizedConversationHistory } from './summarizedConversationHistory';
+import { modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
 
 export interface AgentPromptProps extends GenericBasePromptElementProps {
 	readonly endpoint: IChatEndpoint;
@@ -285,7 +286,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 					<Tag name='reminderInstructions'>
 						{/* Critical reminders that are effective when repeated right next to the user message */}
 						{getKeepGoingReminder(this.props.endpoint.family)}
-						{getEditingReminder(hasEditFileTool, hasReplaceStringTool)}
+						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint))}
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
 					</Tag>
 					{query && <Tag name='userRequest' priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
@@ -596,7 +597,7 @@ class AgentTasksInstructions extends PromptElement {
 	}
 }
 
-export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringTool: boolean) {
+export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringTool: boolean, useStrongReplaceStringHint: boolean) {
 	const lines = [];
 	if (hasEditFileTool) {
 		lines.push(<>When using the {ToolName.EditFile} tool, avoid repeating existing code, instead use a line comment with \`{EXISTING_CODE_MARKER}\` to represent regions of unchanged code.<br /></>);
@@ -605,7 +606,11 @@ export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringToo
 		lines.push(<>When using the {ToolName.ReplaceString} tool, include 3-5 lines of unchanged code before and after the string you want to replace, to make it unambiguous which part of the file should be edited.<br /></>);
 	}
 	if (hasEditFileTool && hasReplaceStringTool) {
-		lines.push(<>It is much faster to edit using the {ToolName.ReplaceString} tool. Prefer {ToolName.ReplaceString} for making edits and only fall back to {ToolName.EditFile} if it fails.</>);
+		if (useStrongReplaceStringHint) {
+			lines.push(<>You must always try making file edits using {ToolName.ReplaceString} tool. You may only use {ToolName.EditFile} for an edit if {ToolName.ReplaceString} fails.</>);
+		} else {
+			lines.push(<>It is much faster to edit using the {ToolName.ReplaceString} tool. Prefer {ToolName.ReplaceString} for making edits and only fall back to {ToolName.EditFile} if it fails.</>);
+		}
 	}
 
 	return lines;

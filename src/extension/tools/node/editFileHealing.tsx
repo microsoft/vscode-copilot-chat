@@ -1,5 +1,9 @@
 // Copyright 2025 Google LLC
-
+//
+// This is adapted from the edit corrector in the Gemini CLI which can be found
+// at https://github.com/google-gemini/gemini-cli/blob/5008aea90d4ea7ac6bb5872f3702f3c7a7878ed0/packages/core/src/utils/editCorrector.ts
+// and is available under the following license:
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -57,7 +61,7 @@ function matchAndCount(currentContent: string, oldString: string, eol: string) {
  * @returns A promise resolving to an object containing the (potentially corrected)
  *          EditToolParams (as CorrectedEditParams) and the final occurrences count.
  */
-export async function ensureCorrectEdit(
+export async function healReplaceStringParams(
 	currentContent: string,
 	originalParams: IReplaceStringToolParams & { expected_replacements?: number }, // This is the EditToolParams from edit.ts, without \'corrected\'
 	eol: string,
