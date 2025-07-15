@@ -12,11 +12,13 @@ import { IChatMLFetcher, IntentParams, Source } from '../../src/platform/chat/co
 import { ChatFetchResponseType, ChatLocation, ChatResponses } from '../../src/platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../src/platform/chat/common/conversationOptions';
 import { getTextPart } from '../../src/platform/chat/common/globalStringUtils';
+import { LogLevel } from '../../src/platform/log/common/logService';
 import { FinishedCallback, ICopilotToolCall, IResponseDelta, OptionalChatRequestParams } from '../../src/platform/networking/common/fetch';
 import { IChatEndpoint } from '../../src/platform/networking/common/networking';
 import { ChoiceLogProbs, rawMessageToCAPI } from '../../src/platform/networking/common/openai';
 import { TelemetryProperties } from '../../src/platform/telemetry/common/telemetry';
 import { LcsDiff, LineSequence } from '../../src/util/common/diff';
+import { LockMap } from '../../src/util/common/lock';
 import { BugIndicatingError } from '../../src/util/vs/base/common/errors';
 import { IDisposable } from '../../src/util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/descriptors';
@@ -24,14 +26,13 @@ import { IInstantiationService } from '../../src/util/vs/platform/instantiation/
 import { CHAT_ML_CACHE_SALT } from '../cacheSalt';
 import { IJSONOutputPrinter } from '../jsonOutputPrinter';
 import { OutputType } from '../simulation/shared/sharedTypes';
+import { logger } from '../simulationLogger';
 import { computeSHA256 } from './hash';
 import { CacheMode, NoFetchChatMLFetcher } from './simulationContext';
 import { ISimulationEndpointHealth } from './simulationEndpointHealth';
 import { SimulationOutcomeImpl } from './simulationOutcome';
 import { drainStdoutAndExit } from './stdout';
 import { REPO_ROOT, SimulationTest } from './stest';
-import { logger } from '../simulationLogger';
-import { LogLevel } from '../../src/platform/log/common/logService';
 
 export class CacheableChatRequest {
 	public readonly hash: string;
@@ -106,6 +107,9 @@ export type ResponseWithMeta = ChatResponses & {
 
 
 export class CachingChatMLFetcher extends AbstractChatMLFetcher implements IDisposable {
+
+	private static readonly Locks = new LockMap();
+
 	private readonly fetcher: IChatMLFetcher;
 	private isDisposed = false;
 
@@ -167,113 +171,115 @@ export class CachingChatMLFetcher extends AbstractChatMLFetcher implements IDisp
 		const req = new CacheableChatRequest(messages, endpoint.model, finalReqOptions, intentParams, this.extraCacheProperties);
 		// console.log(`request with hash: ${req.hash}`);
 
-		let isCacheHit: boolean | undefined = undefined;
-		if (this.cacheMode !== CacheMode.Disable) {
-			const cacheValue = await this.cache.get(req, this.testInfo.cacheSlot);
-			if (cacheValue) {
-				if (cacheValue.type === ChatFetchResponseType.Success) {
-					await finishedCb?.(cacheValue.value[0], 0, { text: cacheValue.value[0], copilotToolCalls: cacheValue.copilotFunctionCalls, logprobs: cacheValue.logprobs });
-				} else if (cacheValue.type === ChatFetchResponseType.Length) {
-					await finishedCb?.(cacheValue.truncatedValue, 0, { text: cacheValue.truncatedValue, copilotToolCalls: cacheValue.copilotFunctionCalls, logprobs: cacheValue.logprobs });
+		return CachingChatMLFetcher.Locks.withLock(req.hash, async () => {
+			let isCacheHit: boolean | undefined = undefined;
+			if (this.cacheMode !== CacheMode.Disable) {
+				const cacheValue = await this.cache.get(req, this.testInfo.cacheSlot);
+				if (cacheValue) {
+					if (cacheValue.type === ChatFetchResponseType.Success) {
+						await finishedCb?.(cacheValue.value[0], 0, { text: cacheValue.value[0], copilotToolCalls: cacheValue.copilotFunctionCalls, logprobs: cacheValue.logprobs });
+					} else if (cacheValue.type === ChatFetchResponseType.Length) {
+						await finishedCb?.(cacheValue.truncatedValue, 0, { text: cacheValue.truncatedValue, copilotToolCalls: cacheValue.copilotFunctionCalls, logprobs: cacheValue.logprobs });
+					}
+					return { ...cacheValue, isCacheHit: true, cacheKey: req.hash };
 				}
-				return { ...cacheValue, isCacheHit: true, cacheKey: req.hash };
-			}
-			isCacheHit = false;
-		}
-
-		if (this.cacheMode === CacheMode.Require) {
-			let diff: { newRequest: string; oldRequest: string } | undefined;
-			try {
-				diff = await this.suggestDiffCommandForCacheMiss(req);
-			} catch (err) {
-				console.log(err);
+				isCacheHit = false;
 			}
 
-			console.log(JSON.stringify(messages, (key, value) => {
-				if (typeof value === 'string') {
-					const split = value.split(/\n/g);
-					return split.length > 1 ? split : value;
+			if (this.cacheMode === CacheMode.Require) {
+				let diff: { newRequest: string; oldRequest: string } | undefined;
+				try {
+					diff = await this.suggestDiffCommandForCacheMiss(req);
+				} catch (err) {
+					console.log(err);
 				}
-				return value;
-			}, 4));
 
-			let message = `\n✗ Cache entry not found for a request generated by test "${this.testInfo.testName}"!
+				console.log(JSON.stringify(messages, (key, value) => {
+					if (typeof value === 'string') {
+						const split = value.split(/\n/g);
+						return split.length > 1 ? split : value;
+					}
+					return value;
+				}, 4));
+
+				let message = `\n✗ Cache entry not found for a request generated by test "${this.testInfo.testName}"!
 - Valid cache entries are currently required for all requests!
 - The missing request has the hash: ${req.hash} (cache slot ${this.testInfo.cacheSlot}, make sure to call simulate -- -n=10).
 `;
-			if (diff) {
-				message += `- Compare with the closest cache entry using \`code-insiders --diff "${diff.oldRequest}" "${diff.newRequest}"\`\n`;
-			}
-
-			console.log(message);
-			this.printTerminatedWithRequireCache(message);
-			await drainStdoutAndExit(1);
-			throw new Error(message);
-		}
-
-		const callbackWrapper = new FinishedCallbackWrapper(finishedCb);
-		const start = Date.now();
-		if (logger.shouldLog(LogLevel.Trace)) {
-			logger.trace(`Making request:\n` + messages.map(m => `  ${m.role}: ${getTextPart(m.content)}`).join('\n'));
-		}
-		const result = await this.fetcher.fetchMany(
-			debugName,
-			messages,
-			callbackWrapper.getCb(),
-			token,
-			location,
-			endpoint,
-			source,
-			requestOptions,
-			userInitiatedRequest,
-			telemetryProperties,
-			intentParams
-		);
-		const fetchingResponseTimeInMs = Date.now() - start;
-		// Don't cache failed results
-		if (
-			result.type === ChatFetchResponseType.OffTopic
-			|| result.type === ChatFetchResponseType.Filtered
-			|| result.type === ChatFetchResponseType.Length
-			|| result.type === ChatFetchResponseType.Success
-		) {
-			const cacheMetadata: CachedResponseMetadata = {
-				testName: this.testInfo.testName,
-				requestDuration: fetchingResponseTimeInMs,
-				requestTime: new Date().toISOString()
-			};
-			const cachedResponse: CachedResponse = {
-				...result,
-				cacheMetadata,
-				copilotFunctionCalls: callbackWrapper.copilotFunctionCalls,
-				logprobs: callbackWrapper.logprobs,
-			};
-			if (!(this.fetcher instanceof NoFetchChatMLFetcher)) {
-				try {
-					await this.cache.set(req, this.testInfo.cacheSlot, cachedResponse);
-				} catch (err) {
-					if (/Key already exists/.test(err.message)) {
-						console.log(JSON.stringify(messages, (key, value) => {
-							if (typeof value === 'string') {
-								const split = value.split(/\n/g);
-								return split.length > 1 ? split : value;
-							}
-							return value;
-						}, 4));
-						console.log(`\n✗ ${err.message}`);
-						await drainStdoutAndExit(1);
-					}
-
-					throw err;
+				if (diff) {
+					message += `- Compare with the closest cache entry using \`code-insiders --diff "${diff.oldRequest}" "${diff.newRequest}"\`\n`;
 				}
-				return { ...result, cacheMetadata, isCacheHit, cacheKey: req.hash };
+
+				console.log(message);
+				this.printTerminatedWithRequireCache(message);
+				await drainStdoutAndExit(1);
+				throw new Error(message);
 			}
-		} else {
-			// A request failed, so we don't want to cache it.
-			// But we should warn the developer that they need to rerun
-			this.simulationEndpointHealth.markFailure(this.testInfo, result);
-		}
-		return { ...result, isCacheHit };
+
+			const callbackWrapper = new FinishedCallbackWrapper(finishedCb);
+			const start = Date.now();
+			if (logger.shouldLog(LogLevel.Trace)) {
+				logger.trace(`Making request:\n` + messages.map(m => `  ${m.role}: ${getTextPart(m.content)}`).join('\n'));
+			}
+			const result = await this.fetcher.fetchMany(
+				debugName,
+				messages,
+				callbackWrapper.getCb(),
+				token,
+				location,
+				endpoint,
+				source,
+				requestOptions,
+				userInitiatedRequest,
+				telemetryProperties,
+				intentParams
+			);
+			const fetchingResponseTimeInMs = Date.now() - start;
+			// Don't cache failed results
+			if (
+				result.type === ChatFetchResponseType.OffTopic
+				|| result.type === ChatFetchResponseType.Filtered
+				|| result.type === ChatFetchResponseType.Length
+				|| result.type === ChatFetchResponseType.Success
+			) {
+				const cacheMetadata: CachedResponseMetadata = {
+					testName: this.testInfo.testName,
+					requestDuration: fetchingResponseTimeInMs,
+					requestTime: new Date().toISOString()
+				};
+				const cachedResponse: CachedResponse = {
+					...result,
+					cacheMetadata,
+					copilotFunctionCalls: callbackWrapper.copilotFunctionCalls,
+					logprobs: callbackWrapper.logprobs,
+				};
+				if (!(this.fetcher instanceof NoFetchChatMLFetcher)) {
+					try {
+						await this.cache.set(req, this.testInfo.cacheSlot, cachedResponse);
+					} catch (err) {
+						if (/Key already exists/.test(err.message)) {
+							console.log(JSON.stringify(messages, (key, value) => {
+								if (typeof value === 'string') {
+									const split = value.split(/\n/g);
+									return split.length > 1 ? split : value;
+								}
+								return value;
+							}, 4));
+							console.log(`\n✗ ${err.message}`);
+							await drainStdoutAndExit(1);
+						}
+
+						throw err;
+					}
+					return { ...result, cacheMetadata, isCacheHit, cacheKey: req.hash };
+				}
+			} else {
+				// A request failed, so we don't want to cache it.
+				// But we should warn the developer that they need to rerun
+				this.simulationEndpointHealth.markFailure(this.testInfo, result);
+			}
+			return { ...result, isCacheHit };
+		});
 	}
 
 	private async suggestDiffCommandForCacheMiss(req: CacheableChatRequest) {
