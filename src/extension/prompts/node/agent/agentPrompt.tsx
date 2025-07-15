@@ -8,6 +8,7 @@ import { isDefined } from '@vscode/test-electron/out/util';
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IEnvService, OperatingSystem } from '../../../../platform/env/common/envService';
 import { getGitHubRepoInfoFromContext, IGitService } from '../../../../platform/git/common/gitService';
@@ -46,7 +47,6 @@ import { MultirootWorkspaceStructure } from '../panel/workspace/workspaceStructu
 import { AgentConversationHistory } from './agentConversationHistory';
 import { DefaultAgentPrompt, SweBenchAgentPrompt } from './agentInstructions';
 import { SummarizedConversationHistory } from './summarizedConversationHistory';
-import { modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
 
 export interface AgentPromptProps extends GenericBasePromptElementProps {
 	readonly endpoint: IChatEndpoint;
@@ -607,7 +607,7 @@ export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringToo
 	}
 	if (hasEditFileTool && hasReplaceStringTool) {
 		if (useStrongReplaceStringHint) {
-			lines.push(<>You must always try making file edits using {ToolName.ReplaceString} tool. You may only use {ToolName.EditFile} for an edit if {ToolName.ReplaceString} fails.</>);
+			lines.push(<>You must always try making file edits using {ToolName.ReplaceString} tool. NEVER use {ToolName.EditFile} unless told to by the user or by a tool.</>);
 		} else {
 			lines.push(<>It is much faster to edit using the {ToolName.ReplaceString} tool. Prefer {ToolName.ReplaceString} for making edits and only fall back to {ToolName.EditFile} if it fails.</>);
 		}

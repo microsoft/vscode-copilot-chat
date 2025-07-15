@@ -935,7 +935,7 @@
 				"name": "copilot_replaceString",
 				"toolReferenceName": "replaceString",
 				"displayName": "%copilot.tools.replaceString.name%",
-				"modelDescription": "This is a tool for making edits in an existing file in the workspace. For moving or renaming files, use run in terminal tool with the 'mv' command instead. For larger edits, split them into smaller edits and call the edit tool multiple times to ensure accuracy. Before editing, always ensure you have the context to understand the file's contents and context. To edit a file, provide: 1) filePath (absolute path), 2) oldString (must exactly match, including whitespace and indentation, uniquely identifying a single occurrence), and 3) newString (replacement text). Each use of this tool replaces exactly ONE occurrence of oldString. CRITICAL REQUIREMENTS: ensure oldString uniquely identifies the change by including at least 3-5 lines of context both before and after the target text, preserving whitespace and indentation exactly. Never use ...existing code... comments in the oldString or newString. Edits must result in valid, idiomatic code and not leave the file broken!",
+				"modelDescription": "This is a tool for making edits in an existing file in the workspace. For moving or renaming files, use run in terminal tool with the 'mv' command instead. For larger edits, split them into smaller edits and call the edit tool multiple times to ensure accuracy. Before editing, always ensure you have the context to understand the file's contents and context. To edit a file, provide: 1) filePath (absolute path), 2) oldString (MUST be the exact literal text to replace including all whitespace, indentation, newlines, and surrounding code etc), and 3) newString (MUST be the exact literal text to replace \\`oldString\\` with (also including all whitespace, indentation, newlines, and surrounding code etc.). Ensure the resulting code is correct and idiomatic.). Each use of this tool replaces exactly ONE occurrence of oldString.\n\nCRITICAL for \\`oldString\\`: Must uniquely identify the single instance to change. Include at least 3 lines of context BEFORE and AFTER the target text, matching whitespace and indentation precisely. If this string matches multiple locations, or does not match exactly, the tool will fail. Never use ...existing code... comments in the oldString or newString.",
 				"when": "!config.github.copilot.chat.disableReplaceTool",
 				"inputSchema": {
 					"type": "object",
@@ -946,11 +946,11 @@
 						},
 						"oldString": {
 							"type": "string",
-							"description": "The string to be replaced in the file. Never use ...existing code... comments in the oldString."
+							"description": "The exact literal text to replace, preferably unescaped. For single replacements (default), include at least 3 lines of context BEFORE and AFTER the target text, matching whitespace and indentation precisely. For multiple replacements, specify expected_replacements parameter. If this string is not the exact literal text (i.e. you escaped it) or does not match exactly, the tool will fail."
 						},
 						"newString": {
 							"type": "string",
-							"description": "The replacement string. Can be empty to delete oldString."
+							"description": "The exact literal text to replace `old_string` with, preferably unescaped. Provide the EXACT text. Ensure the resulting code is correct and idiomatic."
 						}
 					},
 					"required": [

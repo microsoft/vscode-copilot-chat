@@ -493,7 +493,7 @@ export async function applyEdit(
 
 			if (updatedFile === originalFile) {
 				throw new NoChangeError(
-					'Original and edited file match exactly. Failed to apply edit.',
+					'Original and edited file match exactly. Failed to apply edit. Use the ${ToolName.ReadFile} tool to re-read the file and and determine the correct edit.',
 					filePath
 				);
 			}
