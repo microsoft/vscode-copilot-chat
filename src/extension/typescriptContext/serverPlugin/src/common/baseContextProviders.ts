@@ -149,13 +149,13 @@ export class SignatureRunnable extends FunctionLikeContextRunnable {
 			const sourceFile = declaration.getSourceFile();
 			const start = ts.getLineAndCharacterOfPosition(sourceFile, startPos);
 			const end = ts.getLineAndCharacterOfPosition(sourceFile, endPos);
-			return `${SignatureRunnable.name}:${declaration.getSourceFile().fileName}:[${start.line},${start.character},${end.line},${end.character}]`;
+			return `SignatureRunnable:${declaration.getSourceFile().fileName}:[${start.line},${start.character},${end.line},${end.character}]`;
 		} else {
 			const hash = session.host.createHash('md5'); // CodeQL [SM04514] The 'md5' algorithm is used to compute a shorter string to represent a symbol in a map. It has no security implications.
 			const sourceFile = declaration.getSourceFile();
 			hash.update(sourceFile.fileName);
 			hash.update(`[${startPos},${endPos}]`);
-			return `${SignatureRunnable.name}:${hash.digest('base64')}`;
+			return `SignatureRunnable:${hash.digest('base64')}`;
 		}
 	}
 }

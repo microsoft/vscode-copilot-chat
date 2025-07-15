@@ -169,7 +169,7 @@ export class Parser {
 	patch: Patch = { actions: {} };
 	fuzz = 0;
 
-	constructor(currentFiles: Record<string, AbstractDocumentWithLanguageId | TextDocument>, lines: Array<string>, private readonly fixIndentationDuringMatch: boolean) {
+	constructor(currentFiles: Record<string, AbstractDocumentWithLanguageId | TextDocument>, lines: Array<string>) {
 		this.current_files = currentFiles;
 		this.lines = lines;
 		for (const [path, doc] of Object.entries(currentFiles)) {
@@ -416,10 +416,7 @@ export class Parser {
 				}
 
 				ch.insLines = ch.insLines.map(replace_explicit_tabs);
-
-				if (this.fixIndentationDuringMatch) {
-					ch.insLines = ch.insLines.map(ins => isFalsyOrWhitespace(ins) ? ins : additionalIndentation + transformIndentation(ins, srcIndentStyle, targetIndentStyle));
-				}
+				ch.insLines = ch.insLines.map(ins => isFalsyOrWhitespace(ins) ? ins : additionalIndentation + transformIndentation(ins, srcIndentStyle, targetIndentStyle));
 
 				if (match.fuzz & Fuzz.NormalizedExplicitTab) {
 					ch.delLines = ch.delLines.map(replace_explicit_tabs);
@@ -763,7 +760,6 @@ function peek_next_section(
 export function text_to_patch(
 	text: string,
 	orig: Record<string, AbstractDocumentWithLanguageId | TextDocument>,
-	fixIndentationDuringMatch = true,
 ): [Patch, number] {
 	const lines = text.trim().split("\n");
 	if (lines.length < 2) {
@@ -777,7 +773,7 @@ export function text_to_patch(
 	if (lines[lines.length - 1] !== patchSuffix) {
 		lines.push(patchSuffix);
 	}
-	const parser = new Parser(orig, lines, fixIndentationDuringMatch);
+	const parser = new Parser(orig, lines);
 	parser.index = 1;
 	parser.parse();
 	return [parser.patch, parser.fuzz];
@@ -921,13 +917,12 @@ export function apply_commit(
 export async function processPatch(
 	text: string,
 	openFn: (p: string) => Promise<AbstractDocumentWithLanguageId | TextDocument>,
-	fixIndentationDuringMatch: boolean,
 ): Promise<Commit> {
 	if (!text.startsWith(PATCH_PREFIX)) {
 		throw new InvalidPatchFormatError("Patch must start with *** Begin Patch\\n", 'patchMustStartWithBeginPatch');
 	}
 	const paths = identify_files_needed(text);
 	const orig = await load_files(paths, openFn);
-	const [patch, _fuzz] = text_to_patch(text, orig, fixIndentationDuringMatch);
+	const [patch, _fuzz] = text_to_patch(text, orig);
 	return patch_to_commit(patch, orig);
 }

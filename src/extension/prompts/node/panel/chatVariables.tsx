@@ -7,12 +7,16 @@ import { BasePromptElementProps, PromptElement, PromptElementProps, PromptPiece,
 import type { Diagnostic, DiagnosticSeverity, LanguageModelToolInformation } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
+import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { ICopilotToolCall } from '../../../../platform/networking/common/fetch';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IAlternativeNotebookContentService } from '../../../../platform/notebook/common/alternativeContent';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
+import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { createFencedCodeBlock } from '../../../../util/common/markdown';
 import { getNotebookAndCellFromUri } from '../../../../util/common/notebooks';
 import { isLocation } from '../../../../util/common/types';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
@@ -34,7 +38,7 @@ import { Image } from './image';
 import { NotebookCellOutputVariable } from './notebookVariables';
 import { PanelChatBasePrompt } from './panelChatBasePrompt';
 import { sendInvokedToolTelemetry, toolCallErrorToResult, ToolResult, ToolResultMetadata } from './toolCalling';
-import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
+import { IFileTreeData, workspaceVisualFileTree } from './workspace/visualFileTree';
 
 export interface ChatVariablesProps extends BasePromptElementProps, EmbeddedInsideUserMessage {
 	readonly chatVariables: ChatVariablesCollection;
@@ -44,8 +48,15 @@ export interface ChatVariablesProps extends BasePromptElementProps, EmbeddedInsi
 }
 
 export class ChatVariables extends PromptElement<ChatVariablesProps, void> {
+	constructor(
+		props: ChatVariablesProps,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+	) {
+		super(props);
+	}
+
 	override async render(state: void, sizing: PromptSizing): Promise<PromptPiece<any, any> | undefined> {
-		const elements = await renderChatVariables(this.props.chatVariables, this.props.includeFilepath, this.props.omitReferences, this.props.isAgent);
+		const elements = await renderChatVariables(this.props.chatVariables, this.fileSystemService, this.props.includeFilepath, this.props.omitReferences, this.props.isAgent);
 		if (elements.length === 0) {
 			return undefined;
 		}
@@ -87,9 +98,16 @@ export interface ChatVariablesAndQueryProps extends BasePromptElementProps, Embe
 }
 
 export class ChatVariablesAndQuery extends PromptElement<ChatVariablesAndQueryProps, void> {
+	constructor(
+		props: ChatVariablesAndQueryProps,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+	) {
+		super(props);
+	}
+
 	override async render(state: void, sizing: PromptSizing): Promise<PromptPiece<any, any> | undefined> {
 		const chatVariables = this.props.maintainOrder ? this.props.chatVariables : this.props.chatVariables.reverse();
-		const elements = await renderChatVariables(chatVariables, this.props.includeFilepath, this.props.omitReferences);
+		const elements = await renderChatVariables(chatVariables, this.fileSystemService, this.props.includeFilepath, this.props.omitReferences, undefined);
 
 		if (this.props.embeddedInsideUserMessage ?? embeddedInsideUserMessageDefault) {
 			if (!elements.length) {
@@ -121,7 +139,7 @@ function asUserMessage(element: PromptElement, priority: number | undefined): Us
 }
 
 
-export async function renderChatVariables(chatVariables: ChatVariablesCollection, includeFilepathInCodeBlocks = true, omitReferences?: boolean, isAgent?: boolean): Promise<PromptElement[]> {
+export async function renderChatVariables(chatVariables: ChatVariablesCollection, fileSystemService: IFileSystemService, includeFilepathInCodeBlocks = true, omitReferences?: boolean, isAgent?: boolean): Promise<PromptElement[]> {
 	const elements = [];
 	for (const variable of chatVariables) {
 		const { uniqueName: variableName, value: variableValue, reference } = variable;
@@ -130,20 +148,33 @@ export async function renderChatVariables(chatVariables: ChatVariablesCollection
 		}
 
 		if (URI.isUri(variableValue) || isLocation(variableValue)) {
-			const filePathMode = (isAgent && includeFilepathInCodeBlocks)
-				? FilePathMode.AsAttribute
-				: includeFilepathInCodeBlocks
-					? FilePathMode.AsComment
-					: FilePathMode.None;
-			const file = <FileVariable alwaysIncludeSummary={true} filePathMode={filePathMode} variableName={variableName} variableValue={variableValue} omitReferences={omitReferences} description={reference.modelDescription} />;
+			const uri = 'uri' in variableValue ? variableValue.uri : variableValue;
 
-			if (!isAgent || (!URI.isUri(variableValue) || variableValue.scheme !== Schemas.vscodeNotebookCellOutput)) {
-				// When attaching outupts, there's no need to add the entire notebook file again, as model can request the notebook file.
-				// In non agent mode, we need to add the file for context.
-				elements.push(file);
-			}
-			if (URI.isUri(variableValue) && variableValue.scheme === Schemas.vscodeNotebookCellOutput) {
-				elements.push(<NotebookCellOutputVariable outputUri={variableValue} />);
+			// Check if the variable is a directory
+			let isDirectory = false;
+			try {
+				const stat = await fileSystemService.stat(uri);
+				isDirectory = stat.type === FileType.Directory;
+			} catch { }
+
+			if (isDirectory) {
+				elements.push(<FolderVariable variableName={variableName} folderUri={uri} omitReferences={omitReferences} description={reference.modelDescription} />);
+			} else {
+				const filePathMode = (isAgent && includeFilepathInCodeBlocks)
+					? FilePathMode.AsAttribute
+					: includeFilepathInCodeBlocks
+						? FilePathMode.AsComment
+						: FilePathMode.None;
+				const file = <FileVariable alwaysIncludeSummary={true} filePathMode={filePathMode} variableName={variableName} variableValue={variableValue} omitReferences={omitReferences} description={reference.modelDescription} />;
+
+				if (!isAgent || (!URI.isUri(variableValue) || variableValue.scheme !== Schemas.vscodeNotebookCellOutput)) {
+					// When attaching outupts, there's no need to add the entire notebook file again, as model can request the notebook file.
+					// In non agent mode, we need to add the file for context.
+					elements.push(file);
+				}
+				if (URI.isUri(variableValue) && variableValue.scheme === Schemas.vscodeNotebookCellOutput) {
+					elements.push(<NotebookCellOutputVariable outputUri={variableValue} />);
+				}
 			}
 		} else if (typeof variableValue === 'string') {
 			elements.push(
@@ -223,6 +254,47 @@ class DiagnosticVariable extends PromptElement<IDiagnosticVariableProps> {
 function getDiagnosticCode(diagnostic: Diagnostic): string {
 	const code = (typeof diagnostic.code === 'object' && !!diagnostic.code) ? diagnostic.code.value : diagnostic.code;
 	return String(code);
+}
+
+interface IFolderVariableProps extends BasePromptElementProps {
+	variableName: string;
+	folderUri: Uri;
+	omitReferences?: boolean;
+	description?: string;
+}
+
+class FolderVariable extends PromptElement<IFolderVariableProps, IFileTreeData | undefined> {
+	constructor(
+		props: PromptElementProps<IFolderVariableProps>,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
+	) {
+		super(props);
+	}
+
+	override async prepare(sizing: PromptSizing): Promise<IFileTreeData | undefined> {
+		try {
+			return this.instantiationService.invokeFunction(accessor =>
+				workspaceVisualFileTree(accessor, this.props.folderUri, { maxLength: 2000, excludeDotFiles: false }, CancellationToken.None)
+			);
+		} catch {
+			// Directory doesn't exist or is not accessible
+			return undefined;
+		}
+	}
+
+	render(state: IFileTreeData | undefined) {
+		const folderPath = this.promptPathRepresentationService.getFilePath(this.props.folderUri);
+		return (
+			<Tag name='attachment' attrs={this.props.variableName ? { id: this.props.variableName, folderPath } : undefined}>
+				<TextChunk>
+					{!this.props.omitReferences && <references value={[new PromptReference({ variableName: this.props.variableName })]} />}
+					{this.props.description ? this.props.description + ':\n' : ''}
+					The user attached the folder `{folderPath}`{state ? ' which has the following structure: ' + createFencedCodeBlock('', state.tree) : ''}
+				</TextChunk>
+			</Tag>
+		);
+	}
 }
 
 export interface ChatToolCallProps extends GenericBasePromptElementProps, EmbeddedInsideUserMessage {
