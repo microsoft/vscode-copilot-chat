@@ -14,6 +14,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { FinishedCallback, OpenAiFunctionDef, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { ThinkingData } from '../../../platform/thinking/common/thinking';
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
@@ -411,6 +412,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			} satisfies OpenAiFunctionDef;
 		}) : undefined;
 		const toolCalls: IToolCall[] = [];
+		let thinking: ThinkingData | undefined;
 		const fixedMessages = this.applyMessagePostProcessing(buildPromptResult.messages);
 		const fetchResult = await this.fetch(
 			fixedMessages,
@@ -422,6 +424,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						id: this.createInternalToolCallId(call.id),
 						arguments: call.arguments === '' ? '{}' : call.arguments
 					})));
+					thinking = delta.thinking;
 				}
 
 				return stopEarly ? text.length : undefined;
@@ -465,7 +468,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					fetchResult.value,
 					toolCalls,
 					toolInputRetry,
-					undefined
+					undefined,
+					thinking
 				),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
@@ -479,7 +483,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
 			lastRequestMessages: buildPromptResult.messages,
 			availableToolCount: availableTools.length,
-			round: new ToolCallRound('', toolCalls, toolInputRetry, undefined)
+			round: new ToolCallRound('', toolCalls, toolInputRetry, undefined, thinking)
 		};
 	}
 

@@ -11,6 +11,8 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
 import { IResponseDelta } from '../../../platform/networking/common/fetch';
 import { AbstractRequestLogger, ChatRequestScheme, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
+import { ThinkingData } from '../../../platform/thinking/common/thinking';
+import { getThinkingId, getThinkingText } from '../../../platform/thinking/common/thinkingUtils';
 import { createFencedCodeBlock } from '../../../util/common/markdown';
 import { assertNever } from '../../../util/vs/base/common/assert';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
@@ -59,7 +61,7 @@ export class RequestLogger extends AbstractRequestLogger {
 	private _onDidChangeRequests = new Emitter<void>();
 	public readonly onDidChangeRequests = this._onDidChangeRequests.event;
 
-	public override logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2): void {
+	public override logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void {
 		this._addEntry({
 			kind: LoggedInfoKind.ToolCall,
 			id,
@@ -67,7 +69,8 @@ export class RequestLogger extends AbstractRequestLogger {
 			name,
 			args,
 			response,
-			time: Date.now()
+			time: Date.now(),
+			thinking
 		});
 	}
 
@@ -188,6 +191,14 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(`id   : ${entry.id}`);
 		result.push(`tool : ${entry.name}`);
 		result.push(`args : ${args}`);
+		if (entry.thinking) {
+			const thinkingText = getThinkingText(entry.thinking);
+			const thinkingId = getThinkingId(entry.thinking);
+			result.push(`thinking: ${thinkingText}`);
+			if (thinkingId) {
+				result.push(`thinkingId: ${thinkingId}`);
+			}
+		}
 		result.push(`~~~`);
 
 		result.push(`## Response`);
