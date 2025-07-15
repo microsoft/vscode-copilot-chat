@@ -349,6 +349,6 @@ export class RequestLogger extends AbstractRequestLogger {
 			return text;
 		}).join('');
 
-		return `### ${capitalizedRole}\n\`\`\`\`md\n${message}\n\`\`\`\`\n`;
+		return `### ${capitalizedRole}\n~~~md\n${message}\n~~~\n`;
 	}
 }
