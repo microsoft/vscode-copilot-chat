@@ -24,6 +24,8 @@ import { GeminiBYOKModelRegistry } from './geminiProvider';
 import { GroqModelRegistry } from './groqProvider';
 import { OllamaModelRegistry } from './ollamaProvider';
 import { OpenRouterBYOKModelRegistry } from './openRouterProvider';
+import { SAPAICoreModelRegistry } from './sapaicoreProvider';
+import { BYOKDebugCommands } from './debugCommands';
 
 export class BYOKContrib extends Disposable implements IExtensionContribution {
 	public readonly id: string = 'byok-contribution';
@@ -57,6 +59,11 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 		}));
 
 		this._register(commands.registerCommand('github.copilot.chat.manageModels', () => this.registerModelCommand()));
+
+		// Register debug commands
+		const debugCommands = new BYOKDebugCommands(this._logService, this._byokStorageService, this._registeredModelDisposables);
+		const debugDisposables = debugCommands.registerDebugCommands();
+		debugDisposables.forEach(disposable => this._register(disposable));
 	}
 
 	private async _authChange(authService: IAuthenticationService, instantiationService: IInstantiationService) {
@@ -65,6 +72,11 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			this.testLargeTelemetryPayload();
 		}
 		if (authService.copilotToken && isBYOKEnabled(authService.copilotToken, this._capiClientService)) {
+			const sapaicoreRegistry = instantiationService.createInstance(SAPAICoreModelRegistry);
+			this._modelRegistries.push(sapaicoreRegistry);
+			// // Auto-register default SAP AI Core model
+			// await this.autoRegisterDefaultSAPAICoreModel(sapaicoreRegistry);
+
 			// These are intentionally registered in alphabetical order so we don't need to sort them later.
 			// They will be shown to the user in the same order.
 			this._modelRegistries.push(instantiationService.createInstance(AnthropicBYOKModelRegistry));
@@ -75,10 +87,12 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			this._modelRegistries.push(instantiationService.createInstance(GeminiBYOKModelRegistry));
 			this._modelRegistries.push(instantiationService.createInstance(GroqModelRegistry));
 			this._modelRegistries.push(instantiationService.createInstance(OAIBYOKModelRegistry));
+
 			this._modelRegistries.push(instantiationService.createInstance(OllamaModelRegistry, this._configurationService.getConfig(ConfigKey.OllamaEndpoint)));
 			this._modelRegistries.push(instantiationService.createInstance(OpenRouterBYOKModelRegistry));
 			// Update known models list from CDN so all providers have the same list
 			await this.fetchKnownModelList(this._fetcherService);
+
 		}
 		this._byokUIService = new BYOKUIService(this._byokStorageService, this._modelRegistries);
 		this.restoreModels(true);
@@ -106,6 +120,53 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			});
 		} catch (error) {
 			this._logService.logger.error('Large telemetry test failed', error);
+		}
+	}
+
+	/**
+	 * Auto-registers a default SAP AI Core model (gpt-4o) to serve as the default chat model
+	 */
+	private async autoRegisterDefaultSAPAICoreModel(sapaicoreRegistry: SAPAICoreModelRegistry): Promise<void> {
+		try {
+			const defaultModelId = 'gpt-4o';
+			const providerName = 'SAPAICore';
+
+			// Check if this model is already registered
+			const storageKey = `${providerName}-${defaultModelId}`;
+			if (this._registeredModelDisposables.has(storageKey)) {
+				return;
+			}
+
+			// Check if model is already stored (user might have manually registered it)
+			const modelConfigs = await this._byokStorageService.getStoredModelConfigs(providerName);
+			if (modelConfigs[defaultModelId]) {
+				return;
+			}
+
+			this._logService.logger.info(`Auto-registering default SAP AI Core model: ${defaultModelId}`);
+
+			// Register the default model with isDefault flag
+			const modelConfig: BYOKModelConfig & { isDefault?: boolean } = {
+				modelId: defaultModelId,
+				isDefault: true
+			};
+
+			const disposable = await sapaicoreRegistry.registerModel(modelConfig);
+			this._registeredModelDisposables.set(storageKey, disposable);
+			this._register(disposable);
+
+			// Save to storage so it persists
+			const storageConfig: ModelConfig = {
+				id: defaultModelId,
+				isCustomModel: false,
+				apiKey: '' // No auth needed for SAP AI Core
+			};
+			await this._byokStorageService.saveModelConfig(defaultModelId, providerName, storageConfig, BYOKAuthType.None);
+
+			this._logService.logger.info(`Successfully auto-registered default SAP AI Core model: ${defaultModelId}`);
+		} catch (error) {
+			this._logService.logger.warn(`Failed to auto-register default SAP AI Core model: ${error}`);
+			// Don't throw - this is optional functionality
 		}
 	}
 
@@ -229,6 +290,9 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 	private async deregisterModel(modelId: string, providerName: string, isDeletingCustomModel: boolean): Promise<void> {
 		try {
 			const key = `${providerName}-${modelId}`;
+			// if (key === 'SAPAICore-gpt-4o')	{
+			// 	return; // Do not allow to deregister the default SAP AI Core model
+			// }
 			const disposable = this._registeredModelDisposables.get(key);
 			if (disposable) {
 				disposable.dispose();

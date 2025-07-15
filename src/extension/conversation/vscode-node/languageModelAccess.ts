@@ -155,7 +155,7 @@ export class LanguageModelAccess implements IExtensionContribution {
 						maxOutputTokens: endpoint.maxOutputTokens,
 						auth: session && { label: session.account.label },
 						isDefault: endpoint === defaultChatEndpoint,
-						isUserSelectable: endpoint.showInModelPicker,
+						isUserSelectable: true,
 						capabilities: {
 							vision: endpoint.supportsVision,
 							toolCalling: endpoint.supportsToolCalls,

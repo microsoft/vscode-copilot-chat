@@ -49,7 +49,7 @@ export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 		try {
 			// Check Ollama server version before proceeding with model operations
 			await this._checkOllamaVersion();
-			
+
 			const response = await this._fetcherService.fetch(`${this._ollamaBaseUrl}/api/tags`, { method: 'GET' });
 			const models = (await response.json()).models;
 			return models.map((model: { model: string; name: string }) => ({ id: model.model, name: model.name }));
@@ -97,7 +97,7 @@ export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 		try {
 			const response = await this._fetcherService.fetch(`${this._ollamaBaseUrl}/api/version`, { method: 'GET' });
 			const versionInfo = await response.json() as OllamaVersionResponse;
-			
+
 			if (!this._isVersionSupported(versionInfo.version)) {
 				throw new Error(
 					`Ollama server version ${versionInfo.version} is not supported. ` +
@@ -127,11 +127,11 @@ export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 		// Simple version comparison: split by dots and compare numerically
 		const currentParts = currentVersion.split('.').map(n => parseInt(n, 10));
 		const minimumParts = MINIMUM_OLLAMA_VERSION.split('.').map(n => parseInt(n, 10));
-		
+
 		for (let i = 0; i < Math.max(currentParts.length, minimumParts.length); i++) {
 			const current = currentParts[i] || 0;
 			const minimum = minimumParts[i] || 0;
-			
+
 			if (current > minimum) {
 				return true;
 			}
@@ -139,7 +139,7 @@ export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 				return false;
 			}
 		}
-		
+
 		return true; // versions are equal
 	}
 }

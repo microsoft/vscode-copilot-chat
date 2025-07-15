@@ -2,7 +2,7 @@
 	"name": "copilot-chat",
 	"displayName": "GitHub Copilot Chat",
 	"description": "AI chat features powered by Copilot",
-	"version": "0.30.0",
+	"version": "0.30.1",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
 	"internalLargeStorageAriaKey": "ec712b3202c5462fb6877acae7f1f9d7-c19ad55e-3e3c-4f99-984b-827f6d95bd9e-6917",
@@ -22,9 +22,9 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.103.0-insider",
+		"vscode": "^1.101.0-insider",
 		"npm": ">=9.0.0",
-		"node": ">=22.14.0"
+		"node": ">=22.13.0"
 	},
 	"categories": [
 		"AI",
@@ -1782,8 +1782,8 @@
 			{
 				"icon": "$(copilot-large)",
 				"title": "Ask Copilot",
-				"content": "%github.copilot.viewsWelcome.signIn%",
-				"when": "!github.copilot-chat.activated && !github.copilot.offline && !github.copilot.interactiveSession.individual.expired && !github.copilot.interactiveSession.enterprise.disabled && !github.copilot.interactiveSession.contactSupport && !github.copilot.interactiveSession.chatDisabled && !github.copilot.interactiveSession.switchToReleaseChannel"
+				"content": "Welcome! You can start chatting with SAP AI Core below.",
+				"when": "true"
 			},
 			{
 				"icon": "$(copilot-large)",
@@ -2186,6 +2186,16 @@
 				"title": "Disable Follow Cell Execution from Chat",
 				"shortTitle": "Unfollow",
 				"icon": "$(pinned-dirty)"
+			},
+			{
+				"command": "github.copilot.chat.debug.listRegisteredModels",
+				"title": "List All Registered Language Models",
+				"category": "GitHub Copilot Debug"
+			},
+			{
+				"command": "github.copilot.chat.debug.listBYOKModels",
+				"title": "List BYOK Models",
+				"category": "GitHub Copilot Debug"
 			}
 		],
 		"configuration": [
@@ -3810,6 +3820,7 @@
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@roamhq/mac-ca": "^1.0.7",
+		"@sap-ai-sdk/orchestration": "^1.16.0",
 		"@vscode/copilot-api": "^0.1.1",
 		"@vscode/extension-telemetry": "^1.0.0",
 		"@vscode/l10n": "^0.0.18",
