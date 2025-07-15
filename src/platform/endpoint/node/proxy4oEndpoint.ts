@@ -9,7 +9,7 @@ import { TokenizerType } from '../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
-import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
@@ -38,7 +38,8 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 		@IExperimentationService experimentationService: IExperimentationService,
 		@IThinkingDataService thinkingDataService: IThinkingDataService
 	) {
-		const model = configurationService.getExperimentBasedConfig<string>(ConfigKey.Internal.InstantApplyModelName, experimentationService) ?? 'gpt-4o-instant-apply-full-ft-v66';
+		// const model = configurationService.getExperimentBasedConfig<string>(ConfigKey.Internal.InstantApplyModelName, experimentationService) ?? 'gpt-4o-instant-apply-full-ft-v66';
+		const model = 'accounts/msft/models/qwen3-4b-sft';
 		const modelInfo: IChatModelInformation = {
 			id: model,
 			name: model,
