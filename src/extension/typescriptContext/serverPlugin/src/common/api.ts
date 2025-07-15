@@ -10,7 +10,7 @@ import { CompilerOptionsRunnable } from './baseContextProviders';
 import { ClassContextProvider } from './classContextProvider';
 import { ContextProvider, ContextRunnableCollector, RequestContext, type ComputeContextSession, type ContextProviderFactory, type ContextResult, type ContextRunnable, type ProviderComputeContext } from './contextProvider';
 import { FunctionContextProvider } from './functionContextProvider';
-import { ConstructorContextProvider, MethodContextProvider } from './methodContextProvider';
+import { AccessorProvider, ConstructorContextProvider, MethodContextProvider } from './methodContextProvider';
 import { ModuleContextProvider } from './moduleContextProvider';
 import { type FilePath } from './protocol';
 import { SourceFileContextProvider } from './sourceFileContextProvider';
@@ -44,6 +44,8 @@ class ContextProviders {
 		[ts.SyntaxKind.FunctionDeclaration, (node, tokenInfo, computeContext) => new FunctionContextProvider(node as tt.FunctionDeclaration, tokenInfo, computeContext)],
 		[ts.SyntaxKind.ArrowFunction, (node, tokenInfo, computeContext) => new FunctionContextProvider(node as tt.ArrowFunction, tokenInfo, computeContext)],
 		[ts.SyntaxKind.FunctionExpression, (node, tokenInfo, computeContext) => new FunctionContextProvider(node as tt.FunctionExpression, tokenInfo, computeContext)],
+		[ts.SyntaxKind.GetAccessor, (node, tokenInfo, computeContext) => new AccessorProvider(node as tt.GetAccessorDeclaration, tokenInfo, computeContext)],
+		[ts.SyntaxKind.SetAccessor, (node, tokenInfo, computeContext) => new AccessorProvider(node as tt.SetAccessorDeclaration, tokenInfo, computeContext)],
 		[ts.SyntaxKind.ClassDeclaration, ClassContextProvider.create as unknown as ContextProviderFactory],
 		[ts.SyntaxKind.Constructor, (node, tokenInfo, computeContext) => new ConstructorContextProvider(node as tt.ConstructorDeclaration, tokenInfo, computeContext)],
 		[ts.SyntaxKind.MethodDeclaration, (node, tokenInfo, computeContext) => new MethodContextProvider(node as tt.MethodDeclaration, tokenInfo, computeContext)],

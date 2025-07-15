@@ -724,7 +724,7 @@ class RunnableResultManager implements vscode.Disposable {
 		this.withInRangeRunnableResults.length = 0;
 		this.outsideRangeRunnableResults.length = 0;
 		this.neighborFileRunnableResults.length = 0;
-		this.results = new Map();
+		this.results.clear();
 		this.cacheInfo = {
 			version: version,
 			state: CacheState.NotPopulated
@@ -742,7 +742,7 @@ class RunnableResultManager implements vscode.Disposable {
 			path: body.path ?? [0]
 		};
 
-		if (body.runnableResults === undefined || body.runnableResults.length === 0) {
+		if (body.runnableResults === undefined || body.runnableResults.length === 0 || body.path === undefined || body.path.length === 0 || body.path[0] === 0) {
 			return { resolved: [], cached: cachedItems, referenced: referencedItems, serverComputed: serverComputed };
 		}
 
@@ -865,7 +865,7 @@ class RunnableResultManager implements vscode.Disposable {
 		if (this.requestInfo?.document !== document.uri.toString()) {
 			return undefined;
 		}
-		if (this.cacheInfo.version !== document.version) {
+		if (this.cacheInfo.version !== document.version || this.cacheInfo.state === CacheState.NotPopulated || this.requestInfo.path.length === 0 || this.requestInfo.path[0] === 0) {
 			this.clear();
 			return undefined;
 		}
