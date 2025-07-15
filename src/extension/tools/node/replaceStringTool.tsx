@@ -15,6 +15,7 @@ import { IAlternativeNotebookContentService } from '../../../platform/notebook/c
 import { IAlternativeNotebookContentEditGenerator, NotebookEditGenerationTelemtryOptions, NotebookEditGenrationSource } from '../../../platform/notebook/common/alternativeContentEditGenerator';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, multiplexProperties } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
@@ -61,6 +62,7 @@ export class ReplaceStringTool implements ICopilotTool<IReplaceStringToolParams>
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
+		@IExperimentationService private readonly experimentationService: IExperimentationService
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IReplaceStringToolParams>, token: vscode.CancellationToken) {
@@ -236,6 +238,10 @@ export class ReplaceStringTool implements ICopilotTool<IReplaceStringToolParams>
 		} catch (e) {
 			if (!(e instanceof NoMatchError)) {
 				throw e;
+			}
+
+			if (this.experimentationService.getTreatmentVariable<boolean>('vscode', 'copilotchat.disableReplaceStringHealing') === true) {
+				throw e; // failsafe for next release.
 			}
 
 			didHealRef.didHeal = true;
