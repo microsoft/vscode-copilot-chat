@@ -519,6 +519,11 @@ async function fetchWithInstrumentation(
 	const requestStart = Date.now();
 	const intent = locationToIntent(location);
 
+	if (request.prediction) {
+		delete request.prediction;
+		request.max_tokens = 50000;
+	}
+
 	// Wrap the Promise with success/error callbacks so we can log/measure it
 	return postRequest(
 		fetcherService,
