@@ -71,7 +71,6 @@ const computeContextHandler = (request: ComputeContextRequest): ComputeContextHa
 	const requestContext = new RequestContext(computeContextSession!, normalizedPaths, clientSideRunnableResults);
 	const result: ContextResult = new ContextResult(tokenBudget, requestContext);
 	try {
-		cancellationToken.throwIfCancellationRequested();
 		computeContext(result, computeContextSession!, languageService, file, pos, cancellationToken);
 	} catch (error) {
 		if (!(error instanceof ts.OperationCanceledException) && !(error instanceof TokenBudgetExhaustedError)) {
@@ -84,6 +83,7 @@ const computeContextHandler = (request: ComputeContextRequest): ComputeContextHa
 	}
 	const endTime = Date.now();
 	result.addTimings(endTime - totalStart, endTime - computeStart);
+	result.setTimedOut(cancellationToken.isTimedOut());
 	return { response: result.toJson(), responseRequired: true };
 };
 

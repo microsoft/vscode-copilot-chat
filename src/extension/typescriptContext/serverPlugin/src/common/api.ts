@@ -129,10 +129,12 @@ class ContextProviders {
 export function computeContext(result: ContextResult, session: ComputeContextSession, languageService: tt.LanguageService, document: FilePath, position: number, token: tt.CancellationToken): void {
 	const program = languageService.getProgram();
 	if (program === undefined) {
+		result.addErrorData(new RecoverableError(`No program found on language service`, RecoverableError.NoProgram));
 		return;
 	}
 	const sourceFile = program.getSourceFile(document);
 	if (sourceFile === undefined) {
+		result.addErrorData(new RecoverableError(`No source file found for document`, RecoverableError.NoSourceFile));
 		return;
 	}
 
