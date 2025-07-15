@@ -134,7 +134,7 @@ interface ExperimentConfig {
 	id: string;
 }
 
-export function getCustomModelExperimentConfig(expService: IExperimentationService): ExperimentConfig | undefined {
+export function getCustomDefaultModelExperimentConfig(expService: IExperimentationService): ExperimentConfig | undefined {
 	const selected = expService.getTreatmentVariable<string>('vscode', 'custommodel1');
 	const id = expService.getTreatmentVariable<string>('vscode', 'custommodel1.id');
 	const name = expService.getTreatmentVariable<string>('vscode', 'custommodel1.name');
@@ -148,7 +148,8 @@ export function applyExperimentModifications(
 	modelMetadata: IChatModelInformation,
 	experimentConfig: ExperimentConfig | undefined
 ): IChatModelInformation {
-	if (modelMetadata && experimentConfig) {
+	const knownDefaults = ['gpt-4.1'];
+	if (modelMetadata && experimentConfig && modelMetadata.is_chat_default && knownDefaults.includes(modelMetadata.id)) {
 		return { ...modelMetadata, is_chat_default: false };
 	}
 	return modelMetadata;

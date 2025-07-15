@@ -13,7 +13,7 @@ import { AutoChatEndpoint, resolveAutoChatEndpoint } from '../../../platform/end
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { EmbeddingEndpoint } from '../../../platform/endpoint/node/embeddingsEndpoint';
 import { IModelMetadataFetcher, ModelMetadataFetcher } from '../../../platform/endpoint/node/modelMetadataFetcher';
-import { applyExperimentModifications, getCustomModelExperimentConfig, ProxyExperimentEndpoint } from '../../../platform/endpoint/node/proxyExperimentEndpoint';
+import { applyExperimentModifications, getCustomDefaultModelExperimentConfig, ProxyExperimentEndpoint } from '../../../platform/endpoint/node/proxyExperimentEndpoint';
 import { ExtensionContributedChatEndpoint } from '../../../platform/endpoint/vscode-node/extChatEndpoint';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -109,7 +109,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 
 	async getChatEndpoint(requestOrFamilyOrModel: LanguageModelChat | ChatRequest | ChatEndpointFamily): Promise<IChatEndpoint> {
 		this._logService.logger.trace(`Resolving chat model`);
-		const experimentModelConfig = getCustomModelExperimentConfig(this._expService);
+		const experimentModelConfig = getCustomDefaultModelExperimentConfig(this._expService);
 
 		if (this._overridenChatModel) {
 			// Override, only allowed by internal users. Sets model based on setting
@@ -188,7 +188,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		const models: IChatModelInformation[] = await this._modelFetcher.getAllChatModels();
 		const chatEndpoints = [];
 
-		const experimentModelConfig = getCustomModelExperimentConfig(this._expService);
+		const experimentModelConfig = getCustomDefaultModelExperimentConfig(this._expService);
 
 		for (let model of models) {
 			model = applyExperimentModifications(model, experimentModelConfig) ?? model;
