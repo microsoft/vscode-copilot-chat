@@ -107,7 +107,7 @@ export class McpSetupCommands extends Disposable {
 		const done = (async () => {
 			const fakePrompt = `Generate an MCP configuration for ${packageName}`;
 			const mcpLoop = this.instantiationService.createInstance(McpToolCallingLoop, {
-				toolCallLimit: 5,
+				toolCallLimit: 100, // limited via `getAvailableTools` in the loop
 				conversation: new Conversation(generateUuid(), [new Turn(undefined, { type: 'user', message: fakePrompt })]),
 				request: {
 					attempt: 0,
