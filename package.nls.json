@@ -30,10 +30,10 @@
 	"github.copilot.command.buildLocalWorkspaceIndex": "Build Local Workspace Index",
 	"github.copilot.command.buildRemoteWorkspaceIndex": "Build Remote Workspace Index",
 	"github.copilot.viewsWelcome.signIn": {
-		"message": "Sign in to enable features powered by Github Copilot.\n\n[Sign in](command:workbench.action.chat.triggerSetup)",
+		"message": "Sign in to enable features powered by Github Copilot.\n\n[Sign in](command:workbench.action.chat.triggerSetupForceSignIn)",
 		"comment": [
 			"{Locked='['}",
-			"{Locked='](command:workbench.action.chat.triggerSetup)'}"
+			"{Locked='](command:workbench.action.chat.triggerSetupForceSignIn)'}"
 		]
 	},
 	"github.copilot.viewsWelcome.individual.expired": "Your Copilot subscription has expired.\n\n[Review Copilot Settings](https://github.com/settings/copilot?editor=vscode)",
@@ -191,9 +191,9 @@
 	"github.copilot.walkthrough.signIn.description": "To get started with Copilot, sign in with your GitHub account.\nMake sure you're using the correct GitHub account. You can also sign in later using the account menu.\n\n[Sign In](command:github.copilot.signIn)",
 	"github.copilot.walkthrough.signIn.media.altText": "Sign in to GitHub via this walkthrough or VS Code's account menu",
 	"github.copilot.walkthrough.setup.signIn.title": "Sign in to use Copilot for free",
-	"github.copilot.walkthrough.setup.signIn.description": "You can use Copilot to generate code across multiple files, fix errors, ask questions about your code and much more using natural language.\n We now offer [Copilot for free](https://github.com/features/copilot/plans) with your GitHub account.\n\n[Use Copilot for Free](command:workbench.action.chat.triggerSetup)",
+	"github.copilot.walkthrough.setup.signIn.description": "You can use Copilot to generate code across multiple files, fix errors, ask questions about your code and much more using natural language.\n We now offer [Copilot for free](https://github.com/features/copilot/plans) with your GitHub account.\n\n[Use Copilot for Free](command:workbench.action.chat.triggerSetupForceSignIn)",
 	"github.copilot.walkthrough.setup.signUp.title": "Get started with Copilot for free",
-	"github.copilot.walkthrough.setup.signUp.description": "You can use Copilot to generate code across multiple files, fix errors, ask questions about your code and much more using natural language.\n We now offer [Copilot for free](https://github.com/features/copilot/plans) with your GitHub account.\n\n[Use Copilot for Free](command:workbench.action.chat.triggerSetup)",
+	"github.copilot.walkthrough.setup.signUp.description": "You can use Copilot to generate code across multiple files, fix errors, ask questions about your code and much more using natural language.\n We now offer [Copilot for free](https://github.com/features/copilot/plans) with your GitHub account.\n\n[Use Copilot for Free](command:workbench.action.chat.triggerSetupForceSignIn)",
 	"github.copilot.walkthrough.setup.noAction.description": "You can use Copilot to generate code across multiple files, fix errors, ask questions about your code and much more using natural language.\n We now offer [Copilot for free](https://github.com/features/copilot/plans) with your GitHub account.",
 	"github.copilot.walkthrough.firstSuggest.title": "AI-suggested code completions",
 	"github.copilot.walkthrough.firstSuggest.description": "As you type in the editor, Copilot suggests code to help you complete what you started.",
