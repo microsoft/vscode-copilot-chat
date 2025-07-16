@@ -270,7 +270,7 @@ class TelemetrySender {
 		return sampleTelemetry === 1 || this.sendRequestTelemetryCounter % sampleTelemetry === 0;
 	}
 
-	public sendRequestTelemetry(document: vscode.TextDocument, position: vscode.Position, context: RequestContext, data: ContextItemSummary, timeTaken: number, cacheState: { before: CacheState; after: CacheState } | undefined): void {
+	public sendRequestTelemetry(document: vscode.TextDocument, position: vscode.Position, context: RequestContext, data: ContextItemSummary, timeTaken: number, cacheState: { before: CacheState; after: CacheState } | undefined, cacheRequest: string | undefined): void {
 		const stats = data.stats;
 		const nodePath = data?.path ? JSON.stringify(data.path) : JSON.stringify([0]);
 		const items = stats.items;
@@ -288,6 +288,7 @@ class TelemetrySender {
 					"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
 					"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The source of the request" },
 					"trigger": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The trigger kind of the request" },
+					"cacheRequest": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The cache request that was used to populate the cache" },
 					"nodePath": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The syntax kind path to the AST node the position resolved to." },
 					"cancelled": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request got cancelled on the client side" },
 					"timedOut": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request timed out on the server side" },
@@ -317,6 +318,7 @@ class TelemetrySender {
 					requestId: context.requestId,
 					source: context.source ?? KnownSources.unknown,
 					trigger: context.trigger ?? TriggerKind.unknown,
+					cacheRequest: cacheRequest ?? 'unknown',
 					nodePath: nodePath,
 					cancelled: data.cancelled.toString(),
 					timedOut: data.timedOut.toString(),
@@ -1395,7 +1397,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 					}
 				}
 				contextItemResult.updateResponse(body, token);
-				this.telemetrySender.sendRequestTelemetry(document, position, context, contextItemResult, timeTaken, { before: cacheState, after: this.runnableResultManager.getCacheState() });
+				this.telemetrySender.sendRequestTelemetry(document, position, context, contextItemResult, timeTaken, { before: cacheState, after: this.runnableResultManager.getCacheState() }, undefined);
 				isDebugging && forDebugging?.length;
 				this._onCachePopulated.fire({ document, position, results: resolved, summary: contextItemResult });
 			} else if (protocol.ComputeContextResponse.isError(response)) {
@@ -1425,7 +1427,9 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 		}
 
 		const startTime = Date.now();
+		let cacheRequest = 'none';
 		if (this.inflightCachePopulationRequest !== undefined && this.inflightCachePopulationRequest.matchesDocument(document)) {
+			cacheRequest = 'inflight';
 			// We have an inflight request for the same document and position.
 			// We wait for the server promise to resolve and then see if we can yield items from the
 			// inflight request.
@@ -1434,6 +1438,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 			// The server promised resolved first. So the inflight request is done.
 			if (result !== 'timedOut') {
 				this.inflightCachePopulationRequest = undefined;
+				cacheRequest = 'awaited';
 			}
 		}
 		if (token.isCancellationRequested) {
@@ -1465,7 +1470,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 			contextItemResult.fromCache = true;
 			this.telemetrySender.sendRequestTelemetry(
 				document, position, context, contextItemResult, Date.now() - startTime,
-				{ before: cacheState, after: cacheState }
+				{ before: cacheState, after: cacheState }, cacheRequest
 			);
 			isDebugging && forDebugging?.length;
 			this._onContextComputed.fire({ document, position, results: runnableResults, summary: contextItemResult });
@@ -1517,9 +1522,9 @@ class CachePopulationTrigger implements vscode.Disposable {
 			this.didChangeTextEditorSelection(event);
 		}));
 		this.disposables.add(vscode.languages.registerInlineCompletionItemProvider([{ scheme: 'file', language: 'typescript' }, { scheme: 'file', language: 'typescriptreact' }], {
-			provideInlineCompletionItems: async (document, position, context, token) => {
+			provideInlineCompletionItems: async (document, position, context, _token) => {
 				// console.log(`Inline completion ${Date.now()}`);
-				this.populateCache(document, position, this.tokenBudgetProvider.getTokenBudget(document), TriggerKind.completion, false);
+				this.onInlineCompletion(document, position, context);
 				return undefined;
 			}
 		}, { debounceDelayMs: 0 }));
@@ -1576,14 +1581,23 @@ class CachePopulationTrigger implements vscode.Disposable {
 		try {
 			if (event.kind === vscode.TextEditorSelectionChangeKind.Command || event.kind === vscode.TextEditorSelectionChangeKind.Mouse) {
 				this.selectionChangeDebouncer.cancel();
-				this.populateCache(document, position, tokenBudget, TriggerKind.selection, false);
+				this.populateCache(document, position, tokenBudget, undefined, TriggerKind.selection, false);
 			}
 			this.selectionChangeDebouncer.trigger(() => {
-				this.populateCache(document, position, tokenBudget, TriggerKind.selection, true);
+				this.populateCache(document, position, tokenBudget, undefined, TriggerKind.selection, true);
 			});
 		} catch (error) {
 			console.error(error);
 		}
+	}
+
+	private onInlineCompletion(document: vscode.TextDocument, position: vscode.Position, context: vscode.InlineCompletionContext): void {
+		const tokenBudget = this.tokenBudgetProvider.getTokenBudget(document);
+		if (tokenBudget <= 0) {
+			// There is no token budget left, so we don't want to trigger the cache population.
+			return;
+		}
+		this.populateCache(document, position, tokenBudget, context.requestUuid, TriggerKind.completion, false);
 	}
 
 	private getPosition(event: vscode.TextEditorSelectionChangeEvent): vscode.Position | undefined {
@@ -1618,7 +1632,7 @@ class CachePopulationTrigger implements vscode.Disposable {
 		return range.start;
 	}
 
-	private populateCache(document: vscode.TextDocument, position: vscode.Position, tokenBudget: number, trigger: TriggerKind, check: boolean): void {
+	private populateCache(document: vscode.TextDocument, position: vscode.Position, tokenBudget: number, requestId: string | undefined, trigger: TriggerKind, check: boolean): void {
 		if (check) {
 			const activeTextEditor = vscode.window.activeTextEditor;
 			if (activeTextEditor === undefined || activeTextEditor.document.uri.toString() !== document.uri.toString()) {
@@ -1634,11 +1648,11 @@ class CachePopulationTrigger implements vscode.Disposable {
 			}
 		}
 		const context: RequestContext = {
-			requestId: generateUuid(),
+			requestId: requestId ?? generateUuid(),
 			timeBudget: 50,
 			tokenBudget: tokenBudget,
 			source: KnownSources.populateCache,
-			trigger: TriggerKind.selection,
+			trigger: trigger,
 			proposedEdits: undefined
 		};
 		this.languageContextService.populateCache(document, position, context).catch(() => {
@@ -1755,7 +1769,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 					}
 					const tokenBudget = self.getTokenBudget(document);
 					if (tokenBudget <= 0) {
-						telemetrySender.sendRequestTelemetry(document, position, { requestId: request.completionId, source: KnownSources.completion }, ContextItemSummary.DefaultExhausted, 0, undefined);
+						telemetrySender.sendRequestTelemetry(document, position, { requestId: request.completionId, source: KnownSources.completion }, ContextItemSummary.DefaultExhausted, 0, undefined, undefined);
 						return [];
 					}
 					const context: RequestContext = {
