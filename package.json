@@ -416,7 +416,8 @@
 						"explanation",
 						"isBackground"
 					]
-				}
+				},
+				"when": "!config.chat.agent.terminal.coreToolsEnabled"
 			},
 			{
 				"name": "copilot_getTerminalOutput",
@@ -435,7 +436,8 @@
 					"required": [
 						"id"
 					]
-				}
+				},
+				"when": "!config.chat.agent.terminal.coreToolsEnabled"
 			},
 			{
 				"name": "copilot_getTaskOutput",
