@@ -840,8 +840,6 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		if (promptingStrategy === xtabPromptOptions.PromptingStrategy.UnifiedModel ||
 			promptingStrategy === xtabPromptOptions.PromptingStrategy.Codexv21NesUnified
 		) {
-			return editWindowLines.join('\n');
-		} else if (promptingStrategy === xtabPromptOptions.PromptingStrategy.SimplifiedSystemPrompt) {
 			return ['<EDIT>', ...editWindowLines, '</EDIT>'].join('\n');
 		} else if (promptingStrategy === xtabPromptOptions.PromptingStrategy.Xtab275) {
 			return editWindowLines.join('\n');
