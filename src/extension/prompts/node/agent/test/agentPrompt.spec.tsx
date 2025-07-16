@@ -241,4 +241,13 @@ suite('AgentPrompt', () => {
 			query: 'hello',
 		}, undefined)).toMatchSnapshot();
 	});
+
+	test('omit base agent instructions', async () => {
+		accessor.get(IConfigurationService).setConfig(ConfigKey.Internal.OmitBaseAgentInstructions, true);
+		expect(await agentPromptToString(accessor, {
+			chatVariables: new ChatVariablesCollection(),
+			history: [],
+			query: 'hello',
+		}, undefined)).toMatchSnapshot();
+	});
 });

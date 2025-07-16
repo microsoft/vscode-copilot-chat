@@ -90,13 +90,17 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 				codesearchMode={this.props.codesearchMode}
 			/>;
 
-		const baseInstructions = <>
+		const omitBaseAgentInstructions = this.configurationService.getConfig(ConfigKey.Internal.OmitBaseAgentInstructions);
+		const baseAgentInstructions = <>
 			<SystemMessage>
 				You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
 				<CopilotIdentityRules />
 				<SafetyRules />
 			</SystemMessage>
 			{instructions}
+		</>;
+		const baseInstructions = <>
+			{!omitBaseAgentInstructions && baseAgentInstructions}
 			{this.getAgentCustomInstructions()}
 			<UserMessage>
 				{await this.getOrCreateGlobalAgentContext(this.props.endpoint)}
