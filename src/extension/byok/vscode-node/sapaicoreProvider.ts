@@ -14,7 +14,7 @@ import { APIUsage } from "../../../platform/networking/common/openai";
 import { RecordedProgress } from "../../../util/common/progressRecorder";
 import { toErrorMessage } from "../../../util/vs/base/common/errorMessage";
 import { IInstantiationService } from "../../../util/vs/platform/instantiation/common/instantiation";
-import { BYOKAuthType, BYOKKnownModels, BYOKModelConfig, BYOKModelRegistry, chatModelInfoToProviderMetadata, isNoAuthConfig, resolveModelInfo } from "../common/byokProvider";
+import { BYOKAuthType, BYOKKnownModels, BYOKModelCapabilities, BYOKModelConfig, BYOKModelRegistry, chatModelInfoToProviderMetadata, isNoAuthConfig, resolveModelInfo } from "../common/byokProvider";
 import { getDeployments } from './sapaicoreUtils';
 
 const AI_CORE_CREDS_FILENAME = "ai-core-creds.json";
@@ -120,9 +120,20 @@ export class SAPAICoreModelRegistry implements BYOKModelRegistry {
 			// Verify credentials can be loaded
 			setupAiCoreEnv();
 
-			const modelMetadata = chatModelInfoToProviderMetadata(
-				resolveModelInfo(config.modelId, this.name, this._knownModels, config.capabilities)
-			);
+			// Create default capabilities for SAP AI Core models if none provided
+			const defaultCapabilities: BYOKModelCapabilities = {
+				name: `${config.modelId} (SAP AI Core)`,
+				maxInputTokens: 100000,
+				maxOutputTokens: 8192,
+				toolCalling: true, // Enable tool calling
+				vision: false // SAP AI Core doesn't support vision yet
+			};
+
+			// Use provided capabilities or default ones
+			const capabilities = config.capabilities || defaultCapabilities;
+			const modelInfo = resolveModelInfo(config.modelId, this.name, this._knownModels, capabilities);
+			const modelMetadata = chatModelInfoToProviderMetadata(modelInfo);
+
 			const provider = this._instantiationService.createInstance(SAPAICoreProvider, config.modelId, modelMetadata);
 
 			const disposable = lm.registerChatModelProvider(
@@ -149,6 +160,8 @@ export class SAPAICoreProvider implements LanguageModelChatProvider {
 		// Ensure credentials are loaded
 		setupAiCoreEnv();
 		this.modelId = modelId;
+		// Add log for model metadata
+		this._logService.logger.info(`SAPAICoreProvider initialized for model ${modelId} with metadata: ${JSON.stringify(this._modelMetadata)}`);
 	}
 
 	async provideLanguageModelResponse(
