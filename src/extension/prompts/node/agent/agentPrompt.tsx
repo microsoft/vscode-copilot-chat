@@ -140,7 +140,9 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			<CustomInstructions
 				languageId={undefined}
 				chatVariables={this.props.promptContext.chatVariables}
-				includeSystemMessageConflictWarning={!putCustomInstructionsInSystemMessage} />
+				includeSystemMessageConflictWarning={!putCustomInstructionsInSystemMessage}
+				customIntroduction={putCustomInstructionsInSystemMessage ? '' : undefined} // If in system message, skip the "follow these user-provided coding instructions" intro
+			/>
 			{
 				this.props.promptContext.modeInstructions && <Tag name='customInstructions'>
 					Below are some additional instructions from the user.<br />

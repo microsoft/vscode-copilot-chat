@@ -239,6 +239,7 @@ suite('AgentPrompt', () => {
 			chatVariables: new ChatVariablesCollection(),
 			history: [],
 			query: 'hello',
+			modeInstructions: 'custom mode instructions',
 		}, undefined)).toMatchSnapshot();
 	});
 

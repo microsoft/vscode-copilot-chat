@@ -636,10 +636,15 @@ The class \`Person\` is in \`src/models/person.ts\`.
 </example>
 
 </outputFormatting>
-When generating code, please follow these user provided coding instructions.
+
 <instructions>
 This is a test custom instruction file
 </instructions>
+<customInstructions>
+Below are some additional instructions from the user.
+
+custom mode instructions
+</customInstructions>
 copilot_cache_control: {"type":"ephemeral"}
 ~~~
 
@@ -682,7 +687,7 @@ copilot_cache_control: {"type":"ephemeral"}
 exports[`AgentPrompt > omit base agent instructions 1`] = `
 "### System
 ~~~md
-When generating code, please follow these user provided coding instructions.
+
 <instructions>
 This is a test custom instruction file
 </instructions>
