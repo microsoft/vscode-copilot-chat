@@ -102,7 +102,7 @@ export class Linkifier implements ILinkifier {
 						// `text`
 						else if (/^`[^`]+`$/.test(part)) {
 							// No linkifying inside inline code
-							out.push(this.doAppend(part));
+							out.push(...(await this.doLinkifyAndAppend(part, { skipUnlikify: true }, token)).parts);
 						}
 						// $text...
 						else if (/^[^\[`]*\$[^\$]*$/.test(part)) {
@@ -146,10 +146,10 @@ export class Linkifier implements ILinkifier {
 					break;
 				}
 				case LinkifierState.Type.Accumulating: {
-					const completeWord = async (state: LinkifierState.Accumulating, inPart: string, skipUnlikify = true) => {
+					const completeWord = async (state: LinkifierState.Accumulating, inPart: string, skipUnlikify: boolean) => {
 						const toAppend = state.pendingText + inPart;
 						this._state = LinkifierState.Default;
-						const r = await this.doLinkifyAndAppend(toAppend, { skipUnlikify: true }, token);
+						const r = await this.doLinkifyAndAppend(toAppend, { skipUnlikify }, token);
 						out.push(...r.parts);
 					};
 
@@ -158,17 +158,17 @@ export class Linkifier implements ILinkifier {
 							this._state = this._state.append(part);
 							break;
 						} else if (/\n/.test(part)) {
-							await completeWord(this._state, part);
+							await completeWord(this._state, part, false);
 							break;
 						}
 					} else if (this._state.accumulationType === LinkifierState.AccumulationType.InlineCodeOrMath && new RegExp(escapeRegExpCharacters(this._state.terminator ?? '`')).test(part)) {
 						const terminator = this._state.terminator ?? '`';
 						const terminalIndex = part.indexOf(terminator);
 						if (terminalIndex === -1) {
-							await completeWord(this._state, part);
+							await completeWord(this._state, part, true);
 						} else {
 							if (terminator === '`') {
-								await completeWord(this._state, part);
+								await completeWord(this._state, part, true);
 							} else {
 								// Math shouldn't run linkifies
 
