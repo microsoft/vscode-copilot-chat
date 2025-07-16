@@ -2813,6 +2813,14 @@
 						],
 						"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
 					},
+					"github.copilot.chat.customInstructionsInSystemMessage": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental"
+						],
+						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
+					},
 					"github.copilot.chat.agent.terminal.allowList": {
 						"type": "object",
 						"default": {},

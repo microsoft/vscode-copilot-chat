@@ -37,6 +37,11 @@ export interface CustomInstructionsProps extends BasePromptElementProps {
 	 */
 	readonly includePullRequestDescriptionGenerationInstructions?: boolean;
 	readonly customIntroduction?: string;
+
+	/**
+	 * @default true
+	 */
+	readonly includeSystemMessageConflictWarning?: boolean;
 }
 
 export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
@@ -50,6 +55,7 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 	override async render(state: void, sizing: PromptSizing) {
 
 		const { includeCodeGenerationInstructions, includeTestGenerationInstructions, includeCodeFeedbackInstructions, includeCommitMessageGenerationInstructions, includePullRequestDescriptionGenerationInstructions, customIntroduction } = this.props;
+		const includeSystemMessageConflictWarning = this.props.includeSystemMessageConflictWarning ?? true;
 
 		const chunks = [];
 
@@ -97,9 +103,10 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 			return undefined;
 		}
 		const introduction = customIntroduction ?? 'When generating code, please follow these user provided coding instructions.';
+		const systemMessageConflictWarning = includeSystemMessageConflictWarning && ' You can ignore an instruction if it contradicts a system message.';
 
 		return (<>
-			{introduction} You can ignore an instruction if it contradicts a system message.<br />
+			{introduction}{systemMessageConflictWarning}<br />
 			<Tag name='instructions'>
 				{
 					...chunks

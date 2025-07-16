@@ -280,6 +280,7 @@
 	"copilot.tools.getDocInfo.name": "Doc Info",
 	"copilot.tools.createDirectory.name": "Create Directory",
 	"github.copilot.config.agent.currentEditorContext.enabled": "When enabled, Copilot will include the name of the current active editor in the context for agent mode.",
+	"github.copilot.config.customInstructionsInSystemMessage": "When enabled, custom instructions and mode instructions will be appended to the system message instead of a user message.",
 	"github.copilot.config.agent.terminal.allowList": "A list of commands or regular expressions that allow the run in terminal tool commands to run without explicit approval. These will be matched against the start of a command. A regular expression can be provided by wrapping the string in `/` characters.\n\nExamples:\n- `\"mkdir\"` Will allow all command lines starting with `mkdir`\n- `\"npm run build\"` Will allow all command lines starting with `npm run build`\n- `\"/^git (status|show\\b.*)$/\"` will allow `git status` and all command lines starting with `git show`\n- `\"/.*/\"` will allow all command lines\n\nThis will be overridden by anything that matches an entry in `#github.copilot.config.agent.terminal.denyList#`.",
 	"github.copilot.config.agent.terminal.allowList.key": "The start of a command to match against. A regular expression can be provided by wrapping the string in `/` characters.",
 	"github.copilot.config.agent.terminal.allowList.value.true": "Allow the pattern.",
