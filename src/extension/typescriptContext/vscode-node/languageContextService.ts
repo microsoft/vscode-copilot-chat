@@ -1379,7 +1379,6 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 			const timeTaken = Date.now() - startTime;
 			if (protocol.ComputeContextResponse.isCancelled(response)) {
 				this.telemetrySender.sendRequestCancelledTelemetry(context);
-				return;
 			} else if (protocol.ComputeContextResponse.isOk(response)) {
 				const body: protocol.ComputeContextResponse.OK = response.body;
 				const contextItemResult = new ContextItemResultBuilder(timeTaken);
@@ -1399,7 +1398,6 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				this.telemetrySender.sendRequestTelemetry(document, position, context, contextItemResult, timeTaken, { before: cacheState, after: this.runnableResultManager.getCacheState() });
 				isDebugging && forDebugging?.length;
 				this._onCachePopulated.fire({ document, position, results: resolved, summary: contextItemResult });
-				return;
 			} else if (protocol.ComputeContextResponse.isError(response)) {
 				this.telemetrySender.sendRequestFailureTelemetry(context, response.body);
 				console.error('Error populating cache:', response.body.message, response.body.stack);

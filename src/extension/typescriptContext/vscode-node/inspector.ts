@@ -390,9 +390,9 @@ class TreeContextRequest {
 		this.position = event.position;
 		this.items = event.results;
 		this.summary = event.summary;
-		const now = new Date();
-		const timeString = `${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`;
-		this.label = `${label} - ${timeString} - [${this.position.line + 1}:${this.position.character + 1}]`;
+		const start = new Date(Date.now() - this.summary.totalTime);
+		const timeString = `${start.getMinutes().toString().padStart(2, '0')}:${start.getSeconds().toString().padStart(2, '0')}.${start.getMilliseconds().toString().padStart(3, '0')}`;
+		this.label = `[${timeString}] - [${this.position.line + 1}:${this.position.character + 1}] ${label} - ${this.summary.stats.yielded} items`;
 		if (this.summary.serverComputed && this.summary.serverComputed.size > 0) {
 			this.label += ` - ⏳ ${this.summary.totalTime}ms`;
 		} else {
@@ -456,13 +456,13 @@ export class InspectorDataProvider implements vscode.TreeDataProvider<InspectorI
 		this.onDidChangeTreeData = this._onDidChangeTreeData.event;
 		this.items = [];
 		this.languageContextService.onCachePopulated((event) => {
-			this.addContextRequest(new TreeContextRequest(`Cache Population Request`, event));
+			this.addContextRequest(new TreeContextRequest(`Cache`, event));
 		});
 		this.languageContextService.onContextComputed((event) => {
-			this.addContextRequest(new TreeContextRequest(`Context Compute Request`, event));
+			this.addContextRequest(new TreeContextRequest(`Context`, event));
 		});
 		this.languageContextService.onContextComputedOnTimeout((event) => {
-			this.addContextRequest(new TreeContextRequest(`Context On Timeout Request`, event));
+			this.addContextRequest(new TreeContextRequest(`OnTimeout`, event));
 		});
 	}
 
