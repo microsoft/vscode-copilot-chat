@@ -191,14 +191,6 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(`id   : ${entry.id}`);
 		result.push(`tool : ${entry.name}`);
 		result.push(`args : ${args}`);
-		if (entry.thinking) {
-			const thinkingText = getThinkingText(entry.thinking);
-			const thinkingId = getThinkingId(entry.thinking);
-			result.push(`thinking: ${thinkingText}`);
-			if (thinkingId) {
-				result.push(`thinkingId: ${thinkingId}`);
-			}
-		}
 		result.push(`~~~`);
 
 		result.push(`## Response`);
@@ -210,6 +202,18 @@ export class RequestLogger extends AbstractRequestLogger {
 			} else if (content) {
 				result.push(await renderToolResultToStringNoBudget(content));
 			}
+			result.push(`~~~`);
+		}
+
+		if (entry.thinking) {
+			result.push(`## Thinking`);
+			const thinkingId = getThinkingId(entry.thinking);
+			if (thinkingId) {
+				result.push(`thinkingId: ${thinkingId}`);
+			}
+			result.push(`~~~`);
+			const thinkingText = getThinkingText(entry.thinking);
+			result.push(thinkingText);
 			result.push(`~~~`);
 		}
 

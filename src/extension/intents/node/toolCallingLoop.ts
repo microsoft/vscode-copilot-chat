@@ -628,7 +628,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}
 
 		if (originalCall) {
-			this._requestLogger.logToolCall(originalCall?.id || generateUuid(), originalCall?.name, originalCall?.arguments, metadata.result);
+			this._requestLogger.logToolCall(originalCall?.id || generateUuid(), originalCall?.name, originalCall?.arguments, metadata.result, lastTurn?.thinking);
 		}
 	}
 }
