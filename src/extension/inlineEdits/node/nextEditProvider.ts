@@ -266,6 +266,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		}
 
 		tracer.trace('returning next edit result');
+		telemetryBuilder.setHasNextEdit(true);
+
 		return nextEditResult;
 	}
 
