@@ -6,6 +6,7 @@
 import * as vscode from 'vscode';
 
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { Copilot } from '../../../platform/inlineCompletions/vscode-node/api';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -19,10 +20,13 @@ export class PromptFileContextContribution extends Disposable {
 	private readonly _enableCompletionContext: IObservable<boolean>;
 	private registration: Promise<IDisposable> | undefined;
 
+	private models: string[] = ['GPT-4.1', 'GPT-4o'];
+
 	constructor(
 		@IConfigurationService configurationService: IConfigurationService,
 		@ILogService private readonly logService: ILogService,
 		@IExperimentationService experimentationService: IExperimentationService,
+		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 	) {
 		super();
 		this._enableCompletionContext = configurationService.getExperimentBasedConfigObservable(ConfigKey.Internal.PromptFileContext, experimentationService);
@@ -55,27 +59,28 @@ export class PromptFileContextContribution extends Disposable {
 			}
 			const self = this;
 			const resolver: Copilot.ContextResolver<Copilot.SupportedContextItem> = {
-				async *resolve(request: Copilot.ResolveRequest, token: vscode.CancellationToken): AsyncIterable<Copilot.SupportedContextItem> {
-					console.log(`Resolve request ${Date.now()}`);
+				async resolve(request: Copilot.ResolveRequest, token: vscode.CancellationToken): Promise<Copilot.SupportedContextItem[]> {
 					const [document, position] = self.getDocumentAndPosition(request, token);
 					if (document === undefined || position === undefined) {
-						return;
+						return [];
 					}
 					const tokenBudget = self.getTokenBudget(document);
 					if (tokenBudget <= 0) {
 						return [];
 					}
-					const snippet = self.getSnippet(document.languageId);
-					if (snippet === undefined) {
-						return [snippet];
-					}
-					yield snippet;
-				},
-				resolveOnTimeout(request: Copilot.ResolveRequest): Copilot.SupportedContextItem | readonly Copilot.SupportedContextItem[] | undefined {
-					console.log(`on timout ${Date.now()}`);
-					return undefined;
+					return self.getContext(document.languageId);
 				}
 			};
+
+			this.endpointProvider.getAllChatEndpoints().then(endpoints => {
+				const modelNames = new Set<string>();
+				for (const endpoint of endpoints) {
+					if (endpoint.showInModelPicker) {
+						modelNames.add(endpoint.name);
+					}
+				}
+				this.models = [...modelNames.keys()];
+			});
 
 			disposables.add(copilotAPI.registerContextProvider({
 				id: 'promptfile-ai-context-provider',
@@ -88,46 +93,89 @@ export class PromptFileContextContribution extends Disposable {
 		return disposables;
 	}
 
-	private getSnippet(languageId: string): Copilot.CodeSnippet | undefined {
+	private getContext(languageId: string): Copilot.SupportedContextItem[] {
+
 		switch (languageId) {
 			case 'prompt':
-				return {
-					uri: 'file:///exampleProject/.github/prompts/newIssue.prompt.md',
-					value: [
-						`---`,
-						`mode: 'agent'`,
-						`description: This prompt is used to generate a new issue template for GitHub repositories.`,
-						`model: GPT-4.1`,
-						`tools: ['changes', 'codebase', 'editFiles', 'extensions', 'fetch', 'findTestFiles', 'githubRepo', 'new', 'openSimpleBrowser', 'problems', 'runCommands', 'runNotebooks', 'runTasks', 'runTests', 'search', 'searchResults', 'terminalLastCommand', 'terminalSelection', 'testFailure', 'usages', 'vscodeAPI']`,
-						`---`,
-						`Generate a new issue template for a GitHub repository.`,
-					].join('\n'),
-				};
+				return [
+					{
+						name: 'This is a prompt file that uses a frontmatter header with the following fields',
+						value: `mode, description, model, tools`,
+					},
+					{
+						name: '`mode` is optional and must be one of the following values',
+						value: `ask, edit or agent`,
+					},
+					{
+						name: '`model` is optional and must be one of the following values',
+						value: this.models.join(', '),
+					},
+					{
+						name: '`tools` is optional and is an array that can consist of any number of the following values',
+						value: `'changes', 'codebase', 'editFiles', 'extensions', 'fetch', 'findTestFiles', 'githubRepo', 'new', 'openSimpleBrowser', 'problems', 'runCommands', 'runNotebooks', 'runTasks', 'runTests', 'search', 'searchResults', 'terminalLastCommand', 'terminalSelection', 'testFailure', 'usages', 'vscodeAPI'`
+					},
+					{
+						name: 'Here is an example of a prompt file:',
+						value: [
+							`---`,
+							`mode: 'agent'`,
+							`description: This prompt is used to generate a new issue template for GitHub repositories.`,
+							`model: GPT-4.1`,
+							`tools: ['changes', 'codebase', 'editFiles', 'extensions', 'fetch', 'findTestFiles', 'githubRepo', 'new', 'openSimpleBrowser', 'problems', 'runCommands', 'runNotebooks', 'runTasks', 'runTests', 'search', 'searchResults', 'terminalLastCommand', 'terminalSelection', 'testFailure', 'usages', 'vscodeAPI']`,
+							`---`,
+							`Generate a new issue template for a GitHub repository.`,
+						].join('\n'),
+					},
+				];
 			case 'instructions':
-				return {
-					uri: 'file:///exampleProject/.github/instructions/codeStyle.instructions.md',
-					value: [
-						`---`,
-						`description: This file describes the TypeScript code style for the project.`,
-						`applyTo: **/*.ts`,
-						`---`,
-						`For private fields, start the field name with an underscore (_).`,
-					].join('\n'),
-				};
-			case 'mode':
-				return {
-					uri: 'file:///exampleProject/.github/chatmodes/planMode.chatmode.md',
-					value: [
-						`---`,
-						`description: This mode is used to plan a new feature.`,
-						`model: GPT-4.1`,
-						`tools: ['changes', 'codebase','extensions', 'fetch', 'findTestFiles', 'githubRepo', 'openSimpleBrowser', 'problems', 'search', 'searchResults', 'terminalLastCommand', 'terminalSelection', 'testFailure', 'usages', 'vscodeAPI']`,
-						`---`,
-						`First come up with a plan for the new feature. Write a todo list of tasks to complete the feature.`,
-					].join('\n'),
-				};
+				return [
+					{
+						name: 'This is an instructions file that uses a frontmatter header with the following fields',
+						value: `description, applyTo`,
+					},
+					{
+						name: '`applyTo` is one or more glob patterns that specify which files the instructions apply to',
+						value: `**`,
+					},
+					{
+						name: 'Here is an example of a instruction file:',
+						value: [
+							`---`,
+							`description: This file describes the TypeScript code style for the project.`,
+							`applyTo: **/*.ts, **/*.js`,
+							`---`,
+							`For private fields, start the field name with an underscore (_).`,
+						].join('\n'),
+					},
+				];
+			case 'chatmode':
+				return [
+					{
+						name: 'This is an custom mode file that uses a frontmatter header with the following fields',
+						value: `description, model, tools`,
+					},
+					{
+						name: '`model` is optional and must be one of the following values',
+						value: this.models.join(', '),
+					},
+					{
+						name: '`tools` is optional and is an array that can consist of any number of the following values',
+						value: `'changes', 'codebase', 'editFiles', 'extensions', 'fetch', 'findTestFiles', 'githubRepo', 'new', 'openSimpleBrowser', 'problems', 'runCommands', 'runNotebooks', 'runTasks', 'runTests', 'search', 'searchResults', 'terminalLastCommand', 'terminalSelection', 'testFailure', 'usages', 'vscodeAPI'`
+					},
+					{
+						name: 'Here is an example of a mode file:',
+						value: [
+							`---`,
+							`description: This mode is used to plan a new feature.`,
+							`model: GPT-4.1`,
+							`tools: ['changes', 'codebase','extensions', 'fetch', 'findTestFiles', 'githubRepo', 'openSimpleBrowser', 'problems', 'search', 'searchResults', 'terminalLastCommand', 'terminalSelection', 'testFailure', 'usages', 'vscodeAPI']`,
+							`---`,
+							`First come up with a plan for the new feature. Write a todo list of tasks to complete the feature.`,
+						].join('\n'),
+					},
+				];
 			default:
-				return undefined;
+				return [];
 		}
 	}
 
