@@ -2051,6 +2051,11 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.debug.inlineEdit.clearCache",
+				"title": "%github.copilot.command.inlineEdit.clearCache%",
+				"category": "Developer"
+			},
+			{
 				"command": "github.copilot.debug.generateSTest",
 				"title": "%github.copilot.command.generateSTest%",
 				"enablement": "github.copilot.debugReportFeedback",
