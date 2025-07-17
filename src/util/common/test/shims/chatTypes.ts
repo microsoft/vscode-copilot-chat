@@ -320,3 +320,11 @@ export enum ChatRequestEditedFileEventKind {
 	Undo = 2,
 	UserModification = 3,
 }
+
+export class LanguageModelToolExtensionSource implements vscode.LanguageModelToolExtensionSource {
+	constructor(public readonly id: string, public readonly label: string) { }
+}
+
+export class LanguageModelToolMCPSource implements vscode.LanguageModelToolMCPSource {
+	constructor(public readonly label: string, public readonly name: string, public readonly instructions: string | undefined) { }
+}
