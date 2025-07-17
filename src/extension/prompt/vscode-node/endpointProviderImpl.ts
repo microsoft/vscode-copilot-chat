@@ -39,7 +39,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IFetcherService fetcher: IFetcherService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
-		@ITelemetryService telemetryService: ITelemetryService,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@ILogService private readonly _logService: ILogService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
@@ -57,7 +57,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 			this._expService,
 			_envService,
 			_authService,
-			telemetryService,
+			this._telemetryService,
 			_logService,
 			_instantiationService,
 		);
@@ -191,6 +191,21 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		const experimentModelConfig = getCustomDefaultModelExperimentConfig(this._expService);
 
 		for (let model of models) {
+
+			if (model.id === experimentModelConfig?.id) {
+				/* __GDPR__
+					"custommodel.found" : {
+						"owner": "karthiknadig",
+						"comment": "Reports that an experimental model was in the list of models.",
+						"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Model in found list." }
+					}
+				*/
+				this._telemetryService.sendTelemetryEvent('custommodel.found', { microsoft: true, github: false }, {
+					model: model.id,
+				});
+				// The above telemetry is needed for easier filtering.
+			}
+
 			model = applyExperimentModifications(model, experimentModelConfig) ?? model;
 			const chatEndpoint = this.getOrCreateChatEndpointInstance(model);
 			chatEndpoints.push(chatEndpoint);
