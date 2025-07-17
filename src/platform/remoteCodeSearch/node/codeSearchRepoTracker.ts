@@ -913,23 +913,43 @@ export class CodeSearchRepoTracker extends Disposable {
 			}
 
 			if (currentRepoEntry.status === RepoStatus.BuildingIndex) {
-				this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Checking endpoint for status.`);
-				const polledState = await this.getRepoIndexStatusFromEndpoint(currentRepoEntry.repo, currentRepoEntry.remoteInfo, CancellationToken.None);
-				this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Got back new status from endpoint: ${polledState.status}.`);
-
-				if (polledState.status === RepoStatus.Ready) {
-					this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Repo indexed successfully.`);
+				const attemptNumber = pollEntry.attemptNumber++;
+				if (attemptNumber > this.maxPollingAttempts) {
+					this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Max attempts reached. Stopping polling.`);
 					if (!this._isDisposed) {
-						this.updateRepoEntry(repo, polledState);
+						this.updateRepoEntry(repo, { status: RepoStatus.CouldNotCheckIndexStatus, repo: currentRepoEntry.repo, remoteInfo: currentRepoEntry.remoteInfo });
 					}
 					return onComplete();
 				}
 
-				if (pollEntry.attemptNumber++ > this.maxPollingAttempts) {
-					this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Max attempts reached. Stopping polling.`);
-					onComplete();
-					this.updateRepoEntry(repo, polledState);
-					return;
+				this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Checking endpoint for status.`);
+				let polledState: RepoEntry | undefined;
+				try {
+					polledState = await this.getRepoIndexStatusFromEndpoint(currentRepoEntry.repo, currentRepoEntry.remoteInfo, CancellationToken.None);
+				} catch {
+					// noop
+				}
+				this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Got back new status from endpoint: ${polledState?.status}.`);
+
+				switch (polledState?.status) {
+					case RepoStatus.Ready: {
+						this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Repo indexed successfully.`);
+						if (!this._isDisposed) {
+							this.updateRepoEntry(repo, polledState);
+						}
+						return onComplete();
+					}
+					case RepoStatus.BuildingIndex: {
+						// Poll again
+						return;
+					}
+					default: {
+						// We got some other state, so stop polling
+						if (!this._isDisposed) {
+							this.updateRepoEntry(repo, polledState ?? { status: RepoStatus.CouldNotCheckIndexStatus, repo: currentRepoEntry.repo, remoteInfo: currentRepoEntry.remoteInfo });
+						}
+						return onComplete();
+					}
 				}
 			} else {
 				this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Found unknown repo state: ${currentRepoEntry.status}. Stopping polling`);
