@@ -121,6 +121,11 @@ export class NextEditCache extends Disposable {
 			docCache.evictedCachedEdit(cachedEdit);
 		}
 	}
+
+	public clear() {
+		this._documentCaches.forEach(cache => cache.clear());
+		this._sharedCache.clear();
+	}
 }
 
 class DocumentEditCache {
@@ -156,6 +161,10 @@ class DocumentEditCache {
 		if (index !== -1) {
 			this._trackedCachedEdits.splice(index, 1);
 		}
+	}
+
+	public clear() {
+		this._trackedCachedEdits.length = 0;
 	}
 
 	public setKthNextEdit(documentContents: StringText, editWindow: OffsetRange | undefined, nextEdit: StringReplacement, nextEdits: StringReplacement[] | undefined, userEditSince: StringEdit | undefined, subsequentN: number, source: NextEditFetchRequest): CachedEdit {

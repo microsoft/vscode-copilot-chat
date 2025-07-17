@@ -111,7 +111,6 @@ suite('AgentPrompt', () => {
 		return result;
 	}
 
-
 	test('simple case', async () => {
 		expect(await agentPromptToString(accessor, {
 			chatVariables: new ChatVariablesCollection(),
@@ -232,5 +231,24 @@ suite('AgentPrompt', () => {
 			{
 				enableCacheBreakpoints: true,
 			})).toMatchSnapshot();
+	});
+
+	test('custom instructions in system message', async () => {
+		accessor.get(IConfigurationService).setConfig(ConfigKey.CustomInstructionsInSystemMessage, true);
+		expect(await agentPromptToString(accessor, {
+			chatVariables: new ChatVariablesCollection(),
+			history: [],
+			query: 'hello',
+			modeInstructions: 'custom mode instructions',
+		}, undefined)).toMatchSnapshot();
+	});
+
+	test('omit base agent instructions', async () => {
+		accessor.get(IConfigurationService).setConfig(ConfigKey.Internal.OmitBaseAgentInstructions, true);
+		expect(await agentPromptToString(accessor, {
+			chatVariables: new ChatVariablesCollection(),
+			history: [],
+			query: 'hello',
+		}, undefined)).toMatchSnapshot();
 	});
 });

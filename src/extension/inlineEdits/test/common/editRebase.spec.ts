@@ -7,7 +7,7 @@ import { decomposeStringEdit } from '../../../../platform/inlineEdits/common/dat
 import { createTracer } from '../../../../util/common/tracing';
 import { StringEdit, StringReplacement } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
-import { tryRebase, tryRebaseStringEdits } from '../../common/editRebase';
+import { maxAgreementOffset, maxImperfectAgreementLength, tryRebase, tryRebaseStringEdits } from '../../common/editRebase';
 
 
 suite('NextEditCache', () => {
@@ -729,5 +729,71 @@ class Point3D {
 		const lenient = tryRebaseStringEdits(text, suggestion, userEdit, 'lenient');
 		expect(lenient?.apply(current)).toStrictEqual('abCDEfg');
 		expect(lenient?.removeCommonSuffixAndPrefix(current).replacements.toString()).toMatchInlineSnapshot(`"[3, 3) -> "DE""`);
+	});
+
+	test('overlap: both insert in agreement with large offset', () => {
+		const text = `abcdefg`;
+		const userEdit = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(7, 7), 'h'),
+		]);
+		const current = userEdit.apply(text);
+		expect(current).toStrictEqual(`abcdefgh`);
+
+		const suggestion1 = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(7, 7), 'x'.repeat(maxAgreementOffset) + 'h'),
+		]);
+		const applied1 = suggestion1.apply(text);
+		expect(applied1).toStrictEqual(`abcdefg${'x'.repeat(maxAgreementOffset)}h`);
+
+		const strict1 = tryRebaseStringEdits(text, suggestion1, userEdit, 'strict');
+		expect(strict1?.apply(current)).toStrictEqual(applied1);
+		expect(strict1?.removeCommonSuffixAndPrefix(current).replacements.toString()).toMatchInlineSnapshot(`"[7, 7) -> "${'x'.repeat(maxAgreementOffset)}""`);
+		const lenient1 = tryRebaseStringEdits(text, suggestion1, userEdit, 'lenient');
+		expect(lenient1?.apply(current)).toStrictEqual(applied1);
+		expect(lenient1?.removeCommonSuffixAndPrefix(current).replacements.toString()).toMatchInlineSnapshot(`"[7, 7) -> "${'x'.repeat(maxAgreementOffset)}""`);
+
+		const suggestion2 = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(7, 7), 'x'.repeat(maxAgreementOffset + 1) + 'h'),
+		]);
+		const applied2 = suggestion2.apply(text);
+		expect(applied2).toStrictEqual(`abcdefg${'x'.repeat(maxAgreementOffset + 1)}h`);
+
+		expect(tryRebaseStringEdits(text, suggestion2, userEdit, 'strict')).toBeUndefined();
+		const lenient2 = tryRebaseStringEdits(text, suggestion2, userEdit, 'lenient');
+		expect(lenient2?.apply(current)).toStrictEqual(applied2);
+		expect(lenient2?.removeCommonSuffixAndPrefix(current).replacements.toString()).toMatchInlineSnapshot(`"[7, 7) -> "${'x'.repeat(maxAgreementOffset + 1)}""`);
+	});
+
+	test('overlap: both insert in agreement with an offset with longish user edit', () => {
+		const text = `abcdefg`;
+		const userEdit1 = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(7, 7), 'h'.repeat(maxImperfectAgreementLength)),
+		]);
+		const current1 = userEdit1.apply(text);
+		expect(current1).toStrictEqual(`abcdefg${'h'.repeat(maxImperfectAgreementLength)}`);
+
+		const suggestion = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(7, 7), `x${'h'.repeat(maxImperfectAgreementLength + 2)}x`),
+		]);
+		const applied = suggestion.apply(text);
+		expect(applied).toStrictEqual(`abcdefgx${'h'.repeat(maxImperfectAgreementLength + 2)}x`);
+
+		const strict1 = tryRebaseStringEdits(text, suggestion, userEdit1, 'strict');
+		expect(strict1?.apply(current1)).toStrictEqual(applied);
+		expect(strict1?.removeCommonSuffixAndPrefix(current1).replacements.toString()).toMatchInlineSnapshot(`"[7, ${7 + maxImperfectAgreementLength}) -> "x${'h'.repeat(maxImperfectAgreementLength + 2)}x""`);
+		const lenient1 = tryRebaseStringEdits(text, suggestion, userEdit1, 'lenient');
+		expect(lenient1?.apply(current1)).toStrictEqual(applied);
+		expect(lenient1?.removeCommonSuffixAndPrefix(current1).replacements.toString()).toMatchInlineSnapshot(`"[7, ${7 + maxImperfectAgreementLength}) -> "x${'h'.repeat(maxImperfectAgreementLength + 2)}x""`);
+
+		const userEdit2 = StringEdit.create([
+			StringReplacement.replace(new OffsetRange(7, 7), 'h'.repeat(maxImperfectAgreementLength + 1)),
+		]);
+		const current2 = userEdit2.apply(text);
+		expect(current2).toStrictEqual(`abcdefg${'h'.repeat(maxImperfectAgreementLength + 1)}`);
+
+		expect(tryRebaseStringEdits(text, suggestion, userEdit2, 'strict')).toBeUndefined();
+		const lenient2 = tryRebaseStringEdits(text, suggestion, userEdit2, 'lenient');
+		expect(lenient2?.apply(current2)).toStrictEqual(applied);
+		expect(lenient2?.removeCommonSuffixAndPrefix(current2).replacements.toString()).toMatchInlineSnapshot(`"[7, ${7 + maxImperfectAgreementLength + 1}) -> "x${'h'.repeat(maxImperfectAgreementLength + 2)}x""`);
 	});
 });

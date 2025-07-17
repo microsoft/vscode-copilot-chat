@@ -82,7 +82,7 @@ async function main() {
 		console.error(`\n${red("⚠️⚠️⚠️  Command failed with:")}\n\n`);
 
 		for (let i = 0; i < errors.length; i++) {
-			const idx = errors.length === 1 ? '' : `Error ${i + 1}) `;
+			const idx = `Error${errors.length === 1 ? '' : ` ${i + 1})`} `;
 			console.error(`\t${idx}${errors[i]}\n\n`);
 		}
 	}

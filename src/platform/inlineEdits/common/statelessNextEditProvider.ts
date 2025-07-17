@@ -287,7 +287,6 @@ export interface IStatelessNextEditTelemetry {
 	readonly lineDistanceToMostRecentEdit: number | undefined;
 
 	/* result info */
-	readonly hasNextEdit: boolean;
 	readonly nextEditLogprob: number | undefined;
 	readonly noNextEditReasonKind: string | undefined;
 	readonly noNextEditReasonMessage: string | undefined;
@@ -323,7 +322,6 @@ export class StatelessNextEditTelemetryBuilder {
 		const promptLineCount = promptText?.split('\n').length;
 		const promptCharCount = promptText?.length;
 
-		const hasNextEdit = result.isOk();
 		const noNextEditReasonKind = result.isOk() ? undefined : result.err.kind;
 
 		let noNextEditReasonMessage: string | undefined;
@@ -342,7 +340,6 @@ export class StatelessNextEditTelemetryBuilder {
 		return {
 			hadStatelessNextEditProviderCall: true,
 
-			hasNextEdit,
 			noNextEditReasonKind,
 			noNextEditReasonMessage,
 

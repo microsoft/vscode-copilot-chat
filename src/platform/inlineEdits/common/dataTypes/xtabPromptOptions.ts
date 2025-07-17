@@ -37,12 +37,16 @@ export type PromptOptions = {
 	readonly diffHistory: DiffHistoryOptions;
 }
 
+/**
+ * Prompt strategies that tweak prompt in a way that's different from current prod prompting strategy.
+ */
 export enum PromptingStrategy {
 	/**
 	 * Original Xtab unified model prompting strategy.
 	 */
 	UnifiedModel = 'xtabUnifiedModel',
 	Codexv21NesUnified = 'codexv21nesUnified',
+	Nes41Miniv3 = 'nes41miniv3',
 	SimplifiedSystemPrompt = 'simplifiedSystemPrompt',
 	Xtab275 = 'xtab275',
 }

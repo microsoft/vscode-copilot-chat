@@ -15,14 +15,21 @@ import { FinishedCallback, OptionalChatRequestParams } from '../../networking/co
 import { Response } from '../../networking/common/fetcherService';
 import { IChatEndpoint, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
+import { IChatModelInformation } from '../common/endpointProvider';
 
 export class ProxyExperimentEndpoint implements IChatEndpoint {
 	public readonly showInModelPicker: boolean;
 	public readonly family: string;
 
-	constructor(public readonly name: string, public readonly model: string, public readonly selectedEndpoint: IChatEndpoint) {
+	constructor(
+		public readonly name: string,
+		public readonly model: string,
+		public readonly selectedEndpoint: IChatEndpoint,
+		private readonly _isDefault: boolean
+	) {
 		// This is a proxy endpoint that wraps another endpoint, typically used for experiments.
 		// This should be used to show the endpoint in the model picker, when in experiment.
 		this.showInModelPicker = true;
@@ -69,6 +76,9 @@ export class ProxyExperimentEndpoint implements IChatEndpoint {
 	}
 
 	get isDefault(): boolean {
+		if (this._isDefault !== undefined) {
+			return this._isDefault;
+		}
 		return this.selectedEndpoint.isDefault;
 	}
 
@@ -115,5 +125,32 @@ export class ProxyExperimentEndpoint implements IChatEndpoint {
 	acquireTokenizer(): ITokenizer {
 		return this.selectedEndpoint.acquireTokenizer();
 	}
+}
 
+
+interface ExperimentConfig {
+	selected: string;
+	name: string;
+	id: string;
+}
+
+export function getCustomDefaultModelExperimentConfig(expService: IExperimentationService): ExperimentConfig | undefined {
+	const selected = expService.getTreatmentVariable<string>('vscode', 'custommodel1');
+	const id = expService.getTreatmentVariable<string>('vscode', 'custommodel1.id');
+	const name = expService.getTreatmentVariable<string>('vscode', 'custommodel1.name');
+	if (selected && id && name) {
+		return { selected, id, name };
+	}
+	return undefined;
+}
+
+export function applyExperimentModifications(
+	modelMetadata: IChatModelInformation,
+	experimentConfig: ExperimentConfig | undefined
+): IChatModelInformation {
+	const knownDefaults = ['gpt-4.1'];
+	if (modelMetadata && experimentConfig && modelMetadata.is_chat_default && knownDefaults.includes(modelMetadata.id)) {
+		return { ...modelMetadata, is_chat_default: false };
+	}
+	return modelMetadata;
 }

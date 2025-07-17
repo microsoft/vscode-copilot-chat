@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type tt from 'typescript/lib/tsserverlibrary';
+import tt from 'typescript/lib/tsserverlibrary';
 import TS from './typescript';
 const ts = TS();
 
@@ -470,7 +470,7 @@ class SimilarMethodRunnable extends SimilarPropertyRunnable<tt.MethodDeclaration
 	}
 }
 
-abstract class ClassPropertyContextProvider<T extends tt.MethodDeclaration | tt.ConstructorDeclaration> extends FunctionLikeContextProvider {
+abstract class ClassPropertyContextProvider<T extends tt.MethodDeclaration | tt.ConstructorDeclaration | tt.GetAccessorDeclaration | tt.SetAccessorDeclaration> extends FunctionLikeContextProvider {
 
 	protected readonly declaration: T;
 	public override readonly isCallableProvider: boolean;
@@ -508,9 +508,9 @@ abstract class ClassPropertyContextProvider<T extends tt.MethodDeclaration | tt.
 
 class PropertiesTypeRunnable extends AbstractContextRunnable {
 
-	private readonly declaration: tt.MethodDeclaration | tt.ConstructorDeclaration;
+	private readonly declaration: tt.MethodDeclaration | tt.ConstructorDeclaration | tt.GetAccessorDeclaration | tt.SetAccessorDeclaration;
 
-	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, declaration: tt.MethodDeclaration | tt.ConstructorDeclaration, priority: number = Priorities.Properties) {
+	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, declaration: tt.MethodDeclaration | tt.ConstructorDeclaration | tt.GetAccessorDeclaration | tt.SetAccessorDeclaration, priority: number = Priorities.Properties) {
 		super(session, languageService, context, 'PropertiesTypeRunnable', priority, ComputeCost.Medium);
 		this.declaration = declaration;
 	}
@@ -640,6 +640,18 @@ export class MethodContextProvider extends ClassPropertyContextProvider<tt.Metho
 		if (session.enableBlueprintSearch()) {
 			result.addPrimary(new SimilarMethodRunnable(session, languageService, context, this.declaration));
 		}
+		super.provide(result, session, languageService, context, token);
+		result.addSecondary(new PropertiesTypeRunnable(session, languageService, context, this.declaration));
+	}
+}
+
+export class AccessorProvider extends ClassPropertyContextProvider<tt.GetAccessorDeclaration | tt.SetAccessorDeclaration> {
+
+	constructor(declaration: tt.GetAccessorDeclaration | tt.SetAccessorDeclaration, tokenInfo: TokenInfo, computeContext: ProviderComputeContext) {
+		super(declaration, tokenInfo, computeContext);
+	}
+
+	public override provide(result: ContextRunnableCollector, session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, token: tt.CancellationToken): void {
 		super.provide(result, session, languageService, context, token);
 		result.addSecondary(new PropertiesTypeRunnable(session, languageService, context, this.declaration));
 	}

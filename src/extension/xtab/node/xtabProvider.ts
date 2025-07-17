@@ -42,7 +42,7 @@ import { Delayer, DelaySession } from '../../inlineEdits/common/delayer';
 import { editWouldDeleteWhatWasJustInserted } from '../../inlineEdits/common/ghNearbyNesProvider';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
-import { AREA_AROUND_END_TAG, AREA_AROUND_START_TAG, CODE_TO_EDIT_END_TAG, CODE_TO_EDIT_START_TAG, createTaggedCurrentFileContentUsingPagedClipping, CURSOR_TAG, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/promptCrafting';
+import { AREA_AROUND_END_TAG, AREA_AROUND_START_TAG, CODE_TO_EDIT_END_TAG, CODE_TO_EDIT_START_TAG, createTaggedCurrentFileContentUsingPagedClipping, CURSOR_TAG, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/promptCrafting';
 import { XtabEndpoint } from './xtabEndpoint';
 import { linesWithBackticksRemoved, toLines } from './xtabUtils';
 
@@ -219,6 +219,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 				isCodexV21NesUnified: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabCodexV21NesUnified, this.expService),
 				useSimplifiedPrompt: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseSimplifiedPrompt, this.expService),
 				useXtab275Prompting: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseXtab275Prompting, this.expService),
+				useNes41Miniv3Prompting: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabUseNes41Miniv3Prompting, this.expService),
 			});
 			promptOptions = {
 				promptingStrategy,
@@ -783,7 +784,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		}
 	}
 
-	private determinePromptingStrategy({ isXtabUnifiedModel, isCodexV21NesUnified, useSimplifiedPrompt, useXtab275Prompting }: { isXtabUnifiedModel: boolean; isCodexV21NesUnified: boolean; useSimplifiedPrompt: boolean; useXtab275Prompting: boolean }): xtabPromptOptions.PromptingStrategy | undefined {
+	private determinePromptingStrategy({ isXtabUnifiedModel, isCodexV21NesUnified, useSimplifiedPrompt, useXtab275Prompting, useNes41Miniv3Prompting }: { isXtabUnifiedModel: boolean; isCodexV21NesUnified: boolean; useSimplifiedPrompt: boolean; useXtab275Prompting: boolean; useNes41Miniv3Prompting: boolean }): xtabPromptOptions.PromptingStrategy | undefined {
 		if (isXtabUnifiedModel) {
 			return xtabPromptOptions.PromptingStrategy.UnifiedModel;
 		} else if (isCodexV21NesUnified) {
@@ -792,6 +793,8 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 			return xtabPromptOptions.PromptingStrategy.SimplifiedSystemPrompt;
 		} else if (useXtab275Prompting) {
 			return xtabPromptOptions.PromptingStrategy.Xtab275;
+		} else if (useNes41Miniv3Prompting) {
+			return xtabPromptOptions.PromptingStrategy.Nes41Miniv3;
 		} else {
 			return undefined;
 		}
@@ -806,6 +809,8 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 				return simplifiedPrompt;
 			case xtabPromptOptions.PromptingStrategy.Xtab275:
 				return xtab275SystemPrompt;
+			case xtabPromptOptions.PromptingStrategy.Nes41Miniv3:
+				return nes41Miniv3SystemPrompt;
 			default:
 				return systemPromptTemplate;
 		}
@@ -838,10 +843,9 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 
 	private static getPredictionContents(editWindowLines: readonly string[], promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined): string {
 		if (promptingStrategy === xtabPromptOptions.PromptingStrategy.UnifiedModel ||
-			promptingStrategy === xtabPromptOptions.PromptingStrategy.Codexv21NesUnified
+			promptingStrategy === xtabPromptOptions.PromptingStrategy.Codexv21NesUnified ||
+			promptingStrategy === xtabPromptOptions.PromptingStrategy.Nes41Miniv3
 		) {
-			return editWindowLines.join('\n');
-		} else if (promptingStrategy === xtabPromptOptions.PromptingStrategy.SimplifiedSystemPrompt) {
 			return ['<EDIT>', ...editWindowLines, '</EDIT>'].join('\n');
 		} else if (promptingStrategy === xtabPromptOptions.PromptingStrategy.Xtab275) {
 			return editWindowLines.join('\n');
