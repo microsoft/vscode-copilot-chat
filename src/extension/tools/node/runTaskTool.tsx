@@ -205,7 +205,7 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 				taskLabel = input.id;
 			}
 		} catch { }
-		return { workspaceFolder, task, taskLabel };
+		return { workspaceFolder, task, taskLabel: task.label || taskLabel };
 	}
 }
 
