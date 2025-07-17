@@ -120,7 +120,7 @@ export class PromptFileContextContribution extends Disposable {
 							`---`,
 							`mode: 'agent'`,
 							`description: This prompt is used to generate a new issue template for GitHub repositories.`,
-							`model: GPT-4.1`,
+							`model: ${this.models[0] || 'GPT-4.1'}`,
 							`tools: ['changes', 'codebase', 'editFiles', 'extensions', 'fetch', 'findTestFiles', 'githubRepo', 'new', 'openSimpleBrowser', 'problems', 'runCommands', 'runNotebooks', 'runTasks', 'runTests', 'search', 'searchResults', 'terminalLastCommand', 'terminalSelection', 'testFailure', 'usages', 'vscodeAPI']`,
 							`---`,
 							`Generate a new issue template for a GitHub repository.`,
