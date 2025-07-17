@@ -86,7 +86,8 @@ export class CodebaseToolCallingLoop extends ToolCallingLoop<ICodebaseToolCallin
 			false,
 			{
 				messageId: randomUUID(), // @TODO@joyceerhl
-				messageSource: CodebaseToolCallingLoop.ID
+				messageSource: CodebaseToolCallingLoop.ID,
+				turnIndex: this.options.conversation.turns.length.toString(),
 			},
 			{ intent: true }
 		);
