@@ -959,19 +959,17 @@ class RunnableResultManager implements vscode.Disposable {
 					items.set(key, item);
 				}
 			};
-			// Clear all within runnable results that don't contain the requested position.
-			for (let i = 0; i < this.withInRangeRunnableResults.length;) {
-				const entry = this.withInRangeRunnableResults[i];
-				if (entry.range.contains(position)) {
-					i++;
-					continue;
-				}
-				const id = entry.resultId;
-				this.results.delete(id);
-				this.withInRangeRunnableResults.splice(i, 1);
-			}
 			for (const [id, item] of this.results.entries()) {
-				handleRunnableResult(id, item);
+				const scope = item.cache?.scope;
+				if (scope === undefined || scope.kind !== protocol.CacheScopeKind.WithinRange) {
+					handleRunnableResult(id, item);
+				} else {
+					const r = scope.range;
+					const range = new vscode.Range(r.start.line, r.start.character, r.end.line, r.end.character);
+					if (range.contains(position)) {
+						handleRunnableResult(id, item);
+					}
+				}
 			}
 		}
 		return { client, clientOnTimeout, server, itemMap: items, resultMap: new Map(this.results) };

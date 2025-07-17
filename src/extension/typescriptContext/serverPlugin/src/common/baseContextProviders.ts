@@ -202,12 +202,6 @@ export class TypeOfLocalsRunnable extends AbstractContextRunnable {
 			if (this.excludes.has(symbol)) {
 				continue;
 			}
-			const symbolSourceFile = Symbols.getPrimarySourceFile(symbol);
-			// If the symbol is not defined in the current source file we skip it. It would otherwise
-			// pollute with too many types from the global scope from other files.
-			if (symbolSourceFile !== sourceFile || this.skipSourceFile(symbolSourceFile)) {
-				continue;
-			}
 			const declaration: tt.VariableDeclaration | undefined = Symbols.getDeclaration(symbol, ts.SyntaxKind.VariableDeclaration);
 			if (declaration === undefined) {
 				continue;
