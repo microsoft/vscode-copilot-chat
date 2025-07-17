@@ -80,11 +80,6 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			this._modelRegistries.push(instantiationService.createInstance(GeminiBYOKModelRegistry));
 			this._modelRegistries.push(instantiationService.createInstance(GroqModelRegistry));
 			this._modelRegistries.push(instantiationService.createInstance(OAIBYOKModelRegistry));
-			// OpenAI Compatible providers (Like LM Studio, etc.)
-			const openAICompatibleProviders = this._configurationService.getConfig(ConfigKey.OpenAICompatibleProviders);
-			for (const provider of openAICompatibleProviders) {
-				this._modelRegistries.push(instantiationService.createInstance(OAICompatibleModelRegistry, provider.name, provider.url));
-			}
 			// Custom providers from storage
 			const customProviders = await this._byokStorageService.getCustomProviders();
 			for (const customProvider of customProviders) {
