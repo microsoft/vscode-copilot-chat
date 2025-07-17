@@ -18,6 +18,7 @@ import { joinPath } from '../../../../util/vs/base/common/resources';
 import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString, Uri } from '../../../../vscodeTypes';
 import { ToolName } from '../../common/toolNames';
 import { ToolRegistry } from '../../common/toolsRegistry';
+import { getTaskRepresentation } from '../toolUtils.task';
 
 interface ICreateAndRunTaskToolInput {
 	workspaceFolder: string;
@@ -107,6 +108,23 @@ export class CreateAndRunTaskTool implements vscode.LanguageModelTool<ICreateAnd
 				confirmationMessages: undefined
 			};
 		}
+		if (this.tasksService.hasTask(workspaceFolder, task)) {
+			const position = workspaceFolder && task && await this.tasksService.getTaskConfigPosition(workspaceFolder, task);
+			const link = (s: string) => position ? `[${s}](${position.uri.toString()}#${position.range.startLineNumber}-${position.range.endLineNumber})` : s;
+			const trustedMark = (value: string) => {
+				const s = new MarkdownString(value);
+				s.isTrusted = true;
+				return s;
+			};
+
+			return {
+				invocationMessage: trustedMark(l10n.t`Running ${link(task.label)}`),
+				pastTenseMessage: trustedMark(task?.isBackground ? l10n.t`Started ${link(task.label)}` : l10n.t`Ran ${link(task.label)}`),
+				confirmationMessages: task && task.group !== 'build'
+					? { title: l10n.t`Allow task run?`, message: trustedMark(l10n.t`Allow Copilot to run the \`${task.type}\` task ${link(`\`${getTaskRepresentation(task)}\``)}?`) }
+					: undefined
+			};
+		}
 		try {
 			await this.fileSystemService.stat(Uri.parse(tasksFilePath));
 			return {
@@ -125,7 +143,6 @@ export class CreateAndRunTaskTool implements vscode.LanguageModelTool<ICreateAnd
 					)
 				}
 			};
-
 		}
 	}
 }
