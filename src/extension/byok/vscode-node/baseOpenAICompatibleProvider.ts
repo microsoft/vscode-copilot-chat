@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Disposable, lm } from 'vscode';
+import { CancellationToken, ChatResponseFragment2, Disposable, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatProvider2, LanguageModelChatRequestHandleOptions, lm, Progress } from 'vscode';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
@@ -74,17 +74,76 @@ export abstract class BaseOpenAICompatibleBYOKRegistry implements BYOKModelRegis
 
 			const modelUrl = (config as BYOKPerModelConfig)?.deploymentUrl ?? `${this._baseUrl}/chat/completions`;
 			const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey, modelUrl);
-			const provider = this._instantiationService.createInstance(CopilotLanguageModelWrapper, openAIChatEndpoint, lmModelMetadata);
+			const wrapper = this._instantiationService.createInstance(CopilotLanguageModelWrapper, openAIChatEndpoint);
+
+			// Convert the legacy metadata to new API format
+			const modelInformation: LanguageModelChatInformation = {
+				id: `${this.name}-${config.modelId}`,
+				name: lmModelMetadata.name,
+				family: lmModelMetadata.family,
+				description: lmModelMetadata.description,
+				version: lmModelMetadata.version,
+				maxInputTokens: lmModelMetadata.maxInputTokens,
+				maxOutputTokens: lmModelMetadata.maxOutputTokens,
+				capabilities: {
+					toolCalling: lmModelMetadata.capabilities?.toolCalling,
+					vision: lmModelMetadata.capabilities?.vision,
+				},
+				auth: true
+			};
+
+			const provider = new BYOKCopilotWrapperProvider(wrapper, modelInformation);
 
 			const disposable = lm.registerChatModelProvider(
-				`${this.name}-${config.modelId}`,
-				provider,
-				lmModelMetadata
+				this.name,
+				provider
 			);
 			return disposable;
 		} catch (e) {
 			this._logService.logger.error(`Error registering ${this.name} model ${config.modelId}`);
 			throw e;
 		}
+	}
+}
+
+/**
+ * Wrapper class to adapt CopilotLanguageModelWrapper to the new LanguageModelChatProvider2 API
+ */
+class BYOKCopilotWrapperProvider implements LanguageModelChatProvider2<LanguageModelChatInformation> {
+	constructor(
+		private readonly wrapper: CopilotLanguageModelWrapper,
+		private readonly modelInfo: LanguageModelChatInformation
+	) { }
+
+	async prepareLanguageModelChat(options: { silent: boolean }, token: CancellationToken): Promise<LanguageModelChatInformation[]> {
+		return [this.modelInfo];
+	}
+
+	async provideLanguageModelChatResponse(
+		model: LanguageModelChatInformation,
+		messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>,
+		options: LanguageModelChatRequestHandleOptions,
+		progress: Progress<ChatResponseFragment2>,
+		token: CancellationToken
+	): Promise<any> {
+		// The wrapper expects the old interface, so we need to adapt
+		return this.wrapper.provideLanguageModelResponse(
+			messages as any,
+			{
+				...options,
+				modelOptions: options.modelOptions
+			} as any,
+			options.extensionId,
+			progress,
+			token
+		);
+	}
+
+	async provideTokenCount(
+		model: LanguageModelChatInformation,
+		text: string | LanguageModelChatMessage | LanguageModelChatMessage2,
+		token: CancellationToken
+	): Promise<number> {
+		return this.wrapper.provideTokenCount(text as any);
 	}
 }

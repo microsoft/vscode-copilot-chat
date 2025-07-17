@@ -38,7 +38,7 @@ suite('CopilotLanguageModelWrapper', () => {
 				acquireTokenizer: () => {
 					return accessor.get(ITokenizerProvider).acquireTokenizer({ tokenizer: TokenizerType.CL100K });
 				}
-			} as any, {} as any);
+			} as any);
 		});
 
 		const runTest = async (messages: vscode.LanguageModelChatMessage[], tools?: vscode.LanguageModelChatTool[], errMsg?: string) => {
@@ -66,7 +66,7 @@ suite('CopilotLanguageModelWrapper', () => {
 		let wrapper: CopilotLanguageModelWrapper;
 		setup(async () => {
 			const endpoint = await accessor.get(IEndpointProvider).getChatEndpoint('gpt-4.1');
-			wrapper = instaService.createInstance(CopilotLanguageModelWrapper, endpoint, {} as any);
+			wrapper = instaService.createInstance(CopilotLanguageModelWrapper, endpoint);
 		});
 		const runTest = async (messages: vscode.LanguageModelChatMessage[], tools?: vscode.LanguageModelChatTool[]) => {
 			await wrapper.provideLanguageModelResponse(messages, { tools }, vscode.extensions.all[0].id, null!, null!);

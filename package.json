@@ -1758,10 +1758,17 @@
 		],
 		"languageModels": [
 			{
-				"vendor": "copilot"
+				"vendor": "copilot",
+				"displayName": "Copilot",
+				"managementCommand": "foo.bar"
 			},
 			{
-				"vendor": "copilot-byok"
+				"vendor": "anthropic",
+				"displayName": "Anthropic"
+			},
+			{
+				"vendor": "openrouter",
+				"displayName": "OpenRouter"
 			}
 		],
 		"interactiveSession": [
@@ -2121,13 +2128,6 @@
 				"title": "Feedback",
 				"icon": "$(feedback)",
 				"enablement": "!github.copilot.search.feedback.sent"
-			},
-			{
-				"command": "github.copilot.chat.manageModels",
-				"title": "Manage Models...",
-				"icon": "$(settings-gear)",
-				"category": "GitHub Copilot",
-				"enablement": "github.copilot.byokEnabled"
 			},
 			{
 				"command": "github.copilot.chat.debug.showElements",
@@ -2913,12 +2913,6 @@
 			}
 		],
 		"menus": {
-			"chat/modelPicker": [
-				{
-					"command": "github.copilot.chat.manageModels",
-					"when": "github.copilot.byokEnabled"
-				}
-			],
 			"editor/title": [
 				{
 					"command": "github.copilot.debug.generateInlineEditTests",
