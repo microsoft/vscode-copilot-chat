@@ -16,6 +16,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { Uri } from '../../../../vscodeTypes';
 import { getStructure } from '../../../context/node/resolvers/selectionContextHelpers';
 import { CompositeElement } from '../base/common';
+import { IgnoredFiles } from '../base/ignoredFiles';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { LegacySafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
@@ -54,7 +55,7 @@ export class CodeMapperPatchRewritePrompt extends PromptElement<CodeMapperPrompt
 
 		const isIgnored = await this.ignoreService.isCopilotIgnored(document.uri);
 		if (isIgnored) {
-			return <ignoredFiles value={[document.uri]} />;
+			return <IgnoredFiles uris={document.uri} reason={isIgnored} />;
 		}
 
 		const inputDocCharLimit = (sizing.endpoint.modelMaxPromptTokens / 3) * 4; // consume one 3rd of the model window, estimating roughly 4 chars per token;
@@ -234,7 +235,7 @@ export class CodeMapperFullRewritePrompt extends PromptElement<CodeMapperPromptP
 		const document = this.props.request.existingDocument;
 		const isIgnored = await this.ignoreService.isCopilotIgnored(document.uri);
 		if (isIgnored) {
-			return <ignoredFiles value={[document.uri]} />;
+			return <IgnoredFiles uris={document.uri} reason={isIgnored} />;
 		}
 
 		const summarized = document instanceof NotebookDocumentSnapshot ?

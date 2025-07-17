@@ -12,6 +12,7 @@ import { GenericInlinePromptProps } from '../../../context/node/resolvers/generi
 import { SelectionSplitKind, SummarizedDocumentData, SummarizedDocumentWithSelection } from '../../../intents/node/testIntent/summarizedDocumentWithSelection';
 import { EarlyStopping, LeadingMarkdownStreaming } from '../../../prompt/node/intents';
 import { TextPieceClassifiers } from '../../../prompt/node/streamingEdits';
+import { IgnoredFiles } from '../base/ignoredFiles';
 import { InstructionMessage } from '../base/instructionMessage';
 import { LegacySafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
@@ -49,7 +50,7 @@ export class InlineChatEditMarkdownPrompt extends PromptElement<InlineChatEditMa
 
 		const isIgnored = await this._ignoreService.isCopilotIgnored(context.document.uri);
 		if (isIgnored) {
-			return <ignoredFiles value={[this.props.documentContext.document.uri]} />;
+			return <IgnoredFiles uris={this.props.documentContext.document.uri} reason={isIgnored} />;
 		}
 
 		const data = await this._instantiationService.invokeFunction(SummarizedDocumentData.create,

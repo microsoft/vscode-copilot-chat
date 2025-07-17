@@ -5,13 +5,14 @@
 
 import { PromptElement, PromptElementProps, PromptPiece, PromptSizing, UserMessage } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
-import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
+import { IgnoreReason, IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { TreeSitterOffsetRange } from '../../../platform/parser/node/nodes';
 import { NodeToDocumentContext } from '../../../platform/parser/node/parserImpl';
 import { IParserService, treeSitterOffsetRangeToVSCodeRange as toRange, vscodeToTreeSitterOffsetRange as toTSOffsetRange } from '../../../platform/parser/node/parserService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { CodeContextRegion, CodeContextTracker } from '../../inlineChat/node/codeContextRegion';
+import { IgnoredFiles } from '../../prompts/node/base/ignoredFiles';
 import { IDocumentContext } from './documentContext';
 
 export type Props = PromptElementProps<{
@@ -29,6 +30,7 @@ export type State =
 	}
 	| {
 		k: 'ignored';
+		reason: IgnoreReason;
 	}
 	;
 
@@ -44,8 +46,9 @@ export class DefinitionAroundCursor extends PromptElement<Props, State> {
 	}
 
 	override async prepare(sizing: PromptSizing, progress?: vscode.Progress<vscode.ChatResponseProgressPart | vscode.ChatResponseReferencePart> | undefined, token?: vscode.CancellationToken | undefined): Promise<State> {
-		if (await this._ignoreService.isCopilotIgnored(this.props.documentContext.document.uri)) {
-			return { k: 'ignored' };
+		const ignored = await this._ignoreService.isCopilotIgnored(this.props.documentContext.document.uri);
+		if (ignored) {
+			return { k: 'ignored', reason: ignored };
 		}
 		const nodeToDocument = this.props.nodeToDocument ?? await determineNodeToDocument(this._parserService, this._telemetryService, this.props.documentContext);
 		const contextInfo = generateDocContext(this.props.endpointInfo, this.props.documentContext, nodeToDocument.range);
@@ -58,7 +61,7 @@ export class DefinitionAroundCursor extends PromptElement<Props, State> {
 
 	override render(state: State, sizing: PromptSizing): PromptPiece<any, any> | undefined {
 		if (state.k === 'ignored') {
-			return <ignoredFiles value={[this.props.documentContext.document.uri]} />;
+			return <IgnoredFiles uris={this.props.documentContext.document.uri} reason={state.reason} />;
 		}
 		const codeExcerpt = state.codeExcerptToDocument.generatePrompt().join('\n');
 		return (

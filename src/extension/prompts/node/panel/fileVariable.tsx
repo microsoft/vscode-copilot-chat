@@ -23,6 +23,7 @@ import { basename } from '../../../../util/vs/base/common/resources';
 import { splitLines } from '../../../../util/vs/base/common/strings';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { Location, Position, Range, Uri } from '../../../../vscodeTypes';
+import { IgnoredFiles } from '../base/ignoredFiles';
 import { IPromptEndpoint } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 import { SummarizedDocumentLineNumberStyle } from '../inline/summarizedDocument/implementation';
@@ -56,8 +57,9 @@ export class FileVariable extends PromptElement<FileVariableProps, unknown> {
 	override async render(_state: unknown, sizing: PromptSizing) {
 		const uri = 'uri' in this.props.variableValue ? this.props.variableValue.uri : this.props.variableValue;
 
-		if (await this.ignoreService.isCopilotIgnored(uri)) {
-			return <ignoredFiles value={[uri]} />;
+		const ignored = await this.ignoreService.isCopilotIgnored(uri);
+		if (ignored) {
+			return <IgnoredFiles uris={uri} reason={ignored} />;
 		}
 
 		if (uri.scheme === 'untitled' && !this.workspaceService.textDocuments.some(doc => doc.uri.toString() === uri.toString())) {

@@ -12,7 +12,7 @@ import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getE
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession, NullEditSurvivalTrackingSession } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
-import { HAS_IGNORED_FILES_MESSAGE } from '../../../platform/ignore/common/ignoreService';
+import { HAS_IGNORED_FILES_MESSAGE, IgnoreReason } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { FinishedCallback, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
@@ -132,7 +132,7 @@ export class DefaultIntentRequestHandler {
 				chatResult.errorDetails = intentInvocation.modifyErrorDetails(chatResult.errorDetails, resultDetails.response);
 			}
 
-			if (resultDetails.hadIgnoredFiles) {
+			if (resultDetails.hadIgnoredFiles === IgnoreReason.ContentExclusion) {
 				this.stream.markdown(HAS_IGNORED_FILES_MESSAGE);
 			}
 
@@ -468,7 +468,7 @@ interface IInternalRequestResult {
 	response: ChatResponse;
 	round: IToolCallRound;
 	chatResult?: ChatResult; // TODO should just be metadata
-	hadIgnoredFiles: boolean;
+	hadIgnoredFiles: IgnoreReason;
 	lastRequestMessages: Raw.ChatMessage[];
 	lastRequestTelemetry: ChatTelemetry;
 	availableToolCount: number;

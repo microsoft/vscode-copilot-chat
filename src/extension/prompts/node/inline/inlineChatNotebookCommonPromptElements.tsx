@@ -6,6 +6,7 @@
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptSizing, TextChunk, TokenLimit, UserMessage } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
+import { IgnoreReason } from '../../../../platform/ignore/common/ignoreService';
 import { INotebookService, PipPackage, VariablesResult } from '../../../../platform/notebook/common/notebookService';
 import { ITabsAndEditorsService } from '../../../../platform/tabs/common/tabsAndEditorsService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -24,7 +25,7 @@ import { ProjectedDocument } from './summarizedDocument/summarizeDocument';
 
 export interface InlineChatNotebookBasePromptState {
 	summarizedDocument: PromptingSummarizedDocument;
-	isIgnored: boolean;
+	isIgnored: IgnoreReason;
 	priorities: NotebookPromptPriority;
 	tagBasedDocumentSummary: boolean;
 }

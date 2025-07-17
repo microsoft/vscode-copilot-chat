@@ -15,6 +15,7 @@ import { Schemas } from '../../../../util/vs/base/common/network';
 import * as path from '../../../../util/vs/base/common/path';
 import { Position, Range } from '../../../../vscodeTypes';
 import { PromptReference } from '../../../prompt/common/conversation';
+import { IgnoredFiles } from '../base/ignoredFiles';
 import { IPromptEndpoint } from '../base/promptRenderer';
 import { CodeBlock } from './safeElements';
 
@@ -57,7 +58,7 @@ export class CurrentEditor extends PromptElement<CurrentEditorPromptProps> {
 
 		const isIgnored = await this._ignoreService.isCopilotIgnored(document.uri);
 		if (isIgnored) {
-			return <ignoredFiles value={[document.uri]} />;
+			return <IgnoredFiles uris={document.uri} reason={isIgnored} />;
 		}
 
 		if (document.getText().trim().length === 0) {
@@ -101,7 +102,7 @@ export class CurrentEditor extends PromptElement<CurrentEditorPromptProps> {
 		const document = NotebookDocumentSnapshot.create(notebook, format);
 		const isIgnored = await this._ignoreService.isCopilotIgnored(document.uri);
 		if (isIgnored) {
-			return <ignoredFiles value={[document.uri]} />;
+			return <IgnoredFiles uris={document.uri} reason={isIgnored} />;
 		}
 
 		if (document.getText().trim().length === 0) {
@@ -144,7 +145,7 @@ export class CurrentEditor extends PromptElement<CurrentEditorPromptProps> {
 		const document = NotebookDocumentSnapshot.create(editor.notebook, format);
 		const isIgnored = await this._ignoreService.isCopilotIgnored(document.uri);
 		if (isIgnored) {
-			return <ignoredFiles value={[document.uri]} />;
+			return <IgnoredFiles uris={document.uri} reason={isIgnored} />;
 		}
 
 		if (document.getText().trim().length === 0) {

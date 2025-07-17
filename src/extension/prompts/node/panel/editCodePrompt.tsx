@@ -28,6 +28,7 @@ import { Turn } from '../../../prompt/common/conversation';
 import { INotebookWorkingSetEntry, isTextDocumentWorkingSetEntry, ITextDocumentWorkingSetEntry, IWorkingSet, WorkingSetEntryState } from '../../../prompt/common/intents';
 import { CompositeElement } from '../base/common';
 import { CopilotIdentityRules } from '../base/copilotIdentity';
+import { IgnoredFiles } from '../base/ignoredFiles';
 import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { LegacySafetyRules } from '../base/safetyRules';
@@ -392,7 +393,7 @@ export class TextDocumentWorkingSetEntry extends PromptElement<TextDocumentWorki
 
 		const isIgnored = await this._ignoreService.isCopilotIgnored(document.uri);
 		if (isIgnored) {
-			return <ignoredFiles value={[document.uri]} />;
+			return <IgnoredFiles uris={document.uri} reason={isIgnored} />;
 		}
 
 		const s = this.instantiationService.createInstance(DocumentSummarizer);
@@ -453,7 +454,7 @@ export class NotebookWorkingSetEntry extends PromptElement<NotebookWorkingSetEnt
 
 		const isIgnored = await this._ignoreService.isCopilotIgnored(document.uri);
 		if (isIgnored) {
-			return <ignoredFiles value={[document.uri]} />;
+			return <IgnoredFiles uris={document.uri} reason={isIgnored} />;
 		}
 
 		// TODO@rebornix ensure notebook is open
@@ -522,7 +523,7 @@ class FileSelection extends PromptElement<CurrentFileSelectionPromptProps> {
 
 		const isIgnored = await this._ignoreService.isCopilotIgnored(document.uri);
 		if (isIgnored) {
-			return <ignoredFiles value={[document.uri]} />;
+			return <IgnoredFiles uris={document.uri} reason={isIgnored} />;
 		}
 
 		if (document.lineCount >= 4) {

@@ -10,6 +10,7 @@ import { IAuthenticationChatUpgradeService } from '../../../platform/authenticat
 import { FetchStreamSource, IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { IgnoredMetadata, IgnoreReason } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { FinishedCallback, OpenAiFunctionDef, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
@@ -449,6 +450,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		this.turn.setMetadata(interactionOutcomeComputer.interactionOutcome);
 		const toolInputRetry = isToolInputFailure ? (this.toolCallRounds.at(-1)?.toolInputRetry || 0) + 1 : 0;
+		const hadIgnoredFiles = buildPromptResult.metadata.get(IgnoredMetadata)?.reason ?? (buildPromptResult.hasIgnoredFiles ? IgnoreReason.ContentExclusion : IgnoreReason.NotIgnored);
 		if (fetchResult.type === ChatFetchResponseType.Success) {
 			return {
 				response: fetchResult,
@@ -459,7 +461,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					undefined
 				),
 				chatResult,
-				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
+				hadIgnoredFiles,
 				lastRequestMessages: buildPromptResult.messages,
 				availableToolCount: availableTools.length
 			};
@@ -467,7 +469,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		return {
 			response: fetchResult,
-			hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
+			hadIgnoredFiles,
 			lastRequestMessages: buildPromptResult.messages,
 			availableToolCount: availableTools.length,
 			round: new ToolCallRound('', toolCalls, toolInputRetry, undefined)
@@ -636,7 +638,7 @@ export interface IToolCallSingleResult {
 	response: ChatResponse;
 	round: IToolCallRound;
 	chatResult?: ChatResult; // TODO should just be metadata
-	hadIgnoredFiles: boolean;
+	hadIgnoredFiles: IgnoreReason;
 	lastRequestMessages: Raw.ChatMessage[];
 	availableToolCount: number;
 }

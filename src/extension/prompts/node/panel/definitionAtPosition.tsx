@@ -7,7 +7,7 @@ import { PromptElement, PromptElementProps, PromptPiece, PromptSizing } from '@v
 import type * as vscode from 'vscode';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
-import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
+import { IgnoreReason, IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILanguageFeaturesService, isLocationLink } from '../../../../platform/languages/common/languageFeaturesService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IParserService } from '../../../../platform/parser/node/parserService';
@@ -19,6 +19,7 @@ import * as arrays from '../../../../util/vs/base/common/arrays';
 import { ExtensionMode, Selection, Uri } from '../../../../vscodeTypes';
 import { asyncComputeWithTimeBudget } from '../../../context/node/resolvers/selectionContextHelpers';
 import { determineNodeToDocument } from '../../../prompt/node/definitionAroundCursor';
+import { IgnoredFiles } from '../base/ignoredFiles';
 import { CodeBlock } from './safeElements';
 
 type Props = PromptElementProps<{
@@ -49,6 +50,7 @@ export type State =
 	| {
 		/** Document should be ignored by Copilot */
 		k: 'ignored';
+		reason: IgnoreReason;
 	}
 	;
 
@@ -74,8 +76,9 @@ export class DefinitionAtPosition extends PromptElement<Props, State> {
 	}
 
 	override async prepare(): Promise<State> {
-		if (await this._ignoreService.isCopilotIgnored(this.props.document.uri)) {
-			return { k: 'ignored' };
+		const ignore = await this._ignoreService.isCopilotIgnored(this.props.document.uri);
+		if (ignore) {
+			return { k: 'ignored', reason: ignore };
 		}
 
 		const timeout = this._vscodeExtensionCtxService.extensionMode === ExtensionMode.Test
@@ -98,7 +101,7 @@ export class DefinitionAtPosition extends PromptElement<Props, State> {
 	override render(state: State, sizing: PromptSizing): PromptPiece<any, any> | undefined {
 
 		if (state.k === 'ignored') {
-			return <ignoredFiles value={[this.props.document.uri]} />;
+			return <IgnoredFiles uris={this.props.document.uri} reason={state.reason} />;
 		}
 
 		const { document, position } = this.props;

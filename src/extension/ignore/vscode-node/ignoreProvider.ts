@@ -15,7 +15,7 @@ class IgnoredFileProvider implements vscode.LanguageModelIgnoredFileProvider {
 	) { }
 
 	provideFileIgnored(uri: vscode.Uri, token: vscode.CancellationToken): vscode.ProviderResult<boolean> {
-		return this._ignoreService.isCopilotIgnored(uri);
+		return !!this._ignoreService.isCopilotIgnored(uri);
 	}
 }
 

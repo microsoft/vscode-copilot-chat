@@ -16,7 +16,7 @@ import { IGitService } from '../../git/common/gitService';
 import { ILogService } from '../../log/common/logService';
 import { ISearchService } from '../../search/common/searchService';
 import { IWorkspaceService } from '../../workspace/common/workspaceService';
-import { IIgnoreService } from '../common/ignoreService';
+import { ignoredSchemes, IgnoreReason, IIgnoreService } from '../common/ignoreService';
 import { IgnoreFile } from './ignoreFile';
 import { RemoteContentExclusion } from './remoteContentExclusion';
 
@@ -85,13 +85,19 @@ export class BaseIgnoreService implements IIgnoreService {
 		return this._remoteContentExclusions?.isRegexContextExclusionsEnabled ?? false;
 	}
 
-	public async isCopilotIgnored(file: URI, token?: CancellationToken): Promise<boolean> {
-		let copilotIgnored = false;
+	public async isCopilotIgnored(file: URI, token?: CancellationToken): Promise<IgnoreReason> {
+		if (ignoredSchemes.some(s => s === file.scheme)) {
+			return IgnoreReason.BehavioralExclusion;
+		}
+
 		if (this._copilotIgnoreEnabled) {
 			const localCopilotIgnored = this._copilotIgnoreFiles.isIgnored(file);
-			copilotIgnored = localCopilotIgnored || await (this._remoteContentExclusions?.isIgnored(file, token) ?? false);
+			const copilotIgnored = localCopilotIgnored || await (this._remoteContentExclusions?.isIgnored(file, token) ?? false);
+			if (copilotIgnored) {
+				return IgnoreReason.ContentExclusion;
+			}
 		}
-		return copilotIgnored;
+		return IgnoreReason.NotIgnored;
 	}
 
 

@@ -19,6 +19,7 @@ import { ExtensionMode, Location, Selection, Uri } from '../../../../vscodeTypes
 import { asyncComputeWithTimeBudget } from '../../../context/node/resolvers/selectionContextHelpers';
 import { determineNodeToDocument } from '../../../prompt/node/definitionAroundCursor';
 import { CodeBlock } from './safeElements';
+import { IgnoredFiles } from '../base/ignoredFiles';
 
 type Props = PromptElementProps<{
 	document: TextDocumentSnapshot;
@@ -60,8 +61,9 @@ export class ReferencesAtPosition extends PromptElement<Props> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		if (await this.ignoreService.isCopilotIgnored(this.props.document.uri)) {
-			return <ignoredFiles value={[this.props.document.uri]} />;
+		const ignored = await this.ignoreService.isCopilotIgnored(this.props.document.uri);
+		if (ignored) {
+			return <IgnoredFiles uris={this.props.document.uri} reason={ignored} />;
 		}
 
 		const timeout = this.extensionContext.extensionMode === ExtensionMode.Test

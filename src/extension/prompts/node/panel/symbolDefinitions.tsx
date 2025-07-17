@@ -7,7 +7,7 @@ import { PromptElement, PromptElementProps, PromptPiece, PromptSizing, UserMessa
 import type * as vscode from 'vscode';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
-import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
+import { IgnoreReason, IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILanguageFeaturesService } from '../../../../platform/languages/common/languageFeaturesService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { TreeSitterExpressionInfo, TreeSitterExpressionLocationInfo } from '../../../../platform/parser/node/nodes';
@@ -18,6 +18,7 @@ import { IWorkspaceService } from '../../../../platform/workspace/common/workspa
 import { ExtensionMode, Location, Uri } from '../../../../vscodeTypes';
 import { findAllReferencedClassDeclarationsInSelection, findAllReferencedFunctionImplementationsInSelection, findAllReferencedTypeDeclarationsInSelection } from '../../../context/node/resolvers/selectionContextHelpers';
 import { PromptReference } from '../../../prompt/common/conversation';
+import { IgnoredFiles } from '../base/ignoredFiles';
 import { EmbeddedInsideUserMessage, embeddedInsideUserMessageDefault } from '../base/promptElement';
 import { Tag } from '../base/tag';
 import { CodeBlock } from './safeElements';
@@ -38,7 +39,7 @@ type Props = PromptElementProps<EmbeddedInsideUserMessage & {
 
 interface State {
 	activeDocument: TextDocumentSnapshot | undefined;
-	isIgnored: boolean;
+	isIgnored: IgnoreReason;
 	implementations: [/* header/description */ string, TreeSitterExpressionLocationInfo[]][];
 }
 
@@ -61,7 +62,7 @@ export class SymbolDefinitions extends PromptElement<Props, State> {
 	}
 
 	override async prepare(): Promise<State> {
-		const emptyState: State = { implementations: [], activeDocument: undefined, isIgnored: false };
+		const emptyState: State = { implementations: [], activeDocument: undefined, isIgnored: IgnoreReason.NotIgnored };
 
 		let { document: activeDocument, range: selection } = this.props;
 
@@ -78,8 +79,9 @@ export class SymbolDefinitions extends PromptElement<Props, State> {
 			return emptyState;
 		}
 
-		if (await this.ignoreService.isCopilotIgnored(activeDocument.uri)) {
-			return { ...emptyState, isIgnored: true };
+		const isIgnored = await this.ignoreService.isCopilotIgnored(activeDocument.uri);
+		if (isIgnored) {
+			return { ...emptyState, isIgnored };
 		}
 
 		const timeout = this.extensionContext.extensionMode === ExtensionMode.Test
@@ -97,7 +99,7 @@ export class SymbolDefinitions extends PromptElement<Props, State> {
 			const impls = await findImpls(this.parserService, this.logService, this.telemetryService, this.languageFeaturesService, this.workspaceService, activeDocument, selection, timeout);
 			implementations.push([header, impls]);
 		}
-		return { implementations, activeDocument, isIgnored: false };
+		return { implementations, activeDocument, isIgnored: IgnoreReason.NotIgnored };
 	}
 
 	override render(state: State, sizing: PromptSizing): PromptPiece<any, any> | undefined {
@@ -107,7 +109,7 @@ export class SymbolDefinitions extends PromptElement<Props, State> {
 
 		const activeDocumentUri = state.activeDocument.uri;
 		if (state.isIgnored) {
-			return <ignoredFiles value={[activeDocumentUri]} />;
+			return <IgnoredFiles uris={activeDocumentUri} reason={state.isIgnored} />;
 		}
 
 		const combinedElements: UserMessage[] = [];

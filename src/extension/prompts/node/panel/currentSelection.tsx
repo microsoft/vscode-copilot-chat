@@ -6,12 +6,13 @@
 import { AssistantMessage, BasePromptElementProps, PromptElement, PromptPiece, PromptSizing, UserMessage } from '@vscode/prompt-tsx';
 import type { Range } from 'vscode';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
-import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
+import { IgnoreReason, IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { ITabsAndEditorsService } from '../../../../platform/tabs/common/tabsAndEditorsService';
 import * as path from '../../../../util/vs/base/common/path';
 import { Location } from '../../../../vscodeTypes';
 import { PromptReference } from '../../../prompt/common/conversation';
+import { IgnoredFiles } from '../base/ignoredFiles';
 import { CurrentEditor } from './currentEditor';
 import { CodeBlock } from './safeElements';
 
@@ -23,7 +24,7 @@ interface CurrentSelectionProps extends BasePromptElementProps {
 
 interface CurrentSelectionState {
 	exceedsTokenBudget: boolean;
-	isIgnored: boolean;
+	isIgnored: IgnoreReason;
 }
 
 export class CurrentSelection extends PromptElement<CurrentSelectionProps, CurrentSelectionState> {
@@ -39,7 +40,7 @@ export class CurrentSelection extends PromptElement<CurrentSelectionProps, Curre
 
 	override async prepare(sizing: PromptSizing): Promise<CurrentSelectionState> {
 		if (!this.props.document) {
-			return { isIgnored: false, exceedsTokenBudget: false };
+			return { isIgnored: IgnoreReason.NotIgnored, exceedsTokenBudget: false };
 		}
 		const isIgnored = await this.ignoreService.isCopilotIgnored(this.props.document.uri);
 
@@ -62,7 +63,7 @@ export class CurrentSelection extends PromptElement<CurrentSelectionProps, Curre
 		const urisUsed = [selection.activeDocument.uri];
 
 		if (state.isIgnored) {
-			return <ignoredFiles value={urisUsed} />;
+			return <IgnoredFiles uris={urisUsed} reason={state.isIgnored} />;
 		}
 		if (state.exceedsTokenBudget) {
 			this.logger.logger.info(`Dropped current selection (${sizing.tokenBudget} / ${sizing.endpoint.modelMaxPromptTokens} tokens)`);
