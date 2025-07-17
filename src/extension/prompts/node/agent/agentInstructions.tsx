@@ -25,7 +25,7 @@ interface DefaultAgentPromptProps extends BasePromptElementProps {
  */
 export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
-		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.RunInTerminal);
+		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.RunInTerminal || tool.name === ToolName.RunInTerminalCore);
 		const hasReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ReplaceString);
 		const hasInsertEditTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
 		const hasApplyPatchTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ApplyPatch);
@@ -367,7 +367,7 @@ class ApplyPatchInstructions extends PromptElement<DefaultAgentPromptProps> {
 
 class GenericEditingTips extends PromptElement<DefaultAgentPromptProps> {
 	override render() {
-		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.RunInTerminal);
+		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.RunInTerminal || tool.name === ToolName.RunInTerminalCore);
 		return <>
 			Follow best practices when editing files. If a popular external library exists to solve a problem, use it and properly install the package e.g. {hasTerminalTool && 'with "npm install" or '}creating a "requirements.txt".<br />
 			If you're building a webapp from scratch, give it a beautiful and modern UI.<br />

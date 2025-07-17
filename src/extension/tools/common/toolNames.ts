@@ -17,6 +17,7 @@ export const enum ToolName {
 	ListDirectory = 'list_dir',
 	GetErrors = 'get_errors',
 	RunInTerminal = 'run_in_terminal',
+	RunInTerminalCore = 'run_in_terminal2',
 	GetTerminalOutput = 'get_terminal_output',
 	GetScmChanges = 'get_changed_files',
 	UpdateUserPreferences = 'update_user_preferences',
