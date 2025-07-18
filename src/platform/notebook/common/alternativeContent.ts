@@ -77,13 +77,13 @@ export class AlternativeNotebookContentService implements IAlternativeNotebookCo
 
 export function getAltNotebookRange(range: Range, cellUri: Uri, notebook: NotebookDocument, format: AlternativeContentFormat) {
 	// If we have a range for cell, then translate that from notebook cell range to alternative range.
-	const cellIndex = findCell(cellUri, notebook)?.index;
-	if (cellIndex === undefined || cellIndex === -1) {
+	const cell = findCell(cellUri, notebook);
+	if (!cell) {
 		return undefined;
 	}
 	const doc = getAlternativeNotebookDocumentProvider(format).getAlternativeDocument(notebook);
 	return new Range(
-		doc.fromCellPosition(cellIndex, range.start),
-		doc.fromCellPosition(cellIndex, range.end),
+		doc.fromCellPosition(cell, range.start),
+		doc.fromCellPosition(cell, range.end),
 	);
 }

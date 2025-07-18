@@ -9,7 +9,7 @@ import { EndOfLine, NotebookCellKind, Position } from '../../../vscodeTypes';
 import { BaseAlternativeNotebookContentProvider } from './alternativeContentProvider';
 import { AlternativeNotebookDocument } from './alternativeNotebookDocument';
 import { EOL, getCellIdMap, getDefaultLanguage, LineOfCellText, LineOfText, summarize, SummaryCell } from './helpers';
-import { findLastIdx } from '../../../util/vs/base/common/arraysFind';
+import { findLast } from '../../../util/vs/base/common/arraysFind';
 
 const StartDelimter = `<VSCode.Cell `;
 const StartEmptyCellDelimter = `<VSCode.Cell>`;
@@ -29,12 +29,11 @@ export function isXmlContent(text: string): boolean {
 
 
 class AlternativeXmlDocument extends AlternativeNotebookDocument {
-	constructor(text: string, private readonly cellOffsetMap: number[], notebook: NotebookDocument) {
+	constructor(text: string, private readonly cellOffsetMap: { offset: number; cell: NotebookCell }[], notebook: NotebookDocument) {
 		super(text, notebook);
 	}
 
-	override fromCellPosition(cellIndex: number, position: Position): Position {
-		const cell = this.notebook.cellAt(cellIndex);
+	override fromCellPosition(cell: NotebookCell, position: Position): Position {
 		const cellSummary = summarize(cell);
 		const cellMarker = generateCellMarker(cellSummary);
 
@@ -46,15 +45,14 @@ class AlternativeXmlDocument extends AlternativeNotebookDocument {
 		return this.positionAt(offset);
 	}
 
-	override toCellPosition(position: Position): { cellIndex: number; position: Position } | undefined {
+	override toCellPosition(position: Position): { cell: NotebookCell; position: Position } | undefined {
 		const offset = this.offsetAt(position);
-		const cellIndex = findLastIdx(this.cellOffsetMap, (cellOffset) => cellOffset <= offset);
-		if (cellIndex === -1) {
+		const cell = findLast(this.cellOffsetMap, (cell) => cell.offset <= offset);
+		if (!cell) {
 			return undefined;
 		}
-		const cell = this.notebook.cellAt(cellIndex);
-		const cellPosition = cell.document.positionAt(offset - this.cellOffsetMap[cellIndex]);
-		return { cellIndex, position: cellPosition };
+		const cellPosition = cell.cell.document.positionAt(offset - cell.offset);
+		return { cell: cell.cell, position: cellPosition };
 	}
 }
 
@@ -174,16 +172,16 @@ export class AlternativeXmlNotebookContentProvider extends BaseAlternativeNotebo
 		}
 	}
 
-	public override getAlternativeDocument(notebook: NotebookDocument): AlternativeNotebookDocument {
-		const cells = notebook.getCells().map(cell => summarize(cell));
+	public override getAlternativeDocument(notebook: NotebookDocument, excludeMarkdownCells?: boolean): AlternativeNotebookDocument {
+		const cells = notebook.getCells().filter(cell => excludeMarkdownCells ? cell.kind !== NotebookCellKind.Markup : true).map(cell => summarize(cell));
 
 		const cellContent = cells.map(cell => {
 			const cellMarker = generateCellMarker(cell);
 			const prefix = `${cellMarker}${EOL}`;
-			return { content: `${prefix}${cell.source.join(EOL)}${EOL}${EndDelimter}`, prefix };
+			return { content: `${prefix}${cell.source.join(EOL)}${EOL}${EndDelimter}`, prefix, cell: notebook.cellAt(cell.index) };
 		});
 		const content = cellContent.map(cell => cell.content).join(EOL);
-		const cellOffsetMap = cellContent.map(cellContent => content.indexOf(cellContent.content) + cellContent.prefix.length);
+		const cellOffsetMap = cellContent.map(cellContent => ({ offset: content.indexOf(cellContent.content) + cellContent.prefix.length, cell: cellContent.cell }));
 
 		return new AlternativeXmlDocument(content, cellOffsetMap, notebook);
 	}

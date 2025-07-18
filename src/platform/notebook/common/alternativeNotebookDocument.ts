@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { NotebookDocument, TextLine } from 'vscode';
+import type { NotebookCell, NotebookDocument, TextLine } from 'vscode';
 import { DEFAULT_WORD_REGEXP, getWordAtText } from '../../../util/vs/editor/common/core/wordHelper';
 import { Position, Range } from '../../../vscodeTypes';
 import { PositionOffsetTransformer } from '../../editing/common/positionOffsetTransformer';
@@ -46,12 +46,12 @@ export abstract class AlternativeNotebookDocument {
 	/**
 	 * Translates a position in the notebook document to the corresponding alternative position.
 	 */
-	abstract fromCellPosition(cellIndex: number, position: Position): Position;
+	abstract fromCellPosition(cell: NotebookCell, position: Position): Position;
 
 	/**
 	 * Translates a position in the alternative document to the corresponding cell index and position in the notebook document.
 	 */
-	abstract toCellPosition(position: Position): { cellIndex: number; position: Position } | undefined;
+	abstract toCellPosition(position: Position): { cell: NotebookCell; position: Position } | undefined;
 
 	getWordRangeAtPosition(_position: Position): Range | undefined {
 		const position = this.validatePosition(_position);

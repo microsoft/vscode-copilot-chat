@@ -485,8 +485,8 @@ class CurrentEditorContext extends PromptElement<CurrentEditorContextProps> {
 			const startCell = cellsInRange[0];
 			const endCell = cellsInRange[cellsInRange.length - 1];
 			const lastLine = endCell.document.lineAt(endCell.document.lineCount - 1);
-			const startPosition = altDocument.fromCellPosition(startCell.index, new Position(0, 0));
-			const endPosition = altDocument.fromCellPosition(endCell.index, new Position(endCell.document.lineCount - 1, lastLine.text.length));
+			const startPosition = altDocument.fromCellPosition(startCell, new Position(0, 0));
+			const endPosition = altDocument.fromCellPosition(endCell, new Position(endCell.document.lineCount - 1, lastLine.text.length));
 			const selection = new Range(startPosition, endPosition);
 			selectionText = selection ? ` The current selection is from line ${selection.start.line + 1} to line ${selection.end.line + 1}.` : '';
 		}

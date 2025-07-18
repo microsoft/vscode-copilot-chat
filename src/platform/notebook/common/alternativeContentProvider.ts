@@ -21,7 +21,7 @@ export abstract class BaseAlternativeNotebookContentProvider {
 	/**
 	 * Generate the Document of the notebook document that is LLM friendly.
 	 */
-	public abstract getAlternativeDocument(notebook: NotebookDocument): AlternativeNotebookDocument;
+	public abstract getAlternativeDocument(notebook: NotebookDocument, excludeMarkdownCells?: boolean): AlternativeNotebookDocument;
 
 	/**
 	 * Generate the summary of the structure of the notebook document that is LLM friendly.

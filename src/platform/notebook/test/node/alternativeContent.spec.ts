@@ -213,7 +213,7 @@ describe('Alternative Content for Notebooks', () => {
 
 						for (const pos of positions) {
 							const cell = notebook.cellAt(pos.cellIndex);
-							const startTranslation = [pos.start, pos.end].map(p => altDoc.fromCellPosition(cell.index, p));
+							const startTranslation = [pos.start, pos.end].map(p => altDoc.fromCellPosition(cell, p));
 							const textFromCell = cell.document.getText(new Range(pos.start, pos.end));
 							const textFromAltDoc = altDoc.getText(new Range(startTranslation[0], startTranslation[1]));
 							if (provider.kind !== 'json' || pos.start.line === pos.end.line) {
@@ -226,7 +226,7 @@ describe('Alternative Content for Notebooks', () => {
 							if (provider.kind !== 'json') {
 								const cellPosition = altDoc.toCellPosition(startTranslation[0]);
 								expect(cellPosition).toBeDefined();
-								expect(cellPosition?.cellIndex).toBe(pos.cellIndex);
+								expect(cellPosition?.cell).toBe(cell);
 								expect(cellPosition?.position.line).toBe(pos.start.line);
 								expect(cellPosition?.position.character).toBe(pos.start.character);
 							}
