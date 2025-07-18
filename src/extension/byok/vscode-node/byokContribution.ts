@@ -20,6 +20,7 @@ import { IExtensionContribution } from '../../common/contributions';
 import { BYOKStorageService, IBYOKStorageService } from './byokStorageService';
 import { BYOKUIService, ModelConfig } from './byokUIService';
 import { CerebrasModelRegistry } from './cerebrasProvider';
+import { CustomOpenAIProvider } from './customOpenAIProvider';
 import { GeminiBYOKModelRegistry } from './geminiProvider';
 import { GroqModelRegistry } from './groqProvider';
 import { OllamaModelRegistry } from './ollamaProvider';
@@ -43,10 +44,13 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 		@ITelemetryService private readonly _telemetryService: ITelemetryService
 	) {
 		super();
+		this._logService.logger.info(`BYOK: BYOKContrib constructor called`);
 		this._byokStorageService = new BYOKStorageService(extensionContext);
+		this._logService.logger.info(`BYOK: Calling initial _authChange`);
 		this._authChange(authService, instantiationService);
 
 		this._register(authService.onDidAuthenticationChange(() => {
+			this._logService.logger.info(`BYOK: Auth status changed, calling _authChange`);
 			this._authChange(authService, instantiationService);
 		}));
 
@@ -56,15 +60,19 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			}
 		}));
 
+		this._logService.logger.info(`BYOK: Registering github.copilot.chat.manageModels command`);
 		this._register(commands.registerCommand('github.copilot.chat.manageModels', () => this.registerModelCommand()));
 	}
 
 	private async _authChange(authService: IAuthenticationService, instantiationService: IInstantiationService) {
+		this._logService.logger.info(`BYOK: _authChange called`);
 		this._modelRegistries = [];
 		if (authService.copilotToken?.isInternal) {
 			this.testLargeTelemetryPayload();
 		}
+
 		if (authService.copilotToken && isBYOKEnabled(authService.copilotToken, this._capiClientService)) {
+			this._logService.logger.info(`BYOK: BYOK is enabled, registering model providers`);
 			// These are intentionally registered in alphabetical order so we don't need to sort them later.
 			// They will be shown to the user in the same order.
 			this._modelRegistries.push(instantiationService.createInstance(AnthropicBYOKModelRegistry));
@@ -72,13 +80,18 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			if (authService.copilotToken.isInternal) {
 				this._modelRegistries.push(instantiationService.createInstance(CerebrasModelRegistry));
 			}
+			this._modelRegistries.push(instantiationService.createInstance(CustomOpenAIProvider));
+			this._logService.logger.info(`BYOK: CustomOpenAIProvider registered`);
 			this._modelRegistries.push(instantiationService.createInstance(GeminiBYOKModelRegistry));
 			this._modelRegistries.push(instantiationService.createInstance(GroqModelRegistry));
 			this._modelRegistries.push(instantiationService.createInstance(OAIBYOKModelRegistry));
 			this._modelRegistries.push(instantiationService.createInstance(OllamaModelRegistry, this._configurationService.getConfig(ConfigKey.OllamaEndpoint)));
 			this._modelRegistries.push(instantiationService.createInstance(OpenRouterBYOKModelRegistry));
+			this._logService.logger.info(`BYOK: Total ${this._modelRegistries.length} model registries created`);
 			// Update known models list from CDN so all providers have the same list
 			await this.fetchKnownModelList(this._fetcherService);
+		} else {
+			this._logService.logger.info(`BYOK: BYOK is NOT enabled - no model providers registered`);
 		}
 		this._byokUIService = new BYOKUIService(this._byokStorageService, this._modelRegistries);
 		this.restoreModels(true);

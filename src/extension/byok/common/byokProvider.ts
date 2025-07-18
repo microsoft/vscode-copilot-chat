@@ -79,7 +79,14 @@ export function isNoAuthConfig(config: BYOKModelConfig): config is BYOKNoAuthMod
 export function chatModelInfoToProviderMetadata(chatModelInfo: IChatModelInformation): ChatResponseProviderMetadata {
 	const outputTokens = chatModelInfo.capabilities.limits?.max_output_tokens ?? 4096;
 	const inputTokens = chatModelInfo.capabilities.limits?.max_prompt_tokens ?? ((chatModelInfo.capabilities.limits?.max_context_window_tokens || 64000) - outputTokens);
-	return {
+
+	// Calculate agentMode capability using the same logic as built-in models
+	// This enables Edit Mode v2 (chat.edits2.enabled) for custom models that support tool calling
+	const supportsToolCalls = chatModelInfo.capabilities.supports.tool_calls;
+	const hasEnoughTokens = inputTokens > 40000;
+	const agentModeEnabled = supportsToolCalls && hasEnoughTokens;
+
+	const result = {
 		family: chatModelInfo.capabilities.family,
 		cost: chatModelInfo.capabilities.family, // This is a bit odd, but this is what renders in the grey side text
 		description: localize('byok.model.description', '{0} is contributed via the {1} provider.', chatModelInfo.name, chatModelInfo.capabilities.family),
@@ -90,11 +97,13 @@ export function chatModelInfoToProviderMetadata(chatModelInfo: IChatModelInforma
 		name: chatModelInfo.name,
 		isUserSelectable: true,
 		capabilities: {
-			agentMode: chatModelInfo.capabilities.supports.tool_calls,
-			toolCalling: chatModelInfo.capabilities.supports.tool_calls,
+			agentMode: agentModeEnabled,
+			toolCalling: supportsToolCalls,
 			vision: chatModelInfo.capabilities.supports.vision,
 		}
 	};
+
+	return result;
 }
 
 export function resolveModelInfo(modelId: string, providerName: string, knownModels: BYOKKnownModels | undefined, modelCapabilities?: BYOKModelCapabilities): IChatModelInformation {
@@ -103,18 +112,22 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 	if (knownModels && !knownModelInfo) {
 		knownModelInfo = knownModels[modelId];
 	}
+
 	const modelName = knownModelInfo?.name || modelId;
 	const contextWinow = knownModelInfo ? (knownModelInfo.maxInputTokens + knownModelInfo.maxOutputTokens) : 128000;
-	return {
+
+	const toolCallingSupport = knownModelInfo?.toolCalling !== undefined ? knownModelInfo.toolCalling : true;
+
+	const result: IChatModelInformation = {
 		id: modelId,
 		name: modelName,
 		version: '1.0.0',
 		capabilities: {
-			type: 'chat',
+			type: 'chat' as const,
 			family: providerName,
 			supports: {
 				streaming: true,
-				tool_calls: !!knownModelInfo?.toolCalling,
+				tool_calls: toolCallingSupport,
 				vision: !!knownModelInfo?.vision
 			},
 			tokenizer: TokenizerType.O200K,
@@ -128,6 +141,8 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 		is_chat_fallback: false,
 		model_picker_enabled: true
 	};
+
+	return result;
 }
 
 export function isBYOKEnabled(copilotToken: Omit<CopilotToken, "token">, capiClientService: ICAPIClientService): boolean {
