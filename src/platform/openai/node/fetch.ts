@@ -179,7 +179,9 @@ export async function fetchAndStreamChat(
 		return { type: FetchResponseKind.Canceled, reason: 'after fetch request' };
 	}
 
-	if (response.status === 200 && authenticationService.copilotToken?.isFreeUser && authenticationService.copilotToken?.isChatQuotaExceeded) {
+	const isCopilotModel = !chatEndpointInfo.model.startsWith('models/');
+
+	if (response.status === 200 && isCopilotModel && authenticationService.copilotToken?.isFreeUser && authenticationService.copilotToken?.isChatQuotaExceeded) {
 		authenticationService.resetCopilotToken();
 	}
 

@@ -27,6 +27,17 @@ export abstract class BaseOpenAICompatibleBYOKRegistry implements BYOKModelRegis
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) { }
 
+	async createEndpoint(config: BYOKModelConfig): Promise<OpenAIEndpoint> {
+		const apiKey: string = this.getApiKey(config);
+		const modelUrl = (config as BYOKPerModelConfig)?.deploymentUrl ?? `${this._baseUrl}/chat/completions`;
+		const modelInfo: IChatModelInformation = await this.getModelInfo(config.modelId, apiKey, config.capabilities);
+		return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey, modelUrl);
+	}
+
+	private getApiKey(config: BYOKModelConfig): string {
+		return isNoAuthConfig(config) ? '' : (config as BYOKPerModelConfig | BYOKGlobalKeyModelConfig).apiKey;
+	}
+
 	updateKnownModelsList(knownModels: BYOKKnownModels | undefined): void {
 		this._knownModels = knownModels;
 	}
@@ -66,14 +77,13 @@ export abstract class BaseOpenAICompatibleBYOKRegistry implements BYOKModelRegis
 	}
 
 	async registerModel(config: BYOKModelConfig): Promise<Disposable> {
-		const apiKey: string = isNoAuthConfig(config) ? '' : (config as BYOKPerModelConfig | BYOKGlobalKeyModelConfig).apiKey;
+		const apiKey: string = this.getApiKey(config);
 		try {
 			const modelInfo: IChatModelInformation = await this.getModelInfo(config.modelId, apiKey, config.capabilities);
 
 			const lmModelMetadata = chatModelInfoToProviderMetadata(modelInfo);
 
-			const modelUrl = (config as BYOKPerModelConfig)?.deploymentUrl ?? `${this._baseUrl}/chat/completions`;
-			const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey, modelUrl);
+			const openAIChatEndpoint = await this.createEndpoint(config);
 			const provider = this._instantiationService.createInstance(CopilotLanguageModelWrapper, openAIChatEndpoint, lmModelMetadata);
 
 			const disposable = lm.registerChatModelProvider(

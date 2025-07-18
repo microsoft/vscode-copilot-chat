@@ -33,3 +33,6 @@ coverage/
 test/simulation/cache/_base.sqlite
 
 test/aml/out
+
+# From the Booksmarks vscode extension
+.vscode/bookmarks.json

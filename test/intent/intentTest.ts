@@ -18,6 +18,7 @@ import { TestingServiceCollection } from '../../src/platform/test/node/services'
 import { TestingTabsAndEditorsService } from '../../src/platform/test/node/simulationWorkspaceServices';
 import { CancellationToken } from '../../src/util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
+import { ChatRequest } from '../../src/vscodeTypes';
 import { stest } from '../base/stest';
 
 export interface IIntentScenario {
@@ -45,7 +46,7 @@ export async function executeIntentTest(testingServiceCollection: TestingService
 	const intentDetector = instaService.createInstance(IntentDetector);
 	const query = scenario.query;
 	const builtinIntents = readBuiltinIntents(scenario.location);
-	const detectedIntent = await intentDetector.detectIntent(scenario.location, undefined, query, CancellationToken.None, createTelemetryWithId(), new ChatVariablesCollection([]), builtinIntents);
+	const detectedIntent = await intentDetector.detectIntent(scenario.location, undefined, { prompt: query, model: { vendor: 'copilot' } } as ChatRequest, CancellationToken.None, createTelemetryWithId(), new ChatVariablesCollection([]), builtinIntents);
 	const intent = detectedIntent ?? intentService.unknownIntent;
 
 	const expectedIntents = Array.isArray(scenario.expectedIntent) ? scenario.expectedIntent : [scenario.expectedIntent];
