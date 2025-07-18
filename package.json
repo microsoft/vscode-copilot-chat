@@ -431,7 +431,7 @@
 					"properties": {
 						"id": {
 							"type": "string",
-							"description": "The ID of the terminal command output to check."
+							"description": "The ID or processID of the terminal command output to check."
 						}
 					},
 					"required": [
