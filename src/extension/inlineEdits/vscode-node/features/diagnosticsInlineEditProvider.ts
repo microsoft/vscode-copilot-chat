@@ -6,8 +6,8 @@
 import * as vscode from 'vscode';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/common/inlineEditLogContext';
+import { ObservableGit } from '../../../../platform/inlineEdits/common/observableGit';
 import { ShowNextEditPreference } from '../../../../platform/inlineEdits/common/statelessNextEditProvider';
-import { NesHistoryContextProvider } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { ILogService } from '../../../../platform/log/common/logService';
 import * as errors from '../../../../util/common/errors';
 import { createTracer, ITracer } from '../../../../util/common/tracing';
@@ -54,14 +54,14 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 
 	constructor(
 		workspace: VSCodeWorkspace,
-		private readonly _historyContextProvider: NesHistoryContextProvider,
+		git: ObservableGit,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@ILogService logService: ILogService,
 	) {
 		super();
 
 		this._tracer = createTracer(['NES', 'DiagnosticsNextEditProvider'], (s) => logService.logger.trace(s));
-		this._diagnosticsCompletionHandler = this._register(instantiationService.createInstance(DiagnosticsCompletionProcessor, workspace, this._historyContextProvider));
+		this._diagnosticsCompletionHandler = this._register(instantiationService.createInstance(DiagnosticsCompletionProcessor, workspace, git));
 	}
 
 	async getNextEdit(docId: DocumentId, context: vscode.InlineCompletionContext, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, tb: DiagnosticsTelemetryBuilder): Promise<DiagnosticsNextEditResult> {

@@ -116,7 +116,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 
 			let diagnosticsProvider: DiagnosticsNextEditProvider | undefined = undefined;
 			if (this._enableDiagnosticsProvider.read(reader)) {
-				diagnosticsProvider = reader.store.add(this._instantiationService.createInstance(DiagnosticsNextEditProvider, workspace, historyContextProvider));
+				diagnosticsProvider = reader.store.add(this._instantiationService.createInstance(DiagnosticsNextEditProvider, workspace, git));
 			}
 
 			const model = reader.store.add(this._instantiationService.createInstance(InlineEditModel, statelessProviderId, workspace, historyContextProvider, diagnosticsProvider));
@@ -148,6 +148,10 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 			reader.store.add(commands.registerCommand(learnMoreCommandId, () => {
 				this._envService.openExternal(URI.parse(learnMoreLink));
 			}));
+
+			reader.store.add(commands.registerCommand(clearCacheCommandId, () => {
+				model.nextEditProvider.clearCache();
+			}));
 		}));
 
 		this._register(autorun(reader => {
@@ -165,3 +169,5 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 export const learnMoreCommandId = 'github.copilot.debug.inlineEdit.learnMore';
 
 export const learnMoreLink = 'https://aka.ms/vscode-nes';
+
+const clearCacheCommandId = 'github.copilot.debug.inlineEdit.clearCache';

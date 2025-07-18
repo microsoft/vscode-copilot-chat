@@ -37,9 +37,18 @@ export function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpo
 }
 
 /**
- * Currently (@connor4312) running an experiment to see if we should use
- * replace string exclusively for these models.
+ * The model is capable of using replace_string_in_file exclusively,
+ * without needing insert_edit_into_file.
  */
-export function modelMightUseReplaceStringExclusively(model: LanguageModelChat | IChatEndpoint): boolean {
+export function modelCanUseReplaceStringExclusively(model: LanguageModelChat | IChatEndpoint): boolean {
 	return model.family.startsWith('claude') || model.family.startsWith('Anthropic');
+}
+
+/**
+ * Whether, when replace_string and insert_edit tools are both available,
+ * verbiage should be added in the system prompt directing the model to prefer
+ * replace_string.
+ */
+export function modelNeedsStrongReplaceStringHint(model: LanguageModelChat | IChatEndpoint): boolean {
+	return model.family.toLowerCase().includes('gemini');
 }

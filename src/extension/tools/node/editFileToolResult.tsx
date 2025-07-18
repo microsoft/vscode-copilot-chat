@@ -6,6 +6,7 @@
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptSizing } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { modelNeedsStrongReplaceStringHint } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
@@ -98,8 +99,10 @@ export class EditFileResult extends PromptElement<IEditFileResultProps> {
 				{successfullyEditedFiles.length > 0 &&
 					<>The following files were successfully edited:<br />
 						{successfullyEditedFiles.join('\n')}<br /></>}
-				{editingErrors.length > 0 &&
-					<>{editingErrors.join('\n')}</>}
+				{editingErrors.length > 0 && <>
+					{editingErrors.join('\n')}
+					{this.props.model && modelNeedsStrongReplaceStringHint(this.props.model) && <><br /><br />You may use the {ToolName.EditFile} tool to retry these edits.</>}
+				</>}
 				{editsWithDiagnostics.length > 0 &&
 					editsWithDiagnostics.map(edit => {
 						return <>

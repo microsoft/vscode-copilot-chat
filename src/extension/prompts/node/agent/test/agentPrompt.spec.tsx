@@ -20,7 +20,6 @@ import { URI } from '../../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../../../vscodeTypes';
-import { addCacheBreakpoints } from '../../../../intents/node/agentIntent';
 import { ChatVariablesCollection } from '../../../../prompt/common/chatVariablesCollection';
 import { Conversation, ICopilotChatResultIn, Turn, TurnStatus } from '../../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCall } from '../../../../prompt/common/intents';
@@ -30,6 +29,7 @@ import { ToolName } from '../../../../tools/common/toolNames';
 import { IToolsService } from '../../../../tools/common/toolsService';
 import { PromptRenderer } from '../../base/promptRenderer';
 import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
+import { addCacheBreakpoints } from '../../../../intents/node/cacheBreakpoints';
 
 suite('AgentPrompt', () => {
 	let accessor: ITestingServicesAccessor;
@@ -110,7 +110,6 @@ suite('AgentPrompt', () => {
 		}
 		return result;
 	}
-
 
 	test('simple case', async () => {
 		expect(await agentPromptToString(accessor, {
@@ -232,5 +231,24 @@ suite('AgentPrompt', () => {
 			{
 				enableCacheBreakpoints: true,
 			})).toMatchSnapshot();
+	});
+
+	test('custom instructions in system message', async () => {
+		accessor.get(IConfigurationService).setConfig(ConfigKey.CustomInstructionsInSystemMessage, true);
+		expect(await agentPromptToString(accessor, {
+			chatVariables: new ChatVariablesCollection(),
+			history: [],
+			query: 'hello',
+			modeInstructions: 'custom mode instructions',
+		}, undefined)).toMatchSnapshot();
+	});
+
+	test('omit base agent instructions', async () => {
+		accessor.get(IConfigurationService).setConfig(ConfigKey.Internal.OmitBaseAgentInstructions, true);
+		expect(await agentPromptToString(accessor, {
+			chatVariables: new ChatVariablesCollection(),
+			history: [],
+			query: 'hello',
+		}, undefined)).toMatchSnapshot();
 	});
 });

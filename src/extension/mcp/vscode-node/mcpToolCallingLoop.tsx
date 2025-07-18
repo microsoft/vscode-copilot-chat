@@ -64,6 +64,10 @@ export class McpToolCallingLoop extends ToolCallingLoop<IMcpToolCallingLoopOptio
 	}
 
 	protected async getAvailableTools(): Promise<LanguageModelToolInformation[]> {
+		if (this.options.conversation.turns.length > 5) {
+			return []; // force a response
+		}
+
 		return [{
 			description: QuickInputTool.description,
 			name: QuickInputTool.ID,

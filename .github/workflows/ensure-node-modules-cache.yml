@@ -77,7 +77,7 @@ jobs:
       - name: Create build cache archive
         if: steps.build-cache.outputs.cache-hit != 'true'
         run: |
-          mkdir .build
+          mkdir -Force .build
           node build/listBuildCacheFiles.js .build/build_cache_list.txt
-          mkdir .build/build_cache
+          mkdir -Force .build/build_cache
           7z.exe a .build/build_cache/cache.7z -mx3 `@.build/build_cache_list.txt

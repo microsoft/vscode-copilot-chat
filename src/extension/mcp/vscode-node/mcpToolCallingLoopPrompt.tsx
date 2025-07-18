@@ -15,7 +15,7 @@ import { McpPickRef, QuickInputTool, QuickPickTool } from './mcpToolCallingTools
 
 export interface IMcpToolCallingLoopPromptContext {
 	packageName: string;
-	packageType: 'npm' | 'pip' | 'docker';
+	packageType: 'npm' | 'pip' | 'docker' | 'nuget';
 	packageReadme: string | undefined;
 	packageVersion: string | undefined;
 	targetSchema: JsonSchema;
@@ -28,6 +28,7 @@ const packageTypePreferredCommands = {
 	pip: (name: string, version: string | undefined) => `uvx ${name.replaceAll('-', '_')}` + (version ? `==${version}` : ''),
 	npm: (name: string, version: string | undefined) => `npx ${name}` + (version ? `@${version}` : ''),
 	docker: (name: string, _version: string | undefined) => `docker run -i --rm ${name}`,
+	nuget: (name: string, version: string | undefined) => `dnx ${name}` + (version ? `@${version}` : '') + ` --yes`,
 };
 
 export class McpToolCallingLoopPrompt extends PromptElement<IMcpToolCallingLoopProps> {

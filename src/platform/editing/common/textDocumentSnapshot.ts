@@ -125,11 +125,19 @@ export class TextDocumentSnapshot {
 	}
 
 	offsetAt(position: Position): number {
+		if (this.version === this.document.version) {
+			return this.document.offsetAt(position);
+		}
+
 		position = this.validatePosition(position);
 		return this.transformer.getOffset(position);
 	}
 
 	positionAt(offset: number): Position {
+		if (this.version === this.document.version) {
+			return this.document.positionAt(offset);
+		}
+
 		offset = Math.floor(offset);
 		offset = Math.max(0, offset);
 
@@ -141,6 +149,10 @@ export class TextDocumentSnapshot {
 	}
 
 	private _getTextInRange(_range: Range): string {
+		if (this.version === this.document.version) {
+			return this.document.getText(_range);
+		}
+
 		const range = this.validateRange(_range);
 
 		if (range.isEmpty) {

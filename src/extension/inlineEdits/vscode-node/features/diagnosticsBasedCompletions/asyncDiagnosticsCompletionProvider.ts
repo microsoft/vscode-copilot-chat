@@ -21,7 +21,7 @@ class AsyncDiagnosticCompletionItem extends DiagnosticCompletionItem {
 		edit: TextReplacement,
 		workspaceDocument: IVSCodeObservableDocument,
 	) {
-		super(AsyncDiagnosticCompletionItem.type, diagnostic, edit, undefined, workspaceDocument);
+		super(AsyncDiagnosticCompletionItem.type, diagnostic, edit, workspaceDocument);
 	}
 }
 export class AsyncDiagnosticCompletionProvider implements IDiagnosticCompletionProvider<AsyncDiagnosticCompletionItem> {

@@ -139,13 +139,11 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		const repository = gitAPI.getRepository(uri);
 		if (repository) {
 			await this.waitForRepositoryState(repository);
-			const repositoryContext = GitServiceImpl.repoToRepoContext(repository);
 
-			const remotes = repositoryContext ?
-				{
-					rootUri: repositoryContext.rootUri,
-					remoteFetchUrls: repositoryContext.remoteFetchUrls
-				} : undefined;
+			const remotes = {
+				rootUri: repository.rootUri,
+				remoteFetchUrls: repository.state.remotes.map(r => r.fetchUrl),
+			};
 
 			this.logService.logger.trace(`[GitServiceImpl][getRepositoryFetchUrls] Remotes (open repository): ${JSON.stringify(remotes)}`);
 			return remotes;
@@ -265,10 +263,16 @@ export class GitServiceImpl extends Disposable implements IGitService {
 	}
 
 	private async waitForRepositoryState(repository: Repository): Promise<void> {
+		if (repository.state.HEAD) {
+			return;
+		}
+
 		const HEAD = observableFromEvent(this, repository.state.onDidChange as Event<void>, () => repository.state.HEAD);
 		await waitForState(HEAD, state => state !== undefined, undefined, cancelOnDispose(this._store));
 	}
 
+	private static repoToRepoContext(repo: Repository): RepoContext;
+	private static repoToRepoContext(repo: Repository | undefined | null): RepoContext | undefined
 	private static repoToRepoContext(repo: Repository | undefined | null): RepoContext | undefined {
 		if (!repo) {
 			return undefined;

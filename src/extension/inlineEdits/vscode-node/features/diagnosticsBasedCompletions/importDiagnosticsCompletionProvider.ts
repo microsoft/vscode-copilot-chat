@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { IFileSystemService } from '../../../../../platform/filesystem/common/fileSystemService';
 import { DocumentId } from '../../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { LanguageId } from '../../../../../platform/inlineEdits/common/dataTypes/languageId';
+import { IObservableDocument } from '../../../../../platform/inlineEdits/common/observableWorkspace';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { ITracer } from '../../../../../util/common/tracing';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
@@ -114,11 +115,11 @@ export class ImportDiagnosticCompletionItem extends DiagnosticCompletionItem {
 	constructor(
 		private readonly _importCodeAction: ImportCodeAction,
 		diagnostic: Diagnostic,
-		displayLocation: INextEditDisplayLocation,
+		private _importLabel: string,
 		workspaceDocument: IVSCodeObservableDocument,
 		public readonly alternativeImportsCount: number,
 	) {
-		super(ImportDiagnosticCompletionItem.type, diagnostic, _importCodeAction.edit, displayLocation, workspaceDocument);
+		super(ImportDiagnosticCompletionItem.type, diagnostic, _importCodeAction.edit, workspaceDocument);
 
 		let importFilePath: string;
 		if (isAbsolute(this._importCodeAction.importPath)) {
@@ -128,6 +129,10 @@ export class ImportDiagnosticCompletionItem extends DiagnosticCompletionItem {
 		}
 
 		this._importSourceFile = DocumentId.create(importFilePath);
+	}
+
+	protected override _getDisplayLocation(): INextEditDisplayLocation | undefined {
+		return { range: this.diagnostic.range, label: this._importLabel };
 	}
 }
 
@@ -243,9 +248,8 @@ export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletion
 
 		for (const codeAction of sortedImportCodeActions) {
 			const importCodeActionLabel = availableImportCodeActions.length === 1 && codeAction.importSource !== ImportSource.external ? codeAction.labelShort : codeAction.labelDeduped;
-			const displayLocation: INextEditDisplayLocation = { range: importDiagnosticToFix.range, label: importCodeActionLabel };
 
-			const item = new ImportDiagnosticCompletionItem(codeAction, importDiagnosticToFix, displayLocation, workspaceDocument, availableImportCodeActions.length - 1);
+			const item = new ImportDiagnosticCompletionItem(codeAction, importDiagnosticToFix, importCodeActionLabel, workspaceDocument, availableImportCodeActions.length - 1);
 
 			if (this._hasImportBeenRejected(item)) {
 				log(`Rejected import completion item ${codeAction.labelDeduped} for ${importDiagnosticToFix.toString()}`, logContext, this._tracer);
@@ -272,8 +276,11 @@ export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletion
 		rejectedItems.add(item.importItemName);
 	}
 
-	isCompletionItemStillValid(item: ImportDiagnosticCompletionItem): boolean {
-		return !this._hasImportBeenRejected(item);
+	isCompletionItemStillValid(item: ImportDiagnosticCompletionItem, workspaceDocument: IObservableDocument): boolean {
+		if (this._hasImportBeenRejected(item)) {
+			return false;
+		}
+		return workspaceDocument.value.get().getValueOfRange(item.diagnostic.range) === item.importItemName;
 	}
 
 	private _hasImportBeenRejected(item: ImportDiagnosticCompletionItem): boolean {

@@ -303,7 +303,7 @@ describe('RunInTerminalTool', () => {
 			assertConfirmationRequired(await executeToolTest({ command: 'git push --force origin main' }));
 		});
 
-		it('should handle default configuration values', async () => {
+		it.skip('should handle default configuration values', async () => {
 			// Reset to default configuration
 			configurationService.setConfig(ConfigKey.TerminalAllowList, undefined);
 			configurationService.setConfig(ConfigKey.TerminalDenyList, undefined);

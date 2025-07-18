@@ -65,7 +65,7 @@ export class CodebaseTool implements vscode.LanguageModelTool<ICodebaseToolParam
 				query: options.input.query,
 				history: [],
 			},
-			maxResults: 64,
+			maxResults: 32,
 			include: {
 				workspaceChunks: true,
 				workspaceStructure: options.input.includeFileStructure ?? false

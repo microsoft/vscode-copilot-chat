@@ -7,8 +7,8 @@ import assert from 'assert';
 import { type LanguageService } from 'typescript';
 
 import { computeContext as _computeContext } from '../../common/api';
-import { ContextResult, SingleLanguageServiceSession, TokenBudget, type ComputeContextSession } from '../../common/contextProvider';
-import { CodeSnippet, ContextKind, TraitKind, type ContextItem, type Trait } from '../../common/protocol';
+import { ContextResult, RequestContext, SingleLanguageServiceSession, TokenBudget, type ComputeContextSession } from '../../common/contextProvider';
+import { CodeSnippet, ContextKind, type ContextItem, type Trait } from '../../common/protocol';
 import { NullCancellationToken } from '../../common/typescripts';
 import { NodeHost } from '../host';
 import { LanguageServices } from './languageServices';
@@ -20,7 +20,7 @@ function normalize(value: string): string {
 export type ExpectedCodeSnippet = {
 	kind: ContextKind.Snippet;
 	value: string;
-	uri: RegExp;
+	fileName: RegExp;
 };
 
 export type ExpectedTrait = {
@@ -37,8 +37,8 @@ function assertCodeSnippet(actual: CodeSnippet, expected: ExpectedCodeSnippet): 
 	assert.ok(actual.kind === ContextKind.Snippet, `Expected snippet, got ${actual.kind}`);
 	assert.ok(expected.kind === ContextKind.Snippet, `Expected snippet, got ${expected.kind}`);
 	assert.strictEqual(normalize(actual.value), normalize(expected.value));
-	const source = actual.uri;
-	assert.ok(source.match(expected.uri) !== null);
+	const source = actual.fileName;
+	assert.ok(source.match(expected.fileName) !== null);
 }
 
 function assertTrait(actual: Trait, expected: ExpectedTrait): void {
@@ -46,7 +46,7 @@ function assertTrait(actual: Trait, expected: ExpectedTrait): void {
 	assert.ok(actual.kind === ContextKind.Trait, `Expected trait, got ${actual.kind}`);
 	assert.ok(expected.kind === ContextKind.Trait, `Expected trait, got ${expected.kind}`);
 	assert.strictEqual(actual.name, expected.name);
-	if (actual.traitKind === TraitKind.Version) {
+	if (actual.name.startsWith('The TypeScript version used in this project is')) {
 		assert.ok(semverRegex.test(actual.value), `Expected semver, got ${actual.value}`);
 	} else {
 		assert.strictEqual(actual.value, expected.value);
@@ -110,18 +110,18 @@ export type TestSession = {
 };
 
 export function computeContext(session: TestSession, document: string, position: { line: number; character: number }, contextKind: ContextKind): ContextItem[] {
-	const result: ContextResult = new ContextResult(new TokenBudget(7 * 1024));
+	const result: ContextResult = new ContextResult(new TokenBudget(7 * 1024), new RequestContext(session.session, [], new Map()));
 	const program = session.service.getProgram();
 	if (program === undefined) {
-		return result.items.filter((item) => item.kind === contextKind);
+		return [];
 	}
 	const sourceFile = program.getSourceFile(document);
 	if (sourceFile === undefined) {
-		return result.items.filter((item) => item.kind === contextKind);
+		return [];
 	}
 	const pos = sourceFile.getPositionOfLineAndCharacter(position.line, position.character);
-	_computeContext(result, session.session, session.service, document, pos, undefined, [], new NullCancellationToken());
-	return result.items.filter((item) => item.kind === contextKind);
+	_computeContext(result, session.session, session.service, document, pos, new NullCancellationToken());
+	return result.items().filter((item) => item.kind === contextKind);
 }
 
 class LanguageServiceTestSession extends SingleLanguageServiceSession {

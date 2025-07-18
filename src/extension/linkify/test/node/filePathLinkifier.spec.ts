@@ -153,14 +153,15 @@ suite('File Path Linkifier', () => {
 			'sub space/space file.ts',
 		);
 
+		const result = await linkify(linkifier, [
+			'[space file.ts](space%20file.ts)',
+			'[sub space/space file.ts](sub%20space/space%20file.ts)',
+			'[no such file.ts](no%20such%20file.ts)',
+			'[also not.ts](no%20such%20file.ts)',
+		].join('\n')
+		);
 		assertPartsEqual(
-			(await linkify(linkifier, [
-				'[space file.ts](space%20file.ts)',
-				'[sub space/space file.ts](sub%20space/space%20file.ts)',
-				'[no such file.ts](no%20such%20file.ts)',
-				'[also not.ts](no%20such%20file.ts)',
-			].join('\n')
-			)).parts,
+			result.parts,
 			[
 				new LinkifyLocationAnchor(workspaceFile('space file.ts')),
 				`\n`,

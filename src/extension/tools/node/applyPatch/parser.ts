@@ -20,7 +20,7 @@ import type { TextDocument } from 'vscode';
 import { AbstractDocumentWithLanguageId } from '../../../../platform/editing/common/abstractText';
 import { getFilepathComment } from '../../../../util/common/markdown';
 import { computeLevenshteinDistance } from '../../../../util/vs/base/common/diff/diff';
-import { isFalsyOrWhitespace } from '../../../../util/vs/base/common/strings';
+import { count, isFalsyOrWhitespace } from '../../../../util/vs/base/common/strings';
 import { Lines } from '../../../prompt/node/editGeneration';
 import { computeIndentLevel2, getIndentationChar, guessIndentation, IGuessedIndentation, transformIndentation } from '../../../prompt/node/indentationGuesser';
 import {
@@ -80,6 +80,8 @@ export const enum Fuzz {
 	IgnoredEofSignal = 1 << 5,
 	/** Surrounding operations were removed in patch context (see docs on peek_next_section) */
 	MergedOperatorSection = 1 << 6,
+	/** Explicit \\n characters were fixed in the context patch */
+	NormalizedExplicitNL = 1 << 7,
 }
 
 interface FuzzMatch {
@@ -167,7 +169,7 @@ export class Parser {
 	patch: Patch = { actions: {} };
 	fuzz = 0;
 
-	constructor(currentFiles: Record<string, AbstractDocumentWithLanguageId | TextDocument>, lines: Array<string>, private readonly fixIndentationDuringMatch: boolean) {
+	constructor(currentFiles: Record<string, AbstractDocumentWithLanguageId | TextDocument>, lines: Array<string>) {
 		this.current_files = currentFiles;
 		this.lines = lines;
 		for (const [path, doc] of Object.entries(currentFiles)) {
@@ -408,19 +410,19 @@ export class Parser {
 
 			for (const ch of nextSection.chunks) {
 				ch.origIndex += match.line;
-				if (this.fixIndentationDuringMatch) {
-					ch.insLines = ch.insLines.map(ins => isFalsyOrWhitespace(ins) ? ins : additionalIndentation + transformIndentation(ins, srcIndentStyle, targetIndentStyle));
+				if (match.fuzz & Fuzz.NormalizedExplicitNL) {
+					ch.insLines = ch.insLines.map(replace_explicit_nl);
+					ch.delLines = ch.delLines.map(replace_explicit_nl);
 				}
 
+				ch.insLines = ch.insLines.map(replace_explicit_tabs);
+				ch.insLines = ch.insLines.map(ins => isFalsyOrWhitespace(ins) ? ins : additionalIndentation + transformIndentation(ins, srcIndentStyle, targetIndentStyle));
+
 				if (match.fuzz & Fuzz.NormalizedExplicitTab) {
-					action.chunks.push({
-						delLines: ch.delLines.map(replace_explicit_tabs),
-						insLines: ch.insLines.map(replace_explicit_tabs),
-						origIndex: ch.origIndex,
-					});
-				} else {
-					action.chunks.push(ch);
+					ch.delLines = ch.delLines.map(replace_explicit_tabs);
 				}
+
+				action.chunks.push(ch);
 			}
 			index = match.line + nextSection.nextChunkContext.length;
 			this.index = nextSection.endPatchIndex;
@@ -454,6 +456,10 @@ export class Parser {
 
 export function replace_explicit_tabs(s: string) {
 	return s.replace(/^(?:\s|\\t|\/|#)*/gm, r => r.replaceAll('\\t', '\t'));
+}
+
+export function replace_explicit_nl(s: string) {
+	return replace_explicit_tabs(s.replaceAll('\\n', '\n'));
 }
 
 function find_context_core(
@@ -546,19 +552,32 @@ function find_context_core(
 		fuzz |= Fuzz.NormalizedExplicitTab;
 		for (let i = start; i < lines.length; i++) {
 			if (workingLines.slice(i, i + context.length).join('\n') === ctxPass3) {
-				return { line: i, fuzz: Fuzz.NormalizedExplicitTab };
+				return { line: i, fuzz };
 			}
 		}
 	}
 
-	// Pass 4 – ignore all surrounding whitespace ------------------------------
-	const ctxPass4 = ctxPass3.split('\n').map(l => l.trim()).join('\n');
+	// Pass 4 normalize explicit \\t and \\n tab chars -------------------------
+	if (context.length === 1) { // https://github.com/microsoft/vscode/issues/253960
+		const ctxPass4 = replace_explicit_nl(ctxPass3);
+		if (ctxPass4 !== ctxPass3) {
+			const newContextLines = count(ctxPass4, '\n') + 1;
+			for (let i = start; i < lines.length; i++) {
+				if (workingLines.slice(i, i + newContextLines).join('\n') === ctxPass4) {
+					return { line: i, fuzz: fuzz | Fuzz.NormalizedExplicitNL | Fuzz.NormalizedExplicitTab };
+				}
+			}
+		}
+	}
+
+	// Pass 5 – ignore all surrounding whitespace ------------------------------
+	const ctxPass5 = ctxPass3.split('\n').map(l => l.trim()).join('\n');
 	fuzz |= Fuzz.IgnoredWhitespace;
 	for (let i = start; i < workingLines.length; i++) {
 		workingLines[i] = workingLines[i].trimStart();
 	}
 	for (let i = start; i < lines.length; i++) {
-		if (workingLines.slice(i, i + context.length).join('\n') === ctxPass4) {
+		if (workingLines.slice(i, i + context.length).join('\n') === ctxPass5) {
 			return { line: i, fuzz, indent: workingLines[i] };
 		}
 	}
@@ -567,11 +586,11 @@ function find_context_core(
 	const maxDistance = Math.floor(context.length * EDIT_DISTANCE_ALLOWANCE_PER_LINE);
 	fuzz |= Fuzz.EditDistanceMatch;
 	if (maxDistance > 0) {
-		const ctxPass5 = ctxPass4.split('\n');
+		const ctxPass6 = ctxPass5.split('\n');
 		for (let i = start; i < lines.length; i++) {
 			let totalDistance = 0;
-			for (let j = 0; j < ctxPass5.length && totalDistance < maxDistance; j++) {
-				totalDistance += computeLevenshteinDistance(workingLines[i + j], ctxPass5[j]);
+			for (let j = 0; j < ctxPass6.length && totalDistance < maxDistance; j++) {
+				totalDistance += computeLevenshteinDistance(workingLines[i + j], ctxPass6[j]);
 			}
 			if (totalDistance <= maxDistance) {
 				return { line: i, fuzz };
@@ -741,7 +760,6 @@ function peek_next_section(
 export function text_to_patch(
 	text: string,
 	orig: Record<string, AbstractDocumentWithLanguageId | TextDocument>,
-	fixIndentationDuringMatch = true,
 ): [Patch, number] {
 	const lines = text.trim().split("\n");
 	if (lines.length < 2) {
@@ -755,7 +773,7 @@ export function text_to_patch(
 	if (lines[lines.length - 1] !== patchSuffix) {
 		lines.push(patchSuffix);
 	}
-	const parser = new Parser(orig, lines, fixIndentationDuringMatch);
+	const parser = new Parser(orig, lines);
 	parser.index = 1;
 	parser.parse();
 	return [parser.patch, parser.fuzz];
@@ -899,13 +917,12 @@ export function apply_commit(
 export async function processPatch(
 	text: string,
 	openFn: (p: string) => Promise<AbstractDocumentWithLanguageId | TextDocument>,
-	fixIndentationDuringMatch: boolean,
 ): Promise<Commit> {
 	if (!text.startsWith(PATCH_PREFIX)) {
 		throw new InvalidPatchFormatError("Patch must start with *** Begin Patch\\n", 'patchMustStartWithBeginPatch');
 	}
 	const paths = identify_files_needed(text);
 	const orig = await load_files(paths, openFn);
-	const [patch, _fuzz] = text_to_patch(text, orig, fixIndentationDuringMatch);
+	const [patch, _fuzz] = text_to_patch(text, orig);
 	return patch_to_commit(patch, orig);
 }

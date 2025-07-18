@@ -57,6 +57,12 @@ export function getActiveTerminalSelection(): string {
 let lastDetectedShellType: string | undefined;
 export function getActiveTerminalShellType(): string {
 	const activeTerminal = window.activeTerminal;
+
+	// Prefer the state object as it's the most reliable
+	if (activeTerminal?.state.shell) {
+		return activeTerminal.state.shell;
+	}
+
 	if (activeTerminal && 'shellPath' in activeTerminal.creationOptions) {
 		const shellPath = activeTerminal.creationOptions.shellPath;
 		if (shellPath) {
@@ -93,10 +99,7 @@ export function getActiveTerminalShellType(): string {
 
 	// Fall back to bash or PowerShell, this uses the front end OS so it could give the wrong shell
 	// when remoting from Windows into non-Windows or vice versa.
-	if (platform === 'win32') {
-		return 'powershell';
-	}
-	return 'bash';
+	return platform === 'win32' ? 'powershell' : 'bash';
 }
 
 function appendLimitedWindow<T>(target: T[], data: T) {
@@ -109,6 +112,14 @@ function appendLimitedWindow<T>(target: T[], data: T) {
 
 export function installTerminalBufferListeners(): Disposable[] {
 	return [
+		window.onDidChangeTerminalState(t => {
+			if (window.activeTerminal && t.processId === window.activeTerminal.processId) {
+				const newShellType = t.state.shell;
+				if (newShellType && newShellType !== lastDetectedShellType) {
+					lastDetectedShellType = newShellType;
+				}
+			}
+		}),
 		window.onDidWriteTerminalData(e => {
 			let dataBuffer = terminalBuffers.get(e.terminal);
 			if (!dataBuffer) {

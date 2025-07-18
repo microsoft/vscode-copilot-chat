@@ -110,10 +110,8 @@ export type RepoEntry =
 		readonly initTask: InitTask;
 	}
 	| ResolvedRepoEntry
-	| IndexedRepoEntry;
-
-export type CodeSearchRepoInfo = Readonly<RepoEntry>;
-
+	| IndexedRepoEntry
+	;
 
 export type BuildIndexTriggerReason = 'auto' | 'manual';
 
@@ -229,10 +227,10 @@ export class CodeSearchRepoTracker extends Disposable {
 	private readonly _onDidFinishInitialization = this._register(new Emitter<void>());
 	public readonly onDidFinishInitialization = this._onDidFinishInitialization.event;
 
-	private readonly _onDidAddOrUpdateRepo = this._register(new Emitter<CodeSearchRepoInfo>());
+	private readonly _onDidAddOrUpdateRepo = this._register(new Emitter<RepoEntry>());
 	public readonly onDidAddOrUpdateRepo = this._onDidAddOrUpdateRepo.event;
 
-	private readonly _onDidRemoveRepo = this._register(new Emitter<CodeSearchRepoInfo>());
+	private readonly _onDidRemoveRepo = this._register(new Emitter<RepoEntry>());
 	public readonly onDidRemoveRepo = this._onDidRemoveRepo.event;
 
 	private readonly _initializedGitReposP: CancelablePromise<void>;
@@ -380,7 +378,7 @@ export class CodeSearchRepoTracker extends Disposable {
 		this._initializedGitHubRemoteReposP.cancel();
 	}
 
-	getAllRepos(): Iterable<CodeSearchRepoInfo> {
+	getAllRepos(): Iterable<RepoEntry> {
 		return this._repos.values();
 	}
 
@@ -458,7 +456,7 @@ export class CodeSearchRepoTracker extends Disposable {
 			if (remoteInfos.length) {
 				const primaryRemote = remoteInfos[0];
 				const remoteHost = primaryRemote.fetchUrl ? parseRemoteUrl(primaryRemote.fetchUrl) : undefined;
-				remoteTelemetryType = remoteHost ? getRemoteTypeForTelemetry(remoteHost.host) : GitRemoteTypeForTelemetry.Github;
+				remoteTelemetryType = remoteHost ? getRemoteTypeForTelemetry(remoteHost.host) : GitRemoteTypeForTelemetry.Unknown;
 			} else {
 				const allRemotes = Array.from(getOrderedRemoteUrlsFromContext(repo));
 				if (allRemotes.length === 0) {
@@ -915,23 +913,43 @@ export class CodeSearchRepoTracker extends Disposable {
 			}
 
 			if (currentRepoEntry.status === RepoStatus.BuildingIndex) {
-				this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Checking endpoint for status.`);
-				const polledState = await this.getRepoIndexStatusFromEndpoint(currentRepoEntry.repo, currentRepoEntry.remoteInfo, CancellationToken.None);
-				this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Got back new status from endpoint: ${polledState.status}.`);
-
-				if (polledState.status === RepoStatus.Ready) {
-					this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Repo indexed successfully.`);
+				const attemptNumber = pollEntry.attemptNumber++;
+				if (attemptNumber > this.maxPollingAttempts) {
+					this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Max attempts reached. Stopping polling.`);
 					if (!this._isDisposed) {
-						this.updateRepoEntry(repo, polledState);
+						this.updateRepoEntry(repo, { status: RepoStatus.CouldNotCheckIndexStatus, repo: currentRepoEntry.repo, remoteInfo: currentRepoEntry.remoteInfo });
 					}
 					return onComplete();
 				}
 
-				if (pollEntry.attemptNumber++ > this.maxPollingAttempts) {
-					this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Max attempts reached. Stopping polling.`);
-					onComplete();
-					this.updateRepoEntry(repo, polledState);
-					return;
+				this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Checking endpoint for status.`);
+				let polledState: RepoEntry | undefined;
+				try {
+					polledState = await this.getRepoIndexStatusFromEndpoint(currentRepoEntry.repo, currentRepoEntry.remoteInfo, CancellationToken.None);
+				} catch {
+					// noop
+				}
+				this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Got back new status from endpoint: ${polledState?.status}.`);
+
+				switch (polledState?.status) {
+					case RepoStatus.Ready: {
+						this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Repo indexed successfully.`);
+						if (!this._isDisposed) {
+							this.updateRepoEntry(repo, polledState);
+						}
+						return onComplete();
+					}
+					case RepoStatus.BuildingIndex: {
+						// Poll again
+						return;
+					}
+					default: {
+						// We got some other state, so stop polling
+						if (!this._isDisposed) {
+							this.updateRepoEntry(repo, polledState ?? { status: RepoStatus.CouldNotCheckIndexStatus, repo: currentRepoEntry.repo, remoteInfo: currentRepoEntry.remoteInfo });
+						}
+						return onComplete();
+					}
 				}
 			} else {
 				this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Found unknown repo state: ${currentRepoEntry.status}. Stopping polling`);
@@ -942,7 +960,7 @@ export class CodeSearchRepoTracker extends Disposable {
 		return deferredP.p;
 	}
 
-	public async diffWithIndexedCommit(repoInfo: CodeSearchRepoInfo): Promise<CodeSearchDiff | undefined> {
+	public async diffWithIndexedCommit(repoInfo: RepoEntry): Promise<CodeSearchDiff | undefined> {
 		if (isGitHubRemoteRepository(repoInfo.repo.rootUri)) {
 			// TODO: always assumes no diff. Can we get a real diff somehow?
 			return { changes: [] };

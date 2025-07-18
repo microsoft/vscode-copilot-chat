@@ -23,10 +23,14 @@ export class AnyDiagnosticCompletionItem extends DiagnosticCompletionItem {
 	constructor(
 		codeAction: IAnyCodeAction,
 		diagnostic: Diagnostic,
-		nextEditDisplayLocation: INextEditDisplayLocation | undefined,
+		private readonly _nextEditDisplayLocation: INextEditDisplayLocation | undefined,
 		workspaceDocument: IVSCodeObservableDocument,
 	) {
-		super(codeAction.type, diagnostic, codeAction.edit, nextEditDisplayLocation, workspaceDocument);
+		super(codeAction.type, diagnostic, codeAction.edit, workspaceDocument);
+	}
+
+	protected override _getDisplayLocation(): INextEditDisplayLocation | undefined {
+		return this._nextEditDisplayLocation;
 	}
 }
 

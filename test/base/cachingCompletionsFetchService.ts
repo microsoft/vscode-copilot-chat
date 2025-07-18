@@ -18,6 +18,7 @@ import { CancellationToken } from '../../src/util/vs/base/common/cancellation';
 import { IJSONOutputPrinter } from '../jsonOutputPrinter';
 import { InterceptedRequest, ISerialisedChatResponse, OutputType } from '../simulation/shared/sharedTypes';
 
+import { LockMap } from '../../src/util/common/lock';
 import { assertType } from '../../src/util/vs/base/common/types';
 import { OPENAI_FETCHER_CACHE_SALT } from '../cacheSalt';
 import { CachedResponseMetadata, CachedTestInfo } from './cachingChatMLFetcher';
@@ -43,6 +44,8 @@ export class CacheableCompletionRequest {
 }
 
 export class CachingCompletionsFetchService extends CompletionsFetchService {
+
+	private static readonly Locks = new LockMap();
 
 	/** Throttle per URL (currently set to send a request only once a second) */
 	private static readonly throttlers = new CachedFunction(
@@ -153,27 +156,14 @@ export class CachingCompletionsFetchService extends CompletionsFetchService {
 			return this._fetchFromUrlAndCache(request, url, options, ct);
 		}
 
-		const cachedValue = await this.nesCache.get(request, this.testInfo.cacheSlot);
-		if (cachedValue) {
-			this.requests.set(options.requestId, { request, hitsCache: true });
-			return Result.ok(ICacheableCompletionsResponse.toFetchResponse(cachedValue));
-		}
+		return CachingCompletionsFetchService.Locks.withLock(request.hash, async () => {
+			const cachedValue = await this.nesCache.get(request, this.testInfo.cacheSlot);
+			if (cachedValue) {
+				this.requests.set(options.requestId, { request, hitsCache: true });
+				return Result.ok(ICacheableCompletionsResponse.toFetchResponse(cachedValue));
+			}
 
-		if (this.cacheMode === CacheMode.Require) {
-			console.log(JSON.stringify(options.body, (key, value) => {
-				if (typeof value === 'string') {
-					const split = value.split(/\n/g);
-					return split.length > 1 ? split : value;
-				}
-				return value;
-			}, 4));
-			await this.throwCacheMissing(request);
-		}
-
-		try {
-			this.requests.set(options.requestId, { request, hitsCache: false });
-		} catch (err) {
-			if (/Key already exists/.test(err.message)) {
+			if (this.cacheMode === CacheMode.Require) {
 				console.log(JSON.stringify(options.body, (key, value) => {
 					if (typeof value === 'string') {
 						const split = value.split(/\n/g);
@@ -181,13 +171,28 @@ export class CachingCompletionsFetchService extends CompletionsFetchService {
 					}
 					return value;
 				}, 4));
-				console.log(`\n✗ ${err.message}`);
-				await drainStdoutAndExit(1);
+				await this.throwCacheMissing(request);
 			}
 
-			throw err;
-		}
-		return this._fetchFromUrlAndCache(request, url, options, ct);
+			try {
+				this.requests.set(options.requestId, { request, hitsCache: false });
+			} catch (err) {
+				if (/Key already exists/.test(err.message)) {
+					console.log(JSON.stringify(options.body, (key, value) => {
+						if (typeof value === 'string') {
+							const split = value.split(/\n/g);
+							return split.length > 1 ? split : value;
+						}
+						return value;
+					}, 4));
+					console.log(`\n✗ ${err.message}`);
+					await drainStdoutAndExit(1);
+				}
+
+				throw err;
+			}
+			return this._fetchFromUrlAndCache(request, url, options, ct);
+		});
 	}
 
 	private async _fetchFromUrlAndCache(
