@@ -158,10 +158,7 @@ suite('TerminalAndTaskStatePromptElement', () => {
 		tasksService.getTasks = () => [];
 		tasksService.isTaskActive = () => true;
 
-		terminalService.terminals = [
-			{ name: 'Terminal 1', id: '1' },
-			{ name: 'Terminal 2', id: '2' },
-		];
+		terminalService.terminals = [];
 		terminalService.getLastCommandForTerminal = (term: any) => {
 			return undefined;
 		};
