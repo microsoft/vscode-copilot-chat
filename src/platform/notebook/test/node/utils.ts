@@ -3,12 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import * as fs from 'fs';
-import * as path from '../../../../../../util/vs/base/common/path';
+import * as path from '../../../../util/vs/base/common/path';
 import type * as vscode from 'vscode';
-import { BaseAlternativeNotebookContentProvider } from '../../../../../../platform/notebook/common/alternativeContentProvider';
-import { SimulationWorkspace } from '../../../../../../platform/test/node/simulationWorkspace';
-import { ExtHostNotebookDocumentData } from '../../../../../../util/common/test/shims/notebookDocument';
-import { Uri } from '../../../../../../vscodeTypes';
+import { BaseAlternativeNotebookContentProvider } from '../../../../platform/notebook/common/alternativeContentProvider';
+import { SimulationWorkspace } from '../../../../platform/test/node/simulationWorkspace';
+import { ExtHostNotebookDocumentData } from '../../../../util/common/test/shims/notebookDocument';
+import { Uri } from '../../../../vscodeTypes';
 
 export function loadFile(data: FixtureData): Promise<ITestFile>;
 export function loadFile(data: Omit<FixtureData, 'filePath'> & { fileName: string; fileContents: string }): Promise<'not_supported'>;

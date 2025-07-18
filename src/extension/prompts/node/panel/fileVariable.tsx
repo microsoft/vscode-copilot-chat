@@ -136,9 +136,8 @@ export class FileVariable extends PromptElement<FileVariableProps, unknown> {
 					range = cellRange;
 				}
 				const altDocument = this.alternativeNotebookContent.create(this.alternativeNotebookContent.getFormat(this.promptEndpoint)).getAlternativeDocument(notebook);
-				const cellIndex = notebook.getCells().indexOf(cell);
 				//Translate the range to alternative content.
-				range = new Range(altDocument.fromCellPosition(cellIndex, range.start), altDocument.fromCellPosition(cellIndex, range.end));
+				range = new Range(altDocument.fromCellPosition(cell, range.start), altDocument.fromCellPosition(cell, range.end));
 			} else {
 				range = undefined;
 			}
