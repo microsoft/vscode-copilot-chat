@@ -27,12 +27,12 @@ export class CompilerOptionsRunnable extends AbstractContextRunnable {
 
 	public static VersionTraitKey: string = Trait.createContextItemKey(TraitKind.Version);
 
-	// Traits to collect from the compiler options in the format of [trait kind, trait description, priority, context key, CompilerOptions.enumType (if applicable)]
-	public static traitsToCollect: [TraitKind, string, number, ContextItemKey, any][] = [
-		[TraitKind.Module, 'The TypeScript module system used in this project is ', Priorities.Traits, Trait.createContextItemKey(TraitKind.Module), ts.ModuleKind],
-		[TraitKind.ModuleResolution, 'The TypeScript module resolution strategy used in this project is ', Priorities.Traits, Trait.createContextItemKey(TraitKind.ModuleResolution), ts.ModuleResolutionKind],
-		[TraitKind.Target, 'The target version of JavaScript for this project is ', Priorities.Traits, Trait.createContextItemKey(TraitKind.Target), ts.ScriptTarget],
-		[TraitKind.Lib, 'Library files that should be included in TypeScript compilation are ', Priorities.Traits, Trait.createContextItemKey(TraitKind.Lib), undefined],
+	// Traits to collect from the compiler options in the format of [trait kind, trait description, context key, CompilerOptions.enumType (if applicable)]
+	public static traitsToCollect: [TraitKind, string, ContextItemKey, any][] = [
+		[TraitKind.Module, 'The TypeScript module system used in this project is ', Trait.createContextItemKey(TraitKind.Module), ts.ModuleKind],
+		[TraitKind.ModuleResolution, 'The TypeScript module resolution strategy used in this project is ', Trait.createContextItemKey(TraitKind.ModuleResolution), ts.ModuleResolutionKind],
+		[TraitKind.Target, 'The target version of JavaScript for this project is ', Trait.createContextItemKey(TraitKind.Target), ts.ScriptTarget],
+		[TraitKind.Lib, 'Library files that should be included in TypeScript compilation are ', Trait.createContextItemKey(TraitKind.Lib), undefined],
 	];
 
 	private readonly sourceFile: tt.SourceFile;
@@ -47,15 +47,15 @@ export class CompilerOptionsRunnable extends AbstractContextRunnable {
 	}
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheInfo: CacheInfo = { emitMode: EmitMode.ClientBased, scope: { kind: CacheScopeKind.File } };
-		return result.createRunnableResult(this.id, SpeculativeKind.emit, cacheInfo);
+		return result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit, cacheInfo);
 	}
 
 	protected override run(result: RunnableResult, _token: tt.CancellationToken): void {
 		const compilerOptions = this.getProgram().getCompilerOptions();
 		if (!result.addFromKnownItems(CompilerOptionsRunnable.VersionTraitKey)) {
-			result.addTrait(TraitKind.Version, Priorities.Traits, 'The TypeScript version used in this project is ', ts.version);
+			result.addTrait(TraitKind.Version, 'The TypeScript version used in this project is ', ts.version);
 		}
-		for (const [traitKind, trait, priority, key, enumType,] of CompilerOptionsRunnable.traitsToCollect) {
+		for (const [traitKind, trait, key, enumType,] of CompilerOptionsRunnable.traitsToCollect) {
 			if (result.addFromKnownItems(key)) {
 				continue;
 			}
@@ -67,7 +67,7 @@ export class CompilerOptionsRunnable extends AbstractContextRunnable {
 						traitValue = enumName;
 					}
 				}
-				result.addTrait(traitKind, priority, trait, traitValue.toString());
+				result.addTrait(traitKind, trait, traitValue.toString());
 			}
 		}
 	}
@@ -109,7 +109,7 @@ export class SignatureRunnable extends FunctionLikeContextRunnable {
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const scope = this.getCacheScope();
 		const cacheInfo: CacheInfo | undefined = scope !== undefined ? { emitMode: EmitMode.ClientBased, scope } : undefined;
-		return result.createRunnableResult(this.id, SpeculativeKind.emit, cacheInfo);
+		return result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit, cacheInfo);
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {
@@ -181,7 +181,7 @@ export class TypeOfLocalsRunnable extends AbstractContextRunnable {
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheInfo: CacheInfo | undefined = this.cacheScope !== undefined ? { emitMode: EmitMode.ClientBasedOnTimeout, scope: this.cacheScope } : undefined;
-		this.runnableResult = result.createRunnableResult(this.id, SpeculativeKind.emit, cacheInfo);
+		this.runnableResult = result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit, cacheInfo);
 		return this.runnableResult;
 	}
 
@@ -250,7 +250,7 @@ export class TypesOfNeighborFilesRunnable extends AbstractContextRunnable {
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
 		const cacheInfo: CacheInfo = { emitMode: EmitMode.ClientBased, scope: { kind: CacheScopeKind.NeighborFiles } };
-		return result.createRunnableResult(this.id, SpeculativeKind.emit, cacheInfo);
+		return result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit, cacheInfo);
 	}
 
 	protected override run(result: RunnableResult, cancellationToken: tt.CancellationToken): void {
@@ -337,7 +337,7 @@ export class ImportsRunnable extends AbstractContextRunnable {
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
-		this.runnableResult = result.createRunnableResult(this.id, SpeculativeKind.emit, this.cacheInfo);
+		this.runnableResult = result.createRunnableResult(this.id, this.priority, SpeculativeKind.emit, this.cacheInfo);
 		return this.runnableResult;
 	}
 
@@ -502,7 +502,7 @@ export class TypeOfExpressionRunnable extends AbstractContextRunnable {
 	}
 
 	protected override createRunnableResult(result: ContextResult): RunnableResult {
-		return result.createRunnableResult(this.id, SpeculativeKind.ignore);
+		return result.createRunnableResult(this.id, this.priority, SpeculativeKind.ignore);
 	}
 
 	protected override run(result: RunnableResult, token: tt.CancellationToken): void {
@@ -523,7 +523,7 @@ export class TypeOfExpressionRunnable extends AbstractContextRunnable {
 			}
 			const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile);
 			snippetBuilder.addTypeSymbol(returnTypeSymbol, returnTypeSymbol.name);
-			result.addSnippet(snippetBuilder, undefined, this.priority);
+			result.addSnippet(snippetBuilder, undefined);
 		}
 		const typeSymbol = type.getSymbol();
 		if (typeSymbol === undefined) {
@@ -531,7 +531,7 @@ export class TypeOfExpressionRunnable extends AbstractContextRunnable {
 		}
 		const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile);
 		snippetBuilder.addTypeSymbol(typeSymbol, typeSymbol.name);
-		result.addSnippet(snippetBuilder, undefined, this.priority);
+		result.addSnippet(snippetBuilder, undefined);
 	}
 }
 
