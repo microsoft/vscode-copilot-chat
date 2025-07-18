@@ -733,7 +733,11 @@ class RunnableResultManager implements vscode.Disposable {
 				}
 			}
 		}
-		return results;
+		// Sort them by priority so that the most important items are emitted first if they
+		// are contained in more than one runnable result.
+		return results.sort((a, b) => {
+			return a.priority < b.priority ? 1 : a.priority > b.priority ? -1 : 0;
+		});
 	}
 
 	public getContextRequestState(document: vscode.TextDocument, position: vscode.Position): ContextRequestState | undefined {
@@ -807,6 +811,7 @@ class RunnableResultManager implements vscode.Disposable {
 					items.set(key, item);
 				}
 			};
+			// We don't need to sort by priority here since the data is used for the next cache request.
 			for (const [id, item] of this.results.entries()) {
 				const scope = item.cache?.scope;
 				if (scope === undefined || scope.kind !== protocol.CacheScopeKind.WithinRange) {
