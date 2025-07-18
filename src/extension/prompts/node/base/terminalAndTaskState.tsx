@@ -104,7 +104,7 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 											Exit Code: {term.lastCommand.exitCode ?? '(unknown)'}<br />
 										</>
 									) : ''}
-									Output: {'{'}Use {ToolName.GetTerminalOutput} for terminal with ID: {term.pid}.{'}'}<br />
+									Output: {'{'}Use {ToolName.CoreGetTerminalOutput} for terminal with ID: {term.pid}.{'}'}<br />
 								</>
 							))}
 						</>
@@ -115,7 +115,7 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 							{resultTerminals.map((term) => (
 								<>
 									Terminal: {term.name}<br />
-									Output: {'{'}Use {ToolName.GetTerminalOutput} for terminal with pid: {term.pid}.{'}'}<br />
+									Output: {'{'}Use {ToolName.CoreGetTerminalOutput} for terminal with pid: {term.pid}.{'}'}<br />
 								</>
 							))}
 						</>

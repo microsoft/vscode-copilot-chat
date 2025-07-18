@@ -27,8 +27,8 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 	];
 
 	private static readonly ContainerOnlyTools = [
-		ToolName.RunInTerminal,
-		ToolName.GetTerminalOutput
+		ToolName.CoreRunInTerminal,
+		ToolName.CoreGetTerminalOutput
 	];
 
 	private readonly _tools = new Map<string, LanguageModelToolInformation>();
