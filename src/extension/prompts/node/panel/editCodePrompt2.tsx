@@ -20,7 +20,7 @@ import { ChatToolReferences, ChatVariables, UserQuery } from './chatVariables';
 import { EXISTING_CODE_MARKER } from './codeBlockFormattingRules';
 import { ConversationHistoryWithTools } from './conversationHistory';
 import { CustomInstructions } from './customInstructions';
-import { NewFilesLocationHint } from './editCodePrompt';
+import { NewFilesLocationHint, WorkingSet } from './editCodePrompt';
 import { NotebookFormat, NotebookReminderInstructions } from './notebookEditCodePrompt';
 import { ProjectLabels } from './projectLabels';
 import { ChatToolCalls } from './toolCalling';
@@ -147,6 +147,7 @@ export class EditCode2UserMessage extends PromptElement<AgentPromptProps> {
 					<NotebookFormat flexGrow={5} priority={810} chatVariables={chatVariables} query={query} />
 					<ChatToolReferences flexGrow={4} priority={898} promptContext={this.props.promptContext} documentContext={this.props.documentContext} />
 					<ChatVariables flexGrow={3} priority={898} chatVariables={chatVariables} />
+					{this.props.promptContext.workingSet && <WorkingSet flexGrow={2} priority={850} workingSet={this.props.promptContext.workingSet} />}
 					<Tag name='reminder'>
 						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint))}
 						<NotebookReminderInstructions chatVariables={chatVariables} query={query} />

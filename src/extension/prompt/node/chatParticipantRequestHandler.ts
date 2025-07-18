@@ -8,6 +8,7 @@ import type { ChatRequest, ChatRequestTurn2, ChatResponseStream, ChatResult, Loc
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { getChatParticipantIdFromName, getChatParticipantNameFromId, workspaceAgentName } from '../../../platform/chat/common/chatAgents';
 import { CanceledMessage, ChatLocation } from '../../../platform/chat/common/commonTypes';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
@@ -78,9 +79,10 @@ export class ChatParticipantRequestHandler {
 		@IConversationStore private readonly _conversationStore: IConversationStore,
 		@ITabsAndEditorsService tabsAndEditorsService: ITabsAndEditorsService,
 		@ILogService private readonly _logService: ILogService,
-		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService
+		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
-		this.location = getLocation(request);
+		this.location = this.getLocation(request);
 
 		this.intentDetector = this._instantiationService.createInstance(IntentDetector);
 
@@ -127,6 +129,26 @@ export class ChatParticipantRequestHandler {
 		this.conversation = new Conversation(actualSessionId, turns.concat(latestTurn));
 
 		this.turn = latestTurn;
+	}
+
+	private getLocation(request: ChatRequest) {
+		if (request.location2 instanceof ChatRequestEditorData) {
+			return request.location2.document.uri.scheme === 'vscode-notebook-cell' && this._configurationService.getNonExtensionConfig('chat.notebook.inlineAgent.enabled')
+				? ChatLocation.Notebook
+				: ChatLocation.Editor;
+		} else if (request.location2 instanceof ChatRequestNotebookData) {
+			return ChatLocation.Other; // TODO should this be ChatLocation.Notebook
+		}
+		switch (request.location) { // deprecated, but location2 does not yet allow to distinguish between panel, editing session and others
+			case VSChatLocation.Editor:
+				return ChatLocation.Editor;
+			case VSChatLocation.Panel:
+				return ChatLocation.Panel;
+			case VSChatLocation.Terminal:
+				return ChatLocation.Terminal;
+			default:
+				return ChatLocation.Other;
+		}
 	}
 
 	private async sanitizeVariables(): Promise<ChatRequest> {
@@ -260,11 +282,13 @@ export class ChatParticipantRequestHandler {
 	}
 
 	private async selectIntent(command: CommandDetails | undefined, history: Turn[]): Promise<IIntent> {
-		if (!command?.intent && this.location === ChatLocation.Editor) { // TODO@jrieken do away with location specific code
+		if (!command?.intent && (this.location === ChatLocation.Editor || this.location === ChatLocation.Notebook)) { // TODO@jrieken do away with location specific code
 
 			let preferredIntent: Intent | undefined;
-			if (this.location === ChatLocation.Editor && this.documentContext && this.request.attempt === 0 && history.length === 0) { // TODO@jrieken do away with location specific code
-				if (this.documentContext.selection.isEmpty && this.documentContext.document.lineAt(this.documentContext.selection.start.line).text.trim() === '') {
+			if (this.documentContext && this.request.attempt === 0 && history.length === 0) {
+				if (this.location === ChatLocation.Notebook) {
+					preferredIntent = Intent.notebookEditor;
+				} else if (this.documentContext.selection.isEmpty && this.documentContext.document.lineAt(this.documentContext.selection.start.line).text.trim() === '') {
 					preferredIntent = Intent.Generate;
 				} else if (!this.documentContext.selection.isEmpty && this.documentContext.selection.start.line !== this.documentContext.selection.end.line) {
 					preferredIntent = Intent.Edit;
@@ -408,24 +432,6 @@ function createTurnFromVSCodeChatHistoryTurns(
 	}
 
 	return currentTurn;
-}
-
-function getLocation(request: ChatRequest) {
-	if (request.location2 instanceof ChatRequestEditorData) {
-		return ChatLocation.Editor;
-	} else if (request.location2 instanceof ChatRequestNotebookData) {
-		return ChatLocation.Other; // TODO should this be ChatLocation.Notebook
-	}
-	switch (request.location) { // deprecated, but location2 does not yet allow to distinguish between panel, editing session and others
-		case VSChatLocation.Editor:
-			return ChatLocation.Editor;
-		case VSChatLocation.Panel:
-			return ChatLocation.Panel;
-		case VSChatLocation.Terminal:
-			return ChatLocation.Terminal;
-		default:
-			return ChatLocation.Other;
-	}
 }
 
 function anchorPartToMarkdown(workspaceService: IWorkspaceService, anchor: ChatResponseAnchorPart): string {
