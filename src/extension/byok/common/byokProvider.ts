@@ -130,8 +130,41 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 	};
 }
 
+/**
+ * Determines if Bring Your Own Key (BYOK) functionality is enabled for the current user.
+ *
+ * BYOK availability rules:
+ * - Internal users: Always enabled
+ * - Individual users: Always enabled (backward compatibility)
+ * - Business/Enterprise users: Requires "Editor Preview Features" to be enabled by admin
+ * - GitHub Enterprise Server: Not available
+ *
+ * @param copilotToken The user's Copilot token (without the actual token value)
+ * @param capiClientService Service to check if running on GitHub Enterprise
+ * @returns true if BYOK should be enabled for this user
+ */
 export function isBYOKEnabled(copilotToken: Omit<CopilotToken, "token">, capiClientService: ICAPIClientService): boolean {
 	const isGHE = capiClientService.dotcomAPIURL !== 'https://api.github.com';
-	const byokAllowed = (copilotToken.isInternal || copilotToken.isIndividual) && !isGHE;
-	return byokAllowed;
+
+	// Not available on GitHub Enterprise
+	if (isGHE) {
+		return false;
+	}
+
+	// Always allow for internal users
+	if (copilotToken.isInternal) {
+		return true;
+	}
+
+	// Allow for individual users without preview features gating (backward compatibility)
+	if (copilotToken.isIndividual) {
+		return true;
+	}
+
+	// For business and enterprise users, require Editor Preview Features to be enabled
+	if (copilotToken.copilotPlan === 'business' || copilotToken.copilotPlan === 'enterprise') {
+		return copilotToken.isEditorPreviewFeaturesEnabled();
+	}
+
+	return false;
 }
