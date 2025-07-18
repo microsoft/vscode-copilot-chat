@@ -197,7 +197,7 @@ describe('Alternative Content for Notebooks', () => {
 				});
 
 				describe(`${provider.kind} Position Translator`, () => {
-					test(`Translate position in notebook cell`, async () => {
+					test(`Translate position in notebook cell to Alternative Document & back`, async () => {
 						const notebook = await loadNotebook(loadFile({ filePath: fixture('sample.ipynb') }));
 						const altDoc = provider.getAlternativeDocument(notebook);
 
@@ -220,6 +220,15 @@ describe('Alternative Content for Notebooks', () => {
 								expect(normatlizeContent(textFromAltDoc)).toBe(normatlizeContent(textFromCell));
 							} else {
 								expect(normatlizeContent(textFromAltDoc).split(/\r?\n/).join(EOL)).toBe([`\\"Hello from Python!\\")",`, `                "    print`].join(EOL));
+							}
+
+							// Now try the reverse translation.
+							if (provider.kind !== 'json') {
+								const cellPosition = altDoc.toCellPosition(startTranslation[0]);
+								expect(cellPosition).toBeDefined();
+								expect(cellPosition?.cellIndex).toBe(pos.cellIndex);
+								expect(cellPosition?.position.line).toBe(pos.start.line);
+								expect(cellPosition?.position.character).toBe(pos.start.character);
 							}
 						}
 					});

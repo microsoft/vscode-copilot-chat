@@ -9,6 +9,7 @@ import { EndOfLine, NotebookCellKind } from '../../../vscodeTypes';
 import { BaseAlternativeNotebookContentProvider } from './alternativeContentProvider';
 import { AlternativeNotebookDocument } from './alternativeNotebookDocument';
 import { EOL, getCellIdMap, getDefaultLanguage, LineOfCellText, LineOfText, summarize, SummaryCell } from './helpers';
+import { findLastIdx } from '../../../util/vs/base/common/arraysFind';
 
 function generateCellMarker(cell: SummaryCell, lineComment: string): string {
 	const cellIdStr = cell.id ? `[id=${cell.id}] ` : '';
@@ -41,7 +42,7 @@ class AlternativeTextDocument extends AlternativeNotebookDocument {
 
 	override toCellPosition(position: Position): { cellIndex: number; position: Position } | undefined {
 		const offset = this.offsetAt(position);
-		const cellIndex = this.cellOffsetMap.findIndex(cellOffset => cellOffset >= offset);
+		const cellIndex = findLastIdx(this.cellOffsetMap, (cellOffset) => cellOffset <= offset);
 		if (cellIndex === -1) {
 			return undefined;
 		}
@@ -189,24 +190,25 @@ export class AlternativeTextNotebookContentProvider extends BaseAlternativeNoteb
 
 	public override getAlternativeDocument(notebook: NotebookDocument): AlternativeNotebookDocument {
 		const cells = notebook.getCells().map(cell => summarize(cell));
-
 		const blockComment = getBlockComment(notebook);
 		const lineCommentStart = getLineCommentStart(notebook);
 		const cellContent = cells.map(cell => generateAlternativeCellContent(cell, lineCommentStart, blockComment));
 		const content = cellContent.map(cell => cell.content).join(EOL);
-		const cellOffsetMap = cellContent.map(cellContent => content.indexOf(cellContent.content) + cellContent.cellMarker.length + EOL.length);
+		const cellOffsetMap = cellContent.map(cellContent => content.indexOf(cellContent.content) + cellContent.prefix.length);
 
 		return new AlternativeTextDocument(content, cellOffsetMap, notebook);
 	}
 
 }
 
-function generateAlternativeCellContent(cell: SummaryCell, lineCommentStart: string, blockComment: [string, string]): { content: string; cellMarker: string } {
+function generateAlternativeCellContent(cell: SummaryCell, lineCommentStart: string, blockComment: [string, string]): { content: string; prefix: string } {
 	const cellMarker = generateCellMarker(cell, lineCommentStart);
+	const src = cell.source.join(EOL);
+	const prefix = cell.language === 'markdown' ? `${cellMarker}${EOL}${blockComment[0]}${EOL}` : `${cellMarker}${EOL}`;
 	const content = cell.language === 'markdown'
-		? `${cellMarker}${EOL}${blockComment[0]}${EOL}${cell.source.join(EOL)}${EOL}${blockComment[1]}`
-		: `${cellMarker}${EOL}${cell.source.join(EOL)}`;
-	return { content, cellMarker };
+		? `${prefix}${src}${EOL}${blockComment[1]}`
+		: `${prefix}${src}`;
+	return { content, prefix };
 }
 
 function getBlockComment(notebook?: NotebookDocument): [string, string] {

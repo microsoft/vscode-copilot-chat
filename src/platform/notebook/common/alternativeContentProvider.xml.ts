@@ -9,6 +9,7 @@ import { EndOfLine, NotebookCellKind, Position } from '../../../vscodeTypes';
 import { BaseAlternativeNotebookContentProvider } from './alternativeContentProvider';
 import { AlternativeNotebookDocument } from './alternativeNotebookDocument';
 import { EOL, getCellIdMap, getDefaultLanguage, LineOfCellText, LineOfText, summarize, SummaryCell } from './helpers';
+import { findLastIdx } from '../../../util/vs/base/common/arraysFind';
 
 const StartDelimter = `<VSCode.Cell `;
 const StartEmptyCellDelimter = `<VSCode.Cell>`;
@@ -47,7 +48,7 @@ class AlternativeXmlDocument extends AlternativeNotebookDocument {
 
 	override toCellPosition(position: Position): { cellIndex: number; position: Position } | undefined {
 		const offset = this.offsetAt(position);
-		const cellIndex = this.cellOffsetMap.findIndex(cellOffset => cellOffset >= offset);
+		const cellIndex = findLastIdx(this.cellOffsetMap, (cellOffset) => cellOffset <= offset);
 		if (cellIndex === -1) {
 			return undefined;
 		}
@@ -178,10 +179,11 @@ export class AlternativeXmlNotebookContentProvider extends BaseAlternativeNotebo
 
 		const cellContent = cells.map(cell => {
 			const cellMarker = generateCellMarker(cell);
-			return { content: `${cellMarker}${EOL}${cell.source.join(EOL)}${EOL}${EndDelimter}`, cellMarker };
+			const prefix = `${cellMarker}${EOL}`;
+			return { content: `${prefix}${cell.source.join(EOL)}${EOL}${EndDelimter}`, prefix };
 		});
 		const content = cellContent.map(cell => cell.content).join(EOL);
-		const cellOffsetMap = cellContent.map(cellContent => content.indexOf(cellContent.content) + cellContent.cellMarker.length + EOL.length);
+		const cellOffsetMap = cellContent.map(cellContent => content.indexOf(cellContent.content) + cellContent.prefix.length);
 
 		return new AlternativeXmlDocument(content, cellOffsetMap, notebook);
 	}
