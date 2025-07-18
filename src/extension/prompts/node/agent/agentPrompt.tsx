@@ -280,7 +280,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		const hasCreateFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CreateFile);
 		const hasEditFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
 		const hasEditNotebookTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditNotebook);
-		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.RunInTerminal);
+		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.RunInTerminal || tool.name === ToolName.RunInTerminalCore);
 		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1') && this.props.chatVariables.hasVariables() ?
 			' (See <attachments> above for file contents. You may not need to search or read the file again.)'
 			: '';
@@ -485,8 +485,8 @@ class CurrentEditorContext extends PromptElement<CurrentEditorContextProps> {
 			const startCell = cellsInRange[0];
 			const endCell = cellsInRange[cellsInRange.length - 1];
 			const lastLine = endCell.document.lineAt(endCell.document.lineCount - 1);
-			const startPosition = altDocument.fromCellPosition(startCell.index, new Position(0, 0));
-			const endPosition = altDocument.fromCellPosition(endCell.index, new Position(endCell.document.lineCount - 1, lastLine.text.length));
+			const startPosition = altDocument.fromCellPosition(startCell, new Position(0, 0));
+			const endPosition = altDocument.fromCellPosition(endCell, new Position(endCell.document.lineCount - 1, lastLine.text.length));
 			const selection = new Range(startPosition, endPosition);
 			selectionText = selection ? ` The current selection is from line ${selection.start.line + 1} to line ${selection.end.line + 1}.` : '';
 		}
@@ -578,7 +578,6 @@ class AgentTasksInstructions extends PromptElement {
 							<Tag name='task' attrs={{ id: `${t.type}: ${t.label || i}` }}>
 								{this.makeTaskPresentation(t)}
 								{isActive && <> (This task is currently running. You can use the {ToolName.GetTaskOutput} tool to view its output.)</>}
-								{!isActive && <> (This task is not running. Use the {ToolName.GetTaskOutput} tool to view its output and check its status.)</>}
 							</Tag>
 						);
 					})}

@@ -4,20 +4,20 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { describe, expect, test } from 'vitest';
-import { DiffServiceImpl } from '../../../../../../platform/diff/node/diffServiceImpl';
-import { ILogger, ILogService } from '../../../../../../platform/log/common/logService';
-import { IAlternativeNotebookContentService } from '../../../../../../platform/notebook/common/alternativeContent';
-import { AlternativeNotebookContentEditGenerator } from '../../../../../../platform/notebook/common/alternativeContentEditGenerator';
-import { BaseAlternativeNotebookContentProvider } from '../../../../../../platform/notebook/common/alternativeContentProvider';
-import { AlternativeJsonNotebookContentProvider } from '../../../../../../platform/notebook/common/alternativeContentProvider.json';
-import { AlternativeTextNotebookContentProvider } from '../../../../../../platform/notebook/common/alternativeContentProvider.text';
-import { AlternativeXmlNotebookContentProvider } from '../../../../../../platform/notebook/common/alternativeContentProvider.xml';
-import { NullTelemetryService } from '../../../../../../platform/telemetry/common/nullTelemetryService';
-import { AsyncIterableObject } from '../../../../../../util/vs/base/common/async';
-import { CancellationToken } from '../../../../../../util/vs/base/common/cancellation';
-import { NotebookCellKind, NotebookEdit } from '../../../../../../vscodeTypes';
-import { LineOfText } from '../../../../../prompt/node/streamingEdits';
+import { DiffServiceImpl } from '../../../../platform/diff/node/diffServiceImpl';
+import { ILogger, ILogService } from '../../../../platform/log/common/logService';
+import { IAlternativeNotebookContentService } from '../../common/alternativeContent';
+import { AlternativeNotebookContentEditGenerator } from '../../common/alternativeContentEditGenerator';
+import { BaseAlternativeNotebookContentProvider } from '../../common/alternativeContentProvider';
+import { AlternativeJsonNotebookContentProvider } from '../../common/alternativeContentProvider.json';
+import { AlternativeTextNotebookContentProvider } from '../../common/alternativeContentProvider.text';
+import { AlternativeXmlNotebookContentProvider } from '../../common/alternativeContentProvider.xml';
+import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
+import { AsyncIterableObject } from '../../../../util/vs/base/common/async';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { NotebookCellKind, NotebookEdit } from '../../../../vscodeTypes';
 import { fixture, loadFile, loadNotebook } from './utils';
+import { LineOfText } from '../../common/helpers';
 
 describe('Alternative Content Edit Generator', () => {
 	[

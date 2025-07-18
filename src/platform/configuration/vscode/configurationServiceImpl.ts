@@ -170,6 +170,13 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 			return configuredValue;
 		}
 
+		if (key.experimentName) {
+			const expValue = experimentationService.getTreatmentVariable<Exclude<T, undefined>>('vscode', key.experimentName);
+			if (expValue !== undefined) {
+				return expValue;
+			}
+		}
+
 		// This is the pattern we've been using for a while now. We need to maintain it for older experiments.
 		const expValue = experimentationService.getTreatmentVariable<Exclude<T, undefined>>('vscode', `copilotchat.config.${key.id}`);
 		if (expValue !== undefined) {

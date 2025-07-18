@@ -85,7 +85,7 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 				taskLabel = input.id;
 			}
 		} catch { }
-		return { workspaceFolder, task, taskLabel, terminal: task.terminal ?? this.tasksService.getTerminalForTask(task) };
+		return { workspaceFolder, task, taskLabel: task.label || taskLabel, terminal: task.terminal ?? this.tasksService.getTerminalForTask(task) };
 	}
 }
 

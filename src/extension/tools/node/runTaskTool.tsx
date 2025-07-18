@@ -18,6 +18,7 @@ import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { ChatLocation, LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
+import { getTaskRepresentation } from './toolUtils.task';
 
 interface IRunTaskToolInput {
 	id: string;
@@ -173,20 +174,9 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 			invocationMessage: trustedMark(l10n.t`Running ${taskLabel ?? link(options.input.id)}`),
 			pastTenseMessage: trustedMark(task?.isBackground ? l10n.t`Started ${link(taskLabel ?? options.input.id)}` : l10n.t`Ran ${link(taskLabel ?? options.input.id)}`),
 			confirmationMessages: task && task.group !== 'build'
-				? { title: l10n.t`Allow task run?`, message: trustedMark(l10n.t`Allow Copilot to run the \`${task.type}\` task ${link(`\`${this.getTaskRepresentation(task)}\``)}?`) }
+				? { title: l10n.t`Allow task run?`, message: trustedMark(l10n.t`Allow Copilot to run the \`${task.type}\` task ${link(`\`${getTaskRepresentation(task)}\``)}?`) }
 				: undefined
 		};
-	}
-
-	private getTaskRepresentation(task: vscode.TaskDefinition): string {
-		if ('label' in task) {
-			return task.label;
-		} else if ('script' in task) {
-			return task.script;
-		} else if ('command' in task) {
-			return task.command;
-		}
-		return '';
 	}
 
 	private getTaskDefinition(input: IRunTaskToolInput) {
@@ -205,7 +195,7 @@ class RunTaskTool implements vscode.LanguageModelTool<IRunTaskToolInput> {
 				taskLabel = input.id;
 			}
 		} catch { }
-		return { workspaceFolder, task, taskLabel };
+		return { workspaceFolder, task, taskLabel: task.label || taskLabel };
 	}
 }
 
