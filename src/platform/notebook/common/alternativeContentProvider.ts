@@ -6,16 +6,11 @@
 import type { CancellationToken, NotebookCell, NotebookDocument } from 'vscode';
 import { Uri } from '../../../vscodeTypes';
 import { AlternativeNotebookDocument } from './alternativeNotebookDocument';
-import { getCellIdMap, LineOfCellText, LineOfText } from './helpers';
+import { LineOfCellText, LineOfText } from './helpers';
 
 
 export abstract class BaseAlternativeNotebookContentProvider {
 	constructor(public readonly kind: 'xml' | 'text' | 'json') { }
-
-	public getCell(notebook: NotebookDocument, cellId: string): NotebookCell | undefined {
-		const cellMap = getCellIdMap(notebook);
-		return cellMap.get(cellId);
-	}
 
 	/**
 	 * Give the code for a cell, strips the cell markers and returns the code.
