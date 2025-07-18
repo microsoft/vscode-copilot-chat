@@ -65,7 +65,7 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 			}));
 			const resultTerminals = terminals.filter(t => !!t);
 
-			if (resultTerminals.length === 0 && tasks.length === 0) {
+			if (resultTerminals.length === 0 && resultTasks.length === 0) {
 				return 'No tasks or terminals found.';
 			}
 
