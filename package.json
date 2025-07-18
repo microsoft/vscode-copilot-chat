@@ -3322,6 +3322,18 @@
 					"when": "github.copilot.chat.reviewDiff.enabled && github.copilot.chat.review.sourceControlProgress && scmProvider == git && scmProviderRootUri in github.copilot.chat.reviewDiff.enabledRootUris"
 				}
 			],
+			"scm/resourceGroup/context": [
+				{
+					"command": "github.copilot.chat.review.stagedChanges",
+					"when": "github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmResourceGroup == index",
+					"group": "inline@-3"
+				},
+				{
+					"command": "github.copilot.chat.review.unstagedChanges",
+					"when": "github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmResourceGroup == workingTree",
+					"group": "inline@-3"
+				}
+			],
 			"scm/inputBox": [
 				{
 					"command": "github.copilot.git.generateCommitMessage",
