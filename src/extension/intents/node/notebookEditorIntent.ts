@@ -6,14 +6,13 @@
 import type * as vscode from 'vscode';
 import { ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
-import { getAltNotebookRange, IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
-import { requestHasNotebookRefs } from '../../../platform/notebook/common/helpers';
+import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
+import { getCellId, requestHasNotebookRefs } from '../../../platform/notebook/common/helpers';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
@@ -21,10 +20,10 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { Range } from '../../../vscodeTypes';
 import { ICommandService } from '../../commands/node/commandService';
 import { Intent } from '../../common/constants';
-import { IBuildPromptContext, IWorkingSet, IWorkingSetEntry, WorkingSetEntryState } from '../../prompt/common/intents';
+import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
+import { IBuildPromptContext } from '../../prompt/common/intents';
 import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIntentRequestHandler';
 import { IBuildPromptResult, IIntent, IntentLinkificationOptions } from '../../prompt/node/intents';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
@@ -83,7 +82,7 @@ export class NotebookEditorIntent extends EditCodeIntent {
 		return {
 			maxToolCallIterations: getRequestedToolCallIterationLimit(request) ?? this.configurationService.getNonExtensionConfig('chat.agent.maxRequests') ?? 15,
 			temperature: this.configurationService.getConfig(ConfigKey.Internal.AgentTemperature) ?? 0,
-			overrideRequestLocation: ChatLocation.Notebook,  // unsure if this should be set
+			overrideRequestLocation: ChatLocation.Notebook,
 		};
 	}
 }
@@ -127,25 +126,48 @@ export class NotebookEditorIntentInvocation extends EditCode2IntentInvocation {
 	}
 
 	public override buildPrompt(promptContext: IBuildPromptContext, progress: vscode.Progress<vscode.ChatResponseReferencePart | vscode.ChatResponseProgressPart>, token: vscode.CancellationToken): Promise<IBuildPromptResult> {
+		let variables = promptContext.chatVariables;
+
 		const editor = this.tabsAndEditorsService.activeNotebookEditor;
-		let workingSet: IWorkingSet | undefined = undefined;
+
 		if (editor) {
-			const format = this.alternativeNotebookContentService.getFormat(this.endpoint);
-			const documentSnapshot = NotebookDocumentSnapshot.create(editor.notebook, format);
-
 			const cell = editor.notebook.cellAt(editor.selection.start);
-			const cellRange = new Range(cell.document.lineAt(0).range.start, cell.document.lineAt(cell.document.lineCount - 1).range.end);
-			const range = getAltNotebookRange(cellRange, cell.document.uri, editor.notebook, format);
+			const format = this.alternativeNotebookContentService.getFormat(this.endpoint);
+			const altDocument = this.alternativeNotebookContentService.create(format).getAlternativeDocument(editor.notebook);
 
-			const entry: IWorkingSetEntry = {
-				document: documentSnapshot,
-				isMarkedReadonly: false,
-				state: WorkingSetEntryState.Initial,
-				range
-			};
-			workingSet = [entry];
+			const textEditor = this.tabsAndEditorsService.activeTextEditor;
+
+			let selectedText = '';
+
+			if (textEditor) {
+				const cellText = textEditor.document.getText();
+				const lines = cellText.split('\n');
+				const startLine = Math.max(0, textEditor.selection.start.line - 1);
+				const endLine = Math.min(lines.length - 1, textEditor.selection.end.line + 1);
+				selectedText = lines.slice(startLine, endLine + 1).join('\n');
+			}
+
+			const refsForActiveEditor: vscode.ChatPromptReference[] = [
+				{
+					id: editor.notebook.uri.toString(),
+					name: 'Active notebook editor: ' + editor.notebook.uri.toString(),
+					value: altDocument.getText()
+				}
+			];
+
+			// Add selected text as a separate reference if we have any
+			if (selectedText.trim()) {
+				const cellID = getCellId(cell);
+				refsForActiveEditor.push({
+					id: `${editor.notebook.uri.toString()}#selection`,
+					name: `Selected text in cell ${cellID} active notebook editor`,
+					value: selectedText
+				});
+			}
+
+			variables = new ChatVariablesCollection([...this.request.references, ...refsForActiveEditor]);
 		}
 
-		return super.buildPrompt({ ...promptContext, workingSet }, progress, token);
+		return super.buildPrompt({ ...promptContext, chatVariables: variables }, progress, token);
 	}
 }

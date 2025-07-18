@@ -8,10 +8,11 @@ import type { ChatRequest, ChatRequestTurn2, ChatResponseStream, ChatResult, Loc
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { getChatParticipantIdFromName, getChatParticipantNameFromId, workspaceAgentName } from '../../../platform/chat/common/chatAgents';
 import { CanceledMessage, ChatLocation } from '../../../platform/chat/common/commonTypes';
-import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { fileTreePartToMarkdown } from '../../../util/common/fileTree';
@@ -81,6 +82,7 @@ export class ChatParticipantRequestHandler {
 		@ILogService private readonly _logService: ILogService,
 		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService
 	) {
 		this.location = this.getLocation(request);
 
@@ -133,11 +135,12 @@ export class ChatParticipantRequestHandler {
 
 	private getLocation(request: ChatRequest) {
 		if (request.location2 instanceof ChatRequestEditorData) {
-			return request.location2.document.uri.scheme === 'vscode-notebook-cell' && this._configurationService.getNonExtensionConfig('chat.notebook.inlineAgent.enabled')
+			return request.location2.document.uri.scheme === 'vscode-notebook-cell'
+				&& this._configurationService.getExperimentBasedConfig(ConfigKey.NotebookInlineEditsEnabled, this._experimentationService)
 				? ChatLocation.Notebook
 				: ChatLocation.Editor;
 		} else if (request.location2 instanceof ChatRequestNotebookData) {
-			return ChatLocation.Other; // TODO should this be ChatLocation.Notebook
+			return ChatLocation.Notebook;
 		}
 		switch (request.location) { // deprecated, but location2 does not yet allow to distinguish between panel, editing session and others
 			case VSChatLocation.Editor:

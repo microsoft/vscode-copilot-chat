@@ -777,6 +777,7 @@ export namespace ConfigKey {
 	export const AutoFixDiagnostics = defineSetting<boolean>('chat.agent.autoFix', true);
 	export const NotebookFollowCellExecution = defineSetting<boolean>('chat.notebook.followCellExecution.enabled', false);
 	export const CustomInstructionsInSystemMessage = defineSetting<boolean>('chat.customInstructionsInSystemMessage', false);
+	export const NotebookInlineEditsEnabled = defineExpSetting<boolean>('chat.notebook.inlineEditAgent.enabled', false);
 }
 
 export function getAllConfigKeys(): string[] {
