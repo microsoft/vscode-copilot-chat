@@ -1,0 +1,7 @@
+# Test output files
+*.log
+*.tmp
+*.out
+
+# Manual test outputs
+test/manual/output/

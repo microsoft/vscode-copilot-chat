@@ -11,7 +11,7 @@ import { ConfigKey, IConfigurationService } from '../../../../platform/configura
 import { modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IEnvService, OperatingSystem } from '../../../../platform/env/common/envService';
-import { getGitHubRepoInfoFromContext, IGitService } from '../../../../platform/git/common/gitService';
+import { getGitHubRepoInfoFromContext, getOrderedRepoInfosFromContext, IGitService, parseRemoteUrl } from '../../../../platform/git/common/gitService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IAlternativeNotebookContentService } from '../../../../platform/notebook/common/alternativeContent';
@@ -505,20 +505,81 @@ class RepoContext extends PromptElement<{}> {
 
 	async render(state: void, sizing: PromptSizing) {
 		const activeRepository = this.gitService.activeRepository?.get();
-		const repoContext = activeRepository && getGitHubRepoInfoFromContext(activeRepository);
-		if (!repoContext || !activeRepository) {
+		if (!activeRepository) {
 			return;
 		}
-		const prProvider = this.instantiationService.createInstance(GitHubPullRequestProviders);
-		const repoDescription = await prProvider.getRepositoryDescription(activeRepository.rootUri);
+
+		// Try to get GitHub-specific information first for backward compatibility
+		const githubRepoContext = getGitHubRepoInfoFromContext(activeRepository);
+		
+		// If not a GitHub repo, try to get general repo information
+		let repoInfo: { org: string; repo: string; type: string } | undefined;
+		let remoteUrl: string | undefined;
+
+		if (githubRepoContext) {
+			repoInfo = { org: githubRepoContext.id.org, repo: githubRepoContext.id.repo, type: 'github' };
+			remoteUrl = githubRepoContext.remoteUrl;
+		} else {
+			// Try to get repository information from any supported provider
+			const repoInfos = Array.from(getOrderedRepoInfosFromContext(activeRepository));
+			if (repoInfos.length > 0) {
+				const firstRepoInfo = repoInfos[0];
+				remoteUrl = firstRepoInfo.fetchUrl;
+				if (firstRepoInfo.repoId.type === 'github') {
+					repoInfo = { org: firstRepoInfo.repoId.org, repo: firstRepoInfo.repoId.repo, type: 'github' };
+				} else if (firstRepoInfo.repoId.type === 'ado') {
+					repoInfo = { org: firstRepoInfo.repoId.org, repo: firstRepoInfo.repoId.repo, type: 'azure-devops' };
+				}
+			} else {
+				// Fallback: extract basic information from remote URL if available
+				if (activeRepository.remoteFetchUrls && activeRepository.remoteFetchUrls.length > 0) {
+					const fetchUrl = activeRepository.remoteFetchUrls[0];
+					if (fetchUrl) {
+						const parsed = parseRemoteUrl(fetchUrl);
+						if (parsed) {
+							// Extract owner/repo from path for generic repos
+							const pathMatch = parsed.path.match(/^\/?([^/]+)\/([^/]+?)(\/|\.git\/?)?$/i);
+							if (pathMatch) {
+								repoInfo = { org: pathMatch[1], repo: pathMatch[2], type: 'generic' };
+								remoteUrl = fetchUrl;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// For GitHub repos, try to get additional information from the PR extension
+		let repoDescription: any = undefined;
+		if (githubRepoContext) {
+			try {
+				const prProvider = this.instantiationService.createInstance(GitHubPullRequestProviders);
+				repoDescription = await prProvider.getRepositoryDescription(activeRepository.rootUri);
+			} catch (error) {
+				// Ignore errors - the PR extension might not be available
+			}
+		}
+
+		// If we still don't have repo info, provide basic Git context
+		if (!repoInfo) {
+			return <Tag name='repoContext'>
+				Below is the information about the current repository. You can use this information when you need to calculate diffs or compare changes with the default branch.<br />
+				Current branch: {activeRepository.headBranchName}<br />
+				{activeRepository.upstreamBranchName ? <>Upstream branch: {activeRepository.upstreamBranchName}<br /></> : ''}
+				{activeRepository.upstreamRemote ? <>Upstream remote: {activeRepository.upstreamRemote}<br /></> : ''}
+			</Tag>;
+		}
 
 		return <Tag name='repoContext'>
 			Below is the information about the current repository. You can use this information when you need to calculate diffs or compare changes with the default branch.<br />
-			Repository name: {repoContext.id.repo}<br />
-			Owner: {repoContext.id.org}<br />
+			Repository name: {repoInfo.repo}<br />
+			Owner: {repoInfo.org}<br />
+			Repository type: {repoInfo.type}<br />
 			Current branch: {activeRepository.headBranchName}<br />
+			{activeRepository.upstreamBranchName ? <>Upstream branch: {activeRepository.upstreamBranchName}<br /></> : ''}
 			{repoDescription ? <>Default branch: {repoDescription?.defaultBranch}<br /></> : ''}
 			{repoDescription?.pullRequest ? <>Active pull request: {repoDescription.pullRequest.title} ({repoDescription.pullRequest.url})<br /></> : ''}
+			{remoteUrl ? <>Remote URL: {remoteUrl}<br /></> : ''}
 		</Tag>;
 	}
 }
