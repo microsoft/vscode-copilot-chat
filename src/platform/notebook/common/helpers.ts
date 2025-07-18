@@ -22,7 +22,7 @@ export class LineOfText {
 	}
 }
 
-// TODO @rebornix for notebook alternative content we use \n always as the line ending for now.
+/** End of Line for alternative Notebook contnt is always \n */
 export const EOL = '\n';
 export type LineOfCellText = {
 	type: 'start';
