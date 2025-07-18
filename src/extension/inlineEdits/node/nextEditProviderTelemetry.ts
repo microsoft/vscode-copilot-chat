@@ -70,6 +70,7 @@ export interface ILlmNESTelemetry extends Partial<IStatelessNextEditTelemetry> {
 	readonly activeDocumentEditsCount: number | undefined;
 	readonly activeDocumentLanguageId: string | undefined;
 	readonly activeDocumentRepository: string | undefined;
+	readonly hasNextEdit: boolean;
 	readonly wasPreviouslyRejected: boolean;
 	readonly status: NextEditTelemetryStatus;
 	readonly nesConfigs: INesConfigs | undefined;
@@ -236,6 +237,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			activeDocumentLanguageId,
 			activeDocumentOriginalLineCount,
 			fetchStartedAfterMs,
+			hasNextEdit: this._hasNextEdit,
 			wasPreviouslyRejected: this._wasPreviouslyRejected,
 			isNotebook: isNotebook,
 			status: this._status,
@@ -314,6 +316,12 @@ export class LlmNESTelemetryBuilder extends Disposable {
 	private _statelessNextEditTelemetry: IStatelessNextEditTelemetry | undefined;
 	public setStatelessNextEditTelemetry(statelessNextEditTelemetry: IStatelessNextEditTelemetry): this {
 		this._statelessNextEditTelemetry = statelessNextEditTelemetry;
+		return this;
+	}
+
+	private _hasNextEdit: boolean = false;
+	public setHasNextEdit(hasNextEdit: boolean): this {
+		this._hasNextEdit = hasNextEdit;
 		return this;
 	}
 
@@ -701,7 +709,7 @@ export class TelemetrySender implements IDisposable {
 		"promptCharCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of characters in the prompt", "isMeasurement": true },
 		"hadLowLogProbSuggestion": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the suggestion had low log probability", "isMeasurement": true },
 		"nEditsSuggested": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of edits suggested", "isMeasurement": true },
-		"hasNextEdit": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether there is a next edit", "isMeasurement": true },
+		"hasNextEdit": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether next edit provider returned an edit (if an edit was previously rejected, this field is false)", "isMeasurement": true },
 		"nextEditLogprob": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Log probability of the next edit", "isMeasurement": true },
 		"lineDistanceToMostRecentEdit": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Line distance to most recent edit", "isMeasurement": true },
 		"isCursorAtEndOfLine": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the cursor is at the end of the line", "isMeasurement": true },

@@ -78,6 +78,12 @@ export enum KnownSources {
 	fix = 'fix'
 }
 
+export enum TriggerKind {
+	unknown = 'unknown',
+	selection = 'selection',
+	completion = 'completion',
+}
+
 export type RequestContext = {
 	/**
 	 * A unique request id.
@@ -98,6 +104,11 @@ export type RequestContext = {
 	 * The source of the request.
 	 */
 	source?: KnownSources | string;
+
+	/**
+	 * The
+	 */
+	trigger?: TriggerKind | undefined;
 
 	/**
 	 * A list of proposed edits that should be applied before computing the context.

@@ -41,8 +41,6 @@ import { CachedOrRebasedEdit, NextEditCache } from './nextEditCache';
 import { LlmNESTelemetryBuilder } from './nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from './nextEditResult';
 
-const ARTIFICIAL_CACHE_HIT_DELAY = 300; // delay cache hits by 300ms to make it more like a regular request and to reduce flicker ;)
-
 export interface INextEditProvider<T extends INextEditResult, TTelemetry, TData = void> extends IDisposable {
 	readonly ID: string;
 	getNextEdit(docId: DocumentId, context: vscode.InlineCompletionContext, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, telemetryBuilder: TTelemetry, data?: TData): Promise<T>;
@@ -160,6 +158,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		let req: NextEditFetchRequest;
 		let targetDocumentId = docId;
 
+		const cacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheDelay, this._expService);
+
 		if (recentlyShownCachedEdit) {
 			tracer.trace('using recently shown cached edit');
 			edit = recentlyShownCachedEdit[0];
@@ -173,7 +173,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			// back-date the recording bookmark of the cached edit to the bookmark of the original request.
 			logContext.recordingBookmark = req.log.recordingBookmark;
 
-			await timeout(ARTIFICIAL_CACHE_HIT_DELAY);
+			await timeout(cacheDelay);
 
 		} else if (cachedEdit) {
 			tracer.trace('using cached edit');
@@ -187,7 +187,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			// back-date the recording bookmark of the cached edit to the bookmark of the original request.
 			logContext.recordingBookmark = req.log.recordingBookmark;
 
-			await timeout(ARTIFICIAL_CACHE_HIT_DELAY);
+			await timeout(cacheDelay);
 
 		} else {
 			tracer.trace('fetching next edit');
@@ -266,6 +266,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		}
 
 		tracer.trace('returning next edit result');
+		telemetryBuilder.setHasNextEdit(true);
+
 		return nextEditResult;
 	}
 
@@ -662,6 +664,12 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		}
 		this._snippyService.handlePostInsertion(docId.toUri(), suggestion.result.documentBeforeEdits, suggestion.result.edit);
 	}
+
+	public clearCache() {
+		this._nextEditCache.clear();
+		this._recentlyShownCache.clear();
+		this._rejectionCollector.clear();
+	}
 }
 
 function assertDefined<T>(value: T | undefined): T {
@@ -700,6 +708,10 @@ class RecentlyShownCache {
 				break;
 			}
 		}
+	}
+
+	clear() {
+		this._cache.clear();
 	}
 
 	private _key(docId: DocumentId, documentContent: StringText) {

@@ -78,12 +78,13 @@ export class TasksService extends DisposableStore implements ITasksService {
 		for (const [key, terminal] of this.latestTerminalForTaskDefinition.entries()) {
 			if (key.id) {
 				// Only some task definitions have IDs
-				const taskId = this._getTaskId(key);
+				const taskId = this._getTaskId(taskDefinition);
 				if (taskId === key.id) {
 					return terminal;
 				}
 			}
 			if ((taskDefinition.type === key.type &&
+				(key.label || key.script || key.command) &&
 				(!key.label || taskDefinition.label === key.label) &&
 				(!key.script || taskDefinition.script === key.script) &&
 				(!key.command || taskDefinition.command === key.command))) {
@@ -93,20 +94,11 @@ export class TasksService extends DisposableStore implements ITasksService {
 			this.logService.logger.debug(`getTerminalForTask: current stored terminals: ${[...this.latestTerminalForTaskDefinition.values()].map(t => t.name).join(', ')}`);
 		}
 	}
-	// This comes from: src/vs/workbench/contrib/tasks/common/tasks.ts#L1296-L1317
 	private _getTaskId(taskDefinition: vscode.TaskDefinition): string | undefined {
-		const keys = Object.keys(taskDefinition).sort();
-		let result: string = '';
-		for (const key of keys) {
-			let stringified = taskDefinition[key];
-			if (stringified instanceof Object) {
-				stringified = this._getTaskId(stringified);
-			} else if (typeof stringified === 'string') {
-				stringified = stringified.replace(/,/g, ',,');
-			}
-			result += key + ',' + stringified + ',';
+		if (!taskDefinition.type || (taskDefinition.command === undefined && taskDefinition.script === undefined)) {
+			return undefined;
 		}
-		return result;
+		return taskDefinition.type + ',' + (taskDefinition.command ?? taskDefinition.script) + ',';
 	}
 
 	async getTaskConfigPosition(workspaceFolder: URI, def: vscode.TaskDefinition) {

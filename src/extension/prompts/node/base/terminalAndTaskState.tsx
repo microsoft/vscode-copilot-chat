@@ -28,8 +28,8 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 		const allTasks = this.tasksService.getTasks()?.[0]?.[1] ?? [];
 		const tasks = Array.isArray(allTasks) ? allTasks : [];
 		const taskTerminalPids = new Set<number>();
-		const validTasks = tasks.filter(t => !!this.tasksService.getTerminalForTask(t));
-		for (const exec of validTasks) {
+		const filteredTasks = tasks.filter(t => this.tasksService.getTerminalForTask(t));
+		for (const exec of filteredTasks) {
 			if (exec.label) {
 				taskTerminalPids.add(await exec.processId);
 				resultTasks.push({
@@ -75,7 +75,7 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 						Tasks:<br />
 						{resultTasks.map((t) => (
 							<>
-								Task: {t.name} ({t.isBackground && `is background: ${String(t.isBackground)}`}
+								Task: {t.name} ({t.isBackground && `is background: ${String(t.isBackground)} `}
 								{t.isActive ? ', is running' : 'is inactive'}
 								{t.type ? `, type: ${t.type}` : ''}
 								{t.command ? `, command: ${t.command}` : ''}
@@ -125,7 +125,7 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 
 			return (
 				<>
-					{tasks.length > 0 ? renderTasks() : 'Tasks: No tasks found.'}
+					{resultTasks.length > 0 ? renderTasks() : 'Tasks: No tasks found.'}
 					{resultTerminals.length > 0 ? renderTerminals() : 'Terminals: No terminals found.'}
 				</>
 			);

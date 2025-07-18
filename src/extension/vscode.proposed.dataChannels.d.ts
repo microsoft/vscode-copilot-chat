@@ -5,12 +5,15 @@
 
 declare module 'vscode' {
 
-	// https://github.com/microsoft/vscode/issues/206587
+	export namespace env {
+		export function getDataChannel<T>(channelId: string): DataChannel<T>;
+	}
 
-	export interface AuthenticationGetSessionPresentationOptions {
-		/**
-		 * An optional Uri to open in the browser to learn more about this authentication request.
-		 */
-		learnMore?: Uri;
+	export interface DataChannel<T = unknown> {
+		onDidReceiveData: Event<DataChannelEvent<T>>;
+	}
+
+	export interface DataChannelEvent<T> {
+		data: T;
 	}
 }
