@@ -47,8 +47,8 @@ export const enum ToolName {
 	RunVscodeCmd = 'run_vscode_command',
 	GetTaskOutput = 'get_task_output',
 
-	CoreRunInTerminal = 'run_in_terminal2',
-	CoreGetTerminalOutput = 'get_terminal_output2',
+	CoreRunInTerminal = 'run_in_terminal',
+	CoreGetTerminalOutput = 'get_terminal_output',
 }
 
 // When updating this, also update contributedToolNameToToolNames
