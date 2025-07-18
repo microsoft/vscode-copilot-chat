@@ -68,7 +68,7 @@ interface StateData {
 }
 
 // Helper function for creating an input box with a back button
-function createInputBoxWithBackButton(options: InputBoxOptions): Promise<string | BackButtonClick | undefined> {
+function createInputBoxWithBackButton(options: InputBoxOptions, hideBackButton?: boolean): Promise<string | BackButtonClick | undefined> {
 	const disposableStore = new DisposableStore();
 	const inputBox = disposableStore.add(window.createInputBox());
 	inputBox.ignoreFocusOut = true;
@@ -77,7 +77,7 @@ function createInputBoxWithBackButton(options: InputBoxOptions): Promise<string 
 	inputBox.prompt = options.prompt;
 	inputBox.placeholder = options.placeHolder;
 	inputBox.value = options.value || '';
-	inputBox.buttons = [QuickInputButtons.Back];
+	inputBox.buttons = hideBackButton ? [] : [QuickInputButtons.Back];
 
 	return new Promise<string | BackButtonClick | undefined>(resolve => {
 		disposableStore.add(inputBox.onDidTriggerButton(button => {
@@ -778,4 +778,27 @@ export class BYOKUIService {
 
 		return result;
 	}
+}
+
+export async function promptForAPIKey(contextName: string, reconfigure: boolean = false): Promise<string | undefined> {
+	const prompt = reconfigure ? `Enter new ${contextName} API Key or leave blank to delete saved key` : `Enter ${contextName} API Key`;
+	const title = reconfigure ? `Reconfigure ${contextName} API Key - Preview` : `Enter ${contextName} API Key - Preview`;
+
+	const result = await createInputBoxWithBackButton({
+		prompt: prompt,
+		title: title,
+		placeHolder: `${contextName} API Key`,
+		ignoreFocusOut: true,
+		password: true,
+		validateInput: (value) => {
+			// Allow empty input only when reconfiguring (to delete the key)
+			return (value.trim().length > 0 || reconfigure) ? null : 'API Key cannot be empty';
+		}
+	}, true);
+
+	if (isBackButtonClick(result)) {
+		return undefined;
+	}
+
+	return result;
 }

@@ -1702,10 +1702,32 @@
 		],
 		"languageModels": [
 			{
-				"vendor": "copilot"
+				"vendor": "copilot",
+				"displayName": "Copilot"
 			},
 			{
-				"vendor": "copilot-byok"
+				"vendor": "anthropic",
+				"displayName": "Anthropic"
+			},
+			{
+				"vendor": "ollama",
+				"displayName": "Ollama"
+			},
+			{
+				"vendor": "openai",
+				"displayName": "OpenAI"
+			},
+			{
+				"vendor": "gemini",
+				"displayName": "Gemini"
+			},
+			{
+				"vendor": "groq",
+				"displayName": "Groq"
+			},
+			{
+				"vendor": "openrouter",
+				"displayName": "OpenRouter"
 			}
 		],
 		"interactiveSession": [
@@ -2070,13 +2092,6 @@
 				"title": "Feedback",
 				"icon": "$(feedback)",
 				"enablement": "!github.copilot.search.feedback.sent"
-			},
-			{
-				"command": "github.copilot.chat.manageModels",
-				"title": "Manage Models...",
-				"icon": "$(settings-gear)",
-				"category": "GitHub Copilot",
-				"enablement": "github.copilot.byokEnabled"
 			},
 			{
 				"command": "github.copilot.chat.debug.showElements",
@@ -2870,12 +2885,6 @@
 			}
 		],
 		"menus": {
-			"chat/modelPicker": [
-				{
-					"command": "github.copilot.chat.manageModels",
-					"when": "github.copilot.byokEnabled"
-				}
-			],
 			"editor/title": [
 				{
 					"command": "github.copilot.debug.generateInlineEditTests",
