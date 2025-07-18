@@ -6,13 +6,24 @@ import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlock
 import { Raw } from '@vscode/prompt-tsx';
 import { LanguageModelChatMessage, LanguageModelChatMessageRole, LanguageModelDataPart, LanguageModelTextPart, LanguageModelToolCallPart, LanguageModelToolResultPart, LanguageModelToolResultPart2 } from 'vscode';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
+import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { isDefined } from '../../../util/vs/base/common/types';
 
-function apiContentToAnthropicContent(content: (LanguageModelTextPart | LanguageModelToolResultPart | LanguageModelToolCallPart | LanguageModelDataPart)[]): ContentBlockParam[] {
+function apiContentToAnthropicContent(content: (LanguageModelTextPart | LanguageModelToolResultPart | LanguageModelToolCallPart | LanguageModelDataPart)[], thinkingDataService: IThinkingDataService): ContentBlockParam[] {
 	const convertedContent: ContentBlockParam[] = [];
 	for (const part of content) {
 		if (part instanceof LanguageModelToolCallPart) {
+			const thinkingBlock = thinkingDataService.consume(part.callId);
+			// insert as the first of the convertedContent array
+			if (thinkingBlock) {
+				convertedContent.unshift({
+					type: 'thinking',
+					thinking: thinkingBlock.cot_summary ?? '',
+					signature: thinkingBlock.cot_id ?? ''
+				});
+			}
+
 			convertedContent.push({
 				type: 'tool_use',
 				id: part.callId,
@@ -70,7 +81,7 @@ function apiContentToAnthropicContent(content: (LanguageModelTextPart | Language
 
 }
 
-export function apiMessageToAnthropicMessage(messages: LanguageModelChatMessage[]): { messages: MessageParam[]; system: TextBlockParam } {
+export function apiMessageToAnthropicMessage(messages: LanguageModelChatMessage[], thinkingDataService: IThinkingDataService): { messages: MessageParam[]; system: TextBlockParam } {
 	const unmergedMessages: MessageParam[] = [];
 	const systemMessage: TextBlockParam = {
 		type: 'text',
@@ -80,12 +91,12 @@ export function apiMessageToAnthropicMessage(messages: LanguageModelChatMessage[
 		if (message.role === LanguageModelChatMessageRole.Assistant) {
 			unmergedMessages.push({
 				role: 'assistant',
-				content: apiContentToAnthropicContent(message.content),
+				content: apiContentToAnthropicContent(message.content, thinkingDataService),
 			});
 		} else if (message.role === LanguageModelChatMessageRole.User) {
 			unmergedMessages.push({
 				role: 'user',
-				content: apiContentToAnthropicContent(message.content),
+				content: apiContentToAnthropicContent(message.content, thinkingDataService),
 			});
 		} else {
 			systemMessage.text += message.content.map(p => {

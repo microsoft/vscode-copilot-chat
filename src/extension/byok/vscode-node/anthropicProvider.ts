@@ -10,6 +10,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage, rawMessageToCAPI } from '../../../platform/networking/common/openai';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { RecordedProgress } from '../../../util/common/progressRecorder';
 import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
@@ -45,6 +46,15 @@ export class AnthropicBYOKModelRegistry implements BYOKModelRegistry {
 	}
 
 	updateKnownModelsList(knownModels: BYOKKnownModels | undefined): void {
+		if (knownModels) {
+			knownModels['claude-opus-4-20250514'] = {
+				'name': 'Claude Opus 4',
+				'toolCalling': true,
+				'vision': false,
+				'maxInputTokens': 64000,
+				'maxOutputTokens': 8192
+			};
+		}
 		this._knownModels = knownModels;
 	}
 
@@ -79,6 +89,7 @@ export class AnthropicChatProvider implements LanguageModelChatProvider {
 		private readonly _modelMetadata: ChatResponseProviderMetadata,
 		@ILogService private readonly _logService: ILogService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
+		@IThinkingDataService private readonly _thinkingDataService: IThinkingDataService
 	) {
 		this.client = new Anthropic({
 			apiKey
@@ -94,7 +105,7 @@ export class AnthropicChatProvider implements LanguageModelChatProvider {
 		token: CancellationToken
 	): Promise<void> {
 		// Convert the messages from the API format into messages that we can use against anthropic
-		const { system, messages: convertedMessages } = apiMessageToAnthropicMessage(messages);
+		const { system, messages: convertedMessages } = apiMessageToAnthropicMessage(messages, this._thinkingDataService);
 
 		const requestId = generateUuid();
 		const pendingLoggedChatRequest = this._requestLogger.logChatRequest(
@@ -152,6 +163,10 @@ export class AnthropicChatProvider implements LanguageModelChatProvider {
 			stream: true,
 			system: [system],
 			tools: tools.length > 0 ? tools : undefined,
+			thinking: {
+				"type": "enabled",
+				"budget_tokens": 6000
+			},
 		};
 
 		const wrappedProgress = new RecordedProgress(progress);
@@ -217,6 +232,8 @@ export class AnthropicChatProvider implements LanguageModelChatProvider {
 
 		let hasText = false;
 		let firstTool = true;
+		let thinkingBlock = '';
+		let signature = '';
 		for await (const chunk of stream) {
 			if (token.isCancellationRequested) {
 				break;
@@ -239,6 +256,19 @@ export class AnthropicChatProvider implements LanguageModelChatProvider {
 						jsonInput: ''
 					};
 					firstTool = false;
+
+					// now we have tool id, let's capature this thinking block
+					this._thinkingDataService.update({
+						message: {
+							cot_summary: thinkingBlock,
+							cot_id: signature
+						},
+						index: 0
+					}, pendingToolCall.toolId!);
+				}
+				if ('content_block' in chunk && chunk.content_block.type === 'thinking') {
+					console.log(`Thinking block received: ${JSON.stringify(chunk)}`);
+					thinkingBlock += chunk.content_block.thinking;
 				}
 				continue;
 			}
@@ -269,6 +299,11 @@ export class AnthropicChatProvider implements LanguageModelChatProvider {
 						// JSON is not complete yet, continue accumulating
 						continue;
 					}
+				} else if (chunk.delta.type === 'thinking_delta') {
+					console.log(`Thinking delta received: ${JSON.stringify(chunk.delta)}`);
+					thinkingBlock += chunk.delta.thinking;
+				} else if (chunk.delta.type === 'signature_delta') {
+					signature += chunk.delta.signature || '';
 				}
 			}
 
