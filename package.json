@@ -1762,12 +1762,27 @@
 		"languageModels": [
 			{
 				"vendor": "copilot",
-				"displayName": "Copilot",
-				"managementCommand": "foo.bar"
+				"displayName": "Copilot"
 			},
 			{
 				"vendor": "anthropic",
 				"displayName": "Anthropic"
+			},
+			{
+				"vendor": "ollama",
+				"displayName": "Ollama"
+			},
+			{
+				"vendor": "openai",
+				"displayName": "OpenAI"
+			},
+			{
+				"vendor": "gemini",
+				"displayName": "Gemini"
+			},
+			{
+				"vendor": "groq",
+				"displayName": "Groq"
 			},
 			{
 				"vendor": "openrouter",

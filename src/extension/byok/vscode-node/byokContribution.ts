@@ -11,21 +11,18 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { BYOKKnownModels, BYOKModelRegistry, isBYOKEnabled } from '../../byok/common/byokProvider';
-import { AzureBYOKModelRegistry } from '../../byok/vscode-node/azureProvider';
-import { OAIBYOKModelRegistry } from '../../byok/vscode-node/openAIProvider';
+import { BYOKKnownModels, isBYOKEnabled } from '../../byok/common/byokProvider';
 import { IExtensionContribution } from '../../common/contributions';
 import { AnthropicLMProvider } from './anthropicProvider';
 import { BYOKStorageService, IBYOKStorageService } from './byokStorageService';
-import { CerebrasModelRegistry } from './cerebrasProvider';
-import { GeminiBYOKModelRegistry } from './geminiProvider';
-import { GroqModelRegistry } from './groqProvider';
-import { OllamaModelRegistry } from './ollamaProvider';
-import { OpenRouterBYOKModelRegistry } from './openRouterProvider';
+import { GeminiBYOKLMProvider } from './geminiProvider';
+import { GroqBYOKLMProvider } from './groqProvider';
+import { OllamaLMProvider } from './ollamaProvider';
+import { OAIBYOKLMProvider } from './openAIProvider';
+import { OpenRouterLMProvider } from './openRouterProvider';
 
 export class BYOKContrib extends Disposable implements IExtensionContribution {
 	public readonly id: string = 'byok-contribution';
-	private _modelRegistries: BYOKModelRegistry[] = [];
 	private readonly _byokStorageService: IBYOKStorageService;
 
 	constructor(
@@ -47,22 +44,15 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 	}
 
 	private async _authChange(authService: IAuthenticationService, instantiationService: IInstantiationService) {
-		this._modelRegistries = [];
 		if (authService.copilotToken && isBYOKEnabled(authService.copilotToken, this._capiClientService)) {
-			// These are intentionally registered in alphabetical order so we don't need to sort them later.
-			// They will be shown to the user in the same order.
-			this._modelRegistries.push(instantiationService.createInstance(AzureBYOKModelRegistry));
-			if (authService.copilotToken.isInternal) {
-				this._modelRegistries.push(instantiationService.createInstance(CerebrasModelRegistry));
-			}
-			this._modelRegistries.push(instantiationService.createInstance(GeminiBYOKModelRegistry));
-			this._modelRegistries.push(instantiationService.createInstance(GroqModelRegistry));
-			this._modelRegistries.push(instantiationService.createInstance(OAIBYOKModelRegistry));
-			this._modelRegistries.push(instantiationService.createInstance(OllamaModelRegistry, this._configurationService.getConfig(ConfigKey.OllamaEndpoint)));
-			this._modelRegistries.push(instantiationService.createInstance(OpenRouterBYOKModelRegistry));
 			// Update known models list from CDN so all providers have the same list
 			const knownModels = await this.fetchKnownModelList(this._fetcherService);
+			this._store.add(lm.registerChatModelProvider(OllamaLMProvider.providerName.toLowerCase(), this._instantiationService.createInstance(OllamaLMProvider, this._configurationService.getConfig(ConfigKey.OllamaEndpoint), this._byokStorageService)));
 			this._store.add(lm.registerChatModelProvider(AnthropicLMProvider.providerName.toLowerCase(), this._instantiationService.createInstance(AnthropicLMProvider, knownModels[AnthropicLMProvider.providerName], this._byokStorageService)));
+			this._store.add(lm.registerChatModelProvider(GroqBYOKLMProvider.providerName.toLowerCase(), this._instantiationService.createInstance(GroqBYOKLMProvider, knownModels[GroqBYOKLMProvider.providerName], this._byokStorageService)));
+			this._store.add(lm.registerChatModelProvider(GeminiBYOKLMProvider.providerName.toLowerCase(), this._instantiationService.createInstance(GeminiBYOKLMProvider, knownModels[GeminiBYOKLMProvider.providerName], this._byokStorageService)));
+			this._store.add(lm.registerChatModelProvider(OAIBYOKLMProvider.providerName.toLowerCase(), this._instantiationService.createInstance(OAIBYOKLMProvider, knownModels[OAIBYOKLMProvider.providerName], this._byokStorageService)));
+			this._store.add(lm.registerChatModelProvider(OpenRouterLMProvider.providerName.toLowerCase(), this._instantiationService.createInstance(OpenRouterLMProvider, this._byokStorageService)));
 
 		}
 	}
@@ -76,9 +66,6 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			knownModels = data.modelInfo;
 		}
 		this._logService.logger.info('BYOK: Copilot Chat known models list fetched successfully.');
-		for (const registry of this._modelRegistries) {
-			registry.updateKnownModelsList(knownModels[registry.name]);
-		}
 		return knownModels;
 	}
 }
