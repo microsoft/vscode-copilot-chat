@@ -733,7 +733,11 @@ class RunnableResultManager implements vscode.Disposable {
 				}
 			}
 		}
-		return results;
+		// Sort them by priority so that the most important items are emitted first if they
+		// are contained in more than one runnable result.
+		return results.sort((a, b) => {
+			return a.priority < b.priority ? 1 : a.priority > b.priority ? -1 : 0;
+		});
 	}
 
 	public getContextRequestState(document: vscode.TextDocument, position: vscode.Position): ContextRequestState | undefined {
@@ -807,19 +811,18 @@ class RunnableResultManager implements vscode.Disposable {
 					items.set(key, item);
 				}
 			};
-			// Clear all within runnable results that don't contain the requested position.
-			for (let i = 0; i < this.withInRangeRunnableResults.length;) {
-				const entry = this.withInRangeRunnableResults[i];
-				if (entry.range.contains(position)) {
-					i++;
-					continue;
-				}
-				const id = entry.resultId;
-				this.results.delete(id);
-				this.withInRangeRunnableResults.splice(i, 1);
-			}
+			// We don't need to sort by priority here since the data is used for the next cache request.
 			for (const [id, item] of this.results.entries()) {
-				handleRunnableResult(id, item);
+				const scope = item.cache?.scope;
+				if (scope === undefined || scope.kind !== protocol.CacheScopeKind.WithinRange) {
+					handleRunnableResult(id, item);
+				} else {
+					const r = scope.range;
+					const range = new vscode.Range(r.start.line, r.start.character, r.end.line, r.end.character);
+					if (range.contains(position)) {
+						handleRunnableResult(id, item);
+					}
+				}
 			}
 		}
 		return { client, clientOnTimeout, server, itemMap: items, resultMap: new Map(this.results) };

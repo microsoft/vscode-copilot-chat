@@ -658,12 +658,12 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 		return this.lines.length === 0 || this.source === undefined;
 	}
 
-	public snippet(key: string | undefined, priority: number): CodeSnippet {
+	public snippet(key: string | undefined): CodeSnippet {
 		if (this.source === undefined) {
 			throw new RecoverableError('No source', RecoverableError.NoSourceFile);
 		}
 		this.additionalSources.delete(this.source);
-		return CodeSnippet.create(key, this.source, this.additionalSources.size === 0 ? undefined : [...this.additionalSources], this.lines.join('\n'), priority);
+		return CodeSnippet.create(key, this.source, this.additionalSources.size === 0 ? undefined : [...this.additionalSources], this.lines.join('\n'));
 	}
 
 	public addDeclaration(declaration: tt.Declaration): void {
