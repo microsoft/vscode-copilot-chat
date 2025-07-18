@@ -194,6 +194,8 @@ export class TypeOfLocalsRunnable extends AbstractContextRunnable {
 			return;
 		}
 		const sourceFile = token.getSourceFile();
+		// When we try to capture locals outside of a callable (e.g. top level in a source file) we capture the declarations as
+		// scope. If we are inside the body of the callable defines the scope.
 		let variableDeclarations: Set<tt.VariableDeclarationList> | undefined = this.cacheScope === undefined ? new Set() : undefined;
 		// The symbols are block scope variables. We try to find the type of the variable
 		// to include it in the context.
