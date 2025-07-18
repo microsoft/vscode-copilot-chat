@@ -664,6 +664,12 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		}
 		this._snippyService.handlePostInsertion(docId.toUri(), suggestion.result.documentBeforeEdits, suggestion.result.edit);
 	}
+
+	public clearCache() {
+		this._nextEditCache.clear();
+		this._recentlyShownCache.clear();
+		this._rejectionCollector.clear();
+	}
 }
 
 function assertDefined<T>(value: T | undefined): T {
@@ -702,6 +708,10 @@ class RecentlyShownCache {
 				break;
 			}
 		}
+	}
+
+	clear() {
+		this._cache.clear();
 	}
 
 	private _key(docId: DocumentId, documentContent: StringText) {

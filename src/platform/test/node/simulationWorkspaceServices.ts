@@ -825,6 +825,9 @@ export class TestingTerminalService extends Disposable implements ITerminalServi
 	getBufferForTerminal(terminal: vscode.Terminal, maxChars?: number): string {
 		return '';
 	}
+	getBufferWithPid(pid: number, maxChars?: number): Promise<string> {
+		throw new Error('Method not implemented.');
+	}
 }
 
 class SimulationTerminal extends Disposable implements vscode.Terminal {
@@ -844,7 +847,7 @@ class SimulationTerminal extends Disposable implements vscode.Terminal {
 	) {
 		super();
 		this.name = creationOptions.name ?? '';
-		this.state = { isInteractedWith: false };
+		this.state = { isInteractedWith: false, shell: undefined };
 		const cwd = creationOptions.cwd ?? workspace.workspaceFolders[0];
 		if (typeof cwd === 'string') {
 			throw new Error('String cwd not implemented');

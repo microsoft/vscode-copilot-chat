@@ -18,6 +18,7 @@ import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { RunNotebookCellOutput } from './runNotebookCellTool';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { getCellIdMap } from '../../../platform/notebook/common/helpers';
 
 export class GetNotebookCellOutputTool implements ICopilotTool<IGetNotebookCellOutputToolParams> {
 	public static toolName = ToolName.ReadCellOutput;
@@ -52,9 +53,7 @@ export class GetNotebookCellOutputTool implements ICopilotTool<IGetNotebookCellO
 			throw ex;
 		}
 
-		const altDocProvider = this.alternativeNotebookContent.create(this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model));
-
-		const cell = altDocProvider.getCell(notebook, cellId);
+		const cell = getCellIdMap(notebook).get(cellId);
 		if (!cell) {
 			sendOutcomeTelemetry(this.telemetryService, this.endpointProvider, options, 'cellNotFound');
 			throw new Error(`Cell not found, use the ${ToolName.ReadFile} file tool to get the latest content of the notebook file.`);
