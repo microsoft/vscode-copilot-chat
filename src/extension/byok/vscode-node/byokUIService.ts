@@ -8,6 +8,11 @@ import { BYOKAuthType, BYOKModelCapabilities, BYOKModelRegistry } from '../../by
 import { resolveAzureUrl } from './azureProvider';
 import { IBYOKStorageService } from './byokStorageService';
 
+// Extended input box options that supports async validation
+interface ExtendedInputBoxOptions extends Omit<InputBoxOptions, 'validateInput'> {
+	validateInput?: (value: string) => string | null | Promise<string | null>;
+}
+
 // Define state machine for model configuration steps
 enum ConfigurationStep {
 	ProviderSelection,
@@ -20,6 +25,8 @@ enum ConfigurationStep {
 	OutputTokens,
 	ToolCalling,
 	Vision,
+	CustomProviderName,
+	CustomProviderUrl,
 	Complete
 }
 
@@ -30,6 +37,7 @@ interface ModelQuickPickItem extends QuickPickItem {
 interface ProviderQuickPickItem extends QuickPickItem {
 	providerName: string;
 	authType: BYOKAuthType;
+	isCustom?: boolean;
 }
 
 export interface ModelConfig {
@@ -65,10 +73,14 @@ interface StateData {
 	selectedModels: string[];
 	previousStep: ConfigurationStep;
 	navigatingBack?: boolean;
+	// Custom provider related
+	customProviderName?: string;
+	customProviderUrl?: string;
+	customProviderToDelete?: string;
 }
 
 // Helper function for creating an input box with a back button
-function createInputBoxWithBackButton(options: InputBoxOptions): Promise<string | BackButtonClick | undefined> {
+function createInputBoxWithBackButton(options: ExtendedInputBoxOptions): Promise<string | BackButtonClick | undefined> {
 	const disposableStore = new DisposableStore();
 	const inputBox = disposableStore.add(window.createInputBox());
 	inputBox.ignoreFocusOut = true;
@@ -90,13 +102,15 @@ function createInputBoxWithBackButton(options: InputBoxOptions): Promise<string 
 		disposableStore.add(inputBox.onDidAccept(async () => {
 			const value = inputBox.value;
 			if (options.validateInput) {
-				const validation = options.validateInput(value);
+				const validation = await options.validateInput(value);
 				if (validation) {
 					// Show validation message but don't hide
-					inputBox.validationMessage = (await validation) || undefined;
+					inputBox.validationMessage = validation;
 					return;
 				}
 			}
+			// Clear any previous validation message
+			inputBox.validationMessage = undefined;
 			resolve(value);
 			disposableStore.dispose();
 		}));
@@ -189,7 +203,16 @@ export class BYOKUIService {
 	/**
 	 * Start the model management flow state machine
 	 */
-	public async startModelManagementFlow(): Promise<{ selectedModels: string[]; providerName: string; apiKey?: string; newApiKeyProvided?: boolean; customModelToDelete?: string; customModel?: ModelConfig } | undefined> {
+	public async startModelManagementFlow(): Promise<{
+		selectedModels: string[];
+		providerName: string;
+		apiKey?: string;
+		newApiKeyProvided?: boolean;
+		customModelToDelete?: string;
+		customModel?: ModelConfig;
+		customProviderToDelete?: string;
+		newCustomProvider?: { name: string; url: string };
+	} | undefined> {
 		// Start the state machine from the provider selection step
 		let currentStep = ConfigurationStep.ProviderSelection;
 
@@ -253,6 +276,14 @@ export class BYOKUIService {
 						state.previousStep = ConfigurationStep.ToolCalling;
 						result = await this._handleVision(state);
 						break;
+					case ConfigurationStep.CustomProviderName:
+						state.previousStep = ConfigurationStep.ProviderSelection;
+						result = await this._handleCustomProviderName(state);
+						break;
+					case ConfigurationStep.CustomProviderUrl:
+						state.previousStep = ConfigurationStep.CustomProviderName;
+						result = await this._handleCustomProviderUrl(state);
+						break;
 					default:
 						// Should not happen
 						return undefined;
@@ -289,6 +320,7 @@ export class BYOKUIService {
 			newApiKeyProvided: state.isNewApiKey,
 			providerName: state.providerName,
 			customModelToDelete: state.customModelToDelete,
+			customProviderToDelete: state.customProviderToDelete,
 			selectedModels: state.selectedModels,
 			customModel: state.modelId ? {
 				isCustomModel: true,
@@ -296,6 +328,10 @@ export class BYOKUIService {
 				apiKey: state.modelApiKey!,
 				modelCapabilities: state.modelCapabilities,
 				deploymentUrl: state.deploymentUrl
+			} : undefined,
+			newCustomProvider: state.customProviderName && state.customProviderUrl ? {
+				name: state.customProviderName,
+				url: state.customProviderUrl
 			} : undefined
 		};
 	}
@@ -306,12 +342,14 @@ export class BYOKUIService {
 		// Create quick pick items for providers with option to reconfigure API key
 		const quickPickItems: ProviderQuickPickItem[] = [];
 
+		// Add built-in providers
 		for (const registry of this._modelRegistries) {
 			const apiKey = await this._storageService.getAPIKey(registry.name);
 			quickPickItems.push({
 				label: registry.name,
 				providerName: registry.name,
 				authType: registry.authType,
+				isCustom: false,
 				// Add gear icon for providers that use global API key
 				buttons: registry.authType === BYOKAuthType.GlobalApiKey && !!apiKey ? [{
 					iconPath: new ThemeIcon('gear'),
@@ -320,23 +358,64 @@ export class BYOKUIService {
 			});
 		}
 
+		// Add custom providers from storage
+		const customProviders = await this._storageService.getCustomProviders();
+		for (const customProvider of customProviders) {
+			const apiKey = await this._storageService.getAPIKey(customProvider.name);
+			quickPickItems.push({
+				label: customProvider.name,
+				description: customProvider.url,
+				providerName: customProvider.name,
+				authType: BYOKAuthType.GlobalApiKey, // Custom providers use global API key
+				isCustom: true,
+				// Add gear icon for API key reconfiguration and trash icon for deletion
+				buttons: [
+					...(apiKey ? [{
+						iconPath: new ThemeIcon('gear'),
+						tooltip: `Reconfigure ${customProvider.name} API Key`
+					}] : []),
+					{
+						iconPath: new ThemeIcon('trash'),
+						tooltip: `Delete ${customProvider.name} provider`
+					}
+				]
+			});
+		}
+
+		// Add special item for adding custom provider
+		quickPickItems.push({
+			label: '$(plus) Add Custom Provider',
+			description: 'Add a new OpenAI-compatible provider',
+			providerName: '_ADD_CUSTOM_',
+			authType: BYOKAuthType.GlobalApiKey,
+			isCustom: false
+		});
+
 		// Use manual quick pick creation for item button handling
 		const quickPick = window.createQuickPick<ProviderQuickPickItem>();
 		quickPick.title = 'Manage Models - Preview';
 		quickPick.ignoreFocusOut = false;
-		quickPick.placeholder = 'Select a provider';
+		quickPick.placeholder = 'Select a provider or add a custom one';
 		quickPick.items = quickPickItems;
 		let didCancel = true;
 
-		const providerResult = await new Promise<{ providerName: string; apiKey?: string } | undefined>(resolve => {
-			// Handle button clicks for API key reconfiguration
+		const providerResult = await new Promise<{ providerName: string; apiKey?: string; action?: 'delete' | 'add' } | undefined>(resolve => {
+			// Handle button clicks for API key reconfiguration and deletion
 			quickPick.onDidTriggerItemButton(async event => {
 				didCancel = false;
 				const item = event.item;
 				const providerName = item.providerName;
 				const authType = item.authType;
 
-				// Force update API key
+				// Check if it's a delete button (trash icon)
+				if (event.button.iconPath instanceof ThemeIcon && (event.button.iconPath as ThemeIcon).id === 'trash') {
+					// Delete custom provider
+					state.customProviderToDelete = providerName;
+					resolve({ providerName, action: 'delete' });
+					return;
+				}
+
+				// Otherwise it's a gear icon for API key reconfiguration
 				const newApiKey = await this.promptForAPIKey(providerName, true);
 				if (newApiKey) {
 					await this._storageService.storeAPIKey(providerName, newApiKey, authType);
@@ -359,7 +438,15 @@ export class BYOKUIService {
 					resolve(undefined);
 					return;
 				}
+
 				const providerName = selected.providerName;
+
+				// Check if user wants to add custom provider
+				if (providerName === '_ADD_CUSTOM_') {
+					resolve({ providerName, action: 'add' });
+					return;
+				}
+
 				resolve({ providerName });
 			});
 			quickPick.show();
@@ -372,14 +459,35 @@ export class BYOKUIService {
 			return undefined;
 		}
 
+		// Handle special actions
+		if (providerResult.action === 'delete') {
+			// Delete custom provider and restart selection
+			await this._storageService.removeCustomProvider(providerResult.providerName);
+			return { nextStep: ConfigurationStep.ProviderSelection };
+		} else if (providerResult.action === 'add') {
+			// Start custom provider creation flow
+			return { nextStep: ConfigurationStep.CustomProviderName };
+		}
+
 		// Store provider selection results in state
 		state.providerName = providerResult.providerName;
 		state.selectedProviderRegistry = this._modelRegistries.find(r => r.name === providerResult.providerName);
 		state.modelApiKey = providerResult.apiKey || ''; // Use reconfigured key if provided
 
+		// For custom providers, we need to create a temporary registry
 		if (!state.selectedProviderRegistry) {
-			// Should not happen if providerResult is valid
-			throw new Error('Selected provider registry not found.');
+			// Check if it's a custom provider
+			const customProvider = customProviders.find(p => p.name === providerResult.providerName);
+			if (customProvider) {
+				// Create a temporary registry for the custom provider
+				// We'll handle this in the parent class (BYOKContrib)
+				state.providerName = customProvider.name;
+				// For now, just proceed to model selection
+				return { nextStep: ConfigurationStep.ModelSelection };
+			} else {
+				// Should not happen if providerResult is valid
+				throw new Error('Selected provider registry not found.');
+			}
 		}
 
 		// Get API key for providers that need it (if not already set by reconfigure)
@@ -755,6 +863,84 @@ export class BYOKUIService {
 	}
 
 	// --- Helper Methods ---
+
+	private async _handleCustomProviderName(state: StateData): Promise<StateResult> {
+		const nameResult = await createInputBoxWithBackButton({
+			title: 'Add Custom Provider',
+			prompt: 'Enter a name for the custom provider',
+			placeHolder: 'e.g., Local LM Studio, Custom OpenAI',
+			ignoreFocusOut: true,
+			validateInput: async (value) => {
+				if (!value.trim()) {
+					return 'Provider name cannot be empty';
+				}
+
+				// Check if name already exists
+				const existingProviders = await this._storageService.getCustomProviders();
+				const existingBuiltInProviders = this._modelRegistries.map(r => r.name);
+
+				if (existingProviders.some(p => p.name === value.trim()) ||
+					existingBuiltInProviders.includes(value.trim())) {
+					return 'A provider with this name already exists';
+				}
+
+				return null;
+			}
+		});
+
+		if (!nameResult) {
+			return undefined;
+		}
+		if (isBackButtonClick(nameResult)) {
+			return { back: true };
+		}
+
+		state.customProviderName = nameResult.trim();
+		return { nextStep: ConfigurationStep.CustomProviderUrl };
+	}
+
+	private async _handleCustomProviderUrl(state: StateData): Promise<StateResult> {
+		if (!state.customProviderName) {
+			return undefined;
+		}
+
+		const urlResult = await createInputBoxWithBackButton({
+			title: `Add Custom Provider - ${state.customProviderName}`,
+			prompt: 'Enter the base URL for the OpenAI-compatible API',
+			placeHolder: 'e.g., http://localhost:1234/v1, https://api.openrouter.ai/api/v1',
+			ignoreFocusOut: true,
+			validateInput: (value) => {
+				if (!value.trim()) {
+					return 'URL cannot be empty';
+				}
+
+				try {
+					new URL(value.trim());
+					return null;
+				} catch {
+					return 'Please enter a valid URL';
+				}
+			}
+		});
+
+		if (!urlResult) {
+			return undefined;
+		}
+		if (isBackButtonClick(urlResult)) {
+			return { back: true };
+		}
+
+		state.customProviderUrl = urlResult.trim();
+
+		// Save the custom provider and complete
+		await this._storageService.addCustomProvider({
+			name: state.customProviderName,
+			url: state.customProviderUrl,
+			addedAt: Date.now()
+		});
+
+		return { nextStep: ConfigurationStep.Complete };
+	}
 
 	private async promptForAPIKey(contextName: string, reconfigure: boolean = false): Promise<string | undefined> {
 		const prompt = reconfigure ? `Enter new ${contextName} API Key or leave blank to delete saved key` : `Enter ${contextName} API Key`;
