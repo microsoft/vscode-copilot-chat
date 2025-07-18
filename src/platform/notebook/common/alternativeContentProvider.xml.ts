@@ -28,6 +28,10 @@ export function isXmlContent(text: string): boolean {
 
 
 class AlternativeXmlDocument extends AlternativeNotebookDocument {
+	constructor(text: string, private readonly cellOffsetMap: number[], notebook: NotebookDocument) {
+		super(text, notebook);
+	}
+
 	override fromCellPosition(cellIndex: number, position: Position): Position {
 		const cell = this.notebook.cellAt(cellIndex);
 		const cellSummary = summarize(cell);
@@ -40,18 +44,23 @@ class AlternativeXmlDocument extends AlternativeNotebookDocument {
 		const offset = alternativeContentText.indexOf(cellMarker) + cellMarker.length + eolLength + offsetInCell;
 		return this.positionAt(offset);
 	}
+
+	override toCellPosition(position: Position): { cellIndex: number; position: Position } | undefined {
+		const offset = this.offsetAt(position);
+		const cellIndex = this.cellOffsetMap.findIndex(cellOffset => cellOffset >= offset);
+		if (cellIndex === -1) {
+			return undefined;
+		}
+		const cell = this.notebook.cellAt(cellIndex);
+		const cellPosition = cell.document.positionAt(offset - this.cellOffsetMap[cellIndex]);
+		return { cellIndex, position: cellPosition };
+	}
 }
 
 export class AlternativeXmlNotebookContentProvider extends BaseAlternativeNotebookContentProvider {
 	constructor() {
 		super('xml');
 	}
-	public getAlternativeContent(notebook: NotebookDocument): string {
-		const cells = notebook.getCells().map(cell => summarize(cell));
-
-		return cells.map(cell => `${generateCellMarker(cell)}${EOL}${cell.source.join(EOL)}${EOL}${EndDelimter}`).join(EOL);
-	}
-
 	public stripCellMarkers(text: string): string {
 		const lines = text.split(EOL);
 		if (lines.length && (lines[0].startsWith(StartDelimter) || lines[0].startsWith(StartEmptyCellDelimter))) {
@@ -165,8 +174,16 @@ export class AlternativeXmlNotebookContentProvider extends BaseAlternativeNotebo
 	}
 
 	public override getAlternativeDocument(notebook: NotebookDocument): AlternativeNotebookDocument {
-		const text = this.getAlternativeContent(notebook);
-		return new AlternativeXmlDocument(text, notebook);
+		const cells = notebook.getCells().map(cell => summarize(cell));
+
+		const cellContent = cells.map(cell => {
+			const cellMarker = generateCellMarker(cell);
+			return { content: `${cellMarker}${EOL}${cell.source.join(EOL)}${EOL}${EndDelimter}`, cellMarker };
+		});
+		const content = cellContent.map(cell => cell.content).join(EOL);
+		const cellOffsetMap = cellContent.map(cellContent => content.indexOf(cellContent.content) + cellContent.cellMarker.length + EOL.length);
+
+		return new AlternativeXmlDocument(content, cellOffsetMap, notebook);
 	}
 
 }

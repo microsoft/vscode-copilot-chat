@@ -6,24 +6,29 @@
 import { EOL } from 'os';
 import { describe, expect, test } from 'vitest';
 import type { NotebookDocument } from 'vscode';
-import { DiffServiceImpl } from '../../../../../../platform/diff/node/diffServiceImpl';
-import { ILogger, ILogService } from '../../../../../../platform/log/common/logService';
-import { IAlternativeNotebookContentService } from '../../../../../../platform/notebook/common/alternativeContent';
-import { AlternativeNotebookContentEditGenerator, textToAsyncIterableLines } from '../../../../../../platform/notebook/common/alternativeContentEditGenerator';
-import { BaseAlternativeNotebookContentProvider } from '../../../../../../platform/notebook/common/alternativeContentProvider';
-import { AlternativeJsonNotebookContentProvider } from '../../../../../../platform/notebook/common/alternativeContentProvider.json';
-import { AlternativeTextNotebookContentProvider } from '../../../../../../platform/notebook/common/alternativeContentProvider.text';
-import { AlternativeXmlNotebookContentProvider } from '../../../../../../platform/notebook/common/alternativeContentProvider.xml';
-import { notebookCellToCellData, summarize } from '../../../../../../platform/notebook/common/helpers';
-import { NullTelemetryService } from '../../../../../../platform/telemetry/common/nullTelemetryService';
-import { SimulationWorkspace } from '../../../../../../platform/test/node/simulationWorkspace';
-import { ExtHostNotebookDocumentData } from '../../../../../../util/common/test/shims/notebookDocument';
-import { AsyncIterableObject } from '../../../../../../util/vs/base/common/async';
-import { CancellationToken } from '../../../../../../util/vs/base/common/cancellation';
-import { ResourceMap } from '../../../../../../util/vs/base/common/map';
-import * as path from '../../../../../../util/vs/base/common/path';
-import { NotebookCellData, NotebookCellKind, NotebookData, NotebookEdit, NotebookRange, Position, Range, TextEdit, Uri } from '../../../../../../vscodeTypes';
-import { LineOfText } from '../../../../../prompt/node/streamingEdits';
+import { DiffServiceImpl } from '../../../../platform/diff/node/diffServiceImpl';
+import { ILogger, ILogService } from '../../../../platform/log/common/logService';
+import { IAlternativeNotebookContentService } from '../../common/alternativeContent';
+
+import { AlternativeNotebookContentEditGenerator, textToAsyncIterableLines } from '../../common/alternativeContentEditGenerator';
+
+import { BaseAlternativeNotebookContentProvider } from '../../common/alternativeContentProvider';
+
+import { AlternativeJsonNotebookContentProvider } from '../../common/alternativeContentProvider.json';
+
+import { AlternativeTextNotebookContentProvider } from '../../common/alternativeContentProvider.text';
+
+import { AlternativeXmlNotebookContentProvider } from '../../common/alternativeContentProvider.xml';
+
+import { LineOfText, notebookCellToCellData, summarize } from '../../common/helpers';
+import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
+import { SimulationWorkspace } from '../../../../platform/test/node/simulationWorkspace';
+import { ExtHostNotebookDocumentData } from '../../../../util/common/test/shims/notebookDocument';
+import { AsyncIterableObject } from '../../../../util/vs/base/common/async';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { ResourceMap } from '../../../../util/vs/base/common/map';
+import * as path from '../../../../util/vs/base/common/path';
+import { NotebookCellData, NotebookCellKind, NotebookData, NotebookEdit, NotebookRange, Position, Range, TextEdit, Uri } from '../../../../vscodeTypes';
 import { fixture, loadFile, loadNotebook } from './utils';
 
 describe('Alternative Content for Notebooks', () => {

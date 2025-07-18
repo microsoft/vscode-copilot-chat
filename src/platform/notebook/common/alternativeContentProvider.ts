@@ -23,10 +23,6 @@ export abstract class BaseAlternativeNotebookContentProvider {
 	 */
 	public abstract stripCellMarkers(text: string): string;
 
-	/**
-	 * Generate the alternative format of the notebook document that is LLM friendly.
-	 */
-	protected abstract getAlternativeContent(notebook: NotebookDocument): string;
 
 	/**
 	 * Generate the Document of the notebook document that is LLM friendly.

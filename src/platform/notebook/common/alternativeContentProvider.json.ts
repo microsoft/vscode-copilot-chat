@@ -47,6 +47,9 @@ class AlternativeJsonDocument extends AlternativeNotebookDocument {
 		// -1 to exclude to trailing `"`
 		return new Position(linePositionInAltContent, characterPositionInAltContent.length);
 	}
+	override toCellPosition(position: Position): { cellIndex: number; position: Position } | undefined {
+		throw new Error('Method not implemented.');
+	}
 }
 
 export class AlternativeJsonNotebookContentProvider extends BaseAlternativeNotebookContentProvider {
