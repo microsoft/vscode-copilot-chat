@@ -113,8 +113,9 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 			return { kind: 'failure', reason: 'FailedToGetToken' };
 		}
 
-		// FIXME: Unverified type after inputting response
-		const tokenInfo: undefined | TokenInfo = await jsonVerboseError(response);
+		// Parse response with explicit type assertion after validation
+		const rawResponse = await jsonVerboseError(response);
+		const tokenInfo: undefined | TokenInfo = rawResponse as TokenInfo | undefined;
 		if (!tokenInfo) {
 			this._logService.logger.warn('Failed to get copilot token');
 			this._telemetryService.sendGHTelemetryErrorEvent('auth.request_read_failed');

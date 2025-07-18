@@ -469,6 +469,38 @@
 				}
 			},
 			{
+				"name": "copilot_codeAnalysis",
+				"toolReferenceName": "codeAnalysis",
+				"displayName": "Code Analysis Tool",
+				"modelDescription": "Analyze code files to provide metrics like lines of code, complexity, function count, and other insights. Supports TypeScript, JavaScript, and other common programming languages.",
+				"tags": [
+					"analysis",
+					"metrics",
+					"code quality"
+				],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"filePath": {
+							"type": "string",
+							"description": "The absolute path of the file to analyze."
+						},
+						"analysisType": {
+							"type": "string",
+							"description": "Type of analysis to perform: \"basic\" for simple metrics, \"detailed\" for comprehensive analysis.",
+							"enum": [
+								"basic",
+								"detailed"
+							],
+							"default": "basic"
+						}
+					},
+					"required": [
+						"filePath"
+					]
+				}
+			},
+			{
 				"name": "copilot_getErrors",
 				"displayName": "%copilot.tools.getErrors.name%",
 				"toolReferenceName": "problems",
