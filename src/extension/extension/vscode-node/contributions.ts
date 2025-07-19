@@ -30,6 +30,7 @@ import { NotebookFollowCommands } from '../../notebook/vscode-node/followActions
 import { CopilotDebugCommandContribution } from '../../onboardDebug/vscode-node/copilotDebugCommandContribution';
 import { OnboardTerminalTestsContribution } from '../../onboardDebug/vscode-node/onboardTerminalTestsContribution';
 import { DebugCommandsContribution } from '../../prompt/vscode-node/debugCommands';
+import { PromptCompletionContribution } from '../../prompt/vscode-node/promptCompletions';
 import { RenameSuggestionsContrib } from '../../prompt/vscode-node/renameSuggestions';
 import { PromptFileContextContribution } from '../../promptFileContext/vscode-node/promptFileContextService';
 import { RelatedFilesProviderContribution } from '../../relatedFiles/vscode-node/relatedFiles.contribution';
@@ -100,5 +101,6 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(RelatedFilesProviderContribution),
 	asContributionFactory(BYOKContrib),
 	asContributionFactory(McpSetupCommands),
+	asContributionFactory(PromptCompletionContribution),
 	newWorkspaceContribution,
 ];
