@@ -12,18 +12,21 @@ import { APIJsonData, CAPIChatMessage, ChatCompletion, rawMessageToCAPI } from '
 import { FinishedCompletion, convertToAPIJsonData } from './stream';
 
 // TODO @lramos15 - Find a better file for this, since this file is for the chat stream and should not be telemetry related
-export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData) {
+export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, turnIndex?: number) {
 	const telemetryDataWithPrompt = telemetryData.extendedBy({
 		messagesJson: JSON.stringify(messages),
+		...(turnIndex !== undefined ? { turnIndex: turnIndex.toString() } : {}),
 	});
 	telemetryService.sendEnhancedGHTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
+	telemetryService.sendMSFTTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 }
 
 export function prepareChatCompletionForReturn(
 	telemetryService: ITelemetryService,
 	logService: ILogService,
 	c: FinishedCompletion,
-	telemetryData: TelemetryData
+	telemetryData: TelemetryData,
+	turnIndex?: number
 ): ChatCompletion {
 	let messageContent = c.solution.text.join('');
 
@@ -44,7 +47,13 @@ export function prepareChatCompletionForReturn(
 		role: Raw.ChatRole.Assistant,
 		content: toTextParts(messageContent),
 	};
-	sendEngineMessagesTelemetry(telemetryService, [rawMessageToCAPI(message)], telemetryData);
+
+	// Try to get turnIndex from telemetryData properties first, fallback to parameter
+	const effectiveTurnIndex = telemetryData.properties.turnIndex ?
+		parseInt(telemetryData.properties.turnIndex as string, 10) :
+		turnIndex;
+
+	sendEngineMessagesTelemetry(telemetryService, [rawMessageToCAPI(message)], telemetryData, effectiveTurnIndex);
 	return {
 		message: message,
 		choiceIndex: c.index,
