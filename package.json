@@ -2266,6 +2266,11 @@
 						"type": "boolean",
 						"default": true,
 						"description": "%github.copilot.config.autoFix%"
+					},
+					"github.copilot.chat.autonomousFeedback.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Enable autonomous feedback mode for Copilot Chat."
 					}
 				}
 			},
