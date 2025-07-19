@@ -182,7 +182,8 @@ export class EditCodeIntent implements IIntent {
 		const { location, documentContext, request } = invocationContext;
 		const endpoint = await this.endpointProvider.getChatEndpoint(request);
 
-		if (location === ChatLocation.Panel || (location === ChatLocation.Editor && this.configurationService.getNonExtensionConfig('inlineChat.enableV2'))) {
+		if (location === ChatLocation.Panel || location === ChatLocation.Notebook
+			|| (location === ChatLocation.Editor && this.configurationService.getNonExtensionConfig('inlineChat.enableV2'))) {
 			return this.instantiationService.createInstance(this.intentOptions.intentInvocation, this, location, endpoint, request, this.intentOptions);
 		}
 
