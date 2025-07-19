@@ -23,7 +23,6 @@ import { TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { InlineEditDebugComponent } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
 import { DiagnosticsNextEditProvider } from './features/diagnosticsInlineEditProvider';
-import { EditSourceTrackingFeature } from './features/editSourceTrackingFeature';
 import { InlineCompletionProviderImpl } from './inlineCompletionProvider';
 import { InlineEditModel } from './inlineEditModel';
 import { InlineEditLogger } from './parts/inlineEditLogger';
@@ -38,7 +37,6 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 	private readonly _inlineEditsProviderId = makeSettable(this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Internal.InlineEditsProviderId, this._expService));
 
 	private readonly _hideInternalInterface = this._configurationService.getConfigObservable(ConfigKey.Internal.InlineEditsHideInternalInterface);
-	private readonly _editSourceTrackingEnabled = this._configurationService.getConfigObservable(ConfigKey.Internal.EditSourceTrackingEnabled);
 	private readonly _enableDiagnosticsProvider = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.InlineEditsEnableDiagnosticsProvider, this._expService);
 	private readonly _yieldToCopilot = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Internal.InlineEditsYieldToCopilot, this._expService);
 	private readonly _copilotToken = observableFromEvent(this, this._authenticationService.onDidAuthenticationChange, () => this._authenticationService.copilotToken);
@@ -152,14 +150,6 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 			reader.store.add(commands.registerCommand(clearCacheCommandId, () => {
 				model.nextEditProvider.clearCache();
 			}));
-		}));
-
-		this._register(autorun(reader => {
-			if (!this._editSourceTrackingEnabled.read(reader)) {
-				return;
-			}
-			const workspace = this._workspace.read(reader);
-			reader.store.add(this._instantiationService.createInstance(EditSourceTrackingFeature, workspace));
 		}));
 
 		constructorTracer.returns();
