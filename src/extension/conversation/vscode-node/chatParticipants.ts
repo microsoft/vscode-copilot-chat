@@ -22,6 +22,7 @@ import { ChatParticipantRequestHandler } from '../../prompt/node/chatParticipant
 import { IFeedbackReporter } from '../../prompt/node/feedbackReporter';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { ChatTitleProvider } from '../../prompt/node/title';
+import { renderReviewPrompt } from '../../prompts/node/reviewPrompt';
 import { IUserFeedbackService } from './userActions';
 import { getAdditionalWelcomeMessage } from './welcomeMessageProvider';
 
@@ -269,7 +270,19 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 
 			const onPause = Event.chain(onRequestPaused, $ => $.filter(e => e.request === request).map(e => e.isPaused));
 			const handler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, request, stream, token, { agentName: name, agentId: id, intentId }, onPause);
-			return await handler.getResult();
+			const result = await handler.getResult();
+
+			if (this.configurationService.get<boolean>('github.copilot.chat.autonomousFeedback.enabled')) {
+				const { prompt } = await renderReviewPrompt();
+				const newRequest: vscode.ChatRequest = {
+					...request,
+					prompt,
+				};
+				const reviewHandler = this.instantiationService.createInstance(ChatParticipantRequestHandler, context.history, newRequest, stream, token, { agentName: name, agentId: id, intentId }, onPause);
+				await reviewHandler.getResult();
+			}
+
+			return result;
 		};
 	}
 
