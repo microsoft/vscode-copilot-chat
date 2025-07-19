@@ -9,7 +9,7 @@ import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { IChatSessionService } from '../../../platform/chat/common/chatSessionService';
 import { INaiveChunkingService, NaiveChunkingService } from '../../../platform/chunking/node/naiveChunkerService';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { DefaultsOnlyConfigurationService } from '../../../platform/configuration/test/common/defaultsOnlyConfigurationService';
+import { DefaultsOnlyConfigurationService } from '../../../platform/configuration/common/defaultsOnlyConfigurationService';
 import { IDebugOutputService } from '../../../platform/debug/common/debugOutputService';
 import { DebugOutputServiceImpl } from '../../../platform/debug/vscode/debugOutputServiceImpl';
 import { IDialogService } from '../../../platform/dialog/common/dialogService';

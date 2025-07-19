@@ -3,6 +3,7 @@
 .vscode-test-web/
 node_modules/
 dist/
+/tmp-chat-lib/
 
 # created by simulation
 .simulation
