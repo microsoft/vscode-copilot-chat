@@ -133,6 +133,7 @@
 	"github.copilot.config.agent.thinkingTool": "Enables the thinking tool that allows Copilot to think deeply about your request before generating a response in agent mode.",
 	"github.copilot.config.setupTests.enabled": "Enables the `/setupTests` intent and prompting in `/tests` generation.",
 	"github.copilot.config.byok.ollamaEndpoint": "The endpoint to use for the Ollama when accessed via bring your own key. Defaults to localhost.",
+	"github.copilot.config.virtualTools.enabled": "Enables the virtual tools feature.",
 	"github.copilot.command.fixTestFailure": "Fix Test Failure",
 	"copilot.description": "Ask Copilot",
 	"copilot.edits.description": "Edit files in your workspace",
