@@ -25,7 +25,7 @@ export abstract class BaseOpenAICompatibleLMProvider implements LanguageModelCha
 		private _knownModels: BYOKKnownModels | undefined,
 		private readonly _byokStorageService: IBYOKStorageService,
 		@IFetcherService protected readonly _fetcherService: IFetcherService,
-		@ILogService private readonly _logService: ILogService,
+		@ILogService protected readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
 		this._lmWrapper = this._instantiationService.createInstance(CopilotLanguageModelWrapper);

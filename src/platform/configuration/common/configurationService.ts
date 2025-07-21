@@ -628,7 +628,7 @@ export namespace ConfigKey {
 		export const WorkspaceEnableEmbeddingsSearch = defineExpSetting<boolean>('chat.advanced.workspace.enableEmbeddingsSearch', true, INTERNAL);
 		export const WorkspaceUseCodeSearchInstantIndexing = defineExpSetting<boolean>('chat.advanced.workspace.useCodeSearchInstantIndexing', true, INTERNAL);
 		export const WorkspacePreferredEmbeddingsModel = defineExpSetting<string>('chat.advanced.workspace.preferredEmbeddingsModel', '', INTERNAL);
-		export const WorkspacePrototypeAdoCodeSearchEnabled = defineExpSetting<boolean>('chat.advanced.workspace.prototypeAdoCodeSearchEnabled', { defaultValue: false, internalDefaultValue: true, teamDefaultValue: true }, INTERNAL_RESTRICTED);
+		export const WorkspaceEnableAdoCodeSearch = defineExpSetting<boolean>('chat.advanced.workspace.enabledAdoCodeSearch', true, INTERNAL);
 		export const WorkspacePrototypeAdoCodeSearchEndpointOverride = defineSetting<string>('chat.advanced.workspace.prototypeAdoCodeSearchEndpointOverride', '', INTERNAL);
 		export const FeedbackOnChange = defineSetting('chat.advanced.feedback.onChange', false, INTERNAL);
 		export const ReviewIntent = defineSetting('chat.advanced.review.intent', false, INTERNAL);

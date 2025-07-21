@@ -30,18 +30,24 @@ export class OpenRouterLMProvider extends BaseOpenAICompatibleLMProvider {
 	}
 
 	protected override async getAllModels(): Promise<BYOKKnownModels> {
-		const response = await this._fetcherService.fetch('https://openrouter.ai/api/v1/models?supported_parameters=tools', { method: 'GET' });
-		const data: any = await response.json();
-		const knownModels: BYOKKnownModels = {};
-		for (const model of data.data) {
-			knownModels[model.id] = {
-				name: model.name,
-				toolCalling: model.supported_parameters.includes('tools'),
-				vision: model.input_modalities.includes('image'),
-				maxInputTokens: model.top_provider.context_length - 16000,
-				maxOutputTokens: 16000
-			};
+		try {
+			const response = await this._fetcherService.fetch('https://openrouter.ai/api/v1/models?supported_parameters=tools', { method: 'GET' });
+			const data: any = await response.json();
+			const knownModels: BYOKKnownModels = {};
+			for (const model of data.data) {
+				knownModels[model.id] = {
+					name: model.name,
+					toolCalling: model.supported_parameters?.includes('tools') ?? false,
+					vision: model.input_modalities?.includes('image') ?? false,
+					maxInputTokens: model.top_provider.context_length - 16000,
+					maxOutputTokens: 16000
+				};
+			}
+			return knownModels;
+		} catch (error) {
+			this._logService.logger.error(error, `Error fetching available OpenRouter models`);
+			throw error;
 		}
-		return knownModels;
+
 	}
 }

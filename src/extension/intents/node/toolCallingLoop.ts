@@ -14,6 +14,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { FinishedCallback, OpenAiFunctionDef, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { ThinkingData } from '../../../platform/thinking/common/thinking';
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
@@ -118,7 +119,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	protected abstract buildPrompt(buildPromptContext: IBuildPromptContext, progress: Progress<ChatResponseReferencePart | ChatResponseProgressPart>, token: CancellationToken): Promise<IBuildPromptResult>;
 
 	/** Gets the tools that should be callable by the model. */
-	protected abstract getAvailableTools(token: CancellationToken): Promise<LanguageModelToolInformation[]>;
+	protected abstract getAvailableTools(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<LanguageModelToolInformation[]>;
 
 	/** Creates the prompt context for the request. */
 	protected createPromptContext(availableTools: LanguageModelToolInformation[], outputStream: ChatResponseStream | undefined): Mutable<IBuildPromptContext> {
@@ -320,14 +321,14 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 	/** Runs a single iteration of the tool calling loop. */
 	public async runOne(outputStream: ChatResponseStream | undefined, iterationNumber: number, token: CancellationToken | PauseController): Promise<IToolCallSingleResult> {
-		let availableTools = await this.getAvailableTools(token);
+		let availableTools = await this.getAvailableTools(outputStream, token);
 		const context = this.createPromptContext(availableTools, outputStream);
 		const isContinuation = context.isContinuation || false;
 		const buildPromptResult: IBuildPromptResult = await this.buildPrompt2(context, outputStream, token);
 		await this.throwIfCancelled(token);
 		this.turn.addReferences(buildPromptResult.references);
 		// Possible the tool call resulted in new tools getting added.
-		availableTools = await this.getAvailableTools(token);
+		availableTools = await this.getAvailableTools(outputStream, token);
 
 		const isToolInputFailure = buildPromptResult.metadata.get(ToolFailureEncountered);
 		const conversationSummary = buildPromptResult.metadata.get(SummarizedConversationHistoryMetadata);
@@ -411,6 +412,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			} satisfies OpenAiFunctionDef;
 		}) : undefined;
 		const toolCalls: IToolCall[] = [];
+		let thinking: ThinkingData | undefined;
 		const fixedMessages = this.applyMessagePostProcessing(buildPromptResult.messages);
 		const fetchResult = await this.fetch(
 			fixedMessages,
@@ -422,6 +424,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						id: this.createInternalToolCallId(call.id),
 						arguments: call.arguments === '' ? '{}' : call.arguments
 					})));
+					thinking = delta.thinking;
 				}
 
 				return stopEarly ? text.length : undefined;
@@ -465,7 +468,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					fetchResult.value,
 					toolCalls,
 					toolInputRetry,
-					undefined
+					undefined,
+					thinking
 				),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
@@ -479,7 +483,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
 			lastRequestMessages: buildPromptResult.messages,
 			availableToolCount: availableTools.length,
-			round: new ToolCallRound('', toolCalls, toolInputRetry, undefined)
+			round: new ToolCallRound('', toolCalls, toolInputRetry, undefined, thinking)
 		};
 	}
 
@@ -624,7 +628,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}
 
 		if (originalCall) {
-			this._requestLogger.logToolCall(originalCall?.id || generateUuid(), originalCall?.name, originalCall?.arguments, metadata.result);
+			this._requestLogger.logToolCall(originalCall?.id || generateUuid(), originalCall?.name, originalCall?.arguments, metadata.result, lastTurn?.thinking);
 		}
 	}
 }
