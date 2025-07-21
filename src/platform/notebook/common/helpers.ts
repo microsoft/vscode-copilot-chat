@@ -111,7 +111,7 @@ export const CellIdPatternRe = new RegExp(`(\\s+|^|\\b|\\W)(#VSC-[a-f0-9]{${CELL
  * Sometimes the model may return a cellId that is not in the expected format.
  * This function attempts to convert such cellIds to the expected format.
  */
-export function normalizeCellId(cellId: string): string | undefined {
+export function normalizeCellId(cellId: string): string {
 	if (cellId.startsWith(CELL_ID_PREFIX)) {
 		return cellId;
 	}
