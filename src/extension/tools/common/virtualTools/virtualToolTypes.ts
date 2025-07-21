@@ -18,7 +18,7 @@ export interface IToolGrouping {
 	 * Should be called for each model tool call. Returns a tool result if the
 	 * call was a virtual tool call that was expanded.
 	 */
-	didCall(toolCallName: string): LanguageModelToolResult | undefined;
+	didCall(localTurnNumber: number, toolCallName: string): LanguageModelToolResult | undefined;
 
 	/**
 	 * Should be called for each conversation turn. This is used to monitor

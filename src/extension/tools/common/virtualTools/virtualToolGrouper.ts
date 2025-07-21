@@ -6,13 +6,16 @@
 import type { LanguageModelToolInformation } from 'vscode';
 import { CHAT_MODEL, HARD_TOOL_LIMIT } from '../../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
+import { ILogService } from '../../../../platform/log/common/logService';
+import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { groupBy } from '../../../../util/vs/base/common/collections';
 import { Iterable } from '../../../../util/vs/base/common/iterator';
+import { StopWatch } from '../../../../util/vs/base/common/stopwatch';
 import { LanguageModelToolExtensionSource, LanguageModelToolMCPSource } from '../../../../vscodeTypes';
 import { VIRTUAL_TOOL_NAME_PREFIX, VirtualTool } from './virtualTool';
-import { divideToolsIntoGroups, summarizeToolGroup } from './virtualToolSummarizer';
-import { IToolCategorization, IToolGroupingCache } from './virtualToolTypes';
+import { divideToolsIntoExistingGroups, divideToolsIntoGroups, summarizeToolGroup } from './virtualToolSummarizer';
+import { ISummarizedToolCategory, IToolCategorization, IToolGroupingCache } from './virtualToolTypes';
 import * as Constant from './virtualToolsConstants';
 
 const BUILT_IN_GROUP = 'builtin';
@@ -24,6 +27,8 @@ export class VirtualToolGrouper implements IToolCategorization {
 	constructor(
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@IToolGroupingCache private readonly _cache: IToolGroupingCache,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
+		@ILogService private readonly _logService: ILogService,
 	) {
 	}
 
@@ -44,20 +49,24 @@ export class VirtualToolGrouper implements IToolCategorization {
 			}
 		});
 
+		const previousGroups = new Map</* name */ string, VirtualTool>();
+		const previousCategorizations = new Map<string, ISummarizedToolCategory[]>();
+		for (const tool of root.all()) {
+			if (tool instanceof VirtualTool) {
+				previousGroups.set(tool.name, tool);
+				if (tool.metadata?.toolsetKey) {
+					previousCategorizations.set(tool.metadata.toolsetKey, tool.metadata.groups);
+				}
+			}
+		}
+
 		const grouped = await Promise.all(Object.entries(byToolset).map(([key, tools]) => {
 			if (key === BUILT_IN_GROUP) {
 				return tools;
 			} else {
-				return this._generateGroupsFromToolset(tools, token);
+				return this._generateGroupsFromToolset(key, tools, previousCategorizations.get(key), token);
 			}
 		}));
-
-		const previousGroups = new Map</* name */ string, VirtualTool>();
-		for (const tool of root.all()) {
-			if (tool instanceof VirtualTool) {
-				previousGroups.set(tool.name, tool);
-			}
-		}
 
 		this._cache.flush();
 		root.contents = grouped.flat();
@@ -67,12 +76,13 @@ export class VirtualToolGrouper implements IToolCategorization {
 				const prev = previousGroups.get(tool.name);
 				if (prev) {
 					tool.isExpanded = prev.isExpanded;
+					tool.metadata.preExpanded = prev.metadata.preExpanded;
 					tool.lastUsedOnTurn = prev.lastUsedOnTurn;
 				}
 			}
 		}
 
-		this.reExpandToolsToHitBudget(root);
+		this._reExpandToolsToHitBudget(root);
 	}
 
 	/**
@@ -82,7 +92,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 	 * Note: when this is made smarter, we should increase `MIN_TOOLSET_SIZE_TO_GROUP`,
 	 * which is right now because tiny toolsets are likely to automatically be included.
 	 */
-	private reExpandToolsToHitBudget(root: VirtualTool): void {
+	private _reExpandToolsToHitBudget(root: VirtualTool): void {
 		let toolCount = Iterable.length(root.tools());
 		if (toolCount > Constant.EXPAND_UNTIL_COUNT) {
 			return; // No need to expand further.
@@ -101,6 +111,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 			}
 
 			vtool.isExpanded = true;
+			vtool.metadata.preExpanded = true;
 			toolCount = nextCount;
 
 			if (toolCount > Constant.EXPAND_UNTIL_COUNT) {
@@ -110,29 +121,86 @@ export class VirtualToolGrouper implements IToolCategorization {
 	}
 
 	/** Top-level request to categorize a group of tools from a single source. */
-	private async _generateGroupsFromToolset(tools: LanguageModelToolInformation[], token: CancellationToken): Promise<(VirtualTool | LanguageModelToolInformation)[]> {
+	private async _generateGroupsFromToolset(key: string, tools: LanguageModelToolInformation[], previous: ISummarizedToolCategory[] | undefined, token: CancellationToken): Promise<(VirtualTool | LanguageModelToolInformation)[]> {
 		if (tools.length <= Constant.MIN_TOOLSET_SIZE_TO_GROUP) {
 			return tools;
 		}
 
-		const virts = await this._cache.getOrInsert(tools, () =>
-			tools.length <= Constant.GROUP_WITHIN_TOOLSET
-				? this._summarizeToolGroup(tools, token)
-				: this._divideToolsIntoGroups(tools, token)
-		);
+		let retries = 0;
+		let virts: ISummarizedToolCategory[] | undefined;
 
-		return virts?.map(v => {
-			const vt = new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX + v.name, SUMMARY_PREFIX + v.summary + SUMMARY_SUFFIX, 0, undefined);
+		const sw = StopWatch.create();
+		for (; !virts && retries < Constant.MAX_CATEGORIZATION_RETRIES; retries++) {
+			try {
+				virts = await this._cache.getOrInsert(tools, () =>
+					tools.length <= Constant.GROUP_WITHIN_TOOLSET
+						? this._summarizeToolGroup(tools, token)
+						: this._divideToolsIntoGroups(tools, previous, token)
+				);
+			} catch (e) {
+				this._logService.logger.warn(`Failed to categorize tools: ${e}`);
+			}
+		}
+
+		let uncategorized: LanguageModelToolInformation[] = [];
+		if (!virts) {
+			uncategorized = tools;
+		} else {
+			const group = virts.findIndex(g => g.name === Constant.UNCATEGORIZED_TOOLS_GROUP_NAME);
+			if (group >= 0) {
+				uncategorized = virts[group].tools;
+				virts.splice(group, 1);
+			}
+		}
+
+		/* __GDPR__
+			"virtualTools.generate" : {
+				"owner": "connor4312",
+				"comment": "Reports information about the generation of virtual tools.",
+				"groupKey": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Key of the categorized group (MCP or extension)" },
+
+				"toolsBefore": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools before categorization", "isMeasurement": true },
+				"toolsAfter": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools after categorization", "isMeasurement": true },
+				"retries": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of retries to categorize the tools", "isMeasurement": true },
+				"uncategorizedTools": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools that could not be categorized", "isMeasurement": true },
+				"durationMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Total duration of the operation in milliseconds", "isMeasurement": true }
+			}
+		*/
+		this._telemetryService.sendMSFTTelemetryEvent('virtualTools.generate', {
+			groupKey: key,
+		}, {
+			uncategorized: uncategorized?.length || 0,
+			toolsBefore: tools.length,
+			toolsAfter: virts?.length || 0,
+			retries,
+			durationMs: sw.elapsed(),
+		});
+
+		const virtualTools: (VirtualTool | LanguageModelToolInformation)[] = virts?.map(v => {
+			const vt = new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX + v.name, SUMMARY_PREFIX + v.summary + SUMMARY_SUFFIX, 0, { toolsetKey: key, groups: virts });
 			vt.contents = v.tools;
 			return vt;
-		}) || tools;
+		}) || [];
+
+		return virtualTools.concat(uncategorized);
 	}
 
 	/** Makes multiple sub-groups from the given tool list. */
-	protected async _divideToolsIntoGroups(tools: LanguageModelToolInformation[], token: CancellationToken) {
+	protected async _divideToolsIntoGroups(tools: LanguageModelToolInformation[], previous: ISummarizedToolCategory[] | undefined, token: CancellationToken) {
 		const endpoint = await this._endpointProvider.getChatEndpoint(CATEGORIZATION_ENDPOINT);
 
-		const summarized = await divideToolsIntoGroups(endpoint, tools, token);
+
+		if (previous) {
+			const newTools = new Set(tools.map(t => t.name));
+			previous = previous
+				.map(p => ({ ...p, tools: p.tools.filter(t => newTools.has(t.name)) }))
+				.filter(p => p.tools.length > 0);
+		}
+
+		const summarized = previous?.length
+			? await divideToolsIntoExistingGroups(endpoint, previous, tools, token)
+			: await divideToolsIntoGroups(endpoint, tools, token);
+
 		if (!summarized) {
 			return undefined;
 		}

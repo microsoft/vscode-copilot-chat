@@ -4,18 +4,25 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { LanguageModelToolInformation } from 'vscode';
+import { ISummarizedToolCategory } from './virtualToolTypes';
 
 export const VIRTUAL_TOOL_NAME_PREFIX = 'activate_';
 
-export class VirtualTool<TGroupMetadata = any> {
+export interface IVirtualToolMetadata {
+	toolsetKey: string;
+	groups: ISummarizedToolCategory[];
+	preExpanded?: boolean;
+}
+
+export class VirtualTool {
 	public isExpanded = false;
-	public contents: (LanguageModelToolInformation | VirtualTool<TGroupMetadata>)[] = [];
+	public contents: (LanguageModelToolInformation | VirtualTool)[] = [];
 
 	constructor(
 		public readonly name: string,
 		public readonly description: string,
 		public lastUsedOnTurn: number,
-		public readonly groupMetadata: TGroupMetadata,
+		public readonly metadata: IVirtualToolMetadata,
 	) {
 		if (!name.startsWith(VIRTUAL_TOOL_NAME_PREFIX)) {
 			throw new Error(`Virtual tool name must start with '${VIRTUAL_TOOL_NAME_PREFIX}'`);
@@ -26,18 +33,26 @@ export class VirtualTool<TGroupMetadata = any> {
 	 * Looks up a tool. Update the {@link lastUsedOnTurn} of all virtual tools
 	 * it touches.
 	 */
-	public findAndTouch(name: string, turnNumber: number): VirtualTool<TGroupMetadata> | LanguageModelToolInformation | undefined {
+	public findAndTouch(name: string, turnNumber: number): undefined | {
+		tool: VirtualTool | LanguageModelToolInformation;
+		path: VirtualTool[];
+	} {
 		this.lastUsedOnTurn = turnNumber;
 
 		if (this.name === name) {
-			return this;
+			return { tool: this, path: [] };
 		}
 
 		for (const content of this.contents) {
 			if (content instanceof VirtualTool) {
 				const found = content.findAndTouch(name, turnNumber);
 				if (found) {
+					found.path.unshift(this);
 					return found;
+				}
+			} else {
+				if (content.name === name) {
+					return { tool: content, path: [this] };
 				}
 			}
 		}
@@ -48,8 +63,8 @@ export class VirtualTool<TGroupMetadata = any> {
 	/**
 	 * Gets the tool with the lowest {@link lastUsedOnTurn} that is expanded.
 	 */
-	public getLowestExpandedTool(): VirtualTool<TGroupMetadata> | undefined {
-		let lowest: VirtualTool<TGroupMetadata> | undefined;
+	public getLowestExpandedTool(): VirtualTool | undefined {
+		let lowest: VirtualTool | undefined;
 
 		for (const tool of this.all()) {
 			if (tool instanceof VirtualTool && tool.isExpanded) {
@@ -62,7 +77,7 @@ export class VirtualTool<TGroupMetadata = any> {
 		return lowest;
 	}
 
-	public *all(): Iterable<LanguageModelToolInformation | VirtualTool<TGroupMetadata>> {
+	public *all(): Iterable<LanguageModelToolInformation | VirtualTool> {
 		yield this;
 		for (const content of this.contents) {
 			if (content instanceof VirtualTool) {

@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { LanguageModelTextPart, LanguageModelToolInformation } from 'vscode';
 import { HARD_TOOL_LIMIT } from '../../../../../platform/configuration/common/configurationService';
+import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry';
 import { ITestingServicesAccessor } from '../../../../../platform/test/node/services';
 import { shuffle } from '../../../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
@@ -25,9 +26,10 @@ describe('Virtual Tools - Grouping', () => {
 	class TestToolGrouping extends ToolGrouping {
 		constructor(
 			_tools: readonly LanguageModelToolInformation[],
-			@IInstantiationService _instantiationService: IInstantiationService
+			@IInstantiationService _instantiationService: IInstantiationService,
+			@ITelemetryService _telemetryService: ITelemetryService,
 		) {
-			super(_tools, _instantiationService);
+			super(_tools, _instantiationService, _telemetryService);
 			this._grouper = mockGrouper;
 		}
 
@@ -61,7 +63,7 @@ describe('Virtual Tools - Grouping', () => {
 						`${VIRTUAL_TOOL_NAME_PREFIX}${groupName}`,
 						`Group of tools: ${groupName}`,
 						0,
-						undefined
+						{ groups: [], toolsetKey: '', preExpanded: true }
 					);
 					groupTool.contents = groupTools;
 					root.contents.push(groupTool);
@@ -221,7 +223,7 @@ describe('Virtual Tools - Grouping', () => {
 
 	describe('didCall()', () => {
 		it('should return undefined for non-virtual tool calls', () => {
-			const result = grouping.didCall('regular_tool');
+			const result = grouping.didCall(0, 'regular_tool');
 			expect(result).toBeUndefined();
 		});
 
@@ -239,7 +241,7 @@ describe('Virtual Tools - Grouping', () => {
 			// First compute to create the virtual tool
 			await grouping.compute(CancellationToken.None);
 
-			const result = grouping.didCall(`${VIRTUAL_TOOL_NAME_PREFIX}file`);
+			const result = grouping.didCall(0, `${VIRTUAL_TOOL_NAME_PREFIX}file`);
 			expect(result).toBeDefined();
 
 			// The constructor takes an array of parts, check that text is present
@@ -264,7 +266,7 @@ describe('Virtual Tools - Grouping', () => {
 			expect(result[0].name).toBe(`${VIRTUAL_TOOL_NAME_PREFIX}file`);
 
 			// Call the virtual tool to expand it
-			grouping.didCall(`${VIRTUAL_TOOL_NAME_PREFIX}file`);
+			grouping.didCall(0, `${VIRTUAL_TOOL_NAME_PREFIX}file`);
 
 			// Second compute - should now return the expanded tools
 			result = await grouping.compute(CancellationToken.None);
@@ -298,7 +300,7 @@ describe('Virtual Tools - Grouping', () => {
 			// call and expand until we hit the first trim
 			let i = 0;
 			for (; i < groupNumbers.length && result.length < TRIM_THRESHOLD; i++) {
-				grouping.didCall(`${VIRTUAL_TOOL_NAME_PREFIX}group${groupNumbers[i]}`);
+				grouping.didCall(0, `${VIRTUAL_TOOL_NAME_PREFIX}group${groupNumbers[i]}`);
 				grouping.didTakeTurn();
 				result = await grouping.compute(CancellationToken.None);
 			}
@@ -327,13 +329,13 @@ describe('Virtual Tools - Grouping', () => {
 			await grouping.compute(CancellationToken.None);
 
 			// Expand tools in different order - later calls are more recent
-			grouping.didCall(`${VIRTUAL_TOOL_NAME_PREFIX}group0`); // Oldest usage
+			grouping.didCall(0, `${VIRTUAL_TOOL_NAME_PREFIX}group0`); // Oldest usage
 			grouping.didTakeTurn();
 
-			grouping.didCall(`${VIRTUAL_TOOL_NAME_PREFIX}group1`);
+			grouping.didCall(0, `${VIRTUAL_TOOL_NAME_PREFIX}group1`);
 			grouping.didTakeTurn();
 
-			grouping.didCall(`${VIRTUAL_TOOL_NAME_PREFIX}group2`); // Most recent usage
+			grouping.didCall(0, `${VIRTUAL_TOOL_NAME_PREFIX}group2`); // Most recent usage
 			grouping.didTakeTurn();
 
 			// Force trimming
@@ -363,8 +365,8 @@ describe('Virtual Tools - Grouping', () => {
 			await grouping.compute(CancellationToken.None);
 
 			// Expand some tools
-			grouping.didCall(`${VIRTUAL_TOOL_NAME_PREFIX}group0`);
-			grouping.didCall(`${VIRTUAL_TOOL_NAME_PREFIX}group1`);
+			grouping.didCall(0, `${VIRTUAL_TOOL_NAME_PREFIX}group0`);
+			grouping.didCall(0, `${VIRTUAL_TOOL_NAME_PREFIX}group1`);
 			grouping.didTakeTurn();
 
 			// First cache invalidation
@@ -374,8 +376,8 @@ describe('Virtual Tools - Grouping', () => {
 			expect(firstTrimCount).toBeLessThanOrEqual(TRIM_THRESHOLD);
 
 			// Expand more tools
-			grouping.didCall(`${VIRTUAL_TOOL_NAME_PREFIX}group2`);
-			grouping.didCall(`${VIRTUAL_TOOL_NAME_PREFIX}group3`);
+			grouping.didCall(0, `${VIRTUAL_TOOL_NAME_PREFIX}group2`);
+			grouping.didCall(0, `${VIRTUAL_TOOL_NAME_PREFIX}group3`);
 			grouping.didTakeTurn();
 
 			// Second cache invalidation
@@ -425,7 +427,7 @@ describe('Virtual Tools - Grouping', () => {
 			expect(result.length).toBeLessThanOrEqual(HARD_TOOL_LIMIT);
 
 			for (let i = 0; i < 10; i++) {
-				grouping.didCall(`${VIRTUAL_TOOL_NAME_PREFIX}cat${i}`);
+				grouping.didCall(0, `${VIRTUAL_TOOL_NAME_PREFIX}cat${i}`);
 			}
 
 			expect(result.length).toBeLessThanOrEqual(HARD_TOOL_LIMIT);

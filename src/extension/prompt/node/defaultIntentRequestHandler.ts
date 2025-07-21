@@ -27,6 +27,7 @@ import { Iterable } from '../../../util/vs/base/common/iterator';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { mixin } from '../../../util/vs/base/common/objects';
 import { assertType, Mutable } from '../../../util/vs/base/common/types';
+import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEditPart, LanguageModelToolResult2 } from '../../../vscodeTypes';
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
@@ -548,7 +549,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 			if (context.toolCallResults?.[call.id]) {
 				continue;
 			}
-			const expanded = DefaultToolCallingLoop.toolGrouping.didCall(call.name);
+			const expanded = DefaultToolCallingLoop.toolGrouping.didCall(context.toolCallRounds!.length, call.name);
 			if (expanded) {
 				context.toolCallResults ??= {};
 				context.toolCallResults[call.id] = expanded;
@@ -595,7 +596,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		);
 	}
 
-	protected override async getAvailableTools(token: CancellationToken): Promise<LanguageModelToolInformation[]> {
+	protected override async getAvailableTools(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<LanguageModelToolInformation[]> {
 		const tools = await this.options.invocation.getAvailableTools?.() ?? [];
 		if (!this._configurationService.getExperimentBasedConfig(ConfigKey.VirtualTools, this._experimentationService)) {
 			return tools;
@@ -607,7 +608,20 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 			DefaultToolCallingLoop.toolGrouping = this.toolGroupingService.create(tools);
 		}
 
-		return DefaultToolCallingLoop.toolGrouping.compute(token);
+		const computePromise = DefaultToolCallingLoop.toolGrouping.compute(token);
+
+		// Show progress if this takes a moment...
+		const timeout = setTimeout(() => {
+			outputStream?.progress(localize('computingTools', 'Optimizing tool selection...'), async () => {
+				await computePromise;
+			});
+		}, 1000);
+
+		try {
+			return await computePromise;
+		} finally {
+			clearTimeout(timeout);
+		}
 	}
 
 	private fixMessageNames(messages: Raw.ChatMessage[]): void {

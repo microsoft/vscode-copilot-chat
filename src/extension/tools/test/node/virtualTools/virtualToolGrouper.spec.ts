@@ -6,7 +6,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LanguageModelToolInformation } from 'vscode';
 import { HARD_TOOL_LIMIT } from '../../../../../platform/configuration/common/configurationService';
-import { IEndpointProvider } from '../../../../../platform/endpoint/common/endpointProvider';
 import { IVSCodeExtensionContext } from '../../../../../platform/extContext/common/extensionContext';
 import { ITestingServicesAccessor } from '../../../../../platform/test/node/services';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
@@ -16,7 +15,7 @@ import { createExtensionUnitTestingServices } from '../../../../test/node/servic
 import { VIRTUAL_TOOL_NAME_PREFIX, VirtualTool } from '../../../common/virtualTools/virtualTool';
 import { VirtualToolGrouper } from '../../../common/virtualTools/virtualToolGrouper';
 import { EXPAND_UNTIL_COUNT, GROUP_WITHIN_TOOLSET, MIN_TOOLSET_SIZE_TO_GROUP, START_GROUPING_AFTER_TOOL_COUNT } from '../../../common/virtualTools/virtualToolsConstants';
-import { ISummarizedToolCategory, IToolGroupingCache } from '../../../common/virtualTools/virtualToolTypes';
+import { ISummarizedToolCategory } from '../../../common/virtualTools/virtualToolTypes';
 
 describe('Virtual Tools - Grouper', () => {
 	let accessor: ITestingServicesAccessor;
@@ -24,15 +23,8 @@ describe('Virtual Tools - Grouper', () => {
 	let root: VirtualTool;
 
 	class TestVirtualToolGrouper extends VirtualToolGrouper {
-		constructor(
-			@IEndpointProvider endpointProvider: IEndpointProvider,
-			@IToolGroupingCache cache: IToolGroupingCache
-		) {
-			super(endpointProvider, cache);
-		}
-
 		// Stub out the protected methods to avoid hitting the endpoint
-		protected override async _divideToolsIntoGroups(tools: LanguageModelToolInformation[], token: CancellationToken): Promise<ISummarizedToolCategory[] | undefined> {
+		protected override async _divideToolsIntoGroups(tools: LanguageModelToolInformation[], previous: ISummarizedToolCategory[] | undefined, token: CancellationToken): Promise<ISummarizedToolCategory[] | undefined> {
 			// Simulate dividing tools into groups based on their name prefix
 			const groups = new Map<string, LanguageModelToolInformation[]>();
 
@@ -84,7 +76,7 @@ describe('Virtual Tools - Grouper', () => {
 		const testingServiceCollection = createExtensionUnitTestingServices();
 		accessor = testingServiceCollection.createTestingAccessor();
 		grouper = accessor.get(IInstantiationService).createInstance(TestVirtualToolGrouper);
-		root = new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX, '', Infinity, undefined);
+		root = new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX, '', Infinity, { groups: [], toolsetKey: '', preExpanded: true });
 		root.isExpanded = true;
 	});
 
