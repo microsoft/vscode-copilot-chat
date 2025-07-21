@@ -192,7 +192,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 
 		for (let model of models) {
 
-			if (model.id === experimentModelConfig?.id) {
+			if (model.id === experimentModelConfig?.selected) {
 				/* __GDPR__
 					"custommodel.found" : {
 						"owner": "karthiknadig",

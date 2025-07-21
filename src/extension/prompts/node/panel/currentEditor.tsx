@@ -118,9 +118,10 @@ export class CurrentEditor extends PromptElement<CurrentEditorPromptProps> {
 			return undefined;
 		}
 		const altDocument = this._alternativeNotebookContentService.create(format).getAlternativeDocument(notebook);
+		const cell = notebook.cellAt(cellIndex);
 		const ranges = editor.visibleRanges.map(range => {
-			const start = altDocument.fromCellPosition(cellIndex, range.start);
-			const end = altDocument.fromCellPosition(cellIndex, range.end);
+			const start = altDocument.fromCellPosition(cell, range.start);
+			const end = altDocument.fromCellPosition(cell, range.end);
 			return new Range(start, end);
 		});
 
@@ -164,8 +165,8 @@ export class CurrentEditor extends PromptElement<CurrentEditorPromptProps> {
 		const ranges = notebookRanges.map(range => {
 			const cell = editor.notebook.cellAt(range.start);
 			const lastLine = cell.document.lineAt(cell.document.lineCount - 1);
-			const start = altDocument.fromCellPosition(range.start, new Position(0, 0));
-			const end = altDocument.fromCellPosition(range.start, lastLine.range.end);
+			const start = altDocument.fromCellPosition(cell, new Position(0, 0));
+			const end = altDocument.fromCellPosition(cell, lastLine.range.end);
 			return new Range(start, end);
 		});
 

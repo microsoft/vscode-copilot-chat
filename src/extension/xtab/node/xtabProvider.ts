@@ -525,7 +525,8 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 			cleanedLinesStream = linesStream;
 		} else if (
 			opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.UnifiedModel ||
-			opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.Codexv21NesUnified
+			opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.Codexv21NesUnified ||
+			opts.promptingStrategy === xtabPromptOptions.PromptingStrategy.Nes41Miniv3
 		) {
 			const linesIter = linesStream[Symbol.asyncIterator]();
 			const firstLine = await linesIter.next();

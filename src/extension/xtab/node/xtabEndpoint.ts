@@ -89,6 +89,7 @@ export class XtabEndpoint extends ChatEndpoint {
 			throw new Error(message);
 		}
 		return {
+			'Authorization': `Bearer ${apiKey}`,
 			'api-key': apiKey,
 		};
 	}

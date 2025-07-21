@@ -43,6 +43,8 @@ import { EditCodePrompt2 } from '../../prompts/node/panel/editCodePrompt2';
 import { ToolResultMetadata } from '../../prompts/node/panel/toolCalling';
 import { ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
+import { VirtualTool } from '../../tools/common/virtualTools/virtualTool';
+import { IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
 import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
 import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation } from './toolCallingLoop';
@@ -59,7 +61,7 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 
 		const allowTools: Record<string, boolean> = {};
 		allowTools[ToolName.EditFile] = true;
-		allowTools[ToolName.ReplaceString] = modelSupportsReplaceString(model) || !!(model.family.includes('gemini') && experimentationService.getTreatmentVariable<boolean>('vscode', 'copilotchat.geminiReplaceString'));
+		allowTools[ToolName.ReplaceString] = modelSupportsReplaceString(model) || !!(model.family.includes('gemini') && configurationService.getExperimentBasedConfig(ConfigKey.Internal.GeminiReplaceString, experimentationService));
 		allowTools[ToolName.ApplyPatch] = modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
 
 		if (modelCanUseReplaceStringExclusively(model)) {
@@ -93,18 +95,53 @@ export class AgentIntent extends EditCodeIntent {
 		@IExperimentationService expService: IExperimentationService,
 		@ICodeMapperService codeMapperService: ICodeMapperService,
 		@IWorkspaceService workspaceService: IWorkspaceService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+		@IToolGroupingService private readonly _toolGroupingService: IToolGroupingService,
 	) {
 		super(instantiationService, endpointProvider, configurationService, expService, codeMapperService, workspaceService, { intentInvocation: AgentIntentInvocation, processCodeblocks: false });
 	}
 
 	override async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, agentName: string, location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
 		if (request.command === 'list') {
-			const editingTools = await getTools(this.instantiationService, request);
-			stream.markdown(`Available tools: \n${editingTools.map(tool => `- ${tool.name}`).join('\n')}\n`);
+			await this.listTools(request, stream, token);
 			return {};
 		}
 
 		return super.handleRequest(conversation, request, stream, token, documentContext, agentName, location, chatTelemetry, onPaused);
+	}
+
+	private async listTools(request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken) {
+		const editingTools = await getTools(this.instantiationService, request);
+		if (!this._configurationService.getExperimentBasedConfig(ConfigKey.VirtualTools, this._experimentationService)) {
+			stream.markdown(`Available tools: \n${editingTools.map(tool => `- ${tool.name}`).join('\n')}\n`);
+			return;
+		}
+
+		let str = 'Available tools:\n';
+		function printTool(tool: vscode.LanguageModelToolInformation | VirtualTool, indent = 0) {
+			const prefix = '  '.repeat(indent * 2);
+			str += `${prefix}- ${tool.name}`;
+			if (tool instanceof VirtualTool) {
+				if (tool.isExpanded) {
+					str += ` (expanded):`;
+				} else {
+					str += ': ' + tool.description.split('\n\n').map((chunk, i) => i > 0 ? prefix + '  ' + chunk : chunk).join('\n\n');
+				}
+			}
+			str += '\n';
+			if (tool instanceof VirtualTool && tool.contents.length > 0) {
+				for (const child of tool.contents) {
+					printTool(child, indent + 1);
+				}
+			}
+		}
+
+		const tools = await this._toolGroupingService.create(editingTools).computeAll(token);
+		tools.forEach(t => printTool(t));
+		stream.markdown(str);
+
+		return {};
 	}
 
 	protected override getIntentHandlerOptions(request: vscode.ChatRequest): IDefaultIntentRequestHandlerOptions | undefined {

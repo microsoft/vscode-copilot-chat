@@ -3,11 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ILogService } from '../../../platform/log/common/logService';
-import { IFetcherService } from '../../../platform/networking/common/fetcherService';
-import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { BYOKAuthType } from '../common/byokProvider';
-import { BaseOpenAICompatibleBYOKRegistry } from './baseOpenAICompatibleProvider';
 
 export function resolveAzureUrl(modelId: string, url: string): string {
 	// The fully resolved url was already passed in
@@ -40,26 +35,26 @@ export function resolveAzureUrl(modelId: string, url: string): string {
  * and there's no central listing API. The user needs to manually register each model they want to use.
  */
 
-export class AzureBYOKModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
+// export class AzureBYOKModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 
-	constructor(
-		@IFetcherService _fetcherService: IFetcherService,
-		@ILogService _logService: ILogService,
-		@IInstantiationService _instantiationService: IInstantiationService,
-	) {
-		super(
-			BYOKAuthType.PerModelDeployment,
-			'Azure',
-			'',
-			_fetcherService,
-			_logService,
-			_instantiationService
-		);
-	}
+// 	constructor(
+// 		@IFetcherService _fetcherService: IFetcherService,
+// 		@ILogService _logService: ILogService,
+// 		@IInstantiationService _instantiationService: IInstantiationService,
+// 	) {
+// 		super(
+// 			BYOKAuthType.PerModelDeployment,
+// 			'Azure',
+// 			'',
+// 			_fetcherService,
+// 			_logService,
+// 			_instantiationService
+// 		);
+// 	}
 
-	override async getAllModels(_apiKey: string): Promise<{ id: string; name: string }[]> {
-		// Azure doesn't have a central API for listing models
-		// Each model has a unique deployment URL
-		return [];
-	}
-}
+// 	override async getAllModels(_apiKey: string): Promise<{ id: string; name: string }[]> {
+// 		// Azure doesn't have a central API for listing models
+// 		// Each model has a unique deployment URL
+// 		return [];
+// 	}
+// }

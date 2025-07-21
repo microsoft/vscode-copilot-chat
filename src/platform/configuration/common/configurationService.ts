@@ -399,6 +399,7 @@ export interface Config<T> extends BaseConfig<T> {
 
 export interface ExperimentBasedConfig<T extends ExperimentBasedConfigType> extends BaseConfig<T> {
 	readonly configType: ConfigType.ExperimentBased;
+	readonly experimentName: string | undefined;
 }
 
 let packageJsonDefaults: Map<string, any> | undefined = undefined;
@@ -488,8 +489,8 @@ function defineSetting<T>(key: string, defaultValue: T | DefaultValueWithTeamVal
  *     config.github.copilot.chat.advanced.inlineEdits.internalRollout
  * ```
  */
-export function defineExpSetting<T extends ExperimentBasedConfigType>(key: string, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, options?: ConfigOptions): ExperimentBasedConfig<T> {
-	const value: ExperimentBasedConfig<T> = { ...toBaseConfig(key, defaultValue, options), configType: ConfigType.ExperimentBased };
+export function defineExpSetting<T extends ExperimentBasedConfigType>(key: string, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): ExperimentBasedConfig<T> {
+	const value: ExperimentBasedConfig<T> = { ...toBaseConfig(key, defaultValue, options), configType: ConfigType.ExperimentBased, experimentName: expOptions?.experimentName };
 	if (value.advancedSubKey) {
 		// This is a `github.copilot.advanced.*` setting
 		throw new BugIndicatingError('Shared settings cannot be experiment based');
@@ -572,6 +573,7 @@ export namespace ConfigKey {
 			"markdown": false,
 			"scminput": false
 		});
+
 	}
 
 	/**
@@ -714,6 +716,9 @@ export namespace ConfigKey {
 		export const VerifyTextDocumentChanges = defineExpSetting<boolean>('chat.advanced.inlineEdits.verifyTextDocumentChanges', true, INTERNAL_RESTRICTED);
 		export const EnableApplyPatchForNotebooks = defineExpSetting<boolean>('chat.advanced.enableApplyPatchForNotebooks', false, INTERNAL_RESTRICTED);
 		export const OmitBaseAgentInstructions = defineSetting<boolean>('chat.advanced.omitBaseAgentInstructions', false, INTERNAL);
+
+		export const PromptFileContext = defineExpSetting<boolean>('chat.advanced.promptFileContextProvider.enabled', true);
+		export const GeminiReplaceString = defineExpSetting<boolean>('chat.advanced.geminiReplaceString.enabled', false, INTERNAL, { experimentName: 'copilotchat.geminiReplaceString' });
 	}
 
 	export const AgentThinkingTool = defineSetting<boolean>('chat.agent.thinkingTool', false);
@@ -757,6 +762,7 @@ export namespace ConfigKey {
 	export const AgentCanRunTasks = defineValidatedSetting('chat.agent.runTasks', vBoolean(), true);
 	export const NewWorkspaceCreationAgentEnabled = defineSetting<boolean>('chat.newWorkspaceCreation.enabled', true);
 	export const SummarizeAgentConversationHistory = defineExpSetting<boolean>('chat.summarizeAgentConversationHistory.enabled', true);
+	export const VirtualTools = defineExpSetting<boolean>('chat.virtualTools.enabled', false);
 	export const CurrentEditorAgentContext = defineSetting<boolean>('chat.agent.currentEditorContext.enabled', true);
 	export const TerminalAllowList = defineSetting<{ [key: string]: boolean }>('chat.agent.terminal.allowList', {});
 	export const TerminalDenyList = defineSetting<{ [key: string]: boolean }>('chat.agent.terminal.denyList', {

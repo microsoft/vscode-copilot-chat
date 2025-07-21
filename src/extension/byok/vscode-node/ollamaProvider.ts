@@ -6,8 +6,9 @@ import { IChatModelInformation } from '../../../platform/endpoint/common/endpoin
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { BYOKAuthType, BYOKModelCapabilities } from '../common/byokProvider';
-import { BaseOpenAICompatibleBYOKRegistry } from './baseOpenAICompatibleProvider';
+import { BYOKAuthType, BYOKKnownModels, BYOKModelCapabilities } from '../common/byokProvider';
+import { BaseOpenAICompatibleLMProvider } from './baseOpenAICompatibleProvider';
+import { IBYOKStorageService } from './byokStorageService';
 
 interface OllamaModelInfoAPIResponse {
 	template: string;
@@ -27,32 +28,49 @@ interface OllamaVersionResponse {
 // Minimum supported Ollama version - versions below this may have compatibility issues
 const MINIMUM_OLLAMA_VERSION = '0.6.4';
 
-export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
+export class OllamaLMProvider extends BaseOpenAICompatibleLMProvider {
+	public static readonly providerName = 'Ollama';
+	private _modelCache = new Map<string, IChatModelInformation>();
 
 	constructor(
 		private readonly _ollamaBaseUrl: string,
+		byokStorageService: IBYOKStorageService,
 		@IFetcherService _fetcherService: IFetcherService,
 		@ILogService _logService: ILogService,
 		@IInstantiationService _instantiationService: IInstantiationService,
 	) {
 		super(
 			BYOKAuthType.None,
-			'Ollama',
+			OllamaLMProvider.providerName,
 			`${_ollamaBaseUrl}/v1`,
+			undefined,
+			byokStorageService,
 			_fetcherService,
 			_logService,
 			_instantiationService
 		);
 	}
 
-	override async getAllModels(apiKey: string): Promise<{ id: string; name: string }[]> {
+	protected override async getAllModels(): Promise<BYOKKnownModels> {
 		try {
 			// Check Ollama server version before proceeding with model operations
 			await this._checkOllamaVersion();
 
 			const response = await this._fetcherService.fetch(`${this._ollamaBaseUrl}/api/tags`, { method: 'GET' });
 			const models = (await response.json()).models;
-			return models.map((model: { model: string; name: string }) => ({ id: model.model, name: model.name }));
+			const knownModels: BYOKKnownModels = {};
+			for (const model of models) {
+				const modelInfo = await this.getModelInfo(model.model, '', undefined);
+				this._modelCache.set(model.model, modelInfo);
+				knownModels[model.model] = {
+					maxInputTokens: modelInfo.capabilities.limits?.max_prompt_tokens ?? 4096,
+					maxOutputTokens: modelInfo.capabilities.limits?.max_output_tokens ?? 4096,
+					name: modelInfo.name,
+					toolCalling: !!modelInfo.capabilities.supports.tool_calls,
+					vision: !!modelInfo.capabilities.supports.vision
+				};
+			}
+			return knownModels;
 		} catch (e) {
 			// Check if this is our version check error and preserve it
 			if (e instanceof Error && e.message.includes('Ollama server version')) {
@@ -62,7 +80,47 @@ export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 		}
 	}
 
+
+	/**
+	 * Compare version strings to check if current version meets minimum requirements
+	 * @param currentVersion Current Ollama server version
+	 * @returns true if version is supported, false otherwise
+	 */
+	private _isVersionSupported(currentVersion: string): boolean {
+		// Simple version comparison: split by dots and compare numerically
+		const currentParts = currentVersion.split('.').map(n => parseInt(n, 10));
+		const minimumParts = MINIMUM_OLLAMA_VERSION.split('.').map(n => parseInt(n, 10));
+
+		for (let i = 0; i < Math.max(currentParts.length, minimumParts.length); i++) {
+			const current = currentParts[i] || 0;
+			const minimum = minimumParts[i] || 0;
+
+			if (current > minimum) {
+				return true;
+			}
+			if (current < minimum) {
+				return false;
+			}
+		}
+
+		return true; // versions are equal
+	}
+
+	private async _getOllamaModelInformation(modelId: string): Promise<OllamaModelInfoAPIResponse> {
+		const response = await this._fetcherService.fetch(`${this._ollamaBaseUrl}/api/show`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify({ model: modelId })
+		});
+		return response.json() as unknown as OllamaModelInfoAPIResponse;
+	}
+
 	override async getModelInfo(modelId: string, apiKey: string, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
+		if (this._modelCache.has(modelId)) {
+			return this._modelCache.get(modelId)!;
+		}
 		if (!modelCapabilities) {
 			const modelInfo = await this._getOllamaModelInformation(modelId);
 			const contextWindow = modelInfo.model_info[`${modelInfo.model_info['general.architecture']}.context_length`] ?? 4096;
@@ -76,17 +134,6 @@ export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 			};
 		}
 		return super.getModelInfo(modelId, apiKey, modelCapabilities);
-	}
-
-	private async _getOllamaModelInformation(modelId: string): Promise<OllamaModelInfoAPIResponse> {
-		const response = await this._fetcherService.fetch(`${this._ollamaBaseUrl}/api/show`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({ model: modelId })
-		});
-		return response.json() as unknown as OllamaModelInfoAPIResponse;
 	}
 
 	/**
@@ -116,30 +163,5 @@ export class OllamaModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
 				`If you're running an older version, please upgrade from https://ollama.ai`
 			);
 		}
-	}
-
-	/**
-	 * Compare version strings to check if current version meets minimum requirements
-	 * @param currentVersion Current Ollama server version
-	 * @returns true if version is supported, false otherwise
-	 */
-	private _isVersionSupported(currentVersion: string): boolean {
-		// Simple version comparison: split by dots and compare numerically
-		const currentParts = currentVersion.split('.').map(n => parseInt(n, 10));
-		const minimumParts = MINIMUM_OLLAMA_VERSION.split('.').map(n => parseInt(n, 10));
-
-		for (let i = 0; i < Math.max(currentParts.length, minimumParts.length); i++) {
-			const current = currentParts[i] || 0;
-			const minimum = minimumParts[i] || 0;
-
-			if (current > minimum) {
-				return true;
-			}
-			if (current < minimum) {
-				return false;
-			}
-		}
-
-		return true; // versions are equal
 	}
 }
