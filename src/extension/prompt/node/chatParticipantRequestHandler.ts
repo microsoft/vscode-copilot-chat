@@ -288,17 +288,17 @@ export class ChatParticipantRequestHandler {
 		if (!command?.intent && (this.location === ChatLocation.Editor || this.location === ChatLocation.Notebook)) { // TODO@jrieken do away with location specific code
 
 			let preferredIntent: Intent | undefined;
-			if (this.documentContext && this.request.attempt === 0 && history.length === 0) {
-				if (this.location === ChatLocation.Notebook) {
-					preferredIntent = Intent.notebookEditor;
-				} else if (this.documentContext.selection.isEmpty && this.documentContext.document.lineAt(this.documentContext.selection.start.line).text.trim() === '') {
+			if (this.documentContext && this.location === ChatLocation.Notebook) {
+				preferredIntent = Intent.notebookEditor;
+			} else if (this.documentContext && this.request.attempt === 0 && history.length === 0) {
+				if (this.documentContext.selection.isEmpty && this.documentContext.document.lineAt(this.documentContext.selection.start.line).text.trim() === '') {
 					preferredIntent = Intent.Generate;
 				} else if (!this.documentContext.selection.isEmpty && this.documentContext.selection.start.line !== this.documentContext.selection.end.line) {
 					preferredIntent = Intent.Edit;
 				}
-				if (preferredIntent) {
-					return this._intentService.getIntent(preferredIntent, this.location) ?? this._intentService.unknownIntent;
-				}
+			}
+			if (preferredIntent) {
+				return this._intentService.getIntent(preferredIntent, this.location) ?? this._intentService.unknownIntent;
 			}
 		}
 
