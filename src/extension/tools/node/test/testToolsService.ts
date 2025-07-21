@@ -27,8 +27,8 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 	];
 
 	private static readonly ContainerOnlyTools = [
-		ToolName.RunInTerminal,
-		ToolName.GetTerminalOutput
+		ToolName.CoreRunInTerminal,
+		ToolName.CoreGetTerminalOutput
 	];
 
 	private readonly _tools = new Map<string, LanguageModelToolInformation>();
@@ -79,6 +79,7 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 			const info: LanguageModelToolInformation = {
 				name: tool.toolName,
 				description: mapContributedToolNamesInString(contributedTool.modelDescription),
+				source: undefined,
 				inputSchema: contributedTool.inputSchema && mapContributedToolNamesInSchema(contributedTool.inputSchema),
 				tags: contributedTool.tags ?? []
 			};
@@ -130,7 +131,8 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 				name: contributedTool.name,
 				description: contributedTool.modelDescription,
 				inputSchema: contributedTool.inputSchema,
-				tags: []
+				tags: [],
+				source: undefined,
 			};
 		}
 

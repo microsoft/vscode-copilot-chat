@@ -11,6 +11,7 @@ import * as protocol from '../common/serverProtocol';
 export type ResolvedRunnableResult = {
 	id: protocol.ContextRunnableResultId;
 	state: protocol.ContextRunnableState;
+	priority: number;
 	items: protocol.FullContextItem[];
 	cache?: protocol.CacheInfo;
 }
@@ -19,6 +20,7 @@ export namespace ResolvedRunnableResult {
 		return {
 			id: result.id,
 			state: result.state,
+			priority: result.priority,
 			items: items,
 			cache: result.cache
 		};
@@ -179,7 +181,7 @@ export class ContextItemResultBuilder implements ContextItemSummary {
 				}
 				this.seenContextItems.add(item.key);
 			}
-			const converted = ContextItemResultBuilder.doConvert(item);
+			const converted = ContextItemResultBuilder.doConvert(item, runnableResult.priority);
 			if (converted === undefined) {
 				continue;
 			}
@@ -191,7 +193,7 @@ export class ContextItemResultBuilder implements ContextItemSummary {
 	public *convert(runnableResult: ResolvedRunnableResult): IterableIterator<ContextItem> {
 		Stats.update(this.stats, runnableResult);
 		for (const item of runnableResult.items) {
-			const converted = ContextItemResultBuilder.doConvert(item);
+			const converted = ContextItemResultBuilder.doConvert(item, runnableResult.priority);
 			if (converted === undefined) {
 				continue;
 			}
@@ -200,12 +202,12 @@ export class ContextItemResultBuilder implements ContextItemSummary {
 		}
 	}
 
-	private static doConvert(item: protocol.ContextItem): ContextItem | undefined {
+	private static doConvert(item: protocol.ContextItem, priority: number): ContextItem | undefined {
 		switch (item.kind) {
 			case protocol.ContextKind.Snippet:
 				return {
 					kind: ContextKind.Snippet,
-					priority: item.priority,
+					priority: priority,
 					uri: vscode.Uri.file(item.fileName),
 					additionalUris: item.additionalFileNames?.map(uri => vscode.Uri.file(uri)),
 					value: item.value
@@ -213,7 +215,7 @@ export class ContextItemResultBuilder implements ContextItemSummary {
 			case protocol.ContextKind.Trait:
 				return {
 					kind: ContextKind.Trait,
-					priority: item.priority,
+					priority: priority,
 					name: item.name,
 					value: item.value
 				};

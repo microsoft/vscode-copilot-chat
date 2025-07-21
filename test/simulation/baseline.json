@@ -9530,9 +9530,9 @@
   {
     "name": "notebooks (toolCalling) [panel] - Run cell tool should avoid running markdown cells",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 1,
+    "failCount": 9,
+    "score": 0.1
   },
   {
     "name": "PR Title and Description [context] - Multiple commits without issue information",
@@ -11826,9 +11826,9 @@
   {
     "name": "toolCalling [panel] - find all phone numbers in markdown files in the codebase",
     "contentFilterCount": 0,
-    "passCount": 1,
-    "failCount": 9,
-    "score": 0.1
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "toolCalling [panel] - I'm using git, create a new branch called issue-9876",

@@ -35,6 +35,7 @@ import { ToolName } from '../../tools/common/toolNames';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { ReadFileParams } from '../../tools/node/readFileTool';
 import { PauseController } from './pauseController';
+import { Mutable } from '../../../util/vs/base/common/types';
 
 
 export const enum ToolCallLimitBehavior {
@@ -116,10 +117,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	protected abstract buildPrompt(buildPromptContext: IBuildPromptContext, progress: Progress<ChatResponseReferencePart | ChatResponseProgressPart>, token: CancellationToken): Promise<IBuildPromptResult>;
 
 	/** Gets the tools that should be callable by the model. */
-	protected abstract getAvailableTools(): Promise<LanguageModelToolInformation[]>;
+	protected abstract getAvailableTools(token: CancellationToken): Promise<LanguageModelToolInformation[]>;
 
 	/** Creates the prompt context for the request. */
-	protected createPromptContext(availableTools: LanguageModelToolInformation[], outputStream: ChatResponseStream | undefined): IBuildPromptContext {
+	protected createPromptContext(availableTools: LanguageModelToolInformation[], outputStream: ChatResponseStream | undefined): Mutable<IBuildPromptContext> {
 		const { request } = this.options;
 		const chatVariables = new ChatVariablesCollection(request.references);
 
@@ -311,14 +312,14 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 	/** Runs a single iteration of the tool calling loop. */
 	public async runOne(outputStream: ChatResponseStream | undefined, iterationNumber: number, token: CancellationToken | PauseController): Promise<IToolCallSingleResult> {
-		let availableTools = await this.getAvailableTools();
+		let availableTools = await this.getAvailableTools(token);
 		const context = this.createPromptContext(availableTools, outputStream);
 		const isContinuation = context.isContinuation || false;
 		const buildPromptResult: IBuildPromptResult = await this.buildPrompt2(context, outputStream, token);
 		await this.throwIfCancelled(token);
 		this.turn.addReferences(buildPromptResult.references);
 		// Possible the tool call resulted in new tools getting added.
-		availableTools = await this.getAvailableTools();
+		availableTools = await this.getAvailableTools(token);
 
 		const isToolInputFailure = buildPromptResult.metadata.get(ToolFailureEncountered);
 		const conversationSummary = buildPromptResult.metadata.get(SummarizedConversationHistoryMetadata);

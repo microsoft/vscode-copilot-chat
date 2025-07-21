@@ -63,7 +63,7 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 	}
 
 	private ensureToolsRegistered() {
-		this._lmToolRegistration ??= new ToolsContribution(this);
+		this._lmToolRegistration ??= new ToolsContribution(this, {} as any);
 	}
 
 	getCopilotTool(name: string): ICopilotTool<any> | undefined {
@@ -111,6 +111,7 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 				name: contributedTool.name,
 				description: contributedTool.modelDescription,
 				inputSchema: contributedTool.inputSchema,
+				source: undefined,
 				tags: []
 			};
 		}
