@@ -12,8 +12,8 @@ This will allow richer AI capabilities, tighter SAP integration, and enterprise-
 
 ### 1. Provider and Extension Architecture
 
-- [ ] Understand Copilot Chat OSS architecture and LLM provider plug-in points.
-- [ ] Implement basic SAP AI Core provider and integrate into Copilot.
+- [X] Understand Copilot Chat OSS architecture and LLM provider plug-in points.
+- [X] Implement basic SAP AI Core provider and integrate into Copilot.
 - [ ] Refactor provider to support streaming responses for real-time AI chat (currently responses are not streamed).
 - [ ] Properly fork the Copilot Chat repo to allow for long-term maintainability and easier upstream syncs (similar to how “Continue AI” was handled).
 - [ ] Review and improve all error handling, token counting, and prompt formatting to be robust against edge cases.
