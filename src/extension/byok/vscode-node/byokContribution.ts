@@ -75,7 +75,7 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			const sapaicoreRegistry = instantiationService.createInstance(SAPAICoreModelRegistry);
 			this._modelRegistries.push(sapaicoreRegistry);
 			// // Auto-register default SAP AI Core model
-			// await this.autoRegisterDefaultSAPAICoreModel(sapaicoreRegistry);
+			await this.autoRegisterDefaultSAPAICoreModel(sapaicoreRegistry);
 
 			// These are intentionally registered in alphabetical order so we don't need to sort them later.
 			// They will be shown to the user in the same order.

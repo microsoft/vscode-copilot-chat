@@ -85,7 +85,7 @@ export class BYOKDebugCommands {
 				output.appendLine('=== BYOK Registered Models ===');
 				output.appendLine(`Total BYOK models tracked: ${this._registeredModelDisposables.size}`);
 
-				for (const [key, disposable] of this._registeredModelDisposables) {
+				for (const [key] of this._registeredModelDisposables) {
 					this._logService.logger.info(`BYOK Model Key: ${key}`);
 					output.appendLine(`BYOK Model Key: ${key}`);
 				}
