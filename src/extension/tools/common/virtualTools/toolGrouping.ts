@@ -45,12 +45,16 @@ export class ToolGrouping implements IToolGrouping {
 	}
 
 	didCall(localTurnNumber: number, toolCallName: string): LanguageModelToolResult | undefined {
-		const result = this._root.findAndTouch(toolCallName, this._turnNo);
+		const result = this._root.find(toolCallName);
 		if (!result) {
 			return;
 		}
 
 		const { path, tool } = result;
+		for (const part of path) {
+			part.lastUsedOnTurn = this._turnNo;
+		}
+
 		if (path.length > 1) { // only for tools in groups under the root
 			/* __GDPR__
 				"virtualTools.called" : {
@@ -82,6 +86,12 @@ export class ToolGrouping implements IToolGrouping {
 		return new LanguageModelToolResult([
 			new LanguageModelTextPart(`Tools activated: ${[...tool.tools()].map(t => t.name).join(', ')}`),
 		]);
+	}
+
+	getContainerFor(tool: string): VirtualTool | undefined {
+		const result = this._root.find(tool);
+		const last = result?.path.at(-1);
+		return last === this._root ? undefined : last;
 	}
 
 	didTakeTurn(): void {

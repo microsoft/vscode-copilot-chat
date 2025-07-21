@@ -109,7 +109,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		@ILogService protected readonly _logService: ILogService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IAuthenticationChatUpgradeService private readonly _authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
-		@ITelemetryService private readonly _telemetryService: ITelemetryService,
+		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
 	) {
 		super();
 	}
@@ -428,12 +428,12 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			},
 			{
 				tools: promptContextTools?.map(tool => ({
-					function:
-					{
+					function: {
 						name: tool.name,
 						description: tool.description,
 						parameters: tool.parameters && Object.keys(tool.parameters).length ? tool.parameters : undefined
-					}, type: 'function'
+					},
+					type: 'function',
 				})),
 			},
 			iterationNumber === 0 && !isContinuation,

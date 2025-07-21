@@ -34,6 +34,11 @@ export interface IToolGrouping {
 	didInvalidateCache(): void;
 
 	/**
+	 * Gets the virtual tool containing the given tool, or undefined.
+	 */
+	getContainerFor(toolName: string): VirtualTool | undefined;
+
+	/**
 	 * Returns a list of tools that should be used for the given request.
 	 * Internally re-reads the request and conversation state.
 	 */
