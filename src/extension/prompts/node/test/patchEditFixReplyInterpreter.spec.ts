@@ -115,10 +115,10 @@ def main():
 		);
 
 		// Mock AI response that contains patches for imports and code changes
-		const aiResponse = `I'll add the necessary imports and modify the print statement to use JSON formatting.
+		let aiResponse = `I'll add the necessary imports and modify the print statement to use JSON formatting.
 
 ---FILEPATH
-\\test\\file.py
+{documentUri}
 ---FIND
 def process_data(items):
 ---REPLACE
@@ -128,7 +128,7 @@ from typing import List
 
 def process_data(items):
 ---FILEPATH
-\\test\\file.py
+{documentUri}
 ---FIND
     processed = process_data(data)
     print(processed)
@@ -139,6 +139,7 @@ def process_data(items):
 ---COMPLETE`;
 
 		// Create input stream and output stream
+		aiResponse = aiResponse.replace(/{documentUri}/g, documentUri.fsPath);
 		const inputStream = createMockInputStreamFromPatchResponse(aiResponse);
 		const outputStream = new MockChatResponseStream();
 		const context = new MockResponseProcessorContext();
