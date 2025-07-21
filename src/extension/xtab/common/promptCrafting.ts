@@ -160,7 +160,7 @@ they would have made next. Provide the revised code that was between the \`${COD
 // Your revised code goes here
 \`\`\``));
 
-	return `${opts.promptingStrategy === PromptingStrategy.Nes41Miniv3 ? '' : '```'}
+	return `${(opts.promptingStrategy === PromptingStrategy.Nes41Miniv3 || opts.promptingStrategy === PromptingStrategy.Codexv21NesUnified) ? '' : '```'}
 ${RECENTLY_VIEWED_CODE_SNIPPETS_START}
 ${recentlyViewedCodeSnippets}
 ${RECENTLY_VIEWED_CODE_SNIPPETS_END}
@@ -174,9 +174,7 @@ ${EDIT_DIFF_HISTORY_START_TAG}
 ${editDiffHistory}
 ${EDIT_DIFF_HISTORY_END_TAG}
 
-${areaAroundCodeToEdit}${opts.promptingStrategy === PromptingStrategy.Nes41Miniv3 ? '' : '\n```'}
-
-${postScript}
+${areaAroundCodeToEdit}${(opts.promptingStrategy === PromptingStrategy.Nes41Miniv3 || opts.promptingStrategy === PromptingStrategy.Codexv21NesUnified) ? '' : '\n```'}${opts.promptingStrategy === PromptingStrategy.Codexv21NesUnified ? '' : `\n\n${postScript}`}
 `.trim();
 }
 
