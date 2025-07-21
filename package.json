@@ -1960,6 +1960,12 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.debug.resetVirtualToolGroups",
+				"title": "%github.copilot.command.resetVirtualToolGroups%",
+				"icon": "$(inspect)",
+				"category": "Developer"
+			},
+			{
 				"command": "github.copilot.terminal.explainTerminalSelection",
 				"title": "%github.copilot.command.explainTerminalSelection%",
 				"category": "GitHub Copilot"
@@ -2861,6 +2867,14 @@
 							"onExp"
 						],
 						"description": "%github.copilot.config.summarizeAgentConversationHistory.enabled%"
+					},
+					"github.copilot.chat.virtualTools.enabled": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental"
+						],
+						"description": "%github.copilot.config.virtualTools.enabled%"
 					}
 				}
 			}

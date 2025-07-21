@@ -9,6 +9,7 @@ import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocum
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { ChatRequest } from '../../../vscodeTypes';
 import { getToolName } from '../../tools/common/toolNames';
+import { IToolGrouping } from '../../tools/common/virtualTools/virtualToolTypes';
 import { ChatVariablesCollection } from './chatVariablesCollection';
 import { Conversation, Turn } from './conversation';
 
@@ -60,6 +61,7 @@ export interface IBuildPromptContext {
 	 */
 	readonly toolCallRounds?: readonly IToolCallRound[];
 	readonly toolCallResults?: Record<string, vscode.LanguageModelToolResult>;
+	readonly toolGrouping?: IToolGrouping;
 
 	readonly editedFileEvents?: readonly vscode.ChatRequestEditedFileEvent[];
 	readonly conversation?: Conversation;

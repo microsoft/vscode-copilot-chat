@@ -404,7 +404,18 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     "data": {
       "copilotRequestedRoundLimit": 5,
     },
-    "message": "Copilot has been working on this problem for a while. It can continue to iterate, or you can send a new message to refine your prompt.",
+    "message": MarkdownString {
+      "delegate": MarkdownString {
+        "isTrusted": {
+          "enabledCommands": [
+            "workbench.action.openSettings",
+          ],
+        },
+        "supportHtml": false,
+        "supportThemeIcons": false,
+        "value": "Copilot has been working on this problem for a while. It can continue to iterate, or you can send a new message to refine your prompt. [Configure max requests](command:workbench.action.openSettings?%5B%22chat.agent.maxRequests%22%5D).",
+      },
+    },
     "title": "Continue to iterate?",
   },
   ChatResponseMarkdownPart {
@@ -503,7 +514,18 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     "data": {
       "copilotRequestedRoundLimit": 5,
     },
-    "message": "Copilot has been working on this problem for a while. It can continue to iterate, or you can send a new message to refine your prompt.",
+    "message": MarkdownString {
+      "delegate": MarkdownString {
+        "isTrusted": {
+          "enabledCommands": [
+            "workbench.action.openSettings",
+          ],
+        },
+        "supportHtml": false,
+        "supportThemeIcons": false,
+        "value": "Copilot has been working on this problem for a while. It can continue to iterate, or you can send a new message to refine your prompt. [Configure max requests](command:workbench.action.openSettings?%5B%22chat.agent.maxRequests%22%5D).",
+      },
+    },
     "title": "Continue to iterate?",
   },
 ]

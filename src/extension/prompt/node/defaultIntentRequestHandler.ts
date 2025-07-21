@@ -10,6 +10,7 @@ import { IAuthenticationService } from '../../../platform/authentication/common/
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession, NullEditSurvivalTrackingSession } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { HAS_IGNORED_FILES_MESSAGE } from '../../../platform/ignore/common/ignoreService';
@@ -17,13 +18,15 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { FinishedCallback, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ISurveyService } from '../../../platform/survey/common/surveyService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Event } from '../../../util/vs/base/common/event';
+import { Iterable } from '../../../util/vs/base/common/iterator';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { mixin } from '../../../util/vs/base/common/objects';
-import { assertType } from '../../../util/vs/base/common/types';
+import { assertType, Mutable } from '../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEditPart, LanguageModelToolResult2 } from '../../../vscodeTypes';
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
@@ -35,6 +38,7 @@ import { ResponseStreamWithLinkification } from '../../linkify/common/responseSt
 import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/summarizedConversationHistory';
 import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
+import { IToolGrouping, IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
 import { Conversation, getUniqueReferences, GlobalContextMessageMetadata, IResultMetadata, RenderedUserMessageMetadata, RequestDebugInformation, ResponseStreamParticipant, Turn, TurnStatus } from '../common/conversation';
 import { IBuildPromptContext, IToolCallRound } from '../common/intents';
 import { ChatTelemetry, ChatTelemetryBuilder } from './chatParticipantTelemetry';
@@ -485,6 +489,12 @@ interface IDefaultToolLoopOptions extends IToolCallingLoopOptions {
 
 class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 	public telemetry!: ChatTelemetry;
+	/**
+	 * todo@connor4312: we don't have a good representation of chat sessions yet.
+	 * For now global state trimmed occasionally via LRU is... fine. But not ideal.
+	 */
+	private static toolGrouping?: IToolGrouping;
+
 	constructor(
 		options: IDefaultToolLoopOptions,
 		telemetryBuilder: ChatTelemetryBuilder,
@@ -494,10 +504,17 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		@IEndpointProvider endpointProvider: IEndpointProvider,
 		@IAuthenticationChatUpgradeService authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 		@ITelemetryService telemetryService: ITelemetryService,
+		@IToolGroupingService private readonly toolGroupingService: IToolGroupingService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 	) {
 		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService);
 
 		this._register(this.onDidBuildPrompt(({ result, tools, promptTokenLength }) => {
+			if (result.metadata.get(SummarizedConversationHistoryMetadata)) {
+				DefaultToolCallingLoop.toolGrouping?.didInvalidateCache();
+			}
+
 			this.telemetry = telemetryBuilder.makeRequest(
 				options.intent!,
 				options.location,
@@ -510,6 +527,33 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 				tools.length
 			);
 		}));
+
+		this._register(this.onDidReceiveResponse(() => {
+			DefaultToolCallingLoop.toolGrouping?.didTakeTurn();
+		}));
+	}
+
+	protected override createPromptContext(availableTools: LanguageModelToolInformation[], outputStream: ChatResponseStream | undefined): Mutable<IBuildPromptContext> {
+		const context = super.createPromptContext(availableTools, outputStream);
+		this._handleVirtualCalls(context);
+		return context;
+	}
+
+	private _handleVirtualCalls(context: Mutable<IBuildPromptContext>) {
+		if (!DefaultToolCallingLoop.toolGrouping) {
+			return;
+		}
+
+		for (const call of context.toolCallRounds?.at(-1)?.toolCalls || Iterable.empty()) {
+			if (context.toolCallResults?.[call.id]) {
+				continue;
+			}
+			const expanded = DefaultToolCallingLoop.toolGrouping.didCall(call.name);
+			if (expanded) {
+				context.toolCallResults ??= {};
+				context.toolCallResults[call.id] = expanded;
+			}
+		}
 	}
 
 	protected override async buildPrompt(buildPromptContext: IBuildPromptContext, progress: Progress<ChatResponseReferencePart | ChatResponseProgressPart>, token: CancellationToken): Promise<IBuildPromptResult> {
@@ -551,8 +595,19 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		);
 	}
 
-	protected override async getAvailableTools(): Promise<LanguageModelToolInformation[]> {
-		return this.options.invocation.getAvailableTools?.() ?? [];
+	protected override async getAvailableTools(token: CancellationToken): Promise<LanguageModelToolInformation[]> {
+		const tools = await this.options.invocation.getAvailableTools?.() ?? [];
+		if (!this._configurationService.getExperimentBasedConfig(ConfigKey.VirtualTools, this._experimentationService)) {
+			return tools;
+		}
+
+		if (DefaultToolCallingLoop.toolGrouping) {
+			DefaultToolCallingLoop.toolGrouping.tools = tools;
+		} else {
+			DefaultToolCallingLoop.toolGrouping = this.toolGroupingService.create(tools);
+		}
+
+		return DefaultToolCallingLoop.toolGrouping.compute(token);
 	}
 
 	private fixMessageNames(messages: Raw.ChatMessage[]): void {

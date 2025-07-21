@@ -150,15 +150,17 @@ export function getUserPrompt(request: StatelessNextEditRequest, currentFileCont
 Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor \
 position marked as \`${CURSOR_TAG}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes \
 they would have made next. Provide the revised code that was between the \`${CODE_TO_EDIT_START_TAG}\` and \`${CODE_TO_EDIT_END_TAG}\` tags, but do not include the tags themselves. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors. Don't include the line numbers or the form #| in your response. Do not skip any lines. Do not be lazy.`
-			: `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. \
+			: (opts.promptingStrategy === PromptingStrategy.Nes41Miniv3
+				? `The developer was working on a section of code within the tags <|code_to_edit|> in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`<|cursor|>\`, please continue the developer's work. Update the <|code_to_edit|> section by predicting and completing the changes they would have made next. Start your response with <EDIT> or <NO_CHANGE>. If you are making an edit, start with <EDIT> and then provide the rewritten code window followed by </EDIT>. If no changes are necessary, reply only with <NO_CHANGE>. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors.`
+				: `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. \
 Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor \
 position marked as \`${CURSOR_TAG}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes \
 they would have made next. Provide the revised code that was between the \`${CODE_TO_EDIT_START_TAG}\` and \`${CODE_TO_EDIT_END_TAG}\` tags with the following format, but do not include the tags themselves.
 \`\`\`
 // Your revised code goes here
-\`\`\``);
+\`\`\``));
 
-	return `${opts.promptingStrategy === PromptingStrategy.Nes41Miniv3 ? '' : '```'}
+	return `${(opts.promptingStrategy === PromptingStrategy.Nes41Miniv3 || opts.promptingStrategy === PromptingStrategy.Codexv21NesUnified) ? '' : '```'}
 ${RECENTLY_VIEWED_CODE_SNIPPETS_START}
 ${recentlyViewedCodeSnippets}
 ${RECENTLY_VIEWED_CODE_SNIPPETS_END}
@@ -172,9 +174,7 @@ ${EDIT_DIFF_HISTORY_START_TAG}
 ${editDiffHistory}
 ${EDIT_DIFF_HISTORY_END_TAG}
 
-${areaAroundCodeToEdit}${opts.promptingStrategy === PromptingStrategy.Nes41Miniv3 ? '' : '\n```'}
-
-${postScript}
+${areaAroundCodeToEdit}${(opts.promptingStrategy === PromptingStrategy.Nes41Miniv3 || opts.promptingStrategy === PromptingStrategy.Codexv21NesUnified) ? '' : '\n```'}${opts.promptingStrategy === PromptingStrategy.Codexv21NesUnified ? '' : `\n\n${postScript}`}
 `.trim();
 }
 
