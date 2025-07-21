@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import Anthropic from '@anthropic-ai/sdk';
-import { CancellationToken, ChatResponseFragment2, ChatResponseProviderMetadata, Disposable, LanguageModelChatMessage, LanguageModelChatProvider, LanguageModelChatRequestOptions, LanguageModelTextPart, LanguageModelToolCallPart, lm, Progress } from 'vscode';
+import { CancellationToken, ChatResponseFragment2, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatProvider2, LanguageModelChatRequestHandleOptions, LanguageModelTextPart, LanguageModelToolCallPart, Progress } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
@@ -13,99 +13,82 @@ import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogg
 import { RecordedProgress } from '../../../util/common/progressRecorder';
 import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { BYOKAuthType, BYOKKnownModels, BYOKModelConfig, BYOKModelRegistry, chatModelInfoToProviderMetadata, isGlobalKeyConfig, resolveModelInfo } from '../common/byokProvider';
+import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities } from '../common/byokProvider';
 import { anthropicMessagesToRawMessagesForLogging, apiMessageToAnthropicMessage } from './anthropicMessageConverter';
+import { IBYOKStorageService } from './byokStorageService';
+import { promptForAPIKey } from './byokUIService';
 
-export class AnthropicBYOKModelRegistry implements BYOKModelRegistry {
-	public readonly authType = BYOKAuthType.GlobalApiKey;
-	public readonly name = 'Anthropic';
-	private _knownModels: BYOKKnownModels | undefined;
-
+export class AnthropicLMProvider implements LanguageModelChatProvider2<LanguageModelChatInformation> {
+	public static readonly providerName = 'Anthropic';
+	private _anthropicAPIClient: Anthropic | undefined;
+	private _apiKey: string | undefined;
 	constructor(
+		private readonly _knownModels: BYOKKnownModels | undefined,
+		private readonly _byokStorageService: IBYOKStorageService,
 		@ILogService private readonly _logService: ILogService,
-		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IRequestLogger private readonly _requestLogger: IRequestLogger
 	) { }
 
-	async getAllModels(apiKey: string): Promise<{ id: string; name: string }[]> {
+	// Filters the byok known models based on what the anthropic API knows as well
+	private async getAllModels(apiKey: string): Promise<BYOKKnownModels> {
+		if (!this._anthropicAPIClient) {
+			this._anthropicAPIClient = new Anthropic({ apiKey });
+		}
 		try {
-			const client = new Anthropic({ apiKey });
-			const response = await client.models.list();
-			const modelList: { id: string; name: string }[] = [];
+			const response = await this._anthropicAPIClient.models.list();
+			const modelList: Record<string, BYOKModelCapabilities> = {};
 			for (const model of response.data) {
 				if (this._knownModels && this._knownModels[model.id]) {
-					modelList.push({ id: model.id, name: this._knownModels[model.id].name });
+					modelList[model.id] = this._knownModels[model.id];
 				}
 			}
 			return modelList;
 		} catch (error) {
-			this._logService.logger.error(error, `Error fetching available ${this.name} models`);
+			this._logService.logger.error(error, `Error fetching available ${AnthropicLMProvider.providerName} models`);
 			throw new Error(error.message ? error.message : error);
 		}
 	}
 
-	updateKnownModelsList(knownModels: BYOKKnownModels | undefined): void {
-		this._knownModels = knownModels;
-	}
-
-	async registerModel(config: BYOKModelConfig): Promise<Disposable> {
-		if (!isGlobalKeyConfig(config)) {
-			throw new Error('Incorrect configuration passed to anthropic provider');
+	async prepareLanguageModelChat(options: { silent: boolean }, token: CancellationToken): Promise<LanguageModelChatInformation[]> {
+		if (!this._apiKey) { // If we don't have the API key it might just be in storage, so we try to read it first
+			this._apiKey = await this._byokStorageService.getAPIKey(AnthropicLMProvider.providerName);
 		}
 		try {
-			const modelMetadata = chatModelInfoToProviderMetadata(resolveModelInfo(config.modelId, this.name, this._knownModels, config.capabilities));
-			const provider = this._instantiationService.createInstance(AnthropicChatProvider, config.apiKey, config.modelId, modelMetadata);
-
-			const disposable = lm.registerChatModelProvider(
-				`${this.name}-${config.modelId}`,
-				provider,
-				modelMetadata
-			);
-			return disposable;
-		} catch (e) {
-			this._logService.logger.error(`Error registering ${this.name} model ${config.modelId}`);
-			throw e;
+			if (this._apiKey) {
+				return byokKnownModelsToAPIInfo(AnthropicLMProvider.providerName, await this.getAllModels(this._apiKey));
+			} else if (options.silent && !this._apiKey) {
+				return [];
+			} else { // Not silent, and no api key = good to prompt user for api key
+				this._apiKey = await promptForAPIKey(AnthropicLMProvider.providerName, false);
+				if (this._apiKey) {
+					this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, this._apiKey, BYOKAuthType.GlobalApiKey);
+					return byokKnownModelsToAPIInfo(AnthropicLMProvider.providerName, await this.getAllModels(this._apiKey));
+				} else {
+					return [];
+				}
+			}
+		} catch {
+			return [];
 		}
 	}
-}
 
-export class AnthropicChatProvider implements LanguageModelChatProvider {
-	private client: Anthropic;
-	private modelId: string;
-
-	constructor(
-		apiKey: string,
-		modelId: string,
-		private readonly _modelMetadata: ChatResponseProviderMetadata,
-		@ILogService private readonly _logService: ILogService,
-		@IRequestLogger private readonly _requestLogger: IRequestLogger,
-	) {
-		this.client = new Anthropic({
-			apiKey
-		});
-		this.modelId = modelId;
-	}
-
-	async provideLanguageModelResponse(
-		messages: LanguageModelChatMessage[],
-		options: LanguageModelChatRequestOptions,
-		extensionId: string,
-		progress: Progress<ChatResponseFragment2>,
-		token: CancellationToken
-	): Promise<void> {
+	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: LanguageModelChatRequestHandleOptions, progress: Progress<ChatResponseFragment2>, token: CancellationToken): Promise<any> {
+		if (!this._anthropicAPIClient) {
+			return;
+		}
 		// Convert the messages from the API format into messages that we can use against anthropic
-		const { system, messages: convertedMessages } = apiMessageToAnthropicMessage(messages);
+		const { system, messages: convertedMessages } = apiMessageToAnthropicMessage(messages as LanguageModelChatMessage[]);
 
 		const requestId = generateUuid();
 		const pendingLoggedChatRequest = this._requestLogger.logChatRequest(
 			'AnthropicBYOK',
 			{
-				model: this.modelId,
-				modelMaxPromptTokens: this._modelMetadata.maxInputTokens,
-				urlOrRequestMetadata: this.client.baseURL,
+				model: model.id,
+				modelMaxPromptTokens: model.maxInputTokens,
+				urlOrRequestMetadata: this._anthropicAPIClient.baseURL,
 			},
 			{
-				model: this.modelId,
+				model: model.id,
 				location: ChatLocation.Other,
 				messages: rawMessageToCAPI(anthropicMessagesToRawMessagesForLogging(convertedMessages, system)),
 				ourRequestId: requestId,
@@ -146,9 +129,9 @@ export class AnthropicChatProvider implements LanguageModelChatProvider {
 		});
 
 		const params: Anthropic.MessageCreateParamsStreaming = {
-			model: this.modelId,
+			model: model.id,
 			messages: convertedMessages,
-			max_tokens: this._modelMetadata.maxOutputTokens,
+			max_tokens: model.maxOutputTokens,
 			stream: true,
 			system: [system],
 			tools: tools.length > 0 ? tools : undefined,
@@ -198,15 +181,18 @@ export class AnthropicChatProvider implements LanguageModelChatProvider {
 		}
 	}
 
-	async provideTokenCount(text: string | LanguageModelChatMessage): Promise<number> {
+	async provideTokenCount(model: LanguageModelChatInformation, text: string | LanguageModelChatMessage | LanguageModelChatMessage2, token: CancellationToken): Promise<number> {
 		// Simple estimation - actual token count would require Claude's tokenizer
 		return Math.ceil(text.toString().length / 4);
 	}
 
 	private async _makeRequest(progress: Progress<ChatResponseFragment2>, params: Anthropic.MessageCreateParamsStreaming, token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
+		if (!this._anthropicAPIClient) {
+			return { ttft: undefined, usage: undefined };
+		}
 		const start = Date.now();
 		let ttft: number | undefined;
-		const stream = await this.client.messages.create(params);
+		const stream = await this._anthropicAPIClient.messages.create(params);
 
 		let pendingToolCall: {
 			toolId?: string;

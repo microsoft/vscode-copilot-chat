@@ -315,12 +315,12 @@ suite('PropertyTypes', () => {
 		const expected: testing.ExpectedCodeSnippet[] = [
 			{
 				kind: ContextKind.Snippet,
-				value: 'declare class Street { constructor(name: string); public getName(); }',
+				value: 'type Age = { value: number; }',
 				fileName: /p13\/source\/f1.ts$/
 			},
 			{
 				kind: ContextKind.Snippet,
-				value: 'type Age = { value: number; }',
+				value: 'declare class Street { constructor(name: string); public getName(); }',
 				fileName: /p13\/source\/f1.ts$/
 			}
 		];

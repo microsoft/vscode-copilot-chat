@@ -35,46 +35,16 @@ export interface ITerminalService {
 	createTerminal(options: vscode.ExtensionTerminalOptions): vscode.Terminal;
 
 	/**
-	 * Returns the current working directory of the non-background Copilot terminal for the given session.
-	 * If there are multiple Copilot terminals, the active one will be used.
-	 * If there are multiple Copilot terminals and none are active, undefined will be returned.
-	 * @param sessionId The session ID to get the current working directory for
-	 * @returns Promise resolving to the current working directory of the Copilot terminal
-	 */
-	getCwdForSession(sessionId?: string): Promise<vscode.Uri | undefined>;
-
-	/**
-	 * Gets the non-background terminal and its shell integration quality for a specific session ID.
-	 * @param sessionId The session ID to get the terminal for
-	 * @returns Promise resolving to a terminal and its shell integration quality
-	 */
-	getToolTerminalForSession(sessionId: string): Promise<{ terminal: vscode.Terminal; shellIntegrationQuality: ShellIntegrationQuality } | undefined>;
-
-	/**
-	 *
-	 * @param terminal The terminal to associate with the session
-	 * @param sessionId The session ID to associate the terminal with
-	 * @param id The ID of the terminal
-	 * @param shellIntegrationQuality The shell integration quality of the terminal
-	 * @param isBackground Whether the terminal is a background terminal
-	 * @returns Promise resolving when the terminal is associated with the session
-	 */
-	associateTerminalWithSession(terminal: vscode.Terminal, sessionId: string, id: string, shellIntegrationQuality: ShellIntegrationQuality, isBackground?: boolean): Promise<void>;
-
-	/**
-	 * Gets non-background terminals associated with a specific session ID
-	 * If none is provided, the current session will be used.
-	 * @param sessionId The session ID to get terminals for
-	 * @param includeBackground Whether to include background terminals in the result
-	 * @returns Promise resolving to an array of terminals associated with the session
-	 */
-	getCopilotTerminals(sessionId?: string, includeBackground?: boolean): Promise<IKnownTerminal[]>;
-
-	/**
 	 * Gets the buffer for a terminal.
 	 * @param maxChars The maximum number of chars to return from the buffer, defaults to 16k
 	 */
 	getBufferForTerminal(terminal: vscode.Terminal, maxChars?: number): string;
+
+	/**
+	 * Gets the buffer for a terminal with the given pid.
+	 * @param maxChars The maximum number of chars to return from the buffer, defaults to 16k
+	 */
+	getBufferWithPid(pid: number, maxChars?: number): Promise<string>;
 
 	/**
 	 * Gets the last command executed in a terminal.
@@ -155,6 +125,10 @@ export class NullTerminalService extends Disposable implements ITerminalService 
 
 	getBufferForTerminal(terminal: vscode.Terminal, maxLines?: number): string {
 		return '';
+	}
+
+	getBufferWithPid(pid: number, maxChars?: number): Promise<string> {
+		return Promise.resolve('');
 	}
 
 	getLastCommandForTerminal(terminal: vscode.Terminal): vscode.TerminalExecutedCommand | undefined {

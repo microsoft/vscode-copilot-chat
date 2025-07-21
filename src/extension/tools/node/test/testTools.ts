@@ -56,6 +56,7 @@ export class TestEditFileTool extends EditFileTool {
 			name: ToolName.EditFile,
 			tags: contributedTool.tags ?? [],
 			description: mapContributedToolNamesInString(contributedTool.modelDescription),
+			source: undefined,
 			inputSchema: contributedTool.inputSchema && mapContributedToolNamesInSchema(contributedTool.inputSchema),
 		};
 	}

@@ -114,29 +114,6 @@ export class UserFeedbackService implements IUserFeedbackService {
 					newFile: e.action.newFile ? 1 : 0
 				});
 				break;
-			case 'runInTerminal':
-				/* __GDPR__
-					"panel.action.runinterminal" : {
-						"owner": "digitarald",
-						"comment": "Counts generic actions on a chat panel response",
-						"languageId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Language of the currently open document." },
-						"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Id for this message request." },
-						"blockLanguage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Language of the code block in the response." },
-						"codeBlockIndex": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Index of the code block in the response." },
-						"participant": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "The name of the chat participant for this message." },
-						"command": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": false, "comment": "The command used for the chat participant." }
-					}
-				*/
-				this.telemetryService.sendMSFTTelemetryEvent('panel.action.runinterminal', {
-					languageId: document?.languageId,
-					requestId: result.metadata?.responseId,
-					blockLanguage: e.action.languageId,
-					participant: agentId,
-					command: result.metadata?.command,
-				}, {
-					codeBlockIndex: e.action.codeBlockIndex,
-				});
-				break;
 			case 'followUp':
 				/* __GDPR__
 					"panel.action.followup" : {
