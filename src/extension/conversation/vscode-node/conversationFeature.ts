@@ -37,6 +37,7 @@ import { IntentDetector } from '../../prompt/node/intentDetector';
 import { ContributedToolName } from '../../tools/common/toolNames';
 import { SemanticSearchTextSearchProvider } from '../../workspaceSemanticSearch/node/semanticSearchTextSearchProvider';
 import { GitHubPullRequestProviders } from '../node/githubPullRequestProviders';
+import { ChatReverseSearchWidget } from './chatReverseSearchWidget';
 import { startFeedbackCollection } from './feedbackCollection';
 import { registerNewWorkspaceIntentCommand } from './newWorkspaceFollowup';
 import { generateTerminalFixes, setLastCommandMatchResult } from './terminalFixGenerator';
@@ -118,6 +119,7 @@ export class ConversationFeature implements IExtensionContribution {
 
 		// Set context value that is used to show/hide th sidebar icon
 		vscode.commands.executeCommand('setContext', 'github.copilot.interactiveSession.disabled', !value);
+		vscode.commands.executeCommand('setContext', 'github.copilot-chat.activated', value);
 	}
 
 	get activated() {
@@ -279,6 +281,19 @@ export class ConversationFeature implements IExtensionContribution {
 			registerNewWorkspaceIntentCommand(this.newWorkspacePreviewContentManager, this.logService, options),
 			registerGitHubPullRequestTitleAndDescriptionProvider(this.instantiationService),
 			registerSearchIntentCommand(),
+			// Register reverse search command
+			vscode.commands.registerCommand('github.copilot.chat.reverseSearch', async () => {
+				try {
+					// Simply show reverse search widget - no additional history loading
+					const reverseSearchWidget = this.instantiationService.createInstance(ChatReverseSearchWidget);
+					await reverseSearchWidget.showReverseSearch();
+				} catch (error) {
+					// Fallback: open normal chat
+					await vscode.commands.executeCommand('workbench.action.chat.open', {
+						query: ''
+					});
+				}
+			}),
 		].forEach(d => disposables.add(d));
 		return disposables;
 	}
