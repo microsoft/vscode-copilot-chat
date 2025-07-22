@@ -26,7 +26,7 @@ import {
 	type ContextRunnableResultId,
 	type ContextRunnableResultReference,
 	type ContextRunnableResultTypes,
-	type FullContextItem, type Range
+	type FullContextItem, type PriorityTag, type Range
 } from './protocol';
 import { ProgramContext, RecoverableError, type CodeCacheItem, type EmitterContext, type SnippetProvider } from './types';
 import tss, { ImportedByState, Sessions, Symbols, Types } from './typescripts';
@@ -419,10 +419,12 @@ export class RunnableResult {
 	private speculativeKind: SpeculativeKind;
 	private cache: CacheInfo | undefined;
 
+	public readonly priority: number;
 	public readonly items: ContextItem[];
 
-	constructor(id: ContextRunnableResultId, runnableResultContext: RunnableResultContext, tokenBudget: TokenBudget, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined) {
+	constructor(id: ContextRunnableResultId, priority: number, runnableResultContext: RunnableResultContext, tokenBudget: TokenBudget, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined) {
 		this.id = id;
+		this.priority = priority;
 		this.runnableResultContext = runnableResultContext;
 		this.tokenBudget = tokenBudget;
 		this.state = ContextRunnableState.Created;
@@ -459,22 +461,22 @@ export class RunnableResult {
 		return true;
 	}
 
-	public addTrait(traitKind: TraitKind, priority: number, name: string, value: string): void {
+	public addTrait(traitKind: TraitKind, name: string, value: string): void {
 		this.state = ContextRunnableState.InProgress;
-		const trait = Trait.create(traitKind, priority, name, value);
+		const trait = Trait.create(traitKind, name, value);
 		this.items.push(this.runnableResultContext.manageContextItem(trait));
 		this.tokenBudget.spent(Trait.sizeInChars(trait));
 	}
 
-	public addSnippet(code: SnippetProvider, key: string | undefined, priority: number): void;
-	public addSnippet(code: SnippetProvider, key: string | undefined, priority: number, ifRoom: false): void;
-	public addSnippet(code: SnippetProvider, key: string | undefined, priority: number, ifRoom: true): boolean;
-	public addSnippet(code: SnippetProvider, key: string | undefined, priority: number, ifRoom: boolean): boolean
-	public addSnippet(code: SnippetProvider, key: string | undefined, priority: number, ifRoom: boolean = false): boolean {
+	public addSnippet(code: SnippetProvider, key: string | undefined): void;
+	public addSnippet(code: SnippetProvider, key: string | undefined, ifRoom: false): void;
+	public addSnippet(code: SnippetProvider, key: string | undefined, ifRoom: true): boolean;
+	public addSnippet(code: SnippetProvider, key: string | undefined, ifRoom: boolean): boolean
+	public addSnippet(code: SnippetProvider, key: string | undefined, ifRoom: boolean = false): boolean {
 		if (code.isEmpty()) {
 			return true;
 		}
-		const snippet: CodeSnippet = code.snippet(key, priority);
+		const snippet: CodeSnippet = code.snippet(key);
 		const size = CodeSnippet.sizeInChars(snippet);
 		if (ifRoom && !this.tokenBudget.hasRoom(size)) {
 			this.state = ContextRunnableState.IsFull;
@@ -491,6 +493,7 @@ export class RunnableResult {
 			kind: ContextRunnableResultKind.ComputedResult,
 			id: this.id,
 			state: this.state,
+			priority: this.priority,
 			items: this.items,
 			cache: this.cache,
 			speculativeKind: this.speculativeKind
@@ -567,9 +570,9 @@ export class ContextResult {
 		this.timedOut = timedOut;
 	}
 
-	public createRunnableResult(id: ContextRunnableResultId, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined): RunnableResult {
+	public createRunnableResult(id: ContextRunnableResultId, priority: number, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined): RunnableResult {
 		this.state = ContextRequestResultState.InProgress;
-		const result = new RunnableResult(id, this, this.tokenBudget, speculativeKind, cache);
+		const result = new RunnableResult(id, priority, this, this.tokenBudget, speculativeKind, cache);
 		this.runnableResults.push(result);
 		return result;
 	}
@@ -612,10 +615,13 @@ export class ContextResult {
 		this.state = ContextRequestResultState.Finished;
 	}
 
-	public items(): FullContextItem[] {
+	public items(): (FullContextItem & PriorityTag)[] {
 		const seen: Set<ContextItemKey> = new Set();
-		const items: FullContextItem[] = [];
-		for (const runnableResult of this.runnableResults) {
+		const items: (FullContextItem & PriorityTag)[] = [];
+		const runnableResults: RunnableResult[] = this.runnableResults.slice().filter(item => item instanceof RunnableResult).sort((a, b) => {
+			return a.priority < b.priority ? 1 : a.priority > b.priority ? -1 : 0;
+		});
+		for (const runnableResult of runnableResults) {
 			for (const item of runnableResult.items) {
 				if (item.kind === ContextKind.Reference) {
 					if (seen.has(item.key)) {
@@ -625,10 +631,12 @@ export class ContextResult {
 					seen.add(item.key);
 					const referenced = this.contextItems.get(item.key);
 					if (referenced !== undefined) {
-						items.push(referenced);
+						const withPriority = Object.assign({}, referenced, { priority: runnableResult.priority }) as FullContextItem & PriorityTag;
+						items.push(withPriority);
 					}
 				} else {
-					items.push(item);
+					const withPriority = Object.assign({}, item, { priority: runnableResult.priority }) as FullContextItem & PriorityTag;
+					items.push(withPriority);
 				}
 			}
 		}
@@ -917,9 +925,9 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 				const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, this.getActiveSourceFile());
 				snippetBuilder.addDeclaration(emitData.node);
 				if (ifRoom === undefined || ifRoom === false) {
-					this.result.addSnippet(snippetBuilder, undefined, this.priority);
+					this.result.addSnippet(snippetBuilder, undefined);
 				} else {
-					if (!this.result.addSnippet(snippetBuilder, undefined, this.priority, ifRoom)) {
+					if (!this.result.addSnippet(snippetBuilder, undefined, ifRoom)) {
 						return false;
 					}
 				}
@@ -935,9 +943,9 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 				const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, this.getActiveSourceFile());
 				snippetBuilder.addTypeSymbol(symbol, name);
 				if (ifRoom === undefined || ifRoom === false) {
-					this.result.addSnippet(snippetBuilder, key, this.priority);
+					this.result.addSnippet(snippetBuilder, key);
 				} else {
-					if (!this.result.addSnippet(snippetBuilder, key, this.priority, ifRoom)) {
+					if (!this.result.addSnippet(snippetBuilder, key, ifRoom)) {
 						return false;
 					}
 				}

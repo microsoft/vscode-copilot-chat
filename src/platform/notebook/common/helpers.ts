@@ -22,7 +22,7 @@ export class LineOfText {
 	}
 }
 
-// TODO @rebornix for notebook alternative content we use \n always as the line ending for now.
+/** End of Line for alternative Notebook contnt is always \n */
 export const EOL = '\n';
 export type LineOfCellText = {
 	type: 'start';
@@ -106,6 +106,24 @@ const CELL_ID_PREFIX = '#VSC-';
 
 /** RegExp to match all Cell Ids */
 export const CellIdPatternRe = new RegExp(`(\\s+|^|\\b|\\W)(#VSC-[a-f0-9]{${CELL_ID_HASH_LENGTH}})\\b`, 'gi');
+
+/**
+ * Sometimes the model may return a cellId that is not in the expected format.
+ * This function attempts to convert such cellIds to the expected format.
+ */
+export function normalizeCellId(cellId: string): string {
+	if (cellId.startsWith(CELL_ID_PREFIX)) {
+		return cellId;
+	}
+	if (cellId.startsWith('VSC-')) {
+		return `#${cellId}`;
+	}
+	if (cellId.startsWith('-')) {
+		return `#VSC${cellId}`;
+	}
+	// Possible case where the cellId is just a hash without the prefix
+	return cellId.length === CELL_ID_HASH_LENGTH ? `${CELL_ID_PREFIX}${cellId}` : cellId;
+}
 
 /**
  * Given a Notebook cell returns a unique identifier for the cell.

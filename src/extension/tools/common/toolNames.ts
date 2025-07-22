@@ -16,8 +16,6 @@ export const enum ToolName {
 	ReadFile = 'read_file',
 	ListDirectory = 'list_dir',
 	GetErrors = 'get_errors',
-	RunInTerminal = 'run_in_terminal',
-	GetTerminalOutput = 'get_terminal_output',
 	GetScmChanges = 'get_changed_files',
 	UpdateUserPreferences = 'update_user_preferences',
 	ReadProjectStructure = 'read_project_structure',
@@ -47,7 +45,10 @@ export const enum ToolName {
 	SimpleBrowser = 'open_simple_browser',
 	CreateDirectory = 'create_directory',
 	RunVscodeCmd = 'run_vscode_command',
-	GetTaskOutput = 'get_task_output'
+	GetTaskOutput = 'get_task_output',
+
+	CoreRunInTerminal = 'run_in_terminal',
+	CoreGetTerminalOutput = 'get_terminal_output',
 }
 
 // When updating this, also update contributedToolNameToToolNames
@@ -66,8 +67,6 @@ export const enum ContributedToolName {
 	ListDirectory = 'copilot_listDirectory',
 	GetErrors = 'copilot_getErrors',
 	DocInfo = 'copilot_getDocInfo',
-	RunInTerminal = 'copilot_runInTerminal',
-	GetTerminalOutput = 'copilot_getTerminalOutput',
 	GetScmChanges = 'copilot_getChangedFiles',
 	ReadProjectStructure = 'copilot_readProjectStructure',
 	TerminalSelection = 'copilot_getTerminalSelection',
@@ -110,8 +109,6 @@ const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>([
 	[ContributedToolName.ListDirectory, ToolName.ListDirectory],
 	[ContributedToolName.GetErrors, ToolName.GetErrors],
 	[ContributedToolName.DocInfo, ToolName.DocInfo],
-	[ContributedToolName.RunInTerminal, ToolName.RunInTerminal],
-	[ContributedToolName.GetTerminalOutput, ToolName.GetTerminalOutput],
 	[ContributedToolName.GetScmChanges, ToolName.GetScmChanges],
 	[ContributedToolName.ReadProjectStructure, ToolName.ReadProjectStructure],
 	[ContributedToolName.EditFile, ToolName.EditFile],
