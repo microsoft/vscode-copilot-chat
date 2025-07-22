@@ -14,6 +14,7 @@ export interface IConversationStore {
 
 	addConversation(responseId: string, conversation: Conversation): void;
 	getConversation(responseId: string): Conversation | undefined;
+	getAllConversations(): Conversation[];
 	lastConversation: Conversation | undefined;
 }
 
@@ -31,6 +32,10 @@ export class ConversationStore implements IConversationStore {
 
 	getConversation(responseId: string): Conversation | undefined {
 		return this.conversationMap.get(responseId);
+	}
+
+	getAllConversations(): Conversation[] {
+		return Array.from(this.conversationMap.values());
 	}
 
 	get lastConversation(): Conversation | undefined {
