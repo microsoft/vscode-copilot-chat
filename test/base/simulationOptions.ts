@@ -36,6 +36,7 @@ export class SimulationOptions {
 	public readonly boost: boolean;
 	public readonly parallelism: number;
 	public readonly lmCacheMode: CacheMode;
+	public readonly modelCacheMode: CacheMode;
 	public readonly resourcesCacheMode: CacheMode;
 	public readonly cachePath: string | undefined;
 	public readonly externalBaseline: string | undefined;
@@ -108,6 +109,7 @@ export class SimulationOptions {
 		this.swebenchPrompt = boolean(argv['swebench-prompt'], false);
 		this.embeddingModel = cliOptionsToEmbeddingsModel(this.argv['embedding-model']);
 		this.parallelism = this.argv['parallelism'] ?? this.argv['p'] ?? 20;
+		this.modelCacheMode = this.argv['skip-model-cache'] ? CacheMode.Disable : CacheMode.Default;
 		this.lmCacheMode = (
 			this.argv['skip-cache'] ? CacheMode.Disable
 				: (this.argv['require-cache'] ? CacheMode.Require : CacheMode.Default)
@@ -189,6 +191,7 @@ export class SimulationOptions {
 			`  --require-cache                    [experimental] Require cache hits, fail on cache misses`,
 			`  --regenerate-cache                 [experimental] Fetch all responses and refresh the cache`,
 			`  --skip-resources-cache             [experimental] Do not use the cache for computed resources`,
+			`  --skip-model-cache                 [experimental] Do not use the cache for model metadata`,
 			`  --stage-cache-entries              [experimental] Stage cache files that were used in current simulation run`,
 			`  --list-tests                       List tests without running them`,
 			`  --json                             Print output in JSONL format`,
