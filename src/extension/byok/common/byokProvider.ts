@@ -46,6 +46,7 @@ export type BYOKModelConfig = BYOKGlobalKeyModelConfig | BYOKPerModelConfig | BY
 
 export interface BYOKModelCapabilities {
 	name: string;
+	url?: string;
 	maxInputTokens: number;
 	maxOutputTokens: number;
 	toolCalling: boolean;
