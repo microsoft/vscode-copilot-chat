@@ -22,6 +22,7 @@ import { ChatParticipantRequestHandler } from '../../prompt/node/chatParticipant
 import { IFeedbackReporter } from '../../prompt/node/feedbackReporter';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { ChatTitleProvider } from '../../prompt/node/title';
+import { IChatHistoryService } from '../common/chatHistoryService';
 import { IUserFeedbackService } from './userActions';
 import { getAdditionalWelcomeMessage } from './welcomeMessageProvider';
 
@@ -67,6 +68,7 @@ class ChatAgents implements IDisposable {
 		@IChatQuotaService private readonly _chatQuotaService: IChatQuotaService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
+		@IChatHistoryService private readonly chatHistoryService: IChatHistoryService,
 	) { }
 
 	dispose() {
@@ -241,6 +243,15 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 
 	private getChatParticipantHandler(id: string, name: string, defaultIntentIdOrGetter: IntentOrGetter, onRequestPaused: Event<vscode.ChatParticipantPauseStateEvent>): vscode.ChatExtendedRequestHandler {
 		return async (request, context, stream, token): Promise<vscode.ChatResult> => {
+
+			// Sync with VS Code's chat history - filter only ChatRequestTurn items
+			const chatRequestTurns = context.history.filter((turn): turn is vscode.ChatRequestTurn => 'prompt' in turn);
+			this.chatHistoryService.syncWithVSCodeHistory(chatRequestTurns);
+
+			// Add current request to history (since context.history doesn't include current request yet)
+			if (request.prompt && request.prompt.trim()) {
+				this.chatHistoryService.addToHistory(request.prompt.trim());
+			}
 
 			// If we need privacy confirmation, i.e with 3rd party models. We will return a confirmation response and return early
 			const privacyConfirmation = await this.requestPolicyConfirmation(request, stream);
