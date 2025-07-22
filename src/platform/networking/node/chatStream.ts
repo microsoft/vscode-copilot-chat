@@ -18,7 +18,7 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 		...(turnIndex !== undefined ? { turnIndex: turnIndex.toString() } : {}),
 	});
 	telemetryService.sendEnhancedGHTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
-	telemetryService.sendMSFTTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
+	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 }
 
 export function prepareChatCompletionForReturn(
