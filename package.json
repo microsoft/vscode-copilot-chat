@@ -2179,6 +2179,12 @@
 				"title": "Disable Follow Cell Execution from Chat",
 				"shortTitle": "Unfollow",
 				"icon": "$(pinned-dirty)"
+			},
+			{
+				"command": "github.copilot.chat.reverseSearch",
+				"title": "Reverse Search Chat History",
+				"category": "GitHub Copilot",
+				"enablement": "!github.copilot.interactiveSession.disabled"
 			}
 		],
 		"configuration": [
@@ -3499,6 +3505,12 @@
 				"key": "ctrl+alt+.",
 				"mac": "cmd+alt+.",
 				"when": "github.copilot-chat.activated && terminalShellIntegrationEnabled && terminalFocus && !terminalAltBufferActive"
+			},
+			{
+				"command": "github.copilot.chat.reverseSearch",
+				"key": "ctrl+f",
+				"mac": "cmd+f",
+				"when": "github.copilot-chat.activated && focusedView == 'workbench.panel.chat.view.copilot'"
 			}
 		],
 		"walkthroughs": [
