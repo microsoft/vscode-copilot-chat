@@ -10,7 +10,8 @@ export const enum ToolName {
 	Codebase = 'semantic_search',
 	VSCodeAPI = 'get_vscode_api',
 	TestFailure = 'test_failure',
-	RunTests = 'run_tests',
+	/** @deprecated moving to core soon */
+	RunTests = 'run_tests1',
 	FindFiles = 'file_search',
 	FindTextInFiles = 'grep_search',
 	ReadFile = 'read_file',
@@ -62,7 +63,8 @@ export const enum ContributedToolName {
 	UpdateUserPreferences = 'copilot_updateUserPreferences',
 	VSCodeAPI = 'copilot_getVSCodeAPI',
 	TestFailure = 'copilot_testFailure',
-	RunTests = 'copilot_runTests',
+	/** @deprecated moving to core soon */
+	RunTests = 'copilot_runTests1',
 	FindFiles = 'copilot_findFiles',
 	FindTextInFiles = 'copilot_findTextInFiles',
 	ReadFile = 'copilot_readFile',
