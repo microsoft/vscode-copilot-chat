@@ -147,34 +147,3 @@ export class AzureBYOKModelProvider implements LanguageModelChatProvider2<AzureM
 	}
 
 }
-
-/**
- * BYOK registry for Azure OpenAI deployments
- *
- * Azure is different from other providers because each model has its own deployment URL and key,
- * and there's no central listing API. The user needs to manually register each model they want to use.
- */
-
-// export class AzureBYOKModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
-
-// 	constructor(
-// 		@IFetcherService _fetcherService: IFetcherService,
-// 		@ILogService _logService: ILogService,
-// 		@IInstantiationService _instantiationService: IInstantiationService,
-// 	) {
-// 		super(
-// 			BYOKAuthType.PerModelDeployment,
-// 			'Azure',
-// 			'',
-// 			_fetcherService,
-// 			_logService,
-// 			_instantiationService
-// 		);
-// 	}
-
-// 	override async getAllModels(_apiKey: string): Promise<{ id: string; name: string }[]> {
-// 		// Azure doesn't have a central API for listing models
-// 		// Each model has a unique deployment URL
-// 		return [];
-// 	}
-// }
