@@ -10,14 +10,15 @@ import { toTextParts } from '../../../platform/chat/common/globalStringUtils';
 import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { ProxyXtabEndpoint } from '../../../platform/endpoint/node/proxyXtabEndpoint';
+import { Copilot } from '../../../platform/inlineCompletions/common/api';
 import { LanguageContextEntry, LanguageContextResponse } from '../../../platform/inlineEdits/common/dataTypes/languageContext';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
 import { NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { ChainedStatelessNextEditProvider, IgnoreTriviaWhitespaceChangesAspect } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
+import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
-import { ILanguageContextService, KnownSources, RequestContext } from '../../../platform/languageServer/common/languageContextService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { OptionalChatRequestParams, Prediction } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
@@ -83,11 +84,11 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		@ISimulationTestContext private readonly simulationCtx: ISimulationTestContext,
 		@IInstantiationService private readonly instaService: IInstantiationService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@ILanguageContextService private readonly langCtxService: ILanguageContextService,
 		@IDiffService private readonly diffService: IDiffService,
 		@IConfigurationService private readonly configService: IConfigurationService,
 		@IExperimentationService private readonly expService: IExperimentationService,
 		@ILogService private readonly logService: ILogService,
+		@ILanguageContextProviderService private readonly langCtxService: ILanguageContextProviderService,
 		@ILanguageDiagnosticsService private readonly langDiagService: ILanguageDiagnosticsService,
 	) {
 		super(XtabProvider.ID, [
@@ -343,45 +344,48 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		promptOptions: xtabPromptOptions.PromptOptions
 	): Promise<LanguageContextResponse | undefined> {
 		try {
-			const activated = await this.langCtxService.isActivated(activeDocument.languageId);
-			if (!activated) {
-				return undefined;
-			}
-
 			const textDoc = this.workspaceService.textDocuments.find(doc => doc.uri.toString() === activeDocument.id.uri);
 			if (textDoc === undefined) {
 				return undefined;
 			}
 
+			const providers = this.langCtxService.getContextProviders(textDoc);
+			if (providers.length < 1) {
+				return undefined;
+			}
+
 			const debounceTime = delaySession.getDebounceTime();
-			const requestCtx: RequestContext = {
-				requestId: request.id,
-				timeBudget: debounceTime,
-				tokenBudget: promptOptions.languageContext.maxTokens * 4, // because tokenBudget is in characters
-				source: KnownSources.nes,
-			};
+
 			const cursorPositionVscode = new VscodePosition(cursorPosition.lineNumber - 1, cursorPosition.column - 1);
 
+			const ctxRequest: Copilot.ResolveRequest = {
+				completionId: request.id,
+				documentContext: {
+					uri: textDoc.uri.toString(),
+					languageId: textDoc.languageId,
+					version: textDoc.version,
+					offset: textDoc.offsetAt(cursorPositionVscode)
+				},
+				activeExperiments: new Map(),
+				timeBudget: debounceTime
+			};
 			const langCtxItems: LanguageContextEntry[] = [];
-			const getContextPromise = (async () => {
-				const langCtx = this.langCtxService.getContext(textDoc, cursorPositionVscode, requestCtx, cancellationToken);
-				for await (const context of langCtx) {
-					langCtxItems.push({ context, timeStamp: Date.now(), onTimeout: false });
+			const getContextPromise = async () => {
+				const ctxIter = this.langCtxService.getContextItems(textDoc, ctxRequest, cancellationToken);
+				for await (const item of ctxIter) {
+					langCtxItems.push({ context: item, timeStamp: Date.now(), onTimeout: false });
 				}
-			});
+			};
 
 			const start = Date.now();
 			await raceTimeout(getContextPromise(), debounceTime);
 			const end = Date.now();
 
-			if (this.langCtxService.getContextOnTimeout) {
-				const langCtxOnTimeout = this.langCtxService.getContextOnTimeout(textDoc, cursorPositionVscode, requestCtx);
-				if (langCtxOnTimeout) {
-					langCtxItems.push(...langCtxOnTimeout.map(context => ({ context, timeStamp: end, onTimeout: true })));
-				}
-			}
+			const langCtxOnTimeout = this.langCtxService.getContextItemsOnTimeout(textDoc, ctxRequest);
+			langCtxItems.push(...langCtxOnTimeout.map(context => ({ context, timeStamp: end, onTimeout: true })));
 
 			return { start, end, items: langCtxItems };
+
 		} catch (error: unknown) {
 			logContext.setError(errors.fromUnknown(error));
 			this.tracer.trace(`Failed to fetch language context: ${error}`);

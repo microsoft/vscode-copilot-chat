@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import { LRUCache } from 'lru-cache';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
+import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ContextKind, ILanguageContextService, KnownSources, TriggerKind, type ContextItem, type RequestContext } from '../../../platform/languageServer/common/languageContextService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -15,7 +16,6 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { Queue } from '../../../util/vs/base/common/async';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { ILanguageContextProviderService } from '../../languageContextProvider/common/languageContextProviderService';
 import * as protocol from '../common/serverProtocol';
 import { InspectorDataProvider } from './inspector';
 import { ThrottledDebouncer } from './throttledDebounce';
@@ -1678,7 +1678,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 				resolver: resolver
 			};
 			this.registrations.add(copilotAPI.registerContextProvider(provider));
-			this.languageContextProviderService.registerContextProvider(provider);
+			this.registrations.add(this.languageContextProviderService.registerContextProvider(provider));
 			this.telemetrySender.sendInlineCompletionProviderTelemetry(KnownSources.completion, true);
 			logService.logger.info('Registered TypeScript context provider with Copilot inline completions.');
 		} catch (error) {

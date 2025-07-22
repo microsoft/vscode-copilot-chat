@@ -5,8 +5,8 @@
 
 import { TextEditor, window } from 'vscode';
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
+import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { IScopeSelector } from '../../../platform/scopeSelection/common/scopeSelection';
-import { ILanguageContextProviderService } from '../../languageContextProvider/common/languageContextProviderService';
 import { CopilotExtensionApi as ICopilotExtensionApi } from './api';
 import { VSCodeContextProviderApiV1 } from './vscodeContextProviderApi';
 

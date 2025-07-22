@@ -5,7 +5,7 @@
 
 import { Disposable } from 'vscode';
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
-import { ILanguageContextProviderService } from '../../languageContextProvider/common/languageContextProviderService';
+import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 
 
 export class VSCodeContextProviderApiV1 implements Copilot.ContextProviderApiV1 {
