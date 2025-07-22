@@ -65,6 +65,7 @@ import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/d
 import { CommandServiceImpl, ICommandService } from '../../commands/node/commandService';
 import { ApiEmbeddingsIndex, IApiEmbeddingsIndex } from '../../context/node/resolvers/extensionApi';
 import { IPromptWorkspaceLabels, PromptWorkspaceLabels } from '../../context/node/resolvers/promptWorkspaceLabels';
+import { ChatHistoryService, IChatHistoryService, IConversationStoreToken } from '../../conversation/common/chatHistoryService';
 import { ChatAgentService } from '../../conversation/vscode-node/chatParticipants';
 import { FeedbackReporter } from '../../conversation/vscode-node/feedbackReporter';
 import { IUserFeedbackService, UserFeedbackService } from '../../conversation/vscode-node/userActions';
@@ -111,6 +112,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	registerCommonServices(builder, extensionContext);
 
 	builder.define(IConversationStore, new ConversationStore());
+	builder.define(IConversationStoreToken, new ConversationStore());
 	builder.define(IDiffService, new DiffServiceImpl());
 	builder.define(ITokenizerProvider, new SyncDescriptor(TokenizerProvider, [true]));
 	builder.define(IToolsService, new SyncDescriptor(ToolsService));
@@ -170,6 +172,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IPromptVariablesService, new SyncDescriptor(PromptVariablesServiceImpl));
 	builder.define(IPromptWorkspaceLabels, new SyncDescriptor(PromptWorkspaceLabels));
 	builder.define(IUserFeedbackService, new SyncDescriptor(UserFeedbackService));
+	builder.define(IChatHistoryService, new SyncDescriptor(ChatHistoryService));
 	builder.define(IDebugCommandToConfigConverter, new SyncDescriptor(DebugCommandToConfigConverter));
 	builder.define(IDebuggableCommandIdentifier, new SyncDescriptor(DebuggableCommandIdentifier));
 	builder.define(ILanguageToolsProvider, new SyncDescriptor(LanguageToolsProvider));

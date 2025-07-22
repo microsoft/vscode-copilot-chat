@@ -13,6 +13,7 @@ import { IInstantiationServiceBuilder, InstantiationServiceBuilder } from '../..
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotExtensionApi } from '../../api/vscode/extensionApi';
 import { ContributionCollection, IExtensionContributionFactory } from '../../common/contributions';
+import { ChatHistoryService } from '../../conversation/common/chatHistoryService';
 
 // ##################################################################################
 // ###                                                                            ###
@@ -32,6 +33,10 @@ export interface IExtensionActivationConfiguration {
 
 export async function baseActivate(configuration: IExtensionActivationConfiguration) {
 	const context = configuration.context;
+
+	// Set extension context for ChatHistoryService
+	ChatHistoryService.setExtensionContext(context);
+
 	if (context.extensionMode === ExtensionMode.Test && !configuration.forceActivation) {
 		// FIXME Running in tests, don't activate the extension
 		// Avoid bundling the extension code in the test bundle
