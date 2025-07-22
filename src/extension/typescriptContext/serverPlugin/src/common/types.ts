@@ -9,7 +9,7 @@ import type { CodeSnippet } from './protocol';
 
 export interface SnippetProvider {
 	isEmpty(): boolean;
-	snippet(key: string | undefined, priority: number): CodeSnippet;
+	snippet(key: string | undefined): CodeSnippet;
 }
 
 export interface KeyComputationContext {

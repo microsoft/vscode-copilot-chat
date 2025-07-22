@@ -72,11 +72,13 @@ export class McpToolCallingLoop extends ToolCallingLoop<IMcpToolCallingLoopOptio
 			description: QuickInputTool.description,
 			name: QuickInputTool.ID,
 			inputSchema: QuickInputTool.schema,
+			source: undefined,
 			tags: [],
 		}, {
 			description: QuickPickTool.description,
 			name: QuickPickTool.ID,
 			inputSchema: QuickPickTool.schema,
+			source: undefined,
 			tags: [],
 		}];
 	}

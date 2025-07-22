@@ -423,7 +423,7 @@ export class SSEProcessor {
 
 					let finishOffset: number | undefined;
 
-					const emitSolution = async (delta?: { vulnAnnotations?: ICodeVulnerabilityAnnotation[]; ipCodeCitations?: IIPCodeCitation[]; references?: ICopilotReference[]; toolCalls?: ICopilotToolCall[]; functionCalls?: ICopilotFunctionCall[]; errors?: ICopilotError[]; beginToolCalls?: ICopilotBeginToolCall[] }) => {
+					const emitSolution = async (delta?: { vulnAnnotations?: ICodeVulnerabilityAnnotation[]; ipCodeCitations?: IIPCodeCitation[]; references?: ICopilotReference[]; toolCalls?: ICopilotToolCall[]; functionCalls?: ICopilotFunctionCall[]; errors?: ICopilotError[]; beginToolCalls?: ICopilotBeginToolCall[]; thinking?: ThinkingData }) => {
 						if (delta?.vulnAnnotations && (!Array.isArray(delta.vulnAnnotations) || !delta.vulnAnnotations.every(a => isCopilotAnnotation(a)))) {
 							delta.vulnAnnotations = undefined;
 						}
@@ -442,7 +442,8 @@ export class SSEProcessor {
 							copilotToolCalls: delta?.toolCalls,
 							_deprecatedCopilotFunctionCalls: delta?.functionCalls,
 							beginToolCalls: delta?.beginToolCalls,
-							copilotErrors: delta?.errors
+							copilotErrors: delta?.errors,
+							thinking: delta?.thinking
 						});
 						if (finishOffset !== undefined) {
 							hadEarlyFinishedSolution = true;
@@ -518,8 +519,9 @@ export class SSEProcessor {
 						handled = true;
 						const toolCalls = this.toolCalls.getToolCalls();
 						this.completedFunctionCallIdxs.set(choice.index, 'tool');
+						const id = toolCalls.length > 0 ? toolCalls[0].id : undefined;
 						try {
-							if (await emitSolution({ toolCalls: toolCalls })) {
+							if (await emitSolution({ toolCalls: toolCalls, thinking: id ? this.thinkingData.peek(id) : undefined })) {
 								continue;
 							}
 						} catch (error) {

@@ -22,5 +22,5 @@ export const TestingCacheSalts = {
 	chunksEndpointCacheSalt: '2025-02-19T14:49:06.023Z',
 	ruffCacheSalt: '2025-02-19T14:49:06.023Z',
 	globalStateCacheSalt: '2025-02-19T14:49:06.023Z',
-	modelMetadata: '2025-06-25T07:56:24.816Z'
+	modelMetadata: '2025-07-17T07:56:24.816Z'
 };

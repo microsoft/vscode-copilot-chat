@@ -128,7 +128,7 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 		super();
 
 		this._register(this._configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(ConfigKey.Internal.WorkspacePrototypeAdoCodeSearchEnabled.fullyQualifiedId)) {
+			if (e.affectsConfiguration(ConfigKey.Internal.WorkspaceEnableAdoCodeSearch.fullyQualifiedId)) {
 				this._onDidChangeIndexState.fire();
 			}
 		}));
@@ -354,6 +354,6 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 	}
 
 	private isEnabled(): boolean {
-		return this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.WorkspacePrototypeAdoCodeSearchEnabled, this._expService);
+		return this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.WorkspaceEnableAdoCodeSearch, this._expService);
 	}
 }

@@ -573,6 +573,7 @@ export namespace ConfigKey {
 			"markdown": false,
 			"scminput": false
 		});
+
 	}
 
 	/**
@@ -627,7 +628,7 @@ export namespace ConfigKey {
 		export const WorkspaceEnableEmbeddingsSearch = defineExpSetting<boolean>('chat.advanced.workspace.enableEmbeddingsSearch', true, INTERNAL);
 		export const WorkspaceUseCodeSearchInstantIndexing = defineExpSetting<boolean>('chat.advanced.workspace.useCodeSearchInstantIndexing', true, INTERNAL);
 		export const WorkspacePreferredEmbeddingsModel = defineExpSetting<string>('chat.advanced.workspace.preferredEmbeddingsModel', '', INTERNAL);
-		export const WorkspacePrototypeAdoCodeSearchEnabled = defineExpSetting<boolean>('chat.advanced.workspace.prototypeAdoCodeSearchEnabled', { defaultValue: false, internalDefaultValue: true, teamDefaultValue: true }, INTERNAL_RESTRICTED);
+		export const WorkspaceEnableAdoCodeSearch = defineExpSetting<boolean>('chat.advanced.workspace.enabledAdoCodeSearch', true, INTERNAL);
 		export const WorkspacePrototypeAdoCodeSearchEndpointOverride = defineSetting<string>('chat.advanced.workspace.prototypeAdoCodeSearchEndpointOverride', '', INTERNAL);
 		export const FeedbackOnChange = defineSetting('chat.advanced.feedback.onChange', false, INTERNAL);
 		export const ReviewIntent = defineSetting('chat.advanced.review.intent', false, INTERNAL);
@@ -715,6 +716,8 @@ export namespace ConfigKey {
 		export const VerifyTextDocumentChanges = defineExpSetting<boolean>('chat.advanced.inlineEdits.verifyTextDocumentChanges', true, INTERNAL_RESTRICTED);
 		export const EnableApplyPatchForNotebooks = defineExpSetting<boolean>('chat.advanced.enableApplyPatchForNotebooks', false, INTERNAL_RESTRICTED);
 		export const OmitBaseAgentInstructions = defineSetting<boolean>('chat.advanced.omitBaseAgentInstructions', false, INTERNAL);
+
+		export const PromptFileContext = defineExpSetting<boolean>('chat.advanced.promptFileContextProvider.enabled', true);
 		export const GeminiReplaceString = defineExpSetting<boolean>('chat.advanced.geminiReplaceString.enabled', false, INTERNAL, { experimentName: 'copilotchat.geminiReplaceString' });
 	}
 
@@ -759,6 +762,7 @@ export namespace ConfigKey {
 	export const AgentCanRunTasks = defineValidatedSetting('chat.agent.runTasks', vBoolean(), true);
 	export const NewWorkspaceCreationAgentEnabled = defineSetting<boolean>('chat.newWorkspaceCreation.enabled', true);
 	export const SummarizeAgentConversationHistory = defineExpSetting<boolean>('chat.summarizeAgentConversationHistory.enabled', true);
+	export const VirtualTools = defineExpSetting<boolean>('chat.virtualTools.enabled', false);
 	export const CurrentEditorAgentContext = defineSetting<boolean>('chat.agent.currentEditorContext.enabled', true);
 	export const TerminalAllowList = defineSetting<{ [key: string]: boolean }>('chat.agent.terminal.allowList', {});
 	export const TerminalDenyList = defineSetting<{ [key: string]: boolean }>('chat.agent.terminal.denyList', {

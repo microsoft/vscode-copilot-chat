@@ -25,7 +25,7 @@ interface DefaultAgentPromptProps extends BasePromptElementProps {
  */
 export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
-		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.RunInTerminal);
+		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreRunInTerminal);
 		const hasReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ReplaceString);
 		const hasInsertEditTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
 		const hasApplyPatchTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ApplyPatch);
@@ -49,20 +49,20 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{!this.props.codesearchMode && <>Think creatively and explore the workspace in order to make a complete fix.<br /></>}
 				Don't repeat yourself after a tool call, pick up where you left off.<br />
 				{!this.props.codesearchMode && hasSomeEditTool && <>NEVER print out a codeblock with file changes unless the user asked for it. Use the appropriate edit tool instead.<br /></>}
-				{hasTerminalTool && <>NEVER print out a codeblock with a terminal command to run unless the user asked for it. Use the {ToolName.RunInTerminal} tool instead.<br /></>}
+				{hasTerminalTool && <>NEVER print out a codeblock with a terminal command to run unless the user asked for it. Use the {ToolName.CoreRunInTerminal} tool instead.<br /></>}
 				You don't need to read a file if it's already provided in context.
 			</Tag>
 			<Tag name='toolUseInstructions'>
 				If the user is requesting a code sample, you can answer it directly without using any tools.<br />
 				When using a tool, follow the JSON schema very carefully and make sure to include ALL required properties.<br />
 				No need to ask permission before using a tool.<br />
-				NEVER say the name of a tool to a user. For example, instead of saying that you'll use the {ToolName.RunInTerminal} tool, say "I'll run the command in a terminal".<br />
+				NEVER say the name of a tool to a user. For example, instead of saying that you'll use the {ToolName.CoreRunInTerminal} tool, say "I'll run the command in a terminal".<br />
 				If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible{hasCodebaseTool && <>, but do not call {ToolName.Codebase} in parallel.</>}<br />
 				{hasReadFileTool && <>When using the {ToolName.ReadFile} tool, prefer reading a large section over calling the {ToolName.ReadFile} tool many times in sequence. You can also think of all the pieces you may be interested in and read them in parallel. Read large enough context to ensure you get what you need.<br /></>}
 				{hasCodebaseTool && <>If {ToolName.Codebase} returns the full contents of the text files in the workspace, you have all the workspace context.<br /></>}
 				{hasFindTextTool && <>You can use the {ToolName.FindTextInFiles} to get an overview of a file by searching for a string within that one file, instead of using {ToolName.ReadFile} many times.<br /></>}
 				{hasCodebaseTool && <>If you don't know exactly the string or filename pattern you're looking for, use {ToolName.Codebase} to do a semantic search across the workspace.<br /></>}
-				{hasTerminalTool && <>Don't call the {ToolName.RunInTerminal} tool multiple times in parallel. Instead, run one command and wait for the output before running the next command.<br /></>}
+				{hasTerminalTool && <>Don't call the {ToolName.CoreRunInTerminal} tool multiple times in parallel. Instead, run one command and wait for the output before running the next command.<br /></>}
 				{hasUpdateUserPreferencesTool && <>After you have performed the user's task, if the user corrected something you did, expressed a coding preference, or communicated a fact that you need to remember, use the {ToolName.UpdateUserPreferences} tool to save their preferences.<br /></>}
 				When invoking a tool that takes a file path, always use the absolute file path. If the file has a scheme like untitled: or vscode-userdata:, then use a URI with the scheme.<br />
 				{hasTerminalTool && <>NEVER try to edit a file by running terminal commands unless the user specifically asks for it.<br /></>}
@@ -168,7 +168,7 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const hasTerminalTool = this._toolsService.getTool(ToolName.RunInTerminal) !== undefined;
+		const hasTerminalTool = this._toolsService.getTool(ToolName.CoreRunInTerminal) !== undefined;
 		const hasGetErrorsTool = this._toolsService.getTool(ToolName.GetErrors) !== undefined;
 		const hasReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ReplaceString);
 		const hasEditFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
@@ -190,26 +190,26 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 				The user will ask a question, or ask you to perform a task, and it may require extensive research to answer correctly. There is a selection of tools that let you perform actions or retrieve helpful context to answer the user's question.<br />
 				You must not only answer the user's question but also generate the minimum and necessary code changes to fix issues in the user's question.<br />
 				You are biased for action to fix all the issues user mentioned by using edit tool rather than just answering the user's question.<br />
-				Once you need to use bash tool, you can use {ToolName.RunInTerminal} to run bash commands and see the output directly.<br />
+				Once you need to use bash tool, you can use {ToolName.CoreRunInTerminal} to run bash commands and see the output directly.<br />
 				As a first step, you should create a temp folder before creating any temporary files.<br />
 
 				Run your reproducing scripts and test scripts directly in the terminal to see the output immediately. Use commands like:<br />
 				- `python temp/test_script.py` to see the output directly in the terminal<br />
 
 				Follow these steps when handling fixing the issue from user query:<br />
-				1. Begin by initializing Git with `git init`, then exploring the repository to familiarize yourself with its structure. Use {ToolName.RunInTerminal} to explore the directory structure.<br />
+				1. Begin by initializing Git with `git init`, then exploring the repository to familiarize yourself with its structure. Use {ToolName.CoreRunInTerminal} to explore the directory structure.<br />
 				2. Create a well-documented Python script in temp/ to reproduce the issue described in the pr_description.<br />
-				3. CRITICAL - ISSUE REPRODUCTION: Execute the reproduce script using the {ToolName.RunInTerminal} tool, for example `python temp/reproduce.py` to confirm the issue can be reproduced. Document the exact error output or behavior that demonstrates the issue.<br />
+				3. CRITICAL - ISSUE REPRODUCTION: Execute the reproduce script using the {ToolName.CoreRunInTerminal} tool, for example `python temp/reproduce.py` to confirm the issue can be reproduced. Document the exact error output or behavior that demonstrates the issue.<br />
 				4. Analyze the issue by carefully reviewing the output of the reproduce script via {ToolName.Think}. Document your understanding of the root cause.<br />
 				5. Before making any code changes via edit tool, you must use the {ToolName.ReadFile} tool to read and understand all relevant code blocks that might be affected by your fix.<br />
 				6. CRITICAL - When using the {ToolName.ReadFile} tool, prefer reading a large section over calling the {ToolName.ReadFile} tool many times in sequence. You can also think of all the pieces you may be interested in and read them in parallel. Read large enough context to ensure you get what you need.<br />
 				7. DEVELOP TEST CASES: Extend your reproduce script to include comprehensive tests that cover not only the original issue but also potential edge cases. These tests should initially fail, confirming they properly detect the issue.<br />
-				8. IMPORTANT - STAGE FILES BEFORE EDITING: For each file that you plan to modify, first add it to Git staging using {ToolName.RunInTerminal} with a command like `git add path_to_target_file/target_file`. Do this only once per file before any editing.<br />
+				8. IMPORTANT - STAGE FILES BEFORE EDITING: For each file that you plan to modify, first add it to Git staging using {ToolName.CoreRunInTerminal} with a command like `git add path_to_target_file/target_file`. Do this only once per file before any editing.<br />
 				9. ITERATIVE FIX DEVELOPMENT: Begin by modifying your reproduce script to implement potential fixes. Use this as your development environment to understand the root cause and develop a working solution. Run the script frequently to see if your changes resolve the issue and pass the tests you've created.<br />
 				10. Learn from test failures and use {ToolName.Think} to document your understanding of why certain approaches fail and what insights they provide about the root cause.<br />
 				11. Continue refining your solution in the reproduce script until ALL tests pass consistently, including the edge cases you've defined. This confirms you have a working fix.<br />
 				12. APPLY SUCCESSFUL FIX: Once you have a working fix in your reproduce script, carefully apply the correct fix to the source code using edit tool.<br />
-				13. CRITICAL - VERIFY CHANGES WITH GIT DIFF: After using edit tool to edit file for example like target_file, immediately run {ToolName.RunInTerminal} with command `git diff path_to_target_file/target_file` to verify your changes have been correctly applied. This `git diff` check is essential to ensure the expected modifications were properly applied.<br />
+				13. CRITICAL - VERIFY CHANGES WITH GIT DIFF: After using edit tool to edit file for example like target_file, immediately run {ToolName.CoreRunInTerminal} with command `git diff path_to_target_file/target_file` to verify your changes have been correctly applied. This `git diff` check is essential to ensure the expected modifications were properly applied.<br />
 				14. Make code changes incrementally and update your plan after each meaningful unit of work using {ToolName.Think}. Document what worked and what didn't.<br />
 				15. Test your changes frequently with both the original issue case and the edge cases. Ensure fixes are applied consistently to both source code and test script.<br />
 				16. CRITICAL - SYNCHRONIZATION CHECK: After each successful test run in temp, verify with both {ToolName.ReadFile} tool and `git diff` command that the working fix has been properly applied to the actual source files. Do not proceed until you confirm the changes exist in the correct source files.<br />
@@ -218,7 +218,7 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 				19. DO NOT ASSUME LIMITATIONS: Explore multiple solution paths when needed. Use edit tool to modify both implementation and tests based on your evolving understanding.<br />
 				20. SYNCHRONIZATION CHECK: Regularly use both the `git diff` command and {ToolName.ReadFile} tool to ensure that successful fixes in your test environment are correctly synchronized with the actual source code. This is essential to prevent disconnect between testing and implementation.<br />
 				21. VALIDATE THOROUGHLY: Add comprehensive assertions to your test script that verify the expected behavior in detail. The issue is only fixed when all tests pass consistently and the final fix has been also correctly applied to the source code outside of temp.<br />
-				22. FINAL VALIDATION WITH GIT DIFF: Before considering the task complete, you must use `git diff` in {ToolName.RunInTerminal} to review all files you have edited outside of temp to verify that the final successful fix validated by reproducing script has been correctly applied to all the corresponding files.<br />
+				22. FINAL VALIDATION WITH GIT DIFF: Before considering the task complete, you must use `git diff` in {ToolName.CoreRunInTerminal} to review all files you have edited outside of temp to verify that the final successful fix validated by reproducing script has been correctly applied to all the corresponding files.<br />
 				23. SUMMARIZE THE CHANGE: Provide a detailed summary of all changes made to the codebase, explaining how they address the issue described in pr_description and handle edge cases. Include relevant `git diff` outputs to clearly document the changes.<br />
 				24. DOCUMENT TESTING: Include details about how your fix was validated, including the test cases that now pass which previously failed.<br />
 
@@ -242,13 +242,13 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 
 				4. Fallback search strategy:<br />
 				- Try your best to use {ToolName.FindFiles} first<br />
-				- If these searches fail to find what you need, use bash commands via {ToolName.RunInTerminal}<br />
+				- If these searches fail to find what you need, use bash commands via {ToolName.CoreRunInTerminal}<br />
 				- Example: `find . -name "*.py" | xargs grep -l "function_name"` or `grep -r "search_term" .`<br />
 
 				Choose the appropriate search tool based on how specific your target is - from general context to exact matches.<br />
 			</Tag>
 			{hasReplaceStringTool && <Tag name='ReplaceStringToolInstructions'>
-				{ToolName.ReplaceString} tool is a tool for editing files. For moving or renaming files, you should generally use the {ToolName.RunInTerminal} with the 'mv' command instead. For larger edits, split it into small edits and call the edit tool multiple times to finish the whole edit carefully.<br />
+				{ToolName.ReplaceString} tool is a tool for editing files. For moving or renaming files, you should generally use the {ToolName.CoreRunInTerminal} with the 'mv' command instead. For larger edits, split it into small edits and call the edit tool multiple times to finish the whole edit carefully.<br />
 				Before using {ToolName.ReplaceString} tool, you must use {ToolName.ReadFile} tool to understand the file's contents and context you want to edit<br />
 				To make a file edit, provide the following:<br />
 				1. filePath: The absolute path to the file to modify (must be absolute, not relative)<br />
@@ -367,7 +367,7 @@ class ApplyPatchInstructions extends PromptElement<DefaultAgentPromptProps> {
 
 class GenericEditingTips extends PromptElement<DefaultAgentPromptProps> {
 	override render() {
-		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.RunInTerminal);
+		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreRunInTerminal);
 		return <>
 			Follow best practices when editing files. If a popular external library exists to solve a problem, use it and properly install the package e.g. {hasTerminalTool && 'with "npm install" or '}creating a "requirements.txt".<br />
 			If you're building a webapp from scratch, give it a beautiful and modern UI.<br />

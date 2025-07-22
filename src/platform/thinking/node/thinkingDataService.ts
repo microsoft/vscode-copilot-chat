@@ -15,6 +15,7 @@ export interface IThinkingDataService {
 		index: number;
 	}, toolCallId?: string): void;
 	consume(id: string): ThinkingData | undefined;
+	peek(id: string): ThinkingData | undefined;
 	clear(): void;
 }
 export const IThinkingDataService = createServiceIdentifier<IThinkingDataService>('IThinkingDataService');
@@ -92,11 +93,32 @@ export class ThinkingDataImpl implements IThinkingDataService {
 			if (data.cot_id) {
 				return {
 					cot_id: data.cot_id,
+					cot_summary: data.cot_summary,
 				};
 			}
 			if (data.reasoning_opaque) {
 				return {
 					reasoning_opaque: data.reasoning_opaque,
+					reasoning_text: data.reasoning_text,
+				};
+			}
+		}
+		return undefined;
+	}
+
+	public peek(id: string): ThinkingData | undefined {
+		const data = this.data.find(d => d.tool_call_id === id);
+		if (data) {
+			if (data.cot_id) {
+				return {
+					cot_id: data.cot_id,
+					cot_summary: data.cot_summary,
+				};
+			}
+			if (data.reasoning_opaque) {
+				return {
+					reasoning_opaque: data.reasoning_opaque,
+					reasoning_text: data.reasoning_text,
 				};
 			}
 		}

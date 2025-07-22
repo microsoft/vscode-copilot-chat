@@ -11,11 +11,11 @@ import { ContextItemResultBuilder, type ContextComputedEvent, type ContextItemSu
 
 class TreePropertyItem {
 
-	private readonly parent: TreeContextItem | TreeYieldedContextItem | TreeCacheInfo;
+	private readonly parent: TreeContextItem | TreeYieldedContextItem | TreeCacheInfo | TreeRunnableResult;
 	private readonly name: string;
 	private readonly value: string;
 
-	constructor(parent: TreeContextItem | TreeYieldedContextItem | TreeCacheInfo, name: string, value: string) {
+	constructor(parent: TreeContextItem | TreeYieldedContextItem | TreeCacheInfo | TreeRunnableResult, name: string, value: string) {
 		this.parent = parent;
 		this.name = name;
 		this.value = value;
@@ -79,7 +79,6 @@ class TreeTrait extends TreeContextItem {
 		properties.push(new TreePropertyItem(this, 'key', this.from.key));
 		properties.push(new TreePropertyItem(this, 'name', this.from.name));
 		properties.push(new TreePropertyItem(this, 'value', this.from.value));
-		properties.push(new TreePropertyItem(this, 'priority', this.from.priority.toString()));
 		return properties;
 	}
 
@@ -113,7 +112,6 @@ class TreeSnippet extends TreeContextItem {
 		const properties: TreePropertyItem[] = [];
 		properties.push(new TreePropertyItem(this, 'key', this.from.key ?? 'undefined'));
 		properties.push(new TreePropertyItem(this, 'value', this.from.value));
-		properties.push(new TreePropertyItem(this, 'priority', this.from.priority.toString()));
 		properties.push(new TreePropertyItem(this, 'path', this.from.fileName));
 		return properties;
 	}
@@ -214,11 +212,13 @@ class TreeRunnableResult {
 		return `${this.parent.id}.${this.from.id}`;
 	}
 
-	public children(): (TreeTrait | TreeSnippet | TreeCacheInfo)[] {
-		const result: (TreeTrait | TreeSnippet | TreeCacheInfo)[] = this.items;
+	public children(): (TreeTrait | TreeSnippet | TreeCacheInfo | TreePropertyItem)[] {
+		const result: (TreeTrait | TreeSnippet | TreeCacheInfo | TreePropertyItem)[] = this.items;
 		if (this.from.cache !== undefined) {
 			result.push(new TreeCacheInfo(this.from.cache));
 		}
+		result.push(new TreePropertyItem(this, 'priority', this.from.priority.toString()));
+
 		return result;
 	}
 

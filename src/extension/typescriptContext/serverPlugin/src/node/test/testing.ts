@@ -8,7 +8,7 @@ import { type LanguageService } from 'typescript';
 
 import { computeContext as _computeContext } from '../../common/api';
 import { ContextResult, RequestContext, SingleLanguageServiceSession, TokenBudget, type ComputeContextSession } from '../../common/contextProvider';
-import { CodeSnippet, ContextKind, type ContextItem, type Trait } from '../../common/protocol';
+import { CodeSnippet, ContextKind, type ContextItem, type FullContextItem, type PriorityTag, type Trait } from '../../common/protocol';
 import { NullCancellationToken } from '../../common/typescripts';
 import { NodeHost } from '../host';
 import { LanguageServices } from './languageServices';
@@ -53,9 +53,9 @@ function assertTrait(actual: Trait, expected: ExpectedTrait): void {
 	}
 }
 
-export function assertContextItems(actual: ContextItem[], expected: ExpectedContextItem[], mode: 'equals' | 'contains' = 'equals'): void {
-	const actualSnippets: CodeSnippet[] = [];
-	const actualTraits: Trait[] = [];
+export function assertContextItems(actual: (ContextItem & PriorityTag)[], expected: ExpectedContextItem[], mode: 'equals' | 'contains' = 'equals'): void {
+	const actualSnippets: (CodeSnippet & PriorityTag)[] = [];
+	const actualTraits: (Trait & PriorityTag)[] = [];
 	for (const item of actual) {
 		if (item.kind === ContextKind.Snippet) {
 			actualSnippets.push(item);
@@ -109,7 +109,9 @@ export type TestSession = {
 	session: ComputeContextSession;
 };
 
-export function computeContext(session: TestSession, document: string, position: { line: number; character: number }, contextKind: ContextKind): ContextItem[] {
+export type ContextItemWithPriority = FullContextItem & PriorityTag;
+
+export function computeContext(session: TestSession, document: string, position: { line: number; character: number }, contextKind: ContextKind): ContextItemWithPriority[] {
 	const result: ContextResult = new ContextResult(new TokenBudget(7 * 1024), new RequestContext(session.session, [], new Map()));
 	const program = session.service.getProgram();
 	if (program === undefined) {
