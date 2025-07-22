@@ -145,8 +145,7 @@ export function getUserPrompt(request: StatelessNextEditRequest, currentFileCont
 
 	const postScript = getPostScript(opts.promptingStrategy, currentFilePath);
 
-	return `${(opts.promptingStrategy === PromptingStrategy.Nes41Miniv3 || opts.promptingStrategy === PromptingStrategy.Codexv21NesUnified) ? '' : '```'}
-${RECENTLY_VIEWED_CODE_SNIPPETS_START}
+	const mainPrompt = `${RECENTLY_VIEWED_CODE_SNIPPETS_START}
 ${recentlyViewedCodeSnippets}
 ${RECENTLY_VIEWED_CODE_SNIPPETS_END}
 
@@ -159,8 +158,19 @@ ${EDIT_DIFF_HISTORY_START_TAG}
 ${editDiffHistory}
 ${EDIT_DIFF_HISTORY_END_TAG}
 
-${areaAroundCodeToEdit}${(opts.promptingStrategy === PromptingStrategy.Nes41Miniv3 || opts.promptingStrategy === PromptingStrategy.Codexv21NesUnified) ? '' : '\n```'}${postScript}
-`.trim();
+${areaAroundCodeToEdit}`;
+
+	const includeBackticks = opts.promptingStrategy !== PromptingStrategy.Nes41Miniv3 && opts.promptingStrategy !== PromptingStrategy.Codexv21NesUnified;
+
+	const prompt = (includeBackticks ? wrapInBackticks(mainPrompt) : mainPrompt) + postScript;
+
+	const trimmedPrompt = prompt.trim();
+
+	return trimmedPrompt;
+}
+
+function wrapInBackticks(content: string) {
+	return `\`\`\`\n${content}\n\`\`\``;
 }
 
 function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath: string) {
