@@ -343,6 +343,19 @@ export class RequestLogger extends AbstractRequestLogger {
 				text += d.text;
 			}
 
+			if (d.thinking) {
+				let thinking: string = '';
+				const thinkingId = getThinkingId(d.thinking);
+				const thinkingText = getThinkingText(d.thinking);
+				if (thinkingId) {
+					thinking += `\nthinkingId: ${thinkingId}\n`;
+				}
+				if (thinkingText) {
+					thinking += `\nthinking text: ${thinkingText}\n`;
+				}
+				text += `\n## Thinking\n~~~\n${thinking}~~~\n`;
+			}
+
 			// Can include other parts as needed
 			if (d.copilotToolCalls) {
 				if (i > 0) {
