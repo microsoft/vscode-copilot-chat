@@ -26,7 +26,6 @@ export const enum ToolName {
 	SearchWorkspaceSymbols = 'search_workspace_symbols',
 	Usages = 'list_code_usages',
 	RunTask = 'run_vs_code_task',
-	RunTaskCore = 'run__task',
 	EditFile = 'insert_edit_into_file',
 	CreateFile = 'create_file',
 	ReplaceString = 'replace_string_in_file',
@@ -47,10 +46,11 @@ export const enum ToolName {
 	CreateDirectory = 'create_directory',
 	RunVscodeCmd = 'run_vscode_command',
 	GetTaskOutput = 'get_task_output',
-	GetTaskOutputCore = 'get_task_output2',
 
 	CoreRunInTerminal = 'run_in_terminal',
 	CoreGetTerminalOutput = 'get_terminal_output',
+	CoreRunTask = 'run__task',
+	CoreGetTaskOutput = 'get_task_output2',
 }
 
 // When updating this, also update contributedToolNameToToolNames
