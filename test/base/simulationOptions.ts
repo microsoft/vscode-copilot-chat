@@ -86,6 +86,8 @@ export class SimulationOptions {
 
 	public readonly configFile: string | undefined;
 
+	public readonly modelConfigFile: string | undefined;
+
 	protected constructor(processArgv: readonly string[]) {
 		const argv = minimist(processArgv.slice(2));
 		this.argv = argv;
@@ -157,6 +159,7 @@ export class SimulationOptions {
 		this.useExperimentalCodeSearchService = boolean(argv['use-experimental-code-search-service'], false);
 
 		this.configFile = argv['config-file'];
+		this.modelConfigFile = argv['model-config-file'];
 	}
 
 	public printHelp(): void {
@@ -209,6 +212,7 @@ export class SimulationOptions {
 			`  --scenario-workspace-folder        If true, runs the stest inline in the scenario's workspace folder`,
 			`  --nes-unified-model                Use the unified model for NES`,
 			`  --config-file                      Path to a JSON file containing configuration options`,
+			`  --model-config-file                Path to a JSON file containing model configuration options`,
 			``,
 		].join('\n'));
 	}

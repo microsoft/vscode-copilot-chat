@@ -96,6 +96,7 @@ export class AzureBYOKModelProvider implements LanguageModelChatProvider2<AzureM
 					id,
 					url: capabilities.url || '',
 					name: capabilities.name,
+					cost: AzureBYOKModelProvider.providerName,
 					version: '1.0.0',
 					maxOutputTokens: capabilities.maxOutputTokens,
 					maxInputTokens: capabilities.maxInputTokens,
