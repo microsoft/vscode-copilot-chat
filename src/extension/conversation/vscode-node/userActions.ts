@@ -385,6 +385,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 		);
 		const isNotebookDocument = isNotebookCellOrNotebookChatInput(response.promptQuery.document.uri) ? 1 : 0;
 
+		// TODO: Fix the telemetry event name. This is hit by both inline and panel requests.
 		this.surveyService.signalUsage(`inline.${intentId ?? 'default'}`, languageId);
 
 		const sharedProps = {
@@ -452,6 +453,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 					"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the document is a notebook" }
 				}
 			*/
+			// TODO: Fix the telemetry event name. This is hit by both inline and panel requests.
 			this.telemetryService.sendMSFTTelemetryEvent('inline.action.vote', {
 				...sharedProps,
 				reason: feedback?.unhelpfulReason,
@@ -482,12 +484,14 @@ export class UserFeedbackService implements IUserFeedbackService {
 					"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the document is a notebook." }
 				}
 			*/
+			// TODO: Fix the telemetry event name. This may be hit by both inline and panel requests.
 			this.telemetryService.sendMSFTTelemetryEvent('inline.done', sharedProps, {
 				...sharedMeasures, accepted
 			});
 			sendInternalTelemetryEvent('interactiveSessionDone', { accepted });
 		}
 
+		// TODO: Fix the telemetry event name. This is hit by both inline and panel requests.
 		switch (kind) {
 			case InteractiveEditorResponseFeedbackKind.Helpful:
 				userActionProperties['rating'] = 'positive';
