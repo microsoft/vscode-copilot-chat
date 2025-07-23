@@ -4,13 +4,19 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { TextEditor, window } from 'vscode';
+import { Copilot } from '../../../platform/inlineCompletions/common/api';
+import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { IScopeSelector } from '../../../platform/scopeSelection/common/scopeSelection';
 import { CopilotExtensionApi as ICopilotExtensionApi } from './api';
+import { VSCodeContextProviderApiV1 } from './vscodeContextProviderApi';
 
 export class CopilotExtensionApi implements ICopilotExtensionApi {
 	public static readonly version = 1;
 
-	constructor(@IScopeSelector private readonly _scopeSelector: IScopeSelector) { }
+	constructor(
+		@IScopeSelector private readonly _scopeSelector: IScopeSelector,
+		@ILanguageContextProviderService private readonly _languageContextProviderService: ILanguageContextProviderService
+	) { }
 
 	async selectScope(editor?: TextEditor, options?: { reason?: string }) {
 		editor ??= window.activeTextEditor;
@@ -18,5 +24,9 @@ export class CopilotExtensionApi implements ICopilotExtensionApi {
 			return;
 		}
 		return this._scopeSelector.selectEnclosingScope(editor, options);
+	}
+
+	getContextProviderApi(): Copilot.ContextProviderApiV1 {
+		return new VSCodeContextProviderApiV1(this._languageContextProviderService);
 	}
 }

@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
-import { Copilot } from '../../../platform/inlineCompletions/vscode-node/api';
+import { Copilot } from '../../../platform/inlineCompletions/common/api';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';

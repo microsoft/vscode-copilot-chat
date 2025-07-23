@@ -45,6 +45,7 @@ export interface ISimulationModelConfig {
 	fastChatModel?: string;
 	embeddingModel?: EMBEDDING_MODEL;
 	fastRewriteModel?: string;
+	skipModelMetadataCache?: boolean;
 }
 
 export function createExtensionUnitTestingServices(currentTestRunInfo?: any, modelConfig?: ISimulationModelConfig): TestingServiceCollection {
@@ -57,6 +58,7 @@ export function createExtensionUnitTestingServices(currentTestRunInfo?: any, mod
 			modelConfig?.embeddingModel,
 			modelConfig?.fastRewriteModel,
 			currentTestRunInfo,
+			!!modelConfig?.skipModelMetadataCache
 		])
 	);
 	testingServiceCollection.define(IGithubCodeSearchService, new SyncDescriptor(GithubCodeSearchService));

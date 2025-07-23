@@ -567,7 +567,7 @@ class AgentTasksInstructions extends PromptElement {
 		}
 
 		return <>
-			The following tasks can be executed using the {ToolName.RunTask} tool if they are not already running:<br />
+			The following tasks can be executed using the {ToolName.CoreRunTask} or {ToolName.RunTask} tool if they are not already running:<br />
 			{taskGroups.map(([folder, tasks]) =>
 				<Tag name='workspaceFolder' attrs={{ path: this._promptPathRepresentationService.getFilePath(folder) }}>
 					{tasks.map((t, i) => {
@@ -575,7 +575,7 @@ class AgentTasksInstructions extends PromptElement {
 						return (
 							<Tag name='task' attrs={{ id: `${t.type}: ${t.label || i}` }}>
 								{this.makeTaskPresentation(t)}
-								{isActive && <> (This task is currently running. You can use the {ToolName.GetTaskOutput} tool to view its output.)</>}
+								{isActive && <> (This task is currently running. You can use the {ToolName.CoreGetTaskOutput} or {ToolName.GetTaskOutput} tool to view its output.)</>}
 							</Tag>
 						);
 					})}

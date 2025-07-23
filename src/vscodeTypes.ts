@@ -82,7 +82,6 @@ export import NotebookRange = vscode.NotebookRange;
 export import NotebookEdit = vscode.NotebookEdit;
 export import NotebookCellData = vscode.NotebookCellData;
 export import NotebookData = vscode.NotebookData;
-export import PreparedTerminalToolInvocation = vscode.PreparedTerminalToolInvocation;
 export import ChatErrorLevel = vscode.ChatErrorLevel;
 export import TerminalShellExecutionCommandLineConfidence = vscode.TerminalShellExecutionCommandLineConfidence;
 export import ChatRequestEditedFileEventKind = vscode.ChatRequestEditedFileEventKind;

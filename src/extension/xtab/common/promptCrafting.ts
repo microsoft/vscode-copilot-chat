@@ -143,25 +143,9 @@ export function getUserPrompt(request: StatelessNextEditRequest, currentFileCont
 
 	const currentFilePath = toUniquePath(activeDoc.id, activeDoc.workspaceRoot?.path);
 
-	const postScript = opts.promptingStrategy === PromptingStrategy.UnifiedModel
-		? `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`${CURSOR_TAG}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes they would have made next. Start your response with <EDIT>, <INSERT>, or <NO_CHANGE>. If you are making an edit, start with <EDIT> and then provide the rewritten code window followed by </EDIT>. If you are inserting new code, start with <INSERT> and then provide only the new code that will be inserted at the cursor position followed by </INSERT>. If no changes are necessary, reply only with <NO_CHANGE>. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors.`
-		: (opts.promptingStrategy === PromptingStrategy.Xtab275
-			? `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. \
-Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor \
-position marked as \`${CURSOR_TAG}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes \
-they would have made next. Provide the revised code that was between the \`${CODE_TO_EDIT_START_TAG}\` and \`${CODE_TO_EDIT_END_TAG}\` tags, but do not include the tags themselves. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors. Don't include the line numbers or the form #| in your response. Do not skip any lines. Do not be lazy.`
-			: (opts.promptingStrategy === PromptingStrategy.Nes41Miniv3
-				? `The developer was working on a section of code within the tags <|code_to_edit|> in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`<|cursor|>\`, please continue the developer's work. Update the <|code_to_edit|> section by predicting and completing the changes they would have made next. Start your response with <EDIT> or <NO_CHANGE>. If you are making an edit, start with <EDIT> and then provide the rewritten code window followed by </EDIT>. If no changes are necessary, reply only with <NO_CHANGE>. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors.`
-				: `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. \
-Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor \
-position marked as \`${CURSOR_TAG}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes \
-they would have made next. Provide the revised code that was between the \`${CODE_TO_EDIT_START_TAG}\` and \`${CODE_TO_EDIT_END_TAG}\` tags with the following format, but do not include the tags themselves.
-\`\`\`
-// Your revised code goes here
-\`\`\``));
+	const postScript = getPostScript(opts.promptingStrategy, currentFilePath);
 
-	return `${(opts.promptingStrategy === PromptingStrategy.Nes41Miniv3 || opts.promptingStrategy === PromptingStrategy.Codexv21NesUnified) ? '' : '```'}
-${RECENTLY_VIEWED_CODE_SNIPPETS_START}
+	const mainPrompt = `${RECENTLY_VIEWED_CODE_SNIPPETS_START}
 ${recentlyViewedCodeSnippets}
 ${RECENTLY_VIEWED_CODE_SNIPPETS_END}
 
@@ -174,8 +158,49 @@ ${EDIT_DIFF_HISTORY_START_TAG}
 ${editDiffHistory}
 ${EDIT_DIFF_HISTORY_END_TAG}
 
-${areaAroundCodeToEdit}${(opts.promptingStrategy === PromptingStrategy.Nes41Miniv3 || opts.promptingStrategy === PromptingStrategy.Codexv21NesUnified) ? '' : '\n```'}${opts.promptingStrategy === PromptingStrategy.Codexv21NesUnified ? '' : `\n\n${postScript}`}
-`.trim();
+${areaAroundCodeToEdit}`;
+
+	const includeBackticks = opts.promptingStrategy !== PromptingStrategy.Nes41Miniv3 && opts.promptingStrategy !== PromptingStrategy.Codexv21NesUnified;
+
+	const prompt = (includeBackticks ? wrapInBackticks(mainPrompt) : mainPrompt) + postScript;
+
+	const trimmedPrompt = prompt.trim();
+
+	return trimmedPrompt;
+}
+
+function wrapInBackticks(content: string) {
+	return `\`\`\`\n${content}\n\`\`\``;
+}
+
+function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath: string) {
+	let postScript: string | undefined;
+	switch (strategy) {
+		case PromptingStrategy.Codexv21NesUnified:
+			break;
+		case PromptingStrategy.UnifiedModel:
+			postScript = `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`${CURSOR_TAG}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes they would have made next. Start your response with <EDIT>, <INSERT>, or <NO_CHANGE>. If you are making an edit, start with <EDIT> and then provide the rewritten code window followed by </EDIT>. If you are inserting new code, start with <INSERT> and then provide only the new code that will be inserted at the cursor position followed by </INSERT>. If no changes are necessary, reply only with <NO_CHANGE>. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors.`;
+			break;
+		case PromptingStrategy.Nes41Miniv3:
+			postScript = `The developer was working on a section of code within the tags <|code_to_edit|> in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`<|cursor|>\`, please continue the developer's work. Update the <|code_to_edit|> section by predicting and completing the changes they would have made next. Start your response with <EDIT> or <NO_CHANGE>. If you are making an edit, start with <EDIT> and then provide the rewritten code window followed by </EDIT>. If no changes are necessary, reply only with <NO_CHANGE>. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors.`;
+			break;
+		case PromptingStrategy.Xtab275:
+			postScript = `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`${CURSOR_TAG}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes they would have made next. Provide the revised code that was between the \`${CODE_TO_EDIT_START_TAG}\` and \`${CODE_TO_EDIT_END_TAG}\` tags, but do not include the tags themselves. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors. Don't include the line numbers or the form #| in your response. Do not skip any lines. Do not be lazy.`;
+			break;
+		case PromptingStrategy.SimplifiedSystemPrompt:
+		default:
+			postScript = `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. \
+Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor \
+position marked as \`${CURSOR_TAG}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes \
+they would have made next. Provide the revised code that was between the \`${CODE_TO_EDIT_START_TAG}\` and \`${CODE_TO_EDIT_END_TAG}\` tags with the following format, but do not include the tags themselves.
+\`\`\`
+// Your revised code goes here
+\`\`\``;
+			break;
+	}
+
+	const formattedPostScript = postScript === undefined ? '' : `\n\n${postScript}`;
+	return formattedPostScript;
 }
 
 function getEditDiffHistory(

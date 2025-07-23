@@ -327,7 +327,8 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			this._request.prompt,
 			responseType === ChatFetchResponseType.OffTopic ? true : false,
 			this._documentContext?.document,
-			this._userTelemetry
+			this._userTelemetry,
+			this._getModeName(),
 		);
 
 		if (responseType === ChatFetchResponseType.OffTopic) {
@@ -372,6 +373,13 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 				model: this._endpoint.model
 			});
 		}
+	}
+
+	protected _getModeName(): string {
+		return this._request.modeInstructions ? 'custom' :
+			this._intent.id === AgentIntent.ID ? 'agent' :
+				(this._intent.id === EditCodeIntent.ID || this._intent.id === EditCode2Intent.ID) ? 'edit' :
+					'ask';
 	}
 
 	public sendToolCallingTelemetry(toolCallRounds: IToolCallRound[], availableToolCount: number, responseType: ChatFetchResponseType | 'cancelled' | 'maxToolCalls'): void {
@@ -593,10 +601,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			temporalCtxTotalCharCount: temporalContexData?.totalCharLength ?? -1
 		} satisfies RequestPanelTelemetryMeasurements);
 
-		const modeName = this._request.modeInstructions ? 'custom' :
-			this._intent.id === AgentIntent.ID ? 'agent' :
-				(this._intent.id === EditCodeIntent.ID || this._intent.id === EditCode2Intent.ID) ? 'edit' :
-					'ask';
+		const modeName = this._getModeName();
 		sendUserActionTelemetry(
 			this._telemetryService,
 			undefined,
