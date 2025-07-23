@@ -370,6 +370,9 @@ export class UserFeedbackService implements IUserFeedbackService {
 		let telemetryEventName: string;
 
 		const { selection, wholeRange, intent, query } = response.promptQuery;
+
+		// For panel requests, conversation.getLatestTurn() refers to the turn that was voted on
+		// (i.e. last message in the conversation _up to this point_), not the last message shown in the panel.
 		const requestId = conversation?.getLatestTurn().id;
 		const intentId = intent?.id;
 		const languageId = response.promptQuery.document.languageId;
