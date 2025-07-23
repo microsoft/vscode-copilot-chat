@@ -130,7 +130,7 @@ suite('defaultIntentRequestHandler', () => {
 		id = generateUuid();
 	}
 
-	const responseStream = new ChatResponseStreamImpl(p => response.push(p));
+	const responseStream = new ChatResponseStreamImpl(p => response.push(p), () => { });
 	const maxToolCallIterations = 3;
 
 	const makeHandler = ({

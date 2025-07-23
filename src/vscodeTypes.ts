@@ -34,6 +34,7 @@ export import ExtensionMode = vscode.ExtensionMode;
 export import Location = vscode.Location;
 export import DiagnosticRelatedInformation = vscode.DiagnosticRelatedInformation;
 export import ChatVariableLevel = vscode.ChatVariableLevel;
+export import ChatResponseClearReason = vscode.ChatResponseClearReason;
 export import ChatResponseMarkdownPart = vscode.ChatResponseMarkdownPart;
 export import ChatResponseFileTreePart = vscode.ChatResponseFileTreePart;
 export import ChatResponseAnchorPart = vscode.ChatResponseAnchorPart;

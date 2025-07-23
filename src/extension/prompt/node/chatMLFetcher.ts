@@ -8,9 +8,9 @@ import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { FetchStreamRecorder, IChatMLFetcher, IntentParams, Source } from '../../../platform/chat/common/chatMLFetcher';
 import { IChatQuotaService } from '../../../platform/chat/common/chatQuotaService';
-import { ChatFetchError, ChatFetchResponseType, ChatLocation, ChatResponse, ChatResponses } from '../../../platform/chat/common/commonTypes';
+import { ChatFetchError, ChatFetchResponseType, ChatFetchRetriableError, ChatLocation, ChatResponse, ChatResponses } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
-import { getTextPart } from '../../../platform/chat/common/globalStringUtils';
+import { getTextPart, toTextParts } from '../../../platform/chat/common/globalStringUtils';
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
 import { HARD_TOOL_LIMIT } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
@@ -72,7 +72,7 @@ export abstract class AbstractChatMLFetcher implements IChatMLFetcher {
 		requestOptions?: Omit<OptionalChatRequestParams, 'n'>,
 		userInitiatedRequest?: boolean,
 		telemetryProperties?: TelemetryProperties,
-		intentParams?: IntentParams
+		intentParams?: IntentParams,
 	): Promise<ChatResponse> {
 		const resp = await this.fetchMany(
 			debugName,
@@ -107,7 +107,8 @@ export abstract class AbstractChatMLFetcher implements IChatMLFetcher {
 		requestOptions?: OptionalChatRequestParams,
 		userInitiatedRequest?: boolean,
 		telemetryProperties?: TelemetryProperties,
-		intentParams?: IntentParams
+		intentParams?: IntentParams,
+		isFilterRetry?: boolean
 	): Promise<ChatResponses>;
 }
 
@@ -143,6 +144,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		requestOptions?: OptionalChatRequestParams,
 		userInitiatedRequest?: boolean,
 		telemetryProperties?: TelemetryProperties,
+		intentParams?: IntentParams,
+		isFilterRetry?: boolean
 	): Promise<ChatResponses> {
 		if (!telemetryProperties) {
 			telemetryProperties = {};
@@ -228,6 +231,58 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			switch (response.type) {
 				case FetchResponseKind.Success: {
 					const result = await this.processSuccessfulResponse(response, messages, chatParams.ourRequestId, maxResponseTokens, tokenCount, timeToFirstToken, baseTelemetry, chatEndpoint, userInitiatedRequest);
+
+					// Handle FilteredRetry case with augmented messages
+					if (result.type === ChatFetchResponseType.FilteredRetry) {
+
+						if (isFilterRetry !== true) {
+							streamRecorder.callback("", 0, { text: "", retryReason: result.category });
+
+							const filteredContent = result.value[0];
+							if (filteredContent) {
+								const retryMessage = (result.category === FilterReason.Copyright) ?
+									`The previous response (copied below) was filtered due to being too similar to existing public code. Please suggest something similar in function that does not match public code. Here's the previous response: ${filteredContent}\n\n` :
+									`The previous response (copied below) was filtered due to triggering our content safety filters, which looks for hateful, self-harm, sexual, or violent content. Please suggest something similar in content that does not trigger these filters. Here's the previous response: ${filteredContent}\n\n`;
+								const augmentedMessages: Raw.ChatMessage[] = [
+									...messages,
+									{
+										role: Raw.ChatRole.User,
+										content: toTextParts(retryMessage)
+									}
+								];
+
+								// Retry with augmented messages
+								const retryResult = await this.fetchMany(
+									debugName,
+									augmentedMessages,
+									finishedCb,
+									token,
+									location,
+									chatEndpoint,
+									source,
+									requestOptions,
+									userInitiatedRequest,
+									{ ...telemetryProperties, isRetryAfterFilter: 'true' },
+									intentParams,
+									true,
+								);
+
+								pendingLoggedChatRequest?.resolve(retryResult, streamRecorder.deltas);
+								if (retryResult.type === ChatFetchResponseType.Success) {
+									return retryResult;
+								}
+							}
+						}
+
+						return {
+							type: ChatFetchResponseType.Filtered,
+							category: result.category,
+							reason: 'Response got filtered.',
+							requestId: result.requestId,
+							serverRequestId: result.serverRequestId
+						};
+					}
+
 					pendingLoggedChatRequest?.resolve(result, streamRecorder.deltas);
 					return result;
 				}
@@ -332,7 +387,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		baseTelemetry?: TelemetryData,
 		chatEndpointInfo?: IChatEndpoint,
 		userInitiatedRequest?: boolean
-	): Promise<ChatResponses> {
+	): Promise<ChatResponses | ChatFetchRetriableError<string[]>> {
 
 		const completions: ChatCompletion[] = [];
 
@@ -403,9 +458,10 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		switch (result?.finishReason) {
 			case FinishedCompletionReason.ContentFilter:
 				return {
-					type: ChatFetchResponseType.Filtered,
+					type: ChatFetchResponseType.FilteredRetry,
 					category: result.filterReason ?? FilterReason.Copyright,
 					reason: 'Response got filtered.',
+					value: completions.map(c => getTextPart(c.message.content)),
 					requestId: requestId,
 					serverRequestId: result.requestId.headerRequestId,
 				};

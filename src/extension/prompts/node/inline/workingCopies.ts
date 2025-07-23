@@ -51,6 +51,8 @@ export class WorkingCopyDerivedDocument {
 		return new ChatResponseStreamImpl((_value) => {
 			const value = this.applyAndTransformProgressItem(_value);
 			outputStream.push(value);
+		}, (reason) => {
+			outputStream.clear(reason);
 		});
 	}
 
