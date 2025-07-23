@@ -232,6 +232,7 @@
 	"github.copilot.tools.createAndRunTask.userDescription": "Create and run a task in the workspace",
 	"github.copilot.config.newWorkspaceCreation.enabled": "Whether to enable new agentic workspace creation.",
 	"github.copilot.config.editsNewNotebook.enabled": "Whether to enable the new notebook tool in Copilot Edits.",
+	"github.copilot.config.notebook.inlineEditAgent.enabled": "Enable agent-like behavior from the notebook inline chat widget.",
 	"github.copilot.config.summarizeAgentConversationHistory.enabled": "Whether to auto-summarize agent conversation history once the context window is filled.",
 	"github.copilot.tools.createNewWorkspace.name": "Create New Workspace",
 	"github.copilot.tools.openEmptyFolder.name": "Open an empty folder as VS Code workspace",

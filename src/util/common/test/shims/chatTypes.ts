@@ -301,14 +301,6 @@ export class AISearchKeyword {
 	constructor(public keyword: string) { }
 }
 
-export class PreparedTerminalToolInvocation {
-	constructor(
-		public readonly command: string,
-		public readonly language: string,
-		public readonly confirmationMessages?: vscode.LanguageModelToolConfirmationMessages,
-	) { }
-}
-
 export enum ChatErrorLevel {
 	Info = 0,
 	Warning = 1,
