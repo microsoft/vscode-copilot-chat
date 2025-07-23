@@ -2858,14 +2858,6 @@
 						],
 						"description": "%github.copilot.config.editsNewNotebook.enabled%"
 					},
-					"github.copilot.chat.notebook.inlineEditAgent.enabled": {
-						"type": "boolean",
-						"default": false,
-						"tags": [
-							"experimental"
-						],
-						"description": "%github.copilot.config.notebook.inlineEditAgent.enabled%"
-					},
 					"github.copilot.chat.notebook.followCellExecution.enabled": {
 						"type": "boolean",
 						"default": false,
