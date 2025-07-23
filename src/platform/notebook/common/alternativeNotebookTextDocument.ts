@@ -143,7 +143,7 @@ export class AlternativeNotebookTextDocument {
 	}
 
 	public withNotebookChanges(events: readonly NotebookDocumentContentChange[]): AlternativeNotebookTextDocument {
-		return withNotebookChangesAndEdit(this, events)[0];
+		return withNotebookChangesAndEdit(this, events, this.excludeMarkdownCells)[0];
 	}
 
 
@@ -237,8 +237,12 @@ export class AlternativeNotebookTextDocument {
 	}
 }
 
-function withNotebookChangesAndEdit(altDoc: AlternativeNotebookTextDocument, events: readonly NotebookDocumentContentChange[]): [AlternativeNotebookTextDocument, StringEdit | undefined] {
+function withNotebookChangesAndEdit(altDoc: AlternativeNotebookTextDocument, events: readonly NotebookDocumentContentChange[], excludeMarkdownCells: boolean): [AlternativeNotebookTextDocument, StringEdit | undefined] {
 	if (!events.length) {
+		return [altDoc, undefined];
+	}
+	// If we've only added md cells, then its a noop.
+	if (events.every(e => e.removedCells.length === 0 && e.addedCells.every(c => c.kind === NotebookCellKind.Markup))) {
 		return [altDoc, undefined];
 	}
 	let altCells = altDoc.altCells.slice();
@@ -246,7 +250,7 @@ function withNotebookChangesAndEdit(altDoc: AlternativeNotebookTextDocument, eve
 	const blockComment = getBlockComment(altDoc.notebook);
 	const lineCommentStart = getLineCommentStart(altDoc.notebook);
 	for (const event of events) {
-		const newCells = event.addedCells.map(cell => ({ altCell: AlternativeNotebookCellTextDocument.fromNotebookCell(cell, blockComment, lineCommentStart), startLine: 0, startOffset: 0 }));
+		const newCells = event.addedCells.filter(c => excludeMarkdownCells ? c.kind === NotebookCellKind.Code : true).map(cell => ({ altCell: AlternativeNotebookCellTextDocument.fromNotebookCell(cell, blockComment, lineCommentStart), startLine: 0, startOffset: 0 }));
 
 		const removedCells = altCells.slice(event.range.start, event.range.end);
 		let firstUnChangedCellIndex = -1;
@@ -288,7 +292,7 @@ export function editFromNotebookCellTextDocumentContentChangeEvents(notebook: Al
 }
 
 export function editFromNotebookChangeEvents(notebook: AlternativeNotebookTextDocument, events: readonly NotebookDocumentContentChange[]): StringEdit | undefined {
-	return withNotebookChangesAndEdit(notebook, events)[1];
+	return withNotebookChangesAndEdit(notebook, events, notebook.excludeMarkdownCells)[1];
 }
 
 export function toAltCellTextDocumentContentChangeEvents(notebook: AlternativeNotebookTextDocument, cellTextDocument: TextDocument, events: readonly TextDocumentContentChangeEvent[]): TextDocumentContentChangeEvent[] {

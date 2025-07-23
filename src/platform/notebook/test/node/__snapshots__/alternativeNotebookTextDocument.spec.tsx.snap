@@ -32,6 +32,18 @@ exports[`Edit Notebook Tool > Alt Content > No Content 1`] = `""`;
 
 exports[`Edit Notebook Tool > Alt Content > No Content without code cells 1`] = `""`;
 
+exports[`Edit Notebook Tool > Cell Add/Delete > Cell with 1 line > insert a code cell and markdown cell 1`] = `
+"#%% vscode.cell [id=#VSC-ad3571c0] [language=python]
+print("Hello World")
+#%% vscode.cell [id=#VSC-bdb3864a] [language=python]
+print("Foo Bar")"
+`;
+
+exports[`Edit Notebook Tool > Cell Add/Delete > Cell with 1 line > insert a markdown cell 1`] = `
+"#%% vscode.cell [id=#VSC-ad3571c0] [language=python]
+print("Hello World")"
+`;
+
 exports[`Edit Notebook Tool > Cell Add/Delete > Cell with 1 line > insert cell above 1`] = `
 "#%% vscode.cell [id=#VSC-bdb3864a] [language=python]
 print("Foo Bar")

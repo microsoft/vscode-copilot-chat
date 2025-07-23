@@ -1328,6 +1328,27 @@ describe('Edit Notebook Tool', () => {
 					removedCells: [],
 				}])).toMatchSnapshot();
 			});
+			test(`insert a code cell and markdown cell`, async () => {
+				const { notebook } = createNotebook(cells.concat([
+					new NotebookCellData(NotebookCellKind.Code, 'print("Foo Bar")', 'python'),
+					new NotebookCellData(NotebookCellKind.Markup, '# Foo Bar', 'markdown'),
+				]));
+				expect(getUpdatedAltText([{
+					addedCells: [notebook.cellAt(1)],
+					range: new NotebookRange(1, 1),
+					removedCells: [],
+				}])).toMatchSnapshot();
+			});
+			test(`insert a markdown cell`, async () => {
+				const { notebook } = createNotebook(cells.concat([
+					new NotebookCellData(NotebookCellKind.Markup, '# Foo Bar', 'markdown'),
+				]));
+				expect(getUpdatedAltText([{
+					addedCells: [notebook.cellAt(1)],
+					range: new NotebookRange(1, 1),
+					removedCells: [],
+				}])).toMatchSnapshot();
+			});
 			test(`insert cell above`, async () => {
 				const { notebook } = createNotebook(cells.concat([
 					new NotebookCellData(NotebookCellKind.Code, 'print("Foo Bar")', 'python'),
