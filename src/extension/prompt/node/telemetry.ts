@@ -74,13 +74,14 @@ export function sendUserMessageTelemetry(
 	message: string | undefined,
 	offTopic: boolean | undefined,
 	doc: TextDocumentSnapshot | undefined,
-	baseTelemetry: ConversationalBaseTelemetryData
+	baseTelemetry: ConversationalBaseTelemetryData,
+	modeName: string,
 ): void {
 	if (offTopic !== undefined) {
 		baseTelemetry = baseTelemetry.extendedBy({ offTopic: offTopic.toString() });
 	}
 	baseTelemetry = baseTelemetry.extendedBy({ headerRequestId: requestId });
-	sendConversationalMessageTelemetry(telemetryService, doc, location, message, {}, {}, baseTelemetry);
+	sendConversationalMessageTelemetry(telemetryService, doc, location, message, { mode: modeName }, {}, baseTelemetry);
 }
 
 export function sendModelMessageTelemetry(

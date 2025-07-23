@@ -65,6 +65,7 @@ export class TestModelMetadataFetcher extends ModelMetadataFetcher {
 		collectFetcherTelemetry: ((accessor: ServicesAccessor) => void) | undefined,
 		_isModelLab: boolean,
 		info: CurrentTestRunInfo | undefined,
+		private readonly _skipModelMetadataCache: boolean = false,
 		@IFetcherService _fetcher: IFetcherService,
 		@IDomainService _domainService: IDomainService,
 		@ICAPIClientService _capiClientService: ICAPIClientService,
@@ -99,6 +100,9 @@ export class TestModelMetadataFetcher extends ModelMetadataFetcher {
 		const req = new ModelMetadataRequest(type);
 
 		return await TestModelMetadataFetcher.Queues.queue(type, async () => {
+			if (this._skipModelMetadataCache) {
+				return super.getAllChatModels();
+			}
 			const result = await this.cache.get(req);
 			if (result) {
 				return result;
@@ -127,10 +131,11 @@ export class TestEndpointProvider implements IEndpointProvider {
 		private readonly embeddingModelToRunAgainst: EMBEDDING_MODEL | undefined,
 		_fastRewriteModelToRunAgainst: string | undefined,
 		info: CurrentTestRunInfo | undefined,
+		skipModelMetadataCache: boolean,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService
 	) {
-		const prodModelMetadata = this._instantiationService.createInstance(TestModelMetadataFetcher, undefined, false, info);
-		const modelLabModelMetadata = this._instantiationService.createInstance(TestModelMetadataFetcher, undefined, true, info);
+		const prodModelMetadata = this._instantiationService.createInstance(TestModelMetadataFetcher, undefined, false, info, skipModelMetadataCache);
+		const modelLabModelMetadata = this._instantiationService.createInstance(TestModelMetadataFetcher, undefined, true, info, skipModelMetadataCache);
 		this._prodChatModelMetadata = getModelMetadataMap(prodModelMetadata);
 		this._modelLabChatModelMetadata = getModelMetadataMap(modelLabModelMetadata);
 	}

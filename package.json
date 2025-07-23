@@ -22,7 +22,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.103.0-20250717",
+		"vscode": "^1.103.0-20250721",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -391,61 +391,12 @@
 				}
 			},
 			{
-				"name": "copilot_runInTerminal",
-				"toolReferenceName": "runInTerminal",
-				"displayName": "%copilot.tools.runInTerminal.name%",
-				"modelDescription": "This tool allows you to execute shell commands in a persistent terminal session, preserving environment variables, working directory, and other context across multiple commands.\n\nCommand Execution:\n- Supports multi-line commands \n\nDirectory Management:\n- Must use absolute paths to avoid navigation issues.\n\nProgram Execution:\n- Supports Python, Node.js, and other executables.\n- Install dependencies via pip, npm, etc.\n\nBackground Processes:\n- For long-running tasks (e.g., servers), set isBackground=true.\n- Returns a terminal ID for checking status and runtime later.\n\nOutput Management:\n- Output is automatically truncated if longer than 60KB to prevent context overflow\n- Use filters like 'head', 'tail', 'grep' to limit output size\n- For pager commands, disable paging: use 'git --no-pager' or add '| cat'\n\nBest Practices:\n- Be specific with commands to avoid excessive output\n- Use targeted queries instead of broad scans\n- Consider using 'wc -l' to count before listing many items",
-				"tags": [],
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"command": {
-							"type": "string",
-							"description": "The command to run in the terminal."
-						},
-						"explanation": {
-							"type": "string",
-							"description": "A one-sentence description of what the command does. This will be shown to the user before the command is run."
-						},
-						"isBackground": {
-							"type": "boolean",
-							"description": "Whether the command starts a background process. If true, the command will run in the background and you will not see the output. If false, the tool call will block on the command finishing, and then you will get the output. Examples of background processes: building in watch mode, starting a server. You can check the output of a background process later on by using copilot_getTerminalOutput."
-						}
-					},
-					"required": [
-						"command",
-						"explanation",
-						"isBackground"
-					]
-				},
-				"when": "!config.chat.agent.terminal.coreToolsEnabled"
-			},
-			{
-				"name": "copilot_getTerminalOutput",
-				"toolReferenceName": "getTerminalOutput",
-				"displayName": "%copilot.tools.getTerminalOutput.name%",
-				"modelDescription": "Get the output of a terminal command previously started with runInTerminal",
-				"tags": [],
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"id": {
-							"type": "string",
-							"description": "The ID or processID of the terminal command output to check."
-						}
-					},
-					"required": [
-						"id"
-					]
-				},
-				"when": "!config.chat.agent.terminal.coreToolsEnabled"
-			},
-			{
 				"name": "copilot_getTaskOutput",
 				"toolReferenceName": "getTaskOutput",
 				"displayName": "%copilot.tools.getTaskOutput.name%",
 				"modelDescription": "Retrieves the output of a VS Code task.\n- Use this tool when the user is trying to understand the current project state, debug issues, or analyze task-related errors, output, or status.",
 				"tags": [],
+				"when": "!config.chat.agent.terminal.newTaskToolsEnabled",
 				"inputSchema": {
 					"type": "object",
 					"properties": {
@@ -506,7 +457,7 @@
 				"icon": "$(diff)",
 				"canBeReferencedInPrompt": true,
 				"userDescription": "%copilot.tools.changes.description%",
-				"modelDescription": "Get git diffs of current file changes in a git repository. Don't forget that you can use copilot_runInTerminal to run git commands in a terminal as well.",
+				"modelDescription": "Get git diffs of current file changes in a git repository. Don't forget that you can use run_in_terminal to run git commands in a terminal as well.",
 				"tags": [
 					"vscode_codesearch"
 				],
@@ -574,9 +525,10 @@
 				"when": "config.github.copilot.chat.enableUserPreferences"
 			},
 			{
-				"name": "copilot_runTests",
-				"toolReferenceName": "runTests",
-				"canBeReferencedInPrompt": true,
+				"name": "copilot_runTests1",
+				"toolReferenceName": "runTests1",
+				"canBeReferencedInPrompt": false,
+				"when": "!chat.coreTestFailureToolEnabled",
 				"displayName": "%copilot.tools.runTests.name%",
 				"modelDescription": "Runs unit tests in files. Use this tool if the user asks to run tests or when you want to validate changes using unit tests. When possible, always try to provide `files` paths containing the relevant unit tests in order to avoid unnecessarily long test runs.",
 				"inputSchema": {
@@ -823,6 +775,7 @@
 				"displayName": "runVsCodeTask",
 				"toolReferenceName": "runTask",
 				"modelDescription": "Runs a VS Code task.\n\n- If you see that an appropriate task exists for building or running code, prefer to use this tool to run the task instead of using the run_in_terminal tool.\n- Make sure that any appropriate build or watch task is running before trying to run tests or execute code.\n- If the user asks to run a task, use this tool to do so.",
+				"when": "!config.chat.agent.terminal.newTaskToolsEnabled",
 				"inputSchema": {
 					"type": "object",
 					"properties": {
@@ -1242,15 +1195,6 @@
 					"runCell",
 					"getNotebookSummary",
 					"readNotebookCellOutput"
-				]
-			},
-			{
-				"name": "runCommands",
-				"description": "%copilot.toolSet.runCommand.description%",
-				"icon": "$(terminal)",
-				"tools": [
-					"runInTerminal",
-					"getTerminalOutput"
 				]
 			},
 			{
@@ -1761,10 +1705,36 @@
 		],
 		"languageModels": [
 			{
-				"vendor": "copilot"
+				"vendor": "copilot",
+				"displayName": "Copilot"
 			},
 			{
-				"vendor": "copilot-byok"
+				"vendor": "azure",
+				"displayName": "Azure"
+			},
+			{
+				"vendor": "anthropic",
+				"displayName": "Anthropic"
+			},
+			{
+				"vendor": "ollama",
+				"displayName": "Ollama"
+			},
+			{
+				"vendor": "openai",
+				"displayName": "OpenAI"
+			},
+			{
+				"vendor": "gemini",
+				"displayName": "Gemini"
+			},
+			{
+				"vendor": "groq",
+				"displayName": "Groq"
+			},
+			{
+				"vendor": "openrouter",
+				"displayName": "OpenRouter"
 			}
 		],
 		"interactiveSession": [
@@ -1997,6 +1967,12 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.debug.resetVirtualToolGroups",
+				"title": "%github.copilot.command.resetVirtualToolGroups%",
+				"icon": "$(inspect)",
+				"category": "Developer"
+			},
+			{
 				"command": "github.copilot.terminal.explainTerminalSelection",
 				"title": "%github.copilot.command.explainTerminalSelection%",
 				"category": "GitHub Copilot"
@@ -2129,13 +2105,6 @@
 				"title": "Feedback",
 				"icon": "$(feedback)",
 				"enablement": "!github.copilot.search.feedback.sent"
-			},
-			{
-				"command": "github.copilot.chat.manageModels",
-				"title": "Manage Models...",
-				"icon": "$(settings-gear)",
-				"category": "GitHub Copilot",
-				"enablement": "github.copilot.byokEnabled"
 			},
 			{
 				"command": "github.copilot.chat.debug.showElements",
@@ -2889,6 +2858,14 @@
 						],
 						"description": "%github.copilot.config.editsNewNotebook.enabled%"
 					},
+					"github.copilot.chat.notebook.inlineEditAgent.enabled": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental"
+						],
+						"description": "%github.copilot.config.notebook.inlineEditAgent.enabled%"
+					},
 					"github.copilot.chat.notebook.followCellExecution.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -2905,6 +2882,60 @@
 							"onExp"
 						],
 						"description": "%github.copilot.config.summarizeAgentConversationHistory.enabled%"
+					},
+					"github.copilot.chat.virtualTools.enabled": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental"
+						],
+						"description": "%github.copilot.config.virtualTools.enabled%"
+					},
+					"github.copilot.chat.azureModels": {
+						"type": "object",
+						"default": {},
+						"tags": [
+							"experimental"
+						],
+						"additionalProperties": {
+							"type": "object",
+							"properties": {
+								"name": {
+									"type": "string",
+									"description": "Display name of the Azure model"
+								},
+								"url": {
+									"type": "string",
+									"description": "URL endpoint for the Azure model"
+								},
+								"toolCalling": {
+									"type": "boolean",
+									"description": "Whether the model supports tool calling"
+								},
+								"vision": {
+									"type": "boolean",
+									"description": "Whether the model supports vision capabilities"
+								},
+								"maxInputTokens": {
+									"type": "number",
+									"description": "Maximum number of input tokens supported by the model"
+								},
+								"maxOutputTokens": {
+									"type": "number",
+									"description": "Maximum number of output tokens supported by the model"
+								}
+							},
+							"required": [
+								"name",
+								"url",
+								"toolCalling",
+								"vision",
+								"maxInputTokens",
+								"maxOutputTokens"
+							],
+							"additionalProperties": false
+						},
+						"markdownDescription": "Configure custom Azure OpenAI models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
 					}
 				}
 			}
@@ -2929,12 +2960,6 @@
 			}
 		],
 		"menus": {
-			"chat/modelPicker": [
-				{
-					"command": "github.copilot.chat.manageModels",
-					"when": "github.copilot.byokEnabled"
-				}
-			],
 			"editor/title": [
 				{
 					"command": "github.copilot.debug.generateInlineEditTests",

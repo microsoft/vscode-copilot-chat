@@ -10,15 +10,13 @@ export const enum ToolName {
 	Codebase = 'semantic_search',
 	VSCodeAPI = 'get_vscode_api',
 	TestFailure = 'test_failure',
-	RunTests = 'run_tests',
+	/** @deprecated moving to core soon */
+	RunTests = 'run_tests1',
 	FindFiles = 'file_search',
 	FindTextInFiles = 'grep_search',
 	ReadFile = 'read_file',
 	ListDirectory = 'list_dir',
 	GetErrors = 'get_errors',
-	RunInTerminal = 'run_in_terminal',
-	RunInTerminalCore = 'run_in_terminal2',
-	GetTerminalOutput = 'get_terminal_output',
 	GetScmChanges = 'get_changed_files',
 	UpdateUserPreferences = 'update_user_preferences',
 	ReadProjectStructure = 'read_project_structure',
@@ -48,7 +46,12 @@ export const enum ToolName {
 	SimpleBrowser = 'open_simple_browser',
 	CreateDirectory = 'create_directory',
 	RunVscodeCmd = 'run_vscode_command',
-	GetTaskOutput = 'get_task_output'
+	GetTaskOutput = 'get_task_output',
+
+	CoreRunInTerminal = 'run_in_terminal',
+	CoreGetTerminalOutput = 'get_terminal_output',
+	CoreRunTask = 'run__task',
+	CoreGetTaskOutput = 'get_task_output2',
 }
 
 // When updating this, also update contributedToolNameToToolNames
@@ -60,15 +63,14 @@ export const enum ContributedToolName {
 	UpdateUserPreferences = 'copilot_updateUserPreferences',
 	VSCodeAPI = 'copilot_getVSCodeAPI',
 	TestFailure = 'copilot_testFailure',
-	RunTests = 'copilot_runTests',
+	/** @deprecated moving to core soon */
+	RunTests = 'copilot_runTests1',
 	FindFiles = 'copilot_findFiles',
 	FindTextInFiles = 'copilot_findTextInFiles',
 	ReadFile = 'copilot_readFile',
 	ListDirectory = 'copilot_listDirectory',
 	GetErrors = 'copilot_getErrors',
 	DocInfo = 'copilot_getDocInfo',
-	RunInTerminal = 'copilot_runInTerminal',
-	GetTerminalOutput = 'copilot_getTerminalOutput',
 	GetScmChanges = 'copilot_getChangedFiles',
 	ReadProjectStructure = 'copilot_readProjectStructure',
 	TerminalSelection = 'copilot_getTerminalSelection',
@@ -111,8 +113,6 @@ const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>([
 	[ContributedToolName.ListDirectory, ToolName.ListDirectory],
 	[ContributedToolName.GetErrors, ToolName.GetErrors],
 	[ContributedToolName.DocInfo, ToolName.DocInfo],
-	[ContributedToolName.RunInTerminal, ToolName.RunInTerminal],
-	[ContributedToolName.GetTerminalOutput, ToolName.GetTerminalOutput],
 	[ContributedToolName.GetScmChanges, ToolName.GetScmChanges],
 	[ContributedToolName.ReadProjectStructure, ToolName.ReadProjectStructure],
 	[ContributedToolName.EditFile, ToolName.EditFile],

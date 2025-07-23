@@ -3,44 +3,44 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Disposable, lm } from 'vscode';
+import { CancellationToken, ChatResponseFragment2, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatProvider2, LanguageModelChatRequestHandleOptions, Progress } from 'vscode';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotLanguageModelWrapper } from '../../conversation/vscode-node/languageModelAccess';
-import { BYOKAuthType, BYOKGlobalKeyModelConfig, BYOKKnownModels, BYOKModelCapabilities, BYOKModelConfig, BYOKModelRegistry, BYOKPerModelConfig, chatModelInfoToProviderMetadata, isNoAuthConfig, resolveModelInfo } from '../common/byokProvider';
+import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, resolveModelInfo } from '../common/byokProvider';
 import { OpenAIEndpoint } from '../node/openAIEndpoint';
+import { IBYOKStorageService } from './byokStorageService';
+import { promptForAPIKey } from './byokUIService';
 
-/**
- * A base class to make implementing registries which provide open AI compatible models easy.
- * See Gemini, OpenRouter, and OpenAI for example extensions of this class
- */
-export abstract class BaseOpenAICompatibleBYOKRegistry implements BYOKModelRegistry {
-	private _knownModels: BYOKKnownModels | undefined;
+export abstract class BaseOpenAICompatibleLMProvider implements LanguageModelChatProvider2<LanguageModelChatInformation> {
+
+	private readonly _lmWrapper: CopilotLanguageModelWrapper;
+	private _apiKey: string | undefined;
 	constructor(
 		public readonly authType: BYOKAuthType,
-		public readonly name: string,
+		private readonly _name: string,
 		private readonly _baseUrl: string,
+		private _knownModels: BYOKKnownModels | undefined,
+		private readonly _byokStorageService: IBYOKStorageService,
 		@IFetcherService protected readonly _fetcherService: IFetcherService,
-		@ILogService private readonly _logService: ILogService,
+		@ILogService protected readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-	) { }
-
-	updateKnownModelsList(knownModels: BYOKKnownModels | undefined): void {
-		this._knownModels = knownModels;
+	) {
+		this._lmWrapper = this._instantiationService.createInstance(CopilotLanguageModelWrapper);
 	}
 
-	async getModelInfo(modelId: string, apiKey: string, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
-		return resolveModelInfo(modelId, this.name, this._knownModels, modelCapabilities);
+	protected async getModelInfo(modelId: string, apiKey: string | undefined, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
+		return resolveModelInfo(modelId, this._name, this._knownModels, modelCapabilities);
 	}
 
-	async getAllModels(apiKey: string): Promise<{ id: string; name: string }[]> {
+	protected async getAllModels(): Promise<BYOKKnownModels> {
 		try {
 			const response = await this._fetcherService.fetch(`${this._baseUrl}/models`, {
 				method: 'GET',
 				headers: {
-					'Authorization': `Bearer ${apiKey}`,
+					'Authorization': `Bearer ${this._apiKey}`,
 					'Content-Type': 'application/json'
 				}
 			});
@@ -49,42 +49,49 @@ export abstract class BaseOpenAICompatibleBYOKRegistry implements BYOKModelRegis
 			if (models.error) {
 				throw models.error;
 			}
-			const modelList: { id: string; name: string }[] = [];
+			const modelList: BYOKKnownModels = {};
 			for (const model of models.data) {
 				if (this._knownModels && this._knownModels[model.id]) {
-					modelList.push({
-						id: model.id,
-						name: this._knownModels[model.id].name,
-					});
+					modelList[model.id] = this._knownModels[model.id];
 				}
 			}
 			return modelList;
 		} catch (error) {
-			this._logService.logger.error(error, `Error fetching available ${this.name} models`);
+			this._logService.logger.error(error, `Error fetching available ${this._name} models`);
 			throw new Error(error.message ? error.message : error);
 		}
 	}
 
-	async registerModel(config: BYOKModelConfig): Promise<Disposable> {
-		const apiKey: string = isNoAuthConfig(config) ? '' : (config as BYOKPerModelConfig | BYOKGlobalKeyModelConfig).apiKey;
-		try {
-			const modelInfo: IChatModelInformation = await this.getModelInfo(config.modelId, apiKey, config.capabilities);
-
-			const lmModelMetadata = chatModelInfoToProviderMetadata(modelInfo);
-
-			const modelUrl = (config as BYOKPerModelConfig)?.deploymentUrl ?? `${this._baseUrl}/chat/completions`;
-			const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey, modelUrl);
-			const provider = this._instantiationService.createInstance(CopilotLanguageModelWrapper, openAIChatEndpoint, lmModelMetadata);
-
-			const disposable = lm.registerChatModelProvider(
-				`${this.name}-${config.modelId}`,
-				provider,
-				lmModelMetadata
-			);
-			return disposable;
-		} catch (e) {
-			this._logService.logger.error(`Error registering ${this.name} model ${config.modelId}`);
-			throw e;
+	async prepareLanguageModelChat(options: { silent: boolean }, token: CancellationToken): Promise<LanguageModelChatInformation[]> {
+		if (!this._apiKey && this.authType === BYOKAuthType.GlobalApiKey) { // If we don't have the API key it might just be in storage, so we try to read it first
+			this._apiKey = await this._byokStorageService.getAPIKey(this._name);
 		}
+		try {
+			if (this._apiKey || this.authType === BYOKAuthType.None) {
+				return byokKnownModelsToAPIInfo(this._name, await this.getAllModels());
+			} else if (options.silent && !this._apiKey) {
+				return [];
+			} else { // Not silent, and no api key = good to prompt user for api key
+				this._apiKey = await promptForAPIKey(this._name, false);
+				if (this._apiKey) {
+					this._byokStorageService.storeAPIKey(this._name, this._apiKey, BYOKAuthType.GlobalApiKey);
+					return byokKnownModelsToAPIInfo(this._name, await this.getAllModels());
+				} else {
+					return [];
+				}
+			}
+		} catch {
+			return [];
+		}
+	}
+	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: LanguageModelChatRequestHandleOptions, progress: Progress<ChatResponseFragment2>, token: CancellationToken): Promise<any> {
+		const modelInfo: IChatModelInformation = await this.getModelInfo(model.id, this._apiKey);
+		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, this._apiKey ?? '', `${this._baseUrl}/chat/completions`);
+		return this._lmWrapper.provideLanguageModelResponse(openAIChatEndpoint, messages, options, options.extensionId, progress, token);
+	}
+	async provideTokenCount(model: LanguageModelChatInformation, text: string | LanguageModelChatMessage | LanguageModelChatMessage2, token: CancellationToken): Promise<number> {
+		const modelInfo: IChatModelInformation = await this.getModelInfo(model.id, this._apiKey);
+		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, this._apiKey ?? '', `${this._baseUrl}/chat/completions`);
+		return this._lmWrapper.provideTokenCount(openAIChatEndpoint, text);
 	}
 }

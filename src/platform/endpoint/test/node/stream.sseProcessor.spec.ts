@@ -605,8 +605,9 @@ data: [DONE]
 		const thinking = thinkingData.consume('call_bNK0HIaqlEFyZK6wEz8bXDXJ');
 
 		expect(thinking).toBeDefined();
-		expect(thinking?.cot_summary).toBeUndefined();
+		expect(thinking?.cot_summary).toBeDefined();
 		expect(thinking?.cot_id).toBe('cot_a3074ac0-a8e8-4a55-bb5b-65cbb1648dcf');
+		expect(thinking?.cot_summary).toBe(' Analyzing');
 	});
 
 	test('stream containing only cot_id', async function () {
