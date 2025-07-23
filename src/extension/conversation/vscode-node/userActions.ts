@@ -333,12 +333,30 @@ export class UserFeedbackService implements IUserFeedbackService {
 			return;
 		}
 
-		const response = conversation.getLatestTurn().getMetadata(CopilotInteractiveEditorResponse);
+		// Determine the chat location based on the latest turn.
+		const location = conversation.getLatestTurn().getMetadata(IntentInvocationMetadata)?.value?.location;
+		const chatLocation = location === ChatLocation.Editor ? 'inline' : location === ChatLocation.Panel ? 'panel' : location?.toString();
+
+		// Get the turn the event is referring to.
+		// For inline chat, this is the latest turn.
+		// For panel chat, we find the turn with the matching responseId.
+		const metadata = event?.result.metadata || feedback?.result.metadata;
+		const responseId = metadata?.responseId;
+		// TODO: determine if this will quit too early for other event types.
+		if (!responseId) {
+			return;
+		}
+		const turn = location === ChatLocation.Editor ? conversation.getLatestTurn() : conversation.turns.find(t => t.responseId === responseId);
+		if (!turn) {
+			return;
+		}
+
+		const response = turn.getMetadata(CopilotInteractiveEditorResponse);
 		if (!response) {
 			return;
 		}
 
-		const interactionOutcome = conversation.getLatestTurn().getMetadata(InteractionOutcome);
+		const interactionOutcome = turn.getMetadata(InteractionOutcome);
 		if (!interactionOutcome) {
 			return;
 		}
@@ -370,7 +388,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 		let telemetryEventName: string;
 
 		const { selection, wholeRange, intent, query } = response.promptQuery;
-		const requestId = conversation?.getLatestTurn().id;
+		const requestId = turn.id;
 		const intentId = intent?.id;
 		const languageId = response.promptQuery.document.languageId;
 
@@ -385,6 +403,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 		this.surveyService.signalUsage(`inline.${intentId ?? 'default'}`, languageId);
 
 		const sharedProps = {
+			chatLocation,
 			languageId: languageId,
 			replyType: interactionOutcome.kind,
 			conversationId: sessionId,
