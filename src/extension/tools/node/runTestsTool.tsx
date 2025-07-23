@@ -26,6 +26,7 @@ export interface IRunTestToolsInput {
 	files?: string[];
 }
 
+/** @deprecated moving to core soon */
 export class RunTestsTool implements ICopilotTool<IRunTestToolsInput> {
 	public static readonly toolName = ToolName.RunTests;
 
