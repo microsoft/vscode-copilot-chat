@@ -40,6 +40,7 @@ export function resolveAzureUrl(modelId: string, url: string): string {
 
 interface AzureModelInfo extends LanguageModelChatInformation {
 	url: string;
+	thinking: boolean;
 }
 
 export class AzureBYOKModelProvider implements LanguageModelChatProvider2<AzureModelInfo> {
@@ -64,7 +65,8 @@ export class AzureBYOKModelProvider implements LanguageModelChatProvider2<AzureM
 				toolCalling: modelInfo.toolCalling,
 				vision: modelInfo.vision,
 				maxInputTokens: modelInfo.maxInputTokens,
-				maxOutputTokens: modelInfo.maxOutputTokens
+				maxOutputTokens: modelInfo.maxOutputTokens,
+				thinking: modelInfo.thinking,
 			};
 		}
 		return models;
@@ -106,6 +108,7 @@ export class AzureBYOKModelProvider implements LanguageModelChatProvider2<AzureM
 						toolCalling: capabilities.toolCalling,
 						vision: capabilities.vision
 					},
+					thinking: capabilities.thinking || false,
 				};
 			});
 		} catch {
@@ -124,7 +127,8 @@ export class AzureBYOKModelProvider implements LanguageModelChatProvider2<AzureM
 			toolCalling: !!model.capabilities?.toolCalling || false,
 			vision: !!model.capabilities?.vision || false,
 			name: model.name,
-			url: model.url
+			url: model.url,
+			thinking: model.thinking
 		});
 		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey, model.url);
 		return this._lmWrapper.provideLanguageModelResponse(openAIChatEndpoint, messages, options, options.extensionId, progress, token);
@@ -141,7 +145,8 @@ export class AzureBYOKModelProvider implements LanguageModelChatProvider2<AzureM
 			toolCalling: !!model.capabilities?.toolCalling || false,
 			vision: !!model.capabilities?.vision || false,
 			name: model.name,
-			url: model.url
+			url: model.url,
+			thinking: model.thinking
 		});
 		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey, model.url);
 		return this._lmWrapper.provideTokenCount(openAIChatEndpoint, text);

@@ -10,7 +10,7 @@ import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { ChatEndpointFamily, EmbeddingsEndpointFamily, IChatModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { AutoChatEndpoint, resolveAutoChatEndpoint } from '../../../platform/endpoint/node/autoChatEndpoint';
-import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
+import { CopilotChatEndpoint } from '../../../platform/endpoint/node/copilotChatEndpoint';
 import { EmbeddingEndpoint } from '../../../platform/endpoint/node/embeddingsEndpoint';
 import { IModelMetadataFetcher, ModelMetadataFetcher } from '../../../platform/endpoint/node/modelMetadataFetcher';
 import { applyExperimentModifications, getCustomDefaultModelExperimentConfig, ProxyExperimentEndpoint } from '../../../platform/endpoint/node/proxyExperimentEndpoint';
@@ -82,7 +82,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		const modelId = modelMetadata.id;
 		let chatEndpoint = this._chatEndpoints.get(modelId);
 		if (!chatEndpoint) {
-			chatEndpoint = this._instantiationService.createInstance(ChatEndpoint, modelMetadata);
+			chatEndpoint = this._instantiationService.createInstance(CopilotChatEndpoint, modelMetadata);
 			this._chatEndpoints.set(modelId, chatEndpoint);
 		}
 		return chatEndpoint;

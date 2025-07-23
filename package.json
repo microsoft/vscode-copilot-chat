@@ -2701,6 +2701,11 @@
 								"maxOutputTokens": {
 									"type": "number",
 									"description": "Maximum number of output tokens supported by the model"
+								},
+								"thinking": {
+									"type": "boolean",
+									"default": false,
+									"description": "Whether the model supports thinking capabilities"
 								}
 							},
 							"required": [

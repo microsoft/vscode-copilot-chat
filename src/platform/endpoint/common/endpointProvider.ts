@@ -31,6 +31,7 @@ export type IChatModelCapabilities = {
 		streaming: boolean | undefined;
 		vision?: boolean;
 		prediction?: boolean;
+		thinking?: boolean;
 	};
 };
 

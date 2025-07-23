@@ -20,6 +20,7 @@ import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from 
 import { IChatEndpoint, IEndpoint } from '../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { BaseTokensPerCompletion } from '../../../platform/tokenizer/node/tokenizer';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -262,7 +263,8 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ILogService private readonly _logService: ILogService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
-		@IEnvService private readonly _envService: IEnvService
+		@IEnvService private readonly _envService: IEnvService,
+		@IThinkingDataService private readonly _thinkingDataService: IThinkingDataService
 	) {
 		super();
 	}
@@ -414,6 +416,12 @@ export class CopilotLanguageModelWrapper extends Disposable {
 						throw new Error('Invalid JSON for tool call');
 					}
 				}
+			}
+			if (delta.thinking) {
+				// progress.report({ index, part: new vscode.LanguageModelThinkingPart(delta.thinking) });
+
+				// @karthiknadig: remove this when LM API becomes available
+				this._thinkingDataService.update(index, delta.thinking);
 			}
 			return undefined;
 		};

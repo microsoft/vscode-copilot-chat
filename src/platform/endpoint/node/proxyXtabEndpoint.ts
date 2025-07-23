@@ -13,7 +13,6 @@ import { IEnvService } from '../../env/common/envService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { IThinkingDataService } from '../../thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
@@ -59,8 +58,7 @@ export class ProxyXtabEndpoint extends ChatEndpoint {
 		@IAuthenticationService _authService: IAuthenticationService,
 		@IChatMLFetcher _chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider _tokenizerProvider: ITokenizerProvider,
-		@IInstantiationService _instantiationService: IInstantiationService,
-		@IThinkingDataService _thinkingDataService: IThinkingDataService,
+		@IInstantiationService _instantiationService: IInstantiationService
 	) {
 		const chatModelInfo = overriddenModelName === undefined
 			? ProxyXtabEndpoint.chatModelInfo
@@ -78,8 +76,7 @@ export class ProxyXtabEndpoint extends ChatEndpoint {
 			_authService,
 			_chatMLFetcher,
 			_tokenizerProvider,
-			_instantiationService,
-			_thinkingDataService
+			_instantiationService
 		);
 	}
 
