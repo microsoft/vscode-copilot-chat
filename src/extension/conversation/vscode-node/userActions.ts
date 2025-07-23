@@ -56,7 +56,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 		const conversation = result.metadata?.responseId && this.conversationStore.getConversation(result.metadata.responseId);
 
 		if (typeof conversation === 'object' && conversation.getLatestTurn().getMetadata(IntentInvocationMetadata)?.value?.location === ChatLocation.Editor) {
-			this._handleInlineChatUserAction(result.metadata?.sessionId, agentId, conversation, e, undefined);
+			this._handleChatUserAction(result.metadata?.sessionId, agentId, conversation, e, undefined);
 			return;
 		}
 
@@ -275,7 +275,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 		const conversation = result.metadata?.responseId && this.conversationStore.getConversation(result.metadata.responseId);
 
 		if (typeof conversation === 'object' && conversation.getLatestTurn().getMetadata(CopilotInteractiveEditorResponse)) {
-			this._handleInlineChatUserAction(result.metadata?.sessionId, agentId, conversation, undefined, e);
+			this._handleChatUserAction(result.metadata?.sessionId, agentId, conversation, undefined, e);
 			return;
 		}
 
@@ -319,7 +319,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 	// --- inline
 
 
-	private _handleInlineChatUserAction(sessionId: string | undefined, _agentId: string, conversation: Conversation, event: vscode.ChatUserActionEvent | undefined, feedback: vscode.ChatResultFeedback | undefined) {
+	private _handleChatUserAction(sessionId: string | undefined, _agentId: string, conversation: Conversation, event: vscode.ChatUserActionEvent | undefined, feedback: vscode.ChatResultFeedback | undefined) {
 
 		enum InteractiveEditorResponseFeedbackKind {
 			Unhelpful = 0,
