@@ -25,3 +25,12 @@ export const GROUP_WITHIN_TOOLSET = HARD_TOOL_LIMIT / 8; // 16, currently
 
 /** Minimum number of tools in a toolset to group, vs always just including them individually. */
 export const MIN_TOOLSET_SIZE_TO_GROUP = 2;
+
+/** Max number of times to retrying categorization in the event of failures. */
+export const MAX_CATEGORIZATION_RETRIES = 3;
+
+/** Name for the group containing tools that could not be automatically categorized */
+export const UNCATEGORIZED_TOOLS_GROUP_NAME = 'uncategorized_tools';
+
+/** Summary for the group containing tools that could not be automatically categorized */
+export const UNCATEGORIZED_TOOLS_GROUP_SUMMARY = 'Tools that could not be automatically categorized into existing groups.';
