@@ -346,7 +346,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 		if (!responseId) {
 			return;
 		}
-		const turn = location === ChatLocation.Editor ? conversation.getLatestTurn() : conversation.turns.find(t => t.responseId === responseId);
+		const turn = location === ChatLocation.Editor ? conversation.getLatestTurn() : conversation.turns.find(t => t.id === responseId);
 		if (!turn) {
 			return;
 		}
