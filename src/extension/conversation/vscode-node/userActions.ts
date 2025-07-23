@@ -400,7 +400,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 		);
 		const isNotebookDocument = isNotebookCellOrNotebookChatInput(response.promptQuery.document.uri) ? 1 : 0;
 
-		this.surveyService.signalUsage(`${chatLocation}.${intentId ?? 'default'}`, languageId);
+		this.surveyService.signalUsage(`inline.${intentId ?? 'default'}`, languageId);
 
 		const sharedProps = {
 			chatLocation,
@@ -468,7 +468,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 					"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the document is a notebook" }
 				}
 			*/
-			this.telemetryService.sendMSFTTelemetryEvent(`${chatLocation}.action.vote`, {
+			this.telemetryService.sendMSFTTelemetryEvent('inline.action.vote', {
 				...sharedProps,
 				reason: feedback?.unhelpfulReason,
 			}, {
@@ -498,7 +498,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 					"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the document is a notebook." }
 				}
 			*/
-			this.telemetryService.sendMSFTTelemetryEvent(`${chatLocation}.done`, sharedProps, {
+			this.telemetryService.sendMSFTTelemetryEvent('inline.done', sharedProps, {
 				...sharedMeasures, accepted
 			});
 			sendInternalTelemetryEvent('interactiveSessionDone', { accepted });
@@ -507,19 +507,19 @@ export class UserFeedbackService implements IUserFeedbackService {
 		switch (kind) {
 			case InteractiveEditorResponseFeedbackKind.Helpful:
 				userActionProperties['rating'] = 'positive';
-				telemetryEventName = `${chatLocation}.messageRating`;
+				telemetryEventName = 'inlineConversation.messageRating';
 				break;
 			case InteractiveEditorResponseFeedbackKind.Unhelpful:
 				userActionProperties['rating'] = 'negative';
-				telemetryEventName = `${chatLocation}.messageRating`;
+				telemetryEventName = 'inlineConversation.messageRating';
 				break;
 			case InteractiveEditorResponseFeedbackKind.Undone:
 				userActionProperties['action'] = 'undo';
-				telemetryEventName = `${chatLocation}.undo`;
+				telemetryEventName = 'inlineConversation.undo';
 				break;
 			case InteractiveEditorResponseFeedbackKind.Accepted:
 				userActionProperties['action'] = 'accept';
-				telemetryEventName = `${chatLocation}.accept`;
+				telemetryEventName = 'inlineConversation.accept';
 				break;
 			case InteractiveEditorResponseFeedbackKind.Bug:
 				// internal
