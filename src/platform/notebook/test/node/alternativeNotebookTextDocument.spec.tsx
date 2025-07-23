@@ -10,7 +10,7 @@ import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { NotebookCellData, NotebookCellKind, NotebookData, NotebookRange, Range } from '../../../../vscodeTypes';
-import { createAlternativeNotebookDocument, createAlternativeNotebookDocumentSnapshot, editFromNotebookCellTextDocumentContentChangeEvents, editFromNotebookChangeEvents, fromAltTextDocumentContentChangeEvents, IAlternativeNotebookDocument, IAlternativeNotebookDocumentSnapshot } from '../../common/alternativeNotebookTextDocument';
+import { createAlternativeNotebookDocument, createAlternativeNotebookDocumentSnapshot, fromAltTextDocumentContentChangeEvents, IAlternativeNotebookDocument, IAlternativeNotebookDocumentSnapshot, toAltNotebookCellChangeEdit, toAltNotebookChangeEdit } from '../../common/alternativeNotebookTextDocument';
 
 describe('Edit Notebook Tool', () => {
 	const disposables = new DisposableStore();
@@ -205,7 +205,7 @@ describe('Edit Notebook Tool', () => {
 			});
 			function getUpdatedAltText(e: TextDocumentChangeEvent): string {
 				const newDoc = altDocSnapshot.withCellChanges(e.document, e.contentChanges);
-				const edit = editFromNotebookCellTextDocumentContentChangeEvents(altDocSnapshot, e.document, e.contentChanges);
+				const edit = toAltNotebookCellChangeEdit(altDocSnapshot, e.document, e.contentChanges);
 				const updatedAltText = newDoc.getText();
 				altDoc.applyCellChanges(e.document, e.contentChanges);
 
@@ -308,7 +308,7 @@ describe('Edit Notebook Tool', () => {
 			});
 			function getUpdatedAltText(e: TextDocumentChangeEvent): string {
 				const newDoc = altDocSnapshot.withCellChanges(e.document, e.contentChanges);
-				const edit = editFromNotebookCellTextDocumentContentChangeEvents(altDocSnapshot, e.document, e.contentChanges);
+				const edit = toAltNotebookCellChangeEdit(altDocSnapshot, e.document, e.contentChanges);
 				const updatedAltText = newDoc.getText();
 				altDoc.applyCellChanges(e.document, e.contentChanges);
 
@@ -479,7 +479,7 @@ describe('Edit Notebook Tool', () => {
 			});
 			function getUpdatedAltText(e: TextDocumentChangeEvent): string {
 				const newDoc = altDocSnapshot.withCellChanges(e.document, e.contentChanges);
-				const edit = editFromNotebookCellTextDocumentContentChangeEvents(altDocSnapshot, e.document, e.contentChanges);
+				const edit = toAltNotebookCellChangeEdit(altDocSnapshot, e.document, e.contentChanges);
 				altDoc.applyCellChanges(e.document, e.contentChanges);
 
 				const updatedAltText = newDoc.getText();
@@ -653,7 +653,7 @@ describe('Edit Notebook Tool', () => {
 			});
 			function getUpdatedAltText(e: TextDocumentChangeEvent): string {
 				const newDoc = altDocSnapshot.withCellChanges(e.document, e.contentChanges);
-				const edit = editFromNotebookCellTextDocumentContentChangeEvents(altDocSnapshot, e.document, e.contentChanges);
+				const edit = toAltNotebookCellChangeEdit(altDocSnapshot, e.document, e.contentChanges);
 				const updatedAltText = newDoc.getText();
 				altDoc.applyCellChanges(e.document, e.contentChanges);
 
@@ -1319,7 +1319,7 @@ describe('Edit Notebook Tool', () => {
 			function getUpdatedAltText(e: NotebookDocumentContentChange[]): string {
 				const originalText = altDocSnapshot.getText();
 				const newDoc = altDocSnapshot.withNotebookChanges(e);
-				const edit = editFromNotebookChangeEvents(altDocSnapshot, e);
+				const edit = toAltNotebookChangeEdit(altDocSnapshot, e);
 				const updatedAltText = newDoc.getText();
 				altDoc.applyNotebookChanges(e);
 				if (edit) {
@@ -1435,7 +1435,7 @@ describe('Edit Notebook Tool', () => {
 			function getUpdatedAltText(e: NotebookDocumentContentChange[]): string {
 				const originalText = altDocSnapshot.getText();
 				const newDoc = altDocSnapshot.withNotebookChanges(e);
-				const edit = editFromNotebookChangeEvents(altDocSnapshot, e);
+				const edit = toAltNotebookChangeEdit(altDocSnapshot, e);
 				altDoc.applyNotebookChanges(e);
 				const updatedAltText = newDoc.getText();
 				if (edit) {

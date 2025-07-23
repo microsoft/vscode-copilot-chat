@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { NotebookCell, NotebookDocument, NotebookDocumentContentChange, TextDocument, TextDocumentContentChangeEvent } from 'vscode';
+import type { Diagnostic, DiagnosticRelatedInformation, NotebookCell, NotebookDocument, NotebookDocumentContentChange, TextDocument, TextDocumentContentChangeEvent } from 'vscode';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { findLastIdxMonotonous } from '../../../util/vs/base/common/arraysFind';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
@@ -14,6 +14,8 @@ import { PositionOffsetTransformer } from '../../editing/common/positionOffsetTr
 import { generateCellTextMarker, getBlockComment, getLineCommentStart } from './alternativeContentProvider.text';
 import { EOL, summarize } from './helpers';
 import { CrLfOffsetTranslator } from './offsetTranslator';
+import { ResourceMap } from '../../../util/vs/base/common/map';
+import { isEqual } from '../../../util/vs/base/common/resources';
 
 
 class AlternativeNotebookCellSnapshot {
@@ -369,16 +371,16 @@ export function createAlternativeNotebookDocumentSnapshot(notebook: NotebookDocu
 	return AlternativeNotebookDocumentSnapshot.create(notebook, excludeMarkdownCells);
 }
 
-export function editFromNotebookCellTextDocumentContentChangeEvents(notebook: AbstractAlternativeNotebookDocument, cellTextDocument: TextDocument, events: readonly TextDocumentContentChangeEvent[]): StringEdit {
+export function toAltNotebookCellChangeEdit(notebook: AbstractAlternativeNotebookDocument, cellTextDocument: TextDocument, events: readonly TextDocumentContentChangeEvent[]): StringEdit {
 	const replacementsInApplicationOrder = toAltCellTextDocumentContentChangeEvents(notebook, cellTextDocument, events);
 	return stringEditFromTextContentChange(replacementsInApplicationOrder);
 }
 
-export function editFromNotebookChangeEvents(notebook: AbstractAlternativeNotebookDocument, events: readonly NotebookDocumentContentChange[]): StringEdit | undefined {
+export function toAltNotebookChangeEdit(notebook: AbstractAlternativeNotebookDocument, events: readonly NotebookDocumentContentChange[]): StringEdit | undefined {
 	return withNotebookChangesAndEdit(notebook.cells, notebook.blockComment, notebook.lineCommentStart, events, notebook.excludeMarkdownCells)[1];
 }
 
-export function toAltCellTextDocumentContentChangeEvents(notebook: AbstractAlternativeNotebookDocument, cellTextDocument: TextDocument, events: readonly TextDocumentContentChangeEvent[]): TextDocumentContentChangeEvent[] {
+function toAltCellTextDocumentContentChangeEvents(notebook: AbstractAlternativeNotebookDocument, cellTextDocument: TextDocument, events: readonly TextDocumentContentChangeEvent[]): TextDocumentContentChangeEvent[] {
 	return coalesce(events.map(e => {
 		const cell = notebook.getCell(cellTextDocument);
 		if (!cell) {
@@ -487,4 +489,40 @@ export function fromAltTextDocumentContentChangeEvents(notebook: AbstractAlterna
 	}
 
 	return Array.from(cellChanges.entries());
+}
+
+export function toAltDiagnostics(notebook: AbstractAlternativeNotebookDocument, cell: NotebookCell, diagnostics: readonly Diagnostic[]): Diagnostic[] {
+	const cellUris = new ResourceMap(notebook.cells.map(cell => [cell.altCell.cell.document.uri, cell.altCell.cell] as const));
+	if (!cellUris.get(cell.document.uri)) {
+		return [];
+	}
+	return coalesce(diagnostics.map(diagnostic => toAltDiagnostic(notebook, cell, diagnostic)));
+}
+
+function toAltDiagnostic(notebook: AbstractAlternativeNotebookDocument, cell: NotebookCell, diagnostic: Diagnostic): Diagnostic | undefined {
+	const altDiagnostic = { ...diagnostic };
+	const altRanges = notebook.toAltRange(cell, [diagnostic.range]);
+	if (!altRanges.length) {
+		return;
+	}
+	altDiagnostic.range = altRanges[0];
+	if (altDiagnostic.relatedInformation) {
+		altDiagnostic.relatedInformation = coalesce(altDiagnostic.relatedInformation.map(info => {
+			if (!isEqual(info.location.uri, cell.document.uri)) {
+				return info;
+			}
+			const altRange = notebook.toAltRange(cell, [info.location.range]);
+			if (!altRange.length) {
+				return;
+			}
+			return {
+				...info,
+				location: {
+					uri: notebook.notebook.uri,
+					range: altRange[0],
+				},
+			} satisfies DiagnosticRelatedInformation;
+		}));
+	}
+	return altDiagnostic;
 }
