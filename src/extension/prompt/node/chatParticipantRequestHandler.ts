@@ -278,12 +278,10 @@ export class ChatParticipantRequestHandler {
 	}
 
 	private async selectIntent(command: CommandDetails | undefined, history: Turn[]): Promise<IIntent> {
-		if (!command?.intent && (this.location === ChatLocation.Editor || this.location === ChatLocation.Notebook)) { // TODO@jrieken do away with location specific code
+		if (!command?.intent && this.location === ChatLocation.Editor) { // TODO@jrieken do away with location specific code
 
 			let preferredIntent: Intent | undefined;
-			if (this.documentContext && this.location === ChatLocation.Notebook) {
-				preferredIntent = Intent.notebookEditor;
-			} else if (this.documentContext && this.request.attempt === 0 && history.length === 0) {
+			if (this.documentContext && this.request.attempt === 0 && history.length === 0) {
 				if (this.documentContext.selection.isEmpty && this.documentContext.document.lineAt(this.documentContext.selection.start.line).text.trim() === '') {
 					preferredIntent = Intent.Generate;
 				} else if (!this.documentContext.selection.isEmpty && this.documentContext.selection.start.line !== this.documentContext.selection.end.line) {
