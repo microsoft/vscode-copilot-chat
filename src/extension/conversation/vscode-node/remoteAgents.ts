@@ -361,6 +361,7 @@ export class RemoteAgentContribution implements IDisposable {
 					},
 					id: selectedEndpoint.model,
 					name: selectedEndpoint.name,
+					vendor: 'copilot',
 					version: selectedEndpoint.version,
 				}, agentData ? { type: RequestType.RemoteAgentChat, slug: agentData.slug } : { type: RequestType.RemoteAgentChat });
 

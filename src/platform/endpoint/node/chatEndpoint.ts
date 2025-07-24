@@ -144,6 +144,7 @@ export class ChatEndpoint implements IChatEndpoint {
 	private readonly _maxOutputTokens: number;
 	public readonly model: string;
 	public readonly name: string;
+	public readonly vendor: string;
 	public readonly version: string;
 	public readonly family: string;
 	public readonly tokenizer: TokenizerType;
@@ -178,6 +179,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		this._maxOutputTokens = _modelMetadata.capabilities.limits?.max_output_tokens ?? 4096;
 		this.model = _modelMetadata.id;
 		this.name = _modelMetadata.name;
+		this.vendor = _modelMetadata.vendor;
 		this.version = _modelMetadata.version;
 		this.family = _modelMetadata.capabilities.family;
 		this.tokenizer = _modelMetadata.capabilities.tokenizer;

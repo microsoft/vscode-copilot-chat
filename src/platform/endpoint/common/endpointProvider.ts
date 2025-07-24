@@ -60,7 +60,7 @@ export interface IModelAPIResponse {
 	capabilities: IChatModelCapabilities | IEmbeddingModelCapabilities | ICompletionsModelCapabilities;
 }
 
-export type IChatModelInformation = IModelAPIResponse & { capabilities: IChatModelCapabilities };
+export type IChatModelInformation = IModelAPIResponse & { capabilities: IChatModelCapabilities } & { vendor: string };
 export type IEmbeddingModelInformation = IModelAPIResponse & { capabilities: IEmbeddingModelCapabilities };
 
 export function isChatModelInformation(model: IModelAPIResponse): model is IChatModelInformation {

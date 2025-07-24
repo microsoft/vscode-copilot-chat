@@ -29,12 +29,14 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	public readonly isFallback: boolean = false;
 	public readonly isPremium: boolean = false;
 	public readonly multiplier: number = 0;
+	public readonly vendor: string;
 
 	constructor(
 		private readonly languageModel: vscode.LanguageModelChat,
 		@ITokenizerProvider private readonly _tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService
 	) {
+		this.vendor = languageModel.vendor;
 		// Initialize with the model's max tokens
 		this._maxTokens = languageModel.maxInputTokens;
 	}

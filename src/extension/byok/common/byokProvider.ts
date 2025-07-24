@@ -110,6 +110,7 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 	return {
 		id: modelId,
 		name: modelName,
+		vendor: 'copilot-byok',
 		version: '1.0.0',
 		capabilities: {
 			type: 'chat',

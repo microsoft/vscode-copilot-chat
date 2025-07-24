@@ -42,6 +42,7 @@ export class MockEndpoint implements IChatEndpoint {
 	name: string = 'test';
 	version: string = '1.0';
 	family: string = 'test';
+	vendor: string = 'copilot';
 	tokenizer: TokenizerType = TokenizerType.O200K;
 
 	processResponseFromChatEndpoint(telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData, cancellationToken?: CancellationToken): Promise<AsyncIterableObject<ChatCompletion>> {

@@ -80,7 +80,8 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		const modelId = modelMetadata.id;
 		let chatEndpoint = this._chatEndpoints.get(modelId);
 		if (!chatEndpoint) {
-			chatEndpoint = this._instantiationService.createInstance(ChatEndpoint, modelMetadata);
+			// Overwrite the vendor information from the API endpoint, e.g Azure OpenAI
+			chatEndpoint = this._instantiationService.createInstance(ChatEndpoint, { ...modelMetadata, vendor: 'copilot' });
 			this._chatEndpoints.set(modelId, chatEndpoint);
 		}
 		return chatEndpoint;
@@ -105,6 +106,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 			return this.getOrCreateChatEndpointInstance({
 				id: this._overridenChatModel,
 				name: 'Custom Overriden Chat Model',
+				vendor: 'custom',
 				version: '1.0.0',
 				model_picker_enabled: true,
 				is_chat_default: false,

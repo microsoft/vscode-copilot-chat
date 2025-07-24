@@ -28,6 +28,7 @@ class FakeModelMetadataFetcher implements IModelMetadataFetcher {
 		return {
 			id: modelId,
 			name: 'fake-name',
+			vendor: 'fake',
 			version: 'fake-version',
 			model_picker_enabled: false,
 			is_chat_default: false,

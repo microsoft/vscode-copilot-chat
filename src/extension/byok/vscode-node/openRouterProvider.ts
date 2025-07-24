@@ -80,6 +80,7 @@ export class OpenRouterBYOKModelRegistry extends BaseOpenAICompatibleBYOKRegistr
 		const modelInfo: IChatModelInformation = {
 			id: model.id,
 			name: model.name.includes(':') ? model.name : `${this.name}: ${model.name}`,
+			vendor: 'openrouter',
 			version: '1.0.0',
 			capabilities: {
 				type: 'chat',

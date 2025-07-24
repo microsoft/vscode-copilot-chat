@@ -44,6 +44,7 @@ export class AutoChatEndpoint implements IChatEndpoint {
 	name: string = 'Auto';
 	version: string = 'auto';
 	family: string = 'auto';
+	vendor: string = 'auto';
 	tokenizer: TokenizerType = TokenizerType.O200K;
 
 	constructor(

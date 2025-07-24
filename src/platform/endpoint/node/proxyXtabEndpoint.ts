@@ -25,6 +25,7 @@ export class ProxyXtabEndpoint extends ChatEndpoint {
 	private static chatModelInfo: IChatModelInformation = {
 		id: CHAT_MODEL.NES_XTAB,
 		name: 'xtab-proxy',
+		vendor: 'xtab',
 		model_picker_enabled: false,
 		is_chat_default: false,
 		is_chat_fallback: false,

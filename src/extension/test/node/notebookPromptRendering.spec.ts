@@ -270,6 +270,7 @@ describe('Notebook Prompt Rendering', function () {
 			tokenizer: TokenizerType.O200K,
 			name: 'Test',
 			family: 'Test',
+			vendor: 'Test',
 			version: 'Test',
 			policy: 'enabled',
 			showInModelPicker: false,

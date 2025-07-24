@@ -42,6 +42,7 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 		const modelInfo: IChatModelInformation = {
 			id: model,
 			name: model,
+			vendor: 'proxy',
 			version: 'unknown',
 			model_picker_enabled: false,
 			is_chat_default: false,

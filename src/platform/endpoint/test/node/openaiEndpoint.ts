@@ -38,6 +38,7 @@ export class OpenAITestEndpoint extends ChatEndpoint {
 		const modelInfo: IChatModelInformation = {
 			id: _openaiModel,
 			name: 'Open AI Test Model',
+			vendor: 'copilot',
 			version: '20250108',
 			model_picker_enabled: false,
 			is_chat_default: false,

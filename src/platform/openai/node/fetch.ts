@@ -179,7 +179,7 @@ export async function fetchAndStreamChat(
 		return { type: FetchResponseKind.Canceled, reason: 'after fetch request' };
 	}
 
-	const isCopilotModel = !chatEndpointInfo.model.startsWith('models/');
+	const isCopilotModel = chatEndpointInfo.vendor === 'copilot';
 
 	if (response.status === 200 && isCopilotModel && authenticationService.copilotToken?.isFreeUser && authenticationService.copilotToken?.isChatQuotaExceeded) {
 		authenticationService.resetCopilotToken();
