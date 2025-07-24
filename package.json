@@ -2798,57 +2798,6 @@
 						],
 						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
 					},
-					"github.copilot.chat.agent.terminal.allowList": {
-						"type": "object",
-						"default": {},
-						"additionalProperties": {
-							"type": "boolean",
-							"enum": [
-								true,
-								false
-							],
-							"enumDescriptions": [
-								"%github.copilot.config.agent.terminal.allowList.value.true%",
-								"%github.copilot.config.agent.terminal.allowList.value.false%"
-							],
-							"description": "%github.copilot.config.agent.terminal.allowList.key%"
-						},
-						"tags": [
-							"experimental"
-						],
-						"markdownDescription": "%github.copilot.config.agent.terminal.allowList%"
-					},
-					"github.copilot.chat.agent.terminal.denyList": {
-						"type": "object",
-						"default": {
-							"rm": true,
-							"rmdir": true,
-							"del": true,
-							"kill": true,
-							"curl": true,
-							"wget": true,
-							"eval": true,
-							"chmod": true,
-							"chown": true,
-							"Remove-Item": true
-						},
-						"additionalProperties": {
-							"type": "boolean",
-							"enum": [
-								true,
-								false
-							],
-							"enumDescriptions": [
-								"%github.copilot.config.agent.terminal.denyList.value.true%",
-								"%github.copilot.config.agent.terminal.denyList.value.false%"
-							],
-							"description": "%github.copilot.config.agent.terminal.denyList.key%"
-						},
-						"tags": [
-							"experimental"
-						],
-						"markdownDescription": "%github.copilot.config.agent.terminal.denyList%"
-					},
 					"github.copilot.chat.edits.newNotebook.enabled": {
 						"type": "boolean",
 						"default": true,
