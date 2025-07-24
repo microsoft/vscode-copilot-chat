@@ -765,19 +765,6 @@ export namespace ConfigKey {
 	export const SummarizeAgentConversationHistory = defineExpSetting<boolean>('chat.summarizeAgentConversationHistory.enabled', true);
 	export const VirtualTools = defineExpSetting<boolean>('chat.virtualTools.enabled', false);
 	export const CurrentEditorAgentContext = defineSetting<boolean>('chat.agent.currentEditorContext.enabled', true);
-	export const TerminalAllowList = defineSetting<{ [key: string]: boolean }>('chat.agent.terminal.allowList', {});
-	export const TerminalDenyList = defineSetting<{ [key: string]: boolean }>('chat.agent.terminal.denyList', {
-		"rm": true,
-		"rmdir": true,
-		"del": true,
-		"kill": true,
-		"curl": true,
-		"wget": true,
-		"eval": true,
-		"chmod": true,
-		"chown": true,
-		"Remove-Item": true
-	});
 	/** BYOK  */
 	export const OllamaEndpoint = defineSetting<string>('chat.byok.ollamaEndpoint', 'http://localhost:11434');
 	export const AzureModels = defineSetting<Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number }>>('chat.azureModels', {});

@@ -496,33 +496,6 @@
 				"when": "config.github.copilot.chat.enableUserPreferences"
 			},
 			{
-				"name": "copilot_runTests1",
-				"toolReferenceName": "runTests1",
-				"canBeReferencedInPrompt": false,
-				"when": "!chat.coreTestFailureToolEnabled",
-				"displayName": "%copilot.tools.runTests.name%",
-				"modelDescription": "Runs unit tests in files. Use this tool if the user asks to run tests or when you want to validate changes using unit tests. When possible, always try to provide `files` paths containing the relevant unit tests in order to avoid unnecessarily long test runs.",
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"files": {
-							"type": "array",
-							"items": {
-								"type": "string"
-							},
-							"description": "Test files to run. If not provided, all test files will be run."
-						}
-					}
-				},
-				"tags": [
-					"vscode_editing_with_tests",
-					"enable_other_tool_copilot_readFile",
-					"enable_other_tool_copilot_listDirectory",
-					"enable_other_tool_copilot_findFiles",
-					"enable_other_tool_copilot_runTests"
-				]
-			},
-			{
 				"name": "copilot_getTerminalSelection",
 				"toolReferenceName": "terminalSelection",
 				"displayName": "%github.copilot.tools.terminalSelection.name%",
@@ -2661,57 +2634,6 @@
 							"experimental"
 						],
 						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
-					},
-					"github.copilot.chat.agent.terminal.allowList": {
-						"type": "object",
-						"default": {},
-						"additionalProperties": {
-							"type": "boolean",
-							"enum": [
-								true,
-								false
-							],
-							"enumDescriptions": [
-								"%github.copilot.config.agent.terminal.allowList.value.true%",
-								"%github.copilot.config.agent.terminal.allowList.value.false%"
-							],
-							"description": "%github.copilot.config.agent.terminal.allowList.key%"
-						},
-						"tags": [
-							"experimental"
-						],
-						"markdownDescription": "%github.copilot.config.agent.terminal.allowList%"
-					},
-					"github.copilot.chat.agent.terminal.denyList": {
-						"type": "object",
-						"default": {
-							"rm": true,
-							"rmdir": true,
-							"del": true,
-							"kill": true,
-							"curl": true,
-							"wget": true,
-							"eval": true,
-							"chmod": true,
-							"chown": true,
-							"Remove-Item": true
-						},
-						"additionalProperties": {
-							"type": "boolean",
-							"enum": [
-								true,
-								false
-							],
-							"enumDescriptions": [
-								"%github.copilot.config.agent.terminal.denyList.value.true%",
-								"%github.copilot.config.agent.terminal.denyList.value.false%"
-							],
-							"description": "%github.copilot.config.agent.terminal.denyList.key%"
-						},
-						"tags": [
-							"experimental"
-						],
-						"markdownDescription": "%github.copilot.config.agent.terminal.denyList%"
 					},
 					"github.copilot.chat.edits.newNotebook.enabled": {
 						"type": "boolean",
