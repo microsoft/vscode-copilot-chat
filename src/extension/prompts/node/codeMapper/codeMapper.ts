@@ -117,8 +117,21 @@ export async function processFullRewrite(uri: Uri, document: TextDocumentSnapsho
 }
 
 async function processFullRewriteStream(uri: Uri, existingDocument: TextDocumentSnapshot | undefined, inputStream: AsyncIterable<LineOfText>, outputStream: MappedEditsResponseStream, token: CancellationToken, pushedLines: string[] = []) {
+	// Emits text edits to the output stream for each line of code from the input stream, updating the document line-by-line.
+	// Handles skipping initial </think> tags, and returns the array of pushed lines.
+	let state = 'skip';
 	for await (const line of inputStream) {
-		emitCodeLine(line.value, uri, existingDocument, outputStream, pushedLines, token);
+		if (state === 'skip' && line.value.startsWith('</think>')) {
+			state = 'oneMore';
+			continue;
+		} else if (state === 'oneMore') {
+			state = 'emit';
+			continue;
+		}
+
+		if (state === 'emit') {
+			emitCodeLine(line.value, uri, existingDocument, outputStream, pushedLines, token);
+		}
 	}
 
 	return pushedLines;
