@@ -46,6 +46,7 @@ import { ITestInformation } from '../testInformation';
 import { IInlineEditBaseFile, ILoadedFile } from './fileLoading';
 import { inlineEditScoringService } from './inlineEditScoringService';
 import { SpyingServerPoweredNesProvider } from './spyingServerPoweredNesProvider';
+import { INotebookService } from '../../../src/platform/notebook/common/notebookService';
 
 export interface IInlineEditTest {
 	recentEdit: IInlineEditTestDocument | IInlineEditTestDocument[];
@@ -129,6 +130,7 @@ export class InlineEditTester {
 		const configService = accessor.get(IConfigurationService);
 		const expService = accessor.get(IExperimentationService);
 		const gitExtensionService = accessor.get(IGitExtensionService);
+		const notebookService = accessor.get(INotebookService);
 
 		const history = historyContextProvider.getHistoryContext(docId)!;
 		let i = 0;
@@ -167,7 +169,7 @@ export class InlineEditTester {
 		const activeDocument = historyContext.getMostRecentDocument(); // TODO
 		const context: InlineCompletionContext = { triggerKind: 1, selectedCompletionInfo: undefined, requestUuid: generateUuid() };
 		const logContext = new InlineEditRequestLogContext(activeDocument.docId.toString(), 1, context);
-		const telemetryBuilder = new NextEditProviderTelemetryBuilder(gitExtensionService, nextEditProvider.ID, workspace.getDocument(activeDocument.docId)!);
+		const telemetryBuilder = new NextEditProviderTelemetryBuilder(gitExtensionService, notebookService, nextEditProvider.ID, workspace.getDocument(activeDocument.docId)!);
 
 		let nextEditResult: NextEditResult;
 		try {
