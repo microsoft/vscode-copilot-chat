@@ -24,6 +24,8 @@ export type IModelConfig = {
 	id: string;
 	name: string;
 	version: string;
+	type: 'openai' | 'azureOpenai';
+	useDeveloperRole: boolean;
 	capabilities: {
 		supports: {
 			parallel_tool_calls: boolean;
@@ -64,7 +66,7 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 			is_chat_fallback: false,
 			capabilities: {
 				type: 'chat',
-				family: 'openai',
+				family: modelConfig.type === 'azureOpenai' ? 'azure' : 'openai',
 				tokenizer: TokenizerType.O200K,
 				supports: {
 					parallel_tool_calls: modelConfig.capabilities.supports.parallel_tool_calls,
@@ -105,6 +107,13 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 			throw new Error(`API key environment variable ${this.modelConfig.apiKeyEnvName} is not set`);
 		}
 
+		if (this.modelConfig.type === 'azureOpenai') {
+			return {
+				"api-key": apiKey,
+				"Content-Type": "application/json",
+			};
+		}
+
 		return {
 			"Authorization": `Bearer ${apiKey}`,
 			"Content-Type": "application/json",
@@ -112,19 +121,26 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 	}
 
 	override interceptBody(body: IEndpointBody | undefined): void {
-		if (!body) {
-			return;
-		}
-		const newMessages = body.messages!.map((message: CAPIChatMessage) => {
-			if (message.role === OpenAI.ChatRole.System) {
-				return { role: 'developer' as OpenAI.ChatRole.System, content: message.content };
+		super.interceptBody(body);
+		if (this.modelConfig.type === 'azureOpenai') {
+			if (body) {
+				delete body.snippy;
+				delete body.intent;
 			}
-			return message;
-		});
-		Object.keys(body).forEach(key => delete (body as any)[key]);
-		body.model = this.modelConfig.id; //TODO: is id the right field?
-		body.messages = newMessages;
-		body.stream = false;
+		}
+
+		if (this.modelConfig.useDeveloperRole && body) {
+			const newMessages = body.messages!.map((message: CAPIChatMessage) => {
+				if (message.role === OpenAI.ChatRole.System) {
+					return { role: 'developer' as OpenAI.ChatRole.System, content: message.content };
+				}
+				return message;
+			});
+			Object.keys(body).forEach(key => delete (body as any)[key]);
+			body.model = this.modelConfig.id; //TODO: is id the right field?
+			body.messages = newMessages;
+			body.stream = false;
+		}
 	}
 
 	override async acceptChatPolicy(): Promise<boolean> {
