@@ -10,8 +10,7 @@ export const enum ToolName {
 	Codebase = 'semantic_search',
 	VSCodeAPI = 'get_vscode_api',
 	TestFailure = 'test_failure',
-	/** @deprecated moving to core soon */
-	RunTests = 'run_tests1',
+	RunTests = 'run_tests',
 	FindFiles = 'file_search',
 	FindTextInFiles = 'grep_search',
 	ReadFile = 'read_file',
@@ -106,7 +105,6 @@ const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>([
 	[ContributedToolName.Usages, ToolName.Usages],
 	[ContributedToolName.VSCodeAPI, ToolName.VSCodeAPI],
 	[ContributedToolName.TestFailure, ToolName.TestFailure],
-	[ContributedToolName.RunTests, ToolName.RunTests],
 	[ContributedToolName.FindFiles, ToolName.FindFiles],
 	[ContributedToolName.FindTextInFiles, ToolName.FindTextInFiles],
 	[ContributedToolName.ReadFile, ToolName.ReadFile],

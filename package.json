@@ -525,33 +525,6 @@
 				"when": "config.github.copilot.chat.enableUserPreferences"
 			},
 			{
-				"name": "copilot_runTests1",
-				"toolReferenceName": "runTests1",
-				"canBeReferencedInPrompt": false,
-				"when": "!chat.coreTestFailureToolEnabled",
-				"displayName": "%copilot.tools.runTests.name%",
-				"modelDescription": "Runs unit tests in files. Use this tool if the user asks to run tests or when you want to validate changes using unit tests. When possible, always try to provide `files` paths containing the relevant unit tests in order to avoid unnecessarily long test runs.",
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"files": {
-							"type": "array",
-							"items": {
-								"type": "string"
-							},
-							"description": "Test files to run. If not provided, all test files will be run."
-						}
-					}
-				},
-				"tags": [
-					"vscode_editing_with_tests",
-					"enable_other_tool_copilot_readFile",
-					"enable_other_tool_copilot_listDirectory",
-					"enable_other_tool_copilot_findFiles",
-					"enable_other_tool_copilot_runTests"
-				]
-			},
-			{
 				"name": "copilot_getTerminalSelection",
 				"toolReferenceName": "terminalSelection",
 				"displayName": "%github.copilot.tools.terminalSelection.name%",

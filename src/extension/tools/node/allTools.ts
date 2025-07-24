@@ -30,7 +30,6 @@ import './readProjectStructureTool';
 import './replaceStringTool';
 import './runNotebookCellTool';
 import './runTaskTool';
-import './runTestsTool';
 import './scmChangesTool';
 import './searchWorkspaceSymbolsTool';
 import './simpleBrowserTool';
