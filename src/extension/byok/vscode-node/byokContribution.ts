@@ -22,6 +22,7 @@ import { BYOKUIService, ModelConfig } from './byokUIService';
 import { CerebrasModelRegistry } from './cerebrasProvider';
 import { GeminiBYOKModelRegistry } from './geminiProvider';
 import { GroqModelRegistry } from './groqProvider';
+import { HuggingFaceBYOKModelRegistry } from './huggingfaceProvider';
 import { OllamaModelRegistry } from './ollamaProvider';
 import { OpenRouterBYOKModelRegistry } from './openRouterProvider';
 
@@ -77,6 +78,7 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			this._modelRegistries.push(instantiationService.createInstance(OAIBYOKModelRegistry));
 			this._modelRegistries.push(instantiationService.createInstance(OllamaModelRegistry, this._configurationService.getConfig(ConfigKey.OllamaEndpoint)));
 			this._modelRegistries.push(instantiationService.createInstance(OpenRouterBYOKModelRegistry));
+			this._modelRegistries.push(instantiationService.createInstance(HuggingFaceBYOKModelRegistry));
 			// Update known models list from CDN so all providers have the same list
 			await this.fetchKnownModelList(this._fetcherService);
 		}

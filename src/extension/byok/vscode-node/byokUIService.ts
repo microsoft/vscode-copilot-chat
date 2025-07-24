@@ -557,7 +557,7 @@ export class BYOKUIService {
 		// others go to advanced config to ask the user for info
 		if (state.selectedProviderRegistry.authType === BYOKAuthType.PerModelDeployment) {
 			return { nextStep: ConfigurationStep.DeploymentUrl };
-		} else if (state.selectedProviderRegistry.name === 'OpenRouter') {
+		} else if (state.selectedProviderRegistry.name === 'OpenRouter' || state.selectedProviderRegistry.name === 'Hugging Face') {
 			return { nextStep: ConfigurationStep.Complete };
 		} else {
 			return { nextStep: ConfigurationStep.AdvancedConfig };
