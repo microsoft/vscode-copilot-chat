@@ -178,11 +178,13 @@ export class ReplaceStringTool implements ICopilotTool<IReplaceStringToolParams>
 				let outcome: string;
 
 				if (error instanceof NoMatchError) {
-					outcome = options.input.oldString.includes('{…}') ?
-						'oldStringHasSummarizationMarker' :
-						options.input.oldString.includes('/*...*/') ?
-							'oldStringHasSummarizationMarkerSemanticSearch' :
-							error.kindForTelemetry;
+					outcome = options.input.oldString.match(/Lines \d+-\d+ omitted/) ?
+						'oldStringHasOmittedLines' :
+						options.input.oldString.includes('{…}') ?
+							'oldStringHasSummarizationMarker' :
+							options.input.oldString.includes('/*...*/') ?
+								'oldStringHasSummarizationMarkerSemanticSearch' :
+								error.kindForTelemetry;
 					errorMessage += `${error.message}`;
 				} else if (error instanceof EditError) {
 					outcome = error.kindForTelemetry;

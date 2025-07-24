@@ -33,6 +33,7 @@ import { IToolsService } from '../../../tools/common/toolsService';
 import { EmbeddedInsideUserMessage, embeddedInsideUserMessageDefault } from '../base/promptElement';
 import { IPromptEndpoint, PromptRenderer } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
+import { SummarizedDocumentLineNumberStyle } from '../inline/summarizedDocument/implementation';
 import { FilePathMode, FileVariable } from './fileVariable';
 import { Image } from './image';
 import { NotebookCellOutputVariable } from './notebookVariables';
@@ -165,7 +166,15 @@ export async function renderChatVariables(chatVariables: ChatVariablesCollection
 					: includeFilepathInCodeBlocks
 						? FilePathMode.AsComment
 						: FilePathMode.None;
-				const file = <FileVariable alwaysIncludeSummary={true} filePathMode={filePathMode} variableName={variableName} variableValue={variableValue} omitReferences={omitReferences} description={reference.modelDescription} />;
+				const file = <FileVariable
+					alwaysIncludeSummary={true}
+					filePathMode={filePathMode}
+					variableName={variableName}
+					variableValue={variableValue}
+					omitReferences={omitReferences}
+					description={reference.modelDescription}
+					lineNumberStyle={isAgent ? SummarizedDocumentLineNumberStyle.OmittedRanges : undefined}
+				/>;
 
 				if (!isAgent || (!URI.isUri(variableValue) || variableValue.scheme !== Schemas.vscodeNotebookCellOutput)) {
 					// When attaching outupts, there's no need to add the entire notebook file again, as model can request the notebook file.
