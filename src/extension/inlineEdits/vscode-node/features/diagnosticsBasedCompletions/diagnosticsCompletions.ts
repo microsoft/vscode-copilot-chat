@@ -20,7 +20,7 @@ import { Position } from '../../../../../util/vs/editor/common/core/position';
 import { Range } from '../../../../../util/vs/editor/common/core/range';
 import { OffsetRange } from '../../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { INextEditDisplayLocation } from '../../../node/nextEditResult';
-import { IVSCodeObservableDocument } from '../../parts/vscodeWorkspace';
+import { IVSCodeObservableDocument, IVSCodeObservableNotebookDocument, IVSCodeObservableTextDocument } from '../../parts/vscodeWorkspace';
 
 export interface IDiagnosticCodeAction {
 	edit: TextReplacement;
@@ -158,15 +158,7 @@ export class DiagnosticInlineEditRequestLogContext {
 }
 
 export async function getCodeActionsForDiagnostic(diagnostic: Diagnostic, workspaceDocument: IVSCodeObservableDocument, token: CancellationToken): Promise<CodeAction[] | undefined> {
-	const executeCodeActionProviderPromise = asPromise(
-		() => vscode.commands.executeCommand<vscode.CodeAction[]>(
-			'vscode.executeCodeActionProvider',
-			workspaceDocument.id.toUri(),
-			toExternalRange(diagnostic.range),
-			vscode.CodeActionKind.QuickFix.value,
-			3
-		)
-	);
+	const executeCodeActionProviderPromise = workspaceDocument.kind === 'textDocument' ? getCodeActionsForTextDocumentDiagnostic(diagnostic, workspaceDocument) : getCodeActionsForNotebookDocumentDiagnostic(diagnostic, workspaceDocument);
 
 	const codeActions = await raceTimeout(
 		raceCancellation(
@@ -181,6 +173,35 @@ export async function getCodeActionsForDiagnostic(diagnostic: Diagnostic, worksp
 	}
 
 	return codeActions.map(action => CodeAction.fromVSCodeCodeAction(action));
+}
+async function getCodeActionsForUriRange(uri: vscode.Uri, range: vscode.Range): Promise<vscode.CodeAction[]> {
+	return asPromise(
+		() => vscode.commands.executeCommand<vscode.CodeAction[]>(
+			'vscode.executeCodeActionProvider',
+			uri,
+			range,
+			vscode.CodeActionKind.QuickFix.value,
+			3
+		)
+	);
+}
+
+async function getCodeActionsForTextDocumentDiagnostic(diagnostic: Diagnostic, workspaceDocument: IVSCodeObservableTextDocument): Promise<vscode.CodeAction[]> {
+	return getCodeActionsForUriRange(workspaceDocument.id.toUri(), toExternalRange(diagnostic.range));
+}
+
+async function getCodeActionsForNotebookDocumentDiagnostic(diagnostic: Diagnostic, workspaceDocument: IVSCodeObservableNotebookDocument): Promise<vscode.CodeAction[]> {
+	const cellRanges = workspaceDocument.fromRange(toExternalRange(diagnostic.range));
+	if (!cellRanges || cellRanges.length === 0) {
+		return [];
+	}
+	return Promise.all(cellRanges.map(async ([cell, range]) => {
+		const actions = await getCodeActionsForUriRange(cell.document.uri, range);
+		return actions.map(action => {
+			action.diagnostics = action.diagnostics ? workspaceDocument.projectDiagnostics(cell, action.diagnostics) : undefined;
+			return action;
+		});
+	})).then(results => results.flat());
 }
 
 export enum DiagnosticSeverity {
@@ -294,6 +315,7 @@ export class CodeAction {
 		if (!this.edit) {
 			return undefined;
 		}
+		// TODO: @DonJayamanne This will not work for notebooks
 		return this.edit.get(workspaceDocument.id.toUri()).map(toInternalTextEdit);
 	}
 
