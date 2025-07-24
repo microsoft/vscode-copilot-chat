@@ -1482,7 +1482,7 @@
 				]
 			},
 			{
-				"id": "github.copilot.notebook",
+				"id": "github.copilot.notebookEditorAgent",
 				"name": "GitHubCopilot",
 				"fullName": "GitHub Copilot",
 				"description": "%copilot.description%",
@@ -1490,7 +1490,7 @@
 				"locations": [
 					"notebook"
 				],
-				"when": "!config.inlineChat.enableV2 && !config.github.copilot.chat.advanced.inlineChat2",
+				"when": "config.inlineChat.enableV2",
 				"commands": [
 					{
 						"name": "fix",
