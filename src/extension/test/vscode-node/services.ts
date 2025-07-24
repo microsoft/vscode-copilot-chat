@@ -106,7 +106,7 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(ISimulationTestContext, new SyncDescriptor(NulSimulationTestContext));
 	testingServiceCollection.define(IRequestLogger, new SyncDescriptor(NullRequestLogger));
 	testingServiceCollection.define(IFeedbackReporter, new SyncDescriptor(NullFeedbackReporterImpl));
-	testingServiceCollection.define(IEndpointProvider, new SyncDescriptor(TestEndpointProvider, [undefined, undefined, undefined, undefined, undefined]));
+	testingServiceCollection.define(IEndpointProvider, new SyncDescriptor(TestEndpointProvider, [undefined, undefined, undefined, undefined, undefined, false]));
 	testingServiceCollection.define(ICopilotTokenStore, new SyncDescriptor(CopilotTokenStore));
 	testingServiceCollection.define(IDomainService, new SyncDescriptor(DomainService));
 	testingServiceCollection.define(ICAPIClientService, new SyncDescriptor(CAPIClientImpl));

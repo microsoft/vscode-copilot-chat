@@ -12,6 +12,7 @@ export const enum Intent {
 	Fix = 'fix',
 	New = 'new',
 	NewNotebook = 'newNotebook',
+	notebookEditor = 'notebookEditor',
 	Search = 'search',
 	SemanticSearch = 'semanticSearch',
 	Terminal = 'terminal',

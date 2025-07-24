@@ -27,7 +27,7 @@ import { IEndpointProvider } from '../common/endpointProvider';
  */
 export class AutoChatEndpoint implements IChatEndpoint {
 	public static readonly id = 'auto';
-	maxOutputTokens: number = 4096;
+	maxOutputTokens: number = 8192;
 	model: string = AutoChatEndpoint.id;
 	supportsToolCalls: boolean = true;
 	supportsVision: boolean = true;

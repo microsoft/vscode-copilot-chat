@@ -72,6 +72,7 @@ import { ConversationStore, IConversationStore } from '../../conversationStore/n
 import { IIntentService, IntentService } from '../../intents/node/intentService';
 import { INewWorkspacePreviewContentManager, NewWorkspacePreviewContentManagerImpl } from '../../intents/node/newIntent';
 import { ITestGenInfoStorage, TestGenInfoStorage } from '../../intents/node/testIntent/testInfoStorage';
+import { LanguageContextProviderService } from '../../languageContextProvider/vscode-node/languageContextProviderService';
 import { ILinkifyService, LinkifyService } from '../../linkify/common/linkifyService';
 import { collectFetcherTelemetry } from '../../log/vscode-node/loggingActions';
 import { DebugCommandToConfigConverter, IDebugCommandToConfigConverter } from '../../onboardDebug/node/commandToConfigConverter';
@@ -96,6 +97,7 @@ import { LanguageContextServiceImpl } from '../../typescriptContext/vscode-node/
 import { IWorkspaceListenerService } from '../../workspaceRecorder/common/workspaceListenerService';
 import { WorkspacListenerService } from '../../workspaceRecorder/vscode-node/workspaceListenerService';
 import { registerServices as registerCommonServices } from '../vscode/services';
+import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 
 // ###########################################################################################
 // ###                                                                                     ###
@@ -177,6 +179,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ICompletionsFetchService, new SyncDescriptor(CompletionsFetchService));
 	builder.define(IFixCookbookService, new SyncDescriptor(FixCookbookService));
 	builder.define(ILanguageContextService, new SyncDescriptor(LanguageContextServiceImpl));
+	builder.define(ILanguageContextProviderService, new SyncDescriptor(LanguageContextProviderService));
 	builder.define(IWorkspaceListenerService, new SyncDescriptor(WorkspacListenerService));
 	builder.define(ICodeSearchAuthenticationService, new SyncDescriptor(VsCodeCodeSearchAuthenticationService));
 	builder.define(IThinkingDataService, new SyncDescriptor(ThinkingDataImpl));

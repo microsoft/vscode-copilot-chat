@@ -51,10 +51,6 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 		if (copilotToken.isCompletionsQuotaExceeded) {
 			return false;
 		}
-		const shouldRespectNesTokenFlag = this._expService.getTreatmentVariable<boolean>('vscode', 'copilotchat.respectNesTokenFlag');
-		if (shouldRespectNesTokenFlag === true) {
-			return copilotToken.isNesEnabled() || copilotToken.isInternal;
-		}
 		return true;
 	});
 

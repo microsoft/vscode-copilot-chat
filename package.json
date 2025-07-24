@@ -496,9 +496,10 @@
 				"when": "config.github.copilot.chat.enableUserPreferences"
 			},
 			{
-				"name": "copilot_runTests",
-				"toolReferenceName": "runTests",
-				"canBeReferencedInPrompt": true,
+				"name": "copilot_runTests1",
+				"toolReferenceName": "runTests1",
+				"canBeReferencedInPrompt": false,
+				"when": "!chat.coreTestFailureToolEnabled",
 				"displayName": "%copilot.tools.runTests.name%",
 				"modelDescription": "Runs unit tests in files. Use this tool if the user asks to run tests or when you want to validate changes using unit tests. When possible, always try to provide `files` paths containing the relevant unit tests in order to avoid unnecessarily long test runs.",
 				"inputSchema": {
@@ -1570,6 +1571,10 @@
 			{
 				"vendor": "copilot",
 				"displayName": "Copilot"
+			},
+			{
+				"vendor": "azure",
+				"displayName": "Azure"
 			},
 			{
 				"vendor": "anthropic",
@@ -2741,6 +2746,52 @@
 							"experimental"
 						],
 						"description": "%github.copilot.config.virtualTools.enabled%"
+					},
+					"github.copilot.chat.azureModels": {
+						"type": "object",
+						"default": {},
+						"tags": [
+							"experimental"
+						],
+						"additionalProperties": {
+							"type": "object",
+							"properties": {
+								"name": {
+									"type": "string",
+									"description": "Display name of the Azure model"
+								},
+								"url": {
+									"type": "string",
+									"description": "URL endpoint for the Azure model"
+								},
+								"toolCalling": {
+									"type": "boolean",
+									"description": "Whether the model supports tool calling"
+								},
+								"vision": {
+									"type": "boolean",
+									"description": "Whether the model supports vision capabilities"
+								},
+								"maxInputTokens": {
+									"type": "number",
+									"description": "Maximum number of input tokens supported by the model"
+								},
+								"maxOutputTokens": {
+									"type": "number",
+									"description": "Maximum number of output tokens supported by the model"
+								}
+							},
+							"required": [
+								"name",
+								"url",
+								"toolCalling",
+								"vision",
+								"maxInputTokens",
+								"maxOutputTokens"
+							],
+							"additionalProperties": false
+						},
+						"markdownDescription": "Configure custom Azure OpenAI models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
 					}
 				}
 			}

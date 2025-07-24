@@ -46,6 +46,7 @@ export type BYOKModelConfig = BYOKGlobalKeyModelConfig | BYOKPerModelConfig | BY
 
 export interface BYOKModelCapabilities {
 	name: string;
+	url?: string;
 	maxInputTokens: number;
 	maxOutputTokens: number;
 	toolCalling: boolean;
@@ -140,6 +141,7 @@ export function byokKnownModelsToAPIInfo(providerName: string, knownModels: BYOK
 			version: '1.0.0',
 			maxOutputTokens: capabilities.maxOutputTokens,
 			maxInputTokens: capabilities.maxInputTokens,
+			cost: providerName,
 			family: providerName,
 			description: `${capabilities.name} is contributed via the ${providerName} provider.`,
 			capabilities: {
