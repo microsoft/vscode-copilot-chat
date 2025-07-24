@@ -2,83 +2,79 @@
 	{
 		"name": "codeMapper [context] [json] - make changes in package.json",
 		"requests": [
-			"412404678503cceed20ed0d02d73393354b6bf6a35715edee46a37b45d9a84bb"
+			"5ae48f2074f5f289cca79cdb44f87b26f7119a670141b79626c27ce8f911b1d0"
 		]
 	},
 	{
 		"name": "codeMapper [context] [markdown] - mixed product icons (60kb) - modify & insert",
 		"requests": [
-			"20c8c92e422af4af1bf2cbe13b240a68523b3a243e9e943c26eef933bbe89e44",
-			"4721819ade1c8aa657520055e858d8cd6f64e48d186bf9bf763883f4478bc5d3",
-			"4bbb51c6666d89457d2f22a4c8fbc6a7cc431761f60fad7cd0bccb8254831faa",
-			"b9c4dc821d485809f56f59295c7a40b112f38f0203582710983e0857cf3d0e63"
+			"df5bd03f9c7930158a5f96e433d398927d8908a4df39951f54ec69112419b49e"
 		]
 	},
 	{
 		"name": "codeMapper [context] [markdown] - sorted product icons (60kb) - modify & insert",
 		"requests": [
-			"56b017aede5ba711cbcf177b0d08bbb832ae12f2069c482b421e63162b8a7e67",
-			"6ca24f074f112fdb72071f91ec6e8471d65151580e353b6674adee09841ad09f"
+			"aa6730715d599fc6561626902212c792d87a7325fe550f70e406ddb8bd6edae3"
 		]
 	},
 	{
 		"name": "codeMapper [context] [typescript] - add import",
 		"requests": [
-			"1a705e29b4ac217a2304f6a4c2e8bc428040e70ec4fdf22dcf7d9a496560f0b1"
+			"2584dfcb697af436852937dc261d6a3ef186dcae926a2eaaf0141ff80c49f42e"
 		]
 	},
 	{
 		"name": "codeMapper [context] [typescript] - add new function at location 1",
 		"requests": [
-			"0817d56b44cc6afdfa272237b5acaace2ae7caea923453ff2f3d41d0b3d6f6e3"
+			"34094e00a6eaaa2af9a170af6c455cfd388e27ed86d5aa39d82cb2ac7cc071c3"
 		]
 	},
 	{
 		"name": "codeMapper [context] [typescript] - break up function, large file",
 		"requests": [
-			"c7f96a5c7c72b7b00bcb672a0ac336a4f45c9a5bbdddf9f39148d620379e055c"
+			"4ae71854bf25612d853a36e21863c6da5b7ca813281e6e0b2d8060122ecfa225"
 		]
 	},
 	{
 		"name": "codeMapper [context] [typescript] - does not delete random parts of code (big file)",
 		"requests": [
-			"7fd71f726eed38138f8ced75f74c65d7736b7fd05756c55c5314b03afab555a2"
+			"97e60a53678a095d8d9e239e193eaaa8c31d502d9b4bfef0021975b50902c88e"
 		]
 	},
 	{
 		"name": "codeMapper [context] [typescript] - does not remove stale imports #11766",
 		"requests": [
-			"b991c4a15c3740cfc8fb2736fb78db82a8978f6d91553f767eca0d7dd3e0d2c1"
+			"83a90bd5170a17782ba60c9793de444495230cd96b34cdccdd2250d32d7ec9ea"
 		]
 	},
 	{
 		"name": "codeMapper [context] [typescript] - modify function",
 		"requests": [
-			"9fc5b5d477743076f3800f986cf77222d480f686bd562acff16e51c2203b800a"
+			"99dc8b21d0803ca7aab7c8d80eef247202ffbb886166581f608ef9c752925a3d"
 		]
 	},
 	{
 		"name": "codeMapper [context] [typescript] - move to class",
 		"requests": [
-			"0847b3d498b7c545db983085a5bfd562b093521a23de040a7ab56231720eb0ff"
+			"ff923eda0327ea7da03343d74747fd3eafeb45fed459eb7986782cff7741ceee"
 		]
 	},
 	{
 		"name": "codeMapper [context] [typescript] - other tests updated similarly",
 		"requests": [
-			"408482871af2bb9f28e502ee207d7c4eedd7171247fb3b8fcc679add53f1648d"
+			"1fb80c97fe4e42559c351d615b893207b3cb14de730a470683a8713f293ed8ad"
 		]
 	},
 	{
 		"name": "codeMapper [context] [typescript] - replace statement with ident change",
 		"requests": [
-			"b4fab8f28cc320bc7aed4f12373eeaf9a7a1df567c64ced1b1facb8bb83d1762"
+			"e2bc29c1ddf4c7b060e0fad6996606fe8ccc89ed6f2d6201b8a4b69171c16cb2"
 		]
 	},
 	{
 		"name": "codeMapper [context] [yaml] - looping in short yaml file",
 		"requests": [
-			"705a2869b79aface98634f2f938d91b8f63aa53d1ab79c6aae96eae4c2b4607f"
+			"7610a2895db2cd014e7f5241a70c309563d59d26187100c35dc682dd93393770"
 		]
 	}
 ]
