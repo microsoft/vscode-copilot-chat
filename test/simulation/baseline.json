@@ -11826,9 +11826,9 @@
   {
     "name": "toolCalling [panel] - find all phone numbers in markdown files in the codebase",
     "contentFilterCount": 0,
-    "passCount": 6,
-    "failCount": 4,
-    "score": 0.6
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "toolCalling [panel] - I'm using git, create a new branch called issue-9876",
