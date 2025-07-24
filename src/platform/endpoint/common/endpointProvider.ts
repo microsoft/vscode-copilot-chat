@@ -9,6 +9,7 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import type { ChatRequest } from '../../../vscodeTypes';
 import { IChatEndpoint, IEmbeddingEndpoint } from '../../networking/common/networking';
+import { RequestMetadata } from '@vscode/copilot-api';
 
 export type ModelPolicy = {
 	state: 'enabled' | 'disabled' | 'unconfigured';
@@ -51,6 +52,7 @@ type ICompletionsModelCapabilities = {
 export interface IModelAPIResponse {
 	id: string;
 	name: string;
+	urlOrRequestMetadata?: string | RequestMetadata;
 	policy?: ModelPolicy;
 	model_picker_enabled: boolean;
 	preview?: boolean;
