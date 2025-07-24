@@ -105,6 +105,14 @@ class AlternativeNotebookCellSnapshot {
 		}
 		return new Range(startLine, startPosition.character, endLine, endLineEndColumn);
 	}
+	public fromAltRange(range: Range): Range {
+		// Remove the lines we've added for the cell marker and block comments
+		const extraLinesAdded = this.cell.kind === NotebookCellKind.Markup ? 2 : 1;
+
+		const startLine = Math.max(range.start.line - extraLinesAdded, 0);
+		const endLine = Math.max(range.end.line - extraLinesAdded, 0);
+		return new Range(startLine, range.start.character, endLine, range.end.character);
+	}
 }
 
 function buildAlternativeCells<T>(cellItems: readonly T[], altCelBuilder: (cellItem: T) => AlternativeNotebookCellSnapshot) {
@@ -149,6 +157,38 @@ abstract class AbstractAlternativeNotebookDocument {
 		return range ? range.substring(altText) : altText;
 	}
 
+	public fromAltRange(range: Range): [NotebookCell, Range][] {
+		const firstIdx = findLastIdxMonotonous(this.cells, c => c.startLine <= range.start.line);
+		if (firstIdx === -1) {
+			return [];
+		}
+		const cells: [NotebookCell, Range][] = [];
+
+		for (let i = firstIdx; i < this.cells.length; i++) {
+			const { altCell, startLine } = this.cells[i];
+			if (i === firstIdx) {
+				const cellStart = range.start.line - startLine;
+				const cellEnd = range.end.line <= (altCell.lineCount - 1) ? range.end.line : altCell.lineCount - 1;
+				let cellEndChar = range.end.character;
+				if (cellEnd !== range.end.line) {
+					const offset = altCell.toAltRange(altCell.fromAltOffsetRange(new OffsetRange(altCell.altText.length, altCell.altText.length)));
+					cellEndChar = offset.end.character;
+				}
+				const cellRange = new Range(cellStart, range.start.character, cellEnd, cellEndChar);
+				cells.push([altCell.cell, altCell.fromAltRange(cellRange)]);
+			} else if (startLine + altCell.lineCount <= range.end.line) {
+				const endPos = altCell.toAltRange(altCell.fromAltOffsetRange(new OffsetRange(altCell.altText.length, altCell.altText.length)));
+				const cellRange = new Range(0, 0, endPos.end.line, endPos.end.character);
+				cells.push([altCell.cell, altCell.fromAltRange(cellRange)]);
+			} else if (startLine < range.end.line) {
+				const cellRange = new Range(0, 0, range.end.line - startLine, range.end.character);
+				cells.push([altCell.cell, altCell.fromAltRange(cellRange)]);
+			}
+		}
+
+		return cells;
+	}
+
 	public fromAltOffsetRange(offsetRange: OffsetRange): [NotebookCell, Range][] {
 		const firstIdx = findLastIdxMonotonous(this.cells, c => c.startOffset <= offsetRange.start);
 		if (firstIdx === -1) {
@@ -159,7 +199,8 @@ abstract class AbstractAlternativeNotebookDocument {
 		for (let i = firstIdx; i < this.cells.length; i++) {
 			const { altCell, startOffset } = this.cells[i];
 			if (i === firstIdx) {
-				const offset = new OffsetRange(offsetRange.start - startOffset, offsetRange.endExclusive - startOffset);
+				const endOffset = offsetRange.endExclusive > (startOffset + altCell.altText.length) ? (startOffset + altCell.altText.length) : offsetRange.endExclusive;
+				const offset = new OffsetRange(offsetRange.start - startOffset, endOffset);
 				cells.push([altCell.cell, altCell.fromAltOffsetRange(offset)]);
 			} else if ((startOffset + altCell.altText.length) < offsetRange.endExclusive) {
 				const offset = new OffsetRange(0, altCell.altText.length);
@@ -277,9 +318,12 @@ class AlternativeNotebookDocument extends AbstractAlternativeNotebookDocument im
 		super(notebook, excludeMarkdownCells, blockComment, lineCommentStart, cells);
 	}
 
+	private updateCells(cells: readonly AltCellInfo[]) {
+		this.cells.splice(0, this.cells.length, ...cells);
+	}
 	public applyNotebookChanges(events: readonly NotebookDocumentContentChange[]) {
 		const cells = withNotebookChangesAndEdit(this.cells, this.blockComment, this.lineCommentStart, events, this.excludeMarkdownCells)[0];
-		this.cells.splice(0, this.cells.length, ...cells);
+		this.updateCells(cells);
 	}
 
 	public applyCellChanges(cellTextDoc: TextDocument, edit: readonly TextDocumentContentChangeEvent[]) {
@@ -290,7 +334,7 @@ class AlternativeNotebookDocument extends AbstractAlternativeNotebookDocument im
 		if (!cells) {
 			return;
 		}
-		this.cells.splice(0, this.cells.length, ...cells);
+		this.updateCells(cells);
 	}
 }
 
@@ -400,95 +444,6 @@ function toAltCellTextDocumentContentChangeEvents(notebook: AbstractAlternativeN
 			text: e.text.replace(/\r\n|\n/g, EOL), // Normalize line endings to EOL
 		} as typeof e;
 	}));
-}
-
-export function fromAltTextDocumentContentChangeEvents(notebook: AbstractAlternativeNotebookDocument, events: readonly TextDocumentContentChangeEvent[]): [NotebookCell, TextDocumentContentChangeEvent[]][] {
-	if (!events.length) {
-		return [];
-	}
-
-	// Map to collect changes per cell
-	const cellChanges = new Map<NotebookCell, TextDocumentContentChangeEvent[]>();
-
-	for (const event of events) {
-		const altRange = new OffsetRange(event.rangeOffset, event.rangeOffset + event.rangeLength);
-		const cellRanges = notebook.fromAltOffsetRange(altRange);
-
-		if (!cellRanges?.length) {
-			continue;
-		}
-
-		// Handle the case where a single alt document change affects multiple cells
-		let textOffset = 0;
-		const eventText = event.text;
-
-		for (let i = 0; i < cellRanges.length; i++) {
-			const [cell, cellRange] = cellRanges[i];
-
-			// Calculate the portion of the text that applies to this cell
-			let cellText = '';
-			if (cellRanges.length === 1) {
-				// Single cell case - use entire text
-				cellText = eventText;
-			} else if (i === cellRanges.length - 1) {
-				// Last cell in multi-cell change
-				cellText = eventText.substring(textOffset);
-			} else {
-				// First or middle cell in multi-cell change
-				// For simplicity, split text evenly or use line breaks as boundaries
-				const remainingText = eventText.substring(textOffset);
-				const nextLineBreak = remainingText.indexOf(EOL);
-				if (nextLineBreak !== -1) {
-					cellText = remainingText.substring(0, nextLineBreak + EOL.length);
-					textOffset += cellText.length;
-				} else {
-					cellText = remainingText;
-					textOffset = eventText.length;
-				}
-			}
-
-			// Convert EOL back to cell's line ending format
-			const cellEol = cell.document.eol === 2 ? '\r\n' : '\n'; // EndOfLine.CRLF = 2, EndOfLine.LF = 1
-			const convertedText = cellText.replace(new RegExp(EOL, 'g'), cellEol);
-
-			// Calculate rangeOffset for the cell
-			const cellDoc = cell.document;
-			let rangeOffset = 0;
-			for (let line = 0; line < cellRange.start.line; line++) {
-				rangeOffset += cellDoc.lineAt(line).text.length + (cellDoc.eol === 2 ? 2 : 1);
-			}
-			rangeOffset += cellRange.start.character;
-
-			// Calculate rangeLength for the cell
-			let rangeLength = 0;
-			if (cellRange.start.line === cellRange.end.line) {
-				rangeLength = cellRange.end.character - cellRange.start.character;
-			} else {
-				// Multi-line range
-				rangeLength = cellDoc.lineAt(cellRange.start.line).text.length - cellRange.start.character + (cellDoc.eol === 2 ? 2 : 1);
-				for (let line = cellRange.start.line + 1; line < cellRange.end.line; line++) {
-					rangeLength += cellDoc.lineAt(line).text.length + (cellDoc.eol === 2 ? 2 : 1);
-				}
-				rangeLength += cellRange.end.character;
-			}
-
-			// Create the cell-specific change event
-			const cellChangeEvent: TextDocumentContentChangeEvent = {
-				range: cellRange,
-				rangeLength: rangeLength,
-				rangeOffset: rangeOffset,
-				text: convertedText
-			};
-
-			// Add to the map
-			if (!cellChanges.has(cell)) {
-				cellChanges.set(cell, []);
-			}
-			cellChanges.get(cell)!.push(cellChangeEvent);
-		}
-	}
-
-	return Array.from(cellChanges.entries());
 }
 
 export function toAltDiagnostics(notebook: AbstractAlternativeNotebookDocument, cell: NotebookCell, diagnostics: readonly Diagnostic[]): Diagnostic[] {
