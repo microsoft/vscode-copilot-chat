@@ -36,7 +36,7 @@ interface HuggingFaceModel {
 
 
 export class HuggingFaceBYOKLMProvider extends BaseOpenAICompatibleLMProvider {
-	public static readonly providerName = 'HuggingFace';
+	public static readonly providerName = 'Hugging Face';
 	constructor(
 		byokStorageService: IBYOKStorageService,
 		@IFetcherService _fetcherService: IFetcherService,
@@ -60,24 +60,29 @@ export class HuggingFaceBYOKLMProvider extends BaseOpenAICompatibleLMProvider {
 			const response = await this._fetcherService.fetch('https://router.huggingface.co/v1/models', { method: 'GET' });
 			const data: HuggingFaceAPIResponse = await response.json();
 			const knownModels: BYOKKnownModels = {};
-			// Filter models that have at least one provider with supports_tools set to true
-			const toolsSupportedModels = data.data.filter(model =>
-				model.providers.some(provider => provider.supports_tools === true)
-			);
-			for (const model of toolsSupportedModels) {
-				const toolsSupportedProvider = model.providers.find(provider => provider.supports_tools === true);
+
+			for (const model of data.data) {
+				const toolsSupportedProvider = model.providers.find(provider => provider.supports_tools === true && provider.status === 'live');
 				if (!toolsSupportedProvider) {
-					continue; // Skip if no provider supports tools
+					continue;
 				}
-				// Use the provider name and context length from the tools supported provider
+
+				let vision = false;
+				try {
+					const modelInfoResp = await this._fetcherService.fetch(`https://huggingface.co/api/models/${model.id}`, { method: 'GET' });
+					const modelInfo = await modelInfoResp.json();
+					vision = modelInfo.pipeline_tag === 'image-text-to-text';
+				} catch (err) {
+					this._logService.logger.warn(`Failed to fetch vision capabilities for model ${model.id}: ${err}`);
+				}
+
 				const modelName = `${model.id} (${toolsSupportedProvider.provider})`;
 				knownModels[model.id] = {
 					name: modelName,
 					toolCalling: true,
-					vision: model.id.toLowerCase().includes('vision') ||
-						model.id.toLowerCase().includes('vl'),
+					vision,
 					maxInputTokens: (toolsSupportedProvider.context_length || 128000) - 16000,
-					maxOutputTokens: 16000
+					maxOutputTokens: 16000,
 				};
 			}
 			return knownModels;
@@ -85,7 +90,6 @@ export class HuggingFaceBYOKLMProvider extends BaseOpenAICompatibleLMProvider {
 			this._logService.logger.error(error, `Error fetching available Hugging Face models`);
 			throw error;
 		}
-
 	}
 }
 
