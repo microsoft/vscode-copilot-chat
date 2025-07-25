@@ -47,6 +47,6 @@ export class SpyChatResponseStream extends ChatResponseStreamImpl {
 	}
 
 	constructor() {
-		super((part) => this.items.push(part));
+		super((part) => this.items.push(part), () => { });
 	}
 }

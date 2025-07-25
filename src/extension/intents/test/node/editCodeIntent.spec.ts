@@ -5,12 +5,12 @@
 
 
 import { describe, expect, it } from 'vitest';
+import type { MarkdownString } from 'vscode';
 import { PromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { ChatResponseStreamImpl } from '../../../../util/common/chatResponseStreamImpl';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { getCodeBlocksFromResponse } from '../../node/editCodeIntent';
-import type { MarkdownString } from 'vscode';
 import { CodeBlock } from '../../../prompt/common/conversation';
+import { getCodeBlocksFromResponse } from '../../node/editCodeIntent';
 
 
 class MockChatResponseStream extends ChatResponseStreamImpl {
@@ -19,7 +19,7 @@ class MockChatResponseStream extends ChatResponseStreamImpl {
 	public uris: string[] = [];
 
 	constructor() {
-		super(() => { });
+		super(() => { }, () => { });
 	}
 	override markdown(content: string | MarkdownString): void {
 		this.output.push(typeof content === 'string' ? content : content.value);
