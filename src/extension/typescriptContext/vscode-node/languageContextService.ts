@@ -7,7 +7,8 @@ import * as vscode from 'vscode';
 
 import { LRUCache } from 'lru-cache';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { Copilot } from '../../../platform/inlineCompletions/vscode-node/api';
+import { Copilot } from '../../../platform/inlineCompletions/common/api';
+import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ContextKind, ILanguageContextService, KnownSources, TriggerKind, type ContextItem, type RequestContext } from '../../../platform/languageServer/common/languageContextService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -1527,7 +1528,8 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@ILogService readonly logService: ILogService,
 		@ITelemetryService readonly telemetryService: ITelemetryService,
-		@ILanguageContextService private readonly languageContextService: ILanguageContextService
+		@ILanguageContextService private readonly languageContextService: ILanguageContextService,
+		@ILanguageContextProviderService private readonly languageContextProviderService: ILanguageContextProviderService,
 	) {
 		this.registrations = undefined;
 		this.telemetrySender = new TelemetrySender(telemetryService, logService);
@@ -1670,11 +1672,13 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 					return result;
 				};
 			}
-			this.registrations.add(copilotAPI.registerContextProvider({
+			const provider: Copilot.ContextProvider<Copilot.SupportedContextItem> = {
 				id: 'typescript-ai-context-provider',
 				selector: { scheme: 'file', language: 'typescript' },
 				resolver: resolver
-			}));
+			};
+			this.registrations.add(copilotAPI.registerContextProvider(provider));
+			this.registrations.add(this.languageContextProviderService.registerContextProvider(provider));
 			this.telemetrySender.sendInlineCompletionProviderTelemetry(KnownSources.completion, true);
 			logService.logger.info('Registered TypeScript context provider with Copilot inline completions.');
 		} catch (error) {

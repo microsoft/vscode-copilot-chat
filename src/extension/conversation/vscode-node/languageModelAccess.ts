@@ -132,13 +132,17 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			}
 
 			const baseCount = await PromptRenderer.create(this._instantiationService, endpoint, LanguageModelAccessPrompt, { noSafety: false, messages: [] }).countTokens();
+			let multiplierString = endpoint.multiplier !== undefined ? `${endpoint.multiplier}x` : undefined;
+			if (endpoint.model === AutoChatEndpoint.id) {
+				multiplierString = 'Variable';
+			}
 
 			const model: vscode.LanguageModelChatInformation = {
 				id: endpoint.model,
 				name: endpoint.name,
 				family: endpoint.family,
 				description: modelDescription,
-				cost: endpoint.multiplier !== undefined && endpoint.multiplier !== 0 ? `${endpoint.multiplier}x` : endpoint.multiplier === 0 ? localize('languageModel.costIncluded', 'Included') : undefined,
+				cost: multiplierString,
 				category: modelCategory,
 				version: endpoint.version,
 				maxInputTokens: endpoint.modelMaxPromptTokens - baseCount - BaseTokensPerCompletion,

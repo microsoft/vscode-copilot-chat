@@ -149,7 +149,7 @@ export class NewWorkspaceCreationResult extends PromptElement<NewWorkspaceElemen
 				- Customize the project files based on the user's requirements, if specified.<br />
 				- Ensure that all required extensions are installed, if specified.<br />
 				- Compile the project and install any missing dependencies.<br />
-				- Create a task based on the package.json, README.md, and project structure and pass that as input to the tool {ToolName.CreateAndRunTask}.<br />
+				- Create a task based on the package.json, README.md, and project structure and pass that as input to the tool {ToolName.CoreCreateAndRunTask}.<br />
 				<br />
 				Here is the plan you need to execute:<br />
 				## 1. Get Project Template <br />
@@ -188,7 +188,7 @@ export class NewWorkspaceCreationResult extends PromptElement<NewWorkspaceElemen
 				- Verify that a README.md file exists at the root of the project. If it doesn’t, create one.<br />
 				- Update the README.md file to accurately reflect current state of the project.<br />
 				## 9. Create and run the task to build the project<br />
-				- Create a task based on the package.json, README.md, and project structure and pass that as input to the tool {ToolName.CreateAndRunTask}.<br />
+				- Create a task based on the package.json, README.md, and project structure and pass that as input to the tool {ToolName.CoreCreateAndRunTask}.<br />
 				<br />
 				# Rules<br />
 				- Always start executing the plan by calling the tool {ToolName.GetProjectSetupInfo} to get the project template.<br />

@@ -327,7 +327,8 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			this._request.prompt,
 			responseType === ChatFetchResponseType.OffTopic ? true : false,
 			this._documentContext?.document,
-			this._userTelemetry
+			this._userTelemetry,
+			this._getModeName(),
 		);
 
 		if (responseType === ChatFetchResponseType.OffTopic) {
@@ -374,8 +375,15 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		}
 	}
 
-	public sendToolCallingTelemetry(toolCallRounds: IToolCallRound[], availableToolCount: number, responseType: ChatFetchResponseType | 'cancelled' | 'maxToolCalls'): void {
-		if (availableToolCount === 0) {
+	protected _getModeName(): string {
+		return this._request.modeInstructions ? 'custom' :
+			this._intent.id === AgentIntent.ID ? 'agent' :
+				(this._intent.id === EditCodeIntent.ID || this._intent.id === EditCode2Intent.ID) ? 'edit' :
+					'ask';
+	}
+
+	public sendToolCallingTelemetry(toolCallRounds: IToolCallRound[], availableTools: readonly vscode.LanguageModelToolInformation[], responseType: ChatFetchResponseType | 'cancelled' | 'maxToolCalls'): void {
+		if (availableTools.length === 0) {
 			return;
 		}
 
@@ -392,6 +400,25 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			}
 			return acc;
 		}, 0);
+
+		const toolCallProperties = {
+			intentId: this._intent.id,
+			conversationId: this._conversation.sessionId,
+			responseType,
+			toolCounts: JSON.stringify(toolCounts),
+			model: this._endpoint.model
+		};
+
+		const toolCallMeasurements = {
+			numRequests: toolCallRounds.length, // This doesn't include cancelled requests
+			turnIndex: this._conversation.turns.length,
+			sessionDuration: Date.now() - this._conversation.turns[0].startTime,
+			turnDuration: Date.now() - this._conversation.getLatestTurn().startTime,
+			promptTokenCount: this._userTelemetry.measurements.promptTokenLen,
+			messageCharLen: this._userTelemetry.measurements.messageCharLen,
+			availableToolCount: availableTools.length,
+			invalidToolCallCount
+		};
 
 		/* __GDPR__
 			"toolCallDetails" : {
@@ -413,22 +440,12 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model used for the request." }
 			}
 		*/
-		this._telemetryService.sendMSFTTelemetryEvent('toolCallDetails', {
-			intentId: this._intent.id,
-			conversationId: this._conversation.sessionId,
-			responseType,
-			toolCounts: JSON.stringify(toolCounts),
-			model: this._endpoint.model
-		}, {
-			numRequests: toolCallRounds.length, // This doesn't include cancelled requests
-			turnIndex: this._conversation.turns.length,
-			sessionDuration: Date.now() - this._conversation.turns[0].startTime,
-			turnDuration: Date.now() - this._conversation.getLatestTurn().startTime,
-			promptTokenCount: this._userTelemetry.measurements.promptTokenLen,
-			messageCharLen: this._userTelemetry.measurements.messageCharLen,
-			availableToolCount,
-			invalidToolCallCount
-		});
+		this._telemetryService.sendMSFTTelemetryEvent('toolCallDetails', toolCallProperties, toolCallMeasurements);
+
+		this._telemetryService.sendInternalMSFTTelemetryEvent('toolCallDetailsInternal', {
+			...toolCallProperties,
+			availableTools: JSON.stringify(availableTools.map(tool => tool.name)),
+		}, toolCallMeasurements);
 	}
 
 	protected abstract _sendInternalRequestTelemetryEvent(): void;
@@ -593,10 +610,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			temporalCtxTotalCharCount: temporalContexData?.totalCharLength ?? -1
 		} satisfies RequestPanelTelemetryMeasurements);
 
-		const modeName = this._request.modeInstructions ? 'custom' :
-			this._intent.id === AgentIntent.ID ? 'agent' :
-				(this._intent.id === EditCodeIntent.ID || this._intent.id === EditCode2Intent.ID) ? 'edit' :
-					'ask';
+		const modeName = this._getModeName();
 		sendUserActionTelemetry(
 			this._telemetryService,
 			undefined,

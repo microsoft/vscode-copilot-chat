@@ -5,6 +5,7 @@
 
 import type { LanguageModelToolInformation } from 'vscode';
 import { HARD_TOOL_LIMIT } from '../../../../platform/configuration/common/configurationService';
+import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { equals as arraysEqual } from '../../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Iterable } from '../../../../util/vs/base/common/iterator';
@@ -17,7 +18,7 @@ import { IToolCategorization, IToolGrouping } from './virtualToolTypes';
 
 export class ToolGrouping implements IToolGrouping {
 
-	private readonly _root = new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX, '', Infinity, undefined);
+	private readonly _root = new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX, '', Infinity, { groups: [], toolsetKey: '', preExpanded: true });
 	protected _grouper: IToolCategorization = this._instantiationService.createInstance(VirtualToolGrouper);
 	private _didToolsChange = true;
 	private _turnNo = 0;
@@ -37,13 +38,46 @@ export class ToolGrouping implements IToolGrouping {
 
 	constructor(
 		private _tools: readonly LanguageModelToolInformation[],
-		@IInstantiationService private readonly _instantiationService: IInstantiationService
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 	) {
 		this._root.isExpanded = true;
 	}
 
-	didCall(toolCallName: string): LanguageModelToolResult | undefined {
-		const tool = this._root.findAndTouch(toolCallName, this._turnNo);
+	didCall(localTurnNumber: number, toolCallName: string): LanguageModelToolResult | undefined {
+		const result = this._root.find(toolCallName);
+		if (!result) {
+			return;
+		}
+
+		const { path, tool } = result;
+		for (const part of path) {
+			part.lastUsedOnTurn = this._turnNo;
+		}
+
+		if (path.length > 1) { // only for tools in groups under the root
+			/* __GDPR__
+				"virtualTools.called" : {
+					"owner": "connor4312",
+					"comment": "Reports information about the usage of virtual tools.",
+					"callName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Name of the categorized group (MCP or extension)" },
+					"isVirtual": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether this called a virtual tool", "isMeasurement": true },
+					"turnNo": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of turns into the loop when this expansion was made", "isMeasurement": true },
+					"depth": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Nesting depth of the tool", "isMeasurement": true },
+					"preExpanded": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the tool was pre-expanded or expanded on demand", "isMeasurement": true }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('virtualTools.called', {
+				owner: 'connor4312',
+				callName: tool.name,
+			}, {
+				turnNo: localTurnNumber,
+				isVirtual: tool instanceof VirtualTool ? 1 : 0,
+				depth: path.length - 1,
+				preExpanded: path.every(p => p.metadata.preExpanded) ? 1 : 0,
+			});
+		}
+
 		if (!(tool instanceof VirtualTool)) {
 			return;
 		}
@@ -52,6 +86,12 @@ export class ToolGrouping implements IToolGrouping {
 		return new LanguageModelToolResult([
 			new LanguageModelTextPart(`Tools activated: ${[...tool.tools()].map(t => t.name).join(', ')}`),
 		]);
+	}
+
+	getContainerFor(tool: string): VirtualTool | undefined {
+		const result = this._root.find(tool);
+		const last = result?.path.at(-1);
+		return last === this._root ? undefined : last;
 	}
 
 	didTakeTurn(): void {
@@ -94,6 +134,7 @@ export class ToolGrouping implements IToolGrouping {
 			}
 
 			lowest.isExpanded = false;
+			lowest.metadata.preExpanded = false;
 		}
 		this._trimOnNextCompute = false;
 	}
