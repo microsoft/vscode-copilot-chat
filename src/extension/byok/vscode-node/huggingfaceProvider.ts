@@ -61,20 +61,16 @@ export class HuggingFaceBYOKLMProvider extends BaseOpenAICompatibleLMProvider {
 			const data: HuggingFaceAPIResponse = await response.json();
 			const knownModels: BYOKKnownModels = {};
 
+			const modelInfoResp = await this._fetcherService.fetch(`https://huggingface.co/api/models?other=conversational&inference=warm`, { method: 'GET' });
+			const modelInfos = await modelInfoResp.json();
 			for (const model of data.data) {
 				const toolsSupportedProvider = model.providers.find(provider => provider.supports_tools === true && provider.status === 'live');
 				if (!toolsSupportedProvider) {
 					continue;
 				}
+				const modelInfo = modelInfos.find((info: any) => info.id === model.id);
+				const vision = modelInfo && modelInfo.pipeline_tag === 'image-text-to-text' ? true : false;
 
-				let vision = false;
-				try {
-					const modelInfoResp = await this._fetcherService.fetch(`https://huggingface.co/api/models/${model.id}`, { method: 'GET' });
-					const modelInfo = await modelInfoResp.json();
-					vision = modelInfo.pipeline_tag === 'image-text-to-text';
-				} catch (err) {
-					this._logService.logger.warn(`Failed to fetch vision capabilities for model ${model.id}: ${err}`);
-				}
 
 				const modelName = `${model.id} (${toolsSupportedProvider.provider})`;
 				knownModels[model.id] = {
