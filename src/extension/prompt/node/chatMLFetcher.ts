@@ -261,8 +261,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 									chatEndpoint,
 									source,
 									requestOptions,
-									userInitiatedRequest,
-									{ ...telemetryProperties, isRetryAfterFilter: 'true' },
+									false, // do not mark the retry as user initiated
+									{ ...telemetryProperties, retryAfterFilterCategory: result.category ?? 'uncategorized' },
 									intentParams,
 									true,
 								);
@@ -307,6 +307,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						source: telemetryProperties.messageSource ?? 'unknown',
 						requestId: chatParams.ourRequestId,
 						model: chatEndpoint.model,
+						retryAfterFilterCategory: baseTelemetry?.properties.retryAfterFilterCategory ?? ''
 					}, {
 						totalTokenMax: chatEndpoint.modelMaxPromptTokens ?? -1,
 						promptTokenCount: tokenCount,
@@ -367,6 +368,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			source: telemetryProperties?.messageSource ?? 'unknown',
 			requestId: chatParams.ourRequestId,
 			model: chatEndpointInfo.model,
+			retryAfterFilterCategory: telemetryProperties?.retryAfterFilterCategory ?? ''
 		}, {
 			totalTokenMax: chatEndpointInfo.modelMaxPromptTokens ?? -1,
 			promptTokenCount: tokenCount,
@@ -422,7 +424,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				source: baseTelemetry?.properties.messageSource ?? 'unknown',
 				initiatorType: userInitiatedRequest ? 'user' : 'agent',
 				model: chatEndpointInfo?.model,
-				requestId
+				requestId,
+				retryAfterFilterCategory: baseTelemetry?.properties.retryAfterFilterCategory ?? '',
 			}, {
 				totalTokenMax: chatEndpointInfo?.modelMaxPromptTokens ?? -1,
 				tokenCountMax: maxResponseTokens,
