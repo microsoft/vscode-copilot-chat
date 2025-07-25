@@ -567,7 +567,7 @@ class AgentTasksInstructions extends PromptElement {
 		}
 
 		return <>
-			The following tasks can be executed using the {ToolName.CoreRunTask} or {ToolName.RunTask} tool if they are not already running:<br />
+			The following tasks can be executed using the {ToolName.CoreRunTask} tool if they are not already running:<br />
 			{taskGroups.map(([folder, tasks]) =>
 				<Tag name='workspaceFolder' attrs={{ path: this._promptPathRepresentationService.getFilePath(folder) }}>
 					{tasks.map((t, i) => {

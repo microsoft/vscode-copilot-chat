@@ -9530,9 +9530,9 @@
   {
     "name": "notebooks (toolCalling) [panel] - Run cell tool should avoid running markdown cells",
     "contentFilterCount": 0,
-    "passCount": 1,
-    "failCount": 9,
-    "score": 0.1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "PR Title and Description [context] - Multiple commits without issue information",

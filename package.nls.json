@@ -270,7 +270,6 @@
 	"copilot.tools.getChangedFiles.name": "Git Changes",
 	"copilot.tools.testFailure.name": "Test Failure",
 	"copilot.tools.updateUserPreferences.name": "Update User Preferences",
-	"copilot.tools.runTests.name": "Run Tests",
 	"copilot.tools.openSimpleBrowser.name": "Open Simple Browser",
 	"copilot.tools.createFile.name": "Create File",
 	"copilot.tools.insertEdit.name": "Edit File",
