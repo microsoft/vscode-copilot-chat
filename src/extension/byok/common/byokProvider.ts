@@ -141,6 +141,7 @@ export function byokKnownModelsToAPIInfo(providerName: string, knownModels: BYOK
 			version: '1.0.0',
 			maxOutputTokens: capabilities.maxOutputTokens,
 			maxInputTokens: capabilities.maxInputTokens,
+			cost: providerName,
 			family: providerName,
 			description: `${capabilities.name} is contributed via the ${providerName} provider.`,
 			capabilities: {

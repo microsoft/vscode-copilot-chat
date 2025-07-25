@@ -27,6 +27,7 @@ import { ModelMetadataFetcher } from '../../node/modelMetadataFetcher';
 import { AzureTestEndpoint } from './azureEndpoint';
 import { CAPITestEndpoint, modelIdToTokenizer } from './capiEndpoint';
 import { CustomNesEndpoint } from './customNesEndpoint';
+import { IModelConfig, OpenAICompatibleTestEndpoint } from './openaiCompatibleEndpoint';
 
 
 async function getModelMetadataMap(modelMetadataFetcher: TestModelMetadataFetcher): Promise<Map<string, IChatModelInformation>> {
@@ -132,6 +133,7 @@ export class TestEndpointProvider implements IEndpointProvider {
 		_fastRewriteModelToRunAgainst: string | undefined,
 		info: CurrentTestRunInfo | undefined,
 		skipModelMetadataCache: boolean,
+		private readonly customModelConfigs: Map<string, IModelConfig> = new Map(),
 		@IInstantiationService private readonly _instantiationService: IInstantiationService
 	) {
 		const prodModelMetadata = this._instantiationService.createInstance(TestModelMetadataFetcher, undefined, false, info, skipModelMetadataCache);
@@ -143,7 +145,10 @@ export class TestEndpointProvider implements IEndpointProvider {
 	private async getChatEndpointInfo(model: string, modelLabMetadata: Map<string, IChatModelInformation>, prodMetadata: Map<string, IChatModelInformation>): Promise<IChatEndpoint> {
 		let chatEndpoint = this._chatEndpoints.get(model);
 		if (!chatEndpoint) {
-			if (model === CHAT_MODEL.CUSTOM_NES) {
+			const customModel = this.customModelConfigs.get(model);
+			if (customModel !== undefined) {
+				chatEndpoint = this._instantiationService.createInstance(OpenAICompatibleTestEndpoint, customModel);
+			} else if (model === CHAT_MODEL.CUSTOM_NES) {
 				chatEndpoint = this._instantiationService.createInstance(CustomNesEndpoint);
 			} else if (model === CHAT_MODEL.EXPERIMENTAL) {
 				chatEndpoint = this._instantiationService.createInstance(AzureTestEndpoint, model);
@@ -164,6 +169,13 @@ export class TestEndpointProvider implements IEndpointProvider {
 		const modelIDs: Set<string> = new Set([
 			CHAT_MODEL.CUSTOM_NES
 		]);
+
+		if (this.customModelConfigs.size > 0) {
+			this.customModelConfigs.forEach(config => {
+				modelIDs.add(config.name);
+			});
+		}
+
 		const modelLabMetadata: Map<string, IChatModelInformation> = await this._modelLabChatModelMetadata;
 		const prodMetadata: Map<string, IChatModelInformation> = await this._prodChatModelMetadata;
 		modelLabMetadata.forEach((modelMetadata) => {

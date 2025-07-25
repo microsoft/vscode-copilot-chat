@@ -20,6 +20,7 @@ import { SimpleRPC } from '../src/extension/onboardDebug/node/copilotDebugWorker
 import { ISimulationModelConfig, createExtensionUnitTestingServices } from '../src/extension/test/node/services';
 import { CHAT_MODEL } from '../src/platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../src/platform/endpoint/common/endpointProvider';
+import { IModelConfig } from '../src/platform/endpoint/test/node/openaiCompatibleEndpoint';
 import { fileSystemServiceReadAsJSON } from '../src/platform/filesystem/common/fileSystemService';
 import { LogLevel } from '../src/platform/log/common/logService';
 import { ParserWithCaching } from '../src/platform/parser/node/parserWithCaching';
@@ -51,7 +52,6 @@ import { logger } from './simulationLogger';
 import { IInitParams, IInitResult, IRunTestParams, IRunTestResult } from './testExecutionInExtension';
 import { GroupedScores, ITestResult, SimulationTestContext, executeTestOnce, executeTests } from './testExecutor';
 import { createScoreRenderer, fileExists, printTime } from './util';
-
 const dotSimulationPath = path.join(__dirname, `../${SIMULATION_FOLDER_NAME}`);
 
 async function main() {
@@ -563,6 +563,15 @@ function createSimulationTestContext(
 		configs
 	};
 
+	const customModelConfigMap: Map<string, IModelConfig> = new Map();
+	if (opts.modelConfigFile) {
+		console.log("Using model configuration file: " + opts.modelConfigFile);
+		const customModelConfigs = parseModelConfigFile(opts.modelConfigFile);
+		customModelConfigs.forEach(config => {
+			customModelConfigMap.set(config.id, config);
+		});
+	}
+
 	const modelConfig: ISimulationModelConfig = {
 		chatModel: opts.chatModel,
 		fastChatModel: opts.fastChatModel,
@@ -570,6 +579,7 @@ function createSimulationTestContext(
 		embeddingModel: opts.embeddingModel,
 		fastRewriteModel: opts.fastRewriteModel,
 		skipModelMetadataCache: opts.modelCacheMode === CacheMode.Disable,
+		customModelConfigs: customModelConfigMap,
 	};
 
 
@@ -774,6 +784,118 @@ function toCsv(rows: object[]): string {
 	const rowsStr = rows.map(obj => Object.values(obj).join(',') + '\n').join('');
 
 	return header + rowsStr;
+}
+
+function parseModelConfigFile(modelConfigFilePath: string): IModelConfig[] {
+	const resolvedModelConfigFilePath = path.isAbsolute(modelConfigFilePath) ? modelConfigFilePath : path.join(process.cwd(), modelConfigFilePath);
+	const configFileContents = fs.readFileSync(resolvedModelConfigFilePath, 'utf-8');
+
+	let modelConfig: any;
+	try {
+		modelConfig = JSON.parse(configFileContents);
+	} catch (error) {
+		throw new Error(`Invalid JSON configuration file ${resolvedModelConfigFilePath}: ${error.message}`);
+	}
+
+	if (!modelConfig || typeof modelConfig !== 'object') {
+		throw new Error('Invalid configuration file ' + resolvedModelConfigFilePath);
+	}
+
+	/**
+	 * the modelConfigFile.json should contain objects of the form:
+	```
+		"<model id>": {
+			"name": "<model name>",
+			"version": "<model version>",
+			"type": "<model type>", // 'openai' or 'azureOpenai'
+			"useDeveloperRole": <boolean>, // optional, defaults to false
+			"capabilities": {
+				"supports"?: {
+					"parallel_tool_calls"?: <boolean>,
+					"streaming"?: <boolean>,
+					"tool_calls"?: <boolean>,
+					"vision"?: <boolean>,
+					"prediction"?: <boolean>
+				},
+				"limits"?: {
+					"max_prompt_tokens"?: <number>,
+					"max_output_tokens"?: <number>
+				}
+			},
+			"url": "<endpoint URL>",
+			"apiKeyEnvName": "<environment variable name for API key>"
+		},
+		...
+	```
+	*/
+
+	const checkProperty = (obj: any, prop: string, type: 'string' | 'boolean' | 'number' | 'object', optional?: boolean) => {
+		if (!(prop in obj)) {
+			if (optional) {
+				return;
+			}
+			throw new Error(`Missing property '${prop}' in model configuration file ${resolvedModelConfigFilePath}`);
+		}
+		if (typeof obj[prop] !== type) {
+			throw new Error(`Property '${prop}' in model configuration file ${resolvedModelConfigFilePath} must be of type '${type}', but got '${typeof obj[prop]}'`);
+		}
+	};
+
+	const modelConfigs: IModelConfig[] = [];
+	for (const modelId in modelConfig) {
+		const model = modelConfig[modelId];
+		if (typeof model !== 'object') {
+			throw new Error(`Model configuration for '${modelId}' must be an object`);
+		}
+		checkProperty(model, 'name', 'string');
+		checkProperty(model, 'version', 'string');
+		checkProperty(model, 'type', 'string');
+		if (model.type !== 'openai' && model.type !== 'azureOpenai') {
+			throw new Error(`Model type '${model.type}' is not supported. Only 'openai' and 'azureOpenai' are allowed.`);
+		}
+		checkProperty(model, 'useDeveloperRole', 'boolean', true);
+		checkProperty(model, 'capabilities', 'object');
+		checkProperty(model.capabilities, 'supports', 'object', true);
+		if (model.capabilities.supports) {
+			checkProperty(model.capabilities.supports, 'parallel_tool_calls', 'boolean', true);
+			checkProperty(model.capabilities.supports, 'streaming', 'boolean', true);
+			checkProperty(model.capabilities.supports, 'tool_calls', 'boolean', true);
+			checkProperty(model.capabilities.supports, 'vision', 'boolean', true);
+			checkProperty(model.capabilities.supports, 'prediction', 'boolean', true);
+		}
+		checkProperty(model.capabilities, 'limits', 'object', true);
+		if (model.capabilities.limits) {
+			checkProperty(model.capabilities.limits, 'max_prompt_tokens', 'number', true);
+			checkProperty(model.capabilities.limits, 'max_output_tokens', 'number', true);
+		}
+		checkProperty(model, 'url', 'string');
+		checkProperty(model, 'apiKeyEnvName', 'string');
+		modelConfigs.push({
+			id: modelId,
+			name: model.name,
+			version: model.version,
+			type: model.type,
+			useDeveloperRole: model.useDeveloperRole ?? false,
+			capabilities: {
+				supports: {
+					parallel_tool_calls: model.capabilities.supports.parallel_tool_calls ?? false,
+					streaming: model.capabilities.supports.streaming ?? false,
+					tool_calls: model.capabilities.supports.tool_calls ?? false,
+					vision: model.capabilities.supports.vision ?? false,
+					prediction: model.capabilities.supports.prediction ?? false
+				},
+				limits: {
+					max_prompt_tokens: model.capabilities.limits.max_prompt_tokens ?? 128000,
+					max_output_tokens: model.capabilities.limits.max_output_tokens ?? Number.MAX_SAFE_INTEGER
+				}
+			},
+			url: model.url,
+			apiKeyEnvName: model.apiKeyEnvName
+
+		});
+	}
+
+	return modelConfigs;
 }
 
 (async () => main())();
