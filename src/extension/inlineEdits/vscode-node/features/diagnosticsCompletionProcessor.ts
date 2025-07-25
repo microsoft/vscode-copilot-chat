@@ -308,8 +308,13 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 	}
 
 	private _getDiagnostics(workspaceDocument: IVSCodeObservableDocument, cursor: Position, logContext: DiagnosticInlineEditRequestLogContext): { availableDiagnostics: Diagnostic[]; relevantDiagnostics: Diagnostic[] } {
-		const availableDiagnostics = this._languageDiagnosticsService
-			.getDiagnostics(workspaceDocument.textDocument.uri)
+		const diagnostics = workspaceDocument.kind === 'textDocument' ?
+			this._languageDiagnosticsService
+				.getDiagnostics(workspaceDocument.textDocument.uri) :
+			workspaceDocument.notebook.getCells().flatMap(cell => this._languageDiagnosticsService
+				.getDiagnostics(cell.document.uri)
+				.flatMap(diagnostic => workspaceDocument.projectDiagnostics(cell, [diagnostic])));
+		const availableDiagnostics = diagnostics
 			.map(diagnostic => Diagnostic.fromVSCodeDiagnostic(diagnostic))
 			.filter(diagnostic => diagnostic.severity !== DiagnosticSeverity.Information)
 			.filter(diagnostic => diagnostic.severity !== DiagnosticSeverity.Hint);

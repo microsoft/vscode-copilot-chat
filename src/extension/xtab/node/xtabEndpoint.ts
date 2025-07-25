@@ -71,8 +71,7 @@ export class XtabEndpoint extends ChatEndpoint {
 			_authService,
 			_chatMLFetcher,
 			_tokenizerProvider,
-			_instantiationService,
-			_thinkingDataService
+			_instantiationService
 		);
 	}
 

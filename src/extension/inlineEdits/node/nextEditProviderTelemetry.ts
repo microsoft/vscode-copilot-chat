@@ -11,6 +11,7 @@ import { IObservableDocument } from '../../../platform/inlineEdits/common/observ
 import { IStatelessNextEditTelemetry, StatelessNextEditRequest } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { autorunWithChanges } from '../../../platform/inlineEdits/common/utils/observable';
 import { APIUsage } from '../../../platform/networking/common/openai';
+import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { ITelemetryService, multiplexProperties, TelemetryEventMeasurements, TelemetryEventProperties } from '../../../platform/telemetry/common/telemetry';
 import { LogEntry } from '../../../platform/workspaceRecorder/common/workspaceLog';
 import { Disposable, IDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -133,7 +134,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			activeDocumentEditsCount = activeDoc.recentEdits.edits.length;
 			activeDocumentLanguageId = activeDoc.languageId;
 			activeDocumentOriginalLineCount = activeDoc.documentAfterEditsLines.length;
-			isNotebook = activeDoc.id.toUri().scheme === Schemas.vscodeNotebookCell;
+			isNotebook = activeDoc.id.toUri().scheme === Schemas.vscodeNotebookCell || this._notebookService.hasSupportedNotebooks(activeDoc.id.toUri());
 			const git = this._gitExtensionService.getExtensionApi();
 			if (git) {
 				const activeDocRepository = git.getRepository(Uri.parse(activeDoc.id.uri));
@@ -259,6 +260,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 
 	constructor(
 		private readonly _gitExtensionService: IGitExtensionService,
+		private readonly _notebookService: INotebookService,
 		private readonly _providerId: string,
 		private readonly _doc: IObservableDocument,
 		private readonly _debugRecorder?: DebugRecorder,
@@ -450,6 +452,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 
 	constructor(
 		gitExtensionService: IGitExtensionService,
+		notebookService: INotebookService,
 		providerId: string,
 		doc: IObservableDocument,
 		debugRecorder?: DebugRecorder,
@@ -458,7 +461,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 		super();
 		this._requestN = ++NextEditProviderTelemetryBuilder.requestN;
 
-		this._nesBuilder = this._register(new LlmNESTelemetryBuilder(gitExtensionService, providerId, doc, debugRecorder, requestBookmark));
+		this._nesBuilder = this._register(new LlmNESTelemetryBuilder(gitExtensionService, notebookService, providerId, doc, debugRecorder, requestBookmark));
 		this._diagnosticsBuilder = new DiagnosticsTelemetryBuilder();
 	}
 

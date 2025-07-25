@@ -7,13 +7,12 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 
 export class DelaySession {
-	private readonly providerInvocationTime = Date.now();
-
 	private extraDebounce = 0;
 
 	constructor(
 		private baseDebounceTime: number,
 		private readonly expectedTotalTime: number | undefined,
+		private readonly providerInvocationTime: number = Date.now(),
 	) {
 	}
 
@@ -53,13 +52,13 @@ export class Delayer {
 	) {
 	}
 
-	public createDelaySession(): DelaySession {
+	public createDelaySession(requestTime: number | undefined): DelaySession {
 		const baseDebounceTime = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounce, this._experimentationService);
 
 		const backoffDebounceEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsBackoffDebounceEnabled, this._experimentationService);
 		const expectedTotalTime = backoffDebounceEnabled ? this._getExpectedTotalTime(baseDebounceTime) : undefined;
 
-		return new DelaySession(baseDebounceTime, expectedTotalTime);
+		return new DelaySession(baseDebounceTime, expectedTotalTime, requestTime);
 	}
 
 	public handleAcceptance(): void {

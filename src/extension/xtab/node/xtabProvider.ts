@@ -117,7 +117,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 				return StatelessNextEditResult.noEdit(new NoNextEditReason.ActiveDocumentHasNoEdits(), telemetry);
 			}
 
-			const delaySession = this.delayer.createDelaySession();
+			const delaySession = this.delayer.createDelaySession(request.providerRequestStartDateTime);
 
 			const nextEditResult = await this.doGetNextEdit(request, pushEdit, delaySession, logContext, cancellationToken, telemetry, RetryState.NotRetrying);
 

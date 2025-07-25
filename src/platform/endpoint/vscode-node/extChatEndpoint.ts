@@ -20,7 +20,6 @@ import { IChatEndpoint } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { IThinkingDataService } from '../../thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { CustomDataPartMimeTypes } from '../common/endpointTypes';
 
@@ -34,8 +33,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	constructor(
 		private readonly languageModel: vscode.LanguageModelChat,
 		@ITokenizerProvider private readonly _tokenizerProvider: ITokenizerProvider,
-		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-		@IThinkingDataService private readonly thinkingDataService: IThinkingDataService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService
 	) {
 		// Initialize with the model's max tokens
 		this._maxTokens = languageModel.maxInputTokens;
@@ -221,9 +219,8 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 							arguments: JSON.stringify(tool.input) ?? '',
 							id: tool.callId
 						}));
-						const thinking = functionCalls.length > 0 ? this.thinkingDataService.peek(functionCalls[0].id) : undefined;
 						numToolsCalled++;
-						await finishedCb(text, 0, { text: '', copilotToolCalls: functionCalls, thinking });
+						await finishedCb(text, 0, { text: '', copilotToolCalls: functionCalls });
 					}
 				}
 			}

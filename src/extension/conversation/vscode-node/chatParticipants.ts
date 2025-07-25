@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { IChatAgentService, defaultAgentName, editingSessionAgent2Name, editingSessionAgentEditorName, editingSessionAgentName, editorAgentName, editsAgentName, getChatParticipantIdFromName, terminalAgentName, vscodeAgentName, workspaceAgentName } from '../../../platform/chat/common/chatAgents';
+import { IChatAgentService, defaultAgentName, editingSessionAgent2Name, editingSessionAgentEditorName, editingSessionAgentName, editorAgentName, editsAgentName, getChatParticipantIdFromName, notebookEditorAgentName, terminalAgentName, vscodeAgentName, workspaceAgentName } from '../../../platform/chat/common/chatAgents';
 import { IChatQuotaService } from '../../../platform/chat/common/chatQuotaService';
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -236,7 +236,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 	}
 
 	private registerNotebookDefaultAgent(): IDisposable {
-		const defaultAgent = this.createAgent('notebook', Intent.Editor);
+		const defaultAgent = this.createAgent(notebookEditorAgentName, Intent.notebookEditor);
 		defaultAgent.iconPath = new vscode.ThemeIcon('copilot');
 
 		return defaultAgent;

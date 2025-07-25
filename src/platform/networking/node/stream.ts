@@ -8,8 +8,8 @@ import type { CancellationToken } from 'vscode';
 import { ILogService, LogLevel } from '../../log/common/logService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { ThinkingData } from '../../thinking/common/thinking';
-import { IThinkingDataService } from '../../thinking/node/thinkingDataService';
+import { RawThinkingDelta, ThinkingDelta } from '../../thinking/common/thinking';
+import { extractThinkingDeltaFromChoice, } from '../../thinking/common/thinkingUtils';
 import { FinishedCallback, getRequestId, ICodeVulnerabilityAnnotation, ICopilotBeginToolCall, ICopilotConfirmation, ICopilotError, ICopilotFunctionCall, ICopilotReference, ICopilotToolCall, IIPCodeCitation, isCodeCitationAnnotation, isCopilotAnnotation, RequestId } from '../common/fetch';
 import { Response } from '../common/fetcherService';
 import { APIErrorResponse, APIJsonData, APIUsage, ChoiceLogProbs, FilterReason, FinishedCompletionReason, isApiUsage, IToolCall } from '../common/openai';
@@ -114,11 +114,6 @@ class StreamingToolCalls {
 	}
 }
 
-function isChainOfThoughtChoice(choice: ExtendedChoiceJSON): boolean {
-	return (choice.delta?.cot_id !== undefined || choice.delta?.cot_summary !== undefined || choice.delta?.reasoning_opaque !== undefined || choice.delta?.reasoning_text !== undefined);
-}
-
-
 // Given a string of lines separated by one or more newlines, returns complete
 // lines and any remaining partial line data. Exported for test only.
 export function splitChunk(chunk: string): [string[], string] {
@@ -168,7 +163,7 @@ interface ChoiceJSON {
  */
 interface ExtendedChoiceJSON extends ChoiceJSON {
 	content_filter_results?: Record<Exclude<FilterReason, FilterReason.Copyright>, { filtered: boolean; severity: string }>;
-	message?: ThinkingData;
+	message?: RawThinkingDelta;
 	delta?: {
 		content: string | null;
 		copilot_annotations?: {
@@ -187,7 +182,7 @@ interface ExtendedChoiceJSON extends ChoiceJSON {
 		tool_calls?: IToolCall[];
 		role?: string;
 		name?: string;
-	} & ThinkingData;
+	} & RawThinkingDelta;
 }
 
 /**
@@ -215,7 +210,6 @@ export class SSEProcessor {
 		private readonly expectedNumChoices: number,
 		private readonly response: Response,
 		private readonly body: NodeJS.ReadableStream,
-		private readonly thinkingData: IThinkingDataService,
 		private readonly cancellationToken?: CancellationToken
 	) { }
 
@@ -224,7 +218,6 @@ export class SSEProcessor {
 		telemetryService: ITelemetryService,
 		expectedNumChoices: number,
 		response: Response,
-		thinkingData: IThinkingDataService,
 		cancellationToken?: CancellationToken
 	) {
 		const body = (await response.body()) as NodeJS.ReadableStream;
@@ -235,7 +228,6 @@ export class SSEProcessor {
 			expectedNumChoices,
 			response,
 			body,
-			thinkingData,
 			cancellationToken
 		);
 	}
@@ -402,15 +394,8 @@ export class SSEProcessor {
 
 					this.logChoice(choice);
 
-					if (isChainOfThoughtChoice(choice)) {
-						const toolCalls = this.toolCalls.getToolCalls();
-						if (toolCalls.length > 0) {
-							this.thinkingData.update(choice, toolCalls[0].id);
-						} else {
-							this.thinkingData.update(choice);
-						}
-						continue;
-					}
+
+					const thinkingDelta = extractThinkingDeltaFromChoice(choice);
 
 					if (!(choice.index in this.solutions)) {
 						this.solutions[choice.index] = new APIJsonDataStreaming();
@@ -418,12 +403,15 @@ export class SSEProcessor {
 
 					const solution = this.solutions[choice.index];
 					if (solution === null) {
+						if (thinkingDelta) {
+							await finishedCb('', choice.index, { text: '', thinking: thinkingDelta });
+						}
 						continue; // already finished
 					}
 
 					let finishOffset: number | undefined;
 
-					const emitSolution = async (delta?: { vulnAnnotations?: ICodeVulnerabilityAnnotation[]; ipCodeCitations?: IIPCodeCitation[]; references?: ICopilotReference[]; toolCalls?: ICopilotToolCall[]; functionCalls?: ICopilotFunctionCall[]; errors?: ICopilotError[]; beginToolCalls?: ICopilotBeginToolCall[]; thinking?: ThinkingData }) => {
+					const emitSolution = async (delta?: { vulnAnnotations?: ICodeVulnerabilityAnnotation[]; ipCodeCitations?: IIPCodeCitation[]; references?: ICopilotReference[]; toolCalls?: ICopilotToolCall[]; functionCalls?: ICopilotFunctionCall[]; errors?: ICopilotError[]; beginToolCalls?: ICopilotBeginToolCall[]; thinking?: ThinkingDelta }) => {
 						if (delta?.vulnAnnotations && (!Array.isArray(delta.vulnAnnotations) || !delta.vulnAnnotations.every(a => isCopilotAnnotation(a)))) {
 							delta.vulnAnnotations = undefined;
 						}
@@ -443,7 +431,7 @@ export class SSEProcessor {
 							_deprecatedCopilotFunctionCalls: delta?.functionCalls,
 							beginToolCalls: delta?.beginToolCalls,
 							copilotErrors: delta?.errors,
-							thinking: delta?.thinking
+							thinking: thinkingDelta ?? delta?.thinking,
 						});
 						if (finishOffset !== undefined) {
 							hadEarlyFinishedSolution = true;
@@ -519,9 +507,9 @@ export class SSEProcessor {
 						handled = true;
 						const toolCalls = this.toolCalls.getToolCalls();
 						this.completedFunctionCallIdxs.set(choice.index, 'tool');
-						const id = toolCalls.length > 0 ? toolCalls[0].id : undefined;
+						const toolId = toolCalls.length > 0 ? toolCalls[0].id : undefined;
 						try {
-							if (await emitSolution({ toolCalls: toolCalls, thinking: id ? this.thinkingData.peek(id) : undefined })) {
+							if (await emitSolution({ toolCalls: toolCalls, thinking: { text: '', metadata: toolId } })) {
 								continue;
 							}
 						} catch (error) {

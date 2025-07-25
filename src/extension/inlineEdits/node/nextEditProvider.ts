@@ -136,6 +136,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			isRevisedCacheStrategy: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRevisedCacheStrategy, this._expService),
 			isCacheTracksRejections: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheTracksRejections, this._expService),
 			isRecentlyShownCacheEnabled: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRecentlyShownCacheEnabled, this._expService),
+			debounceUseCoreRequestTime: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounceUseCoreRequestTime, this._expService),
 		};
 
 		telemetryBuilder.setNESConfigs({ ...nesConfigs });
@@ -191,7 +192,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		} else {
 			tracer.trace('fetching next edit');
-			req = new NextEditFetchRequest(logContext, Date.now());
+			req = new NextEditFetchRequest(logContext, nesConfigs.debounceUseCoreRequestTime ? (context.requestIssuedDateTime ?? undefined) : undefined);
 			telemetryBuilder.setHeaderRequestId(req.headerRequestId);
 
 			const startVersion = doc.value.get();
@@ -425,7 +426,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			firstEdit,
 			logContext,
 			req.log.recordingBookmark,
-			recording
+			recording,
+			req.providerRequestStartDateTime,
 		);
 		let nextEditResult: StatelessNextEditResult | undefined;
 
@@ -683,7 +685,7 @@ export class NextEditFetchRequest {
 	public readonly headerRequestId = generateUuid();
 	constructor(
 		public readonly log: InlineEditRequestLogContext,
-		public readonly startTime: number,
+		public readonly providerRequestStartDateTime: number | undefined,
 	) {
 	}
 }

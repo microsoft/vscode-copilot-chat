@@ -20,6 +20,7 @@ import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from 
 import { IChatEndpoint, IEndpoint } from '../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { BaseTokensPerCompletion } from '../../../platform/tokenizer/node/tokenizer';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -132,13 +133,17 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			}
 
 			const baseCount = await PromptRenderer.create(this._instantiationService, endpoint, LanguageModelAccessPrompt, { noSafety: false, messages: [] }).countTokens();
+			let multiplierString = endpoint.multiplier !== undefined ? `${endpoint.multiplier}x` : undefined;
+			if (endpoint.model === AutoChatEndpoint.id) {
+				multiplierString = 'Variable';
+			}
 
 			const model: vscode.LanguageModelChatInformation = {
 				id: endpoint.model,
 				name: endpoint.name,
 				family: endpoint.family,
 				description: modelDescription,
-				cost: endpoint.multiplier !== undefined && endpoint.multiplier !== 0 ? `${endpoint.multiplier}x` : endpoint.multiplier === 0 ? localize('languageModel.costIncluded', 'Included') : undefined,
+				cost: multiplierString,
 				category: modelCategory,
 				version: endpoint.version,
 				maxInputTokens: endpoint.modelMaxPromptTokens - baseCount - BaseTokensPerCompletion,
@@ -258,7 +263,8 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ILogService private readonly _logService: ILogService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
-		@IEnvService private readonly _envService: IEnvService
+		@IEnvService private readonly _envService: IEnvService,
+		@IThinkingDataService private readonly _thinkingDataService: IThinkingDataService
 	) {
 		super();
 	}
@@ -410,6 +416,12 @@ export class CopilotLanguageModelWrapper extends Disposable {
 						throw new Error('Invalid JSON for tool call');
 					}
 				}
+			}
+			if (delta.thinking) {
+				// progress.report({ index, part: new vscode.LanguageModelThinkingPart(delta.thinking) });
+
+				// @karthiknadig: remove this when LM API becomes available
+				this._thinkingDataService.update(index, delta.thinking);
 			}
 			return undefined;
 		};

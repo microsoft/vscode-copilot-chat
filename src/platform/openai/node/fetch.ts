@@ -535,6 +535,10 @@ async function fetchWithInstrumentation(
 		additionalHeaders,
 		cancel
 	).then(response => {
+		const apim = response.headers.get('apim-request-id');
+		if (apim) {
+			logService.logger.debug(`APIM request id: ${apim}`);
+		}
 		// This ID is hopefully the one the same as ourRequestId, but it is not guaranteed.
 		// If they are different then we will override the original one we set in telemetryData above.
 		const modelRequestId = getRequestId(response, undefined);

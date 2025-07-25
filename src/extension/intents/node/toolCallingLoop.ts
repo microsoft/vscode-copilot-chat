@@ -14,7 +14,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { FinishedCallback, OpenAiFunctionDef, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { ThinkingData } from '../../../platform/thinking/common/thinking';
+import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
@@ -111,6 +111,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IAuthenticationChatUpgradeService private readonly _authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
+		@IThinkingDataService private readonly _thinkingDataService: IThinkingDataService,
 	) {
 		super();
 	}
@@ -412,7 +413,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			} satisfies OpenAiFunctionDef;
 		}) : undefined;
 		const toolCalls: IToolCall[] = [];
-		let thinking: ThinkingData | undefined;
 		const fixedMessages = this.applyMessagePostProcessing(buildPromptResult.messages);
 		const fetchResult = await this.fetch(
 			fixedMessages,
@@ -424,7 +424,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						id: this.createInternalToolCallId(call.id),
 						arguments: call.arguments === '' ? '{}' : call.arguments
 					})));
-					thinking = delta.thinking;
 				}
 
 				return stopEarly ? text.length : undefined;
@@ -469,12 +468,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					toolCalls,
 					toolInputRetry,
 					undefined,
-					thinking
 				),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
 				lastRequestMessages: buildPromptResult.messages,
-				availableToolCount: availableTools.length
+				availableTools,
 			};
 		}
 
@@ -482,8 +480,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			response: fetchResult,
 			hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
 			lastRequestMessages: buildPromptResult.messages,
-			availableToolCount: availableTools.length,
-			round: new ToolCallRound('', toolCalls, toolInputRetry, undefined, thinking)
+			availableTools,
+			round: new ToolCallRound('', toolCalls, toolInputRetry, undefined)
 		};
 	}
 
@@ -628,7 +626,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}
 
 		if (originalCall) {
-			this._requestLogger.logToolCall(originalCall?.id || generateUuid(), originalCall?.name, originalCall?.arguments, metadata.result, lastTurn?.thinking);
+			const thinking = this._thinkingDataService.get(originalCall.id);
+			this._requestLogger.logToolCall(originalCall.id || generateUuid(), originalCall.name, originalCall.arguments, metadata.result, thinking);
 		}
 	}
 }
@@ -651,7 +650,7 @@ export interface IToolCallSingleResult {
 	chatResult?: ChatResult; // TODO should just be metadata
 	hadIgnoredFiles: boolean;
 	lastRequestMessages: Raw.ChatMessage[];
-	availableToolCount: number;
+	availableTools: readonly LanguageModelToolInformation[];
 }
 
 export interface IToolCallLoopResult extends IToolCallSingleResult {

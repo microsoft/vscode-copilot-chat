@@ -170,6 +170,7 @@ export function sendConversationalMessageTelemetry(
 
 	telemetryService.sendGHTelemetryEvent(`${prefix}.message`, standardTelemetryData.raw.properties, standardTelemetryData.raw.measurements);
 	telemetryService.sendEnhancedGHTelemetryEvent(`${prefix}.messageText`, enhancedTelemetryLogger.raw.properties, enhancedTelemetryLogger.raw.measurements);
+	telemetryService.sendInternalMSFTTelemetryEvent(`${prefix}.messageText`, enhancedTelemetryLogger.raw.properties, enhancedTelemetryLogger.raw.measurements);
 
 	return standardTelemetryData.raw;
 }

@@ -35,6 +35,7 @@ import { InlineEditModel } from './inlineEditModel';
 import { learnMoreCommandId, learnMoreLink } from './inlineEditProviderFeature';
 import { isInlineSuggestion } from './isInlineSuggestion';
 import { InlineEditLogger } from './parts/inlineEditLogger';
+import { INotebookService } from '../../../platform/notebook/common/notebookService';
 
 export interface NesCompletionItem extends InlineCompletionItem {
 	readonly telemetryBuilder: NextEditProviderTelemetryBuilder;
@@ -102,7 +103,8 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@ILogService private readonly _logService: ILogService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
-		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService
+		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
+		@INotebookService private readonly _notebookService: INotebookService,
 	) {
 		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.logger.trace(s));
 	}
@@ -147,7 +149,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		const logContext = new InlineEditRequestLogContext(doc.id.uri, document.version, context);
 		logContext.recordingBookmark = this.model.debugRecorder.createBookmark();
 
-		const telemetryBuilder = new NextEditProviderTelemetryBuilder(this._gitExtensionService, this.model.nextEditProvider.ID, doc, this.model.debugRecorder, logContext.recordingBookmark);
+		const telemetryBuilder = new NextEditProviderTelemetryBuilder(this._gitExtensionService, this._notebookService, this.model.nextEditProvider.ID, doc, this.model.debugRecorder, logContext.recordingBookmark);
 		telemetryBuilder.setOpportunityId(context.requestUuid);
 		telemetryBuilder.setConfigIsDiagnosticsNESEnabled(!!this.model.diagnosticsBasedProvider);
 		telemetryBuilder.setIsNaturalLanguageDominated(LineCheck.isNaturalLanguageDominated(document, position));
@@ -203,7 +205,21 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 			tracer.trace(`using next edit suggestion from ${suggestionInfo.source}`);
 
-			const range = documentRangeFromOffsetRange(document, result.edit.replaceRange);
+			let range: Range;
+
+			if (doc.kind === 'notebookDocument') {
+				// Ignore changes to other cells.
+				const cellRange = doc.fromOffsetRange(result.edit.replaceRange).find(([cell]) => cell.document === document);
+				if (cellRange) {
+					range = cellRange[1];
+				} else {
+					tracer.trace('no next edit suggestion for notebook cell');
+					this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
+					return emptyList;
+				}
+			} else {
+				range = documentRangeFromOffsetRange(document, result.edit.replaceRange);
+			}
 
 			// Only show edit when the cursor is max 4 lines away from the edit
 			const showRange = (

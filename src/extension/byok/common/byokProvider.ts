@@ -51,6 +51,7 @@ export interface BYOKModelCapabilities {
 	maxOutputTokens: number;
 	toolCalling: boolean;
 	vision: boolean;
+	thinking?: boolean;
 }
 
 export interface BYOKModelRegistry {
@@ -115,7 +116,8 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 			supports: {
 				streaming: true,
 				tool_calls: !!knownModelInfo?.toolCalling,
-				vision: !!knownModelInfo?.vision
+				vision: !!knownModelInfo?.vision,
+				thinking: !!knownModelInfo?.thinking
 			},
 			tokenizer: TokenizerType.O200K,
 			limits: {
@@ -141,6 +143,7 @@ export function byokKnownModelsToAPIInfo(providerName: string, knownModels: BYOK
 			version: '1.0.0',
 			maxOutputTokens: capabilities.maxOutputTokens,
 			maxInputTokens: capabilities.maxInputTokens,
+			cost: providerName,
 			family: providerName,
 			description: `${capabilities.name} is contributed via the ${providerName} provider.`,
 			capabilities: {

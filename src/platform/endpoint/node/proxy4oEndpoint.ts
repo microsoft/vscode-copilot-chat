@@ -13,7 +13,6 @@ import { ConfigKey, IConfigurationService } from '../../configuration/common/con
 import { IEnvService } from '../../env/common/envService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { IThinkingDataService } from '../../thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
@@ -35,8 +34,7 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
-		@IExperimentationService experimentationService: IExperimentationService,
-		@IThinkingDataService thinkingDataService: IThinkingDataService
+		@IExperimentationService experimentationService: IExperimentationService
 	) {
 		const model = configurationService.getExperimentBasedConfig<string>(ConfigKey.Internal.InstantApplyModelName, experimentationService) ?? 'gpt-4o-instant-apply-full-ft-v66';
 		const modelInfo: IChatModelInformation = {
@@ -67,8 +65,7 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
-			instantiationService,
-			thinkingDataService,
+			instantiationService
 		);
 	}
 
