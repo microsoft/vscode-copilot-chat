@@ -328,11 +328,11 @@ export class DefaultIntentRequestHandler {
 		try {
 			const result = await loop.run(this.stream, pauseCtrl);
 			if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
-				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableToolCount, this.token.isCancellationRequested ? 'cancelled' : result.response.type);
+				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableTools, this.token.isCancellationRequested ? 'cancelled' : result.response.type);
 			}
 			result.chatResult ??= {};
 			if ((result.chatResult.metadata as IResultMetadata)?.maxToolCallsExceeded) {
-				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableToolCount, 'maxToolCalls');
+				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableTools, 'maxToolCalls');
 			}
 
 			// TODO need proper typing for all chat metadata and a better pattern to build it up from random places
@@ -478,7 +478,6 @@ interface IInternalRequestResult {
 	hadIgnoredFiles: boolean;
 	lastRequestMessages: Raw.ChatMessage[];
 	lastRequestTelemetry: ChatTelemetry;
-	availableToolCount: number;
 }
 
 interface IDefaultToolLoopOptions extends IToolCallingLoopOptions {

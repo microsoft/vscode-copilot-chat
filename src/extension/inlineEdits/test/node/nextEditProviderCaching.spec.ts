@@ -31,6 +31,7 @@ import { LineRange } from '../../../../util/vs/editor/common/core/ranges/lineRan
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { NextEditProvider } from '../../node/nextEditProvider';
 import { NextEditProviderTelemetryBuilder } from '../../node/nextEditProviderTelemetry';
+import { mockNotebookService } from '../../../../platform/test/common/testNotebookService';
 
 describe('NextEditProvider Caching', () => {
 
@@ -105,7 +106,7 @@ describe('NextEditProvider Caching', () => {
 		const context: InlineCompletionContext = { triggerKind: 1, selectedCompletionInfo: undefined, requestUuid: generateUuid() };
 		const logContext = new InlineEditRequestLogContext(doc.id.toString(), 1, context);
 		const cancellationToken = CancellationToken.None;
-		const tb1 = new NextEditProviderTelemetryBuilder(gitExtensionService, nextEditProvider.ID, doc);
+		const tb1 = new NextEditProviderTelemetryBuilder(gitExtensionService, mockNotebookService, nextEditProvider.ID, doc);
 
 		let result = await nextEditProvider.getNextEdit(doc.id, context, logContext, cancellationToken, tb1.nesBuilder);
 
@@ -130,7 +131,7 @@ describe('NextEditProvider Caching', () => {
 			const myPoint = new Point(0, 1);"
 		`);
 
-		const tb2 = new NextEditProviderTelemetryBuilder(gitExtensionService, nextEditProvider.ID, doc);
+		const tb2 = new NextEditProviderTelemetryBuilder(gitExtensionService, mockNotebookService, nextEditProvider.ID, doc);
 
 		result = await nextEditProvider.getNextEdit(doc.id, context, logContext, cancellationToken, tb2.nesBuilder);
 
@@ -155,7 +156,7 @@ describe('NextEditProvider Caching', () => {
 			const myPoint = new Point(0, 1);"
 		`);
 
-		const tb3 = new NextEditProviderTelemetryBuilder(gitExtensionService, nextEditProvider.ID, doc);
+		const tb3 = new NextEditProviderTelemetryBuilder(gitExtensionService, mockNotebookService, nextEditProvider.ID, doc);
 
 		result = await nextEditProvider.getNextEdit(doc.id, context, logContext, cancellationToken, tb3.nesBuilder);
 

@@ -35,8 +35,16 @@ export class EditSourceTrackingFeature extends Disposable {
 		const visibleTextEditorDocs = ObservableVsCode.instance.visibleTextEditors.map(editors => new Set(editors.map(e => e.editor.document)));
 
 		const impl = this._register(this._instantiationService.createInstance(EditSourceTrackingImpl, _workspace, (doc, reader) => {
-			const docIsVisible = visibleTextEditorDocs.read(reader).has((doc as IVSCodeObservableDocument).textDocument);
-			return docIsVisible;
+			const obsDoc = (doc as IVSCodeObservableDocument);
+			if (obsDoc.kind === 'textDocument') {
+				const docIsVisible = visibleTextEditorDocs.read(reader).has(obsDoc.textDocument);
+				return docIsVisible;
+			} else {
+				const notebook = obsDoc.notebook;
+				const visibleEditors = visibleTextEditorDocs.read(reader);
+				const docIsVisible = notebook.getCells().some(c => visibleEditors.has(c.document));
+				return docIsVisible;
+			}
 		}));
 
 		this._register(autorun((reader) => {
