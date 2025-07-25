@@ -21,6 +21,7 @@ import { CompletionsFetchFailure, ModelParams } from '../../nesFetch/common/comp
 import { IFetchRequestParams } from '../../nesFetch/node/completionsFetchServiceImpl';
 import { APIUsage } from '../../networking/common/openai';
 import { ChatParams } from '../../openai/node/fetch';
+import { ThinkingData } from '../../thinking/common/thinking';
 
 export type UriData = { kind: 'request'; id: string } | { kind: 'latest' };
 
@@ -92,6 +93,7 @@ export interface ILoggedToolCall {
 	response: LanguageModelToolResult2;
 	chatRequest: ChatRequest | undefined;
 	time: number;
+	thinking?: ThinkingData;
 }
 
 export type LoggedInfo = ILoggedElementInfo | ILoggedRequestInfo | ILoggedToolCall;
@@ -105,7 +107,7 @@ export interface IRequestLogger {
 
 	captureInvocation<T>(request: ChatRequest, fn: () => Promise<T>): Promise<T>;
 
-	logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2): void;
+	logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void;
 
 	logChatRequest(debugName: string, chatEndpoint: IChatEndpointLogInfo, chatParams: ChatParams): PendingLoggedChatRequest;
 

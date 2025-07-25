@@ -51,10 +51,6 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 		if (copilotToken.isCompletionsQuotaExceeded) {
 			return false;
 		}
-		const shouldRespectNesTokenFlag = this._expService.getTreatmentVariable<boolean>('vscode', 'copilotchat.respectNesTokenFlag');
-		if (shouldRespectNesTokenFlag === true) {
-			return copilotToken.isNesEnabled() || copilotToken.isInternal;
-		}
 		return true;
 	});
 
@@ -148,6 +144,10 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 			reader.store.add(commands.registerCommand(learnMoreCommandId, () => {
 				this._envService.openExternal(URI.parse(learnMoreLink));
 			}));
+
+			reader.store.add(commands.registerCommand(clearCacheCommandId, () => {
+				model.nextEditProvider.clearCache();
+			}));
 		}));
 
 		this._register(autorun(reader => {
@@ -165,3 +165,5 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 export const learnMoreCommandId = 'github.copilot.debug.inlineEdit.learnMore';
 
 export const learnMoreLink = 'https://aka.ms/vscode-nes';
+
+const clearCacheCommandId = 'github.copilot.debug.inlineEdit.clearCache';

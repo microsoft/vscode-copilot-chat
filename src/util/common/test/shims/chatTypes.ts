@@ -301,14 +301,6 @@ export class AISearchKeyword {
 	constructor(public keyword: string) { }
 }
 
-export class PreparedTerminalToolInvocation {
-	constructor(
-		public readonly command: string,
-		public readonly language: string,
-		public readonly confirmationMessages?: vscode.LanguageModelToolConfirmationMessages,
-	) { }
-}
-
 export enum ChatErrorLevel {
 	Info = 0,
 	Warning = 1,
@@ -319,4 +311,12 @@ export enum ChatRequestEditedFileEventKind {
 	Keep = 1,
 	Undo = 2,
 	UserModification = 3,
+}
+
+export class LanguageModelToolExtensionSource implements vscode.LanguageModelToolExtensionSource {
+	constructor(public readonly id: string, public readonly label: string) { }
+}
+
+export class LanguageModelToolMCPSource implements vscode.LanguageModelToolMCPSource {
+	constructor(public readonly label: string, public readonly name: string, public readonly instructions: string | undefined) { }
 }

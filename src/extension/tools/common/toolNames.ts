@@ -16,8 +16,6 @@ export const enum ToolName {
 	ReadFile = 'read_file',
 	ListDirectory = 'list_dir',
 	GetErrors = 'get_errors',
-	RunInTerminal = 'run_in_terminal',
-	GetTerminalOutput = 'get_terminal_output',
 	GetScmChanges = 'get_changed_files',
 	UpdateUserPreferences = 'update_user_preferences',
 	ReadProjectStructure = 'read_project_structure',
@@ -27,7 +25,6 @@ export const enum ToolName {
 	CreateNewJupyterNotebook = 'create_new_jupyter_notebook',
 	SearchWorkspaceSymbols = 'search_workspace_symbols',
 	Usages = 'list_code_usages',
-	RunTask = 'run_vs_code_task',
 	EditFile = 'insert_edit_into_file',
 	CreateFile = 'create_file',
 	ReplaceString = 'replace_string_in_file',
@@ -43,11 +40,16 @@ export const enum ToolName {
 	SearchViewResults = 'get_search_view_results',
 	DocInfo = 'get_doc_info',
 	GithubRepo = 'github_repo',
-	CreateAndRunTask = 'create_and_run_task',
 	SimpleBrowser = 'open_simple_browser',
 	CreateDirectory = 'create_directory',
 	RunVscodeCmd = 'run_vscode_command',
-	GetTaskOutput = 'get_task_output'
+	GetTaskOutput = 'get_task_output',
+
+	CoreRunInTerminal = 'run_in_terminal',
+	CoreGetTerminalOutput = 'get_terminal_output',
+	CoreCreateAndRunTask = 'create_and_run_task',
+	CoreRunTask = 'run_task',
+	CoreGetTaskOutput = 'get_task_output',
 }
 
 // When updating this, also update contributedToolNameToToolNames
@@ -59,22 +61,20 @@ export const enum ContributedToolName {
 	UpdateUserPreferences = 'copilot_updateUserPreferences',
 	VSCodeAPI = 'copilot_getVSCodeAPI',
 	TestFailure = 'copilot_testFailure',
-	RunTests = 'copilot_runTests',
+	/** @deprecated moving to core soon */
+	RunTests = 'copilot_runTests1',
 	FindFiles = 'copilot_findFiles',
 	FindTextInFiles = 'copilot_findTextInFiles',
 	ReadFile = 'copilot_readFile',
 	ListDirectory = 'copilot_listDirectory',
 	GetErrors = 'copilot_getErrors',
 	DocInfo = 'copilot_getDocInfo',
-	RunInTerminal = 'copilot_runInTerminal',
-	GetTerminalOutput = 'copilot_getTerminalOutput',
 	GetScmChanges = 'copilot_getChangedFiles',
 	ReadProjectStructure = 'copilot_readProjectStructure',
 	TerminalSelection = 'copilot_getTerminalSelection',
 	TerminalLastCommand = 'copilot_getTerminalLastCommand',
 	CreateNewWorkspace = 'copilot_createNewWorkspace',
 	CreateNewJupyterNotebook = 'copilot_createNewJupyterNotebook',
-	RunTask = 'copilot_runVsCodeTask',
 	EditFile = 'copilot_insertEdit',
 	CreateFile = 'copilot_createFile',
 	ReplaceString = 'copilot_replaceString',
@@ -93,7 +93,6 @@ export const enum ContributedToolName {
 	SimpleBrowser = 'copilot_openSimpleBrowser',
 	CreateDirectory = 'copilot_createDirectory',
 	RunVscodeCmd = 'copilot_runVscodeCommand',
-	GetTaskOutput = 'copilot_getTaskOutput'
 }
 
 const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>([
@@ -103,15 +102,12 @@ const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>([
 	[ContributedToolName.Usages, ToolName.Usages],
 	[ContributedToolName.VSCodeAPI, ToolName.VSCodeAPI],
 	[ContributedToolName.TestFailure, ToolName.TestFailure],
-	[ContributedToolName.RunTests, ToolName.RunTests],
 	[ContributedToolName.FindFiles, ToolName.FindFiles],
 	[ContributedToolName.FindTextInFiles, ToolName.FindTextInFiles],
 	[ContributedToolName.ReadFile, ToolName.ReadFile],
 	[ContributedToolName.ListDirectory, ToolName.ListDirectory],
 	[ContributedToolName.GetErrors, ToolName.GetErrors],
 	[ContributedToolName.DocInfo, ToolName.DocInfo],
-	[ContributedToolName.RunInTerminal, ToolName.RunInTerminal],
-	[ContributedToolName.GetTerminalOutput, ToolName.GetTerminalOutput],
 	[ContributedToolName.GetScmChanges, ToolName.GetScmChanges],
 	[ContributedToolName.ReadProjectStructure, ToolName.ReadProjectStructure],
 	[ContributedToolName.EditFile, ToolName.EditFile],
@@ -120,7 +116,6 @@ const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>([
 	[ContributedToolName.TerminalLastCommand, ToolName.TerminalLastCommand],
 	[ContributedToolName.CreateNewWorkspace, ToolName.CreateNewWorkspace],
 	[ContributedToolName.CreateNewJupyterNotebook, ToolName.CreateNewJupyterNotebook],
-	[ContributedToolName.RunTask, ToolName.RunTask],
 	[ContributedToolName.InstallExtension, ToolName.InstallExtension],
 	[ContributedToolName.Think, ToolName.Think],
 	[ContributedToolName.FetchWebPage, ToolName.FetchWebPage],
@@ -134,11 +129,9 @@ const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>([
 	[ContributedToolName.GetProjectSetupInfo, ToolName.GetProjectSetupInfo],
 	[ContributedToolName.SearchViewResults, ToolName.SearchViewResults],
 	[ContributedToolName.GithubRepo, ToolName.GithubRepo],
-	[ContributedToolName.CreateAndRunTask, ToolName.CreateAndRunTask],
 	[ContributedToolName.SimpleBrowser, ToolName.SimpleBrowser],
 	[ContributedToolName.CreateDirectory, ToolName.CreateDirectory],
 	[ContributedToolName.RunVscodeCmd, ToolName.RunVscodeCmd],
-	[ContributedToolName.GetTaskOutput, ToolName.GetTaskOutput]
 ]);
 
 const toolNameToContributedToolNames = new Map<ToolName, ContributedToolName>();

@@ -26,7 +26,7 @@ import { safeStringify } from '../src/util/vs/base/common/objects';
 import { SyncDescriptor } from '../src/util/vs/platform/instantiation/common/descriptors';
 import { SimulationExtHostToolsService } from './base/extHostContext/simulationExtHostToolsService';
 import { SimulationBaseline, TestBaselineComparison } from './base/simulationBaseline';
-import { createSimulationAccessor, CurrentTestRunInfo, SimulationServicesOptions } from './base/simulationContext';
+import { CacheMode, createSimulationAccessor, CurrentTestRunInfo, SimulationServicesOptions } from './base/simulationContext';
 import { ISimulationEndpointHealth } from './base/simulationEndpointHealth';
 import { SimulationOptions } from './base/simulationOptions';
 import { ISimulationOutcome } from './base/simulationOutcome';
@@ -404,7 +404,7 @@ export const executeTestOnce = async (
 		const fastChatModel = (opts.fastChatModel ?? opts.chatModel) ?? test.model;
 		const fastRewriteModel = (opts.fastRewriteModel ?? opts.chatModel) ?? test.model;
 		const embeddingsModel = opts.embeddingModel ?? test.embeddingsModel;
-		testingServiceCollection.define(IEndpointProvider, new SyncDescriptor(TestEndpointProvider, [smartChatModel, fastChatModel, embeddingsModel, fastRewriteModel, currentTestRunInfo]));
+		testingServiceCollection.define(IEndpointProvider, new SyncDescriptor(TestEndpointProvider, [smartChatModel, fastChatModel, embeddingsModel, fastRewriteModel, currentTestRunInfo, opts.modelCacheMode === CacheMode.Disable]));
 	}
 
 	const simulationTestRuntime = (ctx.externalScenariosPath !== undefined)

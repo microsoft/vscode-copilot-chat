@@ -6,24 +6,29 @@
 import { EOL } from 'os';
 import { describe, expect, test } from 'vitest';
 import type { NotebookDocument } from 'vscode';
-import { DiffServiceImpl } from '../../../../../../platform/diff/node/diffServiceImpl';
-import { ILogger, ILogService } from '../../../../../../platform/log/common/logService';
-import { IAlternativeNotebookContentService } from '../../../../../../platform/notebook/common/alternativeContent';
-import { AlternativeNotebookContentEditGenerator, textToAsyncIterableLines } from '../../../../../../platform/notebook/common/alternativeContentEditGenerator';
-import { BaseAlternativeNotebookContentProvider } from '../../../../../../platform/notebook/common/alternativeContentProvider';
-import { AlternativeJsonNotebookContentProvider } from '../../../../../../platform/notebook/common/alternativeContentProvider.json';
-import { AlternativeTextNotebookContentProvider } from '../../../../../../platform/notebook/common/alternativeContentProvider.text';
-import { AlternativeXmlNotebookContentProvider } from '../../../../../../platform/notebook/common/alternativeContentProvider.xml';
-import { notebookCellToCellData, summarize } from '../../../../../../platform/notebook/common/helpers';
-import { NullTelemetryService } from '../../../../../../platform/telemetry/common/nullTelemetryService';
-import { SimulationWorkspace } from '../../../../../../platform/test/node/simulationWorkspace';
-import { ExtHostNotebookDocumentData } from '../../../../../../util/common/test/shims/notebookDocument';
-import { AsyncIterableObject } from '../../../../../../util/vs/base/common/async';
-import { CancellationToken } from '../../../../../../util/vs/base/common/cancellation';
-import { ResourceMap } from '../../../../../../util/vs/base/common/map';
-import * as path from '../../../../../../util/vs/base/common/path';
-import { NotebookCellData, NotebookCellKind, NotebookData, NotebookEdit, NotebookRange, Position, Range, TextEdit, Uri } from '../../../../../../vscodeTypes';
-import { LineOfText } from '../../../../../prompt/node/streamingEdits';
+import { DiffServiceImpl } from '../../../../platform/diff/node/diffServiceImpl';
+import { ILogger, ILogService } from '../../../../platform/log/common/logService';
+import { IAlternativeNotebookContentService } from '../../common/alternativeContent';
+
+import { AlternativeNotebookContentEditGenerator, textToAsyncIterableLines } from '../../common/alternativeContentEditGenerator';
+
+import { BaseAlternativeNotebookContentProvider } from '../../common/alternativeContentProvider';
+
+import { AlternativeJsonNotebookContentProvider } from '../../common/alternativeContentProvider.json';
+
+import { AlternativeTextNotebookContentProvider } from '../../common/alternativeContentProvider.text';
+
+import { AlternativeXmlNotebookContentProvider } from '../../common/alternativeContentProvider.xml';
+
+import { LineOfText, notebookCellToCellData, summarize } from '../../common/helpers';
+import { NullTelemetryService } from '../../../../platform/telemetry/common/nullTelemetryService';
+import { SimulationWorkspace } from '../../../../platform/test/node/simulationWorkspace';
+import { ExtHostNotebookDocumentData } from '../../../../util/common/test/shims/notebookDocument';
+import { AsyncIterableObject } from '../../../../util/vs/base/common/async';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { ResourceMap } from '../../../../util/vs/base/common/map';
+import * as path from '../../../../util/vs/base/common/path';
+import { NotebookCellData, NotebookCellKind, NotebookData, NotebookEdit, NotebookRange, Position, Range, TextEdit, Uri } from '../../../../vscodeTypes';
 import { fixture, loadFile, loadNotebook } from './utils';
 
 describe('Alternative Content for Notebooks', () => {
@@ -192,7 +197,7 @@ describe('Alternative Content for Notebooks', () => {
 				});
 
 				describe(`${provider.kind} Position Translator`, () => {
-					test(`Translate position in notebook cell`, async () => {
+					test(`Translate position in notebook cell to Alternative Document & back`, async () => {
 						const notebook = await loadNotebook(loadFile({ filePath: fixture('sample.ipynb') }));
 						const altDoc = provider.getAlternativeDocument(notebook);
 
@@ -208,13 +213,22 @@ describe('Alternative Content for Notebooks', () => {
 
 						for (const pos of positions) {
 							const cell = notebook.cellAt(pos.cellIndex);
-							const startTranslation = [pos.start, pos.end].map(p => altDoc.fromCellPosition(cell.index, p));
+							const startTranslation = [pos.start, pos.end].map(p => altDoc.fromCellPosition(cell, p));
 							const textFromCell = cell.document.getText(new Range(pos.start, pos.end));
 							const textFromAltDoc = altDoc.getText(new Range(startTranslation[0], startTranslation[1]));
 							if (provider.kind !== 'json' || pos.start.line === pos.end.line) {
 								expect(normatlizeContent(textFromAltDoc)).toBe(normatlizeContent(textFromCell));
 							} else {
 								expect(normatlizeContent(textFromAltDoc).split(/\r?\n/).join(EOL)).toBe([`\\"Hello from Python!\\")",`, `                "    print`].join(EOL));
+							}
+
+							// Now try the reverse translation.
+							if (provider.kind !== 'json') {
+								const cellPosition = altDoc.toCellPosition(startTranslation[0]);
+								expect(cellPosition).toBeDefined();
+								expect(cellPosition?.cell).toBe(cell);
+								expect(cellPosition?.position.line).toBe(pos.start.line);
+								expect(cellPosition?.position.character).toBe(pos.start.character);
 							}
 						}
 					});
