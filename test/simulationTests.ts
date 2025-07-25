@@ -59,4 +59,5 @@ import './simulation/slash-test/testGen.js.stest';
 import './simulation/slash-test/testGen.py.stest';
 import './simulation/slash-test/testGen.ts.stest';
 import './simulation/tools/toolcall.stest';
+import './simulation/tools/virtualToolSelection.stest';
 

@@ -4,10 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
+import type { LanguageModelTool, LanguageModelToolInformation } from 'vscode';
 import { IToolCall } from '../../src/extension/prompt/common/intents';
 import { ToolName } from '../../src/extension/tools/common/toolNames';
 import { IToolsService } from '../../src/extension/tools/common/toolsService';
-import { NoopTestToolsService } from '../../src/extension/tools/node/test/testToolsService';
+import { NoopTestToolsService, TestToolsService } from '../../src/extension/tools/node/test/testToolsService';
 import { IConfigurationService } from '../../src/platform/configuration/common/configurationService';
 import { InMemoryConfigurationService } from '../../src/platform/configuration/test/common/inMemoryConfigurationService';
 import { ITestingServicesAccessor } from '../../src/platform/test/node/services';
@@ -32,6 +33,8 @@ export interface IParsedToolCall {
 export interface IToolCallExpectation {
 	allowParallelToolCalls?: boolean;
 
+	toolOverrides?: ReadonlyMap<LanguageModelToolInformation, LanguageModelTool<unknown>>;
+
 	/**
 	 * Validate tool results with a callback.
 	 */
@@ -52,6 +55,11 @@ export function generateToolTestRunner(toolScenario: IConversationToolTestCase |
 		const testCase = toolScenario[0];
 		testCase.question = ensureSlashEditAgent(testCase.question);
 		testCase.setupCase = accessor => {
+			const toolsService = accessor.get(IToolsService) as TestToolsService;
+			expectedToolCalls?.toolOverrides?.forEach((override, tool) => {
+				toolsService.addTestToolOverride(tool, override);
+			});
+
 			(accessor.get(IConfigurationService) as InMemoryConfigurationService).setNonExtensionConfig('chat.agent.maxRequests', 0);
 		};
 

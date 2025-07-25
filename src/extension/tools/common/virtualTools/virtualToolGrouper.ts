@@ -82,7 +82,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 			}
 		}
 
-		this._reExpandToolsToHitBudget(root);
+		// this._reExpandToolsToHitBudget(root);
 	}
 
 	/**
@@ -138,6 +138,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 						: this._divideToolsIntoGroups(tools, previous, token)
 				);
 			} catch (e) {
+				console.error(e);
 				this._logService.logger.warn(`Failed to categorize tools: ${e}`);
 			}
 		}

@@ -280,6 +280,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		const hasEditFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
 		const hasEditNotebookTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditNotebook);
 		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreRunInTerminal);
+		const hasVirtualTool = !!this.props.availableTools?.find(tool => tool.name.startsWith('activate_'));
 		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1') && this.props.chatVariables.hasVariables() ?
 			' (See <attachments> above for file contents. You may not need to search or read the file again.)'
 			: '';
@@ -302,7 +303,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 					<RepoContext />
 					<Tag name='reminderInstructions'>
 						{/* Critical reminders that are effective when repeated right next to the user message */}
-						{getKeepGoingReminder(this.props.endpoint.family)}
+						{getKeepGoingReminder(this.props.endpoint.family, hasVirtualTool)}
 						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint))}
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
 					</Tag>
@@ -635,13 +636,15 @@ export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringToo
 /**
  * Remind gpt-4.1 to keep going and not stop to ask questions...
  */
-export function getKeepGoingReminder(modelFamily: string | undefined) {
+export function getKeepGoingReminder(modelFamily: string | undefined, hasVirtualTool: boolean) {
+	const virtualReminder = hasVirtualTool && <>You may need to call one of the "activate" tools to complete your task. Before delegating work back to the user, make sure you "activate" all relevant tool groups.<br /></>;
 	return modelFamily === 'gpt-4.1' ?
 		<>
 			You are an agent - you must keep going until the user's query is completely resolved, before ending your turn and yielding back to the user. ONLY terminate your turn when you are sure that the problem is solved, or you absolutely cannot continue.<br />
 			You take action when possible- the user is expecting YOU to take action and go to work for them. Don't ask unnecessary questions about the details if you can simply DO something useful instead.<br />
+			{virtualReminder}
 		</>
-		: undefined;
+		: virtualReminder;
 }
 
 export interface EditedFileEventsProps extends BasePromptElementProps {
