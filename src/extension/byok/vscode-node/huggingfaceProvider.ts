@@ -69,7 +69,7 @@ export class HuggingFaceBYOKLMProvider extends BaseOpenAICompatibleLMProvider {
 					continue;
 				}
 				const modelInfo = modelInfos.find((info: any) => info.id === model.id);
-				const vision = modelInfo && modelInfo.pipeline_tag === 'image-text-to-text' ? true : false;
+				const vision = modelInfo?.pipeline_tag === 'image-text-to-text';
 
 
 				const modelName = `${model.id} (${toolsSupportedProvider.provider})`;
