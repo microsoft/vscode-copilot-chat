@@ -52,7 +52,7 @@ export class WorkingCopyDerivedDocument {
 			const value = this.applyAndTransformProgressItem(_value);
 			outputStream.push(value);
 		}, (reason) => {
-			outputStream.clear(reason);
+			outputStream.clearToPreviousToolInvocation(reason);
 		});
 	}
 

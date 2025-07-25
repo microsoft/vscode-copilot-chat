@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type { ChatResponseClearReason, ChatResponseFileTree, ChatResponsePart, ChatResponseStream, ChatVulnerability, Command, Location, NotebookEdit, TextEdit, Uri } from 'vscode';
+import type { ChatResponseClearToPreviousToolInvocationReason, ChatResponseFileTree, ChatResponsePart, ChatResponseStream, ChatVulnerability, Command, Location, NotebookEdit, TextEdit, Uri } from 'vscode';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { FinalizableChatResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -36,9 +36,9 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 		return this._linkifier.totalAddedLinkCount;
 	}
 
-	clear(reason: ChatResponseClearReason): void {
+	clearToPreviousToolInvocation(reason: ChatResponseClearToPreviousToolInvocationReason): void {
 		this._linkifier.flush(CancellationToken.None);
-		this._progress.clear(reason);
+		this._progress.clearToPreviousToolInvocation(reason);
 	}
 
 	//#region ChatResponseStream

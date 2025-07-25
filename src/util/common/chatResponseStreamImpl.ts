@@ -5,7 +5,7 @@
 
 import { ChatResponseReferencePartStatusKind } from '@vscode/prompt-tsx';
 import type { ChatResponseFileTree, ChatResponseStream, ChatVulnerability, Command, ExtendedChatResponsePart, Location, NotebookEdit, Progress, Uri } from 'vscode';
-import { ChatPrepareToolInvocationPart, ChatResponseAnchorPart, ChatResponseClearReason, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseWarningPart, MarkdownString, TextEdit } from '../../vscodeTypes';
+import { ChatPrepareToolInvocationPart, ChatResponseAnchorPart, ChatResponseClearToPreviousToolInvocationReason, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseWarningPart, MarkdownString, TextEdit } from '../../vscodeTypes';
 import type { ThemeIcon } from '../vs/base/common/themables';
 
 
@@ -30,7 +30,7 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 				callback(value);
 				stream.push(value);
 			}, (reason) => {
-				stream.clear(reason);
+				stream.clearToPreviousToolInvocation(reason);
 			}, () => {
 				finalize?.();
 				return tryFinalizeResponseStream(stream);
@@ -44,7 +44,7 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 				stream.push(value);
 			}
 		}, (reason) => {
-			stream.clear(reason);
+			stream.clearToPreviousToolInvocation(reason);
 		}, () => {
 			finalize?.();
 			return tryFinalizeResponseStream(stream);
@@ -53,7 +53,7 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 
 	constructor(
 		private readonly _push: (part: ExtendedChatResponsePart) => void,
-		private readonly _clear: (reason: ChatResponseClearReason) => void,
+		private readonly _clearToPreviousToolInvocation: (reason: ChatResponseClearToPreviousToolInvocationReason) => void,
 		private readonly _finalize?: () => void | Promise<void>,
 	) { }
 
@@ -61,8 +61,8 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 		await this._finalize?.();
 	}
 
-	clear(reason: ChatResponseClearReason): void {
-		this._clear(reason);
+	clearToPreviousToolInvocation(reason: ChatResponseClearToPreviousToolInvocationReason): void {
+		this._clearToPreviousToolInvocation(reason);
 	}
 
 	markdown(value: string | MarkdownString): void {
