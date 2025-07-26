@@ -68,7 +68,7 @@ export class CreateAndRunTaskTool implements vscode.LanguageModelTool<ICreateAnd
 		}
 
 		// Execute the task
-		this.logService.logger.debug(`CreateAndRunTaskTool: Starting task \`${task.label}\``);
+		this.logService.debug(`CreateAndRunTaskTool: Starting task \`${task.label}\``);
 		await this.tasksService.ensureTask(workspaceFolder, task, true);
 		const result = await this.tasksService.executeTask(task, token, workspaceFolder);
 		let succeeded = false;
@@ -90,7 +90,7 @@ export class CreateAndRunTaskTool implements vscode.LanguageModelTool<ICreateAnd
 			toolName: CreateAndRunTaskTool.toolName,
 			outcome: succeeded ? 'succeeded' : 'failed',
 		});
-		this.logService.logger.debug(`CreateAndRunTaskTool: Task \`${options.input.task.label}\` finished with status \`${result.status}\``);
+		this.logService.debug(`CreateAndRunTaskTool: Task \`${options.input.task.label}\` finished with status \`${result.status}\``);
 		return new LanguageModelToolResult([new LanguageModelTextPart(output)]);
 	}
 

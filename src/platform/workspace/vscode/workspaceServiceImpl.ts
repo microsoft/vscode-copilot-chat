@@ -89,12 +89,12 @@ export class ExtensionTextDocumentManager extends AbstractWorkspaceService {
 		this._fullyLoadedPromise ??= (async () => {
 			for (const uri of this.getWorkspaceFolders()) {
 				if (isGitHubRemoteRepository(uri)) {
-					this._logService.logger.debug(`Preloading virtual workspace contents for ${uri}`);
+					this._logService.debug(`Preloading virtual workspace contents for ${uri}`);
 					try {
 						const result = await this._remoteRepositoriesService.loadWorkspaceContents(uri);
-						this._logService.logger.info(`loading virtual workspace contents resulted in ${result} for: ${uri}`);
+						this._logService.info(`loading virtual workspace contents resulted in ${result} for: ${uri}`);
 					} catch (e) {
-						this._logService.logger.error(`Error loading virtual workspace contents for ${uri}: ${e}`);
+						this._logService.error(`Error loading virtual workspace contents for ${uri}: ${e}`);
 					}
 				}
 			}

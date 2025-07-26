@@ -108,12 +108,12 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 	}
 
 	async getChatEndpoint(requestOrFamilyOrModel: LanguageModelChat | ChatRequest | ChatEndpointFamily): Promise<IChatEndpoint> {
-		this._logService.logger.trace(`Resolving chat model`);
+		this._logService.trace(`Resolving chat model`);
 		const experimentModelConfig = getCustomDefaultModelExperimentConfig(this._expService);
 
 		if (this._overridenChatModel) {
 			// Override, only allowed by internal users. Sets model based on setting
-			this._logService.logger.trace(`Using overriden chat model`);
+			this._logService.trace(`Using overriden chat model`);
 			return this.getOrCreateChatEndpointInstance({
 				id: this._overridenChatModel,
 				name: 'Custom Overriden Chat Model',
@@ -156,14 +156,14 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 			}
 		}
 
-		this._logService.logger.trace(`Resolved chat model`);
+		this._logService.trace(`Resolved chat model`);
 		return endpoint;
 	}
 
 	async getEmbeddingsEndpoint(family: EmbeddingsEndpointFamily): Promise<IEmbeddingEndpoint> {
-		this._logService.logger.trace(`Resolving embedding model`);
+		this._logService.trace(`Resolving embedding model`);
 		if (this._overridenEmbeddingsModel) {
-			this._logService.logger.trace(`Using overriden embeddings model`);
+			this._logService.trace(`Using overriden embeddings model`);
 			return this.getOrCreateEmbeddingEndpointInstance({
 				id: this._overridenEmbeddingsModel,
 				name: 'Custom Overriden Embeddings Model',
@@ -180,7 +180,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		}
 		const modelMetadata = await this._modelFetcher.getEmbeddingsModel('text-embedding-3-small');
 		const model = await this.getOrCreateEmbeddingEndpointInstance(modelMetadata);
-		this._logService.logger.trace(`Resolved embedding model`);
+		this._logService.trace(`Resolved embedding model`);
 		return model;
 	}
 

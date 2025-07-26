@@ -140,7 +140,7 @@ class DocumentEditCache {
 		private readonly _sharedCache: LRUCache<CachedEdit>,
 		private readonly _logService: ILogService,
 	) {
-		this._tracer = createTracer(['NES', 'DocumentEditCache'], (s) => this._logService.logger.trace(s));
+		this._tracer = createTracer(['NES', 'DocumentEditCache'], (s) => this._logService.trace(s));
 	}
 
 	public handleEdit(edit: StringEdit): void {

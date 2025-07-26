@@ -30,7 +30,7 @@ export abstract class SafePromptElement<P extends BasePromptElementProps, S = vo
 		// REPORT error telemetry
 		// FAIL when running tests
 		const err = new Error('BAD PROMPT');
-		this._logService.logger.error(err);
+		this._logService.error(err);
 
 		if (this._contextService.extensionMode !== ExtensionMode.Production) {
 			throw err;

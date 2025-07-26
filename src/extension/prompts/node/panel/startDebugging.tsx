@@ -352,7 +352,7 @@ export class StartDebuggingPrompt extends PromptElement<StartDebuggingPromptProp
 		try {
 			return await this.docSearchClient.search(this.props.input.userQuery, { repo: 'microsoft/vscode-docs' }, { limit: numResults, similarity: 0.75 }, token);
 		} catch (e) {
-			this.logService.logger.error(e, `Failed to search docs search for query`);
+			this.logService.error(e, `Failed to search docs search for query`);
 			return [];
 		}
 	}

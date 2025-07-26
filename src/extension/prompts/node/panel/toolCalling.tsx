@@ -202,7 +202,7 @@ class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
 					} else {
 						outcome = outcome === ToolInvocationOutcome.DisabledByUser ? outcome : ToolInvocationOutcome.Error;
 						extraMetadata.push(new ToolFailureEncountered(this.props.toolCall.id));
-						this.logService.logger.error(`Error from tool ${this.props.toolCall.name} with args ${this.props.toolCall.arguments}`, toErrorMessage(err, true));
+						this.logService.error(`Error from tool ${this.props.toolCall.name} with args ${this.props.toolCall.arguments}`, toErrorMessage(err, true));
 					}
 				}
 			}

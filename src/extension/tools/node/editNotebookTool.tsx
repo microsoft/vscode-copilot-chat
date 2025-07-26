@@ -252,7 +252,7 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 			sendEndEdit();
 
 			const summaryOfExpectedEdits = summarizeOriginalEdits(notebook, options.input, expectedCellEdits);
-			this.logger.logger.trace(`[Notebook] ${summaryOfExpectedEdits}`);
+			this.logger.trace(`[Notebook] ${summaryOfExpectedEdits}`);
 			await raceCancellation(Promise.all(codeMapperCompleted), token);
 			if (token.isCancellationRequested) {
 				return;
@@ -267,11 +267,11 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 				const timeout = setTimeout(() => {
 					if (expectedCellEdits.length) {
 						const summaryOfPendingEdits = summarizeEdits(expectedCellEdits);
-						this.logger.logger.error(`[Notebook] Timed out waiting for cell operations to complete.`, `${summaryOfExpectedEdits}. Pending Cell Edits ${summaryOfPendingEdits}`);
+						this.logger.error(`[Notebook] Timed out waiting for cell operations to complete.`, `${summaryOfExpectedEdits}. Pending Cell Edits ${summaryOfPendingEdits}`);
 					}
 					if (expectedCellEdits.length) {
 						const summaryOfPendingEdits = summarizeTextEdits(notebook, expectedCellTextEdits);
-						this.logger.logger.error(`[Notebook] Timed out waiting for cell text edit operations to complete.`, `${summaryOfExpectedEdits}. Pending Text Edits ${summaryOfPendingEdits}`);
+						this.logger.error(`[Notebook] Timed out waiting for cell text edit operations to complete.`, `${summaryOfExpectedEdits}. Pending Text Edits ${summaryOfPendingEdits}`);
 					}
 					resolve();
 				}, 10_000);

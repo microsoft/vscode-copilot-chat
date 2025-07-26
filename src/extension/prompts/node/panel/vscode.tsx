@@ -72,7 +72,7 @@ export class VscodePrompt extends PromptElement<VscodePromptProps, VscodePromptS
 			return { settings: [], commands: [], query: userQuery };
 		}
 
-		this.logService.logger.debug('[VSCode Prompt] Asking the model to update the user question.');
+		this.logService.debug('[VSCode Prompt] Asking the model to update the user question.');
 
 		const fetchResult = await endpoint.makeChatRequest(
 			'vscodePrompt',
@@ -101,7 +101,7 @@ export class VscodePrompt extends PromptElement<VscodePromptProps, VscodePromptS
 			extensionSearch = fetchResult.value.includes('vscode_extensions');
 			vscodeApiSearch = fetchResult.value.includes('vscode_api');
 		} else {
-			this.logService.logger.error(`[VSCode Prompt] Failed to refine the question: ${fetchResult.requestId}`);
+			this.logService.error(`[VSCode Prompt] Failed to refine the question: ${fetchResult.requestId}`);
 		}
 
 		if (fetchReleaseNotes) {

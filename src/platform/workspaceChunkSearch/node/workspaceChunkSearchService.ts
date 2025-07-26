@@ -373,7 +373,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 			});
 
 			if (searchResult.isError()) {
-				this._logService.logger.error(`WorkspaceChunkSearch.searchFileChunks: no strategies succeeded`);
+				this._logService.error(`WorkspaceChunkSearch.searchFileChunks: no strategies succeeded`);
 				if (this._simulationTestContext.isInSimulationTests) {
 					throw new Error('All workspace search strategies failed');
 				}
@@ -385,7 +385,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 				};
 			}
 
-			this._logService.logger.trace(`WorkspaceChunkSearch.searchFileChunks: found ${searchResult.val.result.chunks.length} chunks using '${searchResult.val.strategy}'`);
+			this._logService.trace(`WorkspaceChunkSearch.searchFileChunks: found ${searchResult.val.result.chunks.length} chunks using '${searchResult.val.strategy}'`);
 
 			const filteredChunks = await raceCancellationError(this.filterIgnoredChunks(searchResult.val.result.chunks), token);
 			if (this._simulationTestContext.isInSimulationTests) {
@@ -447,7 +447,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		telemetryInfo: TelemetryCorrelationId,
 		token: CancellationToken,
 	): Promise<StrategySearchOutcome> {
-		this._logService.logger.debug(`Searching for ${sizing.maxResultCountHint} chunks in workspace`);
+		this._logService.debug(`Searching for ${sizing.maxResultCountHint} chunks in workspace`);
 
 		// First try full workspace
 		try {
@@ -459,7 +459,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 			if (isCancellationError(e)) {
 				throw e;
 			}
-			this._logService.logger.error(e, `Error during full workspace search`);
+			this._logService.error(e, `Error during full workspace search`);
 		}
 
 		// Then try code search but fallback to local search on error or timeout
@@ -611,7 +611,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 				throw e;
 			}
 
-			this._logService.logger.error(e, `Error during ${strategy.id} search`);
+			this._logService.error(e, `Error during ${strategy.id} search`);
 			return Result.error<StrategySearchErr>({
 				errorDiagMessage: `${strategy.id} error: ` + e,
 			});
@@ -688,7 +688,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 				let newlyScoredChunks: Array<ScoredFileChunk<FileChunk & { index: number }>> | undefined;
 
 				if (unscoredChunks.length) {
-					this._logService.logger.debug(`WorkspaceChunkSearch.rerankChunks. Scoring ${unscoredChunks.length} new chunks`);
+					this._logService.debug(`WorkspaceChunkSearch.rerankChunks. Scoring ${unscoredChunks.length} new chunks`);
 
 					// Only show progress when we're doing a potentially long running operation
 					const scoreTask = this.scoreChunks(query, unscoredChunks, telemetryInfo, token);
@@ -710,7 +710,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 
 				for (let i = 0; i < inChunks.length; i++) {
 					if (!out[i]) {
-						this._logService.logger.error(`Missing out chunk ${i}`);
+						this._logService.error(`Missing out chunk ${i}`);
 					}
 				}
 
@@ -729,11 +729,11 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 			const topScore = sortedChunks[0].distance.value;
 			const lowestAllowedScore = topScore * maxEmbeddingSpread;
 			const filteredChunks = sortedChunks.filter(x => x.distance.value >= lowestAllowedScore);
-			this._logService.logger.debug(`Eagerly filtered out ${sortedChunks.length - filteredChunks.length} chunks due to low quality`);
+			this._logService.debug(`Eagerly filtered out ${sortedChunks.length - filteredChunks.length} chunks due to low quality`);
 			return filteredChunks;
 		} catch (e) {
 			if (!isCancellationError(e)) {
-				this._logService.logger.error(e, 'Failed to search chunk embeddings index');
+				this._logService.error(e, 'Failed to search chunk embeddings index');
 			}
 			return inChunks.slice(0, maxResults);
 		}

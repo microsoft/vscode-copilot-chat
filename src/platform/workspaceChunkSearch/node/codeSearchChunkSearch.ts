@@ -224,9 +224,9 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		});
 
 		if (checkResult.isError()) {
-			this._logService.logger.debug(`CodeSearchChunkSearch.isAvailable: false. ${checkResult.err.unavailableReason}`);
+			this._logService.debug(`CodeSearchChunkSearch.isAvailable: false. ${checkResult.err.unavailableReason}`);
 		} else {
-			this._logService.logger.debug(`CodeSearchChunkSearch.isAvailable: true`);
+			this._logService.debug(`CodeSearchChunkSearch.isAvailable: true`);
 		}
 
 		return checkResult.isOk();
@@ -369,7 +369,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			if (notYetIndexedRepos.length) {
 				const instantIndexResults = await Promise.all(notYetIndexedRepos.map(repo => this.tryToInstantIndexRepo(repo, telemetryInfo, token)));
 				if (!instantIndexResults.every(x => x)) {
-					this._logService.logger.error(`Instant indexing failed for some repos. Will not try code search.`);
+					this._logService.error(`Instant indexing failed for some repos. Will not try code search.`);
 					return;
 				}
 			}
@@ -385,7 +385,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			// This is needed incase local diff times out
 			const codeSearchOperation = this.doCodeSearch(query, [...indexedRepos, ...notYetIndexedRepos], sizing, options, innerTelemetryInfo, token).catch(e => {
 				if (!isCancellationError(e)) {
-					this._logService.logger.error(`Code search failed`, e);
+					this._logService.error(`Code search failed`, e);
 				}
 
 				// If code search fails, cancel local search too because we won't be able to merge
@@ -436,7 +436,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				embeddingsRecomputedFileCount: localResults?.embeddingsComputeInfo?.recomputedFileCount ?? 0,
 			});
 
-			this._logService.logger.trace(`CodeSearchChunkSearch.searchWorkspace: codeSearchResults: ${codeSearchResults?.chunks.length}, localResults: ${localResults?.chunks.length}`);
+			this._logService.trace(`CodeSearchChunkSearch.searchWorkspace: codeSearchResults: ${codeSearchResults?.chunks.length}, localResults: ${localResults?.chunks.length}`);
 
 			if (!codeSearchResults) {
 				return;
@@ -565,7 +565,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			if (repo.remoteInfo.repoId instanceof GithubRepoId) {
 				const authToken = await githubAuthToken.value;
 				if (!authToken) {
-					this._logService.logger.warn(`CodeSearchChunkSearch: doCodeSearch failed to get github auth token for repo ${repo.remoteInfo.repoId}`);
+					this._logService.warn(`CodeSearchChunkSearch: doCodeSearch failed to get github auth token for repo ${repo.remoteInfo.repoId}`);
 					return;
 				}
 
@@ -577,7 +577,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			} else {
 				const authToken = await adoAuthToken.value;
 				if (!authToken) {
-					this._logService.logger.warn(`CodeSearchChunkSearch: doCodeSearch failed to get ado auth token for repo ${repo.remoteInfo.repoId}`);
+					this._logService.warn(`CodeSearchChunkSearch: doCodeSearch failed to get ado auth token for repo ${repo.remoteInfo.repoId}`);
 					return;
 				}
 
@@ -664,9 +664,9 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		const triggerResult = await this._repoTracker.triggerRemoteIndexing(triggerReason, telemetryInfo);
 
 		if (triggerResult.isOk()) {
-			this._logService.logger.trace(`CodeSearch.triggerRemoteIndexing(${triggerReason}) succeeded`);
+			this._logService.trace(`CodeSearch.triggerRemoteIndexing(${triggerReason}) succeeded`);
 		} else {
-			this._logService.logger.trace(`CodeSearch.triggerRemoteIndexing(${triggerReason}) failed. ${triggerResult.err.id}`);
+			this._logService.trace(`CodeSearch.triggerRemoteIndexing(${triggerReason}) failed. ${triggerResult.err.id}`);
 		}
 
 		/* __GDPR__

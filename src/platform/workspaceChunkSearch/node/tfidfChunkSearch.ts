@@ -105,9 +105,9 @@ export class TfidfChunkSearch extends Disposable implements IWorkspaceChunkSearc
 			}
 
 			const resolvedQuery = this.toQuery(resolved);
-			this._logService.logger.trace(`TfidfChunkSearch.searchWorkspace: Starting tfidf search for: ${resolvedQuery}`);
+			this._logService.trace(`TfidfChunkSearch.searchWorkspace: Starting tfidf search for: ${resolvedQuery}`);
 			const result = await raceCancellationError(this.doTfidfSearch(resolvedQuery, sizing.maxResultCountHint, options, telemetryInfo.addCaller('TfidfChunkSearch::searchWorkspace'), token), token);
-			this._logService.logger.trace(`TfidfChunkSearch.searchWorkspace: Found ${result.length} results`);
+			this._logService.trace(`TfidfChunkSearch.searchWorkspace: Found ${result.length} results`);
 
 			return { chunks: result.map((chunk): FileChunkAndScore => ({ chunk, distance: undefined })) };
 		}, (execTime, status) => {

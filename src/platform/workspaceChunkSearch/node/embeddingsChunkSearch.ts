@@ -252,16 +252,16 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 			const limitStatus = await this.checkIndexSizeLimits();
 			if (limitStatus) {
 				if (limitStatus === LocalEmbeddingsIndexStatus.TooManyFilesForAnyIndexing) {
-					this._logService.logger.debug(`EmbeddingsChunkSearch: Disabling all local embedding indexing due to too many files. Found ${this._embeddingsIndex.fileCount} files. Max: ${this.getManualIndexFileCap()}`);
+					this._logService.debug(`EmbeddingsChunkSearch: Disabling all local embedding indexing due to too many files. Found ${this._embeddingsIndex.fileCount} files. Max: ${this.getManualIndexFileCap()}`);
 				} else if (limitStatus === LocalEmbeddingsIndexStatus.TooManyFilesForAutomaticIndexing) {
-					this._logService.logger.debug(`EmbeddingsChunkSearch: skipping automatic indexing due to too many files. Found ${this._embeddingsIndex.fileCount} files. Max: ${this.getAutoIndexFileCap()}`);
+					this._logService.debug(`EmbeddingsChunkSearch: skipping automatic indexing due to too many files. Found ${this._embeddingsIndex.fileCount} files. Max: ${this.getAutoIndexFileCap()}`);
 				}
 
 				this.setState(limitStatus);
 				return;
 			}
 
-			this._logService.logger.debug(`EmbeddingsChunkSearch: initialize found ${this._embeddingsIndex.fileCount} files. Max: ${this.getAutoIndexFileCap()}`);
+			this._logService.debug(`EmbeddingsChunkSearch: initialize found ${this._embeddingsIndex.fileCount} files. Max: ${this.getAutoIndexFileCap()}`);
 			this.setState(LocalEmbeddingsIndexStatus.Ready);
 		})();
 		await this._init;
@@ -306,15 +306,15 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 	}
 
 	private async triggerIndexingOfWorkspace(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<void> {
-		this._logService.logger.debug('EmbeddingsChunkSearch::triggerIndexingOfWorkspace()');
+		this._logService.debug('EmbeddingsChunkSearch::triggerIndexingOfWorkspace()');
 		this.setState(LocalEmbeddingsIndexStatus.UpdatingIndex);
 
 		try {
 			await this._embeddingsIndex.triggerIndexingOfWorkspace(trigger, telemetryInfo, this._disposeCts.token);
 			this.setState(LocalEmbeddingsIndexStatus.Ready);
-			this._logService.logger.debug('Workspace Chunk Embeddings Index initialized.');
+			this._logService.debug('Workspace Chunk Embeddings Index initialized.');
 		} catch (e) {
-			this._logService.logger.warn(`Failed to index workspace: ${e}`);
+			this._logService.warn(`Failed to index workspace: ${e}`);
 		}
 	}
 

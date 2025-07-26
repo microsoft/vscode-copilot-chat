@@ -40,7 +40,7 @@ class GetScmChangesTool implements ICopilotTool<IGetScmChangesToolParams> {
 		checkCancellation(token);
 		await this.gitService.initialize();
 
-		this.logService.logger.trace(`[GetScmChangesTool][invoke] Options: ${JSON.stringify(options)}`);
+		this.logService.trace(`[GetScmChangesTool][invoke] Options: ${JSON.stringify(options)}`);
 
 		const diffs: Diff[] = [];
 		const changedFiles: Change[] = [];
@@ -53,14 +53,14 @@ class GetScmChangesTool implements ICopilotTool<IGetScmChangesToolParams> {
 		repository = repository ?? this.gitService.activeRepository.get();
 
 		if (!repository) {
-			this.logService.logger.warn(`[GetScmChangesTool][invoke] Unable to resolve the repository using repositoryPath: ${options.input.repositoryPath}`);
-			this.logService.logger.warn(`[GetScmChangesTool][invoke] Unable to resolve the active repository: ${this.gitService.activeRepository.get()?.rootUri.toString()}`);
+			this.logService.warn(`[GetScmChangesTool][invoke] Unable to resolve the repository using repositoryPath: ${options.input.repositoryPath}`);
+			this.logService.warn(`[GetScmChangesTool][invoke] Unable to resolve the active repository: ${this.gitService.activeRepository.get()?.rootUri.toString()}`);
 
 			return new LanguageModelToolResult([new LanguageModelTextPart('The workspace does not contain a git repository')]);
 		}
 
-		this.logService.logger.trace(`[GetScmChangesTool][invoke] Uri: ${uri?.toString()}`);
-		this.logService.logger.trace(`[GetScmChangesTool][invoke] Repository: ${repository.rootUri.toString()}`);
+		this.logService.trace(`[GetScmChangesTool][invoke] Uri: ${uri?.toString()}`);
+		this.logService.trace(`[GetScmChangesTool][invoke] Repository: ${repository.rootUri.toString()}`);
 
 		const changes = repository?.changes;
 		if (changes) {
@@ -92,7 +92,7 @@ class GetScmChangesTool implements ICopilotTool<IGetScmChangesToolParams> {
 				diffs.push(...await this.gitDiffService.getChangeDiffs(repository.rootUri, changedFiles));
 			} catch { }
 		} else {
-			this.logService.logger.warn(`[GetScmChangesTool][invoke] Unable to retrieve changes because there is no active repository`);
+			this.logService.warn(`[GetScmChangesTool][invoke] Unable to retrieve changes because there is no active repository`);
 		}
 
 		checkCancellation(token);
@@ -111,8 +111,8 @@ class GetScmChangesTool implements ICopilotTool<IGetScmChangesToolParams> {
 			? this.promptPathRepresentationService.resolveFilePath(options.input.repositoryPath)
 			: undefined;
 
-		this.logService.logger.trace(`[GetScmChangesTool][prepareInvocation] Options: ${JSON.stringify(options)}`);
-		this.logService.logger.trace(`[GetScmChangesTool][prepareInvocation] Uri: ${uri?.toString()}`);
+		this.logService.trace(`[GetScmChangesTool][prepareInvocation] Options: ${JSON.stringify(options)}`);
+		this.logService.trace(`[GetScmChangesTool][prepareInvocation] Uri: ${uri?.toString()}`);
 
 		return uri
 			? {
@@ -128,7 +128,7 @@ class GetScmChangesTool implements ICopilotTool<IGetScmChangesToolParams> {
 	async provideInput(): Promise<IGetScmChangesToolParams | undefined> {
 		await this.gitService.initialize();
 
-		this.logService.logger.trace(`[GetScmChangesTool][provideInput] Active repository: ${this.gitService.activeRepository.get()?.rootUri.toString()}`);
+		this.logService.trace(`[GetScmChangesTool][provideInput] Active repository: ${this.gitService.activeRepository.get()?.rootUri.toString()}`);
 
 		return Promise.resolve({
 			repositoryPath: this.gitService.activeRepository.get()?.rootUri.toString(),

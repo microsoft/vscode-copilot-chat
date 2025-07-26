@@ -138,7 +138,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 						: this._divideToolsIntoGroups(tools, previous, token)
 				);
 			} catch (e) {
-				this._logService.logger.warn(`Failed to categorize tools: ${e}`);
+				this._logService.warn(`Failed to categorize tools: ${e}`);
 			}
 		}
 

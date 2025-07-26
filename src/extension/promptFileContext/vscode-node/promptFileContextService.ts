@@ -54,7 +54,7 @@ export class PromptFileContextContribution extends Disposable {
 		try {
 			const copilotAPI = await this.getCopilotApi();
 			if (copilotAPI === undefined) {
-				this.logService.logger.warn('Copilot API is undefined, unable to register context provider.');
+				this.logService.warn('Copilot API is undefined, unable to register context provider.');
 				return disposables;
 			}
 			const self = this;
@@ -88,7 +88,7 @@ export class PromptFileContextContribution extends Disposable {
 				resolver: resolver
 			}));
 		} catch (error) {
-			this.logService.logger.error('Error regsistering prompt file context provider:', error);
+			this.logService.error('Error regsistering prompt file context provider:', error);
 		}
 		return disposables;
 	}
@@ -183,7 +183,7 @@ export class PromptFileContextContribution extends Disposable {
 	private async getCopilotApi(): Promise<Copilot.ContextProviderApiV1 | undefined> {
 		const copilotExtension = vscode.extensions.getExtension('GitHub.copilot');
 		if (copilotExtension === undefined) {
-			this.logService.logger.error('Copilot extension not found');
+			this.logService.error('Copilot extension not found');
 			return undefined;
 		}
 		try {
@@ -191,9 +191,9 @@ export class PromptFileContextContribution extends Disposable {
 			return api.getContextProviderAPI('v1');
 		} catch (error) {
 			if (error instanceof Error) {
-				this.logService.logger.error('Error activating Copilot extension:', error.message);
+				this.logService.error('Error activating Copilot extension:', error.message);
 			} else {
-				this.logService.logger.error('Error activating Copilot extension: Unknown error.');
+				this.logService.error('Error activating Copilot extension: Unknown error.');
 			}
 			return undefined;
 		}

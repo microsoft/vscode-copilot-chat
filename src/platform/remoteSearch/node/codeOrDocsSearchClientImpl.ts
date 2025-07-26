@@ -146,7 +146,7 @@ export class DocsSearchClient implements IDocsSearchClient {
 				retryCount++;
 				const waitTime = 100;
 				errorMessages.add(`Error fetching ${this.slug} search. ${error.message ?? error}`);
-				this._logService.logger.warn(`[repo:${scopingQuery.repo}] Error fetching ${this.slug} search. Error: ${error.message ?? error}. Retrying in ${retryCount}ms. Query: ${query}`);
+				this._logService.warn(`[repo:${scopingQuery.repo}] Error fetching ${this.slug} search. Error: ${error.message ?? error}. Retrying in ${retryCount}ms. Query: ${query}`);
 				await new Promise(resolve => setTimeout(resolve, waitTime));
 			}
 		}
@@ -156,7 +156,7 @@ export class DocsSearchClient implements IDocsSearchClient {
 		}
 
 		if (retryCount >= MAX_RETRIES) {
-			this._logService.logger.warn(`[repo:${scopingQuery.repo}] Max Retry Error thrown while querying '${query}'`);
+			this._logService.warn(`[repo:${scopingQuery.repo}] Max Retry Error thrown while querying '${query}'`);
 			error = constructSearchError({
 				error: SearchErrorType.maxRetriesExceeded,
 				message: `${this.slug} search timed out after ${MAX_RETRIES} retries. ${Array.from(errorMessages).join('\n')}`
@@ -220,7 +220,7 @@ export class DocsSearchClient implements IDocsSearchClient {
 		const text = await response.text();
 		if (response.status === 404 || (response.status === 400 && text.includes('unknown integration'))) {
 			// If the endpoint is not available for this user it will return 404.
-			this._logService.logger.debug(`${this.slug} search endpoint not available for this user.`);
+			this._logService.debug(`${this.slug} search endpoint not available for this user.`);
 			const error = constructSearchError({
 				error: SearchErrorType.noAccessToEndpoint,
 				message: `${this.slug}: ${text}`

@@ -37,16 +37,16 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<ITaskOptions>, token: vscode.CancellationToken) {
 		const taskDefinition = this.getTaskDefinition(options.input);
 		if (!taskDefinition) {
-			this.logService.logger.debug('getTaskOutputTool returning undefined: no matching label for task ' + options.input.id);
+			this.logService.debug('getTaskOutputTool returning undefined: no matching label for task ' + options.input.id);
 			return;
 		}
 		const terminal = taskDefinition.terminal ?? this.tasksService.getTerminalForTask(taskDefinition.task);
 		if (!terminal) {
-			this.logService.logger.debug('getTaskOutputTool returning undefined: no terminal for task: ' + options.input.id + ' label: ' + taskDefinition.taskLabel + ' terminal names: ' + this.terminalService.terminals.map(t => t.name).join(', '));
+			this.logService.debug('getTaskOutputTool returning undefined: no terminal for task: ' + options.input.id + ' label: ' + taskDefinition.taskLabel + ' terminal names: ' + this.terminalService.terminals.map(t => t.name).join(', '));
 			return;
 		}
 		const buffer = this.terminalService.getBufferForTerminal(terminal, Math.min(options.input.maxCharsToRetrieve ?? 16000, 16000));
-		this.logService.logger.debug('getTaskOutputTool task is still running with buffer length: ' + buffer.length + ' for terminal: ' + terminal.name);
+		this.logService.debug('getTaskOutputTool task is still running with buffer length: ' + buffer.length + ' for terminal: ' + terminal.name);
 		return new LanguageModelToolResult([
 			new LanguageModelTextPart(`Output for task ${terminal.name}: ${buffer}`)
 		]);
@@ -77,7 +77,7 @@ export class GetTaskOutputTool implements vscode.LanguageModelTool<ITaskOptions>
 		const workspaceFolder = (workspaceFolderRaw && this.workspaceService.getWorkspaceFolder(workspaceFolderRaw)) || this.workspaceService.getWorkspaceFolders()[0];
 		const task = this.tasksService.getTasks(workspaceFolder).find((t, i) => t.type === taskType && (t.label || String(i)) === taskLabel);
 		if (!task) {
-			this.logService.logger.debug('getTaskOutputTool returning undefined: no task for type: ' + taskType + ' label: ' + taskLabel + ' inputId: ' + input.id);
+			this.logService.debug('getTaskOutputTool returning undefined: no task for type: ' + taskType + ' label: ' + taskLabel + ' inputId: ' + input.id);
 			return undefined;
 		}
 		try {

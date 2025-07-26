@@ -270,7 +270,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		}
 
 		if (this.props.isHistorical) {
-			this.logService.logger.trace('Re-rendering historical user message');
+			this.logService.trace('Re-rendering historical user message');
 		}
 
 		const query = await this.promptVariablesService.resolveToolReferencesInPrompt(this.props.request, this.props.toolReferences ?? []);

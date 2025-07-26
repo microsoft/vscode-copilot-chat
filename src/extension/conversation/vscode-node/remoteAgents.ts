@@ -141,7 +141,7 @@ export class RemoteAgentContribution implements IDisposable {
 						quickpick.busy = true;
 						const authSession = await this.authenticationService.getPermissiveGitHubSession({ forceNewSession: true });
 						if (!authSession) {
-							this.logService.logger.error('Failed to get a new auth session for knowledge base selection');
+							this.logService.error('Failed to get a new auth session for knowledge base selection');
 							resolve(undefined);
 							quickpick.hide();
 							return;
@@ -151,7 +151,7 @@ export class RemoteAgentContribution implements IDisposable {
 						this.knowledgeBases?.clear();
 						quickpick.items = await this.getKnowledgeBaseAutocompleteQuickPickItems(authSession.accessToken);
 						if (quickpick.items.length === 1 && quickpick.items[0] instanceof SSOQuickPickItem) {
-							this.logService.logger.error('Failed to fetch new knowledge bases after fetching new auth session');
+							this.logService.error('Failed to fetch new knowledge bases after fetching new auth session');
 							resolve(undefined);
 							quickpick.hide();
 							return;
@@ -200,17 +200,17 @@ export class RemoteAgentContribution implements IDisposable {
 			const authToken = this.authenticationService.anyGitHubSession?.accessToken;
 			if (!authToken) {
 				// We have to silently wait for auth to become available so we can fetch remote agents
-				this.logService.logger.warn('Unable to fetch remote agents because user is not signed in.');
+				this.logService.warn('Unable to fetch remote agents because user is not signed in.');
 				return;
 			}
 			try {
 				// First try to register the default platform agent
 				if (!existingAgents.delete(GITHUB_PLATFORM_AGENT_ID)) { // Don't reregister it
-					this.logService.logger.info('Registering default platform agent...');
+					this.logService.info('Registering default platform agent...');
 					agentRegistrations.set(GITHUB_PLATFORM_AGENT_ID, this.registerAgent(null));
 				}
 			} catch (ex) {
-				this.logService.logger.info(`Encountered error while registering platform agent: ${JSON.stringify(ex)}`);
+				this.logService.info(`Encountered error while registering platform agent: ${JSON.stringify(ex)}`);
 			}
 			const response = await this.capiClientService.makeRequest<Response>({
 				method: 'GET',
@@ -227,7 +227,7 @@ export class RemoteAgentContribution implements IDisposable {
 				}
 			} catch (e) {
 				if (!text.includes('access denied')) {
-					this.logService.logger.warn(`Invalid remote agent response: ${text} (${e})`);
+					this.logService.warn(`Invalid remote agent response: ${text} (${e})`);
 				}
 				return;
 			}
@@ -239,7 +239,7 @@ export class RemoteAgentContribution implements IDisposable {
 				}
 			}
 		} catch (e) {
-			this.logService.logger.error(e, 'Failed to load remote copilot agents');
+			this.logService.error(e, 'Failed to load remote copilot agents');
 		}
 
 		for (const item of existingAgents) {
@@ -560,7 +560,7 @@ export class RemoteAgentContribution implements IDisposable {
 				}
 
 				if (response.type !== ChatFetchResponseType.Success) {
-					this.logService.logger.warn(`Bad response from remote agent "${slug}": ${response.type} ${response.reason}`);
+					this.logService.warn(`Bad response from remote agent "${slug}": ${response.type} ${response.reason}`);
 					if (response.reason.includes('400 no docs found')) {
 						return {
 							errorDetails: { message: 'No docs found' },
@@ -611,7 +611,7 @@ export class RemoteAgentContribution implements IDisposable {
 
 				return { metadata } satisfies ICopilotChatResult;
 			} catch (e) {
-				this.logService.logger.error(`/agents/${slug} failed: ${e}`);
+				this.logService.error(`/agents/${slug} failed: ${e}`);
 				return { metadata };
 			}
 		}));
@@ -770,7 +770,7 @@ export class RemoteAgentContribution implements IDisposable {
 					// For now, raise a reauth badge so the user has a way out of this state
 					void this.authenticationService.getPermissiveGitHubSession({ silent: true });
 				}
-				this.logService.logger.error(ex, 'Failed to fetch info about current GitHub repository');
+				this.logService.error(ex, 'Failed to fetch info about current GitHub repository');
 			}
 		}
 
@@ -818,7 +818,7 @@ export class RemoteAgentContribution implements IDisposable {
 		const missingOrganizations = xGithubSSOHeader?.split('partial-results; organizations=')[1];
 		if (missingOrganizations) {
 			const organizationsMissingSSO = missingOrganizations.split(',');
-			this.logService.logger.debug(`Missing knowledge bases SSO for ${organizationsMissingSSO.length} organizations: ${missingOrganizations}`);
+			this.logService.debug(`Missing knowledge bases SSO for ${organizationsMissingSSO.length} organizations: ${missingOrganizations}`);
 
 			const orgName = await this.getOrganizationName(authToken, parseInt(organizationsMissingSSO[0]));
 			if (orgName) {
@@ -836,7 +836,7 @@ export class RemoteAgentContribution implements IDisposable {
 		}
 		const authToken = accessToken ?? (await this.authenticationService.getPermissiveGitHubSession({ createIfNone: true }))?.accessToken;
 		if (!authToken) {
-			this.logService.logger.debug('No auth token available to fetch knowledge bases');
+			this.logService.debug('No auth token available to fetch knowledge bases');
 			return { knowledgeBases: [], organizationsMissingSSO: undefined };
 		}
 		const response = await this.listKnowledgeBases(authToken);
@@ -856,7 +856,7 @@ export class RemoteAgentContribution implements IDisposable {
 			}
 			return { knowledgeBases: [...this.knowledgeBases.values()], organizationsMissingSSO: this.organizationsMissingSSO };
 		} catch (ex) {
-			this.logService.logger.error(ex);
+			this.logService.error(ex);
 			return { knowledgeBases: [], organizationsMissingSSO: this.organizationsMissingSSO };
 		}
 	}

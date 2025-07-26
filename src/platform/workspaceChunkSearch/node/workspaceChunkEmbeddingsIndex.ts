@@ -260,7 +260,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 
 			const resolvedFileSemanticChunks = new Map<string, FileChunkAndScore>();
 			if (!semanticChunks) {
-				this._logService.logger.error(`toSemanticChunks - Could not get semantic chunks for ${uri}`);
+				this._logService.error(`toSemanticChunks - Could not get semantic chunks for ${uri}`);
 
 				for (const chunk of chunks) {
 					const key = chunk.range.toString();
@@ -282,7 +282,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 
 					// If we didn't find any semantic chunks we still want to make sure the original chunk is included
 					if (!resolvedFileSemanticChunks.size) {
-						this._logService.logger.error(`No semantic chunk found for in ${uri} for chunk ${chunk.range}`,);
+						this._logService.error(`No semantic chunk found for in ${uri} for chunk ${chunk.range}`,);
 
 						const key = chunk.range.toString();
 						if (!resolvedFileSemanticChunks.has(key)) {
@@ -371,7 +371,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 		const batchInfo = telemetry.batchInfo ?? new ComputeBatchInfo();
 
 		return logExecTime(this._logService, 'workspaceChunkEmbeddingsIndex.getEmbeddingsForFiles', async () => {
-			this._logService.logger.trace(`workspaceChunkEmbeddingsIndex: Getting auth token `);
+			this._logService.trace(`workspaceChunkEmbeddingsIndex: Getting auth token `);
 			const authToken = await this.tryGetAuthToken();
 			if (!authToken) {
 				throw new Error('Unable to get auth token');

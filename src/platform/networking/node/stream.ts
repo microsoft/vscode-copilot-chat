@@ -289,7 +289,7 @@ export class SSEProcessor {
 			}
 		} finally {
 			this.cancel();
-			this.logService.logger.info(
+			this.logService.info(
 				`request done: requestId: [${this.requestId.headerRequestId}] model deployment ID: [${this.requestId.deploymentId}]`
 			);
 		}
@@ -340,7 +340,7 @@ export class SSEProcessor {
 				try {
 					json = JSON.parse(lineWithoutData);
 				} catch (e) {
-					this.logService.logger.error(`Error parsing JSON stream data for request id ${this.requestId.headerRequestId}:${dataLine}`);
+					this.logService.error(`Error parsing JSON stream data for request id ${this.requestId.headerRequestId}:${dataLine}`);
 					sendCommunicationErrorTelemetry(this.telemetryService, `Error parsing JSON stream data for request id ${this.requestId.headerRequestId}:`, dataLine);
 					continue;
 				}
@@ -359,7 +359,7 @@ export class SSEProcessor {
 					// Currently there are messages with a null 'choices' that include copilot_references- ignore these
 					if (!json.copilot_references && !json.copilot_confirmation) {
 						if (json.error !== undefined) {
-							this.logService.logger.error(`Error in response for request id ${this.requestId.headerRequestId}:${json.error.message}`);
+							this.logService.error(`Error in response for request id ${this.requestId.headerRequestId}:${json.error.message}`);
 							sendCommunicationErrorTelemetry(this.telemetryService, `Error in response for request id ${this.requestId.headerRequestId}:`, json.error.message);
 							// Encountered an error mid stream we immediately yield as the response is not usable.
 							yield {
@@ -371,7 +371,7 @@ export class SSEProcessor {
 								requestId: this.requestId,
 							};
 						} else {
-							this.logService.logger.error(`Unexpected response with no choices or error for request id ${this.requestId.headerRequestId}`);
+							this.logService.error(`Unexpected response with no choices or error for request id ${this.requestId.headerRequestId}`);
 							sendCommunicationErrorTelemetry(this.telemetryService, `Unexpected response with no choices or error for request id ${this.requestId.headerRequestId}`);
 						}
 					}
@@ -392,7 +392,7 @@ export class SSEProcessor {
 					// Would only be 0 if we're the first actual response chunk
 					this.requestId = getRequestId(this.response, json);
 					if (this.requestId.created === 0 && json.choices?.length) { // An initial chunk is sent with an empty choices array and no id, to hold `prompt_filter_results`
-						this.logService.logger.error(`Request id invalid, should have "completionId" and "created": ${JSON.stringify(this.requestId)} ${this.requestId}`);
+						this.logService.error(`Request id invalid, should have "completionId" and "created": ${JSON.stringify(this.requestId)} ${this.requestId}`);
 						sendCommunicationErrorTelemetry(this.telemetryService, `Request id invalid, should have "completionId" and "created": ${JSON.stringify(this.requestId)}`, this.requestId);
 					}
 				}
@@ -483,7 +483,7 @@ export class SSEProcessor {
 									}
 								}
 							} catch (ex) {
-								this.logService.logger.error(`Error parsing function references: ${JSON.stringify(ex)}`);
+								this.logService.error(`Error parsing function references: ${JSON.stringify(ex)}`);
 							}
 						}
 					} else if (choice.delta?.function_call && (choice.delta.function_call.name || choice.delta.function_call.arguments)) {
@@ -502,7 +502,7 @@ export class SSEProcessor {
 								continue;
 							}
 						} catch (error) {
-							this.logService.logger.error(error);
+							this.logService.error(error);
 						}
 
 						this.functionCalls[this.functionCallName] = null;
@@ -525,7 +525,7 @@ export class SSEProcessor {
 								continue;
 							}
 						} catch (error) {
-							this.logService.logger.error(error);
+							this.logService.error(error);
 						}
 					}
 
@@ -599,11 +599,11 @@ export class SSEProcessor {
 			try {
 				const extraDataJson = JSON.parse(extraData);
 				if (extraDataJson.error !== undefined) {
-					this.logService.logger.error(extraDataJson.error, `Error in response: ${extraDataJson.error.message}`);
+					this.logService.error(extraDataJson.error, `Error in response: ${extraDataJson.error.message}`);
 					sendCommunicationErrorTelemetry(this.telemetryService, `Error in response: ${extraDataJson.error.message}`, extraDataJson.error);
 				}
 			} catch (e) {
-				this.logService.logger.error(`Error parsing extraData for request id ${this.requestId.headerRequestId}: ${extraData}`);
+				this.logService.error(`Error parsing extraData for request id ${this.requestId.headerRequestId}: ${extraData}`);
 				sendCommunicationErrorTelemetry(this.telemetryService, `Error parsing extraData for request id ${this.requestId.headerRequestId}: ${extraData}`);
 			}
 		}
@@ -646,7 +646,7 @@ export class SSEProcessor {
 	 */
 	private maybeCancel(description: string) {
 		if (this.cancellationToken?.isCancellationRequested) {
-			this.logService.logger.debug('Cancelled: ' + description);
+			this.logService.debug('Cancelled: ' + description);
 			this.cancel();
 			return true;
 		}
@@ -662,7 +662,7 @@ export class SSEProcessor {
 		delete choiceCopy.index;
 		delete choiceCopy.content_filter_results;
 		delete choiceCopy.content_filter_offsets;
-		this.logService.logger.trace(`choice ${JSON.stringify(choiceCopy)}`);
+		this.logService.trace(`choice ${JSON.stringify(choiceCopy)}`);
 	}
 }
 

@@ -536,7 +536,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				serverRequestId: undefined,
 			};
 		} else {
-			this._logService.logger.error(errorsUtil.fromUnknown(err), `Error on conversation request`);
+			this._logService.error(errorsUtil.fromUnknown(err), `Error on conversation request`);
 			this._telemetryService.sendGHTelemetryException(err, 'Error on conversation request');
 			// this.logger.exception(err, `Error on conversation request`);
 			if (fetcher.isInternetDisconnectedError(err)) {

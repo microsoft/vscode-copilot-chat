@@ -110,7 +110,7 @@ class TelemetrySender {
 				}
 			);
 		}
-		this.logService.logger.debug(`TypeScript Copilot context speculative request: [${context.requestId} - ${originalRequestId}, numberOfItems: ${numberOfItems}]`);
+		this.logService.debug(`TypeScript Copilot context speculative request: [${context.requestId} - ${originalRequestId}, numberOfItems: ${numberOfItems}]`);
 	}
 
 	public willLogRequestTelemetry(context: RequestContext): boolean {
@@ -193,7 +193,7 @@ class TelemetrySender {
 				}
 			);
 		}
-		this.logService.logger.debug(`TypeScript Copilot context: [${context.requestId}, ${context.source ?? KnownSources.unknown}, ${JSON.stringify(position, undefined, 0)}, ${JSON.stringify(nodePath, undefined, 0)}, ${JSON.stringify(stats, undefined, 0)}, cacheItems:${data.cachedItems}, cacheState:${JSON.stringify(cacheState, undefined, 0)}, budgetExhausted:${data.tokenBudgetExhausted}, cancelled:${data.cancelled}, timedOut:${data.timedOut}, fileSize:${fileSize}] in [${timeTaken},${data.serverTime},${data.contextComputeTime}]ms.${data.timedOut ? ' Timed out.' : ''}`);
+		this.logService.debug(`TypeScript Copilot context: [${context.requestId}, ${context.source ?? KnownSources.unknown}, ${JSON.stringify(position, undefined, 0)}, ${JSON.stringify(nodePath, undefined, 0)}, ${JSON.stringify(stats, undefined, 0)}, cacheItems:${data.cachedItems}, cacheState:${JSON.stringify(cacheState, undefined, 0)}, budgetExhausted:${data.tokenBudgetExhausted}, cancelled:${data.cancelled}, timedOut:${data.timedOut}, fileSize:${fileSize}] in [${timeTaken},${data.serverTime},${data.contextComputeTime}]ms.${data.timedOut ? ' Timed out.' : ''}`);
 		if (data.errorData !== undefined && data.errorData.length > 0) {
 			const errorData = data.errorData;
 			for (const error of errorData) {
@@ -218,7 +218,7 @@ class TelemetrySender {
 						code: error.code
 					}
 				);
-				this.logService.logger.error('Error computing context:', `${error.message} [${error.code}]`);
+				this.logService.error('Error computing context:', `${error.message} [${error.code}]`);
 			}
 		}
 	}
@@ -258,7 +258,7 @@ class TelemetrySender {
 				totalSize: totalSize
 			}
 		);
-		this.logService.logger.debug(`TypeScript Copilot context on timeout: [${context.requestId}, ${JSON.stringify(stats, undefined, 0)}]`);
+		this.logService.debug(`TypeScript Copilot context on timeout: [${context.requestId}, ${JSON.stringify(stats, undefined, 0)}]`);
 	}
 
 	public sendRequestFailureTelemetry(context: RequestContext, data: { error: protocol.ErrorCode; message: string; stack?: string }): void {
@@ -301,7 +301,7 @@ class TelemetrySender {
 				source: context.source ?? KnownSources.unknown
 			}
 		);
-		this.logService.logger.debug(`TypeScript Copilot context request ${context.requestId} got cancelled.`);
+		this.logService.debug(`TypeScript Copilot context request ${context.requestId} got cancelled.`);
 	}
 
 	public sendActivationTelemetry(response: protocol.PingResponse | undefined, error: any | undefined): void {
@@ -1172,17 +1172,17 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 			this.telemetrySender.sendActivationTelemetry(response, undefined);
 			if (response !== undefined) {
 				if (response.body?.kind === 'ok') {
-					this.logService.logger.info('TypeScript server plugin activated.');
+					this.logService.info('TypeScript server plugin activated.');
 					activated = true;
 				} else {
-					this.logService.logger.error('TypeScript server plugin not activated:', response.body?.message ?? 'Message not provided.');
+					this.logService.error('TypeScript server plugin not activated:', response.body?.message ?? 'Message not provided.');
 				}
 			} else {
-				this.logService.logger.error('TypeScript server plugin not activated:', 'No ping response received.');
+				this.logService.error('TypeScript server plugin not activated:', 'No ping response received.');
 			}
 		} catch (error) {
 			this.telemetrySender.sendActivationTelemetry(undefined, error);
-			this.logService.logger.error('Error pinging TypeScript server plugin:', error);
+			this.logService.error('Error pinging TypeScript server plugin:', error);
 		}
 
 		return activated;
@@ -1256,7 +1256,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				console.error('Error populating cache:', response.body.message, response.body.stack);
 			}
 		} catch (error) {
-			this.logService.logger.error(error, `Error populating cache for document: ${document.uri.toString()} at position: ${position.line + 1}:${position.character + 1}`);
+			this.logService.error(error, `Error populating cache for document: ${document.uri.toString()} at position: ${position.line + 1}:${position.character + 1}`);
 		}
 		if (this.pendingRequest !== undefined) {
 			// We had a pending request. Clear it and try to populate the cache again.
@@ -1579,7 +1579,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 			} else {
 				this.unregister();
 			}
-		}).catch((error: any) => this.logService.logger.error('Error checking TypeScript context provider registration:', error));
+		}).catch((error: any) => this.logService.error('Error checking TypeScript context provider registration:', error));
 	}
 
 	private async register(): Promise<void> {
@@ -1596,7 +1596,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 
 			const copilotAPI = await this.getCopilotApi();
 			if (copilotAPI === undefined) {
-				logService.logger.warn('Copilot API is undefined, unable to register context provider.');
+				logService.warn('Copilot API is undefined, unable to register context provider.');
 				return;
 			}
 
@@ -1676,9 +1676,9 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 				resolver: resolver
 			}));
 			this.telemetrySender.sendInlineCompletionProviderTelemetry(KnownSources.completion, true);
-			logService.logger.info('Registered TypeScript context provider with Copilot inline completions.');
+			logService.info('Registered TypeScript context provider with Copilot inline completions.');
 		} catch (error) {
-			logService.logger.error('Error checking if server plugin is installed:', error);
+			logService.error('Error checking if server plugin is installed:', error);
 		}
 	}
 
@@ -1687,7 +1687,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 		const typeScriptExtension = vscode.extensions.getExtension('vscode.typescript-language-features');
 		if (typeScriptExtension === undefined) {
 			this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.TypescriptPlugin, 'TypeScript extension not found', undefined);
-			this.logService.logger.error('TypeScript extension not found');
+			this.logService.error('TypeScript extension not found');
 			return false;
 		}
 		try {
@@ -1696,10 +1696,10 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 		} catch (error) {
 			if (error instanceof Error) {
 				this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.TypescriptPlugin, error.message, error.stack);
-				this.logService.logger.error('Error checking if TypeScript plugin is installed:', error.message);
+				this.logService.error('Error checking if TypeScript plugin is installed:', error.message);
 			} else {
 				this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.TypescriptPlugin, 'Unknown error', undefined);
-				this.logService.logger.error('Error checking if TypeScript plugin is installed: Unknown error');
+				this.logService.error('Error checking if TypeScript plugin is installed: Unknown error');
 			}
 			return false;
 		}
@@ -1757,7 +1757,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 		const copilotExtension = vscode.extensions.getExtension('GitHub.copilot');
 		if (copilotExtension === undefined) {
 			this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.CopilotExtension, 'Copilot extension not found', undefined);
-			this.logService.logger.error('Copilot extension not found');
+			this.logService.error('Copilot extension not found');
 			return undefined;
 		}
 		try {
@@ -1766,10 +1766,10 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 		} catch (error) {
 			if (error instanceof Error) {
 				this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.CopilotExtension, error.message, error.stack);
-				this.logService.logger.error('Error activating Copilot extension:', error.message);
+				this.logService.error('Error activating Copilot extension:', error.message);
 			} else {
 				this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.CopilotExtension, 'Unknown error', undefined);
-				this.logService.logger.error('Error activating Copilot extension: Unknown error.');
+				this.logService.error('Error activating Copilot extension: Unknown error.');
 			}
 			return undefined;
 		}

@@ -84,10 +84,10 @@ export class UrlChunkEmbeddingsIndex extends Disposable {
 
 		const batchInfo = new ComputeBatchInfo();
 
-		this._logService.logger.trace(`urlChunkEmbeddingsIndex: Getting auth token `);
+		this._logService.trace(`urlChunkEmbeddingsIndex: Getting auth token `);
 		const authToken = await this.tryGetAuthToken();
 		if (!authToken) {
-			this._logService.logger.error('urlChunkEmbeddingsIndex: Unable to get auth token');
+			this._logService.error('urlChunkEmbeddingsIndex: Unable to get auth token');
 			throw new Error('Unable to get auth token');
 		}
 

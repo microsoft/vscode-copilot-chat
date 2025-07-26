@@ -100,7 +100,7 @@ export class FullWorkspaceChunkSearch extends Disposable implements IWorkspaceCh
 						} catch (e) {
 							if (!isCancellationError(e)) {
 								errorReason = 'error-reading-file';
-								this._logService.logger.error(`FullWorkspaceChunkSearch: Error getting text for file ${file.uri}: ${e}`);
+								this._logService.error(`FullWorkspaceChunkSearch: Error getting text for file ${file.uri}: ${e}`);
 							}
 							throw e;
 						}
@@ -111,7 +111,7 @@ export class FullWorkspaceChunkSearch extends Disposable implements IWorkspaceCh
 						} catch (e) {
 							if (!isCancellationError(e)) {
 								errorReason = 'error-tokenizing-file';
-								this._logService.logger.error(`FullWorkspaceChunkSearch: Error tokenizing file ${file.uri}: ${e}`);
+								this._logService.error(`FullWorkspaceChunkSearch: Error tokenizing file ${file.uri}: ${e}`);
 							}
 							throw e;
 						}
@@ -143,16 +143,16 @@ export class FullWorkspaceChunkSearch extends Disposable implements IWorkspaceCh
 						this._previousHitWholeWorkspaceTokenCount = Math.max(usedTokenBudget, this._previousHitWholeWorkspaceTokenCount);
 					}
 
-					this._logService.logger.debug(`FullWorkspaceChunkSearch: Workspace too large. Found at least ${usedTokenBudget} of ${sizing.tokenBudget} token limit`);
+					this._logService.debug(`FullWorkspaceChunkSearch: Workspace too large. Found at least ${usedTokenBudget} of ${sizing.tokenBudget} token limit`);
 					errorReason = 'too-large';
 					return undefined;
 				} else {
-					this._logService.logger.debug(`FullWorkspaceChunkSearch: Found ${usedTokenBudget} of ${sizing.tokenBudget} token limit`);
+					this._logService.debug(`FullWorkspaceChunkSearch: Found ${usedTokenBudget} of ${sizing.tokenBudget} token limit`);
 					return { chunks };
 				}
 			} catch (e) {
 				if (!isCancellationError(e)) {
-					this._logService.logger.error(e, `Error collecting info for full workspace search`);
+					this._logService.error(e, `Error collecting info for full workspace search`);
 					if (e instanceof Error) {
 						errorReason ??= e.message;
 					}

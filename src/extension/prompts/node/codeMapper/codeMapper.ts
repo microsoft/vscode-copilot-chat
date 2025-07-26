@@ -373,7 +373,7 @@ export class CodeMapper {
 			result = createOutcome([{ label: errorDetails.message, message: `request ${fetchResult.type}`, severity: 'error' }], errorDetails);
 		}
 		if (result.annotations.length || result.errorDetails) {
-			this.logService.logger.info(`[code mapper] Problems generating edits: ${result.annotations.map(a => `${a.message} [${a.label}]`).join(', ')}, ${result.errorDetails?.message}`);
+			this.logService.info(`[code mapper] Problems generating edits: ${result.annotations.map(a => `${a.message} [${a.label}]`).join(', ')}, ${result.errorDetails?.message}`);
 		}
 		return result;
 	}
@@ -435,7 +435,7 @@ export class CodeMapper {
 
 		const timeToFirstToken = firstTokenTime === -1 ? -1 : firstTokenTime - startTime;
 		const timeToComplete = Date.now() - startTime;
-		this.logService.logger.info(`srequest done: ${timeToComplete}ms, chatRequestId: [${telemetryInfo?.requestId}], speculationRequestId: [${requestId}]`);
+		this.logService.info(`srequest done: ${timeToComplete}ms, chatRequestId: [${telemetryInfo?.requestId}], speculationRequestId: [${requestId}]`);
 		const isNoopEdit = responseText.trim() === speculation.trim();
 
 		const { addedLines, removedLines } = await computeAdditionsAndDeletions(this.diffService, speculation, responseText);
@@ -487,9 +487,9 @@ export class CodeMapper {
 		const { promptTokenCount, speculationTokenCount } = prompt;
 		const { startTime, requestId } = response;
 
-		this.logService.logger.error(`srequest failed: ${Date.now() - startTime}ms, chatRequestId: [${telemetryInfo?.requestId}], speculationRequestId: [${requestId}] error: [${errorMessage}]`);
+		this.logService.error(`srequest failed: ${Date.now() - startTime}ms, chatRequestId: [${telemetryInfo?.requestId}], speculationRequestId: [${requestId}] error: [${errorMessage}]`);
 		if (error) {
-			this.logService.logger.error(error);
+			this.logService.error(error);
 		}
 		/* __GDPR__
 			"speculation.response.error" : {
@@ -523,7 +523,7 @@ export class CodeMapper {
 		// location = panel, is when user is applying code displayed in chat panel into notebook.
 		// Fast apply doesn't work well when we have only a part of the code and no code markers.
 		if (!request.createNew && request.location === 'panel' && this.notebookService.hasSupportedNotebooks(request.uri)) {
-			this.logService.logger.error(`srequest | refuse | SD | refusing notebook from Panel | [codeMapper]`);
+			this.logService.error(`srequest | refuse | SD | refusing notebook from Panel | [codeMapper]`);
 			return new CodeMapperRefusal();
 		}
 
@@ -531,7 +531,7 @@ export class CodeMapper {
 
 		const promptLimit = 256_000; // (256K is roughly 64k tokens) and documents longer than this will surely not fit
 		if (combinedDocumentLength > promptLimit) {
-			this.logService.logger.error(`srequest | refuse | SD | refusing huge document | [codeMapper]`);
+			this.logService.error(`srequest | refuse | SD | refusing huge document | [codeMapper]`);
 			return new CodeMapperRefusal();
 		}
 
@@ -544,7 +544,7 @@ export class CodeMapper {
 		// if (promptTokenCount > 128_000 - speculationTokenCount - codeBlockTokenCount) {
 
 		if (promptTokenCount > 64_000) {
-			this.logService.logger.error(`srequest | refuse | SD | exceeds token limit | [codeMapper]`);
+			this.logService.error(`srequest | refuse | SD | exceeds token limit | [codeMapper]`);
 			return new CodeMapperRefusal();
 		}
 

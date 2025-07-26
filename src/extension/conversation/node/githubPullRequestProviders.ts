@@ -40,7 +40,7 @@ export class GitHubPullRequestProviders implements Disposable {
 		const initialize = async () => {
 			if (githubPRExtension) {
 				const extension = await githubPRExtension!.activate();
-				this.logService.logger.info('Successfully activated the GitHub.vscode-pull-request-github extension.');
+				this.logService.info('Successfully activated the GitHub.vscode-pull-request-github extension.');
 
 				this.gitHubExtensionApi = extension;
 				this.registerTitleAndDescriptionProvider();
@@ -51,7 +51,7 @@ export class GitHubPullRequestProviders implements Disposable {
 		if (githubPRExtension) {
 			initialize();
 		} else {
-			this.logService.logger.info('GitHub.vscode-pull-request-github extension is not yet activated.');
+			this.logService.info('GitHub.vscode-pull-request-github extension is not yet activated.');
 
 			const listener = this.extensionService.onDidChange(() => {
 				githubPRExtension = this.getExtension();
@@ -75,7 +75,7 @@ export class GitHubPullRequestProviders implements Disposable {
 			}
 			// This string "Copilot" needs to be in here. It's how we an tell which provider to use in the PR extension.
 			this.disposables.add(this.gitHubExtensionApi.registerTitleAndDescriptionProvider(l10n.t('Generate with Copilot'), this.titleAndDescriptionProvider));
-			this.logService.logger.info('Successfully registered GitHub PR title and description provider.');
+			this.logService.info('Successfully registered GitHub PR title and description provider.');
 		} catch (e) {
 			// Catch errors in case there's a breaking API change.
 		}
@@ -96,7 +96,7 @@ export class GitHubPullRequestProviders implements Disposable {
 				this.reviewerCommentsProvider = this.instantiationService.createInstance(GitHubPullRequestReviewerCommentsProvider);
 			}
 			this.disposables.add(this.gitHubExtensionApi.registerReviewerCommentsProvider(l10n.t('Copilot'), this.reviewerCommentsProvider));
-			this.logService.logger.info('Successfully registered GitHub PR reviewer comments provider.');
+			this.logService.info('Successfully registered GitHub PR reviewer comments provider.');
 		} catch (e) {
 			// Catch errors in case there's a breaking API change.
 		}
@@ -112,7 +112,7 @@ export class GitHubPullRequestProviders implements Disposable {
 					const extension = await githubPRExtension.activate();
 					this.gitHubExtensionApi = extension;
 				} else {
-					this.logService.logger.warn('GitHub.vscode-pull-request-github extension API is not available.');
+					this.logService.warn('GitHub.vscode-pull-request-github extension API is not available.');
 					return undefined;
 				}
 			}
@@ -123,7 +123,7 @@ export class GitHubPullRequestProviders implements Disposable {
 
 			return await this.gitHubExtensionApi.getRepositoryDescription(uri);
 		} catch (error) {
-			this.logService.logger.error('Failed to get repository description from GitHub.vscode-pull-request-github extension.', error);
+			this.logService.error('Failed to get repository description from GitHub.vscode-pull-request-github extension.', error);
 			return undefined;
 		}
 	}

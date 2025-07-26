@@ -179,7 +179,7 @@ export class IntentDetector implements ChatParticipantDetectionProvider {
 		history?: readonly Turn[],
 	): Promise<IIntent | ChatParticipantDetectionResult | undefined> {
 
-		this.logService.logger.trace('Building intent detector');
+		this.logService.trace('Building intent detector');
 
 		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-4o-mini');
 
@@ -204,7 +204,7 @@ export class IntentDetector implements ChatParticipantDetectionProvider {
 		);
 
 		const { messages, metadata } = await promptRenderer.render(undefined, token);
-		this.logService.logger.trace('Built intent detector');
+		this.logService.trace('Built intent detector');
 
 		const fetchResult = await endpoint.makeChatRequest(
 			'intentDetection',
@@ -324,7 +324,7 @@ export class IntentDetector implements ChatParticipantDetectionProvider {
 
 		const chosenIntent = intent && 'id' in intent ? intent?.id : intent?.participant;
 
-		this.logService.logger.debug(`picked intent "${chosenIntent}" from ${JSON.stringify(fetchResult.value, null, '\t')}`);
+		this.logService.debug(`picked intent "${chosenIntent}" from ${JSON.stringify(fetchResult.value, null, '\t')}`);
 
 		// override /edit in inline chat based on the document context
 		if (location === ChatLocation.Editor

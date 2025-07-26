@@ -80,7 +80,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 	) {
 		super();
 
-		const tracer = createTracer(['NES', 'Feature'], (s) => this._logService.logger.trace(s));
+		const tracer = createTracer(['NES', 'Feature'], (s) => this._logService.trace(s));
 		const constructorTracer = tracer.sub('constructor');
 
 		const hasUpdatedNesSettingKey = 'copilot.chat.nextEdits.hasEnabledNesInSettings';

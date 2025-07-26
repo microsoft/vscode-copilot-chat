@@ -30,10 +30,10 @@ export async function measureExecTime<R>(fn: () => PromiseLike<R>, cb: MeasureCa
  */
 export async function logExecTime<R>(logService: ILogService, name: string, fn: () => PromiseLike<R>, measureCb?: MeasureCallBack<R>): Promise<R> {
 	return measureExecTime(() => {
-		logService.logger.trace(`${name} started`);
+		logService.trace(`${name} started`);
 		return fn();
 	}, (time, status, result) => {
-		logService.logger.trace(`${name} ${status}. Elapsed ${time}`);
+		logService.trace(`${name} ${status}. Elapsed ${time}`);
 		measureCb?.(time, status, result);
 	});
 }

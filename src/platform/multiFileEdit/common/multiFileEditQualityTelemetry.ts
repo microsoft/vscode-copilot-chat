@@ -72,7 +72,7 @@ export class MultiFileEditInternalTelemetryService extends Disposable implements
 	}
 
 	storeEditPrompt(edit: IMultiFileEdit, telemetryOptions: IMultiFileEditTelemetry): void {
-		this.logService.logger.debug(`Storing edit prompt for ${edit.uri.toString()} with request ID ${telemetryOptions.chatRequestId}`);
+		this.logService.debug(`Storing edit prompt for ${edit.uri.toString()} with request ID ${telemetryOptions.chatRequestId}`);
 
 		const existingEditsForUri = this.editedFiles.get(edit.uri) ?? new Map();
 		const existingEditsForUriInRequest = existingEditsForUri.get(telemetryOptions.chatRequestId) ?? [];
@@ -99,7 +99,7 @@ export class MultiFileEditInternalTelemetryService extends Disposable implements
 			// i.e. edit -> edit -> accept/reject
 			// Skip sending telemetry for files which originated from multiple SD prompts
 			// and reset our tracking
-			this.logService.logger.debug(`Skipping telemetry for ${uri.toString()} with request ID ${telemetry.chatRequestId} due to multiple edit turns`);
+			this.logService.debug(`Skipping telemetry for ${uri.toString()} with request ID ${telemetry.chatRequestId} due to multiple edit turns`);
 			this.editedFiles.delete(uri);
 			return;
 		}
@@ -115,7 +115,7 @@ export class MultiFileEditInternalTelemetryService extends Disposable implements
 			// and can also happen when the LLM ignores instructions in non-agentic edits.
 			// Again, skip sending telemetry for files which originated from multiple SD prompts
 			// and reset our tracking
-			this.logService.logger.debug(`Skipping telemetry for ${uri.toString()} with request ID ${telemetry.chatRequestId} due to multiple edits in one turn`);
+			this.logService.debug(`Skipping telemetry for ${uri.toString()} with request ID ${telemetry.chatRequestId} due to multiple edits in one turn`);
 			this.editedFiles.delete(uri);
 			return;
 		}
@@ -173,9 +173,9 @@ export class MultiFileEditInternalTelemetryService extends Disposable implements
 				completionTextJson: documentText, // Note that this is not necessarily the same as the model output because the user may have made manual edits
 			});
 			this.telemetryService.sendEnhancedGHTelemetryEvent('fastApply/editOutcome', gitHubEnhancedTelemetryProperties);
-			this.logService.logger.debug(`Sent telemetry for ${uri.toString()} with request ID ${edit.chatRequestId}, SD request ID ${edit.speculationRequestId}, and outcome ${outcome}`);
+			this.logService.debug(`Sent telemetry for ${uri.toString()} with request ID ${edit.chatRequestId}, SD request ID ${edit.speculationRequestId}, and outcome ${outcome}`);
 		} catch (e) {
-			this.logService.logger.error('Error sending multi-file edit telemetry', JSON.stringify(e));
+			this.logService.error('Error sending multi-file edit telemetry', JSON.stringify(e));
 		} finally {
 			this.editedFiles.delete(uri);
 		}

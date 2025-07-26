@@ -54,7 +54,7 @@ class AuthUpgradeAsk extends Disposable {
 			}
 		} catch (error) {
 			// likely due to the user canceling the auth flow
-			this._logService.logger.error(error, 'Failed to get copilot token');
+			this._logService.error(error, 'Failed to get copilot token');
 		}
 
 		await Event.toPromise(
@@ -90,9 +90,9 @@ class AuthUpgradeAsk extends Disposable {
 			return;
 		}
 		if (await this._authenticationChatUpgradeService.showPermissiveSessionModal()) {
-			this._logService.logger.debug('Got permissive GitHub token');
+			this._logService.debug('Got permissive GitHub token');
 		} else {
-			this._logService.logger.debug('Did not get permissive GitHub token');
+			this._logService.debug('Did not get permissive GitHub token');
 		}
 		this._extensionContext.globalState.update(AuthUpgradeAsk.AUTH_UPGRADE_ASK_KEY, true);
 	}

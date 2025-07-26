@@ -37,7 +37,7 @@ export class SnippyNotifier {
 		void this.notificationService.showInformationMessage(SnippyNotifier.matchCodeMessage, ...messageItems).then(action => {
 			switch (action) {
 				case SnippyNotifier.MatchAction: {
-					this.logService.logger.show(true);
+					this.logService.show(true);
 					break;
 				}
 				case SnippyNotifier.SettingAction: {

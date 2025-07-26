@@ -79,16 +79,16 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 			}
 			return true;
 		} finally {
-			this.logService.logger.trace(`Should request permissive session upgrade: ${reason}`);
+			this.logService.trace(`Should request permissive session upgrade: ${reason}`);
 		}
 	}
 
 	async showPermissiveSessionModal(): Promise<boolean> {
 		if (this.hasRequestedPermissiveSessionUpgrade) {
-			this.logService.logger.trace('Already requested permissive session upgrade');
+			this.logService.trace('Already requested permissive session upgrade');
 			return false;
 		}
-		this.logService.logger.trace('Requesting permissive session upgrade');
+		this.logService.trace('Requesting permissive session upgrade');
 		this.hasRequestedPermissiveSessionUpgrade = true;
 		try {
 			await this._authenticationService.getPermissiveGitHubSession({
@@ -111,7 +111,7 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 		data: ChatRequest,
 		detail?: string
 	): void {
-		this.logService.logger.trace('Requesting permissive session upgrade in chat');
+		this.logService.trace('Requesting permissive session upgrade in chat');
 		this.hasRequestedPermissiveSessionUpgrade = true;
 		stream.confirmation(
 			this._permissionRequest,
@@ -130,10 +130,10 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 		if (!findConfirmationRequested) {
 			return request;
 		}
-		this.logService.logger.trace('Handling confirmation request');
+		this.logService.trace('Handling confirmation request');
 		switch (request.prompt) {
 			case `${this._permissionRequestGrant}: "${this._permissionRequest}"`:
-				this.logService.logger.trace('User granted permission');
+				this.logService.trace('User granted permission');
 				try {
 					await this._authenticationService.getPermissiveGitHubSession({ createIfNone: true });
 					this._onDidGrantAuthUpgrade.fire();
@@ -143,12 +143,12 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 				}
 				break;
 			case `${this._permissionRequestNotNow}: "${this._permissionRequest}"`:
-				this.logService.logger.trace('User declined permission');
+				this.logService.trace('User declined permission');
 				stream.markdown(l10n.t("Ok. I won't bother you again for now. If you change your mind, you can react to the authentication request in the Account menu.") + '\n\n');
 				await this._authenticationService.getPermissiveGitHubSession({});
 				break;
 			case `${this._permissionRequestNeverAskAgain}: "${this._permissionRequest}"`:
-				this.logService.logger.trace('User chose never ask again for permission');
+				this.logService.trace('User chose never ask again for permission');
 				await this.configurationService.setConfig(ConfigKey.Shared.AuthPermissions, AuthPermissionMode.Minimal);
 				// Change this back to false to handle if the user changes back to allowing permissive tokens.
 				this.hasRequestedPermissiveSessionUpgrade = false;
@@ -200,7 +200,7 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 	private async _canAccessAllRepositories(): Promise<boolean> {
 		const repoContexts = this.gitService?.repositories;
 		if (!repoContexts) {
-			this.logService.logger.debug('No git repositories found');
+			this.logService.debug('No git repositories found');
 			return false;
 		}
 

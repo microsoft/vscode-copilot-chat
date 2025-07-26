@@ -77,7 +77,7 @@ export class ContextKeysContribution extends Disposable {
 	private _scheduleOfflineCheck() {
 		this._cancelPendingOfflineCheck();
 		this._needsOfflineCheck = true;
-		this._logService.logger.debug(`[context keys] Scheduling offline check. Active: ${window.state.active}, focused: ${window.state.focused}.`);
+		this._logService.debug(`[context keys] Scheduling offline check. Active: ${window.state.active}, focused: ${window.state.focused}.`);
 		if (window.state.active && window.state.focused) {
 			const delayInSeconds = 60;
 			this._scheduledOfflineCheck = setTimeout(() => {
@@ -88,10 +88,10 @@ export class ContextKeysContribution extends Disposable {
 	}
 
 	private _runOfflineCheck(trigger: string) {
-		this._logService.logger.debug(`[context keys] ${trigger}. Needs offline check: ${this._needsOfflineCheck}, active: ${window.state.active}, focused: ${window.state.focused}.`);
+		this._logService.debug(`[context keys] ${trigger}. Needs offline check: ${this._needsOfflineCheck}, active: ${window.state.active}, focused: ${window.state.focused}.`);
 		if (this._needsOfflineCheck && window.state.active && window.state.focused) {
 			this._inspectContext()
-				.catch(err => this._logService.logger.error(err));
+				.catch(err => this._logService.error(err));
 		}
 	}
 
@@ -104,7 +104,7 @@ export class ContextKeysContribution extends Disposable {
 	}
 
 	private async _inspectContext() {
-		this._logService.logger.debug(`[context keys] Updating context keys.`);
+		this._logService.debug(`[context keys] Updating context keys.`);
 		this._cancelPendingOfflineCheck();
 		const allKeys = Object.values(welcomeViewContextKeys);
 		let error: unknown | undefined = undefined;
@@ -121,7 +121,7 @@ export class ContextKeysContribution extends Disposable {
 				reason === 'GitHubLoginFailed'
 					? SESSION_LOGIN_MESSAGE
 					: `GitHub Copilot could not connect to server. Extension activation failed: "${reason}"`;
-			this._logService.logger.error(message);
+			this._logService.error(message);
 		}
 
 		if (error instanceof NotSignedUpError) {
@@ -165,7 +165,7 @@ export class ContextKeysContribution extends Disposable {
 			const copilotToken = await this._authenticationService.getCopilotToken();
 			const disabled = !copilotToken.isEditorPreviewFeaturesEnabled();
 			if (disabled) {
-				this._logService.logger.warn(`Copilot preview features are disabled by organizational policy. Learn more: https://aka.ms/github-copilot-org-enable-features`);
+				this._logService.warn(`Copilot preview features are disabled by organizational policy. Learn more: https://aka.ms/github-copilot-org-enable-features`);
 			}
 			commands.executeCommand('setContext', previewFeaturesDisabledContextKey, disabled);
 		} catch (e) {

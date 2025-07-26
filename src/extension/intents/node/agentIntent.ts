@@ -224,7 +224,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 		const safeBudget = Math.floor((baseBudget - toolTokens) * 0.85);
 		const endpoint = toolTokens > 0 ? this.endpoint.cloneWithTokenOverride(safeBudget) : this.endpoint;
 		const summarizationEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.SummarizeAgentConversationHistory, this.experimentationService) && this.prompt === AgentPrompt;
-		this.logService.logger.debug(`AgentIntent: rendering with budget=${safeBudget} (baseBudget: ${baseBudget}, toolTokens: ${toolTokens}), summarizationEnabled=${summarizationEnabled}`);
+		this.logService.debug(`AgentIntent: rendering with budget=${safeBudget} (baseBudget: ${baseBudget}, toolTokens: ${toolTokens}), summarizationEnabled=${summarizationEnabled}`);
 		let result: RenderPromptResult;
 		const props: AgentPromptProps = {
 			endpoint,
@@ -244,7 +244,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 			result = await renderer.render(progress, token);
 		} catch (e) {
 			if (e instanceof BudgetExceededError && summarizationEnabled) {
-				this.logService.logger.debug(`[Agent] budget exceeded, triggering summarization (${e.message})`);
+				this.logService.debug(`[Agent] budget exceeded, triggering summarization (${e.message})`);
 				if (!promptContext.toolCallResults) {
 					promptContext = {
 						...promptContext,
@@ -261,7 +261,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 					});
 					result = await renderer.render(progress, token);
 				} catch (e) {
-					this.logService.logger.error(e, `[Agent] summarization failed`);
+					this.logService.error(e, `[Agent] summarization failed`);
 					const errorKind = e instanceof BudgetExceededError ? 'budgetExceeded' : 'error';
 					/* __GDPR__
 						"triggerSummarizeFailed" : {

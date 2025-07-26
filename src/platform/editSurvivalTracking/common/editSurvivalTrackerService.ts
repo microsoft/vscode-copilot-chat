@@ -54,7 +54,7 @@ export class EditSurvivalTrackerService implements IEditSurvivalTrackerService {
 				try {
 					editCollector.addEdits(Array.isArray(edits) ? edits : [edits]);
 				} catch (error) {
-					this._logService.logger.error("[EditSurvivalTrackerService] Error while collecting edits", error);
+					this._logService.error("[EditSurvivalTrackerService] Error while collecting edits", error);
 				}
 			},
 			startReporter: (sendTelemetryEvent: (res: EditSurvivalResult) => void) => {

@@ -91,7 +91,7 @@ export class GithubAvailableEmbeddingTypesManager {
 				getGithubMetadataHeaders(new CallTracker(), this._envService)
 			);
 		} catch (e) {
-			this._logService.logger.error('Error fetching available embedding types', e);
+			this._logService.error('Error fetching available embedding types', e);
 			return undefined;
 		}
 

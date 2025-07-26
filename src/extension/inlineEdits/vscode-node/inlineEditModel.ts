@@ -107,7 +107,7 @@ class InlineEditTriggerer extends Disposable {
 	) {
 		super();
 
-		this._tracer = createTracer(['NES', 'Triggerer'], (s) => this._logService.logger.trace(s));
+		this._tracer = createTracer(['NES', 'Triggerer'], (s) => this._logService.trace(s));
 
 		this.registerListeners();
 	}

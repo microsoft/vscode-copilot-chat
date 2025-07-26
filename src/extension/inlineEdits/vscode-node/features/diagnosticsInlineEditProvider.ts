@@ -60,7 +60,7 @@ export class DiagnosticsNextEditProvider extends Disposable implements INextEdit
 	) {
 		super();
 
-		this._tracer = createTracer(['NES', 'DiagnosticsNextEditProvider'], (s) => logService.logger.trace(s));
+		this._tracer = createTracer(['NES', 'DiagnosticsNextEditProvider'], (s) => logService.trace(s));
 		this._diagnosticsCompletionHandler = this._register(instantiationService.createInstance(DiagnosticsCompletionProcessor, workspace, git));
 	}
 

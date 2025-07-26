@@ -74,7 +74,12 @@ suite('Notebook Cell Linkifier', () => {
 		_serviceBrand: undefined;
 		internal = logger;
 		logger = logger;
-		showPublicLog(preserveFocus?: boolean): void {
+		trace = logger.trace;
+		debug = logger.debug;
+		info = logger.info;
+		warn = logger.warn;
+		error = logger.error;
+		show(preserveFocus?: boolean): void {
 			//
 		}
 	}();

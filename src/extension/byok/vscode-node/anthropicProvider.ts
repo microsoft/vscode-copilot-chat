@@ -44,7 +44,7 @@ export class AnthropicLMProvider implements LanguageModelChatProvider2<LanguageM
 			}
 			return modelList;
 		} catch (error) {
-			this._logService.logger.error(error, `Error fetching available ${AnthropicLMProvider.providerName} models`);
+			this._logService.error(error, `Error fetching available ${AnthropicLMProvider.providerName} models`);
 			throw new Error(error.message ? error.message : error);
 		}
 	}
@@ -161,7 +161,7 @@ export class AnthropicLMProvider implements LanguageModelChatProvider2<LanguageM
 				};
 			}));
 		} catch (err) {
-			this._logService.logger.error(`BYOK Anthropic error: ${toErrorMessage(err, true)}`);
+			this._logService.error(`BYOK Anthropic error: ${toErrorMessage(err, true)}`);
 			pendingLoggedChatRequest.resolve({
 				type: ChatFetchResponseType.Unknown,
 				requestId,
@@ -211,7 +211,7 @@ export class AnthropicLMProvider implements LanguageModelChatProvider2<LanguageM
 			if (ttft === undefined) {
 				ttft = Date.now() - start;
 			}
-			this._logService.logger.trace(`chunk: ${JSON.stringify(chunk)}`);
+			this._logService.trace(`chunk: ${JSON.stringify(chunk)}`);
 
 			if (chunk.type === 'content_block_start') {
 				if ('content_block' in chunk && chunk.content_block.type === 'tool_use') {

@@ -225,12 +225,12 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 			);
 
 			this._lastFetchTime = Date.now();
-			this._logService.logger.info(`Fetched model metadata in ${Date.now() - requestStartTime}ms ${requestId}`);
+			this._logService.info(`Fetched model metadata in ${Date.now() - requestStartTime}ms ${requestId}`);
 
 			if (response.status < 200 || response.status >= 300) {
 				// If we're rate limited and have models, we should just return
 				if (response.status === 429 && this._familyMap.size > 0) {
-					this._logService.logger.warn(`Rate limited while fetching models ${requestId}`);
+					this._logService.warn(`Rate limited while fetching models ${requestId}`);
 					return;
 				}
 				throw new Error(`Failed to fetch models (${requestId}): ${(await response.text()) || response.statusText || `HTTP ${response.status}`}`);
@@ -261,7 +261,7 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 				this._instantiationService.invokeFunction(this.collectFetcherTelemetry);
 			}
 		} catch (e) {
-			this._logService.logger.error(e, `Failed to fetch models (${requestId})`);
+			this._logService.error(e, `Failed to fetch models (${requestId})`);
 			this._lastFetchError = e;
 			this._lastFetchTime = 0;
 			// If we fail to fetch models, we should try again next time

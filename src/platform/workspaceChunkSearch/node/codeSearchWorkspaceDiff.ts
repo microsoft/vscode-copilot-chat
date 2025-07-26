@@ -177,15 +177,15 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 
 	private async refreshRepoDiffs() {
 		await Promise.all(Array.from(this._repos.values(), repo => this.refreshRepoDiff(repo)));
-		this._logService.logger.trace(`CodeSearchWorkspaceDiff: Refreshed all diffs. New local diffs count: ${this._locallyChangedFiles.size}`);
+		this._logService.trace(`CodeSearchWorkspaceDiff: Refreshed all diffs. New local diffs count: ${this._locallyChangedFiles.size}`);
 	}
 
 	private async refreshRepoDiff(repo: RepoDiffState) {
-		this._logService.logger.trace(`CodeSearchWorkspaceDiff: refreshing diff for ${repo.info.repo.rootUri}.`);
+		this._logService.trace(`CodeSearchWorkspaceDiff: refreshing diff for ${repo.info.repo.rootUri}.`);
 
 		if (this._simulationTestContext.isInSimulationTests) {
 			// In simulation tests, we don't want to refresh the diff
-			this._logService.logger.trace(`CodeSearchWorkspaceDiff: Skipping diff refresh for ${repo.info.repo.rootUri} in simulation tests.`);
+			this._logService.trace(`CodeSearchWorkspaceDiff: Skipping diff refresh for ${repo.info.repo.rootUri} in simulation tests.`);
 			repo.state = RepoState.Ready;
 			return;
 		}
@@ -199,7 +199,7 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 					repo.initialChanges.add(changedFile);
 				}
 
-				this._logService.logger.trace(`CodeSearchWorkspaceDiff: Refreshed diff for ${repo.info.repo.rootUri}. New diff count: ${repo.initialChanges.size}`);
+				this._logService.trace(`CodeSearchWorkspaceDiff: Refreshed diff for ${repo.info.repo.rootUri}. New diff count: ${repo.initialChanges.size}`);
 
 				// Delete any local changes that have no longer changed
 				for (const locallyChangedFile of this._locallyChangedFiles) {
@@ -217,11 +217,11 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 				repo.state = RepoState.Ready;
 
 			} else {
-				this._logService.logger.error(`CodeSearchWorkspaceDiff: Failed to get new diff for ${repo.info.repo.rootUri}.`);
+				this._logService.error(`CodeSearchWorkspaceDiff: Failed to get new diff for ${repo.info.repo.rootUri}.`);
 				repo.state = RepoState.Error;
 			}
 		} catch (e) {
-			this._logService.logger.error(`CodeSearchWorkspaceDiff: Failed to refresh diff for ${repo.info.repo.rootUri}.`, e);
+			this._logService.error(`CodeSearchWorkspaceDiff: Failed to refresh diff for ${repo.info.repo.rootUri}.`, e);
 			repo.state = RepoState.Error;
 		}
 	}

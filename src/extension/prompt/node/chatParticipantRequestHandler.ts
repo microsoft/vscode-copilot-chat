@@ -194,7 +194,7 @@ export class ChatParticipantRequestHandler {
 				}
 			};
 		}
-		this._logService.logger.trace(`[${ChatLocation.toStringShorter(this.location)}] chat request received from extension host`);
+		this._logService.trace(`[${ChatLocation.toStringShorter(this.location)}] chat request received from extension host`);
 		try {
 
 			// sanitize the variables of all requests

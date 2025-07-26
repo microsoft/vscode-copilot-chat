@@ -57,7 +57,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		this._lmWrapper = this._instantiationService.createInstance(CopilotLanguageModelWrapper);
 
 		if (this._vsCodeExtensionContext.extensionMode === ExtensionMode.Test) {
-			this._logService.logger.warn('[LanguageModelAccess] LanguageModels and Embeddings are NOT AVAILABLE in test mode.');
+			this._logService.warn('[LanguageModelAccess] LanguageModels and Embeddings are NOT AVAILABLE in test mode.');
 			return;
 		}
 
@@ -230,15 +230,15 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		try {
 			await this._authenticationService.getCopilotToken();
 		} catch (e) {
-			this._logService.logger.warn('[LanguageModelAccess] LanguageModel/Embeddings are not available without auth token');
-			this._logService.logger.error(e);
+			this._logService.warn('[LanguageModelAccess] LanguageModel/Embeddings are not available without auth token');
+			this._logService.error(e);
 			return undefined;
 		}
 
 		const session = this._authenticationService.anyGitHubSession;
 		if (!session) {
 			// At this point, we should have auth, but log just in case we don't so we have record of it
-			this._logService.logger.error('[LanguageModelAccess] Auth token not present when we expected it to be');
+			this._logService.error('[LanguageModelAccess] Auth token not present when we expected it to be');
 			return undefined;
 		}
 
@@ -406,7 +406,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 						const parameters = JSON.parse(call.arguments);
 						progress.report({ index, part: new vscode.LanguageModelToolCallPart(call.id, call.name, parameters) });
 					} catch (err) {
-						this._logService.logger.error(err, `Got invalid JSON for tool call: ${call.arguments}`);
+						this._logService.error(err, `Got invalid JSON for tool call: ${call.arguments}`);
 						throw new Error('Invalid JSON for tool call');
 					}
 				}

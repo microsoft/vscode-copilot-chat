@@ -275,12 +275,12 @@ export async function asyncComputeWithTimeBudget<T>(
 		if (functionPositionsResult.type === 'success') {
 			return functionPositionsResult.value;
 		} else {
-			logService.logger.warn(`Computing async parser based result took longer than ${timeoutMs}ms`);
+			logService.warn(`Computing async parser based result took longer than ${timeoutMs}ms`);
 			return defaultValue;
 		}
 	} catch (err) {
 		if (!(err instanceof TreeSitterUnknownLanguageError)) {
-			logService.logger.error(err, `Failed to compute async parser based result`);
+			logService.error(err, `Failed to compute async parser based result`);
 			telemetryService.sendGHTelemetryException(err, 'Failed to compute async parser based result');
 		}
 		return defaultValue;

@@ -142,14 +142,14 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 					statusCode: statusRequest.status,
 				});
 
-				this._logService.logger.error(`GithubCodeSearchService.getRemoteIndexState(${repoNwo}). Failed to fetch indexing status. Response: ${statusRequest.status}. ${await statusRequest.text()}`);
+				this._logService.error(`GithubCodeSearchService.getRemoteIndexState(${repoNwo}). Failed to fetch indexing status. Response: ${statusRequest.status}. ${await statusRequest.text()}`);
 				return Result.error(new Error(`Failed to fetch indexing status. Response: ${statusRequest.status}.`));
 			}
 
 			const preCheckResult = await raceCancellationError(statusRequest.json(), token);
 			if (preCheckResult.semantic_code_search_ok && preCheckResult.semantic_commit_sha) {
 				const indexedCommit = preCheckResult.semantic_commit_sha;
-				this._logService.logger.trace(`GithubCodeSearchService.getRemoteIndexState(${repoNwo}). Found indexed commit: ${indexedCommit}.`);
+				this._logService.trace(`GithubCodeSearchService.getRemoteIndexState(${repoNwo}). Found indexed commit: ${indexedCommit}.`);
 				return Result.ok({
 					status: RemoteCodeSearchIndexStatus.Ready,
 					indexedCommit,
@@ -158,18 +158,18 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 
 			if (preCheckResult.semantic_indexing_enabled) {
 				if (await raceCancellationError(this.isEmptyRepo(authToken, githubRepoId, token), token)) {
-					this._logService.logger.trace(`GithubCodeSearchService.getRemoteIndexState(${repoNwo}). Semantic indexing enabled but repo is empty.`);
+					this._logService.trace(`GithubCodeSearchService.getRemoteIndexState(${repoNwo}). Semantic indexing enabled but repo is empty.`);
 					return Result.ok({
 						status: RemoteCodeSearchIndexStatus.Ready,
 						indexedCommit: undefined
 					});
 				}
 
-				this._logService.logger.trace(`GithubCodeSearchService.getRemoteIndexState(${repoNwo}). Semantic indexing enabled but not yet indexed.`);
+				this._logService.trace(`GithubCodeSearchService.getRemoteIndexState(${repoNwo}). Semantic indexing enabled but not yet indexed.`);
 
 				return Result.ok({ status: RemoteCodeSearchIndexStatus.BuildingIndex });
 			} else {
-				this._logService.logger.trace(`GithubCodeSearchService.getRemoteIndexState(${repoNwo}). semantic_indexing_enabled was false. Repo not yet indexed but possibly can be.`);
+				this._logService.trace(`GithubCodeSearchService.getRemoteIndexState(${repoNwo}). semantic_indexing_enabled was false. Repo not yet indexed but possibly can be.`);
 				return Result.ok({ status: RemoteCodeSearchIndexStatus.NotYetIndexed });
 			}
 		} catch (e) {
@@ -177,7 +177,7 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 				throw e;
 			}
 
-			this._logService.logger.error(`GithubCodeSearchService.getRemoteIndexState(${repoNwo}). Error: ${e}`);
+			this._logService.error(`GithubCodeSearchService.getRemoteIndexState(${repoNwo}). Error: ${e}`);
 			return Result.error(e);
 		}
 	}
@@ -199,7 +199,7 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 		}, { type: RequestType.EmbeddingsIndex, repoWithOwner: toGithubNwo(githubRepoId) });
 
 		if (!response.ok) {
-			this._logService.logger.error(`GithubCodeSearchService.triggerIndexing(${triggerReason}). Failed to request indexing for '${githubRepoId}'. Response: ${response.status}. ${await response.text()}`);
+			this._logService.error(`GithubCodeSearchService.triggerIndexing(${triggerReason}). Failed to request indexing for '${githubRepoId}'. Response: ${response.status}. ${await response.text()}`);
 
 			/* __GDPR__
 				"githubCodeSearch.triggerIndexing.error" : {
@@ -339,7 +339,7 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 		}), token);
 
 		if (!response.ok) {
-			this._logService.logger.error(`GithubCodeSearchService.isEmptyRepo(${toGithubNwo(githubRepoId)}). Failed to fetch repo info. Response: ${response.status}. ${await response.text()}`);
+			this._logService.error(`GithubCodeSearchService.isEmptyRepo(${toGithubNwo(githubRepoId)}). Failed to fetch repo info. Response: ${response.status}. ${await response.text()}`);
 			return false;
 		}
 

@@ -204,7 +204,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 
 		this._workspaceDocumentEditHistory = this._register(new WorkspaceDocumentEditHistory(this._workspace, git, 100));
 
-		this._tracer = createTracer(['NES', 'DiagnosticsInlineCompletionProvider'], (s) => logService.logger.trace(s));
+		this._tracer = createTracer(['NES', 'DiagnosticsInlineCompletionProvider'], (s) => logService.trace(s));
 
 		const diagnosticsExplorationEnabled = configurationService.getConfigObservable(ConfigKey.Internal.InlineEditsDiagnosticsExplorationEnabled);
 

@@ -36,7 +36,7 @@ class SimulationGithubCodeSearchService extends Disposable implements IGithubCod
 	}
 
 	async searchRepo(authToken: string, embeddingType: EmbeddingType, repo: GithubCodeSearchRepoInfo, query: string, maxResults: number, options: WorkspaceChunkSearchOptions, _telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<CodeSearchResult> {
-		this._logService.logger.trace(`SimulationGithubCodeSearchService::searchRepo(${repo.githubRepoId}, ${query})`);
+		this._logService.trace(`SimulationGithubCodeSearchService::searchRepo(${repo.githubRepoId}, ${query})`);
 		const response = await fetch(searchEndpoint, {
 			method: 'POST',
 			headers: {
@@ -50,7 +50,7 @@ class SimulationGithubCodeSearchService extends Disposable implements IGithubCod
 		});
 
 		if (!response.ok) {
-			this._logService.logger.trace(`SimulationGithubCodeSearchService::searchRepo(${repo.githubRepoId}, ${query}) failed. status: ${response.status}`);
+			this._logService.trace(`SimulationGithubCodeSearchService::searchRepo(${repo.githubRepoId}, ${query}) failed. status: ${response.status}`);
 			const body = await response.text();
 			throw new Error(`Error fetching index status: ${response.status} - ${body}`);
 		}
@@ -58,7 +58,7 @@ class SimulationGithubCodeSearchService extends Disposable implements IGithubCod
 		const json: any = await response.json();
 
 		const result = await parseGithubCodeSearchResponse(json, repo, { ...options, skipVerifyRepo: true }, this._ignoreService);
-		this._logService.logger.trace(`SimulationGithubCodeSearchService::searchRepo(${repo.githubRepoId}, ${query}) success. Found ${result.chunks.length} chunks`);
+		this._logService.trace(`SimulationGithubCodeSearchService::searchRepo(${repo.githubRepoId}, ${query}) success. Found ${result.chunks.length} chunks`);
 		return result;
 	}
 

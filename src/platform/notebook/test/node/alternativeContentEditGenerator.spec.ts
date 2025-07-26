@@ -46,7 +46,12 @@ describe('Alternative Content Edit Generator', () => {
 				_serviceBrand: undefined;
 				internal = mockLogger;
 				logger = mockLogger;
-				showPublicLog(preserveFocus?: boolean): void {
+				trace = mockLogger.trace;
+				debug = mockLogger.debug;
+				info = mockLogger.info;
+				warn = mockLogger.warn;
+				error = mockLogger.error;
+				show(preserveFocus?: boolean): void {
 					//
 				}
 			}(), new NullTelemetryService());

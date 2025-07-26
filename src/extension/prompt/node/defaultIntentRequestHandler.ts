@@ -108,12 +108,12 @@ export class DefaultIntentRequestHandler {
 				return CanceledResult;
 			}
 
-			this._logService.logger.trace('Processing intent');
+			this._logService.trace('Processing intent');
 			const intentInvocation = await this.intent.invoke({ location: this.location, documentContext: this.documentContext, request: this.request });
 			if (this.token.isCancellationRequested) {
 				return CanceledResult;
 			}
-			this._logService.logger.trace('Processed intent');
+			this._logService.trace('Processed intent');
 
 			this.turn.setMetadata(new IntentInvocationMetadata(intentInvocation));
 
@@ -154,7 +154,7 @@ export class DefaultIntentRequestHandler {
 				return {};
 			}
 
-			this._logService.logger.error(err);
+			this._logService.error(err);
 			this._telemetryService.sendGHTelemetryException(err, 'Error');
 			const errorMessage = (<Error>err).message;
 			const chatResult = { errorDetails: { message: errorMessage } };
@@ -606,7 +606,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 							},
 						})),
 						(tool, rule) => {
-							this._logService.logger.warn(`Tool ${tool} failed validation: ${rule}`);
+							this._logService.warn(`Tool ${tool} failed validation: ${rule}`);
 						},
 					),
 					temperature: this.calculateTemperature(),
@@ -674,7 +674,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 					this.options.invocation.endpoint.family,
 					requestOptions.tools,
 					(tool, rule) => {
-						this._logService.logger.warn(`Tool ${tool} failed validation: ${rule}`);
+						this._logService.warn(`Tool ${tool} failed validation: ${rule}`);
 					},
 				),
 				temperature: this.calculateTemperature(),
