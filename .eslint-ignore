@@ -10,6 +10,7 @@ test/simulation/fixtures/**
 test/scenarios/**
 .simulation/**
 .eslintplugin/**
+tmp-chat-lib/**
 
 # ignore vs
 src/util/vs/**
