@@ -314,6 +314,14 @@ ${message}`,
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.stagedChanges', () => doReview(...instaService.invokeFunction(getServicesForReview), 'index', vscode.ProgressLocation.SourceControl)));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.unstagedChanges', () => doReview(...instaService.invokeFunction(getServicesForReview), 'workingTree', vscode.ProgressLocation.SourceControl)));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.changes', () => doReview(...instaService.invokeFunction(getServicesForReview), 'all', vscode.ProgressLocation.SourceControl)));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.stagedFileChange', (resource: vscode.SourceControlResourceState) => {
+		vscode.window.showTextDocument(resource.resourceUri, { preview: false });
+		return doReview(...instaService.invokeFunction(getServicesForReview), { group: 'index', file: resource.resourceUri }, vscode.ProgressLocation.SourceControl);
+	}));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.unstagedFileChange', (resource: vscode.SourceControlResourceState) => {
+		vscode.window.showTextDocument(resource.resourceUri, { preview: false });
+		return doReview(...instaService.invokeFunction(getServicesForReview), { group: 'workingTree', file: resource.resourceUri }, vscode.ProgressLocation.SourceControl);
+	}));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.changes.cancel', () => cancelReview(vscode.ProgressLocation.SourceControl, instaService.invokeFunction(accessor => accessor.get(IRunCommandExecutionService)))));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.apply', doApplyReview));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.applyAndNext', (commentThread: vscode.CommentThread) => doApplyReview(commentThread, true)));
