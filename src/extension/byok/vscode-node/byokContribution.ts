@@ -18,6 +18,7 @@ import { AzureBYOKModelProvider } from './azureProvider';
 import { BYOKStorageService, IBYOKStorageService } from './byokStorageService';
 import { GeminiBYOKLMProvider } from './geminiProvider';
 import { GroqBYOKLMProvider } from './groqProvider';
+import { HuggingFaceBYOKLMProvider } from './huggingfaceProvider';
 import { OllamaLMProvider } from './ollamaProvider';
 import { OAIBYOKLMProvider } from './openAIProvider';
 import { OpenRouterLMProvider } from './openRouterProvider';
@@ -52,6 +53,7 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			this._store.add(lm.registerChatModelProvider(AnthropicLMProvider.providerName.toLowerCase(), this._instantiationService.createInstance(AnthropicLMProvider, knownModels[AnthropicLMProvider.providerName], this._byokStorageService)));
 			this._store.add(lm.registerChatModelProvider(GroqBYOKLMProvider.providerName.toLowerCase(), this._instantiationService.createInstance(GroqBYOKLMProvider, knownModels[GroqBYOKLMProvider.providerName], this._byokStorageService)));
 			this._store.add(lm.registerChatModelProvider(GeminiBYOKLMProvider.providerName.toLowerCase(), this._instantiationService.createInstance(GeminiBYOKLMProvider, knownModels[GeminiBYOKLMProvider.providerName], this._byokStorageService)));
+			this._store.add(lm.registerChatModelProvider(HuggingFaceBYOKLMProvider.providerName.toLowerCase(), this._instantiationService.createInstance(HuggingFaceBYOKLMProvider, this._byokStorageService)));
 			this._store.add(lm.registerChatModelProvider(OAIBYOKLMProvider.providerName.toLowerCase(), this._instantiationService.createInstance(OAIBYOKLMProvider, knownModels[OAIBYOKLMProvider.providerName], this._byokStorageService)));
 			this._store.add(lm.registerChatModelProvider(OpenRouterLMProvider.providerName.toLowerCase(), this._instantiationService.createInstance(OpenRouterLMProvider, this._byokStorageService)));
 			this._store.add(lm.registerChatModelProvider('azure', this._instantiationService.createInstance(AzureBYOKModelProvider, this._byokStorageService)));
