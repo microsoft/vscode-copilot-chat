@@ -819,11 +819,21 @@ function parseModelConfigFile(modelConfigFilePath: string): IModelConfig[] {
 				},
 				"limits"?: {
 					"max_prompt_tokens"?: <number>,
-					"max_output_tokens"?: <number>
+					"max_output_tokens"?: <number>,
+					"max_context_window_tokens"?: <number>
 				}
 			},
 			"url": "<endpoint URL>",
-			"apiKeyEnvName": "<environment variable name for API key>"
+			"apiKeyEnvName": "<environment variable name for API key>",
+			"useBearerAuth"?: <boolean>, // optional, defaults to true. If false, uses api-key header instead of Authorization header
+			"overrides"?: {
+				"temperature"?: <number> | null, // optional, if null removes from request body
+				"top_p"?: <number> | null, // optional, if null removes from request body
+				"snippy"?: <boolean> | null, // optional, if null removes from request body
+				"max_tokens"?: <number> | null, // optional, if null removes from request body
+				"max_completion_tokens"?: <number> | null, // optional, if null removes from request body
+				"intent"?: <boolean> | null // optional, if null removes from request body
+			}
 		},
 		...
 	```
@@ -867,9 +877,35 @@ function parseModelConfigFile(modelConfigFilePath: string): IModelConfig[] {
 		if (model.capabilities.limits) {
 			checkProperty(model.capabilities.limits, 'max_prompt_tokens', 'number', true);
 			checkProperty(model.capabilities.limits, 'max_output_tokens', 'number', true);
+			checkProperty(model.capabilities.limits, 'max_context_window_tokens', 'number', true);
 		}
 		checkProperty(model, 'url', 'string');
 		checkProperty(model, 'apiKeyEnvName', 'string');
+		checkProperty(model, 'useBearerAuth', 'boolean', true);
+		checkProperty(model, 'overrides', 'object', true);
+
+		// Validate overrides object if present
+		if (model.overrides) {
+			const overrides = model.overrides;
+			if ('temperature' in overrides && overrides.temperature !== null && typeof overrides.temperature !== 'number') {
+				throw new Error(`Property 'overrides.temperature' in model configuration file ${resolvedModelConfigFilePath} must be a number or null`);
+			}
+			if ('top_p' in overrides && overrides.top_p !== null && typeof overrides.top_p !== 'number') {
+				throw new Error(`Property 'overrides.top_p' in model configuration file ${resolvedModelConfigFilePath} must be a number or null`);
+			}
+			if ('snippy' in overrides && overrides.snippy !== null && typeof overrides.snippy !== 'boolean') {
+				throw new Error(`Property 'overrides.snippy' in model configuration file ${resolvedModelConfigFilePath} must be a boolean or null`);
+			}
+			if ('max_tokens' in overrides && overrides.max_tokens !== null && typeof overrides.max_tokens !== 'number') {
+				throw new Error(`Property 'overrides.max_tokens' in model configuration file ${resolvedModelConfigFilePath} must be a number or null`);
+			}
+			if ('max_completion_tokens' in overrides && overrides.max_completion_tokens !== null && typeof overrides.max_completion_tokens !== 'number') {
+				throw new Error(`Property 'overrides.max_completion_tokens' in model configuration file ${resolvedModelConfigFilePath} must be a number or null`);
+			}
+			if ('intent' in overrides && overrides.intent !== null && typeof overrides.intent !== 'boolean') {
+				throw new Error(`Property 'overrides.intent' in model configuration file ${resolvedModelConfigFilePath} must be a boolean or null`);
+			}
+		}
 		modelConfigs.push({
 			id: modelId,
 			name: model.name,
@@ -878,20 +914,29 @@ function parseModelConfigFile(modelConfigFilePath: string): IModelConfig[] {
 			useDeveloperRole: model.useDeveloperRole ?? false,
 			capabilities: {
 				supports: {
-					parallel_tool_calls: model.capabilities.supports.parallel_tool_calls ?? false,
-					streaming: model.capabilities.supports.streaming ?? false,
-					tool_calls: model.capabilities.supports.tool_calls ?? false,
-					vision: model.capabilities.supports.vision ?? false,
-					prediction: model.capabilities.supports.prediction ?? false
+					parallel_tool_calls: model.capabilities.supports?.parallel_tool_calls ?? false,
+					streaming: model.capabilities.supports?.streaming ?? false,
+					tool_calls: model.capabilities.supports?.tool_calls ?? false,
+					vision: model.capabilities.supports?.vision ?? false,
+					prediction: model.capabilities.supports?.prediction ?? false
 				},
 				limits: {
-					max_prompt_tokens: model.capabilities.limits.max_prompt_tokens ?? 128000,
-					max_output_tokens: model.capabilities.limits.max_output_tokens ?? Number.MAX_SAFE_INTEGER
+					max_prompt_tokens: model.capabilities.limits?.max_prompt_tokens ?? 128000,
+					max_output_tokens: model.capabilities.limits?.max_output_tokens ?? Number.MAX_SAFE_INTEGER,
+					max_context_window_tokens: model.capabilities.limits?.max_context_window_tokens
 				}
 			},
 			url: model.url,
-			apiKeyEnvName: model.apiKeyEnvName
-
+			apiKeyEnvName: model.apiKeyEnvName,
+			useBearerAuth: model.useBearerAuth ?? true,
+			overrides: {
+				temperature: model.overrides ? (model.overrides.hasOwnProperty('temperature') ? model.overrides.temperature : undefined) : undefined,
+				top_p: model.overrides ? (model.overrides.hasOwnProperty('top_p') ? model.overrides.top_p : undefined) : undefined,
+				snippy: model.overrides ? (model.overrides.hasOwnProperty('snippy') ? model.overrides.snippy : undefined) : undefined,
+				max_tokens: model.overrides ? (model.overrides.hasOwnProperty('max_tokens') ? model.overrides.max_tokens : undefined) : undefined,
+				max_completion_tokens: model.overrides ? (model.overrides.hasOwnProperty('max_completion_tokens') ? model.overrides.max_completion_tokens : undefined) : undefined,
+				intent: model.overrides ? (model.overrides.hasOwnProperty('intent') ? model.overrides.intent : undefined) : undefined
+			}
 		});
 	}
 
