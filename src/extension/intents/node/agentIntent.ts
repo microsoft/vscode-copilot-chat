@@ -95,8 +95,6 @@ export class AgentIntent extends EditCodeIntent {
 		@IExperimentationService expService: IExperimentationService,
 		@ICodeMapperService codeMapperService: ICodeMapperService,
 		@IWorkspaceService workspaceService: IWorkspaceService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@IToolGroupingService private readonly _toolGroupingService: IToolGroupingService,
 	) {
 		super(instantiationService, endpointProvider, configurationService, expService, codeMapperService, workspaceService, { intentInvocation: AgentIntentInvocation, processCodeblocks: false });
@@ -113,7 +111,8 @@ export class AgentIntent extends EditCodeIntent {
 
 	private async listTools(request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken) {
 		const editingTools = await getTools(this.instantiationService, request);
-		if (!this._configurationService.getExperimentBasedConfig(ConfigKey.VirtualTools, this._experimentationService)) {
+		const grouping = this._toolGroupingService.create(editingTools);
+		if (!grouping.isEnabled) {
 			stream.markdown(`Available tools: \n${editingTools.map(tool => `- ${tool.name}`).join('\n')}\n`);
 			return;
 		}
@@ -137,7 +136,7 @@ export class AgentIntent extends EditCodeIntent {
 			}
 		}
 
-		const tools = await this._toolGroupingService.create(editingTools).computeAll(token);
+		const tools = await grouping.computeAll(token);
 		tools.forEach(t => printTool(t));
 		stream.markdown(str);
 

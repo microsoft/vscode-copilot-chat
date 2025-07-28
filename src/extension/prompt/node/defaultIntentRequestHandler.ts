@@ -11,7 +11,6 @@ import { IAuthenticationChatUpgradeService } from '../../../platform/authenticat
 import { ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession, NullEditSurvivalTrackingSession } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { HAS_IGNORED_FILES_MESSAGE } from '../../../platform/ignore/common/ignoreService';
@@ -508,7 +507,6 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		@IAuthenticationChatUpgradeService authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IToolGroupingService private readonly toolGroupingService: IToolGroupingService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@ICopilotTokenStore private readonly _copilotTokenStore: ICopilotTokenStore,
 		@IThinkingDataService thinkingDataService: IThinkingDataService,
@@ -557,7 +555,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 	private async _doMirroredCallWithVirtualTools(delta: IResponseDelta, messages: Raw.ChatMessage[], requestOptions: OptionalChatRequestParams) {
 		const shouldDo = !this._didParallelToolCallLoop
 			&& this._copilotTokenStore.copilotToken?.isInternal
-			&& !DefaultToolCallingLoop.toolGrouping;
+			&& !DefaultToolCallingLoop.toolGrouping?.isEnabled;
 		if (!shouldDo) {
 			return;
 		}
@@ -692,14 +690,14 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 
 	protected override async getAvailableTools(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<LanguageModelToolInformation[]> {
 		const tools = await this.options.invocation.getAvailableTools?.() ?? [];
-		if (!this._configurationService.getExperimentBasedConfig(ConfigKey.VirtualTools, this._experimentationService)) {
-			return tools;
-		}
-
 		if (DefaultToolCallingLoop.toolGrouping) {
 			DefaultToolCallingLoop.toolGrouping.tools = tools;
 		} else {
 			DefaultToolCallingLoop.toolGrouping = this.toolGroupingService.create(tools);
+		}
+
+		if (!DefaultToolCallingLoop.toolGrouping.isEnabled) {
+			return tools;
 		}
 
 		const computePromise = DefaultToolCallingLoop.toolGrouping.compute(token);
