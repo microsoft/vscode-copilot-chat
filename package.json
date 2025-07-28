@@ -2629,7 +2629,7 @@
 					},
 					"github.copilot.chat.customInstructionsInSystemMessage": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"tags": [
 							"experimental"
 						],
