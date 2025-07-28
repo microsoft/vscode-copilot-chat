@@ -154,19 +154,28 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		telemetryBuilder.setIsNaturalLanguageDominated(LineCheck.isNaturalLanguageDominated(document, position));
 
 		const requestCancellationTokenSource = new CancellationTokenSource(token);
+		const completionsCts = new CancellationTokenSource(token);
 		let suggestionInfo: NesCompletionInfo | undefined;
 		try {
 			tracer.trace('invoking next edit provider');
 
 			const { first, all } = raceAndAll([
 				this.model.nextEditProvider.getNextEdit(doc.id, context, logContext, token, telemetryBuilder.nesBuilder),
-				this.model.diagnosticsBasedProvider?.runUntilNextEdit(doc.id, context, logContext, 50, requestCancellationTokenSource.token, telemetryBuilder.diagnosticsBuilder) ?? raceCancellation(new Promise<undefined>(() => { }), requestCancellationTokenSource.token)
+				this.model.diagnosticsBasedProvider?.runUntilNextEdit(doc.id, context, logContext, 50, requestCancellationTokenSource.token, telemetryBuilder.diagnosticsBuilder) ?? raceCancellation(new Promise<undefined>(() => { }), requestCancellationTokenSource.token),
+				this.model.completionsProvider?.getCompletions(doc.id, context, logContext, token) ?? raceCancellation(new Promise<undefined>(() => { }), completionsCts.token),
 			]);
 
-			let [providerSuggestion, diagnosticsSuggestion] = await first;
+			let [providerSuggestion, diagnosticsSuggestion, completionAtCursor] = await first;
 
-			// If the provider returned first with empty result, then we wait for the diagnostics provider
-			if (providerSuggestion && providerSuggestion.result === undefined && this.model.diagnosticsBasedProvider) {
+			// ensure completions promise resolves
+			completionsCts.cancel();
+
+			const hasCompletionAtCursor = completionAtCursor && completionAtCursor.result !== undefined;
+			const hasNonEmptyLlmNes = providerSuggestion && providerSuggestion.result !== undefined;
+
+			const shouldGiveMoreTimeToDiagnostics = !hasCompletionAtCursor && !hasNonEmptyLlmNes && this.model.diagnosticsBasedProvider;
+
+			if (shouldGiveMoreTimeToDiagnostics) {
 				tracer.trace('giving some more time to diagnostics provider');
 				timeout(1000).then(() => requestCancellationTokenSource.cancel());
 				[, diagnosticsSuggestion] = await all;
@@ -184,13 +193,14 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			}
 
 			// Determine which suggestion to use
-			if (diagnosticsSuggestion?.result) {
+			if (completionAtCursor?.result) {
+				suggestionInfo = new LlmCompletionInfo(completionAtCursor, doc.id, document, context.requestUuid);
+			} else if (diagnosticsSuggestion?.result) {
 				suggestionInfo = new DiagnosticsCompletionInfo(diagnosticsSuggestion, doc.id, document, context.requestUuid);
 			} else if (providerSuggestion) {
 				suggestionInfo = new LlmCompletionInfo(providerSuggestion, doc.id, document, context.requestUuid);
 			} else {
 				this.telemetrySender.scheduleSendingEnhancedTelemetry({ requestId: logContext.requestId, result: undefined }, telemetryBuilder);
-				console.error('Providers returned nothing without cancellation being requested');
 				return emptyList;
 			}
 
@@ -287,6 +297,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			throw e;
 		} finally {
 			requestCancellationTokenSource.dispose();
+			completionsCts.dispose();
 			this.logger.add(logContext);
 		}
 	}

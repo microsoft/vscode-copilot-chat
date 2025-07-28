@@ -10,7 +10,7 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { ResponseStream } from './responseStream';
 
-export interface ModelParams {
+interface BaseCompletionsParams {
 	prompt: string;
 	stop?: string[];
 	top_p?: number;
@@ -22,7 +22,17 @@ export interface ModelParams {
 	// required to access certain experimental models
 	model?: string;
 	logprobs?: number;
+	n?: number;
+	stream: true;
 }
+
+interface CodexV2Params {
+	suffix?: string;
+	extra?: { [key: string]: any };
+	code_annotations?: boolean;
+}
+
+export interface ModelParams extends BaseCompletionsParams, CodexV2Params { }
 
 export type FetchOptions = {
 	requestId: string;
