@@ -6,6 +6,7 @@ import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptSizing, TextChunk } from '@vscode/prompt-tsx';
 import type { CancellationToken, LanguageModelToolInvocationOptions, LanguageModelToolInvocationPrepareOptions, PreparedToolInvocation, Uri } from 'vscode';
 import { IRunCommandExecutionService } from '../../../../platform/commands/common/runCommandExecutionService';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IDialogService } from '../../../../platform/dialog/common/dialogService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
@@ -123,7 +124,8 @@ export class NewWorkspaceCreationResult extends PromptElement<NewWorkspaceElemen
 	constructor(
 		props: PromptElementProps<NewWorkspaceElementProps>,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
-		@IWorkspaceService private readonly workspaceService: IWorkspaceService
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IConfigurationService private readonly configurationService: IConfigurationService
 	) {
 		super(props);
 	}
@@ -138,6 +140,10 @@ export class NewWorkspaceCreationResult extends PromptElement<NewWorkspaceElemen
 			</TextChunk>;
 		}
 
+		const useContext7 = this.configurationService.getConfig(ConfigKey.NewWorkspaceUseContext7);
+		const context7ToolInstructions = useContext7
+			? "Use get-library-docs and resolve-library-id to search documentation and identify the correct library for scaffolding the project"
+			: "If applicable, call project setup tool with:\n\t\t- projectType: e.g. 'python-script', 'mcp-server', 'next-js'\n\t\t- language: e.g. 'python', 'typescript'";
 		return <>
 			<TextChunk>
 				The user has opened the workspace folder {this.promptPathRepresentationService.getFilePath(workspaceUri)}<br />
@@ -157,10 +163,8 @@ export class NewWorkspaceCreationResult extends PromptElement<NewWorkspaceElemen
 	- Use this to guide project setup
 	- If already provided, skip this step
 
-- [ ] Scaffold the Project Using the Right Tool**
-	- Call project setup tool with:
-		- projectType: e.g. 'python-script', 'mcp-server', 'next-js'
-		- language: e.g. 'python', 'typescript'
+- [ ] Scaffold the Project**
+	${context7ToolInstructions}
 	- Run the scaffolding command from setup info
 	- Use '.' as the working directory
 	- Fall back to default scaffolding if needed

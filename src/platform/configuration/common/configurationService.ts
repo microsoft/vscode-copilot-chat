@@ -763,6 +763,7 @@ export namespace ConfigKey {
 	export const InlineEditsEnableDiagnosticsProvider = defineExpSetting<boolean>('nextEditSuggestions.fixes', { defaultValue: true, teamDefaultValue: true });
 	export const AgentCanRunTasks = defineValidatedSetting('chat.agent.runTasks', vBoolean(), true);
 	export const NewWorkspaceCreationAgentEnabled = defineSetting<boolean>('chat.newWorkspaceCreation.enabled', true);
+	export const NewWorkspaceUseContext7 = defineSetting<boolean>('chat.newWorkspace.useContext7', false);
 	export const SummarizeAgentConversationHistory = defineExpSetting<boolean>('chat.summarizeAgentConversationHistory.enabled', true);
 	export const VirtualTools = defineExpSetting<boolean>('chat.virtualTools.enabled', false);
 	export const CurrentEditorAgentContext = defineSetting<boolean>('chat.agent.currentEditorContext.enabled', true);
