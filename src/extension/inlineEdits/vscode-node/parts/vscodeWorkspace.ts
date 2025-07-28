@@ -386,6 +386,7 @@ export interface IVSCodeObservableTextDocument extends IObservableDocument {
 	readonly textDocument: TextDocument;
 	fromOffsetRange(textDocument: TextDocument, range: OffsetRange): Range | undefined;
 	toOffsetRange(textDocument: TextDocument, range: Range): OffsetRange | undefined;
+	toRange(textDocument: TextDocument, range: Range): Range | undefined;
 }
 
 abstract class AbstractVSCodeObservableDocument {
@@ -443,6 +444,10 @@ class VSCodeObservableTextDocument extends AbstractVSCodeObservableDocument impl
 	toOffsetRange(textDocument: TextDocument, range: Range): OffsetRange | undefined {
 		return new OffsetRange(textDocument.offsetAt(range.start), textDocument.offsetAt(range.end));
 	}
+
+	toRange(_textDocument: TextDocument, range: Range): Range | undefined {
+		return range;
+	}
 }
 
 export interface IVSCodeObservableNotebookDocument extends IObservableDocument {
@@ -460,6 +465,7 @@ export interface IVSCodeObservableNotebookDocument extends IObservableDocument {
 	fromOffsetRange(range: OffsetRange): [TextDocument, Range][];
 	fromRange(range: Range): [TextDocument, Range][];
 	projectDiagnostics(cell: TextDocument, diagnostics: readonly Diagnostic[]): Diagnostic[];
+	toRange(textDocument: TextDocument, range: Range): Range | undefined;
 }
 
 class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument implements IVSCodeObservableNotebookDocument {
@@ -504,6 +510,14 @@ class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument 
 			return [];
 		}
 		return toAltDiagnostics(this.altNotebook, cell, diagnostics);
+	}
+	toRange(textDocument: TextDocument, range: Range): Range | undefined {
+		const cell = this.altNotebook.getCell(textDocument);
+		if (!cell) {
+			return undefined;
+		}
+		const ranges = this.altNotebook.toAltRange(cell, [range]);
+		return ranges.length > 0 ? ranges[0] : undefined;
 	}
 }
 
