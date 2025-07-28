@@ -107,6 +107,10 @@ export function isNotebookCellOrNotebookChatInput(uri: vscode.Uri): boolean {
 		|| (uri.scheme === 'untitled' && uri.fragment.startsWith('notebook-chat-input'));
 }
 
+export function isNotebookCell(uri: vscode.Uri): boolean {
+	return uri.scheme === Schemas.vscodeNotebookCell;
+}
+
 export function isJupyterNotebookUri(uri: vscode.Uri): boolean {
 	return uri.path.endsWith('.ipynb');
 }
