@@ -1614,7 +1614,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 			const self = this;
 			const resolver: Copilot.ContextResolver<Copilot.SupportedContextItem> = {
 				async *resolve(request: Copilot.ResolveRequest, token: vscode.CancellationToken): AsyncIterable<Copilot.SupportedContextItem> {
-					console.log(`Resolve request ${Date.now()}`);
+					// console.log(`Resolve request ${Date.now()}`);
 					const isSpeculativeRequest = request.documentContext.proposedEdits !== undefined;
 					const [document, position] = self.getDocumentAndPosition(request, token);
 					if (document === undefined || position === undefined) {
