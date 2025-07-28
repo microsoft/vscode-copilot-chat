@@ -148,6 +148,12 @@ abstract class AbstractAlternativeNotebookDocument {
 		}
 	}
 
+	/**
+	 * Get the cell associated with a text document.
+	 * @param textDocument The text document to find the cell for.
+	 * @returns The notebook cell associated with the text document, or undefined if not found.
+	 * If a cell was inserted into the notebook and this instance hasn't been updated yet, it will return undefined.
+	 */
 	public getCell(textDocument: TextDocument): NotebookCell | undefined {
 		return this.cellTextDocuments.get(textDocument);
 	}

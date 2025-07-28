@@ -22,7 +22,6 @@ import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
-import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LineCheck } from '../../inlineChat/vscode-node/inlineChatHint';
 import { NextEditProviderTelemetryBuilder, TelemetrySender } from '../node/nextEditProviderTelemetry';
@@ -205,20 +204,11 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 			tracer.trace(`using next edit suggestion from ${suggestionInfo.source}`);
 
-			let range: Range;
-
-			if (doc.kind === 'notebookDocument') {
-				// Ignore changes to other cells.
-				const cellRange = doc.fromOffsetRange(result.edit.replaceRange).find(([cell]) => cell.document === document);
-				if (cellRange) {
-					range = cellRange[1];
-				} else {
-					tracer.trace('no next edit suggestion for notebook cell');
-					this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
-					return emptyList;
-				}
-			} else {
-				range = documentRangeFromOffsetRange(document, result.edit.replaceRange);
+			const range = doc.fromOffsetRange(document, result.edit.replaceRange);
+			if (!range) {
+				tracer.trace('no next edit suggestion for notebook cell');
+				this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
+				return emptyList;
 			}
 
 			// Only show edit when the cursor is max 4 lines away from the edit
@@ -499,13 +489,6 @@ export function raceAndAll<T extends readonly unknown[]>(
 	const all = Promise.all(promises) as Promise<T>;
 
 	return { first, all };
-}
-
-export function documentRangeFromOffsetRange(doc: TextDocument, range: OffsetRange): Range {
-	return new Range(
-		doc.positionAt(range.start),
-		doc.positionAt(range.endExclusive)
-	);
 }
 
 function shortOpportunityId(oppId: string): string {

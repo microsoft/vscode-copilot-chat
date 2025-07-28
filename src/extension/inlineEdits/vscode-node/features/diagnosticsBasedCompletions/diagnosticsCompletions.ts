@@ -196,7 +196,7 @@ async function getCodeActionsForNotebookDocumentDiagnostic(diagnostic: Diagnosti
 		return [];
 	}
 	return Promise.all(cellRanges.map(async ([cell, range]) => {
-		const actions = await getCodeActionsForUriRange(cell.document.uri, range);
+		const actions = await getCodeActionsForUriRange(cell.uri, range);
 		return actions.map(action => {
 			action.diagnostics = action.diagnostics ? workspaceDocument.projectDiagnostics(cell, action.diagnostics) : undefined;
 			return action;

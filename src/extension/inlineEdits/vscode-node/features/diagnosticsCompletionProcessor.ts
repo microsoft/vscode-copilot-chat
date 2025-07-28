@@ -313,7 +313,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 				.getDiagnostics(workspaceDocument.textDocument.uri) :
 			workspaceDocument.notebook.getCells().flatMap(cell => this._languageDiagnosticsService
 				.getDiagnostics(cell.document.uri)
-				.flatMap(diagnostic => workspaceDocument.projectDiagnostics(cell, [diagnostic])));
+				.flatMap(diagnostic => workspaceDocument.projectDiagnostics(cell.document, [diagnostic])));
 		const availableDiagnostics = diagnostics
 			.map(diagnostic => Diagnostic.fromVSCodeDiagnostic(diagnostic))
 			.filter(diagnostic => diagnostic.severity !== DiagnosticSeverity.Information)
