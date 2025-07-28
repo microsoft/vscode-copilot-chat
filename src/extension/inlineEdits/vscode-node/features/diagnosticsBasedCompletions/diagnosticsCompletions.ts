@@ -315,7 +315,6 @@ export class CodeAction {
 		if (!this.edit) {
 			return undefined;
 		}
-		// TODO: @DonJayamanne This will not work for notebooks
 		return this.edit.get(workspaceDocument.id.toUri()).map(toInternalTextEdit);
 	}
 

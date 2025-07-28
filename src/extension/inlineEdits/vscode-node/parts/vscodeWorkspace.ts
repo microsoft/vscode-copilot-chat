@@ -36,7 +36,9 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 	public readonly openDocuments = this._openDocuments;
 	private readonly _store = new DisposableStore();
 	private readonly _filter: DocumentFilter;
-	private readonly _useAlternativeNotebookFormat: boolean;
+	private get useAlternativeNotebookFormat(): boolean {
+		return this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, this._experimentationService);
+	}
 	constructor(
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 		@IInstantiationService private readonly _instaService: IInstantiationService,
@@ -47,7 +49,6 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 
 		this._filter = this._instaService.createInstance(DocumentFilter);
 
-		this._useAlternativeNotebookFormat = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, this._experimentationService);
 		const config = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Internal.VerifyTextDocumentChanges, this._experimentationService);
 		this._store.add(autorun(reader => {
 			if (config.read(reader)) {
@@ -161,7 +162,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 	});
 
 	private getTextDocuments() {
-		return getTextDocuments(this._useAlternativeNotebookFormat);
+		return getTextDocuments(this.useAlternativeNotebookFormat);
 	}
 	private readonly _vscodeTextDocuments: IObservable<readonly TextDocument[]> = this.getTextDocuments();
 	private readonly _textDocsWithShouldTrackFlag = mapObservableArrayCached(this, this._vscodeTextDocuments, (doc, store) => {
@@ -198,7 +199,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 	});
 
 	private getNotebookDocuments() {
-		if (!this._useAlternativeNotebookFormat) {
+		if (!this.useAlternativeNotebookFormat) {
 			return observableValue('', []);
 		}
 		return getNotebookDocuments();
