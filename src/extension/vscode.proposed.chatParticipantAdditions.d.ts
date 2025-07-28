@@ -361,6 +361,7 @@ declare module 'vscode' {
 			participant?: string;
 			command?: string;
 		};
+		details?: string;
 	}
 
 	export namespace chat {
