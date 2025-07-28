@@ -215,7 +215,7 @@ export class TestsIntent implements IIntent {
 
 	private log(...args: any[]): void {
 		const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg, null, '\t') : arg).join('\n');
-		this.logService.logger.debug(`[TestsIntent] ${message}`);
+		this.logService.debug(`[TestsIntent] ${message}`);
 	}
 }
 

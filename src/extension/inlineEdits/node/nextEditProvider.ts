@@ -62,7 +62,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	public readonly ID = this._statelessNextEditProvider.ID;
 
-	private readonly _rejectionCollector = new RejectionCollector(this._workspace, s => this._logService.logger.trace(s));
+	private readonly _rejectionCollector = new RejectionCollector(this._workspace, s => this._logService.trace(s));
 	private readonly _nextEditCache: NextEditCache;
 	private readonly _recentlyShownCache = new RecentlyShownCache();
 
@@ -95,7 +95,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	) {
 		super();
 
-		this._tracer = createTracer(['NES', 'NextEditProvider'], (s) => this._logService.logger.trace(s));
+		this._tracer = createTracer(['NES', 'NextEditProvider'], (s) => this._logService.trace(s));
 		this._nextEditCache = new NextEditCache(this._workspace, this._logService);
 
 		mapObservableArrayCached(this, this._workspace.openDocuments, (doc, store) => {

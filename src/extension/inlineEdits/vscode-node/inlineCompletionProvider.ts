@@ -106,7 +106,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
 		@INotebookService private readonly _notebookService: INotebookService,
 	) {
-		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.logger.trace(s));
+		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
 	}
 
 	// copied from `vscodeWorkspace.ts` `DocumentFilter#_enabledLanguages`

@@ -84,9 +84,9 @@ export class DefinitionAtPosition extends PromptElement<Props, State> {
 
 		const definitions = await this.findDefinition(timeout);
 
-		this._logService.logger.debug(`Found ${definitions.length} implementation(s)/definition(s)`);
+		this._logService.debug(`Found ${definitions.length} implementation(s)/definition(s)`);
 		if (definitions.length > 0) {
-			this._logService.logger.debug(`Implementation(s)/definition(s) found:` + JSON.stringify(definitions, null, '\t'));
+			this._logService.debug(`Implementation(s)/definition(s) found:` + JSON.stringify(definitions, null, '\t'));
 		}
 
 		return {
@@ -140,7 +140,7 @@ export class DefinitionAtPosition extends PromptElement<Props, State> {
 			try {
 				const impls = await this._languageFeaturesService.getImplementations(document.uri, position);
 
-				this._logService.logger.debug(`Found ${impls.length} implementations` + JSON.stringify(impls, null, '\t'));
+				this._logService.debug(`Found ${impls.length} implementations` + JSON.stringify(impls, null, '\t'));
 
 				if (impls.length > 0) {
 					return impls;
@@ -150,14 +150,14 @@ export class DefinitionAtPosition extends PromptElement<Props, State> {
 			try {
 				const defs = await this._languageFeaturesService.getDefinitions(document.uri, position);
 
-				this._logService.logger.debug(`Found ${defs.length} definitions` + JSON.stringify(defs, null, '\t'));
+				this._logService.debug(`Found ${defs.length} definitions` + JSON.stringify(defs, null, '\t'));
 
 				if (defs.length > 0) {
 					return defs;
 				}
 			} catch { }
 
-			this._logService.logger.debug(`No definitions or implementations found`);
+			this._logService.debug(`No definitions or implementations found`);
 
 			return [];
 		};

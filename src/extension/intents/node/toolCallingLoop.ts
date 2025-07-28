@@ -200,7 +200,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}
 
 		this.emitReadFileTrajectories().catch(err => {
-			this._logService.logger.error('Error emitting read file trajectories', err);
+			this._logService.error('Error emitting read file trajectories', err);
 		});
 
 		for (const result of Object.keys(this.toolCallResults)) {
@@ -349,7 +349,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const promptTokenLength = await (await this._endpointProvider.getChatEndpoint(this.options.request)).acquireTokenizer().countMessagesTokens(buildPromptResult.messages);
 		await this.throwIfCancelled(token);
 		this._onDidBuildPrompt.fire({ result: buildPromptResult, tools: availableTools, promptTokenLength });
-		this._logService.logger.trace('Built prompt');
+		this._logService.trace('Built prompt');
 
 		// todo@connor4312: can interaction outcome logic be implemented in a more generic way?
 		const interactionOutcomeComputer = new InteractionOutcomeComputer(this.options.interactionContext);
@@ -371,7 +371,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			}
 		}();
 
-		this._logService.logger.trace('Sending prompt to model');
+		this._logService.trace('Sending prompt to model');
 
 		const streamParticipants = outputStream ? [outputStream] : [];
 		let fetchStreamSource: FetchStreamSource | undefined;
@@ -564,7 +564,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		if (filterReasons.length) {
 			const filterReasonsStr = filterReasons.join(', ');
-			this._logService.logger.warn('Filtered invalid tool messages: ' + filterReasonsStr);
+			this._logService.warn('Filtered invalid tool messages: ' + filterReasonsStr);
 			/* __GDPR__
 					"toolCalling.invalidToolMessages" : {
 						"owner": "roblourens",

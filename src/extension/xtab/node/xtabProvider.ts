@@ -97,7 +97,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		]);
 
 		this.delayer = new Delayer(this.configService, this.expService);
-		this.tracer = createTracer(['NES', 'XtabProvider'], (s) => this.logService.logger.trace(s));
+		this.tracer = createTracer(['NES', 'XtabProvider'], (s) => this.logService.trace(s));
 	}
 
 	public handleAcceptance(): void {

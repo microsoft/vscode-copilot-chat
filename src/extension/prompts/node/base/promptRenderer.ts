@@ -140,7 +140,7 @@ export class PromptRenderer<P extends BasePromptElementProps> extends BasePrompt
 		const validateLocation = (value: Uri | Location) => {
 			const uri = isLocation(value) ? value.uri : value;
 			if (!URI.isUri(uri)) {
-				this._logService.logger.warn(`Invalid PromptReference, uri not an instance of URI: ${uri}. Try to find the code that is creating this reference and fix it.`);
+				this._logService.warn(`Invalid PromptReference, uri not an instance of URI: ${uri}. Try to find the code that is creating this reference and fix it.`);
 				return false;
 			}
 			return true;

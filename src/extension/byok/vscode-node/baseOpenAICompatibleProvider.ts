@@ -57,7 +57,7 @@ export abstract class BaseOpenAICompatibleLMProvider implements LanguageModelCha
 			}
 			return modelList;
 		} catch (error) {
-			this._logService.logger.error(error, `Error fetching available ${this._name} models`);
+			this._logService.error(error, `Error fetching available ${this._name} models`);
 			throw new Error(error.message ? error.message : error);
 		}
 	}

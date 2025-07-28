@@ -128,7 +128,7 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 			const chatProgress: vscode.Progress<ChatResponseReferencePart | vscode.ChatResponseProgressPart> = {
 				report(_obj) { }
 			};
-			this._logService.logger.trace(`Starting semantic search for ${query}`);
+			this._logService.trace(`Starting semantic search for ${query}`);
 			SemanticSearchTextSearchProvider.latestQuery = query;
 			const includes = new Set<vscode.GlobPattern>();
 			const excludes = new Set<vscode.GlobPattern>();
@@ -339,7 +339,7 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 				});
 			}
 
-			this._logService.logger.debug(`Semantic search took ${sw.elapsed()}ms`);
+			this._logService.debug(`Semantic search took ${sw.elapsed()}ms`);
 			return { limitHit: false } satisfies vscode.TextSearchComplete;
 		};
 		return getResults();

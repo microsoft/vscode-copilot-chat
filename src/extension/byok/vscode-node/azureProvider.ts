@@ -118,7 +118,7 @@ export class AzureBYOKModelProvider implements LanguageModelChatProvider2<AzureM
 	async provideLanguageModelChatResponse(model: AzureModelInfo, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: LanguageModelChatRequestHandleOptions, progress: Progress<ChatResponseFragment2>, token: CancellationToken): Promise<any> {
 		const apiKey = await this._byokStorageService.getAPIKey(AzureBYOKModelProvider.providerName, model.id);
 		if (!apiKey) {
-			this._logService.logger.error(`No API key found for model ${model.id}`);
+			this._logService.error(`No API key found for model ${model.id}`);
 			throw new Error(`No API key found for model ${model.id}`);
 		}
 		const modelInfo = resolveModelInfo(model.id, AzureBYOKModelProvider.providerName, undefined, {
@@ -136,7 +136,7 @@ export class AzureBYOKModelProvider implements LanguageModelChatProvider2<AzureM
 	async provideTokenCount(model: AzureModelInfo, text: string | LanguageModelChatMessage | LanguageModelChatMessage2, token: CancellationToken): Promise<number> {
 		const apiKey = await this._byokStorageService.getAPIKey(AzureBYOKModelProvider.providerName, model.id);
 		if (!apiKey) {
-			this._logService.logger.error(`No API key found for model ${model.id}`);
+			this._logService.error(`No API key found for model ${model.id}`);
 			throw new Error(`No API key found for model ${model.id}`);
 		}
 		const modelInfo = resolveModelInfo(model.id, AzureBYOKModelProvider.providerName, undefined, {

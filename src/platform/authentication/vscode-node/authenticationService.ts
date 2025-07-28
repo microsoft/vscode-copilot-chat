@@ -26,7 +26,7 @@ export class AuthenticationService extends BaseAuthenticationService {
 		super(logService, tokenStore, tokenManager, configurationService);
 		this._register(authentication.onDidChangeSessions((e) => {
 			if (e.provider.id === authProviderId(configurationService)) {
-				this._logService.logger.debug('Handling onDidChangeSession.');
+				this._logService.debug('Handling onDidChangeSession.');
 				void this._handleAuthChangeEvent();
 			} else if (e.provider.id === AuthProviderId.Microsoft) {
 				this._onDidAdoAuthenticationChange.fire();
@@ -34,7 +34,7 @@ export class AuthenticationService extends BaseAuthenticationService {
 		}));
 		this._register(this._domainService.onDidChangeDomains((e) => {
 			if (e.dotcomUrlChanged) {
-				this._logService.logger.debug('Handling onDidChangeDomains.');
+				this._logService.debug('Handling onDidChangeDomains.');
 				void this._handleAuthChangeEvent();
 			}
 		}));
