@@ -700,6 +700,10 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 			return tools;
 		}
 
+		for (const { name } of this.options.request.toolReferences) {
+			DefaultToolCallingLoop.toolGrouping.ensureExpanded(name);
+		}
+
 		const computePromise = DefaultToolCallingLoop.toolGrouping.compute(token);
 
 		// Show progress if this takes a moment...

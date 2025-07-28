@@ -114,6 +114,13 @@ export class ToolGrouping implements IToolGrouping {
 		return last === this._root ? undefined : last;
 	}
 
+	ensureExpanded(tool: string): void {
+		this._root.find(tool)?.path.forEach(p => {
+			p.isExpanded = true;
+			p.lastUsedOnTurn = this._turnNo;
+		});
+	}
+
 	didTakeTurn(): void {
 		this._turnNo++;
 	}

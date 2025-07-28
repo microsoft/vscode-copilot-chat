@@ -81,7 +81,7 @@ export class SimpleSummarizedHistory extends PromptElement<SummarizedAgentHistor
 		}
 
 		if (entry.round.summary) {
-			const keepGoingReminder = getKeepGoingReminder(this.props.endpoint.family);
+			const keepGoingReminder = getKeepGoingReminder(this.props.endpoint.family, false);
 			return <ChunkTag name='conversation-summary' priority={priorityOverride}>
 				{entry.round.summary}
 				{keepGoingReminder && <Tag name='reminderInstructions'>

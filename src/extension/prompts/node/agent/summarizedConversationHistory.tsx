@@ -713,7 +713,7 @@ interface SummaryMessageProps extends BasePromptElementProps {
 
 class SummaryMessageElement extends PromptElement<SummaryMessageProps> {
 	override async render(state: void, sizing: PromptSizing) {
-		const keepGoingReminder = getKeepGoingReminder(this.props.endpoint.family);
+		const keepGoingReminder = getKeepGoingReminder(this.props.endpoint.family, false);
 		return <UserMessage>
 			<Tag name='conversation-summary'>
 				{this.props.summaryText}

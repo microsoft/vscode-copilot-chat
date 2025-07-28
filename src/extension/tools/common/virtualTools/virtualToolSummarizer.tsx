@@ -216,7 +216,7 @@ class CategorizerSummaryPrompt extends PromptElement<BasePromptElementProps & { 
 			<SystemMessage>
 				Context: There are many tools available for a user. However, the number of tools can be large, and it is not always practical to present all of them at once. We need to create logical groups for the user to pick from at a glance.<br />
 				<br />
-				The user present you with the tools available to them, and you must group them into logical categories and provide a summary of each one. The summary should include the capabilities of the tools and when they should be used. Every tool MUST be a part of EXACTLY one category.<br />
+				The user present you with the tools available to them, and you must group them into logical categories and provide a summary of each one. The summary should include the capabilities of the tools and when they should be used. Every tool MUST be a part of EXACTLY one category. Category names must be unique.<br />
 			</SystemMessage>
 			<UserMessage>
 				{this.props.tools.map(tool => <ToolInformation tool={tool} />)}<br />
@@ -271,7 +271,7 @@ class ExistingGroupCategorizerPrompt extends PromptElement<BasePromptElementProp
 			<SystemMessage>
 				Context: There are existing tool categories that have been previously established. New tools have become available and need to be categorized. You must decide whether each new tool fits into an existing category or requires a new category to be created.<br />
 				<br />
-				The user will provide you with the existing categories and their current tools, as well as the new tools that need to be categorized. You must assign each new tool to either an existing category (if it fits well) or create new categories as needed. You should also return all existing tools in their current categories unless there's a compelling reason to reorganize them.<br />
+				The user will provide you with the existing categories and their current tools, as well as the new tools that need to be categorized. You must assign each new tool to either an existing category (if it fits well) or create new categories as needed. You should also return all existing tools in their current categories unless there's a compelling reason to reorganize them. Category names must be unique.<br />
 				<br />
 				Every tool (both existing and new) MUST be part of EXACTLY one category in your response.<br />
 			</SystemMessage>

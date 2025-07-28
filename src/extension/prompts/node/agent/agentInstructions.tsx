@@ -34,12 +34,13 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 		const hasCodebaseTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.Codebase);
 		const hasUpdateUserPreferencesTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.UpdateUserPreferences);
 		const hasSomeEditTool = hasInsertEditTool || hasReplaceStringTool || hasApplyPatchTool;
+		const hasVirtualTool = !!this.props.availableTools?.find(tool => tool.name.startsWith('activate_'));
 
 		return <InstructionMessage>
 			<Tag name='instructions'>
 				You are a highly sophisticated automated coding agent with expert-level knowledge across many different programming languages and frameworks.<br />
 				The user will ask a question, or ask you to perform a task, and it may require lots of research to answer correctly. There is a selection of tools that let you perform actions or retrieve helpful context to answer the user's question.<br />
-				{getKeepGoingReminder(this.props.modelFamily)}
+				{getKeepGoingReminder(this.props.modelFamily, hasVirtualTool)}
 				You will be given some context and attachments along with the user prompt. You can use them if they are relevant to the task, and ignore them if not.{hasReadFileTool && <> Some attachments may be summarized. You can use the {ToolName.ReadFile} tool to read more context, but only do this if the attached file is incomplete.</>}<br />
 				If you can infer the project type (languages, frameworks, and libraries) from the user's query or the context that you have, make sure to keep them in mind when making changes.<br />
 				{!this.props.codesearchMode && <>If the user wants you to implement a feature and they have not specified the files to edit, first break down the user's request into smaller concepts and think about the kinds of files you need to grasp each concept.<br /></>}
@@ -173,10 +174,11 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 		const hasReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ReplaceString);
 		const hasEditFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
 		const hasApplyPatchTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ApplyPatch);
+		const hasVirtualTool = !!this.props.availableTools?.find(tool => tool.name.startsWith('activate_'));
 
 		return <InstructionMessage>
 			<Tag name="mostImportantInstructions">
-				{getKeepGoingReminder(this.props.modelFamily)}
+				{getKeepGoingReminder(this.props.modelFamily, hasVirtualTool)}
 				1. Make sure you fully understand the issue described by user and can confidently reproduce it.<br />
 				2. For each file you plan to modify, add it to Git staging using `git add` before making any edits. You must do it only once for each file before starting editing.<br />
 				3. Create comprehensive test cases in your reproduction script to cover both the described issue and potential edge cases.<br />
