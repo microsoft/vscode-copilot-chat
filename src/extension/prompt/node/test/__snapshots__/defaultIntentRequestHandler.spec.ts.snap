@@ -23,7 +23,6 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     ToolCallRound {
       "id": "static-id",
       "response": "response number 0",
-      "thinking": undefined,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -36,7 +35,6 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     ToolCallRound {
       "id": "static-id",
       "response": "response number 1",
-      "thinking": undefined,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -49,7 +47,6 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     ToolCallRound {
       "id": "static-id",
       "response": "response number 2",
-      "thinking": undefined,
       "toolCalls": [],
       "toolInputRetry": 0,
     },
@@ -80,7 +77,6 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     ToolCallRound {
       "id": "static-id",
       "response": "response number 3",
-      "thinking": undefined,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -93,7 +89,6 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     ToolCallRound {
       "id": "static-id",
       "response": "response number 4",
-      "thinking": undefined,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -106,7 +101,6 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     ToolCallRound {
       "id": "static-id",
       "response": "response number 5",
-      "thinking": undefined,
       "toolCalls": [],
       "toolInputRetry": 0,
     },
@@ -121,13 +115,19 @@ exports[`defaultIntentRequestHandler > avoids requests when handler return is nu
     {
       "eventName": "interactiveSessionMessage",
       "eventType": "internal",
-      "measurements": {},
+      "measurements": {
+        "turnNumber": 1,
+      },
       "properties": {
+        "baseModel": "gpt-4.1-2025-04-14",
+        "chatLocation": "panel",
         "contextTypes": "none",
         "detectedIntent": "none",
         "intent": "test",
         "isParticipantDetected": "false",
         "query": "hello world!",
+        "requestId": "some-uuid",
+        "sessionId": "some-session-id",
       },
     },
   ],
@@ -173,7 +173,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 0",
-        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -186,7 +185,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 1",
-        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -199,7 +197,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 2",
-        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -212,7 +209,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 3",
-        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -266,7 +262,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 4",
-        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -279,7 +274,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 5",
-        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -292,7 +286,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 6",
-        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -305,7 +298,6 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 7",
-        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -552,13 +544,19 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     {
       "eventName": "interactiveSessionMessage",
       "eventType": "internal",
-      "measurements": {},
+      "measurements": {
+        "turnNumber": 1,
+      },
       "properties": {
+        "baseModel": "gpt-4.1-2025-04-14",
+        "chatLocation": "panel",
         "contextTypes": "none",
         "detectedIntent": "none",
         "intent": "test",
         "isParticipantDetected": "false",
         "query": "hello world!",
+        "requestId": "some-uuid",
+        "sessionId": "some-session-id",
       },
     },
     {
@@ -768,6 +766,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "intent": "test",
         "isParticipantDetected": "false",
         "request": "hello world!",
+        "requestId": "some-uuid",
         "response": "response number 0",
         "sessionId": "some-session-id",
       },
@@ -775,13 +774,19 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     {
       "eventName": "interactiveSessionMessage",
       "eventType": "internal",
-      "measurements": {},
+      "measurements": {
+        "turnNumber": 1,
+      },
       "properties": {
+        "baseModel": "gpt-4.1-2025-04-14",
+        "chatLocation": "panel",
         "contextTypes": "none",
         "detectedIntent": "none",
         "intent": "test",
         "isParticipantDetected": "false",
         "query": "hello world!",
+        "requestId": "some-uuid",
+        "sessionId": "some-session-id",
       },
     },
     {
@@ -991,6 +996,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "intent": "test",
         "isParticipantDetected": "false",
         "request": "hello world!",
+        "requestId": "some-uuid",
         "response": "response number 1",
         "sessionId": "some-session-id",
       },
@@ -998,13 +1004,19 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     {
       "eventName": "interactiveSessionMessage",
       "eventType": "internal",
-      "measurements": {},
+      "measurements": {
+        "turnNumber": 1,
+      },
       "properties": {
+        "baseModel": "gpt-4.1-2025-04-14",
+        "chatLocation": "panel",
         "contextTypes": "none",
         "detectedIntent": "none",
         "intent": "test",
         "isParticipantDetected": "false",
         "query": "hello world!",
+        "requestId": "some-uuid",
+        "sessionId": "some-session-id",
       },
     },
     {
@@ -1214,6 +1226,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "intent": "test",
         "isParticipantDetected": "false",
         "request": "hello world!",
+        "requestId": "some-uuid",
         "response": "response number 2",
         "sessionId": "some-session-id",
       },
@@ -1221,13 +1234,19 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     {
       "eventName": "interactiveSessionMessage",
       "eventType": "internal",
-      "measurements": {},
+      "measurements": {
+        "turnNumber": 1,
+      },
       "properties": {
+        "baseModel": "gpt-4.1-2025-04-14",
+        "chatLocation": "panel",
         "contextTypes": "none",
         "detectedIntent": "none",
         "intent": "test",
         "isParticipantDetected": "false",
         "query": "hello world!",
+        "requestId": "some-uuid",
+        "sessionId": "some-session-id",
       },
     },
     {
@@ -1437,6 +1456,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "intent": "test",
         "isParticipantDetected": "false",
         "request": "hello world!",
+        "requestId": "some-uuid",
         "response": "response number 3",
         "sessionId": "some-session-id",
       },
@@ -1491,13 +1511,19 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     {
       "eventName": "interactiveSessionMessage",
       "eventType": "internal",
-      "measurements": {},
+      "measurements": {
+        "turnNumber": 1,
+      },
       "properties": {
+        "baseModel": "gpt-4.1-2025-04-14",
+        "chatLocation": "panel",
         "contextTypes": "none",
         "detectedIntent": "none",
         "intent": "test",
         "isParticipantDetected": "false",
         "query": "hello world!",
+        "requestId": "some-uuid",
+        "sessionId": "some-session-id",
       },
     },
     {
@@ -1707,6 +1733,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "intent": "test",
         "isParticipantDetected": "false",
         "request": "hello world!",
+        "requestId": "some-uuid",
         "response": "response number 4",
         "sessionId": "some-session-id",
       },
@@ -1714,13 +1741,19 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     {
       "eventName": "interactiveSessionMessage",
       "eventType": "internal",
-      "measurements": {},
+      "measurements": {
+        "turnNumber": 1,
+      },
       "properties": {
+        "baseModel": "gpt-4.1-2025-04-14",
+        "chatLocation": "panel",
         "contextTypes": "none",
         "detectedIntent": "none",
         "intent": "test",
         "isParticipantDetected": "false",
         "query": "hello world!",
+        "requestId": "some-uuid",
+        "sessionId": "some-session-id",
       },
     },
     {
@@ -1930,6 +1963,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "intent": "test",
         "isParticipantDetected": "false",
         "request": "hello world!",
+        "requestId": "some-uuid",
         "response": "response number 5",
         "sessionId": "some-session-id",
       },
@@ -1937,13 +1971,19 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     {
       "eventName": "interactiveSessionMessage",
       "eventType": "internal",
-      "measurements": {},
+      "measurements": {
+        "turnNumber": 1,
+      },
       "properties": {
+        "baseModel": "gpt-4.1-2025-04-14",
+        "chatLocation": "panel",
         "contextTypes": "none",
         "detectedIntent": "none",
         "intent": "test",
         "isParticipantDetected": "false",
         "query": "hello world!",
+        "requestId": "some-uuid",
+        "sessionId": "some-session-id",
       },
     },
     {
@@ -2153,6 +2193,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "intent": "test",
         "isParticipantDetected": "false",
         "request": "hello world!",
+        "requestId": "some-uuid",
         "response": "response number 6",
         "sessionId": "some-session-id",
       },
@@ -2160,13 +2201,19 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
     {
       "eventName": "interactiveSessionMessage",
       "eventType": "internal",
-      "measurements": {},
+      "measurements": {
+        "turnNumber": 1,
+      },
       "properties": {
+        "baseModel": "gpt-4.1-2025-04-14",
+        "chatLocation": "panel",
         "contextTypes": "none",
         "detectedIntent": "none",
         "intent": "test",
         "isParticipantDetected": "false",
         "query": "hello world!",
+        "requestId": "some-uuid",
+        "sessionId": "some-session-id",
       },
     },
     {
@@ -2376,6 +2423,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "intent": "test",
         "isParticipantDetected": "false",
         "request": "hello world!",
+        "requestId": "some-uuid",
         "response": "response number 7",
         "sessionId": "some-session-id",
       },
@@ -2440,7 +2488,6 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
       ToolCallRound {
         "id": "static-id",
         "response": "some response here :)",
-        "thinking": undefined,
         "toolCalls": [],
         "toolInputRetry": 0,
       },
@@ -2456,13 +2503,19 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
     {
       "eventName": "interactiveSessionMessage",
       "eventType": "internal",
-      "measurements": {},
+      "measurements": {
+        "turnNumber": 1,
+      },
       "properties": {
+        "baseModel": "gpt-4.1-2025-04-14",
+        "chatLocation": "panel",
         "contextTypes": "none",
         "detectedIntent": "none",
         "intent": "test",
         "isParticipantDetected": "false",
         "query": "hello world!",
+        "requestId": "some-uuid",
+        "sessionId": "some-session-id",
       },
     },
     {
@@ -2672,6 +2725,7 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "intent": "test",
         "isParticipantDetected": "false",
         "request": "hello world!",
+        "requestId": "some-uuid",
         "response": "some response here :)",
         "sessionId": "some-session-id",
       },
@@ -2744,7 +2798,6 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
       ToolCallRound {
         "id": "static-id",
         "response": "some response here :)",
-        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -2757,7 +2810,6 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
       ToolCallRound {
         "id": "static-id",
         "response": "response to tool call",
-        "thinking": undefined,
         "toolCalls": [],
         "toolInputRetry": 0,
       },
@@ -2773,13 +2825,19 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
     {
       "eventName": "interactiveSessionMessage",
       "eventType": "internal",
-      "measurements": {},
+      "measurements": {
+        "turnNumber": 1,
+      },
       "properties": {
+        "baseModel": "gpt-4.1-2025-04-14",
+        "chatLocation": "panel",
         "contextTypes": "none",
         "detectedIntent": "none",
         "intent": "test",
         "isParticipantDetected": "false",
         "query": "hello world!",
+        "requestId": "some-uuid",
+        "sessionId": "some-session-id",
       },
     },
     {
@@ -2989,6 +3047,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "intent": "test",
         "isParticipantDetected": "false",
         "request": "hello world!",
+        "requestId": "some-uuid",
         "response": "some response here :)",
         "sessionId": "some-session-id",
       },
@@ -2996,13 +3055,19 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
     {
       "eventName": "interactiveSessionMessage",
       "eventType": "internal",
-      "measurements": {},
+      "measurements": {
+        "turnNumber": 1,
+      },
       "properties": {
+        "baseModel": "gpt-4.1-2025-04-14",
+        "chatLocation": "panel",
         "contextTypes": "none",
         "detectedIntent": "none",
         "intent": "test",
         "isParticipantDetected": "false",
         "query": "hello world!",
+        "requestId": "some-uuid",
+        "sessionId": "some-session-id",
       },
     },
     {
@@ -3212,6 +3277,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "intent": "test",
         "isParticipantDetected": "false",
         "request": "hello world!",
+        "requestId": "some-uuid",
         "response": "response to tool call",
         "sessionId": "some-session-id",
       },

@@ -233,8 +233,8 @@ suite('AgentPrompt', () => {
 			})).toMatchSnapshot();
 	});
 
-	test('custom instructions in system message', async () => {
-		accessor.get(IConfigurationService).setConfig(ConfigKey.CustomInstructionsInSystemMessage, true);
+	test('custom instructions not in system message', async () => {
+		accessor.get(IConfigurationService).setConfig(ConfigKey.CustomInstructionsInSystemMessage, false);
 		expect(await agentPromptToString(accessor, {
 			chatVariables: new ChatVariablesCollection(),
 			history: [],

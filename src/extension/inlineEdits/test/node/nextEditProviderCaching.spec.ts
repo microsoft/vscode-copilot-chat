@@ -20,6 +20,7 @@ import { ILogService, LogServiceImpl } from '../../../../platform/log/common/log
 import { NulSimulationTestContext } from '../../../../platform/simulationTestContext/common/simulationTestContext';
 import { ISnippyService, NullSnippyService } from '../../../../platform/snippy/common/snippyService';
 import { IExperimentationService, NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
+import { mockNotebookService } from '../../../../platform/test/common/testNotebookService';
 import { MockExtensionContext } from '../../../../platform/test/node/extensionContext';
 import { Result } from '../../../../util/common/result';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
@@ -31,7 +32,6 @@ import { LineRange } from '../../../../util/vs/editor/common/core/ranges/lineRan
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { NextEditProvider } from '../../node/nextEditProvider';
 import { NextEditProviderTelemetryBuilder } from '../../node/nextEditProviderTelemetry';
-import { mockNotebookService } from '../../../../platform/test/common/testNotebookService';
 
 describe('NextEditProvider Caching', () => {
 
@@ -103,7 +103,7 @@ describe('NextEditProvider Caching', () => {
 
 		doc.applyEdit(StringEdit.insert(11, '3D'));
 
-		const context: InlineCompletionContext = { triggerKind: 1, selectedCompletionInfo: undefined, requestUuid: generateUuid() };
+		const context: InlineCompletionContext = { triggerKind: 1, selectedCompletionInfo: undefined, requestUuid: generateUuid(), requestIssuedDateTime: Date.now() };
 		const logContext = new InlineEditRequestLogContext(doc.id.toString(), 1, context);
 		const cancellationToken = CancellationToken.None;
 		const tb1 = new NextEditProviderTelemetryBuilder(gitExtensionService, mockNotebookService, nextEditProvider.ID, doc);

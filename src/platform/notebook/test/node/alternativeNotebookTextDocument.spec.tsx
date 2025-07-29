@@ -82,6 +82,11 @@ describe('Alternative Notebook (text) Content', () => {
 			];
 			const { notebook, altDocSnapshot } = createNotebook(cells);
 
+			expect(altDocSnapshot.getText(new OffsetRange(53, 53))).toBe('');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(53, 53))).toEqual([[notebook.cellAt(0), new Range(0, 0, 0, 0)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(1, 0, 1, 0))).toEqual([[notebook.cellAt(0), new Range(0, 0, 0, 0)]]);
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(0), [new Range(0, 0, 0, 0)])).toEqual([new OffsetRange(53, 53)]);
+
 			expect(altDocSnapshot.getText(new OffsetRange(53, 59))).toBe('import');
 			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(53, 59))).toEqual([[notebook.cellAt(0), new Range(0, 0, 0, 6)]]);
 			expect(altDocSnapshot.fromAltRange(new Range(1, 0, 1, 6))).toEqual([[notebook.cellAt(0), new Range(0, 0, 0, 6)]]);
@@ -111,6 +116,16 @@ describe('Alternative Notebook (text) Content', () => {
 			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(71, 73))).toEqual([[notebook.cellAt(0), new Range(1, 7, 1, 9)]]);
 			expect(altDocSnapshot.fromAltRange(new Range(2, 7, 2, 9))).toEqual([[notebook.cellAt(0), new Range(1, 7, 1, 9)]]);
 			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(0), [new Range(1, 7, 1, 9)])).toEqual([new OffsetRange(71, 73)]);
+
+			expect(altDocSnapshot.getText(new OffsetRange(127, 127))).toBe('');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(127, 127))).toEqual([[notebook.cellAt(1), new Range(0, 0, 0, 0)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(4, 0, 4, 0))).toEqual([[notebook.cellAt(1), new Range(0, 0, 0, 0)]]);
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(1), [new Range(0, 0, 0, 0)])).toEqual([new OffsetRange(127, 127)]);
+
+			expect(altDocSnapshot.getText(new OffsetRange(127, 133))).toBe('import');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(127, 133))).toEqual([[notebook.cellAt(1), new Range(0, 0, 0, 6)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(4, 0, 4, 6))).toEqual([[notebook.cellAt(1), new Range(0, 0, 0, 6)]]);
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(1), [new Range(0, 0, 0, 6)])).toEqual([new OffsetRange(127, 133)]);
 
 			expect(altDocSnapshot.getText(new OffsetRange(134, 258))).toBe('pandas\nimport requests\n#%% vscode.cell [id=#VSC-8862d4f3] [language=python]\nprint("Hello World")\nprint("Foo Bar")\nprint("Bar');
 			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(134, 258))).toEqual([

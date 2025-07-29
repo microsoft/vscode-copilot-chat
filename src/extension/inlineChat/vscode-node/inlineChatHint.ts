@@ -132,7 +132,7 @@ export namespace LineCheck {
 			}
 		}
 
-		logService?.logger.trace('[ChatTrigger] ' + JSON.stringify({ wordCount, keywordCount, spaceCount, otherCount, tokenCount: tokens.length }));
+		logService?.trace('[ChatTrigger] ' + JSON.stringify({ wordCount, keywordCount, spaceCount, otherCount, tokenCount: tokens.length }));
 
 		if (tokens.length < 4 || spaceCount < 2) {
 			// too little content

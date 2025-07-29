@@ -98,27 +98,27 @@ abstract class RelatedInformationProviderEmbeddingsIndex<V extends { key: string
 		if (!this.isIndexLoaded) {
 			// Queue off the calculation, but don't await as the user doesn't need to wait for it
 			this.calculateEmbeddings();
-			this._logService.logger.debug(`Related Information: Index not loaded yet triggering background calculation, returning ${Date.now() - similarityStart}ms`);
+			this._logService.debug(`Related Information: Index not loaded yet triggering background calculation, returning ${Date.now() - similarityStart}ms`);
 			return [];
 		}
 		if (token.isCancellationRequested) {
 			// return an array of 0s the same length as comparisons
-			this._logService.logger.debug(`Related Information: Request cancelled, returning ${Date.now() - similarityStart}ms`);
+			this._logService.debug(`Related Information: Request cancelled, returning ${Date.now() - similarityStart}ms`);
 			return [];
 		}
 		const startOfEmbeddingRequest = Date.now();
 		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [query], {}, token);
-		this._logService.logger.debug(`Related Information: Remote similarly request took ${Date.now() - startOfEmbeddingRequest}ms`);
+		this._logService.debug(`Related Information: Remote similarly request took ${Date.now() - startOfEmbeddingRequest}ms`);
 		if (token.isCancellationRequested || !embeddingResult || !embeddingResult.values[0]) {
 			// return an array of 0s the same length as comparisons
-			this._logService.logger.debug(`Related Information: Request cancelled or no embeddings computed, returning ${Date.now() - similarityStart}ms`);
+			this._logService.debug(`Related Information: Request cancelled or no embeddings computed, returning ${Date.now() - similarityStart}ms`);
 			return [];
 		}
 
 		const results: RelatedInformationResult[] = [];
 		for (const item of this._items.values()) {
 			if (token.isCancellationRequested) {
-				this._logService.logger.debug(`Related Information: Request cancelled, returning ${Date.now() - similarityStart}ms`);
+				this._logService.debug(`Related Information: Request cancelled, returning ${Date.now() - similarityStart}ms`);
 				break;
 			}
 			if (item.embedding) {
@@ -129,7 +129,7 @@ abstract class RelatedInformationProviderEmbeddingsIndex<V extends { key: string
 			}
 		}
 
-		this.logService.logger.debug(`Related Information: Successfully Calculated, returning ${Date.now() - similarityStart}ms`);
+		this.logService.debug(`Related Information: Successfully Calculated, returning ${Date.now() - similarityStart}ms`);
 
 		// Only log non-cancelled settings related information queries
 		if (this.relatedInformationConfig.type === RelatedInformationType.SettingInformation) {

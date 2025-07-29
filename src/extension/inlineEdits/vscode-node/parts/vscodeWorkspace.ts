@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Diagnostic, DiagnosticSeverity, EndOfLine, languages, NotebookCell, NotebookDocument, Range, TextDocument, TextDocumentChangeEvent, TextDocumentContentChangeEvent, TextEditor, Uri, window, workspace } from 'vscode';
+import { Diagnostic, DiagnosticSeverity, EndOfLine, languages, NotebookDocument, Range, TextDocument, TextDocumentChangeEvent, TextDocumentContentChangeEvent, TextEditor, Uri, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { DiagnosticData } from '../../../../platform/inlineEdits/common/dataTypes/diagnosticData';
@@ -36,7 +36,9 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 	public readonly openDocuments = this._openDocuments;
 	private readonly _store = new DisposableStore();
 	private readonly _filter: DocumentFilter;
-	private readonly _useAlternativeNotebookFormat: boolean;
+	private get useAlternativeNotebookFormat(): boolean {
+		return this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, this._experimentationService);
+	}
 	constructor(
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 		@IInstantiationService private readonly _instaService: IInstantiationService,
@@ -47,7 +49,6 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 
 		this._filter = this._instaService.createInstance(DocumentFilter);
 
-		this._useAlternativeNotebookFormat = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, this._experimentationService);
 		const config = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Internal.VerifyTextDocumentChanges, this._experimentationService);
 		this._store.add(autorun(reader => {
 			if (config.read(reader)) {
@@ -86,7 +87,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 				doc.altNotebook.applyCellChanges(e.document, e.contentChanges);
 				const editWithReason = new StringEditWithReason(edit.replacements, EditReason.create(e.detailedReason?.metadata as any));
 				transaction(tx => {
-					doc.value.set(new StringText(doc.altNotebook.getText()), tx, editWithReason);
+					doc.value.set(stringValueFromDoc(doc.altNotebook), tx, editWithReason);
 					doc.version.set(doc.notebook.version, tx);
 				});
 			}
@@ -104,7 +105,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 			doc.altNotebook.applyNotebookChanges(e.contentChanges);
 			const editWithReason = new StringEditWithReason(edit.replacements, EditReason.unknown);
 			transaction(tx => {
-				doc.value.set(new StringText(doc.altNotebook.getText()), tx, editWithReason);
+				doc.value.set(stringValueFromDoc(doc.altNotebook), tx, editWithReason);
 				doc.version.set(doc.notebook.version, tx);
 			});
 		}));
@@ -114,11 +115,10 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 			if (!doc) {
 				return;
 			}
-			if (doc.kind === 'textDocument') {
-				doc.selection.set(e.selections.map(s => rangeToOffsetRange(s, e.textEditor.document)), undefined);
-			} else {
-				doc.selection.set(this.getNotebookSelections(doc.notebook, e.textEditor), undefined);
-			}
+			const selections = doc.kind === 'textDocument' ?
+				coalesce(e.selections.map(s => doc.toOffsetRange(e.textEditor.document, s))) :
+				this.getNotebookSelections(doc.notebook, e.textEditor);
+			doc.selection.set(selections, undefined);
 		}));
 
 		this._store.add(window.onDidChangeTextEditorVisibleRanges(e => {
@@ -126,11 +126,10 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 			if (!doc) {
 				return;
 			}
-			if (doc.kind === 'textDocument') {
-				doc.visibleRanges.set(e.visibleRanges.map(r => rangeToOffsetRange(r, e.textEditor.document)), undefined);
-			} else {
-				doc.visibleRanges.set(this.getNotebookVisibleRanges(doc.notebook), undefined);
-			}
+			const visibleRanges = doc.kind === 'textDocument' ?
+				coalesce(e.visibleRanges.map(r => doc.toOffsetRange(e.textEditor.document, r))) :
+				this.getNotebookVisibleRanges(doc.notebook);
+			doc.visibleRanges.set(visibleRanges, undefined);
 		}));
 
 		this._store.add(languages.onDidChangeDiagnostics(e => {
@@ -139,7 +138,9 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 				if (!document) {
 					return;
 				}
-				const diagnostics = document.kind === 'textDocument' ? this._createTextDocumentDiagnosticData(document.textDocument) : this._createNotebookDiagnosticData(document.altNotebook);
+				const diagnostics = document.kind === 'textDocument' ?
+					this._createTextDocumentDiagnosticData(document) :
+					this._createNotebookDiagnosticData(document.altNotebook);
 				document.diagnostics.set(diagnostics, undefined);
 			});
 		}));
@@ -161,7 +162,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 	});
 
 	private getTextDocuments() {
-		return getTextDocuments(this._useAlternativeNotebookFormat);
+		return getTextDocuments(this.useAlternativeNotebookFormat);
 	}
 	private readonly _vscodeTextDocuments: IObservable<readonly TextDocument[]> = this.getTextDocuments();
 	private readonly _textDocsWithShouldTrackFlag = mapObservableArrayCached(this, this._vscodeTextDocuments, (doc, store) => {
@@ -182,10 +183,15 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 
 			const documentId = DocumentId.create(doc.uri.toString());
 			const openedTextEditor = window.visibleTextEditors.find(e => e.document.uri.toString() === doc.uri.toString());
-			const selections = openedTextEditor?.selections.map(s => rangeToOffsetRange(s, doc));
-			const visibleRanges = openedTextEditor?.visibleRanges.map(r => rangeToOffsetRange(r, doc));
-			const diagnostics = this._createTextDocumentDiagnosticData(doc);
-			const document = new VSCodeObservableTextDocument(documentId, stringValueFromDoc(doc), doc.version, selections ?? [], visibleRanges ?? [], LanguageId.create(doc.languageId), diagnostics, doc);
+			const document = new VSCodeObservableTextDocument(documentId, stringValueFromDoc(doc), doc.version, [], [], LanguageId.create(doc.languageId), [], doc);
+
+			const selections = coalesce((openedTextEditor?.selections || []).map(s => document.toOffsetRange(doc, s)));
+			const visibleRanges = coalesce((openedTextEditor?.visibleRanges || []).map(r => document.toOffsetRange(doc, r)));
+			transaction(tx => {
+				document.selection.set(selections, tx);
+				document.visibleRanges.set(visibleRanges, tx);
+				document.diagnostics.set(this._createTextDocumentDiagnosticData(document), tx);
+			});
 			return document;
 		}).recomputeInitiallyAndOnChange(store);
 
@@ -198,7 +204,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 	});
 
 	private getNotebookDocuments() {
-		if (!this._useAlternativeNotebookFormat) {
+		if (!this.useAlternativeNotebookFormat) {
 			return observableValue('', []);
 		}
 		return getNotebookDocuments();
@@ -234,7 +240,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 			const visibleRanges = this.getNotebookVisibleRanges(doc);
 			const diagnostics = this._createNotebookDiagnosticData(altNotebook);
 			const language = getLanguage(getDefaultLanguage(altNotebook.notebook)).languageId;
-			const document = new VSCodeObservableNotebookDocument(documentId, new StringText(altNotebook.getText()), doc.version, selections ?? [], visibleRanges ?? [], LanguageId.create(language), diagnostics, doc, altNotebook);
+			const document = new VSCodeObservableNotebookDocument(documentId, stringValueFromDoc(altNotebook), doc.version, selections ?? [], visibleRanges ?? [], LanguageId.create(language), diagnostics, doc, altNotebook);
 			return document;
 		}).recomputeInitiallyAndOnChange(store);
 
@@ -288,19 +294,23 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 		return document;
 	}
 
-	private _createTextDocumentDiagnosticData(document: TextDocument) {
-		return languages.getDiagnostics(document.uri).map(d => this._createDiagnosticData(d, document)).filter(isDefined);
+	private _createTextDocumentDiagnosticData(document: VSCodeObservableTextDocument) {
+		return languages.getDiagnostics(document.textDocument.uri).map(d => this._createDiagnosticData(d, document)).filter(isDefined);
 	}
 
-	private _createDiagnosticData(diagnostic: Diagnostic, doc: TextDocument): DiagnosticData | undefined {
+	private _createDiagnosticData(diagnostic: Diagnostic, doc: VSCodeObservableTextDocument): DiagnosticData | undefined {
 		if (!diagnostic.source || (diagnostic.severity !== DiagnosticSeverity.Error && diagnostic.severity !== DiagnosticSeverity.Warning)) {
 			return undefined;
 		}
+		const range = doc.toOffsetRange(doc.textDocument, diagnostic.range);
+		if (!range) {
+			return undefined;
+		}
 		const diag: DiagnosticData = new DiagnosticData(
-			doc.uri,
+			doc.textDocument.uri,
 			diagnostic.message,
 			diagnostic.severity === DiagnosticSeverity.Error ? 'error' : 'warning',
-			rangeToOffsetRange(diagnostic.range, doc)
+			range
 		);
 		return diag;
 	}
@@ -374,7 +384,9 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 export interface IVSCodeObservableTextDocument extends IObservableDocument {
 	kind: 'textDocument';
 	readonly textDocument: TextDocument;
-	fromOffsetRange(range: OffsetRange): Range;
+	fromOffsetRange(textDocument: TextDocument, range: OffsetRange): Range | undefined;
+	fromRange(textDocument: TextDocument, range: Range): Range | undefined;
+	toOffsetRange(textDocument: TextDocument, range: Range): OffsetRange | undefined;
 }
 
 abstract class AbstractVSCodeObservableDocument {
@@ -420,21 +432,40 @@ class VSCodeObservableTextDocument extends AbstractVSCodeObservableDocument impl
 		super(id, value, versionId, selection, visibleRanges, languageId, diagnostics);
 	}
 
-	fromOffsetRange(range: OffsetRange): Range {
+	fromOffsetRange(textDocument: TextDocument, range: OffsetRange): Range {
+		if (textDocument !== this.textDocument) {
+			throw new Error('TextDocument does not match the one of this observable document.');
+		}
 		return new Range(
-			this.textDocument.positionAt(range.start),
-			this.textDocument.positionAt(range.endExclusive)
+			textDocument.positionAt(range.start),
+			textDocument.positionAt(range.endExclusive)
 		);
+	}
+	toOffsetRange(textDocument: TextDocument, range: Range): OffsetRange | undefined {
+		return new OffsetRange(textDocument.offsetAt(range.start), textDocument.offsetAt(range.end));
+	}
+
+	fromRange(_textDocument: TextDocument, range: Range): Range | undefined {
+		return range;
 	}
 }
 
 export interface IVSCodeObservableNotebookDocument extends IObservableDocument {
 	kind: 'notebookDocument';
 	readonly notebook: NotebookDocument;
-	fromOffsetRange(range: OffsetRange): [NotebookCell, Range][];
-	fromRange(range: Range): [NotebookCell, Range][];
-	projectRange(cell: NotebookCell, range: readonly Range[]): Range[];
-	projectDiagnostics(cell: NotebookCell, diagnostics: readonly Diagnostic[]): Diagnostic[];
+	/**
+	 * Converts an offset range of Notebook Text document to a range within the provided notebook cell.
+	 * If the range does not belong to the cell, it returns undefined.
+	 */
+	fromOffsetRange(textDocument: TextDocument, range: OffsetRange): Range | undefined;
+	/**
+	 * Converts an offset range of Notebook Text document to a range within the notebook cell(s).
+	 * The range provided could span multiple cells, so it returns an array of tuples containing the cell document and the range within that cell.
+	 */
+	fromOffsetRange(range: OffsetRange): [TextDocument, Range][];
+	fromRange(textDocument: TextDocument, range: Range): Range | undefined;
+	fromRange(range: Range): [TextDocument, Range][];
+	projectDiagnostics(cell: TextDocument, diagnostics: readonly Diagnostic[]): Diagnostic[];
 }
 
 class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument implements IVSCodeObservableNotebookDocument {
@@ -454,25 +485,47 @@ class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument 
 		super(id, value, versionId, selection, visibleRanges, languageId, diagnostics);
 	}
 
-	fromOffsetRange(range: OffsetRange): [NotebookCell, Range][] {
-		return this.altNotebook.fromAltOffsetRange(range);
+	fromOffsetRange(textDocument: TextDocument, range: OffsetRange): Range | undefined;
+	fromOffsetRange(range: OffsetRange): [TextDocument, Range][];
+	fromOffsetRange(arg1: TextDocument | OffsetRange, range?: OffsetRange): Range | undefined | [TextDocument, Range][] {
+		if (arg1 instanceof OffsetRange) {
+			return this.altNotebook.fromAltOffsetRange(arg1).map(r => [r[0].document, r[1]]);
+		} else if (range !== undefined) {
+			const cell = this.altNotebook.getCell(arg1);
+			if (!cell) {
+				return undefined;
+			}
+			const results = this.altNotebook.fromAltOffsetRange(range);
+			const found = results.find(r => r[0].document === arg1);
+			return found ? found[1] : undefined;
+		}
+		return undefined;
 	}
-	fromRange(range: Range): [NotebookCell, Range][] {
-		return this.altNotebook.fromAltRange(range);
+	fromRange(textDocument: TextDocument, range: Range): Range | undefined;
+	fromRange(range: Range): [TextDocument, Range][];
+	fromRange(arg1: TextDocument | Range, range?: Range): Range | undefined | [TextDocument, Range][] {
+		if (arg1 instanceof Range) {
+			return this.altNotebook.fromAltRange(arg1).map(r => [r[0].document, r[1]]);
+		} else if (range !== undefined) {
+			const cell = this.altNotebook.getCell(arg1);
+			if (!cell) {
+				return undefined;
+			}
+			const results = this.altNotebook.fromAltRange(range);
+			const found = results.find(r => r[0].document === arg1);
+			return found ? found[1] : undefined;
+		}
 	}
-	projectRange(cell: NotebookCell, range: readonly Range[]): Range[] {
-		return this.altNotebook.toAltRange(cell, range);
-	}
-	projectDiagnostics(cell: NotebookCell, diagnostics: readonly Diagnostic[]): Diagnostic[] {
+	projectDiagnostics(textDocument: TextDocument, diagnostics: readonly Diagnostic[]): Diagnostic[] {
+		const cell = this.altNotebook.getCell(textDocument);
+		if (!cell) {
+			return [];
+		}
 		return toAltDiagnostics(this.altNotebook, cell, diagnostics);
 	}
 }
 
 export type IVSCodeObservableDocument = IVSCodeObservableTextDocument | IVSCodeObservableNotebookDocument;
-
-function rangeToOffsetRange(range: Range, doc: TextDocument): OffsetRange {
-	return new OffsetRange(doc.offsetAt(range.start), doc.offsetAt(range.end));
-}
 
 function getTextDocuments(excludeNotebookCells: boolean): IObservable<readonly TextDocument[]> {
 	return observableFromEvent(undefined, e => {
@@ -631,7 +684,7 @@ export class VerifyTextDocumentChanges extends Disposable {
 	}
 }
 
-export function stringValueFromDoc(doc: TextDocument): StringText {
+export function stringValueFromDoc(doc: TextDocument | IAlternativeNotebookDocument): StringText {
 	return new StringText(doc.getText());
 }
 export function editFromTextDocumentContentChangeEvents(events: readonly TextDocumentContentChangeEvent[]): StringEdit {

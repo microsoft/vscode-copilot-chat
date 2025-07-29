@@ -22,7 +22,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.103.0-20250725",
+		"vscode": "^1.103.0-20250728",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -1319,7 +1319,7 @@
 				]
 			},
 			{
-				"id": "github.copilot.notebook",
+				"id": "github.copilot.notebookEditorAgent",
 				"name": "GitHubCopilot",
 				"fullName": "GitHub Copilot",
 				"description": "%copilot.description%",
@@ -1327,7 +1327,7 @@
 				"locations": [
 					"notebook"
 				],
-				"when": "!config.inlineChat.enableV2 && !config.github.copilot.chat.advanced.inlineChat2",
+				"when": "config.inlineChat.enableV2",
 				"commands": [
 					{
 						"name": "fix",
@@ -2619,6 +2619,14 @@
 						],
 						"description": "%github.copilot.config.newWorkspaceCreation.enabled%"
 					},
+					"github.copilot.chat.newWorkspace.useContext7": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental"
+						],
+						"markdownDescription": "%github.copilot.config.newWorkspace.useContext7%"
+					},
 					"github.copilot.chat.agent.currentEditorContext.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -2629,7 +2637,7 @@
 					},
 					"github.copilot.chat.customInstructionsInSystemMessage": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"tags": [
 							"experimental"
 						],
@@ -2701,6 +2709,11 @@
 								"maxOutputTokens": {
 									"type": "number",
 									"description": "Maximum number of output tokens supported by the model"
+								},
+								"thinking": {
+									"type": "boolean",
+									"default": false,
+									"description": "Whether the model supports thinking capabilities"
 								}
 							},
 							"required": [

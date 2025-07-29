@@ -19,6 +19,7 @@ import { join } from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
+import { CompletionsProvider } from '../../completions/vscode-node/completionsProvider';
 import { TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { InlineEditDebugComponent } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
@@ -40,6 +41,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 	private readonly _hideInternalInterface = this._configurationService.getConfigObservable(ConfigKey.Internal.InlineEditsHideInternalInterface);
 	private readonly _editSourceTrackingEnabled = this._configurationService.getConfigObservable(ConfigKey.Internal.EditSourceTrackingEnabled);
 	private readonly _enableDiagnosticsProvider = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.InlineEditsEnableDiagnosticsProvider, this._expService);
+	private readonly _enableCompletionsProvider = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Internal.InlineEditsEnableCompletionsProvider, this._expService);
 	private readonly _yieldToCopilot = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Internal.InlineEditsYieldToCopilot, this._expService);
 	private readonly _copilotToken = observableFromEvent(this, this._authenticationService.onDidAuthenticationChange, () => this._authenticationService.copilotToken);
 
@@ -76,7 +78,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 	) {
 		super();
 
-		const tracer = createTracer(['NES', 'Feature'], (s) => this._logService.logger.trace(s));
+		const tracer = createTracer(['NES', 'Feature'], (s) => this._logService.trace(s));
 		const constructorTracer = tracer.sub('constructor');
 
 		const hasUpdatedNesSettingKey = 'copilot.chat.nextEdits.hasEnabledNesInSettings';
@@ -115,7 +117,11 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 				diagnosticsProvider = reader.store.add(this._instantiationService.createInstance(DiagnosticsNextEditProvider, workspace, git));
 			}
 
-			const model = reader.store.add(this._instantiationService.createInstance(InlineEditModel, statelessProviderId, workspace, historyContextProvider, diagnosticsProvider));
+			const completionsProvider = (this._enableCompletionsProvider.read(reader)
+				? reader.store.add(this._instantiationService.createInstance(CompletionsProvider, workspace))
+				: undefined);
+
+			const model = reader.store.add(this._instantiationService.createInstance(InlineEditModel, statelessProviderId, workspace, historyContextProvider, diagnosticsProvider, completionsProvider));
 
 			const recordingDirPath = join(this._vscodeExtensionContext.globalStorageUri.fsPath, 'logContextRecordings');
 			const logContextRecorder = this.inlineEditsLogFileEnabled ? reader.store.add(this._instantiationService.createInstance(LogContextRecorder, recordingDirPath, logger)) : undefined;

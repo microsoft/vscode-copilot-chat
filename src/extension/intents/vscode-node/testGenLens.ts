@@ -49,7 +49,7 @@ class TestGenLensProvider implements vscode.CodeLensProvider<vscode.CodeLens>, I
 
 		const testResults = vscode.tests.testResults;
 		if (testResults.length === 0) {
-			this.logService.logger.trace('No test results');
+			this.logService.trace('No test results');
 			return [];
 		}
 
@@ -59,7 +59,7 @@ class TestGenLensProvider implements vscode.CodeLensProvider<vscode.CodeLens>, I
 		try {
 			detailedCoverage = await lastTest.getDetailedCoverage?.(document.uri, token);
 		} catch (e) {
-			this.logService.logger.error(e);
+			this.logService.error(e);
 			return [];
 		}
 
@@ -72,7 +72,7 @@ class TestGenLensProvider implements vscode.CodeLensProvider<vscode.CodeLens>, I
 		for (const detail of detailedCoverage) {
 
 			if (detail instanceof vscode.DeclarationCoverage) {
-				this.logService.logger.trace(`Received statement coverage for ${detail.name}. (detail.executed: ${detail.executed})`);
+				this.logService.trace(`Received statement coverage for ${detail.name}. (detail.executed: ${detail.executed})`);
 				const wasExecuted = !!detail.executed;
 				if (wasExecuted) {
 					continue;
@@ -80,9 +80,9 @@ class TestGenLensProvider implements vscode.CodeLensProvider<vscode.CodeLens>, I
 				const locationAsRange = detail.location instanceof vscode.Range ? detail.location : new vscode.Range(detail.location, detail.location);
 				codeLens.push(this.createCodeLens(document, locationAsRange));
 			} else if (detail instanceof vscode.StatementCoverage) {
-				this.logService.logger.trace('Received statement coverage; did nothing');
+				this.logService.trace('Received statement coverage; did nothing');
 			} else {
-				this.logService.logger.error('Unexpected coverage type');
+				this.logService.error('Unexpected coverage type');
 			}
 		}
 

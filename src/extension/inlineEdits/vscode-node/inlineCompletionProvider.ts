@@ -22,7 +22,6 @@ import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
-import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LineCheck } from '../../inlineChat/vscode-node/inlineChatHint';
 import { NextEditProviderTelemetryBuilder, TelemetrySender } from '../node/nextEditProviderTelemetry';
@@ -106,7 +105,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
 		@INotebookService private readonly _notebookService: INotebookService,
 	) {
-		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.logger.trace(s));
+		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
 	}
 
 	// copied from `vscodeWorkspace.ts` `DocumentFilter#_enabledLanguages`
@@ -155,19 +154,28 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		telemetryBuilder.setIsNaturalLanguageDominated(LineCheck.isNaturalLanguageDominated(document, position));
 
 		const requestCancellationTokenSource = new CancellationTokenSource(token);
+		const completionsCts = new CancellationTokenSource(token);
 		let suggestionInfo: NesCompletionInfo | undefined;
 		try {
 			tracer.trace('invoking next edit provider');
 
 			const { first, all } = raceAndAll([
 				this.model.nextEditProvider.getNextEdit(doc.id, context, logContext, token, telemetryBuilder.nesBuilder),
-				this.model.diagnosticsBasedProvider?.runUntilNextEdit(doc.id, context, logContext, 50, requestCancellationTokenSource.token, telemetryBuilder.diagnosticsBuilder) ?? raceCancellation(new Promise<undefined>(() => { }), requestCancellationTokenSource.token)
+				this.model.diagnosticsBasedProvider?.runUntilNextEdit(doc.id, context, logContext, 50, requestCancellationTokenSource.token, telemetryBuilder.diagnosticsBuilder) ?? raceCancellation(new Promise<undefined>(() => { }), requestCancellationTokenSource.token),
+				this.model.completionsProvider?.getCompletions(doc.id, context, logContext, token) ?? raceCancellation(new Promise<undefined>(() => { }), completionsCts.token),
 			]);
 
-			let [providerSuggestion, diagnosticsSuggestion] = await first;
+			let [providerSuggestion, diagnosticsSuggestion, completionAtCursor] = await first;
 
-			// If the provider returned first with empty result, then we wait for the diagnostics provider
-			if (providerSuggestion && providerSuggestion.result === undefined && this.model.diagnosticsBasedProvider) {
+			// ensure completions promise resolves
+			completionsCts.cancel();
+
+			const hasCompletionAtCursor = completionAtCursor && completionAtCursor.result !== undefined;
+			const hasNonEmptyLlmNes = providerSuggestion && providerSuggestion.result !== undefined;
+
+			const shouldGiveMoreTimeToDiagnostics = !hasCompletionAtCursor && !hasNonEmptyLlmNes && this.model.diagnosticsBasedProvider;
+
+			if (shouldGiveMoreTimeToDiagnostics) {
 				tracer.trace('giving some more time to diagnostics provider');
 				timeout(1000).then(() => requestCancellationTokenSource.cancel());
 				[, diagnosticsSuggestion] = await all;
@@ -185,13 +193,14 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			}
 
 			// Determine which suggestion to use
-			if (diagnosticsSuggestion?.result) {
+			if (completionAtCursor?.result) {
+				suggestionInfo = new LlmCompletionInfo(completionAtCursor, doc.id, document, context.requestUuid);
+			} else if (diagnosticsSuggestion?.result) {
 				suggestionInfo = new DiagnosticsCompletionInfo(diagnosticsSuggestion, doc.id, document, context.requestUuid);
 			} else if (providerSuggestion) {
 				suggestionInfo = new LlmCompletionInfo(providerSuggestion, doc.id, document, context.requestUuid);
 			} else {
 				this.telemetrySender.scheduleSendingEnhancedTelemetry({ requestId: logContext.requestId, result: undefined }, telemetryBuilder);
-				console.error('Providers returned nothing without cancellation being requested');
 				return emptyList;
 			}
 
@@ -205,20 +214,11 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 			tracer.trace(`using next edit suggestion from ${suggestionInfo.source}`);
 
-			let range: Range;
-
-			if (doc.kind === 'notebookDocument') {
-				// Ignore changes to other cells.
-				const cellRange = doc.fromOffsetRange(result.edit.replaceRange).find(([cell]) => cell.document === document);
-				if (cellRange) {
-					range = cellRange[1];
-				} else {
-					tracer.trace('no next edit suggestion for notebook cell');
-					this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
-					return emptyList;
-				}
-			} else {
-				range = documentRangeFromOffsetRange(document, result.edit.replaceRange);
+			const range = doc.fromOffsetRange(document, result.edit.replaceRange);
+			if (!range) {
+				tracer.trace('no next edit suggestion for notebook cell');
+				this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
+				return emptyList;
 			}
 
 			// Only show edit when the cursor is max 4 lines away from the edit
@@ -233,8 +233,9 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 					: undefined
 			);
 
-			const displayLocation: InlineCompletionDisplayLocation | undefined = result.displayLocation ? {
-				range: toExternalRange(result.displayLocation.range),
+			const displayRange = result.displayLocation ? doc.fromRange(document, toExternalRange(result.displayLocation.range)) : undefined;
+			const displayLocation: InlineCompletionDisplayLocation | undefined = result.displayLocation && displayRange ? {
+				range: displayRange,
 				label: result.displayLocation.label
 			} : undefined;
 
@@ -297,6 +298,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			throw e;
 		} finally {
 			requestCancellationTokenSource.dispose();
+			completionsCts.dispose();
 			this.logger.add(logContext);
 		}
 	}
@@ -499,13 +501,6 @@ export function raceAndAll<T extends readonly unknown[]>(
 	const all = Promise.all(promises) as Promise<T>;
 
 	return { first, all };
-}
-
-export function documentRangeFromOffsetRange(doc: TextDocument, range: OffsetRange): Range {
-	return new Range(
-		doc.positionAt(range.start),
-		doc.positionAt(range.endExclusive)
-	);
 }
 
 function shortOpportunityId(oppId: string): string {

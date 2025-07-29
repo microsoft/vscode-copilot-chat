@@ -62,7 +62,7 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 		const allowTools: Record<string, boolean> = {};
 		allowTools[ToolName.EditFile] = true;
 		allowTools[ToolName.ReplaceString] = modelSupportsReplaceString(model) || !!(model.family.includes('gemini') && configurationService.getExperimentBasedConfig(ConfigKey.Internal.GeminiReplaceString, experimentationService));
-		allowTools[ToolName.ApplyPatch] = modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
+		allowTools[ToolName.ApplyPatch] = await modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
 
 		if (modelCanUseReplaceStringExclusively(model)) {
 			allowTools[ToolName.ReplaceString] = true;
@@ -95,8 +95,6 @@ export class AgentIntent extends EditCodeIntent {
 		@IExperimentationService expService: IExperimentationService,
 		@ICodeMapperService codeMapperService: ICodeMapperService,
 		@IWorkspaceService workspaceService: IWorkspaceService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@IToolGroupingService private readonly _toolGroupingService: IToolGroupingService,
 	) {
 		super(instantiationService, endpointProvider, configurationService, expService, codeMapperService, workspaceService, { intentInvocation: AgentIntentInvocation, processCodeblocks: false });
@@ -113,7 +111,8 @@ export class AgentIntent extends EditCodeIntent {
 
 	private async listTools(request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken) {
 		const editingTools = await getTools(this.instantiationService, request);
-		if (!this._configurationService.getExperimentBasedConfig(ConfigKey.VirtualTools, this._experimentationService)) {
+		const grouping = this._toolGroupingService.create(editingTools);
+		if (!grouping.isEnabled) {
 			stream.markdown(`Available tools: \n${editingTools.map(tool => `- ${tool.name}`).join('\n')}\n`);
 			return;
 		}
@@ -137,7 +136,7 @@ export class AgentIntent extends EditCodeIntent {
 			}
 		}
 
-		const tools = await this._toolGroupingService.create(editingTools).computeAll(token);
+		const tools = await grouping.computeAll(token);
 		tools.forEach(t => printTool(t));
 		stream.markdown(str);
 
@@ -224,7 +223,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 		const safeBudget = Math.floor((baseBudget - toolTokens) * 0.85);
 		const endpoint = toolTokens > 0 ? this.endpoint.cloneWithTokenOverride(safeBudget) : this.endpoint;
 		const summarizationEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.SummarizeAgentConversationHistory, this.experimentationService) && this.prompt === AgentPrompt;
-		this.logService.logger.debug(`AgentIntent: rendering with budget=${safeBudget} (baseBudget: ${baseBudget}, toolTokens: ${toolTokens}), summarizationEnabled=${summarizationEnabled}`);
+		this.logService.debug(`AgentIntent: rendering with budget=${safeBudget} (baseBudget: ${baseBudget}, toolTokens: ${toolTokens}), summarizationEnabled=${summarizationEnabled}`);
 		let result: RenderPromptResult;
 		const props: AgentPromptProps = {
 			endpoint,
@@ -244,7 +243,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 			result = await renderer.render(progress, token);
 		} catch (e) {
 			if (e instanceof BudgetExceededError && summarizationEnabled) {
-				this.logService.logger.debug(`[Agent] budget exceeded, triggering summarization (${e.message})`);
+				this.logService.debug(`[Agent] budget exceeded, triggering summarization (${e.message})`);
 				if (!promptContext.toolCallResults) {
 					promptContext = {
 						...promptContext,
@@ -261,7 +260,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 					});
 					result = await renderer.render(progress, token);
 				} catch (e) {
-					this.logService.logger.error(e, `[Agent] summarization failed`);
+					this.logService.error(e, `[Agent] summarization failed`);
 					const errorKind = e instanceof BudgetExceededError ? 'budgetExceeded' : 'error';
 					/* __GDPR__
 						"triggerSummarizeFailed" : {

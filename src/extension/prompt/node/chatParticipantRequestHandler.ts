@@ -8,6 +8,7 @@ import type { ChatRequest, ChatRequestTurn2, ChatResponseStream, ChatResult, Loc
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { getChatParticipantIdFromName, getChatParticipantNameFromId, workspaceAgentName } from '../../../platform/chat/common/chatAgents';
 import { CanceledMessage, ChatLocation } from '../../../platform/chat/common/commonTypes';
+import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
@@ -72,6 +73,7 @@ export class ChatParticipantRequestHandler {
 		private readonly chatAgentArgs: IChatAgentArgs,
 		private readonly onPaused: Event<boolean>,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@ICommandService private readonly _commandService: ICommandService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@IIntentService private readonly _intentService: IIntentService,
@@ -212,7 +214,7 @@ export class ChatParticipantRequestHandler {
 				}
 			};
 		}
-		this._logService.logger.trace(`[${ChatLocation.toStringShorter(this.location)}] chat request received from extension host`);
+		this._logService.trace(`[${ChatLocation.toStringShorter(this.location)}] chat request received from extension host`);
 		try {
 
 			// sanitize the variables of all requests
@@ -252,6 +254,8 @@ export class ChatParticipantRequestHandler {
 				}
 
 				result = await chatResult;
+				const endpoint = await this._endpointProvider.getChatEndpoint(this.request);
+				result.details = `${endpoint.name} • ${endpoint.multiplier ?? 0}x`;
 			}
 
 			this._conversationStore.addConversation(this.turn.id, this.conversation);
@@ -278,12 +282,10 @@ export class ChatParticipantRequestHandler {
 	}
 
 	private async selectIntent(command: CommandDetails | undefined, history: Turn[]): Promise<IIntent> {
-		if (!command?.intent && (this.location === ChatLocation.Editor || this.location === ChatLocation.Notebook)) { // TODO@jrieken do away with location specific code
+		if (!command?.intent && this.location === ChatLocation.Editor) { // TODO@jrieken do away with location specific code
 
 			let preferredIntent: Intent | undefined;
-			if (this.documentContext && this.location === ChatLocation.Notebook) {
-				preferredIntent = Intent.notebookEditor;
-			} else if (this.documentContext && this.request.attempt === 0 && history.length === 0) {
+			if (this.documentContext && this.request.attempt === 0 && history.length === 0) {
 				if (this.documentContext.selection.isEmpty && this.documentContext.document.lineAt(this.documentContext.selection.start.line).text.trim() === '') {
 					preferredIntent = Intent.Generate;
 				} else if (!this.documentContext.selection.isEmpty && this.documentContext.selection.start.line !== this.documentContext.selection.end.line) {

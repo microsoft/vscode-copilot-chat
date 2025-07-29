@@ -196,7 +196,7 @@ async function getCodeActionsForNotebookDocumentDiagnostic(diagnostic: Diagnosti
 		return [];
 	}
 	return Promise.all(cellRanges.map(async ([cell, range]) => {
-		const actions = await getCodeActionsForUriRange(cell.document.uri, range);
+		const actions = await getCodeActionsForUriRange(cell.uri, range);
 		return actions.map(action => {
 			action.diagnostics = action.diagnostics ? workspaceDocument.projectDiagnostics(cell, action.diagnostics) : undefined;
 			return action;
@@ -315,7 +315,6 @@ export class CodeAction {
 		if (!this.edit) {
 			return undefined;
 		}
-		// TODO: @DonJayamanne This will not work for notebooks
 		return this.edit.get(workspaceDocument.id.toUri()).map(toInternalTextEdit);
 	}
 

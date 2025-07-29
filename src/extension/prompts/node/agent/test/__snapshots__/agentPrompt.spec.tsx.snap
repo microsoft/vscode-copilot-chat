@@ -86,13 +86,7 @@ The class \`Person\` is in \`src/models/person.ts\`.
 </example>
 
 </outputFormatting>
-copilot_cache_control: {"type":"ephemeral"}
-~~~
 
-
-### User
-~~~md
-When generating code, please follow these user provided coding instructions. You can ignore an instruction if it contradicts a system message.
 <instructions>
 This is a test custom instruction file
 </instructions>
@@ -218,13 +212,7 @@ The class \`Person\` is in \`src/models/person.ts\`.
 </example>
 
 </outputFormatting>
-copilot_cache_control: {"type":"ephemeral"}
-~~~
 
-
-### User
-~~~md
-When generating code, please follow these user provided coding instructions. You can ignore an instruction if it contradicts a system message.
 <instructions>
 This is a test custom instruction file
 </instructions>
@@ -310,13 +298,7 @@ The class \`Person\` is in \`src/models/person.ts\`.
 </example>
 
 </outputFormatting>
-copilot_cache_control: {"type":"ephemeral"}
-~~~
 
-
-### User
-~~~md
-When generating code, please follow these user provided coding instructions. You can ignore an instruction if it contradicts a system message.
 <instructions>
 This is a test custom instruction file
 </instructions>
@@ -412,12 +394,7 @@ The class \`Person\` is in \`src/models/person.ts\`.
 </example>
 
 </outputFormatting>
-~~~
 
-
-### User
-~~~md
-When generating code, please follow these user provided coding instructions. You can ignore an instruction if it contradicts a system message.
 <instructions>
 This is a test custom instruction file
 </instructions>
@@ -595,7 +572,7 @@ copilot_cache_control: {"type":"ephemeral"}
 "
 `;
 
-exports[`AgentPrompt > custom instructions in system message 1`] = `
+exports[`AgentPrompt > custom instructions not in system message 1`] = `
 "### System
 ~~~md
 You are an expert AI programming assistant, working with a user in the VS Code editor.
@@ -636,7 +613,13 @@ The class \`Person\` is in \`src/models/person.ts\`.
 </example>
 
 </outputFormatting>
+copilot_cache_control: {"type":"ephemeral"}
+~~~
 
+
+### User
+~~~md
+When generating code, please follow these user provided coding instructions. You can ignore an instruction if it contradicts a system message.
 <instructions>
 This is a test custom instruction file
 </instructions>
@@ -685,9 +668,9 @@ copilot_cache_control: {"type":"ephemeral"}
 `;
 
 exports[`AgentPrompt > omit base agent instructions 1`] = `
-"### System
+"### User
 ~~~md
-
+When generating code, please follow these user provided coding instructions. You can ignore an instruction if it contradicts a system message.
 <instructions>
 This is a test custom instruction file
 </instructions>
@@ -771,13 +754,7 @@ The class \`Person\` is in \`src/models/person.ts\`.
 </example>
 
 </outputFormatting>
-copilot_cache_control: {"type":"ephemeral"}
-~~~
 
-
-### User
-~~~md
-When generating code, please follow these user provided coding instructions. You can ignore an instruction if it contradicts a system message.
 <instructions>
 This is a test custom instruction file
 </instructions>
@@ -873,13 +850,7 @@ The class \`Person\` is in \`src/models/person.ts\`.
 </example>
 
 </outputFormatting>
-copilot_cache_control: {"type":"ephemeral"}
-~~~
 
-
-### User
-~~~md
-When generating code, please follow these user provided coding instructions. You can ignore an instruction if it contradicts a system message.
 <instructions>
 This is a test custom instruction file
 </instructions>
@@ -963,13 +934,7 @@ The class \`Person\` is in \`src/models/person.ts\`.
 </example>
 
 </outputFormatting>
-copilot_cache_control: {"type":"ephemeral"}
-~~~
 
-
-### User
-~~~md
-When generating code, please follow these user provided coding instructions. You can ignore an instruction if it contradicts a system message.
 <instructions>
 This is a test custom instruction file
 </instructions>
@@ -992,6 +957,7 @@ I am working in a workspace that has the following structure:
 \`\`\`
 This is the state of the context at this point in the conversation. The view of the workspace structure may be truncated. You can use tools to collect more context if needed.
 </workspace_info>
+copilot_cache_control: {"type":"ephemeral"}
 ~~~
 
 
