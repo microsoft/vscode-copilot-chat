@@ -27,6 +27,7 @@ import { EditSurvivalTrackerService, IEditSurvivalTrackerService } from '../../.
 import { IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
 import { RemoteEmbeddingsComputer } from '../../../platform/embeddings/common/remoteEmbeddingsComputer';
 import { ICombinedEmbeddingIndex, VSCodeCombinedIndexImpl } from '../../../platform/embeddings/common/vscodeIndex';
+import { AutomodeService, IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { EnvServiceImpl } from '../../../platform/env/vscode/envServiceImpl';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
@@ -107,6 +108,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	const isTestMode = extensionContext.extensionMode === ExtensionMode.Test;
 
 	builder.define(IInteractionService, new SyncDescriptor(InteractionService));
+	builder.define(IAutomodeService, new SyncDescriptor(AutomodeService));
 	builder.define(ICopilotTokenStore, new CopilotTokenStore());
 	builder.define(IDebugOutputService, new DebugOutputServiceImpl());
 	builder.define(IDialogService, new DialogServiceImpl());
