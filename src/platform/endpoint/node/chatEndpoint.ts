@@ -138,6 +138,7 @@ export async function defaultNonStreamChatResponseProcessor(response: Response, 
 }
 
 export class ChatEndpoint implements IChatEndpoint {
+	private readonly _urlOrRequestMetadata: string | RequestMetadata;
 	private readonly _maxTokens: number;
 	private readonly _maxOutputTokens: number;
 	public readonly model: string;
@@ -169,6 +170,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		@ITokenizerProvider private readonly _tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
+		this._urlOrRequestMetadata = _modelMetadata.urlOrRequestMetadata ?? { type: RequestType.ChatCompletions };
 		// This metadata should always be present, but if not we will default to 8192 tokens
 		this._maxTokens = _modelMetadata.capabilities.limits?.max_prompt_tokens ?? 8192;
 		// This metadata should always be present, but if not we will default to 4096 tokens
@@ -200,7 +202,7 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	public get urlOrRequestMetadata(): string | RequestMetadata {
-		return { type: RequestType.ChatCompletions };
+		return this._urlOrRequestMetadata;
 	}
 
 	public get policy(): 'enabled' | { terms: string } {

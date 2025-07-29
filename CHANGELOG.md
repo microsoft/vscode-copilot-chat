@@ -29,21 +29,21 @@ This milestone, we have made several improvements and bug fixes in this area.
 
 Upon popular request, you can now also specify which language model should be used for a chat mode. Add the `model` metadata property to your `chatmode.md` file and provide the model identifier (we provide IntelliSense for the model info).
 
-![Screenshot that shows the IntelliSense for the model metadata property in chat mode file.](https://code.visualstudio.com/assets/updates/1_102//1_102/prompt-file-model-code-completion.png)
+![Screenshot that shows the IntelliSense for the model metadata property in chat mode file.](https://code.visualstudio.com/assets/updates/1_102/prompt-file-model-code-completion.png)
 
 ##### Improved editing support
 
 The editor for [chat modes](https://code.visualstudio.com/docs/copilot/chat/chat-modes), [prompts](https://code.visualstudio.com/docs/copilot/copilot-customization#_prompt-files-experimental), and [instruction files](https://code.visualstudio.com/docs/copilot/copilot-customization#_custom-instructions) now supports completions, validation, and hovers for all supported metadata properties.
 
-![Screenshot that shows the hover information for tools.](https://code.visualstudio.com/assets/updates/1_102//1_102/tools-hover.png)
+![Screenshot that shows the hover information for tools.](https://code.visualstudio.com/assets/updates/1_102/tools-hover.png)
 
-![Screenshot that shows the model diagnostics when a model is not available for a specific chat mode.](https://code.visualstudio.com/assets/updates/1_102//1_102/prompt-file-diagnostics.png)
+![Screenshot that shows the model diagnostics when a model is not available for a specific chat mode.](https://code.visualstudio.com/assets/updates/1_102/prompt-file-diagnostics.png)
 
 ##### Gear menu in the chat view
 
 The **Configure Chat** action in the Chat view toolbar lets you manage custom modes as well as reusable instructions, prompts, and tool sets:
 
-![Screenshot that shows the Configure Chat menu in the Chat view.](https://code.visualstudio.com/assets/updates/1_102//1_102/chat-gear.png)
+![Screenshot that shows the Configure Chat menu in the Chat view.](https://code.visualstudio.com/assets/updates/1_102/chat-gear.png)
 
 Selecting **Modes** shows all currently installed custom modes and enables you to open, create new, or delete modes.
 
@@ -76,7 +76,7 @@ For larger instructions that you want to include conditionally, you can use `.in
 
 New in this release, the large language model can load instructions on demand. Each request gets a list of all instruction files, along with glob pattern and description. In this example, the LLM has no instructions for TypeScript files explicitly added in the context. So, it looks for code style rules before creating a TypeScript file:
 
-![Screenshot showing loading instruction files on demand.](https://code.visualstudio.com/assets/updates/1_102//1_102/instructions-loading-on-demand.png)
+![Screenshot showing loading instruction files on demand.](https://code.visualstudio.com/assets/updates/1_102/instructions-loading-on-demand.png)
 
 #### Edit previous requests (Experimental)
 
@@ -88,13 +88,13 @@ There will be a controlled rollout of different entry points to editing requests
 * `chat.editRequests.hover`: Hover a request to reveal a toolbar with a button to begin an edit inline with the request.
 * `chat.editRequests.input`: Hover a request to reveal a toolbar, which will start edits in the input box at the bottom of chat.
 
-<video src="images/1_102/edit-previous-requests.mp4" title="Video showing the process of editing a previous request in the Chat view." autoplay loop controls muted></video>
+<video src="https://code.visualstudio.com/assets/updates/1_102/edit-previous-requests.mp4" title="Video showing the process of editing a previous request in the Chat view." autoplay loop controls muted></video>
 
 #### Terminal auto-approval (Experimental)
 
 Agent mode now has a mechanism for auto approving commands in the terminal. Here's a demo of it using the defaults:
 
-<video src="images/1_102/terminal-auto-approve.mp4" title="Video showing terminal commands like 'echo' and 'ls' being auto-approved in the Chat view." autoplay loop controls muted></video>
+<video src="https://code.visualstudio.com/assets/updates/1_102/terminal-auto-approve.mp4" title="Video showing terminal commands like 'echo' and 'ls' being auto-approved in the Chat view." autoplay loop controls muted></video>
 
 There are currently two settings: the allow list and the deny list. The allow list is a list of command _prefixes_ or regular expressions that when matched allows the command to be run without explicit approval. For example, the following will allow any command starting with `npm run test` to be run, as well as _exactly_ `git status` or `git log`:
 
@@ -131,19 +131,19 @@ The two major parts we want to add to this feature are a UI entry point to more 
 
 Agent mode sometimes wants to run commands with a `cd` statement, just in case. We now detect this case when it matches the current working directory and simplify the command that is run.
 
-![Screenshot of the terminal, asking to run `cd C:\Github\Tyriar\xterm.js && echo hello` only runs `echo hello` when the current working directory already matches.](https://code.visualstudio.com/assets/updates/1_102//1_102/terminal-working-dir.png)
+![Screenshot of the terminal, asking to run `cd C:\Github\Tyriar\xterm.js && echo hello` only runs `echo hello` when the current working directory already matches.](https://code.visualstudio.com/assets/updates/1_102/terminal-working-dir.png)
 
 #### Agent awareness of tasks and terminals
 
 Agent mode now understands which background terminals it has created and which tasks are actively running. The agent can read task output by using the new `GetTaskOutput` tool, which helps prevent running duplicate tasks and improves workspace context.
 
-![Screenshot of VS Code window showing two build tasks running in the terminal panel. The left terminal displays several errors. The chat agent replies to describe status of my build tasks with a summary of each task's output.](https://code.visualstudio.com/assets/updates/1_102//1_102/task-status.png)
+![Screenshot of VS Code window showing two build tasks running in the terminal panel. The left terminal displays several errors. The chat agent replies to describe status of my build tasks with a summary of each task's output.](https://code.visualstudio.com/assets/updates/1_102/task-status.png)
 
 #### Maximized chat view
 
 You can now maximize the Secondary Side Bar to span the editor area and hide the Primary Side Bar and panel area. VS Code will remember this state between restarts and will restore the Chat view when you open an editor or view.
 
-<video src="images/1_102/auxmax.mp4" title="Video showing maximizing the Secondary Side Bar." autoplay loop controls muted></video>
+<video src="https://code.visualstudio.com/assets/updates/1_102/auxmax.mp4" title="Video showing maximizing the Secondary Side Bar." autoplay loop controls muted></video>
 
 You can toggle in and out of the maximized state by using the new icon next to the close button, or use the new command `workbench.action.toggleMaximizedAuxiliaryBar` from the Command Palette.
 
@@ -159,7 +159,7 @@ You can enable or disable this badge via the `chat.notifyWindowOnConfirmation` s
 
 A new subcommand `chat` is added to the VS Code CLI that enables you to start a chat session in the current working directory with the prompt provided.
 
-<video src="images/1_102/chatcli.mp4" title="Video showing the Chat CLI in action to open the Chat view from the command line and run a prompt." autoplay loop controls muted></video>
+<video src="https://code.visualstudio.com/assets/updates/1_102/chatcli.mp4" title="Video showing the Chat CLI in action to open the Chat view from the command line and run a prompt." autoplay loop controls muted></video>
 
 The basic syntax is `code chat [options] [prompt]` and options can be any of:
 
@@ -181,7 +181,7 @@ We've reworked the UX around managing extension access to language models provid
 
 To make this clearer, we've removed the **AccountName (GitHub Copilot Chat)** item and replaced it with a new item called **Manage Language Model Access...**. This item opens a Quick Pick that enables you to manage which extensions have access to the language models provided by GitHub Copilot Chat.
 
-![Screenshot that shows the language model access Quick Pick.](https://code.visualstudio.com/assets/updates/1_102//1_102/lm-access-qp.png)
+![Screenshot that shows the language model access Quick Pick.](https://code.visualstudio.com/assets/updates/1_102/lm-access-qp.png)
 
 We think this is clearer... That said, in a future release we will explore more granular access control for language models (for example, only allowing specific models rather than _all_ models provided by an extension), so stay tuned for that.
 
@@ -193,7 +193,7 @@ We've have been working on expanding MCP support in VS Code for the past few mon
 
 You can get started by installing some of the [popular MCP servers from our curated list](https://code.visualstudio.com/mcp). Learn more about [using MCP servers in VS Code](https://code.visualstudio.com/docs/copilot/chat/mcp-servers) and how you can use them to extend agent mode.
 
-![Screenshot that shows the MCP Servers page.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-servers-page.png)
+![Screenshot that shows the MCP Servers page.](https://code.visualstudio.com/assets/updates/1_102/mcp-servers-page.png)
 
 If you want to build your own MCP server, check our [MCP developer guide](https://code.visualstudio.com/api/extension-guides/ai/mcp) for more details about how to take advantage of the MCP capabilities in VS Code.
 
@@ -201,7 +201,7 @@ If you want to build your own MCP server, check our [MCP developer guide](https:
 
 The latest MCP specification added support for [Elicitations](https://modelcontextprotocol.io/specification/2025-06-18/client/elicitation) as a way for MCP servers to request input from MCP clients. The latest version of VS Code adopts this specification and includes support for elicitations.
 
-<video src="images/1_102/mcp-server-elicit.mp4" autoplay loop controls muted></video>
+<video src="https://code.visualstudio.com/assets/updates/1_102/mcp-server-elicit.mp4" autoplay loop controls muted></video>
 
 #### MCP server discovery and installation
 
@@ -209,17 +209,17 @@ The new **MCP Servers** section in the Extensions view includes welcome content 
 
 Once installed, MCP servers automatically appear in your Extensions view under the **MCP SERVERS - INSTALLED** section, and their tools become available in the Chat view's tools Quick Pick. This makes it easy to verify that your MCP server is working correctly and access its capabilities immediately.
 
-<video src="images/1_102/mcp-servers-discovery-install.mp4" title="Video showing installing an MCP server from the MCP page on the VS Code website." autoplay loop controls muted></video>
+<video src="https://code.visualstudio.com/assets/updates/1_102/mcp-servers-discovery-install.mp4" title="Video showing installing an MCP server from the MCP page on the VS Code website." autoplay loop controls muted></video>
 
 #### MCP server management view
 
 The new **MCP SERVERS - INSTALLED** view in the Extensions view makes it easy to monitor, configure, and control your installed MCP servers.
 
-![Screenshot showing the MCP Servers management view with installed servers.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-servers-installed-view.png)
+![Screenshot showing the MCP Servers management view with installed servers.](https://code.visualstudio.com/assets/updates/1_102/mcp-servers-installed-view.png)
 
 The view lists the installed MCP servers and provides several management actions through the context menu:
 
-![Screenshot showing the context menu actions for an MCP server.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-server-context-menu.png)
+![Screenshot showing the context menu actions for an MCP server.](https://code.visualstudio.com/assets/updates/1_102/mcp-server-context-menu.png)
 
 * **Start Server** / **Stop Server** / **Restart Server**: Control the server's running state
 * **Disconnect Account**: Remove account access from the server
@@ -232,11 +232,11 @@ The view lists the installed MCP servers and provides several management actions
 
 When you select an installed MCP server, VS Code opens the MCP server editor displaying the server's readme details, manifest, and its runtime configuration. This provides an overview of the server's capabilities and current settings, making it easy to understand what the server does and how it's configured.
 
-![Screenshot showing the MCP server editor with runtime configuration.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-server-editor-configuration.png)
+![Screenshot showing the MCP server editor with runtime configuration.](https://code.visualstudio.com/assets/updates/1_102/mcp-server-editor-configuration.png)
 
 The **MCP SERVERS - INSTALLED** view also provides a **Browse MCP Servers...** action that takes you directly to the community website, making server discovery always accessible from within VS Code.
 
-![Screenshot that shows the Browse MCP Servers action in the MCP Servers view.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-servers-browse-action.png)
+![Screenshot that shows the Browse MCP Servers action in the MCP Servers view.](https://code.visualstudio.com/assets/updates/1_102/mcp-servers-browse-action.png)
 
 #### MCP servers as first-class resources
 
@@ -274,13 +274,13 @@ These commands provide quick access to your MCP configuration files, making it e
 You are now able to sign out or disconnect accounts from the MCP gear menu and quick picks.
 
 * MCP view gear menu:
-    ![Screenshot showing the Disconnect Account action shown in MCP view gear menu.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-view-signout.png)
+    ![Screenshot showing the Disconnect Account action shown in MCP view gear menu.](https://code.visualstudio.com/assets/updates/1_102/mcp-view-signout.png)
 
 * MCP editor gear menu:
-    ![Screenshot showing the Disconnect Account action shown in MCP editor gear menu.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-editor-signout.png)
+    ![Screenshot showing the Disconnect Account action shown in MCP editor gear menu.](https://code.visualstudio.com/assets/updates/1_102/mcp-editor-signout.png)
 
 * MCP quick pick:
-    ![Screenshot showing the Disconnect Account action shown in MCP quick pick menu.](https://code.visualstudio.com/assets/updates/1_102//1_102/mcp-qp-signout.png)
+    ![Screenshot showing the Disconnect Account action shown in MCP quick pick menu.](https://code.visualstudio.com/assets/updates/1_102/mcp-qp-signout.png)
 
 The **Disconnect** action is shown when the account is used by either other MCP servers or extensions, while **Sign Out** is shown when the account is only used by the MCP server. The sign out action completely removes the account from VS Code, while disconnect only removes access to the account from the MCP server.
 
@@ -292,7 +292,7 @@ You can now temporarily pause inline suggestions and next edit suggestions (NES)
 
 To snooze suggestions, select the Copilot dashboard in the Status Bar, or run the **Snooze Inline Suggestions** command from the Command Palette and select a duration from the dropdown menu. During the snooze period, no inline suggestions or NES will appear.
 
-![Screenshot showing the Copilot dashboard with the snooze button at the bottom.](https://code.visualstudio.com/assets/updates/1_102//1_102/nes-snooze.png)
+![Screenshot showing the Copilot dashboard with the snooze button at the bottom.](https://code.visualstudio.com/assets/updates/1_102/nes-snooze.png)
 
 You can also assign a custom keybinding to quickly snooze suggestions for a specific duration by passing the desired duration as an argument to the command. For example:
 
@@ -314,7 +314,7 @@ This milestone, we modified the sparkle toggle in the Settings editor, so that i
 
 The toggle is enabled only when there are AI results available. We welcome feedback on when the AI settings search did not find an expected setting, and we plan to enable the setting by default over the next iteration.
 
-<video src="images/1_102/settings-search-toggle-stable.mp4" title="Switching between AI and non-AI results using the AI results toggle in the Settings editor" autoplay loop controls muted></video>
+<video src="https://code.visualstudio.com/assets/updates/1_102/settings-search-toggle-stable.mp4" title="Switching between AI and non-AI results using the AI results toggle in the Settings editor" autoplay loop controls muted></video>
 
 
 ## 0.28 (2025-06-12)

@@ -15,6 +15,11 @@ export interface IToolGrouping {
 	tools: readonly LanguageModelToolInformation[];
 
 	/**
+	 * Whether tool grouping logic is enabled at the current tool threshold.
+	 */
+	isEnabled: boolean;
+
+	/**
 	 * Should be called for each model tool call. Returns a tool result if the
 	 * call was a virtual tool call that was expanded.
 	 */
@@ -52,6 +57,10 @@ export interface IToolGrouping {
 
 export interface IToolGroupingService {
 	_serviceBrand: undefined;
+	/**
+	 * The current tool count threshold for grouping to kick in.
+	 */
+	threshold: number;
 	/**
 	 * Creates a tool grouping for a request, based on its conversation and the
 	 * initial set of tools.

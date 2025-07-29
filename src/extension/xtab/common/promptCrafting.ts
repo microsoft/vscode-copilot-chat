@@ -291,7 +291,7 @@ function generateDocDiff(entry: IXtabHistoryEditEntry): string | null {
 	return docDiff;
 }
 
-function toUniquePath(documentId: DocumentId, workspaceRootPath: string | undefined): string {
+export function toUniquePath(documentId: DocumentId, workspaceRootPath: string | undefined): string {
 	const filePath = documentId.path;
 	// remove prefix from path if defined
 

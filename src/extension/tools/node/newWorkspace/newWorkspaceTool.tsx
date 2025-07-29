@@ -141,9 +141,6 @@ export class NewWorkspaceCreationResult extends PromptElement<NewWorkspaceElemen
 		}
 
 		const useContext7 = this.configurationService.getConfig(ConfigKey.NewWorkspaceUseContext7);
-		const context7ToolInstructions = useContext7
-			? "Use get-library-docs and resolve-library-id to search documentation and identify the correct library for scaffolding the project"
-			: "If applicable, call project setup tool with:\n\t\t- projectType: e.g. 'python-script', 'mcp-server', 'next-js'\n\t\t- language: e.g. 'python', 'typescript'";
 		return <>
 			<TextChunk>
 				The user has opened the workspace folder {this.promptPathRepresentationService.getFilePath(workspaceUri)}<br />
@@ -152,73 +149,81 @@ export class NewWorkspaceCreationResult extends PromptElement<NewWorkspaceElemen
 				- If the user has requested a VS Code extension: Add a note at the top to use {ToolName.VSCodeAPI} tool<br />
 				- If the user has requested an MCP server: Add a link at the top to https://modelcontextprotocol.io/llms-full.txt<br />
 				- Include this comment at the top of the file {`<!-- Use this file to provide workspace-specific custom instructions to Copilot. For more details, visit https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->`}<br />
-				- Include the below markdown content in the file including the comments <br />
+				- Copy the entire markdown content below including all tasks and their comments exactly as shown<br />
+				- If vscode_manageTodoList tool is available, use it to manage this checklist throughout the process<br />
+				- After completing each step, mark it as done and update your progress (use vscode_manageTodoList if available)<br />
 			</TextChunk>
 			<UnsafeCodeBlock code={`
-- [ ] Clarify Project Requirements (If Not Provided)**
-	- If the user hasn't already specified, ask:
-	- What is the goal or type of the project? (e.g. CLI tool, web app, VS Code extension)
-	- What language should be used? (e.g. Python, TypeScript)
-	- Any specific frameworks/technologies? (e.g. Flask, React, Next.js, Vite)
-	- Use this to guide project setup
-	- If already provided, skip this step
+- [ ] Clarify Project Requirements
+	<!-- Ask for project type, language, and frameworks if not specified. Skip if already provided. -->
 
-- [ ] Scaffold the Project**
-	${context7ToolInstructions}
-	- Run the scaffolding command from setup info
-	- Use '.' as the working directory
-	- Fall back to default scaffolding if needed
+- [ ] Scaffold the Project
+	<!--
+	${useContext7 ? 'MANDATORY Context7 Usage: Call mcp_context7_resolve-library-id with your project requirements, then call mcp_context7_get-library-docs to get scaffolding instructions. Review the Context7 documentation carefully and use it to scaffold the project.' : 'Call project setup tool with projectType and language parameters.'}
+	Run scaffolding command to create project files and folders.
+	Use '.' as the working directory.
+	-->
 
-- [ ] Customize the project
-	- Develop a plan to modify the codebase according to the user's requirements. Ignore this step for a "Hello World" project.
-	- Apply the modifications in the plan to the codebase using the right tools and user-provided references below.
+- [ ] Customize the Project
+	<!--
+	Develop a plan to modify codebase according to user requirements.
+	Apply modifications using appropriate tools and user-provided references.
+	Skip this step for "Hello World" projects.
+	-->
 
-- [ ] Install required VS Code extensions using the extension installer tool (if \`requiredExtensions\` is defined)
+- [ ] Install Required Extensions
+	<!-- Use extension installer tool if requiredExtensions is defined in project setup. -->
 
-- [ ] Compile the project
-	- Install any missing dependencies.
-	- Run diagnostics and resolve any issues.
-	- Check for markdown files in the project folder that may contain relevant instructions to help with this step.
+- [ ] Compile the Project
+	<!--
+	Install any missing dependencies.
+	Run diagnostics and resolve any issues.
+	Check for markdown files in project folder for relevant instructions on how to do this.
+	-->
 
-- [ ] Create and run a task based on project structure and metadata using the right tool
-  <!-- 	Create a task based on the package.json, README.md, and project structure and pass that as input to the tool. -->
+- [ ] Create and Run Task
+	<!-- Create task based on package.json, README.md, and project structure. -->
 
-- [ ] Launch the project (prompt user for debug mode, launch only if confirmed)
+- [ ] Launch the Project
+	<!-- Prompt user for debug mode, launch only if confirmed. -->
 
-- [ ] Ensure README.md exists and is up to date
-
-## Execution Guidelines
-- After completing each step, check it off and add a one-line summary
-- Avoid verbose explanations or printing full command outputs
-- If a step is skipped, state that briefly (e.g. "No extensions needed")
-- Use '.' as the working directory unless user specifies otherwise
-- Do not explain project structure unless asked
-- Do not create folders unless user instructs
-- Avoid adding media or external links unless explicitly requested
-- Use placeholders only with a note that they should be replaced
-- Use VS Code API tool only for VS Code extension projects
-- Completion = project scaffolded, copilot-instructions + README exist, task runnable, debug launch offered
+- [ ] Ensure Documentation is Complete
+	<!-- Verify README.md exists and is up to date. -->
 
 <!--
-# Rules
+## Execution Guidelines
+PROGRESS TRACKING:
+- If vscode_manageTodoList tool is available, use it to track progress through this checklist.
+- After completing each step, mark it complete and add a summary.
+- Read current todo list status before starting each new step.
+
+COMMUNICATION RULES:
+- Avoid verbose explanations or printing full command outputs.
+- If a step is skipped, state that briefly (e.g. "No extensions needed").
+- Do not explain project structure unless asked.
+- Keep explanations concise and focused.
+
+DEVELOPMENT RULES:
 - Always start executing the plan by calling the tool to get the project template.
-- Before executing, provide the user with a high-level plan outlining the steps and the command that you will use to create the project. Do not list unnecessary details—keep it concise and actionable.
-- Help the user execute this plan by calling the appropriate tools.
+- Use '.' as the working directory unless user specifies otherwise.
+- Do not create folders unless user instructs.
+- Avoid adding media or external links unless explicitly requested.
+- Use placeholders only with a note that they should be replaced.
+- Use VS Code API tool only for VS Code extension projects.
 - Once the project is created, it is already opened in Visual Studio Code—do not suggest commands to open this project in Visual Studio again.
 - Do not print and explain the project structure to the user unless explicitly requested.
 - If the project setup information has additional rules, follow them strictly.
-- Follow the rules below strictly.
 
-## Folder Creation Rules
+FOLDER CREATION RULES:
 - Always use the current directory as the project root.
 - If you are running any terminal commands, use the '.' argument to ensure that the current working directory is used ALWAYS.
 - Do not create a new folder unless the user explicitly requests it besides a .vscode folder for a tasks.json file.
 - If any of the scaffolding commands mention that the folder name is not correct, let the user know to create a new folder with the correct name and then reopen it again in vscode. Do not attempt to move it yourself. And do not proceed with next steps.
 
-## Extension Installation Rules
-- If the project setup lists \`requiredExtensions\`, use extension installer tool to check and install ALL the listed \`requiredExtensions\` before proceeding.
+EXTENSION INSTALLATION RULES:
+- If the project setup lists requiredExtensions, use extension installer tool to check and install ALL the listed requiredExtensions before proceeding.
 
-## Project Content Rules
+PROJECT CONTENT RULES:
 - If the user has not specified project details, assume they want a "Hello World" project as a starting point.
 - Avoid adding links of any type (URLs, files, folders, etc.) or integrations that are not explicitly required.
 - Avoid generating images, videos, or any other media files unless explicitly requested.
@@ -227,22 +232,35 @@ export class NewWorkspaceCreationResult extends PromptElement<NewWorkspaceElemen
 - If a feature is assumed but not confirmed, prompt the user for clarification before including it.
 - If you are working on a VS Code extension, use the VS Code API tool with a query to find relevant VS Code API references and samples related to that query.
 
-## Task Completion Rules
+TASK COMPLETION RULES:
 - Your task is complete when:
   - The project is successfully created without errors.
   - The user has clear instructions on how to launch their code in debug mode within Visual Studio Code.
-  - A \`copilot-instructions.md\` exists in the project root under the \`.github\` directory.
+  - A copilot-instructions.md exists in the project root under the .github directory.
   - A README.md file in the root of the project is up to date.
-  - A \`tasks.json\` file exists in the project root under the \`.vscode\` directory.
--->
+  - A tasks.json file exists in the project root under the .vscode directory.
+
+SUCCESS CRITERIA:
+- Completion = project scaffolded, copilot-instructions + README exist, task runnable, debug launch offered.
 
 Before starting a new task in the above plan, update progress in the plan.
+-->
+- Work through each checklist item systematically.
+- Keep communication concise and focused.
+- Follow development best practices.
 `} languageId='markdown'></UnsafeCodeBlock>
 			<TextChunk>
 				<br />
 				Step 2: Execute the Plan<br />
-				After creating the .github/copilot-instructions.md file with the above content, continue with executing each step of the plan systematically.<br />
-				Update the .github/copilot-instructions.md with progress as you exectue the plan<br />
+				After creating the .github/copilot-instructions.md file, systematically work through each item.<br />
+				If vscode_manageTodoList tool is available, use it to read status, mark items complete, and track progress.<br />
+				Update the .github/copilot-instructions.md file directly as you complete each step.<br />
+				<br />
+				Step 3: Finalize Instructions<br />
+				Once all tasks are complete, update the .github/copilot-instructions.md file:<br />
+				- Remove all HTML comments from the completed tasks<br />
+				- Replace the comments with a brief description of the project structure and key files<br />
+				- Add any project-specific instructions or conventions that future developers should know<br />
 				<br />
 				If the user asks to "continue," refer to the previous steps and proceed accordingly.
 			</TextChunk>

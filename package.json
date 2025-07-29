@@ -2625,7 +2625,7 @@
 						"tags": [
 							"experimental"
 						],
-						"description": "%github.copilot.config.newWorkspace.useContext7%"
+						"markdownDescription": "%github.copilot.config.newWorkspace.useContext7%"
 					},
 					"github.copilot.chat.agent.currentEditorContext.enabled": {
 						"type": "boolean",

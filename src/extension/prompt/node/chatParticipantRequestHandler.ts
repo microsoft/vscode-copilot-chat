@@ -8,6 +8,7 @@ import type { ChatRequest, ChatRequestTurn2, ChatResponseStream, ChatResult, Loc
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { getChatParticipantIdFromName, getChatParticipantNameFromId, workspaceAgentName } from '../../../platform/chat/common/chatAgents';
 import { CanceledMessage, ChatLocation } from '../../../platform/chat/common/commonTypes';
+import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
@@ -72,6 +73,7 @@ export class ChatParticipantRequestHandler {
 		private readonly chatAgentArgs: IChatAgentArgs,
 		private readonly onPaused: Event<boolean>,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@ICommandService private readonly _commandService: ICommandService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@IIntentService private readonly _intentService: IIntentService,
@@ -252,6 +254,8 @@ export class ChatParticipantRequestHandler {
 				}
 
 				result = await chatResult;
+				const endpoint = await this._endpointProvider.getChatEndpoint(this.request);
+				result.details = `${endpoint.name} • ${endpoint.multiplier ?? 0}x`;
 			}
 
 			this._conversationStore.addConversation(this.turn.id, this.conversation);
