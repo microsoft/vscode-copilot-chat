@@ -233,8 +233,9 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 					: undefined
 			);
 
-			const displayLocation: InlineCompletionDisplayLocation | undefined = result.displayLocation ? {
-				range: toExternalRange(result.displayLocation.range),
+			const displayRange = result.displayLocation ? doc.fromRange(document, toExternalRange(result.displayLocation.range)) : undefined;
+			const displayLocation: InlineCompletionDisplayLocation | undefined = result.displayLocation && displayRange ? {
+				range: displayRange,
 				label: result.displayLocation.label
 			} : undefined;
 
