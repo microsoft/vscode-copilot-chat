@@ -10,7 +10,7 @@ import { BudgetExceededError } from '@vscode/prompt-tsx/dist/base/materialized';
 import type * as vscode from 'vscode';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { modelCanUseReplaceStringExclusively, modelSupportsApplyPatchAsync, modelSupportsReplaceString } from '../../../platform/endpoint/common/chatModelCapabilities';
+import { modelCanUseReplaceStringExclusively, modelSupportsApplyPatch, modelSupportsReplaceString } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -62,7 +62,7 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 		const allowTools: Record<string, boolean> = {};
 		allowTools[ToolName.EditFile] = true;
 		allowTools[ToolName.ReplaceString] = modelSupportsReplaceString(model) || !!(model.family.includes('gemini') && configurationService.getExperimentBasedConfig(ConfigKey.Internal.GeminiReplaceString, experimentationService));
-		allowTools[ToolName.ApplyPatch] = await modelSupportsApplyPatchAsync(model) && !!toolsService.getTool(ToolName.ApplyPatch);
+		allowTools[ToolName.ApplyPatch] = await modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
 
 		if (modelCanUseReplaceStringExclusively(model)) {
 			allowTools[ToolName.ReplaceString] = true;

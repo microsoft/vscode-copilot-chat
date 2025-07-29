@@ -35,15 +35,18 @@ export function modelPrefersInstructionsAfterHistory(modelFamily: string) {
 /**
  * Model supports apply_patch as an edit tool.
  */
-export function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family === 'gpt-4.1' || model.family === 'o4-mini';
-}
-export async function modelSupportsApplyPatchAsync(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	if (modelSupportsApplyPatch(model)) {
+export async function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
+	if (model.family === 'gpt-4.1' || model.family === 'o4-mini') {
 		return true;
 	}
-
 	return await getSha256Hash(model.family) === 'a99dd17dfee04155d863268596b7f6dd36d0a6531cd326348dbe7416142a21a3';
+}
+
+/**
+ * Model prefers JSON notebook representation.
+ */
+export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat | IChatEndpoint): boolean {
+	return model.family === 'gpt-4.1' || model.family === 'o4-mini';
 }
 
 /**
