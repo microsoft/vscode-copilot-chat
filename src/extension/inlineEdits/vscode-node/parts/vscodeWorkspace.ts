@@ -450,7 +450,7 @@ class VSCodeObservableTextDocument extends AbstractVSCodeObservableDocument impl
 		return range;
 	}
 
-  fromRange(_textDocument: TextDocument, range: Range): Range | undefined {
+	fromRange(_textDocument: TextDocument, range: Range): Range | undefined {
 		return range;
 	}
 }
@@ -705,4 +705,3 @@ export function editFromTextDocumentContentChangeEvents(events: readonly TextDoc
 	const replacementsInApplicationOrder = events.map(e => StringReplacement.replace(OffsetRange.ofStartAndLength(e.rangeOffset, e.rangeLength), e.text));
 	return StringEdit.composeSequentialReplacements(replacementsInApplicationOrder);
 }
-
