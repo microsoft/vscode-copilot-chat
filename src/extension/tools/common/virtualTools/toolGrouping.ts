@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { LanguageModelToolInformation } from 'vscode';
-import { HARD_TOOL_LIMIT } from '../../../../platform/configuration/common/configurationService';
+import { ConfigKey, HARD_TOOL_LIMIT, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { equals as arraysEqual } from '../../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
@@ -15,6 +16,19 @@ import { VIRTUAL_TOOL_NAME_PREFIX, VirtualTool } from './virtualTool';
 import { VirtualToolGrouper } from './virtualToolGrouper';
 import * as Constant from './virtualToolsConstants';
 import { IToolCategorization, IToolGrouping } from './virtualToolTypes';
+
+export function computeToolGroupingMinThreshold(experimentationService: IExperimentationService, configurationService: IConfigurationService): number {
+	let threshold = HARD_TOOL_LIMIT;
+
+	const override = experimentationService.getTreatmentVariable<number>('vscode', 'copilotchat.virtualToolThreshold');
+	if (override) {
+		threshold = override;
+	} else if (configurationService.getExperimentBasedConfig(ConfigKey.VirtualTools, experimentationService)) {
+		threshold = Constant.START_GROUPING_AFTER_TOOL_COUNT;
+	}
+
+	return threshold;
+}
 
 export class ToolGrouping implements IToolGrouping {
 
@@ -36,10 +50,16 @@ export class ToolGrouping implements IToolGrouping {
 		}
 	}
 
+	public get isEnabled() {
+		return this._tools.length >= computeToolGroupingMinThreshold(this._experimentationService, this._configurationService);
+	}
+
 	constructor(
 		private _tools: readonly LanguageModelToolInformation[],
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService
 	) {
 		this._root.isExpanded = true;
 	}

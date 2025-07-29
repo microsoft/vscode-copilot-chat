@@ -204,7 +204,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 
 		this._workspaceDocumentEditHistory = this._register(new WorkspaceDocumentEditHistory(this._workspace, git, 100));
 
-		this._tracer = createTracer(['NES', 'DiagnosticsInlineCompletionProvider'], (s) => logService.logger.trace(s));
+		this._tracer = createTracer(['NES', 'DiagnosticsInlineCompletionProvider'], (s) => logService.trace(s));
 
 		const diagnosticsExplorationEnabled = configurationService.getConfigObservable(ConfigKey.Internal.InlineEditsDiagnosticsExplorationEnabled);
 
@@ -313,7 +313,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 				.getDiagnostics(workspaceDocument.textDocument.uri) :
 			workspaceDocument.notebook.getCells().flatMap(cell => this._languageDiagnosticsService
 				.getDiagnostics(cell.document.uri)
-				.flatMap(diagnostic => workspaceDocument.projectDiagnostics(cell, [diagnostic])));
+				.flatMap(diagnostic => workspaceDocument.projectDiagnostics(cell.document, [diagnostic])));
 		const availableDiagnostics = diagnostics
 			.map(diagnostic => Diagnostic.fromVSCodeDiagnostic(diagnostic))
 			.filter(diagnostic => diagnostic.severity !== DiagnosticSeverity.Information)

@@ -23,7 +23,7 @@ export class FixIntent implements IIntent {
 
 	static readonly ID = Intent.Fix;
 	readonly id = Intent.Fix;
-	readonly locations = [ChatLocation.Editor, ChatLocation.Panel];
+	readonly locations = [ChatLocation.Editor, ChatLocation.Panel, ChatLocation.Notebook];
 	readonly description = l10n.t('Propose a fix for the problems in the selected code');
 
 	readonly commandInfo: IIntentSlashCommandInfo = { toolEquivalent: ContributedToolName.GetErrors };

@@ -50,6 +50,7 @@ export const enum ToolName {
 	CoreCreateAndRunTask = 'create_and_run_task',
 	CoreRunTask = 'run_task',
 	CoreGetTaskOutput = 'get_task_output',
+	CoreRunTest = 'runTests',
 }
 
 // When updating this, also update contributedToolNameToToolNames

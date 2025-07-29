@@ -132,7 +132,7 @@ export abstract class BaseToolsService extends Disposable implements IToolsServi
 				if (!this.didWarnAboutValidationError?.has(tool.name)) {
 					this.didWarnAboutValidationError ??= new Set();
 					this.didWarnAboutValidationError.add(tool.name);
-					this.logService.logger.warn(`Error compiling input schema for tool ${tool.name}: ${e}`);
+					this.logService.warn(`Error compiling input schema for tool ${tool.name}: ${e}`);
 				}
 
 				return { inputObj };

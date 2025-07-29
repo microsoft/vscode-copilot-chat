@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { OpenAI } from '@vscode/prompt-tsx';
 import { TokenizerType } from '../../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
@@ -20,6 +21,7 @@ import { IChatModelInformation } from '../../common/endpointProvider';
 import { ChatEndpoint } from '../../node/chatEndpoint';
 
 export class AzureTestEndpoint extends ChatEndpoint {
+	private readonly isThinkingModel: boolean;
 	constructor(
 		private readonly _azureModel: string,
 		@IDomainService domainService: IDomainService,
@@ -31,7 +33,7 @@ export class AzureTestEndpoint extends ChatEndpoint {
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService private instantiationService: IInstantiationService,
-		@IThinkingDataService thinkingDataService: IThinkingDataService
+		@IThinkingDataService private thinkingDataService: IThinkingDataService
 	) {
 		const modelInfo: IChatModelInformation = {
 			id: _azureModel,
@@ -46,9 +48,9 @@ export class AzureTestEndpoint extends ChatEndpoint {
 				tokenizer: TokenizerType.O200K,
 				supports: { streaming: true, tool_calls: true, vision: false, prediction: false },
 				limits: {
-					max_prompt_tokens: 123000,
-					max_output_tokens: 4096,
-				}
+					max_prompt_tokens: 200000,
+					max_output_tokens: 56000,
+				},
 			}
 		};
 		super(
@@ -61,14 +63,15 @@ export class AzureTestEndpoint extends ChatEndpoint {
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
-			instantiationService,
-			thinkingDataService
+			instantiationService
 		);
+		this.isThinkingModel = false; // Set to true if testing a thinking model
 	}
 
 	override get urlOrRequestMetadata(): string {
 		switch (this._azureModel) {
 			case CHAT_MODEL.EXPERIMENTAL:
+				// Set model params and thinking in constructor
 				return '<replace with your experimental endpoint URL>';
 			default:
 				throw new Error(`Unknown azure model passed ${this._azureModel} passed to test endpoint`);
@@ -108,6 +111,30 @@ export class AzureTestEndpoint extends ChatEndpoint {
 		if (body) {
 			delete body.snippy;
 			delete body.intent;
+
+			if (body.messages) {
+				const newMessages = body.messages.map((message: OpenAI.ChatMessage) => {
+					if (message.role === OpenAI.ChatRole.Assistant && message.tool_calls && message.tool_calls.length > 0) {
+						const id = message.tool_calls[0].id;
+						const thinking = this.thinkingDataService.get(id);
+						if (thinking?.id) {
+							return {
+								...message,
+								cot_id: thinking.id,
+								cot_summary: thinking.text,
+							};
+						}
+					}
+					return message;
+				});
+				body.messages = newMessages;
+			}
+
+			if (body && this.isThinkingModel) {
+				delete body.temperature;
+				body['max_completion_tokens'] = body.max_tokens;
+				delete body.max_tokens;
+			}
 		}
 	}
 

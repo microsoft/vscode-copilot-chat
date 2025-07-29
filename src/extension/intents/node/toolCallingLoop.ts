@@ -5,7 +5,7 @@
 
 import * as l10n from '@vscode/l10n';
 import { Raw } from '@vscode/prompt-tsx';
-import type { CancellationToken, ChatRequest, ChatResponseProgressPart, ChatResponseReferencePart, ChatResponseStream, ChatResult, LanguageModelToolInformation, LanguageModelToolResult2, Progress } from 'vscode';
+import type { CancellationToken, ChatRequest, ChatResponseProgressPart, ChatResponseReferencePart, ChatResponseStream, ChatResult, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { FetchStreamSource, IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
@@ -14,7 +14,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { FinishedCallback, OpenAiFunctionDef, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { ThinkingData } from '../../../platform/thinking/common/thinking';
+import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
@@ -23,7 +23,7 @@ import { Mutable } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { MarkdownString } from '../../../vscodeTypes';
+import { ChatResponsePullRequestPart, LanguageModelDataPart2, LanguageModelToolResult2, MarkdownString, ToolResultAudience } from '../../../vscodeTypes';
 import { InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
 import { Conversation, IResultMetadata, ResponseStreamParticipant, TurnStatus } from '../../prompt/common/conversation';
@@ -111,6 +111,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IAuthenticationChatUpgradeService private readonly _authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
+		@IThinkingDataService private readonly _thinkingDataService: IThinkingDataService,
 	) {
 		super();
 	}
@@ -199,9 +200,19 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}
 
 		this.emitReadFileTrajectories().catch(err => {
-			this._logService.logger.error('Error emitting read file trajectories', err);
+			this._logService.error('Error emitting read file trajectories', err);
 		});
 
+		for (const result of Object.keys(this.toolCallResults)) {
+			if (this.toolCallResults[result] instanceof LanguageModelToolResult2) {
+				for (const part of this.toolCallResults[result].content) {
+					if (part instanceof LanguageModelDataPart2 && part.mimeType === 'application/pull-request+json' && part.audience?.includes(ToolResultAudience.User)) {
+						const data: { uri: string; title: string; description: string; author: string; linkTag: string } = JSON.parse(part.data.toString());
+						outputStream?.push(new ChatResponsePullRequestPart(URI.parse(data.uri), data.title, data.description, data.author, data.linkTag));
+					}
+				}
+			}
+		}
 		return { ...lastResult, toolCallRounds: this.toolCallRounds, toolCallResults: this.toolCallResults };
 	}
 
@@ -338,7 +349,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const promptTokenLength = await (await this._endpointProvider.getChatEndpoint(this.options.request)).acquireTokenizer().countMessagesTokens(buildPromptResult.messages);
 		await this.throwIfCancelled(token);
 		this._onDidBuildPrompt.fire({ result: buildPromptResult, tools: availableTools, promptTokenLength });
-		this._logService.logger.trace('Built prompt');
+		this._logService.trace('Built prompt');
 
 		// todo@connor4312: can interaction outcome logic be implemented in a more generic way?
 		const interactionOutcomeComputer = new InteractionOutcomeComputer(this.options.interactionContext);
@@ -360,7 +371,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			}
 		}();
 
-		this._logService.logger.trace('Sending prompt to model');
+		this._logService.trace('Sending prompt to model');
 
 		const streamParticipants = outputStream ? [outputStream] : [];
 		let fetchStreamSource: FetchStreamSource | undefined;
@@ -412,7 +423,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			} satisfies OpenAiFunctionDef;
 		}) : undefined;
 		const toolCalls: IToolCall[] = [];
-		let thinking: ThinkingData | undefined;
 		const fixedMessages = this.applyMessagePostProcessing(buildPromptResult.messages);
 		const fetchResult = await this.fetch(
 			fixedMessages,
@@ -424,7 +434,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						id: this.createInternalToolCallId(call.id),
 						arguments: call.arguments === '' ? '{}' : call.arguments
 					})));
-					thinking = delta.thinking;
 				}
 
 				return stopEarly ? text.length : undefined;
@@ -469,7 +478,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					toolCalls,
 					toolInputRetry,
 					undefined,
-					thinking
 				),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
@@ -483,7 +491,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
 			lastRequestMessages: buildPromptResult.messages,
 			availableTools,
-			round: new ToolCallRound('', toolCalls, toolInputRetry, undefined, thinking)
+			round: new ToolCallRound('', toolCalls, toolInputRetry, undefined)
 		};
 	}
 
@@ -556,7 +564,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 		if (filterReasons.length) {
 			const filterReasonsStr = filterReasons.join(', ');
-			this._logService.logger.warn('Filtered invalid tool messages: ' + filterReasonsStr);
+			this._logService.warn('Filtered invalid tool messages: ' + filterReasonsStr);
 			/* __GDPR__
 					"toolCalling.invalidToolMessages" : {
 						"owner": "roblourens",
@@ -628,7 +636,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}
 
 		if (originalCall) {
-			this._requestLogger.logToolCall(originalCall?.id || generateUuid(), originalCall?.name, originalCall?.arguments, metadata.result, lastTurn?.thinking);
+			const thinking = this._thinkingDataService.get(originalCall.id);
+			this._requestLogger.logToolCall(originalCall.id || generateUuid(), originalCall.name, originalCall.arguments, metadata.result, thinking);
 		}
 	}
 }

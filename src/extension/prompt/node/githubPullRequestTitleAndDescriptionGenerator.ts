@@ -31,7 +31,7 @@ export class GitHubPullRequestTitleAndDescriptionGenerator implements TitleAndDe
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@INotificationService private readonly notificationService: INotificationService,
 	) {
-		this.logService.logger.info('[githubTitleAndDescriptionProvider] Initializing GitHub PR title and description provider provider.');
+		this.logService.info('[githubTitleAndDescriptionProvider] Initializing GitHub PR title and description provider provider.');
 	}
 
 	dispose() {

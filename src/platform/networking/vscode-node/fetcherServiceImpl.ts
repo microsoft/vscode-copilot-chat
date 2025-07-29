@@ -31,26 +31,26 @@ export class FetcherService implements IFetcherService {
 		if (useElectronFetcher) {
 			const electronFetcher = ElectronFetcher.create(envService);
 			if (electronFetcher) {
-				this._logService.logger.info(`Using the Electron fetcher.`);
+				this._logService.info(`Using the Electron fetcher.`);
 				return electronFetcher;
 			} else {
-				this._logService.logger.info(`Can't use the Electron fetcher in this environment.`);
+				this._logService.info(`Can't use the Electron fetcher in this environment.`);
 			}
 		}
 
 		const useNodeFetcher = configurationService.getConfig(ConfigKey.Shared.DebugUseNodeFetcher);
 		if (useNodeFetcher) {
-			this._logService.logger.info(`Using the Node fetcher.`);
+			this._logService.info(`Using the Node fetcher.`);
 			return new NodeFetcher(envService);
 		}
 
 		const useNodeFetchFetcher = configurationService.getConfig(ConfigKey.Shared.DebugUseNodeFetchFetcher);
 		if (useNodeFetchFetcher) {
-			this._logService.logger.info(`Using the Node fetch fetcher.`);
+			this._logService.info(`Using the Node fetch fetcher.`);
 			return new NodeFetchFetcher(envService);
 		}
 
-		this._logService.logger.info(`Using the Node fetcher.`);
+		this._logService.info(`Using the Node fetcher.`);
 		return new NodeFetcher(envService);
 	}
 
