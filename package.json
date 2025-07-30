@@ -2669,13 +2669,15 @@
 						],
 						"description": "%github.copilot.config.summarizeAgentConversationHistory.enabled%"
 					},
-					"github.copilot.chat.virtualTools.enabled": {
-						"type": "boolean",
-						"default": false,
+					"github.copilot.chat.virtualTools.threshold": {
+						"type": "number",
+						"minimum": 0,
+						"maximum": 128,
+						"default": 128,
 						"tags": [
 							"experimental"
 						],
-						"description": "%github.copilot.config.virtualTools.enabled%"
+						"markdownDescription": "%github.copilot.config.virtualTools.threshold%"
 					},
 					"github.copilot.chat.azureModels": {
 						"type": "object",

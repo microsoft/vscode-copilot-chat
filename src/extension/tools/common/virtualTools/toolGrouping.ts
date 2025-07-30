@@ -10,6 +10,7 @@ import { ITelemetryService } from '../../../../platform/telemetry/common/telemet
 import { equals as arraysEqual } from '../../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Iterable } from '../../../../util/vs/base/common/iterator';
+import { IObservable } from '../../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../../vscodeTypes';
 import { VIRTUAL_TOOL_NAME_PREFIX, VirtualTool } from './virtualTool';
@@ -17,17 +18,11 @@ import { VirtualToolGrouper } from './virtualToolGrouper';
 import * as Constant from './virtualToolsConstants';
 import { IToolCategorization, IToolGrouping } from './virtualToolTypes';
 
-export function computeToolGroupingMinThreshold(experimentationService: IExperimentationService, configurationService: IConfigurationService): number {
-	let threshold = HARD_TOOL_LIMIT;
-
-	const override = experimentationService.getTreatmentVariable<number>('vscode', 'copilotchat.virtualToolThreshold');
-	if (override) {
-		threshold = override;
-	} else if (configurationService.getExperimentBasedConfig(ConfigKey.VirtualTools, experimentationService)) {
-		threshold = Constant.START_GROUPING_AFTER_TOOL_COUNT;
-	}
-
-	return threshold;
+export function computeToolGroupingMinThreshold(experimentationService: IExperimentationService, configurationService: IConfigurationService): IObservable<number> {
+	return configurationService.getExperimentBasedConfigObservable(ConfigKey.VirtualToolThreshold, experimentationService).map(configured => {
+		const value = configured ?? HARD_TOOL_LIMIT;
+		return value <= 0 ? Infinity : value;
+	});
 }
 
 export class ToolGrouping implements IToolGrouping {
@@ -51,7 +46,7 @@ export class ToolGrouping implements IToolGrouping {
 	}
 
 	public get isEnabled() {
-		return this._tools.length >= computeToolGroupingMinThreshold(this._experimentationService, this._configurationService);
+		return this._tools.length >= computeToolGroupingMinThreshold(this._experimentationService, this._configurationService).get();
 	}
 
 	constructor(
