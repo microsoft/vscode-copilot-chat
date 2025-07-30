@@ -550,10 +550,6 @@
 						"projectType": {
 							"type": "string",
 							"description": "The type of project to create. Supported values are: 'python-script', 'python-project', 'mcp-server', 'model-context-protocol-server', 'vscode-extension', 'next-js', 'vite' and 'other'"
-						},
-						"language": {
-							"type": "string",
-							"description": "The programming language for the project. Supported: 'javascript', 'typescript', 'python' and 'other'."
 						}
 					},
 					"required": [
