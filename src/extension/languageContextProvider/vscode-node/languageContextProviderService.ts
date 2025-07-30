@@ -7,6 +7,7 @@ import { type CancellationToken, languages, type TextDocument, type Disposable a
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
 import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ContextItem, ContextKind, SnippetContext, TraitContext } from '../../../platform/languageServer/common/languageContextService';
+import { filterMap } from '../../../util/common/arrays';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -99,7 +100,15 @@ export class LanguageContextProviderService extends Disposable implements ILangu
 	}
 
 	public getContextItemsOnTimeout(doc: TextDocument, request: Copilot.ResolveRequest): ContextItem[] {
-		return [];
+		const providers = this.getContextProviders(doc);
+
+		const unprocessedResults = filterMap(providers, p => p.resolver.resolveOnTimeout?.(request));
+
+		const copilotCtxItems = unprocessedResults.flat();
+
+		const ctxItems = copilotCtxItems.map(v => LanguageContextProviderService.convertCopilotContextItem(v));
+
+		return ctxItems;
 	}
 
 }
