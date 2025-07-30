@@ -131,11 +131,13 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const query = isContinuation ?
 			'Please continue' :
 			this.turn.request.message;
+		// exclude turns from the history that errored due to prompt filtration
+		const history = this.options.conversation.turns.slice(0, -1).filter(turn => turn.responseStatus !== TurnStatus.Filtered);
 
 		return {
 			requestId: this.turn.id,
 			query,
-			history: this.options.conversation.turns.slice(0, -1),
+			history,
 			toolCallResults: this.toolCallResults,
 			toolCallRounds: this.toolCallRounds,
 			editedFileEvents: this.options.request.editedFileEvents,
