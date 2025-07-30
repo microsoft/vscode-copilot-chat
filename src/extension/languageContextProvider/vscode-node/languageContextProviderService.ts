@@ -67,7 +67,7 @@ export class LanguageContextProviderService extends Disposable implements ILangu
 				const ctx = item.context as Copilot.CodeSnippet;
 				return {
 					kind: ContextKind.Snippet,
-					priority: ctx.importance ? ctx.importance : 0,
+					priority: this.convertImportanceToPriority(ctx.importance),
 					uri: URI.parse(ctx.uri),
 					value: ctx.value
 				} satisfies SnippetContext;
@@ -75,7 +75,7 @@ export class LanguageContextProviderService extends Disposable implements ILangu
 				const ctx = item.context as Copilot.Trait;
 				return {
 					kind: ContextKind.Trait,
-					priority: ctx.importance ? ctx.importance : 0,
+					priority: this.convertImportanceToPriority(ctx.importance),
 					name: ctx.name,
 					value: ctx.value,
 				} satisfies TraitContext;
@@ -83,6 +83,17 @@ export class LanguageContextProviderService extends Disposable implements ILangu
 		});
 
 		return contextItems;
+	}
+
+	// importance is coined by the copilot extension and must be an integer in [0, 100], while priority is by the chat extension and spans [0, 1]
+	private convertImportanceToPriority(importance: number | undefined): number {
+		if (importance === undefined || importance < 0) {
+			return 0;
+		}
+		if (importance > 100) {
+			return 1;
+		}
+		return importance / 100;
 	}
 
 	public getContextItemsOnTimeout(doc: TextDocument, request: Copilot.ResolveRequest): ContextItem[] {
