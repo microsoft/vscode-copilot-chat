@@ -131,15 +131,15 @@ export async function fetchAndStreamChat(
 		return { type: FetchResponseKind.Canceled, reason: 'before fetch request' };
 	}
 
-	logService.logger.debug(`modelMaxPromptTokens ${chatEndpointInfo.modelMaxPromptTokens}`);
-	logService.logger.debug(`modelMaxResponseTokens ${request.max_tokens ?? 2048}`);
-	logService.logger.debug(`chat model ${params.model}`);
+	logService.debug(`modelMaxPromptTokens ${chatEndpointInfo.modelMaxPromptTokens}`);
+	logService.debug(`modelMaxResponseTokens ${request.max_tokens ?? 2048}`);
+	logService.debug(`chat model ${params.model}`);
 
 	const secretKey = params.secretKey ?? (await authenticationService.getCopilotToken()).token;
 	if (!secretKey) {
 		// If no key is set we error
 		const urlOrRequestMetadata = stringifyUrlOrRequestMetadata(chatEndpointInfo.urlOrRequestMetadata);
-		logService.logger.error(`Failed to send request to ${urlOrRequestMetadata} due to missing key`);
+		logService.error(`Failed to send request to ${urlOrRequestMetadata} due to missing key`);
 		sendCommunicationErrorTelemetry(telemetryService, `Failed to send request to ${urlOrRequestMetadata} due to missing key`);
 		return {
 			type: FetchResponseKind.Failed,
@@ -173,7 +173,7 @@ export async function fetchAndStreamChat(
 			// and can cancel/forget about the request itself.
 			(body as ClientHttp2Stream).destroy();
 		} catch (e) {
-			logService.logger.error(e, `Error destroying stream`);
+			logService.error(e, `Error destroying stream`);
 			telemetryService.sendGHTelemetryException(e, 'Error destroying stream');
 		}
 		return { type: FetchResponseKind.Canceled, reason: 'after fetch request' };
@@ -185,7 +185,7 @@ export async function fetchAndStreamChat(
 
 	if (response.status !== 200) {
 		const telemetryData = createTelemetryData(chatEndpointInfo, params.location, params.ourRequestId);
-		logService.logger.info('Request ID for failed request: ' + params.ourRequestId);
+		logService.info('Request ID for failed request: ' + params.ourRequestId);
 		return handleError(logService, telemetryService, authenticationService, telemetryData, response, params.ourRequestId);
 	}
 
@@ -408,7 +408,7 @@ async function handleError(
 		}
 
 		if (response.status === 466) {
-			logService.logger.info(text);
+			logService.info(text);
 			return {
 				type: FetchResponseKind.Failed,
 				modelRequestId: modelRequestIdObj,
@@ -418,7 +418,7 @@ async function handleError(
 		}
 
 		if (response.status === 499) {
-			logService.logger.info('Cancelled by server');
+			logService.info('Cancelled by server');
 			return {
 				type: FetchResponseKind.Failed,
 				modelRequestId: modelRequestIdObj,
@@ -445,7 +445,7 @@ async function handleError(
 
 		const reasonNoText = `Server error: ${response.status}`;
 		const reason = `${reasonNoText} ${text}`;
-		logService.logger.error(reason);
+		logService.error(reason);
 		// HTTP 5xx Server Error
 		return {
 			type: FetchResponseKind.Failed,
@@ -455,7 +455,7 @@ async function handleError(
 		};
 	}
 
-	logService.logger.error(`Request Failed: ${response.status} ${text}`);
+	logService.error(`Request Failed: ${response.status} ${text}`);
 
 	sendCommunicationErrorTelemetry(telemetryService, 'Unhandled status from server: ' + response.status, text);
 
@@ -535,6 +535,10 @@ async function fetchWithInstrumentation(
 		additionalHeaders,
 		cancel
 	).then(response => {
+		const apim = response.headers.get('apim-request-id');
+		if (apim) {
+			logService.debug(`APIM request id: ${apim}`);
+		}
 		// This ID is hopefully the one the same as ourRequestId, but it is not guaranteed.
 		// If they are different then we will override the original one we set in telemetryData above.
 		const modelRequestId = getRequestId(response, undefined);
@@ -544,9 +548,9 @@ async function fetchWithInstrumentation(
 		const totalTimeMs = Date.now() - requestStart;
 		telemetryData.measurements.totalTimeMs = totalTimeMs;
 
-		logService.logger.debug(`request.response: [${stringifyUrlOrRequestMetadata(chatEndpoint.urlOrRequestMetadata)}], took ${totalTimeMs} ms`);
+		logService.debug(`request.response: [${stringifyUrlOrRequestMetadata(chatEndpoint.urlOrRequestMetadata)}], took ${totalTimeMs} ms`);
 
-		logService.logger.debug(`messages: ${JSON.stringify(request.messages)}`);
+		logService.debug(`messages: ${JSON.stringify(request.messages)}`);
 
 		telemetryService.sendGHTelemetryEvent('request.response', telemetryData.properties, telemetryData.measurements);
 
@@ -569,7 +573,7 @@ async function fetchWithInstrumentation(
 			const totalTimeMs = Date.now() - requestStart;
 			telemetryData.measurements.totalTimeMs = totalTimeMs;
 
-			logService.logger.debug(`request.response: [${chatEndpoint.urlOrRequestMetadata}] took ${totalTimeMs} ms`);
+			logService.debug(`request.response: [${chatEndpoint.urlOrRequestMetadata}] took ${totalTimeMs} ms`);
 
 			telemetryService.sendGHTelemetryEvent('request.error', telemetryData.properties, telemetryData.measurements);
 

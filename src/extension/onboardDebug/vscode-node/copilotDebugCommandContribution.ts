@@ -109,7 +109,7 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 		});
 
 		const socket = connect(pipePath, () => {
-			this.logService.logger.info(`Got a debug connection on ${pipePath}`);
+			this.logService.info(`Got a debug connection on ${pipePath}`);
 
 			const rpc = new SimpleRPC(socket);
 			const handle = new CopilotDebugCommandHandle(rpc);
@@ -176,7 +176,7 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 		});
 
 		socket.on('error', e => {
-			this.logService.logger.error(`Error connecting to debug client on ${pipePath}: ${e}`);
+			this.logService.error(`Error connecting to debug client on ${pipePath}: ${e}`);
 			cts.dispose(true);
 		});
 

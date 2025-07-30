@@ -33,19 +33,17 @@ export class VirtualTool {
 	 * Looks up a tool. Update the {@link lastUsedOnTurn} of all virtual tools
 	 * it touches.
 	 */
-	public findAndTouch(name: string, turnNumber: number): undefined | {
+	public find(name: string): undefined | {
 		tool: VirtualTool | LanguageModelToolInformation;
 		path: VirtualTool[];
 	} {
-		this.lastUsedOnTurn = turnNumber;
-
 		if (this.name === name) {
 			return { tool: this, path: [] };
 		}
 
 		for (const content of this.contents) {
 			if (content instanceof VirtualTool) {
-				const found = content.findAndTouch(name, turnNumber);
+				const found = content.find(name);
 				if (found) {
 					found.path.unshift(this);
 					return found;

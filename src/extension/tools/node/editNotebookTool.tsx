@@ -14,7 +14,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { BaseAlternativeNotebookContentProvider } from '../../../platform/notebook/common/alternativeContentProvider';
-import { getCellId, getCellIdMap, getDefaultLanguage } from '../../../platform/notebook/common/helpers';
+import { getCellId, getCellIdMap, getDefaultLanguage, normalizeCellId } from '../../../platform/notebook/common/helpers';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -22,6 +22,7 @@ import { createSha256Hash } from '../../../util/common/crypto';
 import { findCell, findNotebook } from '../../../util/common/notebooks';
 import { findLast } from '../../../util/vs/base/common/arraysFind';
 import { raceCancellation, StatefulPromise } from '../../../util/vs/base/common/async';
+import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { createSingleCallFunction } from '../../../util/vs/base/common/functional';
 import { DisposableStore, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { isEqual } from '../../../util/vs/base/common/resources';
@@ -35,7 +36,6 @@ import { EXISTING_CODE_MARKER } from '../../prompts/node/panel/codeBlockFormatti
 import { CodeBlock } from '../../prompts/node/panel/safeElements';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { isCancellationError } from '../../../util/vs/base/common/errors';
 
 export interface IEditNotebookToolParams {
 	filePath: string;
@@ -252,7 +252,7 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 			sendEndEdit();
 
 			const summaryOfExpectedEdits = summarizeOriginalEdits(notebook, options.input, expectedCellEdits);
-			this.logger.logger.trace(`[Notebook] ${summaryOfExpectedEdits}`);
+			this.logger.trace(`[Notebook] ${summaryOfExpectedEdits}`);
 			await raceCancellation(Promise.all(codeMapperCompleted), token);
 			if (token.isCancellationRequested) {
 				return;
@@ -267,11 +267,11 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 				const timeout = setTimeout(() => {
 					if (expectedCellEdits.length) {
 						const summaryOfPendingEdits = summarizeEdits(expectedCellEdits);
-						this.logger.logger.error(`[Notebook] Timed out waiting for cell operations to complete.`, `${summaryOfExpectedEdits}. Pending Cell Edits ${summaryOfPendingEdits}`);
+						this.logger.error(`[Notebook] Timed out waiting for cell operations to complete.`, `${summaryOfExpectedEdits}. Pending Cell Edits ${summaryOfPendingEdits}`);
 					}
 					if (expectedCellEdits.length) {
 						const summaryOfPendingEdits = summarizeTextEdits(notebook, expectedCellTextEdits);
-						this.logger.logger.error(`[Notebook] Timed out waiting for cell text edit operations to complete.`, `${summaryOfExpectedEdits}. Pending Text Edits ${summaryOfPendingEdits}`);
+						this.logger.error(`[Notebook] Timed out waiting for cell text edit operations to complete.`, `${summaryOfExpectedEdits}. Pending Text Edits ${summaryOfPendingEdits}`);
 					}
 					resolve();
 				}, 10_000);
@@ -387,6 +387,9 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 		// If the insertion has no cell id, then treat it as bottom.
 		if (input.editType === 'insert' && !input.cellId) {
 			input.cellId = 'bottom';
+		}
+		if (input.cellId && input.cellId !== 'top' && input.cellId !== 'bottom') {
+			input.cellId = normalizeCellId(input.cellId);
 		}
 	}
 

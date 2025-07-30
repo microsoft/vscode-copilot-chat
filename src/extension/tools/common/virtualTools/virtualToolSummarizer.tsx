@@ -27,12 +27,20 @@ function deduplicateTools(tools: LanguageModelToolInformation[], seen = new Set<
 	});
 }
 
-function validateCategorizationResponse(json: unknown, context: string): asserts json is { name: string; summary: string; tools: string[] }[] {
+function validateCategoriesWithoutToolsResponse(json: unknown, context: string): asserts json is { name: string; summary: string }[] {
 	if (!Array.isArray(json)) {
 		throw new SummarizerError(`Invalid response from ${context}: ${JSON.stringify(json)}`);
 	}
 
-	if (!json.every((item: any) => typeof item.name === 'string' && typeof item.summary === 'string' && Array.isArray(item.tools) && item.tools.every((t: any) => typeof t === 'string'))) {
+	if (!json.every((item: any) => typeof item.name === 'string' && typeof item.summary === 'string')) {
+		throw new SummarizerError(`Invalid response from ${context}: ${JSON.stringify(json)}`);
+	}
+}
+
+function validateCategorizationResponse(json: unknown, context: string): asserts json is { name: string; summary: string; tools: string[] }[] {
+	validateCategoriesWithoutToolsResponse(json, context);
+
+	if (!json.every((item: any) => Array.isArray(item.tools) && item.tools.every((t: any) => typeof t === 'string'))) {
 		throw new SummarizerError(`Invalid response from ${context}: ${JSON.stringify(json)}`);
 	}
 }
@@ -89,7 +97,7 @@ export async function summarizeToolGroup(endpoint: IChatEndpoint, tools: Languag
 	}
 
 	const jsonArr = [json];
-	validateCategorizationResponse(jsonArr, 'categorizer');
+	validateCategoriesWithoutToolsResponse(jsonArr, 'categorizer');
 
 	return { ...jsonArr[0], tools: deduplicateTools(tools), name: normalizeGroupName(jsonArr[0].name) };
 }

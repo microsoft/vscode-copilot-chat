@@ -138,7 +138,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 						: this._divideToolsIntoGroups(tools, previous, token)
 				);
 			} catch (e) {
-				this._logService.logger.warn(`Failed to categorize tools: ${e}`);
+				this._logService.warn(`Failed to categorize tools: ${e}`);
 			}
 		}
 
@@ -175,6 +175,11 @@ export class VirtualToolGrouper implements IToolCategorization {
 			retries,
 			durationMs: sw.elapsed(),
 		});
+
+		this._telemetryService.sendInternalMSFTTelemetryEvent('virtualTools.toolset', {
+			uncategorized: JSON.stringify(uncategorized.map(t => t.name)),
+			groups: JSON.stringify(virts?.map(v => ({ name: v.name, tools: v.tools.map(t => t.name) })) || []),
+		}, { retries, durationMs: sw.elapsed() });
 
 		const virtualTools: (VirtualTool | LanguageModelToolInformation)[] = virts?.map(v => {
 			const vt = new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX + v.name, SUMMARY_PREFIX + v.summary + SUMMARY_SUFFIX, 0, { toolsetKey: key, groups: virts });

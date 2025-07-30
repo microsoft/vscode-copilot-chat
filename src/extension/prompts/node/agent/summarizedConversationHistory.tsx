@@ -431,7 +431,7 @@ class ConversationHistorySummarizer {
 	}
 
 	private logInfo(message: string, mode: SummaryMode): void {
-		this.logService.logger.info(`[ConversationHistorySummarizer] [${mode}] ${message}`);
+		this.logService.info(`[ConversationHistorySummarizer] [${mode}] ${message}`);
 	}
 
 	private async getSummary(mode: SummaryMode, propsInfo: ISummarizedConversationHistoryInfo): Promise<FetchSuccess<string>> {
@@ -478,7 +478,7 @@ class ConversationHistorySummarizer {
 						}, type: 'function'
 					})),
 					(tool, rule) => {
-						this.logService.logger.warn(`Tool ${tool} failed validation: ${rule}`);
+						this.logService.warn(`Tool ${tool} failed validation: ${rule}`);
 					},
 				),
 			} : undefined;

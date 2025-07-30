@@ -143,11 +143,6 @@ export class CopilotToken {
 		return (this.getTokenValue('ccr') === '1');
 	}
 
-	isNesEnabled(): boolean {
-		// NES is disabled if the flag is present and set to 0
-		return (this.getTokenValue('nes') !== '0');
-	}
-
 	isEditorPreviewFeaturesEnabled(): boolean {
 		// Editor preview features are disabled if the flag is present and set to 0
 		return this.getTokenValue('editor_preview_features') !== '0';

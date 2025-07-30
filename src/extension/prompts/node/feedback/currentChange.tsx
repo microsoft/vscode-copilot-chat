@@ -111,7 +111,7 @@ export class CurrentChange extends PromptElement<CurrentChangeProps, CurrentChan
 
 		let currentTokens = texts.reduce((acc, { tokens }) => acc + tokens, 0);
 
-		this.props.logService.logger.info(`[CurrentChange] Full documents: ${currentTokens} tokens, ${sizing.tokenBudget} budget`);
+		this.props.logService.info(`[CurrentChange] Full documents: ${currentTokens} tokens, ${sizing.tokenBudget} budget`);
 		if (currentTokens <= sizing.tokenBudget) {
 			return {
 				input: texts.map(({ input, hunks }) => ({
@@ -185,7 +185,7 @@ export class CurrentChange extends PromptElement<CurrentChangeProps, CurrentChan
 				currentTokens += text.tokens - tokens;
 			}
 
-			this.props.logService.logger.info(`[CurrentChange] Reduced ${input.relativeDocumentPath} to defintions: ${currentTokens} tokens, ${sizing.tokenBudget} budget`);
+			this.props.logService.info(`[CurrentChange] Reduced ${input.relativeDocumentPath} to defintions: ${currentTokens} tokens, ${sizing.tokenBudget} budget`);
 			if (currentTokens <= sizing.tokenBudget) {
 				return {
 					input: texts.map(({ input, hunks }) => ({
@@ -196,7 +196,7 @@ export class CurrentChange extends PromptElement<CurrentChangeProps, CurrentChan
 			}
 		}
 
-		this.props.logService.logger.info(`[CurrentChange] Still too large: ${currentTokens} tokens, ${sizing.tokenBudget} budget, ${texts.length} inputs`);
+		this.props.logService.info(`[CurrentChange] Still too large: ${currentTokens} tokens, ${sizing.tokenBudget} budget, ${texts.length} inputs`);
 		if (texts.length > 1) {
 			const err = new Error('Split prompt.');
 			(err as any).code = 'split_input';

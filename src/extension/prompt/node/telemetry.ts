@@ -74,13 +74,14 @@ export function sendUserMessageTelemetry(
 	message: string | undefined,
 	offTopic: boolean | undefined,
 	doc: TextDocumentSnapshot | undefined,
-	baseTelemetry: ConversationalBaseTelemetryData
+	baseTelemetry: ConversationalBaseTelemetryData,
+	modeName: string,
 ): void {
 	if (offTopic !== undefined) {
 		baseTelemetry = baseTelemetry.extendedBy({ offTopic: offTopic.toString() });
 	}
 	baseTelemetry = baseTelemetry.extendedBy({ headerRequestId: requestId });
-	sendConversationalMessageTelemetry(telemetryService, doc, location, message, {}, {}, baseTelemetry);
+	sendConversationalMessageTelemetry(telemetryService, doc, location, message, { mode: modeName }, {}, baseTelemetry);
 }
 
 export function sendModelMessageTelemetry(
@@ -169,6 +170,7 @@ export function sendConversationalMessageTelemetry(
 
 	telemetryService.sendGHTelemetryEvent(`${prefix}.message`, standardTelemetryData.raw.properties, standardTelemetryData.raw.measurements);
 	telemetryService.sendEnhancedGHTelemetryEvent(`${prefix}.messageText`, enhancedTelemetryLogger.raw.properties, enhancedTelemetryLogger.raw.measurements);
+	telemetryService.sendInternalMSFTTelemetryEvent(`${prefix}.messageText`, enhancedTelemetryLogger.raw.properties, enhancedTelemetryLogger.raw.measurements);
 
 	return standardTelemetryData.raw;
 }

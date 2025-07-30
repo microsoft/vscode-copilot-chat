@@ -53,6 +53,8 @@ import { GithubRepositoryService } from '../../github/node/githubRepositoryServi
 import { IHeatmapService, nullHeatmapService } from '../../heatmap/common/heatmapService';
 import { IIgnoreService, NullIgnoreService } from '../../ignore/common/ignoreService';
 import { IInteractiveSessionService } from '../../interactive/common/interactiveSessionService';
+import { ILanguageContextProviderService } from '../../languageContextProvider/common/languageContextProviderService';
+import { NullLanguageContextProviderService } from '../../languageContextProvider/common/nullLanguageContextProviderService';
 import { ILanguageDiagnosticsService } from '../../languages/common/languageDiagnosticsService';
 import { ILanguageFeaturesService, NoopLanguageFeaturesService } from '../../languages/common/languageFeaturesService';
 import { TestLanguageDiagnosticsService } from '../../languages/common/testLanguageDiagnosticsService';
@@ -252,6 +254,7 @@ export function createPlatformServices(): TestingServiceCollection {
 	testingServiceCollection.define(INaiveChunkingService, new SyncDescriptor(NaiveChunkingService));
 	testingServiceCollection.define(IHeatmapService, nullHeatmapService);
 	testingServiceCollection.define(ILanguageContextService, NullLanguageContextService);
+	testingServiceCollection.define(ILanguageContextProviderService, new SyncDescriptor(NullLanguageContextProviderService));
 	testingServiceCollection.define(ILanguageDiagnosticsService, new SyncDescriptor(TestLanguageDiagnosticsService));
 	testingServiceCollection.define(IPromptPathRepresentationService, new SyncDescriptor(TestPromptPathRepresentationService));
 	testingServiceCollection.define(IRequestLogger, new SyncDescriptor(NullRequestLogger));

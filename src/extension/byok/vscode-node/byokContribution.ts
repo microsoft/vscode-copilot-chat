@@ -14,6 +14,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { BYOKKnownModels, isBYOKEnabled } from '../../byok/common/byokProvider';
 import { IExtensionContribution } from '../../common/contributions';
 import { AnthropicLMProvider } from './anthropicProvider';
+import { AzureBYOKModelProvider } from './azureProvider';
 import { BYOKStorageService, IBYOKStorageService } from './byokStorageService';
 import { GeminiBYOKLMProvider } from './geminiProvider';
 import { GroqBYOKLMProvider } from './groqProvider';
@@ -53,19 +54,19 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			this._store.add(lm.registerChatModelProvider(GeminiBYOKLMProvider.providerName.toLowerCase(), this._instantiationService.createInstance(GeminiBYOKLMProvider, knownModels[GeminiBYOKLMProvider.providerName], this._byokStorageService)));
 			this._store.add(lm.registerChatModelProvider(OAIBYOKLMProvider.providerName.toLowerCase(), this._instantiationService.createInstance(OAIBYOKLMProvider, knownModels[OAIBYOKLMProvider.providerName], this._byokStorageService)));
 			this._store.add(lm.registerChatModelProvider(OpenRouterLMProvider.providerName.toLowerCase(), this._instantiationService.createInstance(OpenRouterLMProvider, this._byokStorageService)));
-
+			this._store.add(lm.registerChatModelProvider('azure', this._instantiationService.createInstance(AzureBYOKModelProvider, this._byokStorageService)));
 		}
 	}
 	private async fetchKnownModelList(fetcherService: IFetcherService): Promise<Record<string, BYOKKnownModels>> {
 		const data = await (await fetcherService.fetch('https://main.vscode-cdn.net/extensions/copilotChat.json', { method: "GET" })).json();
 		let knownModels: Record<string, BYOKKnownModels>;
 		if (data.version !== 1) {
-			this._logService.logger.warn('BYOK: Copilot Chat known models list is not in the expected format. Defaulting to empty list.');
+			this._logService.warn('BYOK: Copilot Chat known models list is not in the expected format. Defaulting to empty list.');
 			knownModels = {};
 		} else {
 			knownModels = data.modelInfo;
 		}
-		this._logService.logger.info('BYOK: Copilot Chat known models list fetched successfully.');
+		this._logService.info('BYOK: Copilot Chat known models list fetched successfully.');
 		return knownModels;
 	}
 }

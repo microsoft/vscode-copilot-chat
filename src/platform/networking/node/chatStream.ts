@@ -17,6 +17,8 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 		messagesJson: JSON.stringify(messages),
 	});
 	telemetryService.sendEnhancedGHTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
+	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
+
 }
 
 export function prepareChatCompletionForReturn(
@@ -30,13 +32,13 @@ export function prepareChatCompletionForReturn(
 	let blockFinished = false;
 	if (c.finishOffset !== undefined) {
 		// Trim solution to finishOffset returned by finishedCb
-		logService.logger.debug(`message ${c.index}: early finish at offset ${c.finishOffset}`);
+		logService.debug(`message ${c.index}: early finish at offset ${c.finishOffset}`);
 		messageContent = messageContent.substring(0, c.finishOffset);
 		blockFinished = true;
 	}
 
-	logService.logger.info(`message ${c.index} returned. finish reason: [${c.reason}]`);
-	logService.logger.debug(
+	logService.info(`message ${c.index} returned. finish reason: [${c.reason}]`);
+	logService.debug(
 		`message ${c.index} details: finishOffset: [${c.finishOffset}] completionId: [{${c.requestId.completionId}}] created: [{${c.requestId.created}}]`
 	);
 	const jsonData: APIJsonData = convertToAPIJsonData(c.solution);

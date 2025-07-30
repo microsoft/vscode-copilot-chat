@@ -22,10 +22,7 @@ export type FetchResponse = {
 	body: AsyncIterableObject<string>;
 };
 
-export interface IFetchRequestParams extends ModelParams {
-	suffix?: string;
-	stream?: boolean;
-}
+export interface IFetchRequestParams extends ModelParams { }
 
 export class CompletionsFetchService implements ICompletionsFetchService {
 	readonly _serviceBrand: undefined;
@@ -193,6 +190,10 @@ export class CompletionsFetchService implements ICompletionsFetchService {
 		} catch (reason: any) { // TODO: replace with unknown with proper error handling
 
 			onCancellationDisposable.dispose();
+
+			if (reason instanceof Error && reason.message === 'This operation was aborted') {
+				return Result.error({ kind: 'cancelled', errorMessage: reason.message });
+			}
 
 			if (
 				reason.code === 'ECONNRESET' ||

@@ -177,7 +177,7 @@ export class SummarizedDocumentWithSelection extends PromptElement<SummarizedDoc
 			splitDoc = documentData.summarizeDocument(tokenBudget);
 		}
 
-		this.logger.logger.info(`Summarized doc to fit token budget (${tokenBudget} / ${sizing.endpoint.modelMaxPromptTokens}): ${splitDoc.codeAbove.length} + ${splitDoc.codeSelected.length} + ${splitDoc.codeBelow.length}`);
+		this.logger.info(`Summarized doc to fit token budget (${tokenBudget} / ${sizing.endpoint.modelMaxPromptTokens}): ${splitDoc.codeAbove.length} + ${splitDoc.codeSelected.length} + ${splitDoc.codeBelow.length}`);
 
 		const { uri, languageId } = documentData.document;
 

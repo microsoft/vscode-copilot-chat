@@ -9530,9 +9530,9 @@
   {
     "name": "notebooks (toolCalling) [panel] - Run cell tool should avoid running markdown cells",
     "contentFilterCount": 0,
-    "passCount": 1,
-    "failCount": 9,
-    "score": 0.1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "PR Title and Description [context] - Multiple commits without issue information",
@@ -9957,9 +9957,9 @@
   {
     "name": "startDebugging [panel] -  chrome OS app port 3000",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "startDebugging [panel] -  node app",
