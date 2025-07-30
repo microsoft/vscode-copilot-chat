@@ -1547,11 +1547,13 @@
 			},
 			{
 				"vendor": "azure",
-				"displayName": "Azure"
+				"displayName": "Azure",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "anthropic",
-				"displayName": "Anthropic"
+				"displayName": "Anthropic",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "ollama",
@@ -1559,19 +1561,23 @@
 			},
 			{
 				"vendor": "openai",
-				"displayName": "OpenAI"
+				"displayName": "OpenAI",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "gemini",
-				"displayName": "Gemini"
+				"displayName": "Gemini",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "groq",
-				"displayName": "Groq"
+				"displayName": "Groq",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "openrouter",
-				"displayName": "OpenRouter"
+				"displayName": "OpenRouter",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			}
 		],
 		"interactiveSession": [
@@ -2001,6 +2007,10 @@
 				"title": "Disable Follow Cell Execution from Chat",
 				"shortTitle": "Unfollow",
 				"icon": "$(pinned-dirty)"
+			},
+			{
+				"command": "github.copilot.chat.manageBYOK",
+				"title": "Manage Bring Your Own Key Vendor"
 			}
 		],
 		"configuration": [

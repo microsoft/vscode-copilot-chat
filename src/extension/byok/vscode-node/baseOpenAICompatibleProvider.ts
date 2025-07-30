@@ -3,18 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, ChatResponseFragment2, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatProvider2, LanguageModelChatRequestHandleOptions, Progress } from 'vscode';
+import { CancellationToken, ChatResponseFragment2, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatRequestHandleOptions, Progress } from 'vscode';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotLanguageModelWrapper } from '../../conversation/vscode-node/languageModelAccess';
-import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, resolveModelInfo } from '../common/byokProvider';
+import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, resolveModelInfo } from '../common/byokProvider';
 import { OpenAIEndpoint } from '../node/openAIEndpoint';
 import { IBYOKStorageService } from './byokStorageService';
 import { promptForAPIKey } from './byokUIService';
 
-export abstract class BaseOpenAICompatibleLMProvider implements LanguageModelChatProvider2<LanguageModelChatInformation> {
+export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvider<LanguageModelChatInformation> {
 
 	private readonly _lmWrapper: CopilotLanguageModelWrapper;
 	private _apiKey: string | undefined;
@@ -72,9 +72,8 @@ export abstract class BaseOpenAICompatibleLMProvider implements LanguageModelCha
 			} else if (options.silent && !this._apiKey) {
 				return [];
 			} else { // Not silent, and no api key = good to prompt user for api key
-				this._apiKey = await promptForAPIKey(this._name, false);
+				await this.updateAPIKey();
 				if (this._apiKey) {
-					this._byokStorageService.storeAPIKey(this._name, this._apiKey, BYOKAuthType.GlobalApiKey);
 					return byokKnownModelsToAPIInfo(this._name, await this.getAllModels());
 				} else {
 					return [];
@@ -93,5 +92,15 @@ export abstract class BaseOpenAICompatibleLMProvider implements LanguageModelCha
 		const modelInfo: IChatModelInformation = await this.getModelInfo(model.id, this._apiKey);
 		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, this._apiKey ?? '', `${this._baseUrl}/chat/completions`);
 		return this._lmWrapper.provideTokenCount(openAIChatEndpoint, text);
+	}
+
+	async updateAPIKey(): Promise<void> {
+		if (this.authType === BYOKAuthType.None) {
+			return;
+		}
+		this._apiKey = await promptForAPIKey(this._name, await this._byokStorageService.getAPIKey(this._name) !== undefined);
+		if (this._apiKey) {
+			this._byokStorageService.storeAPIKey(this._name, this._apiKey, BYOKAuthType.GlobalApiKey);
+		}
 	}
 }
