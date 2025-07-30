@@ -1884,7 +1884,7 @@ There are no changes to the behavior of the editor context. When the active edit
 
 A common use case of Copilot Chat is asking questions about the code in your workspace, such as using `/tests` to generate new unit tests for the selected code or asking `@workspace` to find some specific class or function in your project. This milestone, we added enhanced links for any workspace symbols that Copilot mentions in chat responses. These symbol links can help you better understand Copilot responses and learn more about the symbols used in them.
 
-Symbol links are rendered as little pills in the response, just like the [file links](https://code.visualstudio.com/updates/v1_94#_improved-file-links-in-chat-responses) we added last milestone. To start learn more about a symbol, just seleect the symbol link to jump to that symbol's definition:
+Symbol links are rendered as little pills in the response, just like the [file links](https://code.visualstudio.com/updates/v1_94#_improved-file-links-in-chat-responses) we added last milestone. To start learn more about a symbol, just select the symbol link to jump to that symbol's definition:
 
 <video src="https://code.visualstudio.com/assets/updates/1_95/copilot-symbol-links-overview.mp4" title="Symbols links being rendered in a Copilot response. Clicking on then navigates to the symbol definition." autoplay loop controls muted></video>
 
