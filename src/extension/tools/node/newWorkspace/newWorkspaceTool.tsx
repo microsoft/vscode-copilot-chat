@@ -138,12 +138,12 @@ export class NewWorkspaceCreationResult extends PromptElement<NewWorkspaceElemen
 
 		return <>
 			<TextChunk>
-				Create or update the file `.github/copilot-instructions.md` with the exact content shown below<br />
+				Create or update the file `.github/copilot-instructions.md` with the exact content shown below.<br />
 				<br />
 			</TextChunk>
 			<UnsafeCodeBlock code={`
 <!-- Use this file to provide workspace-specific custom instructions to Copilot. For more details, visit https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->
-- [ ] Verify that .github/copilot-instructions.md is created
+- [ ] Verify that .github/copilot-instructions.md is created.
 
 - [ ] Clarify Project Requirements
 	<!-- Ask for project type, language, and frameworks if not specified. Skip if already provided. -->

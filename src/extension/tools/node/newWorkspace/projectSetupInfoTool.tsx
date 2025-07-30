@@ -189,9 +189,9 @@ export class WorkspaceSetupResult extends PromptElement<WorkspaceSetupProps> {
 		const useContext7 = this.configurationService.getConfig(ConfigKey.NewWorkspaceUseContext7);
 		if (useContext7) {
 			return <> <TextChunk>
-				Use context7 tools to find the latest libraries, APIs, and documentation to help the user create and customize their project<br />
-				1. Call mcp_context7_resolve-library-id with your project requirements<br />
-				2. Call mcp_context7_get-library-docs to get scaffolding instructions<br />
+				Use context7 tools to find the latest libraries, APIs, and documentation to help the user create and customize their project.<br />
+				1. Call mcp_context7_resolve-library-id with your project requirements.<br />
+				2. Call mcp_context7_get-library-docs to get scaffolding instructions.<br />
 				You must call these tools before proceeding and confirm that you did NOT skip this step.<br />
 				<br />
 			</TextChunk></>;
