@@ -61,32 +61,34 @@ export class LanguageContextProviderService extends Disposable implements ILangu
 			await Promise.allSettled(providers.map(runProvider));
 		});
 
-		const contextItems = items.map(item => {
-			const isSnippet = item && typeof item === 'object' && (item as any).uri !== undefined;
-			if (isSnippet) {
-				const ctx = item as Copilot.CodeSnippet;
-				return {
-					kind: ContextKind.Snippet,
-					priority: this.convertImportanceToPriority(ctx.importance),
-					uri: URI.parse(ctx.uri),
-					value: ctx.value
-				} satisfies SnippetContext;
-			} else {
-				const ctx = item as Copilot.Trait;
-				return {
-					kind: ContextKind.Trait,
-					priority: this.convertImportanceToPriority(ctx.importance),
-					name: ctx.name,
-					value: ctx.value,
-				} satisfies TraitContext;
-			}
-		});
+		const contextItems = items.map(v => LanguageContextProviderService.convertCopilotContextItem(v));
 
 		return contextItems;
 	}
 
+	private static convertCopilotContextItem(item: Copilot.SupportedContextItem): ContextItem {
+		const isSnippet = item && typeof item === 'object' && (item as any).uri !== undefined;
+		if (isSnippet) {
+			const ctx = item as Copilot.CodeSnippet;
+			return {
+				kind: ContextKind.Snippet,
+				priority: LanguageContextProviderService.convertImportanceToPriority(ctx.importance),
+				uri: URI.parse(ctx.uri),
+				value: ctx.value
+			} satisfies SnippetContext;
+		} else {
+			const ctx = item as Copilot.Trait;
+			return {
+				kind: ContextKind.Trait,
+				priority: LanguageContextProviderService.convertImportanceToPriority(ctx.importance),
+				name: ctx.name,
+				value: ctx.value,
+			} satisfies TraitContext;
+		}
+	}
+
 	// importance is coined by the copilot extension and must be an integer in [0, 100], while priority is by the chat extension and spans [0, 1]
-	private convertImportanceToPriority(importance: number | undefined): number {
+	private static convertImportanceToPriority(importance: number | undefined): number {
 		if (importance === undefined || importance < 0) {
 			return 0;
 		}
