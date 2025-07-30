@@ -38,23 +38,23 @@ export class LanguageContextProviderService extends Disposable implements ILangu
 	public getContextItems(doc: TextDocument, request: Copilot.ResolveRequest, cancellationToken: CancellationToken): AsyncIterable<ContextItem> {
 		const providers = this.getContextProviders(doc);
 
-		const items = new AsyncIterableObject<{ context: Copilot.SupportedContextItem; timeStamp: number; onTimeout: boolean }>(async emitter => {
+		const items = new AsyncIterableObject<Copilot.SupportedContextItem>(async emitter => {
 			async function runProvider(provider: Copilot.ContextProvider<Copilot.SupportedContextItem>) {
 				const langCtx = provider.resolver.resolve(request, cancellationToken);
 				if (typeof (langCtx as any)[Symbol.asyncIterator] === 'function') {
 					for await (const context of langCtx as AsyncIterable<Copilot.SupportedContextItem>) {
-						emitter.emitOne({ context, timeStamp: Date.now(), onTimeout: false });
+						emitter.emitOne(context);
 					}
 					return;
 				}
 				const result = await langCtx;
 				if (Array.isArray(result)) {
 					for (const context of result) {
-						emitter.emitOne({ context, timeStamp: Date.now(), onTimeout: false });
+						emitter.emitOne(context);
 					}
 				} else if (typeof (result as any)[Symbol.asyncIterator] !== 'function') {
 					// Only push if it's a single SupportedContextItem, not an AsyncIterable
-					emitter.emitOne({ context: result as Copilot.SupportedContextItem, timeStamp: Date.now(), onTimeout: false });
+					emitter.emitOne(result as Copilot.SupportedContextItem);
 				}
 			}
 
@@ -64,7 +64,7 @@ export class LanguageContextProviderService extends Disposable implements ILangu
 		const contextItems = items.map(item => {
 			const isSnippet = item && typeof item === 'object' && (item as any).uri !== undefined;
 			if (isSnippet) {
-				const ctx = item.context as Copilot.CodeSnippet;
+				const ctx = item as Copilot.CodeSnippet;
 				return {
 					kind: ContextKind.Snippet,
 					priority: this.convertImportanceToPriority(ctx.importance),
@@ -72,7 +72,7 @@ export class LanguageContextProviderService extends Disposable implements ILangu
 					value: ctx.value
 				} satisfies SnippetContext;
 			} else {
-				const ctx = item.context as Copilot.Trait;
+				const ctx = item as Copilot.Trait;
 				return {
 					kind: ContextKind.Trait,
 					priority: this.convertImportanceToPriority(ctx.importance),
