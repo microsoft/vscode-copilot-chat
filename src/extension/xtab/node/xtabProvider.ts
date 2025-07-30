@@ -774,6 +774,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 				return new NoNextEditReason.GotCancelled('afterFetchCall');
 			case ChatFetchResponseType.OffTopic:
 			case ChatFetchResponseType.Filtered:
+			case ChatFetchResponseType.PromptFiltered:
 			case ChatFetchResponseType.Length:
 			case ChatFetchResponseType.RateLimited:
 			case ChatFetchResponseType.QuotaExceeded:
