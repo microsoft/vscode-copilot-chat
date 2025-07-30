@@ -170,6 +170,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	public async run(outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<IToolCallLoopResult> {
 		let i = 0;
 		let lastResult: IToolCallSingleResult | undefined;
+		let lastRequestMessagesStartingIndexForRun: number | undefined;
 
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {
@@ -179,6 +180,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 			try {
 				const result = await this.runOne(outputStream, i, token);
+				if (lastRequestMessagesStartingIndexForRun === undefined) {
+					lastRequestMessagesStartingIndexForRun = result.lastRequestMessages.length - 1;
+				}
 				lastResult = {
 					...result,
 					hadIgnoredFiles: lastResult?.hadIgnoredFiles || result.hadIgnoredFiles
@@ -203,9 +207,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			this._logService.error('Error emitting read file trajectories', err);
 		});
 
-		for (const result of Object.keys(this.toolCallResults)) {
-			if (this.toolCallResults[result] instanceof LanguageModelToolResult2) {
-				for (const part of this.toolCallResults[result].content) {
+		const toolCallRoundsToDisplay = lastResult.lastRequestMessages.slice(lastRequestMessagesStartingIndexForRun ?? 0).filter((m): m is Raw.ToolChatMessage => m.role === Raw.ChatRole.Tool);
+		for (const toolRound of toolCallRoundsToDisplay) {
+			const result = this.toolCallResults[toolRound.toolCallId];
+			if (result instanceof LanguageModelToolResult2) {
+				for (const part of result.content) {
 					if (part instanceof LanguageModelDataPart2 && part.mimeType === 'application/pull-request+json' && part.audience?.includes(ToolResultAudience.User)) {
 						const data: { uri: string; title: string; description: string; author: string; linkTag: string } = JSON.parse(part.data.toString());
 						outputStream?.push(new ChatResponsePullRequestPart(URI.parse(data.uri), data.title, data.description, data.author, data.linkTag));
