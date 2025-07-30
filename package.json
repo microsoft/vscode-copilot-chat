@@ -403,16 +403,13 @@
 					"type": "object",
 					"properties": {
 						"filePaths": {
-							"description": "The absolute paths to the files to check for errors.",
+							"description": "The absolute paths to the files to check for errors. Omit when retrieving all errors.",
 							"type": "array",
 							"items": {
 								"type": "string"
 							}
 						}
-					},
-					"required": [
-						"filePaths"
-					]
+					}
 				}
 			},
 			{
