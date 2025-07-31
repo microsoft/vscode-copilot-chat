@@ -1708,6 +1708,20 @@
 				"category": "GitHub Copilot"
 			},
 			{
+				"command": "github.copilot.chat.review.stagedFileChange",
+				"title": "%github.copilot.command.reviewFileChange%",
+				"icon": "$(code-review)",
+				"enablement": "github.copilot.chat.reviewDiff.enabled && !github.copilot.interactiveSession.disabled",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.chat.review.unstagedFileChange",
+				"title": "%github.copilot.command.reviewFileChange%",
+				"icon": "$(code-review)",
+				"enablement": "github.copilot.chat.reviewDiff.enabled && !github.copilot.interactiveSession.disabled",
+				"category": "GitHub Copilot"
+			},
+			{
 				"command": "github.copilot.chat.review.changes.cancel",
 				"title": "%github.copilot.command.reviewChanges.cancel%",
 				"icon": "$(stop-circle)",
@@ -2892,6 +2906,14 @@
 					"when": "false"
 				},
 				{
+					"command": "github.copilot.chat.review.stagedFileChange",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.review.unstagedFileChange",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.chat.review.changes.cancel",
 					"when": "false"
 				},
@@ -3156,6 +3178,18 @@
 					"command": "github.copilot.chat.review.unstagedChanges",
 					"when": "github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmResourceGroup == workingTree",
 					"group": "inline@-3"
+				}
+			],
+			"scm/resourceState/context": [
+				{
+					"command": "github.copilot.chat.review.stagedFileChange",
+					"group": "3_copilot",
+					"when": "github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmResourceGroup == index"
+				},
+				{
+					"command": "github.copilot.chat.review.unstagedFileChange",
+					"group": "3_copilot",
+					"when": "github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmResourceGroup == workingTree"
 				}
 			],
 			"scm/inputBox": [
