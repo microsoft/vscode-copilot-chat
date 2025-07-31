@@ -37,15 +37,14 @@ interface PromptStringInputInfo {
 }
 
 export interface IPendingSetupArgs {
-	type: PackageType;
-	publisher: string;
 	name: string;
 	version?: string;
 	readme?: string;
 }
 
+// contract with https://github.com/microsoft/vscode/blob/main/src/vs/workbench/contrib/mcp/browser/mcpCommandsAddConfiguration.ts
 export type ValidatePackageResult =
-	{ state: 'ok'; pendingSetup: IPendingSetupArgs }
+	{ state: 'ok'; publisher: string; pendingSetup: IPendingSetupArgs }
 	| { state: 'error'; error: string };
 
 interface NpmPackageResponse {
@@ -96,7 +95,7 @@ export class McpSetupCommands extends Disposable {
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.validatePackage', async (args: IValidatePackageArgs): Promise<ValidatePackageResult> => {
 			const result = await this.validatePackageRegistry(args);
 			if (result.state === 'ok') {
-				this.enqueuePendingSetup(args.targetConfig, result.pendingSetup);
+				this.enqueuePendingSetup(args, result.pendingSetup);
 			}
 			return result;
 		}));
@@ -105,14 +104,14 @@ export class McpSetupCommands extends Disposable {
 		}));
 	}
 
-	private async enqueuePendingSetup(targetConfig: JsonSchema, args: IPendingSetupArgs) {
+	private async enqueuePendingSetup(validateArgs: IValidatePackageArgs, pendingArgs: IPendingSetupArgs) {
 		const cts = new CancellationTokenSource();
 		const canPrompt = new DeferredPromise<void>();
 		const pickRef = new McpPickRef(raceCancellation(canPrompt.p, cts.token));
 
 		// we start doing the prompt in the background so the first call is speedy
 		const done = (async () => {
-			const fakePrompt = `Generate an MCP configuration for ${args.name}`;
+			const fakePrompt = `Generate an MCP configuration for ${validateArgs.name}`;
 			const mcpLoop = this.instantiationService.createInstance(McpToolCallingLoop, {
 				toolCallLimit: 100, // limited via `getAvailableTools` in the loop
 				conversation: new Conversation(generateUuid(), [new Turn(undefined, { type: 'user', message: fakePrompt })]),
@@ -133,18 +132,18 @@ export class McpSetupCommands extends Disposable {
 					id: '1'
 				},
 				props: {
-					targetSchema: targetConfig,
-					packageName: args.name,
-					packageVersion: args.version,
-					packageType: args.type,
+					targetSchema: validateArgs.targetConfig,
+					packageName: pendingArgs.name, // prefer the resolved name, not the input
+					packageVersion: pendingArgs.version,
+					packageType: validateArgs.type,
 					pickRef,
-					packageReadme: args.readme || '<empty>',
+					packageReadme: pendingArgs.readme || '<empty>',
 				},
 			});
 
 			const toolCallLoopResult = await mcpLoop.run(undefined, cts.token);
 			if (toolCallLoopResult.response.type !== ChatFetchResponseType.Success) {
-				vscode.window.showErrorMessage(`Failed to generate MCP configuration for ${args.name}: ${toolCallLoopResult.response.reason}`);
+				vscode.window.showErrorMessage(`Failed to generate MCP configuration for ${validateArgs.name}: ${toolCallLoopResult.response.reason}`);
 				return undefined;
 			}
 
@@ -186,7 +185,7 @@ export class McpSetupCommands extends Disposable {
 		});
 
 		this.pendingSetup?.cts.dispose(true);
-		this.pendingSetup = { cts, name: args.name, canPrompt, done };
+		this.pendingSetup = { cts, name: pendingArgs.name, canPrompt, done };
 	}
 
 	private async validatePackageRegistry(args: IValidatePackageArgs): Promise<ValidatePackageResult> {
@@ -200,9 +199,8 @@ export class McpSetupCommands extends Disposable {
 				const version = data['dist-tags']?.latest;
 				return {
 					state: 'ok',
+					publisher: data.maintainers?.[0]?.name || 'unknown',
 					pendingSetup: {
-						type: args.type,
-						publisher: data.maintainers?.[0]?.name || 'unknown',
 						name: args.name,
 						version: version,
 						readme: data.readme
@@ -217,11 +215,10 @@ export class McpSetupCommands extends Disposable {
 				const version = data.info?.version;
 				return {
 					state: 'ok',
+					publisher: data.info?.author || data.info?.author_email || 'unknown',
 					pendingSetup: {
-						publisher: data.info?.author || data.info?.author_email || 'unknown',
 						name: args.name,
 						version: version,
-						type: args.type,
 						readme: data.info?.description
 					}
 				};
@@ -241,10 +238,9 @@ export class McpSetupCommands extends Disposable {
 				const data = await response.json() as DockerHubResponse;
 				return {
 					state: 'ok',
+					publisher: data.namespace || data.user || 'unknown',
 					pendingSetup: {
-						publisher: data.namespace || data.user || 'unknown',
 						name: args.name,
-						type: args.type,
 						readme: data.full_description || data.description,
 					}
 				};

@@ -75,14 +75,11 @@ export async function getNuGetPackageMetadata(args: IValidatePackageArgs): Promi
 
 	return {
 		state: 'ok',
-		publisher,
-		version,
+		publisher: publisher,
 		pendingSetup: {
-			targetSchema: args.targetConfig,
 			name: id,
-			type: args.type,
-			readme: description,
-			version: version
+			version: version,
+			readme: description
 		}
 	};
 }
