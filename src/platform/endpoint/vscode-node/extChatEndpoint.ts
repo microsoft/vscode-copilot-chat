@@ -16,7 +16,7 @@ import { ChatFetchResponseType, ChatLocation, ChatResponse } from '../../chat/co
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { Response } from '../../networking/common/fetcherService';
-import { IChatEndpoint } from '../../networking/common/networking';
+import { IChatEndpoint, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
@@ -89,6 +89,10 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 
 	get supportsPrediction(): boolean {
 		return false;
+	}
+
+	get supportsStatefulResponses() {
+		return false; // todo@connor4312 ?
 	}
 
 	get policy(): 'enabled' | { terms: string } {
@@ -175,6 +179,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		return apiMessages;
 	}
 
+
 	async makeChatRequest(
 		debugName: string,
 		messages: Raw.ChatMessage[],
@@ -184,9 +189,27 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		source?: { extensionId?: string | undefined },
 		requestOptions?: Omit<OptionalChatRequestParams, 'n'>,
 		userInitiatedRequest?: boolean,
-		telemetryProperties?: Record<string, string | number | boolean | undefined>,
+		telemetryProperties?: Record<string, string>,
 		intentParams?: IntentParams
 	): Promise<ChatResponse> {
+		return this.makeChatRequest2({
+			debugName,
+			messages,
+			finishedCb,
+			location,
+			source,
+			requestOptions,
+			userInitiatedRequest,
+			telemetryProperties,
+			intentParams
+		}, token);
+	}
+
+	async makeChatRequest2({
+		messages,
+		requestOptions,
+		finishedCb,
+	}: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
 		const vscodeMessages = this.convertToApiChatMessage(messages);
 
 		const vscodeOptions: vscode.LanguageModelChatRequestOptions = {

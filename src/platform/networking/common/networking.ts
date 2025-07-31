@@ -117,6 +117,29 @@ export interface IEmbeddingEndpoint extends IEndpoint {
 	readonly model: EMBEDDING_MODEL;
 }
 
+export interface IMakeChatRequestOptions {
+	/** The debug name for this request */
+	debugName: string;
+	/** The array of chat messages to send */
+	messages: Raw.ChatMessage[];
+	/** Optional marker for responses where {@link supportsStatefulResponses} is true. No effect otherwise. */
+	statefulMarker?: { index: number; id: string };
+	/** Streaming callback for each response part. */
+	finishedCb: FinishedCallback | undefined;
+	/** Location where the chat message is being sent. */
+	location: ChatLocation;
+	/** Optional source of the chat request */
+	source?: Source;
+	/** Additional request options */
+	requestOptions?: Omit<OptionalChatRequestParams, 'n'>;
+	/** Indicates if the request was user-initiated */
+	userInitiatedRequest?: boolean;
+	/** (CAPI-only) Optional telemetry properties for analytics */
+	telemetryProperties?: TelemetryProperties;
+	/** (CAPI-only) Intent classifier details */
+	intentParams?: IntentParams;
+}
+
 export interface IChatEndpoint extends IEndpoint {
 	readonly maxOutputTokens: number;
 	/** The model ID- this may change and will be `copilot-base` for the base model. Use `family` to switch behavior based on model type. */
@@ -124,6 +147,7 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly supportsToolCalls: boolean;
 	readonly supportsVision: boolean;
 	readonly supportsPrediction: boolean;
+	readonly supportsStatefulResponses: boolean;
 	readonly showInModelPicker: boolean;
 	readonly isPremium?: boolean;
 	readonly multiplier?: number;
@@ -178,6 +202,12 @@ export interface IChatEndpoint extends IEndpoint {
 		telemetryProperties?: TelemetryProperties,
 		intentParams?: IntentParams
 	): Promise<ChatResponse>;
+
+	/**
+	 * Flights a request from the chat endpoint returning a chat response.
+	 * Most of the time this is ChatMLFetcher#fetchOne, but it can be overridden for special cases.
+	 */
+	makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse>;
 
 	cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint;
 }

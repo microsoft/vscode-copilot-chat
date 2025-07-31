@@ -11,7 +11,8 @@ import { FetchStreamSource, IResponsePart } from '../../../platform/chat/common/
 import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
-import { FinishedCallback, OpenAiFunctionDef, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
+import { OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
+import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
@@ -80,6 +81,8 @@ export interface IToolCallingBuiltPromptEvent {
 	result: IBuildPromptResult;
 	tools: LanguageModelToolInformation[];
 }
+
+export type ToolCallingLoopFetchOptions = Required<Pick<IMakeChatRequestOptions, 'messages' | 'finishedCb' | 'requestOptions' | 'userInitiatedRequest'>>;
 
 /**
  * This is a base class that can be used to implement a tool calling loop
@@ -156,10 +159,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	protected abstract fetch(
-		messages: Raw.ChatMessage[],
-		finishedCb: FinishedCallback,
-		requestOptions: OptionalChatRequestParams,
-		firstFetchCall: boolean,
+		options: ToolCallingLoopFetchOptions,
 		token: CancellationToken
 	): Promise<ChatResponse>;
 
@@ -431,10 +431,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			} satisfies OpenAiFunctionDef;
 		}) : undefined;
 		const toolCalls: IToolCall[] = [];
-		const fixedMessages = this.applyMessagePostProcessing(buildPromptResult.messages);
-		const fetchResult = await this.fetch(
-			fixedMessages,
-			async (text, _, delta) => {
+		const fetchResult = await this.fetch({
+			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
+			finishedCb: async (text, _, delta) => {
 				fetchStreamSource?.update(text, delta);
 				if (delta.copilotToolCalls) {
 					toolCalls.push(...delta.copilotToolCalls.map((call): IToolCall => ({
@@ -446,7 +445,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 				return stopEarly ? text.length : undefined;
 			},
-			{
+			requestOptions: {
 				tools: promptContextTools?.map(tool => ({
 					function: {
 						name: tool.name,
@@ -456,9 +455,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					type: 'function',
 				})),
 			},
-			iterationNumber === 0 && !isContinuation,
-			token,
-		);
+			userInitiatedRequest: iterationNumber === 0 && !isContinuation
+		}, token);
 
 		fetchStreamSource?.resolve();
 		const chatResult = await processResponsePromise ?? undefined;

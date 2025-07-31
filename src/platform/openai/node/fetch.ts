@@ -41,7 +41,7 @@ interface CopilotOnlyParams {
 	copilot_thread_id?: string;
 }
 
-export declare interface ChatRequest extends
+export interface ChatRequest extends
 	RequiredChatRequestParams, OptionalChatRequestParams, CopilotOnlyParams, IntentParams {
 }
 
@@ -56,6 +56,7 @@ export interface ChatParams {
 	intent?: boolean;
 	intent_threshold?: number;
 	secretKey?: string;
+	statefulMarker?: { index: number; id: string };
 }
 
 export enum FetchResponseKind {
@@ -235,6 +236,11 @@ function createChatRequest(params: ChatParams): ChatRequest {
 		model: params.model,
 		// stop: stops,
 	};
+
+	if (params.statefulMarker) {
+		request.previous_response_id = params.statefulMarker.id;
+		request.messages = request.messages.slice(params.statefulMarker.index);
+	}
 
 	if (params.postOptions) {
 		Object.assign(request, params.postOptions);

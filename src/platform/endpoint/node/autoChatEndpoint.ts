@@ -12,7 +12,7 @@ import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { Response } from '../../networking/common/fetcherService';
-import { IChatEndpoint } from '../../networking/common/networking';
+import { IChatEndpoint, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
@@ -33,6 +33,7 @@ export class AutoChatEndpoint implements IChatEndpoint {
 	supportsVision: boolean = true;
 	supportsPrediction: boolean = true;
 	showInModelPicker: boolean = true;
+	supportsStatefulResponses: boolean = false;
 	isPremium?: boolean | undefined = false;
 	multiplier?: number | undefined = undefined;
 	restrictedToSkus?: string[] | undefined = undefined;
@@ -66,23 +67,26 @@ export class AutoChatEndpoint implements IChatEndpoint {
 		return this._tokenizerProvider.acquireTokenizer({ tokenizer: TokenizerType.O200K });
 	}
 
-	async makeChatRequest(debugName: string, messages: ChatMessage[], finishedCb: FinishedCallback | undefined, token: CancellationToken, location: ChatLocation, source?: Source, requestOptions?: Omit<OptionalChatRequestParams, 'n'>, userInitiatedRequest?: boolean, telemetryProperties?: TelemetryProperties, intentParams?: IntentParams): Promise<ChatResponse> {
+	async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
 		// This is only ever called from LM chat extensions.
 		//  Copilot Chat 1st party requests instead get the endpoint much earlier and never call `makeChatRequest` on this endpoint but instead the actual one
 		// What copilot Chat does is more correct, but it's difficult to do this in the LM API
 		const endpoint = await resolveAutoChatEndpoint(this._endpointProvider, this._expService, undefined);
-		return endpoint.makeChatRequest(
+		return endpoint.makeChatRequest2(options, token);
+	}
+
+	async makeChatRequest(debugName: string, messages: ChatMessage[], finishedCb: FinishedCallback | undefined, token: CancellationToken, location: ChatLocation, source?: Source, requestOptions?: Omit<OptionalChatRequestParams, 'n'>, userInitiatedRequest?: boolean, telemetryProperties?: TelemetryProperties, intentParams?: IntentParams): Promise<ChatResponse> {
+		return this.makeChatRequest2({
 			debugName,
 			messages,
 			finishedCb,
-			token,
 			location,
 			source,
 			requestOptions,
 			userInitiatedRequest,
 			telemetryProperties,
-			intentParams,
-		);
+			intentParams
+		}, token);
 	}
 }
 

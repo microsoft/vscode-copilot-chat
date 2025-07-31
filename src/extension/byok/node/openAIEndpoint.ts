@@ -2,22 +2,28 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { OpenAI, Raw } from '@vscode/prompt-tsx';
+import { OpenAI } from '@vscode/prompt-tsx';
+import { ClientHttp2Stream } from 'http2';
 import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { IChatMLFetcher, IntentParams, Source } from '../../../platform/chat/common/chatMLFetcher';
-import { ChatFetchResponseType, ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
+import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
+import { ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { IEnvService } from '../../../platform/env/common/envService';
-import { FinishedCallback, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
-import { IFetcherService } from '../../../platform/networking/common/fetcherService';
-import { IChatEndpoint, IEndpointBody } from '../../../platform/networking/common/networking';
-import { ITelemetryService, TelemetryProperties } from '../../../platform/telemetry/common/telemetry';
+import { ILogService } from '../../../platform/log/common/logService';
+import { FinishedCallback } from '../../../platform/networking/common/fetch';
+import { IFetcherService, Response } from '../../../platform/networking/common/fetcherService';
+import { IChatEndpoint, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { ChatCompletion } from '../../../platform/networking/common/openai';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
+import { AsyncIterableObject } from '../../../util/vs/base/common/async';
+import { SSEParser } from '../../../util/vs/base/common/sseParser';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 
 function hydrateBYOKErrorMessages(response: ChatResponse): ChatResponse {
@@ -44,9 +50,9 @@ function hydrateBYOKErrorMessages(response: ChatResponse): ChatResponse {
 
 export class OpenAIEndpoint extends ChatEndpoint {
 	constructor(
-		private readonly _modelInfo: IChatModelInformation,
-		private readonly _apiKey: string,
-		private readonly _modelUrl: string,
+		protected readonly _modelInfo: IChatModelInformation,
+		protected readonly _apiKey: string,
+		protected readonly _modelUrl: string,
 		@IFetcherService fetcherService: IFetcherService,
 		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
@@ -55,7 +61,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		@IAuthenticationService authService: IAuthenticationService,
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
-		@IInstantiationService private instantiationService: IInstantiationService,
+		@IInstantiationService protected instantiationService: IInstantiationService,
 		@IThinkingDataService private thinkingDataService: IThinkingDataService
 	) {
 		super(
@@ -134,30 +140,8 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		return this.instantiationService.createInstance(OpenAIEndpoint, newModelInfo, this._apiKey, this._modelUrl);
 	}
 
-	override async makeChatRequest(
-		debugName: string,
-		messages: Raw.ChatMessage[],
-		finishedCb: FinishedCallback | undefined,
-		token: CancellationToken,
-		location: ChatLocation,
-		source?: Source,
-		requestOptions?: Omit<OptionalChatRequestParams, 'n'>,
-		userInitiatedRequest?: boolean,
-		telemetryProperties?: TelemetryProperties,
-		intentParams?: IntentParams
-	): Promise<ChatResponse> {
-		const response = await super.makeChatRequest(
-			debugName,
-			messages,
-			finishedCb,
-			token,
-			location,
-			source,
-			requestOptions,
-			userInitiatedRequest,
-			telemetryProperties,
-			intentParams
-		);
+	public override async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
+		const response = await super.makeChatRequest2(options, token);
 		return hydrateBYOKErrorMessages(response);
 	}
 }

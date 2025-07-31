@@ -6,7 +6,7 @@
 import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { FetchStreamRecorder, IChatMLFetcher, IntentParams, Source } from '../../../platform/chat/common/chatMLFetcher';
+import { FetchStreamRecorder, IChatMLFetcher, IFetchMLOptions, Source } from '../../../platform/chat/common/chatMLFetcher';
 import { IChatQuotaService } from '../../../platform/chat/common/chatQuotaService';
 import { ChatFetchError, ChatFetchResponseType, ChatLocation, ChatResponse, ChatResponses } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
@@ -17,7 +17,7 @@ import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { FinishedCallback, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
+import { OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { ChatCompletion, FilterReason, FinishedCompletionReason, rawMessageToCAPI } from '../../../platform/networking/common/openai';
@@ -61,32 +61,11 @@ export abstract class AbstractChatMLFetcher implements IChatMLFetcher {
 	protected readonly _onDidMakeChatMLRequest = new Emitter<IMadeChatRequestEvent>();
 	readonly onDidMakeChatMLRequest = this._onDidMakeChatMLRequest.event;
 
-	public async fetchOne(
-		debugName: string,
-		messages: Raw.ChatMessage[],
-		finishedCb: FinishedCallback | undefined,
-		token: CancellationToken,
-		location: ChatLocation,
-		endpoint: IChatEndpoint,
-		source: Source,
-		requestOptions?: Omit<OptionalChatRequestParams, 'n'>,
-		userInitiatedRequest?: boolean,
-		telemetryProperties?: TelemetryProperties,
-		intentParams?: IntentParams
-	): Promise<ChatResponse> {
-		const resp = await this.fetchMany(
-			debugName,
-			messages,
-			finishedCb,
-			token,
-			location,
-			endpoint,
-			source,
-			{ ...requestOptions, n: 1 },
-			userInitiatedRequest,
-			telemetryProperties,
-			intentParams
-		);
+	public async fetchOne(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponse> {
+		const resp = await this.fetchMany({
+			...opts,
+			requestOptions: { ...opts.requestOptions, n: 1 }
+		}, token);
 		if (resp.type === ChatFetchResponseType.Success) {
 			return { ...resp, value: resp.value[0] };
 		}
@@ -96,19 +75,7 @@ export abstract class AbstractChatMLFetcher implements IChatMLFetcher {
 	/**
 	 * Note: the returned array of strings may be less than `n` (e.g., in case there were errors during streaming)
 	 */
-	public abstract fetchMany(
-		debugName: string,
-		messages: Raw.ChatMessage[],
-		finishedCb: FinishedCallback | undefined,
-		token: CancellationToken,
-		location: ChatLocation,
-		chatEndpointInfo: IChatEndpoint,
-		source?: Source,
-		requestOptions?: OptionalChatRequestParams,
-		userInitiatedRequest?: boolean,
-		telemetryProperties?: TelemetryProperties,
-		intentParams?: IntentParams
-	): Promise<ChatResponses>;
+	public abstract fetchMany(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponses>;
 }
 
 export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
@@ -132,18 +99,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 	/**
 	 * Note: the returned array of strings may be less than `n` (e.g., in case there were errors during streaming)
 	 */
-	public async fetchMany(
-		debugName: string,
-		messages: Raw.ChatMessage[],
-		finishedCb: FinishedCallback | undefined,
-		token: CancellationToken,
-		location: ChatLocation,
-		chatEndpoint: IChatEndpoint,
-		source?: Source,
-		requestOptions?: OptionalChatRequestParams,
-		userInitiatedRequest?: boolean,
-		telemetryProperties?: TelemetryProperties,
-	): Promise<ChatResponses> {
+	public async fetchMany(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponses> {
+		let { debugName, endpoint: chatEndpoint, finishedCb, location, messages, requestOptions, source, statefulMarker, telemetryProperties, userInitiatedRequest } = opts;
 		if (!telemetryProperties) {
 			telemetryProperties = {};
 		}
@@ -173,7 +130,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			ourRequestId,
 			location,
 			postOptions,
-			secretKey: requestOptions.secretKey
+			secretKey: requestOptions.secretKey,
+			statefulMarker,
 		};
 
 		const baseTelemetry = TelemetryData.createAndMarkAsIssued({

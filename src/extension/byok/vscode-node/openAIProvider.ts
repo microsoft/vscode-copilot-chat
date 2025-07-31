@@ -2,10 +2,11 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { BYOKAuthType, BYOKKnownModels } from '../common/byokProvider';
+import { BYOKAuthType, BYOKKnownModels, BYOKModelCapabilities } from '../common/byokProvider';
 import { BaseOpenAICompatibleLMProvider } from './baseOpenAICompatibleProvider';
 import { IBYOKStorageService } from './byokStorageService';
 
@@ -29,5 +30,11 @@ export class OAIBYOKLMProvider extends BaseOpenAICompatibleLMProvider {
 			_logService,
 			_instantiationService
 		);
+	}
+
+	protected override async getModelInfo(modelId: string, apiKey: string | undefined, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
+		const info = await super.getModelInfo(modelId, apiKey, modelCapabilities);
+		info.capabilities.supports.statefulResponses = true; // todo@connor4312: temporary
+		return info;
 	}
 }
