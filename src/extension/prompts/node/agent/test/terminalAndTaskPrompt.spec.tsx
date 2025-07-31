@@ -98,9 +98,9 @@ suite('TerminalAndTaskStatePromptElement', () => {
 			{ name: 'Terminal 4', id: '4', processId: 5545 },
 		];
 		terminalService.getLastCommandForTerminal = (term: { id: string }) => {
-			if (term.id === '1') {
+			if (term.id === '3') {
 				return { commandLine: 'npm run build', cwd: '/workspace', exitCode: 0 };
-			} else if (term.id === '2') {
+			} else if (term.id === '4') {
 				return { commandLine: 'npm test', cwd: '/workspace', exitCode: 1 };
 			}
 			return undefined;
