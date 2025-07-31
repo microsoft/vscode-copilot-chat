@@ -122,6 +122,7 @@ export class NewWorkspaceCreationResult extends PromptElement<NewWorkspaceElemen
 	constructor(
 		props: PromptElementProps<NewWorkspaceElementProps>,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IRunCommandExecutionService private readonly commandService: IRunCommandExecutionService,
 	) {
 		super(props);
 	}
@@ -135,6 +136,9 @@ export class NewWorkspaceCreationResult extends PromptElement<NewWorkspaceElemen
 				The user has not opened an empty workspace folder in VS Code. Ask them to open an empty folder before continuing.<br />
 			</TextChunk>;
 		}
+
+		// For https://github.com/microsoft/vscode/issues/258252
+		this.commandService.executeCommand('workbench.action.terminal.focus');
 
 		return <>
 			<TextChunk>
