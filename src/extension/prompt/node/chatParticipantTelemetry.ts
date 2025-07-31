@@ -389,7 +389,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 					'ask';
 	}
 
-	public sendToolCallingTelemetry(toolCallRounds: IToolCallRound[], availableTools: readonly vscode.LanguageModelToolInformation[], responseType: ChatFetchResponseType | 'cancelled' | 'maxToolCalls'): void {
+	public sendToolCallingTelemetry(toolCallRounds: IToolCallRound[], availableTools: readonly vscode.LanguageModelToolInformation[], responseType: ChatFetchResponseType | 'cancelled' | 'maxToolCalls', toolCallResults?: Record<string, vscode.LanguageModelToolResult>): void {
 		if (availableTools.length === 0) {
 			return;
 		}
@@ -410,11 +410,15 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 
 		// Collect all tool call details including parameters for internal telemetry
 		const toolCallDetails = toolCallRounds.flatMap(round =>
-			round.toolCalls.map(call => ({
-				name: call.name,
-				arguments: call.arguments,
-				id: call.id
-			}))
+			round.toolCalls.map(call => {
+				const result = toolCallResults?.[call.id];
+				return {
+					name: call.name,
+					arguments: call.arguments,
+					id: call.id,
+					result: result ? this.summarizeToolResult(result) : undefined
+				};
+			})
 		);
 
 		const toolCallProperties = {
@@ -482,6 +486,24 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 
 	protected _getTelemetryData<T extends TelemetryData>(ctor: new (...args: any[]) => T): T | undefined {
 		return <T>this._genericTelemetryData.find(d => d instanceof ctor);
+	}
+
+	private summarizeToolResult(result: vscode.LanguageModelToolResult): string {
+		try {
+			// Extract the text content from the tool result for telemetry
+			if ('content' in result && Array.isArray(result.content)) {
+				const textParts = result.content
+					.filter(part => part && typeof part === 'object' && 'value' in part)
+					.map(part => (part as any).value)
+					.join('\n');
+
+				// Truncate long results for telemetry
+				return textParts.length > 500 ? textParts.substring(0, 500) + '...' : textParts;
+			}
+			return '[Tool result content not readable]';
+		} catch (e) {
+			return '[Error reading tool result]';
+		}
 	}
 }
 
