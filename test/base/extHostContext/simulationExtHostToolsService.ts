@@ -14,10 +14,10 @@ import { ToolsContribution } from '../../../src/extension/tools/vscode-node/tool
 import { ToolsService } from '../../../src/extension/tools/vscode-node/toolsService';
 import { packageJson } from '../../../src/platform/env/common/packagejson';
 import { ILogService } from '../../../src/platform/log/common/logService';
-import { NullExperimentationService } from '../../../src/platform/telemetry/common/nullExperimentationService';
 import { raceTimeout } from '../../../src/util/vs/base/common/async';
 import { CancellationError } from '../../../src/util/vs/base/common/errors';
 import { Iterable } from '../../../src/util/vs/base/common/iterator';
+import { observableValue } from '../../../src/util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../src/util/vs/platform/instantiation/common/instantiation';
 import { logger } from '../../simulationLogger';
 
@@ -64,7 +64,7 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 	}
 
 	private ensureToolsRegistered() {
-		this._lmToolRegistration ??= new ToolsContribution(this, {} as any, { threshold: Infinity } as any, new NullExperimentationService());
+		this._lmToolRegistration ??= new ToolsContribution(this, {} as any, { threshold: observableValue(this, 128) } as any);
 	}
 
 	getCopilotTool(name: string): ICopilotTool<any> | undefined {

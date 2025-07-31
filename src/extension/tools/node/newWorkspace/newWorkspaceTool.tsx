@@ -6,12 +6,10 @@ import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptSizing, TextChunk } from '@vscode/prompt-tsx';
 import type { CancellationToken, LanguageModelToolInvocationOptions, LanguageModelToolInvocationPrepareOptions, PreparedToolInvocation, Uri } from 'vscode';
 import { IRunCommandExecutionService } from '../../../../platform/commands/common/runCommandExecutionService';
-import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IDialogService } from '../../../../platform/dialog/common/dialogService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { IInteractiveSessionService } from '../../../../platform/interactive/common/interactiveSessionService';
-import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationError } from '../../../../util/vs/base/common/errors';
 import { extUri } from '../../../../util/vs/base/common/resources';
@@ -123,9 +121,7 @@ export class GetNewWorkspaceTool implements ICopilotTool<INewWorkspaceToolParams
 export class NewWorkspaceCreationResult extends PromptElement<NewWorkspaceElementProps> {
 	constructor(
 		props: PromptElementProps<NewWorkspaceElementProps>,
-		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@IConfigurationService private readonly configurationService: IConfigurationService
 	) {
 		super(props);
 	}
@@ -140,60 +136,71 @@ export class NewWorkspaceCreationResult extends PromptElement<NewWorkspaceElemen
 			</TextChunk>;
 		}
 
-		const useContext7 = this.configurationService.getConfig(ConfigKey.NewWorkspaceUseContext7);
 		return <>
 			<TextChunk>
-				The user has opened the workspace folder {this.promptPathRepresentationService.getFilePath(workspaceUri)}<br />
-				Follow the plan below to create a new project in the current VS Code workspace folder<br />
-				Step 1: Create a `.github/copilot-instructions.md` with the following content as a markdown todo list<br />
-				- If the user has requested a VS Code extension: Add a note at the top to use {ToolName.VSCodeAPI} tool<br />
-				- If the user has requested an MCP server: Add a link at the top to https://modelcontextprotocol.io/llms-full.txt<br />
-				- Include this comment at the top of the file {`<!-- Use this file to provide workspace-specific custom instructions to Copilot. For more details, visit https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->`}<br />
-				- Copy the entire markdown content below including all tasks and their comments exactly as shown<br />
-				- If vscode_manageTodoList tool is available, use it to manage this checklist throughout the process<br />
-				- After completing each step, mark it as done and update your progress (use vscode_manageTodoList if available)<br />
+				Create or update the file `.github/copilot-instructions.md` with the exact content shown below.<br />
+				<br />
 			</TextChunk>
 			<UnsafeCodeBlock code={`
+<!-- Use this file to provide workspace-specific custom instructions to Copilot. For more details, visit https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->
+- [ ] Verify that .github/copilot-instructions.md is created.
+
 - [ ] Clarify Project Requirements
 	<!-- Ask for project type, language, and frameworks if not specified. Skip if already provided. -->
 
 - [ ] Scaffold the Project
 	<!--
-	${useContext7 ? 'MANDATORY Context7 Usage: Call mcp_context7_resolve-library-id with your project requirements, then call mcp_context7_get-library-docs to get scaffolding instructions. Review the Context7 documentation carefully and use it to scaffold the project.' : 'Call project setup tool with projectType and language parameters.'}
+	Ensure that the previous step has been marked as completed.
+	Call project setup tool with projectType parameter.
 	Run scaffolding command to create project files and folders.
 	Use '.' as the working directory.
+	If no appropriate projectType is available, search documentation using available tools.
+	Otherwise, create the project structure manually using available file creation tools.
 	-->
 
 - [ ] Customize the Project
 	<!--
+	Verify that all previous steps have been completed successfully and you have marked the step as completed.
 	Develop a plan to modify codebase according to user requirements.
 	Apply modifications using appropriate tools and user-provided references.
 	Skip this step for "Hello World" projects.
 	-->
 
 - [ ] Install Required Extensions
-	<!-- Use extension installer tool if requiredExtensions is defined in project setup. -->
+	<!-- ONLY install extensions provided mentioned in the ${ToolName.GetProjectSetupInfo}. Skip this step otherwise and mark as completed. -->
 
 - [ ] Compile the Project
 	<!--
+	Verify that all previous steps have been completed.
 	Install any missing dependencies.
 	Run diagnostics and resolve any issues.
 	Check for markdown files in project folder for relevant instructions on how to do this.
 	-->
 
 - [ ] Create and Run Task
-	<!-- Create task based on package.json, README.md, and project structure. -->
+	<!--
+	Verify that all previous steps have been completed.
+	Check https://code.visualstudio.com/docs/debugtest/tasks to determine if the project needs a task. If so, use the ${ToolName.CoreCreateAndRunTask} to create and launch a task based on package.json, README.md, and project structure.
+	Skip this step otherwise.
+	 -->
 
 - [ ] Launch the Project
-	<!-- Prompt user for debug mode, launch only if confirmed. -->
+	<!--
+	Verify that all previous steps have been completed.
+	Prompt user for debug mode, launch only if confirmed.
+	 -->
 
 - [ ] Ensure Documentation is Complete
-	<!-- Verify README.md exists and is up to date. -->
+	<!--
+	Verify that all previous steps have been completed.
+	Verify that README.md and .github/copilot-instructions.md exists and contains current project information.
+	Clean up .github/copilot-instructions.md by removing all HTML comments.
+	 -->
 
 <!--
 ## Execution Guidelines
 PROGRESS TRACKING:
-- If vscode_manageTodoList tool is available, use it to track progress through this checklist.
+- If any tools are available to manage the above todo list, use it to track progress through this checklist.
 - After completing each step, mark it complete and add a summary.
 - Read current todo list status before starting each new step.
 
@@ -204,24 +211,21 @@ COMMUNICATION RULES:
 - Keep explanations concise and focused.
 
 DEVELOPMENT RULES:
-- Always start executing the plan by calling the tool to get the project template.
 - Use '.' as the working directory unless user specifies otherwise.
-- Do not create folders unless user instructs.
 - Avoid adding media or external links unless explicitly requested.
 - Use placeholders only with a note that they should be replaced.
 - Use VS Code API tool only for VS Code extension projects.
 - Once the project is created, it is already opened in Visual Studio Code—do not suggest commands to open this project in Visual Studio again.
-- Do not print and explain the project structure to the user unless explicitly requested.
 - If the project setup information has additional rules, follow them strictly.
 
 FOLDER CREATION RULES:
 - Always use the current directory as the project root.
 - If you are running any terminal commands, use the '.' argument to ensure that the current working directory is used ALWAYS.
 - Do not create a new folder unless the user explicitly requests it besides a .vscode folder for a tasks.json file.
-- If any of the scaffolding commands mention that the folder name is not correct, let the user know to create a new folder with the correct name and then reopen it again in vscode. Do not attempt to move it yourself. And do not proceed with next steps.
+- If any of the scaffolding commands mention that the folder name is not correct, let the user know to create a new folder with the correct name and then reopen it again in vscode.
 
 EXTENSION INSTALLATION RULES:
-- If the project setup lists requiredExtensions, use extension installer tool to check and install ALL the listed requiredExtensions before proceeding.
+- Only install extension specified by the ${ToolName.GetProjectSetupInfo} tool. DO NOT INSTALL any other extensions.
 
 PROJECT CONTENT RULES:
 - If the user has not specified project details, assume they want a "Hello World" project as a starting point.
@@ -234,14 +238,10 @@ PROJECT CONTENT RULES:
 
 TASK COMPLETION RULES:
 - Your task is complete when:
-  - The project is successfully created without errors.
-  - The user has clear instructions on how to launch their code in debug mode within Visual Studio Code.
-  - A copilot-instructions.md exists in the project root under the .github directory.
-  - A README.md file in the root of the project is up to date.
-  - A tasks.json file exists in the project root under the .vscode directory.
-
-SUCCESS CRITERIA:
-- Completion = project scaffolded, copilot-instructions + README exist, task runnable, debug launch offered.
+  - Project is successfully scaffolded and compiled without errors
+  - .github/copilot-instructions.md exists in the project
+  - README.md file exists and is up to date
+  - User is provided with clear instructions to debug/launch the project
 
 Before starting a new task in the above plan, update progress in the plan.
 -->
@@ -251,16 +251,8 @@ Before starting a new task in the above plan, update progress in the plan.
 `} languageId='markdown'></UnsafeCodeBlock>
 			<TextChunk>
 				<br />
-				Step 2: Execute the Plan<br />
-				After creating the .github/copilot-instructions.md file, systematically work through each item.<br />
-				If vscode_manageTodoList tool is available, use it to read status, mark items complete, and track progress.<br />
+				Verify that a .github/copilot-instructions.md file exists and systematically work through each item in the task list.<br />
 				Update the .github/copilot-instructions.md file directly as you complete each step.<br />
-				<br />
-				Step 3: Finalize Instructions<br />
-				Once all tasks are complete, update the .github/copilot-instructions.md file:<br />
-				- Remove all HTML comments from the completed tasks<br />
-				- Replace the comments with a brief description of the project structure and key files<br />
-				- Add any project-specific instructions or conventions that future developers should know<br />
 				<br />
 				If the user asks to "continue," refer to the previous steps and proceed accordingly.
 			</TextChunk>

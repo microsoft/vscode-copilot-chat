@@ -7,6 +7,7 @@ import { type CancellationToken, languages, type TextDocument, type Disposable a
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
 import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ContextItem, ContextKind, SnippetContext, TraitContext } from '../../../platform/languageServer/common/languageContextService';
+import { filterMap } from '../../../util/common/arrays';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -38,55 +39,76 @@ export class LanguageContextProviderService extends Disposable implements ILangu
 	public getContextItems(doc: TextDocument, request: Copilot.ResolveRequest, cancellationToken: CancellationToken): AsyncIterable<ContextItem> {
 		const providers = this.getContextProviders(doc);
 
-		const items = new AsyncIterableObject<{ context: Copilot.SupportedContextItem; timeStamp: number; onTimeout: boolean }>(async emitter => {
+		const items = new AsyncIterableObject<Copilot.SupportedContextItem>(async emitter => {
 			async function runProvider(provider: Copilot.ContextProvider<Copilot.SupportedContextItem>) {
 				const langCtx = provider.resolver.resolve(request, cancellationToken);
 				if (typeof (langCtx as any)[Symbol.asyncIterator] === 'function') {
 					for await (const context of langCtx as AsyncIterable<Copilot.SupportedContextItem>) {
-						emitter.emitOne({ context, timeStamp: Date.now(), onTimeout: false });
+						emitter.emitOne(context);
 					}
 					return;
 				}
 				const result = await langCtx;
 				if (Array.isArray(result)) {
 					for (const context of result) {
-						emitter.emitOne({ context, timeStamp: Date.now(), onTimeout: false });
+						emitter.emitOne(context);
 					}
 				} else if (typeof (result as any)[Symbol.asyncIterator] !== 'function') {
 					// Only push if it's a single SupportedContextItem, not an AsyncIterable
-					emitter.emitOne({ context: result as Copilot.SupportedContextItem, timeStamp: Date.now(), onTimeout: false });
+					emitter.emitOne(result as Copilot.SupportedContextItem);
 				}
 			}
 
 			await Promise.allSettled(providers.map(runProvider));
 		});
 
-		const contextItems = items.map(item => {
-			const isSnippet = item && typeof item === 'object' && (item as any).uri !== undefined;
-			if (isSnippet) {
-				const ctx = item.context as Copilot.CodeSnippet;
-				return {
-					kind: ContextKind.Snippet,
-					priority: ctx.importance ? ctx.importance : 0,
-					uri: URI.parse(ctx.uri),
-					value: ctx.value
-				} satisfies SnippetContext;
-			} else {
-				const ctx = item.context as Copilot.Trait;
-				return {
-					kind: ContextKind.Trait,
-					priority: ctx.importance ? ctx.importance : 0,
-					name: ctx.name,
-					value: ctx.value,
-				} satisfies TraitContext;
-			}
-		});
+		const contextItems = items.map(v => LanguageContextProviderService.convertCopilotContextItem(v));
 
 		return contextItems;
 	}
 
+	private static convertCopilotContextItem(item: Copilot.SupportedContextItem): ContextItem {
+		const isSnippet = item && typeof item === 'object' && (item as any).uri !== undefined;
+		if (isSnippet) {
+			const ctx = item as Copilot.CodeSnippet;
+			return {
+				kind: ContextKind.Snippet,
+				priority: LanguageContextProviderService.convertImportanceToPriority(ctx.importance),
+				uri: URI.parse(ctx.uri),
+				value: ctx.value
+			} satisfies SnippetContext;
+		} else {
+			const ctx = item as Copilot.Trait;
+			return {
+				kind: ContextKind.Trait,
+				priority: LanguageContextProviderService.convertImportanceToPriority(ctx.importance),
+				name: ctx.name,
+				value: ctx.value,
+			} satisfies TraitContext;
+		}
+	}
+
+	// importance is coined by the copilot extension and must be an integer in [0, 100], while priority is by the chat extension and spans [0, 1]
+	private static convertImportanceToPriority(importance: number | undefined): number {
+		if (importance === undefined || importance < 0) {
+			return 0;
+		}
+		if (importance > 100) {
+			return 1;
+		}
+		return importance / 100;
+	}
+
 	public getContextItemsOnTimeout(doc: TextDocument, request: Copilot.ResolveRequest): ContextItem[] {
-		return [];
+		const providers = this.getContextProviders(doc);
+
+		const unprocessedResults = filterMap(providers, p => p.resolver.resolveOnTimeout?.(request));
+
+		const copilotCtxItems = unprocessedResults.flat();
+
+		const ctxItems = copilotCtxItems.map(v => LanguageContextProviderService.convertCopilotContextItem(v));
+
+		return ctxItems;
 	}
 
 }

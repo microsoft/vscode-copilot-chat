@@ -5,7 +5,7 @@
 			"label": "compile",
 			"type": "npm",
 			"script": "compile",
-			"problemMatcher": "$esbuild"
+			"problemMatcher": "$esbuild",
 		},
 		{
 			"type": "npm",
@@ -16,7 +16,13 @@
 			"label": "ensure-deps",
 			"type": "shell",
 			"windows": {
-				"command": "if not exist node_modules npm install"
+				"command": "if not exist node_modules npm install",
+				"options": {
+					"shell": {
+						"executable": "cmd.exe",
+						"args": ["/c"]
+					}
+				}
 			},
 			"linux": {
 				"command": "test -d node_modules || npm install"

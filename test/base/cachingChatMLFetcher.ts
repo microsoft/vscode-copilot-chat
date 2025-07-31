@@ -239,6 +239,7 @@ export class CachingChatMLFetcher extends AbstractChatMLFetcher implements IDisp
 			if (
 				result.type === ChatFetchResponseType.OffTopic
 				|| result.type === ChatFetchResponseType.Filtered
+				|| result.type === ChatFetchResponseType.PromptFiltered
 				|| result.type === ChatFetchResponseType.Length
 				|| result.type === ChatFetchResponseType.Success
 			) {

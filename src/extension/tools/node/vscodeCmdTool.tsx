@@ -6,6 +6,7 @@
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkbenchService } from '../../../platform/workbench/common/workbenchService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
@@ -25,11 +26,12 @@ class VSCodeCmdTool implements vscode.LanguageModelTool<IVSCodeCmdToolToolInput>
 	constructor(
 		@IRunCommandExecutionService private readonly _commandService: IRunCommandExecutionService,
 		@IWorkbenchService private readonly _workbenchService: IWorkbenchService,
+		@ILogService private readonly _logService: ILogService
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IVSCodeCmdToolToolInput>, token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
 		const command = options.input.commandId;
-		const args = options.input.args;
+		const args = options.input.args ?? [];
 
 		const allcommands = (await this._workbenchService.getAllCommands(/* filterByPreCondition */true));
 		const commandItem = allcommands.find(commandItem => commandItem.command === command);
@@ -41,6 +43,7 @@ class VSCodeCmdTool implements vscode.LanguageModelTool<IVSCodeCmdToolToolInput>
 			await this._commandService.executeCommand(command, ...args);
 			return new LanguageModelToolResult([new LanguageModelTextPart(`Finished running ${options.input.name} command`)]);
 		} catch (error) {
+			this._logService.error(`[VSCodeCmdTool] ${error}`);
 			return new LanguageModelToolResult([new LanguageModelTextPart(`Failed to run ${options.input.name} command.`)]);
 		}
 	}
