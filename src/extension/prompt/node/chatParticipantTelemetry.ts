@@ -408,6 +408,15 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			return acc;
 		}, 0);
 
+		// Collect all tool call details including parameters for internal telemetry
+		const toolCallDetails = toolCallRounds.flatMap(round =>
+			round.toolCalls.map(call => ({
+				name: call.name,
+				arguments: call.arguments,
+				id: call.id
+			}))
+		);
+
 		const toolCallProperties = {
 			intentId: this._intent.id,
 			conversationId: this._conversation.sessionId,
@@ -453,7 +462,16 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			...toolCallProperties,
 			messageId: this.telemetryMessageId,
 			availableTools: JSON.stringify(availableTools.map(tool => tool.name)),
+			toolCallDetails: JSON.stringify(toolCallDetails),
 		}, toolCallMeasurements);
+
+		this._telemetryService.sendEnhancedGHTelemetryEvent('toolCallDetailsRestricted', {
+			...toolCallProperties,
+			messageId: this.telemetryMessageId,
+			availableTools: JSON.stringify(availableTools.map(tool => tool.name)),
+			toolCallDetails: JSON.stringify(toolCallDetails),
+		}, toolCallMeasurements);
+
 	}
 
 	protected abstract _sendInternalRequestTelemetryEvent(): void;
