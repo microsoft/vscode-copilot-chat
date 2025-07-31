@@ -563,7 +563,7 @@ class AgentTasksInstructions extends PromptElement {
 
 		const taskGroups = taskGroupsRaw.map(([wf, tasks]) => [wf, tasks.filter(task => !!task.type && !task.hide)] as const).filter(([, tasks]) => tasks.length > 0);
 		if (taskGroups.length === 0) {
-			return 0;
+			return <>You can use the {ToolName.CoreCreateAndRunTask} tool to create tasks and run them.</>;
 		}
 
 		return <>
@@ -579,6 +579,7 @@ class AgentTasksInstructions extends PromptElement {
 							</Tag>
 						);
 					})}
+					<>You can use the {ToolName.CoreCreateAndRunTask} tool to create tasks and run them.</>
 				</Tag>
 			)}
 		</>;
