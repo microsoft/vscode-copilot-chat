@@ -54,7 +54,8 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		@IEmbeddingsComputer private readonly _embeddingsComputer: IEmbeddingsComputer,
 		@IVSCodeExtensionContext private readonly _vsCodeExtensionContext: IVSCodeExtensionContext,
 		@IExperimentationService private readonly _expService: IExperimentationService,
-		@IAutomodeService private readonly _automodeService: IAutomodeService
+		@IAutomodeService private readonly _automodeService: IAutomodeService,
+		@IEnvService private readonly _envService: IEnvService
 	) {
 		super();
 
@@ -101,7 +102,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		const chatEndpoints = await this._endpointProvider.getAllChatEndpoints();
 
 		const defaultChatEndpoint = chatEndpoints.find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1') ?? chatEndpoints[0];
-		if (isAutoModeEnabled(this._expService)) {
+		if (isAutoModeEnabled(this._expService, this._envService)) {
 			chatEndpoints.push(await this._automodeService.resolveAutoModeEndpoint(generateUuid(), chatEndpoints));
 		}
 		const seenFamilies = new Set<string>();

@@ -10,6 +10,7 @@ import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { IntentParams, Source } from '../../chat/common/chatMLFetcher';
 import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
+import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { Response } from '../../networking/common/fetcherService';
@@ -77,8 +78,9 @@ export class AutoChatEndpoint implements IChatEndpoint {
 /**
  * Checks if the auto chat mode is enabled.
  * @param expService The experimentation service to use to check if the auto mode is enabled
+ * @param envService The environment service to use to check if the auto mode is enabled
  * @returns True if the auto mode is enabled, false otherwise
  */
-export function isAutoModeEnabled(expService: IExperimentationService): boolean {
-	return !!expService.getTreatmentVariable<boolean>('vscode', 'copilotchatcapiautomode');
+export function isAutoModeEnabled(expService: IExperimentationService, envService: IEnvService): boolean {
+	return !!expService.getTreatmentVariable<boolean>('vscode', 'copilotchatcapiautomode') || envService.isPreRelease();
 }
