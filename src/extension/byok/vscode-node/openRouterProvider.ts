@@ -45,7 +45,7 @@ export class OpenRouterLMProvider extends BaseOpenAICompatibleLMProvider {
 			}
 			return knownModels;
 		} catch (error) {
-			this._logService.logger.error(error, `Error fetching available OpenRouter models`);
+			this._logService.error(error, `Error fetching available OpenRouter models`);
 			throw error;
 		}
 

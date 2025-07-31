@@ -13,7 +13,7 @@ import { ITokenizer } from '../../../../util/common/tokenizer';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { toErrorMessage } from '../../../../util/vs/base/common/errorMessage';
 import { isCancellationError } from '../../../../util/vs/base/common/errors';
-import { LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult } from '../../../../vscodeTypes';
+import { LanguageModelDataPart, LanguageModelPromptTsxPart, ToolResultAudience, LanguageModelTextPart, LanguageModelToolResult, LanguageModelTextPart2, LanguageModelDataPart2 } from '../../../../vscodeTypes';
 import { isImageDataPart } from '../../../conversation/common/languageModelChatMessageHelpers';
 import { IResultMetadata } from '../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCall, IToolCallRound } from '../../../prompt/common/intents';
@@ -202,7 +202,7 @@ class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
 					} else {
 						outcome = outcome === ToolInvocationOutcome.DisabledByUser ? outcome : ToolInvocationOutcome.Error;
 						extraMetadata.push(new ToolFailureEncountered(this.props.toolCall.id));
-						this.logService.logger.error(`Error from tool ${this.props.toolCall.name} with args ${this.props.toolCall.arguments}`, toErrorMessage(err, true));
+						this.logService.error(`Error from tool ${this.props.toolCall.name} with args ${this.props.toolCall.arguments}`, toErrorMessage(err, true));
 					}
 				}
 			}
@@ -339,7 +339,7 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 		return (
 			<>
 				<IfEmpty alt='(empty)'>
-					{await Promise.all(this.props.content.map(async part => {
+					{await Promise.all(this.props.content.filter(part => this.hasAssistantAudience(part)).map(async part => {
 						if (part instanceof LanguageModelTextPart) {
 							return await this.onText(part.value);
 						} else if (part instanceof LanguageModelPromptTsxPart) {
@@ -351,6 +351,16 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 				</IfEmpty>
 			</>
 		);
+	}
+
+	private hasAssistantAudience(part: LanguageModelTextPart2 | LanguageModelPromptTsxPart | LanguageModelDataPart2 | unknown): boolean {
+		if (part instanceof LanguageModelPromptTsxPart) {
+			return true;
+		}
+		if (!(part instanceof LanguageModelDataPart2 || part instanceof LanguageModelTextPart2) || !part.audience) {
+			return true;
+		}
+		return part.audience.includes(ToolResultAudience.Assistant);
 	}
 
 	protected onData(part: LanguageModelDataPart) {

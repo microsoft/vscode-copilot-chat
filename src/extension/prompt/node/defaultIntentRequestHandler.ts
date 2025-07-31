@@ -11,16 +11,17 @@ import { IAuthenticationChatUpgradeService } from '../../../platform/authenticat
 import { ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession, NullEditSurvivalTrackingSession } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { HAS_IGNORED_FILES_MESSAGE } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { FinishedCallback, IResponseDelta, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
+import { FilterReason } from '../../../platform/networking/common/openai';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ISurveyService } from '../../../platform/survey/common/surveyService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
@@ -108,12 +109,12 @@ export class DefaultIntentRequestHandler {
 				return CanceledResult;
 			}
 
-			this._logService.logger.trace('Processing intent');
+			this._logService.trace('Processing intent');
 			const intentInvocation = await this.intent.invoke({ location: this.location, documentContext: this.documentContext, request: this.request });
 			if (this.token.isCancellationRequested) {
 				return CanceledResult;
 			}
-			this._logService.logger.trace('Processed intent');
+			this._logService.trace('Processed intent');
 
 			this.turn.setMetadata(new IntentInvocationMetadata(intentInvocation));
 
@@ -154,7 +155,7 @@ export class DefaultIntentRequestHandler {
 				return {};
 			}
 
-			this._logService.logger.error(err);
+			this._logService.error(err);
 			this._telemetryService.sendGHTelemetryException(err, 'Error');
 			const errorMessage = (<Error>err).message;
 			const chatResult = { errorDetails: { message: errorMessage } };
@@ -328,11 +329,11 @@ export class DefaultIntentRequestHandler {
 		try {
 			const result = await loop.run(this.stream, pauseCtrl);
 			if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
-				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableToolCount, this.token.isCancellationRequested ? 'cancelled' : result.response.type);
+				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableTools, this.token.isCancellationRequested ? 'cancelled' : result.response.type);
 			}
 			result.chatResult ??= {};
 			if ((result.chatResult.metadata as IResultMetadata)?.maxToolCallsExceeded) {
-				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableToolCount, 'maxToolCalls');
+				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableTools, 'maxToolCalls');
 			}
 
 			// TODO need proper typing for all chat metadata and a better pattern to build it up from random places
@@ -432,8 +433,14 @@ export class DefaultIntentRequestHandler {
 			}
 			case ChatFetchResponseType.Filtered: {
 				const errorDetails = getErrorDetailsFromChatFetchError(fetchResult, (await this._authenticationService.getCopilotToken()).copilotPlan);
-				const chatResult = { errorDetails, metadata: metadataFragment };
+				const chatResult = { errorDetails, metadata: { ...metadataFragment, filterReason: fetchResult.category } };
 				this.turn.setResponse(TurnStatus.Filtered, undefined, baseModelTelemetry.properties.messageId, chatResult);
+				return chatResult;
+			}
+			case ChatFetchResponseType.PromptFiltered: {
+				const errorDetails = getErrorDetailsFromChatFetchError(fetchResult, (await this._authenticationService.getCopilotToken()).copilotPlan);
+				const chatResult = { errorDetails, metadata: { ...metadataFragment, filterReason: FilterReason.Prompt } };
+				this.turn.setResponse(TurnStatus.PromptFiltered, undefined, baseModelTelemetry.properties.messageId, chatResult);
 				return chatResult;
 			}
 			case ChatFetchResponseType.AgentUnauthorized: {
@@ -478,7 +485,6 @@ interface IInternalRequestResult {
 	hadIgnoredFiles: boolean;
 	lastRequestMessages: Raw.ChatMessage[];
 	lastRequestTelemetry: ChatTelemetry;
-	availableToolCount: number;
 }
 
 interface IDefaultToolLoopOptions extends IToolCallingLoopOptions {
@@ -508,11 +514,11 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		@IAuthenticationChatUpgradeService authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IToolGroupingService private readonly toolGroupingService: IToolGroupingService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@ICopilotTokenStore private readonly _copilotTokenStore: ICopilotTokenStore,
+		@IThinkingDataService thinkingDataService: IThinkingDataService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, thinkingDataService);
 
 		this._register(this.onDidBuildPrompt(({ result, tools, promptTokenLength }) => {
 			if (result.metadata.get(SummarizedConversationHistoryMetadata)) {
@@ -556,7 +562,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 	private async _doMirroredCallWithVirtualTools(delta: IResponseDelta, messages: Raw.ChatMessage[], requestOptions: OptionalChatRequestParams) {
 		const shouldDo = !this._didParallelToolCallLoop
 			&& this._copilotTokenStore.copilotToken?.isInternal
-			&& !DefaultToolCallingLoop.toolGrouping;
+			&& !DefaultToolCallingLoop.toolGrouping?.isEnabled;
 		if (!shouldDo) {
 			return;
 		}
@@ -606,7 +612,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 							},
 						})),
 						(tool, rule) => {
-							this._logService.logger.warn(`Tool ${tool} failed validation: ${rule}`);
+							this._logService.warn(`Tool ${tool} failed validation: ${rule}`);
 						},
 					),
 					temperature: this.calculateTemperature(),
@@ -674,7 +680,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 					this.options.invocation.endpoint.family,
 					requestOptions.tools,
 					(tool, rule) => {
-						this._logService.logger.warn(`Tool ${tool} failed validation: ${rule}`);
+						this._logService.warn(`Tool ${tool} failed validation: ${rule}`);
 					},
 				),
 				temperature: this.calculateTemperature(),
@@ -691,14 +697,14 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 
 	protected override async getAvailableTools(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<LanguageModelToolInformation[]> {
 		const tools = await this.options.invocation.getAvailableTools?.() ?? [];
-		if (!this._configurationService.getExperimentBasedConfig(ConfigKey.VirtualTools, this._experimentationService)) {
-			return tools;
-		}
-
 		if (DefaultToolCallingLoop.toolGrouping) {
 			DefaultToolCallingLoop.toolGrouping.tools = tools;
 		} else {
 			DefaultToolCallingLoop.toolGrouping = this.toolGroupingService.create(tools);
+		}
+
+		if (!DefaultToolCallingLoop.toolGrouping.isEnabled) {
+			return tools;
 		}
 
 		const computePromise = DefaultToolCallingLoop.toolGrouping.compute(token);

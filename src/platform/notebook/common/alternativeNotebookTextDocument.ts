@@ -148,6 +148,12 @@ abstract class AbstractAlternativeNotebookDocument {
 		}
 	}
 
+	/**
+	 * Get the cell associated with a text document.
+	 * @param textDocument The text document to find the cell for.
+	 * @returns The notebook cell associated with the text document, or undefined if not found.
+	 * If a cell was inserted into the notebook and this instance hasn't been updated yet, it will return undefined.
+	 */
 	public getCell(textDocument: TextDocument): NotebookCell | undefined {
 		return this.cellTextDocuments.get(textDocument);
 	}
@@ -167,14 +173,15 @@ abstract class AbstractAlternativeNotebookDocument {
 		for (let i = firstIdx; i < this.cells.length; i++) {
 			const { altCell, startLine } = this.cells[i];
 			if (i === firstIdx) {
-				const cellStart = range.start.line - startLine;
-				const cellEnd = range.end.line <= (altCell.lineCount - 1) ? range.end.line : altCell.lineCount - 1;
+				const cellStartLine = range.start.line - startLine;
+				const cellEndLine = range.end.line - startLine;
+				const cellEnd = cellEndLine <= (altCell.lineCount - 1) ? cellEndLine : altCell.lineCount - 1;
 				let cellEndChar = range.end.character;
-				if (cellEnd !== range.end.line) {
+				if (cellEnd !== cellEndLine) {
 					const offset = altCell.toAltRange(altCell.fromAltOffsetRange(new OffsetRange(altCell.altText.length, altCell.altText.length)));
 					cellEndChar = offset.end.character;
 				}
-				const cellRange = new Range(cellStart, range.start.character, cellEnd, cellEndChar);
+				const cellRange = new Range(cellStartLine, range.start.character, cellEnd, cellEndChar);
 				cells.push([altCell.cell, altCell.fromAltRange(cellRange)]);
 			} else if (startLine + altCell.lineCount <= range.end.line) {
 				const endPos = altCell.toAltRange(altCell.fromAltOffsetRange(new OffsetRange(altCell.altText.length, altCell.altText.length)));
@@ -200,7 +207,7 @@ abstract class AbstractAlternativeNotebookDocument {
 			const { altCell, startOffset } = this.cells[i];
 			if (i === firstIdx) {
 				const endOffset = offsetRange.endExclusive > (startOffset + altCell.altText.length) ? (startOffset + altCell.altText.length) : offsetRange.endExclusive;
-				const offset = new OffsetRange(offsetRange.start - startOffset, endOffset);
+				const offset = new OffsetRange(offsetRange.start - startOffset, endOffset - startOffset);
 				cells.push([altCell.cell, altCell.fromAltOffsetRange(offset)]);
 			} else if ((startOffset + altCell.altText.length) < offsetRange.endExclusive) {
 				const offset = new OffsetRange(0, altCell.altText.length);

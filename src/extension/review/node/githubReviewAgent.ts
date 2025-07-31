@@ -101,14 +101,14 @@ export async function githubReview(
 	const ignored = await Promise.all(changes.map(i => ignoreService.isCopilotIgnored(i.document.uri)));
 	const filteredChanges = changes.filter((_, i) => !ignored[i]);
 	if (filteredChanges.length === 0) {
-		logService.logger.info('All input documents are ignored. Skipping feedback generation.');
+		logService.info('All input documents are ignored. Skipping feedback generation.');
 		return {
 			type: 'error',
 			severity: 'info',
 			reason: l10n.t('All input documents are ignored by configuration. Check your .copilotignore file.')
 		};
 	}
-	logService.logger.debug(`[github review agent] files: ${filteredChanges.map(change => change.relativePath).join(', ')}`);
+	logService.debug(`[github review agent] files: ${filteredChanges.map(change => change.relativePath).join(', ')}`);
 
 	const { requestId, rl } = !testing ? await fetchComments(
 		logService,
@@ -131,7 +131,7 @@ export async function githubReview(
 		return { type: 'cancelled' };
 	}
 
-	logService.logger.info(`[github review agent] request id: ${requestId}`);
+	logService.info(`[github review agent] request id: ${requestId}`);
 
 	const request: ReviewRequest = {
 		source: 'githubReviewAgent',
@@ -146,7 +146,7 @@ export async function githubReview(
 		if (cancellationToken.isCancellationRequested) {
 			return { type: 'cancelled' };
 		}
-		logService.logger.debug(`[github review agent] response line: ${line}`);
+		logService.debug(`[github review agent] response line: ${line}`);
 		const refs = parseLine(line);
 		references.push(...refs);
 		for (const ghComment of refs.filter(ref => ref.type === 'github.generated-pull-request-comment')) {
@@ -412,7 +412,7 @@ async function loadCodingGuidelines(logService: ILogService, authService: IAuthe
 	const repo = pathSegments[2].endsWith('.git') ? pathSegments[2].substring(0, pathSegments[2].length - 4) : pathSegments[2];
 	const ghToken = (await authService.getAnyGitHubSession())?.accessToken;
 	if (!ghToken) {
-		logService.logger.info(`Failed to fetch coding guidelines for ${owner}/${repo}: Not signed in.`);
+		logService.info(`Failed to fetch coding guidelines for ${owner}/${repo}: Not signed in.`);
 		return [];
 	}
 	const response = await capiClientService.makeRequest<Response>({
@@ -422,17 +422,17 @@ async function loadCodingGuidelines(logService: ILogService, authService: IAuthe
 	}, { type: RequestType.CodingGuidelines, repoWithOwner: `${owner}/${repo}` });
 
 	const requestId = response.headers.get('x-github-request-id') || undefined;
-	logService.logger.info(`[github review agent] coding guidelines request id: ${requestId}`);
+	logService.info(`[github review agent] coding guidelines request id: ${requestId}`);
 
 	if (!response.ok) {
 		if (response.status !== 404) { // 404: No coding guidelines or user not part of coding guidelines feature flag.
-			logService.logger.info(`Failed to fetch coding guidelines for ${owner}/${repo}: ${response.statusText}`);
+			logService.info(`Failed to fetch coding guidelines for ${owner}/${repo}: ${response.statusText}`);
 		}
 		return [];
 	}
 
 	const text = await response.text();
-	logService.logger.debug(`[github review agent] coding guidelines: ${text}`);
+	logService.debug(`[github review agent] coding guidelines: ${text}`);
 	const codingGuidelines = JSON.parse(text) as { name: string; description: string; filePatterns: string }[];
 	const codingGuidelineRefs = codingGuidelines.map((input, index) => ({
 		type: "github.coding_guideline",

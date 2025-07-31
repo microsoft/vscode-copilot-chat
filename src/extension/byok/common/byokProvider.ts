@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type { Disposable, LanguageModelChatInformation } from 'vscode';
+import type { Disposable, LanguageModelChatInformation, LanguageModelChatProvider2 } from 'vscode';
 import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
@@ -51,6 +51,7 @@ export interface BYOKModelCapabilities {
 	maxOutputTokens: number;
 	toolCalling: boolean;
 	vision: boolean;
+	thinking?: boolean;
 }
 
 export interface BYOKModelRegistry {
@@ -59,6 +60,14 @@ export interface BYOKModelRegistry {
 	updateKnownModelsList(knownModels: BYOKKnownModels | undefined): void;
 	getAllModels(apiKey?: string): Promise<{ id: string; name: string }[]>;
 	registerModel(config: BYOKModelConfig): Promise<Disposable>;
+}
+
+export interface BYOKModelProvider<T extends LanguageModelChatInformation> extends LanguageModelChatProvider2<T> {
+	readonly authType: BYOKAuthType;
+	/**
+	 * Called when the user is requesting an API key update. The provider should handle all the UI and updating the storage
+	 */
+	updateAPIKey(): Promise<void>;
 }
 
 // Many model providers don't have robust model lists. This allows us to map id -> information about models, and then if we don't know the model just let the user enter a custom id
@@ -115,7 +124,8 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 			supports: {
 				streaming: true,
 				tool_calls: !!knownModelInfo?.toolCalling,
-				vision: !!knownModelInfo?.vision
+				vision: !!knownModelInfo?.vision,
+				thinking: !!knownModelInfo?.thinking
 			},
 			tokenizer: TokenizerType.O200K,
 			limits: {

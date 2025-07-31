@@ -5,7 +5,7 @@
 			"label": "compile",
 			"type": "npm",
 			"script": "compile",
-			"problemMatcher": "$esbuild"
+			"problemMatcher": "$esbuild",
 		},
 		{
 			"type": "npm",
@@ -13,13 +13,53 @@
 			"label": "npm: watch - DO NOT USE", // The auto-discovered npm task is also called watch, so we change its name here. This is here until people clear their histories.
 		},
 		{
-			"label": "watch",
+			"label": "ensure-deps",
+			"type": "shell",
+			"windows": {
+				"command": "if not exist node_modules npm install",
+				"options": {
+					"shell": {
+						"executable": "cmd.exe",
+						"args": ["/c"]
+					}
+				}
+			},
+			"linux": {
+				"command": "test -d node_modules || npm install"
+			},
+			"osx": {
+				"command": "test -d node_modules || npm install"
+			},
+			"group": "build",
+			"presentation": {
+				"reveal": "never",
+				"close": true
+			},
+			"problemMatcher": [],
+			"isBackground": true,
+			"promptOnClose": false
+		},
+		{
+			"label": "start-watch-tasks",
 			"dependsOn": [
 				"npm: watch:tsc-extension",
 				"npm: watch:tsc-extension-web",
 				"npm: watch:tsc-simulation-workbench",
 				"npm: watch:esbuild"
 			],
+			"dependsOrder": "parallel",
+			"group": "build",
+			"presentation": {
+				"reveal": "never"
+			}
+		},
+		{
+			"label": "watch",
+			"dependsOn": [
+				"ensure-deps",
+				"start-watch-tasks",
+			],
+			"dependsOrder": "sequence",
 			"presentation": {
 				"reveal": "never",
 			},
