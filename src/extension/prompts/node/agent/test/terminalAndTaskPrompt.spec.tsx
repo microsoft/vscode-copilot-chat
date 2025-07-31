@@ -11,9 +11,9 @@ suite('TerminalAndTaskStatePromptElement', () => {
 	const tasksService: any = {};
 	tasksService.getTerminalForTask = (task: any) => {
 		if (task.command === 'build') {
-			return { name: 'Terminal 1', id: '1' };
+			return { name: 'Terminal 3', processId: 3434, id: '3' };
 		} else if (task.command === 'watch') {
-			return { name: 'Terminal 2', id: '2' };
+			return { name: 'Terminal 4', processId: 5545, id: '4' };
 		}
 		return undefined;
 	};
@@ -45,6 +45,8 @@ suite('TerminalAndTaskStatePromptElement', () => {
 		terminalService.terminals = [
 			{ name: 'Terminal 1', id: '1', processId: 1234 },
 			{ name: 'Terminal 2', id: '2', processId: 5678 },
+			{ name: 'Terminal 3', id: '3', processId: 3434 },
+			{ name: 'Terminal 4', id: '4', processId: 5545 },
 		];
 		terminalService.getLastCommandForTerminal = (term: { id: string }) => {
 			if (term.id === '1') {
@@ -92,6 +94,8 @@ suite('TerminalAndTaskStatePromptElement', () => {
 		terminalService.terminals = [
 			{ name: 'Terminal 1', id: '1', processId: 1234 },
 			{ name: 'Terminal 2', id: '2', processId: 5678 },
+			{ name: 'Terminal 3', id: '3', processId: 3434 },
+			{ name: 'Terminal 4', id: '4', processId: 5545 },
 		];
 		terminalService.getLastCommandForTerminal = (term: { id: string }) => {
 			if (term.id === '1') {
