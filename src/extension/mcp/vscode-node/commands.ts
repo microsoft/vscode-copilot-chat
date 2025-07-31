@@ -37,15 +37,15 @@ interface PromptStringInputInfo {
 }
 
 export interface IPendingSetupArgs {
-	targetSchema: JsonSchema;
-	name: string;
 	type: PackageType;
-	readme?: string;
+	publisher: string;
+	name: string;
 	version?: string;
+	readme?: string;
 }
 
 export type ValidatePackageResult =
-	{ state: 'ok'; publisher: string; version?: string; pendingSetup: IPendingSetupArgs }
+	{ state: 'ok'; pendingSetup: IPendingSetupArgs }
 	| { state: 'error'; error: string };
 
 interface NpmPackageResponse {
@@ -96,7 +96,7 @@ export class McpSetupCommands extends Disposable {
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.validatePackage', async (args: IValidatePackageArgs): Promise<ValidatePackageResult> => {
 			const result = await this.validatePackageRegistry(args);
 			if (result.state === 'ok') {
-				this.enqueuePendingSetup(result.pendingSetup);
+				this.enqueuePendingSetup(args.targetConfig, result.pendingSetup);
 			}
 			return result;
 		}));
@@ -105,7 +105,7 @@ export class McpSetupCommands extends Disposable {
 		}));
 	}
 
-	private async enqueuePendingSetup(args: IPendingSetupArgs) {
+	private async enqueuePendingSetup(targetConfig: JsonSchema, args: IPendingSetupArgs) {
 		const cts = new CancellationTokenSource();
 		const canPrompt = new DeferredPromise<void>();
 		const pickRef = new McpPickRef(raceCancellation(canPrompt.p, cts.token));
@@ -133,7 +133,7 @@ export class McpSetupCommands extends Disposable {
 					id: '1'
 				},
 				props: {
-					targetSchema: args.targetSchema,
+					targetSchema: targetConfig,
 					packageName: args.name,
 					packageVersion: args.version,
 					packageType: args.type,
@@ -200,14 +200,12 @@ export class McpSetupCommands extends Disposable {
 				const version = data['dist-tags']?.latest;
 				return {
 					state: 'ok',
-					publisher: data.maintainers?.[0]?.name || 'unknown',
-					version,
 					pendingSetup: {
-						targetSchema: args.targetConfig,
-						name: args.name,
 						type: args.type,
-						readme: data.readme,
-						version: version
+						publisher: data.maintainers?.[0]?.name || 'unknown',
+						name: args.name,
+						version: version,
+						readme: data.readme
 					}
 				};
 			} else if (args.type === 'pip') {
@@ -219,14 +217,12 @@ export class McpSetupCommands extends Disposable {
 				const version = data.info?.version;
 				return {
 					state: 'ok',
-					publisher: data.info?.author || data.info?.author_email || 'unknown',
-					version,
 					pendingSetup: {
-						targetSchema: args.targetConfig,
+						publisher: data.info?.author || data.info?.author_email || 'unknown',
 						name: args.name,
+						version: version,
 						type: args.type,
-						readme: data.info?.description,
-						version: version
+						readme: data.info?.description
 					}
 				};
 			} else if (args.type === 'nuget') {
@@ -245,9 +241,8 @@ export class McpSetupCommands extends Disposable {
 				const data = await response.json() as DockerHubResponse;
 				return {
 					state: 'ok',
-					publisher: data.namespace || data.user || 'unknown',
 					pendingSetup: {
-						targetSchema: args.targetConfig,
+						publisher: data.namespace || data.user || 'unknown',
 						name: args.name,
 						type: args.type,
 						readme: data.full_description || data.description,
