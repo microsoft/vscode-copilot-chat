@@ -18,10 +18,11 @@ import { ChatLocation as VsCodeChatLocation } from '../../../vscodeTypes';
 import { Conversation, Turn } from '../../prompt/common/conversation';
 import { McpToolCallingLoop } from './mcpToolCallingLoop';
 import { McpPickRef } from './mcpToolCallingTools';
+import { getNuGetPackageMetadata } from './nuget';
 
 type PackageType = 'npm' | 'pip' | 'docker' | 'nuget';
 
-interface IValidatePackageArgs {
+export interface IValidatePackageArgs {
 	type: PackageType;
 	name: string;
 	targetConfig: JsonSchema;
@@ -35,7 +36,17 @@ interface PromptStringInputInfo {
 	password?: boolean;
 }
 
-type ValidatePackageResult = { state: 'ok'; publisher: string; version?: string } | { state: 'error'; error: string };
+export interface IPendingSetupArgs {
+	targetSchema: JsonSchema;
+	name: string;
+	type: PackageType;
+	readme?: string;
+	version?: string;
+}
+
+export type ValidatePackageResult =
+	{ state: 'ok'; publisher: string; version?: string; pendingSetup: IPendingSetupArgs }
+	| { state: 'error'; error: string };
 
 interface NpmPackageResponse {
 	maintainers?: Array<{ name: string }>;
@@ -50,14 +61,6 @@ interface PyPiPackageResponse {
 		description?: string;
 		version?: string;
 	};
-}
-
-interface NuGetServiceIndexResponse {
-	resources?: Array<{ "@id": string; "@type": string }>;
-}
-
-interface NuGetSearchResponse {
-	data?: Array<{ id: string; version: string; description?: string; owners?: Array<string> }>;
 }
 
 interface DockerHubResponse {
@@ -91,21 +94,25 @@ export class McpSetupCommands extends Disposable {
 			return this.pendingSetup.done;
 		}));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.validatePackage', async (args: IValidatePackageArgs): Promise<ValidatePackageResult> => {
-			return this.validatePackageRegistry(args);
+			const result = await this.validatePackageRegistry(args);
+			if (result.state === 'ok') {
+				this.enqueuePendingSetup(result.pendingSetup);
+			}
+			return result;
 		}));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.check', () => {
 			return 1;
 		}));
 	}
 
-	private async enqueuePendingSetup(targetSchema: JsonSchema, packageName: string, packageType: PackageType, packageReadme: string | undefined, packageVersion: string | undefined) {
+	private async enqueuePendingSetup(args: IPendingSetupArgs) {
 		const cts = new CancellationTokenSource();
 		const canPrompt = new DeferredPromise<void>();
 		const pickRef = new McpPickRef(raceCancellation(canPrompt.p, cts.token));
 
 		// we start doing the prompt in the background so the first call is speedy
 		const done = (async () => {
-			const fakePrompt = `Generate an MCP configuration for ${packageName}`;
+			const fakePrompt = `Generate an MCP configuration for ${args.name}`;
 			const mcpLoop = this.instantiationService.createInstance(McpToolCallingLoop, {
 				toolCallLimit: 100, // limited via `getAvailableTools` in the loop
 				conversation: new Conversation(generateUuid(), [new Turn(undefined, { type: 'user', message: fakePrompt })]),
@@ -126,18 +133,18 @@ export class McpSetupCommands extends Disposable {
 					id: '1'
 				},
 				props: {
-					targetSchema,
-					packageName,
-					packageVersion,
-					packageType,
+					targetSchema: args.targetSchema,
+					packageName: args.name,
+					packageVersion: args.version,
+					packageType: args.type,
 					pickRef,
-					packageReadme: packageReadme || '<empty>',
+					packageReadme: args.readme || '<empty>',
 				},
 			});
 
 			const toolCallLoopResult = await mcpLoop.run(undefined, cts.token);
 			if (toolCallLoopResult.response.type !== ChatFetchResponseType.Success) {
-				vscode.window.showErrorMessage(`Failed to generate MCP configuration for ${packageName}: ${toolCallLoopResult.response.reason}`);
+				vscode.window.showErrorMessage(`Failed to generate MCP configuration for ${args.name}: ${toolCallLoopResult.response.reason}`);
 				return undefined;
 			}
 
@@ -179,7 +186,7 @@ export class McpSetupCommands extends Disposable {
 		});
 
 		this.pendingSetup?.cts.dispose(true);
-		this.pendingSetup = { cts, name: packageName, canPrompt, done };
+		this.pendingSetup = { cts, name: args.name, canPrompt, done };
 	}
 
 	private async validatePackageRegistry(args: IValidatePackageArgs): Promise<ValidatePackageResult> {
@@ -191,8 +198,18 @@ export class McpSetupCommands extends Disposable {
 				}
 				const data = await response.json() as NpmPackageResponse;
 				const version = data['dist-tags']?.latest;
-				this.enqueuePendingSetup(args.targetConfig, args.name, args.type, data.readme, version);
-				return { state: 'ok', publisher: data.maintainers?.[0]?.name || 'unknown', version };
+				return {
+					state: 'ok',
+					publisher: data.maintainers?.[0]?.name || 'unknown',
+					version,
+					pendingSetup: {
+						targetSchema: args.targetConfig,
+						name: args.name,
+						type: args.type,
+						readme: data.readme,
+						version: version
+					}
+				};
 			} else if (args.type === 'pip') {
 				const response = await fetch(`https://pypi.org/pypi/${encodeURIComponent(args.name)}/json`);
 				if (!response.ok) {
@@ -200,62 +217,20 @@ export class McpSetupCommands extends Disposable {
 				}
 				const data = await response.json() as PyPiPackageResponse;
 				const version = data.info?.version;
-				this.enqueuePendingSetup(args.targetConfig, args.name, args.type, data.info?.description, version);
-				return { state: 'ok', publisher: data.info?.author || data.info?.author_email || 'unknown', version };
-			} else if (args.type === 'nuget') {
-				// read the service index to find the search URL
-				// https://learn.microsoft.com/en-us/nuget/api/service-index
-				const serviceIndexUrl = `https://api.nuget.org/v3/index.json`;
-				const serviceIndexResponse = await fetch(serviceIndexUrl);
-				if (!serviceIndexResponse.ok) {
-					return { state: 'error', error: `Unable to load the NuGet.org registry service index (${serviceIndexUrl})` };
-				}
-
-				// find the search query URL
-				// https://learn.microsoft.com/en-us/nuget/api/search-query-service-resource
-				const serviceIndex = await serviceIndexResponse.json() as NuGetServiceIndexResponse;
-				const searchBaseUrl = serviceIndex.resources?.find(resource => resource['@type'] === 'SearchQueryService/3.5.0')?.['@id'];
-				if (!searchBaseUrl) {
-					return { state: 'error', error: `Package search URL not found in the NuGet.org registry service index` };
-				}
-
-				// search for the package by ID
-				// https://learn.microsoft.com/en-us/nuget/consume-packages/finding-and-choosing-packages#search-syntax
-				const searchQueryUrl = `${searchBaseUrl}?q=packageid:${encodeURIComponent(args.name)}&prerelease=true&semVerLevel=2.0.0`;
-				const searchResponse = await fetch(searchQueryUrl);
-				if (!searchResponse.ok) {
-					return { state: 'error', error: `Failed to search for ${args.name} in then NuGet.org registry` };
-				}
-				const data = await searchResponse.json() as NuGetSearchResponse;
-				if (!data.data?.[0]) {
-					return { state: 'error', error: `Package ${args.name} not found on NuGet.org` };
-				}
-
-				const id = data.data[0].id ?? args.name;
-				let version = data.data[0].version;
-				if (version.indexOf('+') !== -1) {
-					// NuGet versions can have a + sign for build metadata, we strip it for MCP config and API calls
-					// e.g. 1.0.0+build123 -> 1.0.0
-					version = version.split('+')[0];
-				}
-				const publisher = data.data[0].owners ? data.data[0].owners.join(', ') : 'unknown';
-
-				// Try to fetch the package readme
-				// https://learn.microsoft.com/en-us/nuget/api/readme-template-resource
-				const readmeTemplate = serviceIndex.resources?.find(resource => resource['@type'] === 'ReadmeUriTemplate/6.13.0')?.['@id'];
-				let description = data.data[0].description || undefined;
-				if (readmeTemplate) {
-					const readmeUrl = readmeTemplate
-						.replace('{lower_id}', encodeURIComponent(id.toLowerCase()))
-						.replace('{lower_version}', encodeURIComponent(version.toLowerCase()));
-					const readmeResponse = await fetch(readmeUrl);
-					if (readmeResponse.ok) {
-						description = await readmeResponse.text();
+				return {
+					state: 'ok',
+					publisher: data.info?.author || data.info?.author_email || 'unknown',
+					version,
+					pendingSetup: {
+						targetSchema: args.targetConfig,
+						name: args.name,
+						type: args.type,
+						readme: data.info?.description,
+						version: version
 					}
-				}
-
-				this.enqueuePendingSetup(args.targetConfig, id, args.type, description, version);
-				return { state: 'ok', publisher, version };
+				};
+			} else if (args.type === 'nuget') {
+				return await getNuGetPackageMetadata(args);
 			} else if (args.type === 'docker') {
 				// Docker Hub API uses namespace/repository format
 				// Handle both formats: 'namespace/repository' or just 'repository' (assumes 'library/' namespace)
@@ -268,8 +243,16 @@ export class McpSetupCommands extends Disposable {
 					return { state: 'error', error: `Docker image ${args.name} not found in Docker Hub registry` };
 				}
 				const data = await response.json() as DockerHubResponse;
-				this.enqueuePendingSetup(args.targetConfig, args.name, args.type, data.full_description || data.description, undefined);
-				return { state: 'ok', publisher: data.namespace || data.user || 'unknown' };
+				return {
+					state: 'ok',
+					publisher: data.namespace || data.user || 'unknown',
+					pendingSetup: {
+						targetSchema: args.targetConfig,
+						name: args.name,
+						type: args.type,
+						readme: data.full_description || data.description,
+					}
+				};
 			}
 			return { state: 'error', error: `Unsupported package type: ${args.type}` };
 		} catch (error) {
