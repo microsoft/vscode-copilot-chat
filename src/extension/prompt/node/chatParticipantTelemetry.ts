@@ -451,6 +451,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 
 		this._telemetryService.sendInternalMSFTTelemetryEvent('toolCallDetailsInternal', {
 			...toolCallProperties,
+			messageId: this.telemetryMessageId,
 			availableTools: JSON.stringify(availableTools.map(tool => tool.name)),
 		}, toolCallMeasurements);
 	}
