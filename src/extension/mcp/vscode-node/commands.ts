@@ -44,7 +44,7 @@ export interface IPendingSetupArgs {
 
 // contract with https://github.com/microsoft/vscode/blob/main/src/vs/workbench/contrib/mcp/browser/mcpCommandsAddConfiguration.ts
 export type ValidatePackageResult =
-	{ state: 'ok'; publisher: string; pendingSetup: IPendingSetupArgs }
+	{ state: 'ok'; publisher: string; name?: string; version?: string } & IPendingSetupArgs
 	| { state: 'error'; error: string };
 
 interface NpmPackageResponse {
@@ -95,9 +95,14 @@ export class McpSetupCommands extends Disposable {
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.validatePackage', async (args: IValidatePackageArgs): Promise<ValidatePackageResult> => {
 			const result = await this.validatePackageRegistry(args);
 			if (result.state === 'ok') {
-				this.enqueuePendingSetup(args, result.pendingSetup);
+				this.enqueuePendingSetup(args, result);
+
+				// return the minimal result to avoid leaking implementation details
+				// not all package information is needed to request consent to install the package
+				return { state: 'ok', publisher: result.publisher, name: result.name, version: result.version };
+			} else {
+				return { state: 'error', error: result.error };
 			}
-			return result;
 		}));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.check', () => {
 			return 1;
@@ -200,11 +205,9 @@ export class McpSetupCommands extends Disposable {
 				return {
 					state: 'ok',
 					publisher: data.maintainers?.[0]?.name || 'unknown',
-					pendingSetup: {
-						name: args.name,
-						version: version,
-						readme: data.readme
-					}
+					name: args.name,
+					version: version,
+					readme: data.readme,
 				};
 			} else if (args.type === 'pip') {
 				const response = await fetch(`https://pypi.org/pypi/${encodeURIComponent(args.name)}/json`);
@@ -216,11 +219,9 @@ export class McpSetupCommands extends Disposable {
 				return {
 					state: 'ok',
 					publisher: data.info?.author || data.info?.author_email || 'unknown',
-					pendingSetup: {
-						name: args.name,
-						version: version,
-						readme: data.info?.description
-					}
+					name: args.name,
+					version: version,
+					readme: data.info?.description,
 				};
 			} else if (args.type === 'nuget') {
 				return await getNuGetPackageMetadata(args);
@@ -239,10 +240,8 @@ export class McpSetupCommands extends Disposable {
 				return {
 					state: 'ok',
 					publisher: data.namespace || data.user || 'unknown',
-					pendingSetup: {
-						name: args.name,
-						readme: data.full_description || data.description,
-					}
+					name: args.name,
+					readme: data.full_description || data.description,
 				};
 			}
 			return { state: 'error', error: `Unsupported package type: ${args.type}` };

@@ -76,10 +76,8 @@ export async function getNuGetPackageMetadata(args: IValidatePackageArgs): Promi
 	return {
 		state: 'ok',
 		publisher: publisher,
-		pendingSetup: {
-			name: id,
-			version: version,
-			readme: description
-		}
+		name: id,
+		version: version,
+		readme: description,
 	};
 }
