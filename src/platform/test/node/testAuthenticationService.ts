@@ -79,6 +79,11 @@ export class TestAuthenticationService extends BaseAuthenticationService {
 		this._onDidAuthenticationChange.fire();
 	}
 
+
+	override getAnyAdoSession(_options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
+		return Promise.resolve(undefined);
+	}
+
 	override getAdoAccessTokenBase64(options?: AuthenticationGetSessionOptions): Promise<string | undefined> {
 		return Promise.resolve(undefined);
 	}

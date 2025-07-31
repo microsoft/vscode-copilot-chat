@@ -25,11 +25,9 @@ export class AuthenticationService extends BaseAuthenticationService {
 	) {
 		super(logService, tokenStore, tokenManager, configurationService);
 		this._register(authentication.onDidChangeSessions((e) => {
-			if (e.provider.id === authProviderId(configurationService)) {
+			if (e.provider.id === authProviderId(configurationService) || e.provider.id === AuthProviderId.Microsoft) {
 				this._logService.debug('Handling onDidChangeSession.');
 				void this._handleAuthChangeEvent();
-			} else if (e.provider.id === AuthProviderId.Microsoft) {
-				this._onDidAdoAuthenticationChange.fire();
 			}
 		}));
 		this._register(this._domainService.onDidChangeDomains((e) => {
@@ -58,10 +56,18 @@ export class AuthenticationService extends BaseAuthenticationService {
 		return session;
 	}
 
-	async getAdoAccessTokenBase64(options?: AuthenticationGetSessionOptions): Promise<string | undefined> {
+	protected async getAnyAdoSession(options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined> {
 		const adoAuthProviderId = 'microsoft';
 		const adoScopes = ['499b84ac-1321-427f-aa17-267ca6975798/.default', 'offline_access'];
-		const session = await authentication.getSession(adoAuthProviderId, adoScopes, options);
+		const func = async () => await authentication.getSession(adoAuthProviderId, adoScopes, options);
+		// If we are doing an interactive flow, don't use the singler so that we don't get hung up on the user's choice
+		const session = options?.createIfNone || options?.forceNewSession ? await func() : await this._taskSingler.getOrCreate('ado', func);
+		this._anyAdoSession = session;
+		return session;
+	}
+
+	async getAdoAccessTokenBase64(options?: AuthenticationGetSessionOptions): Promise<string | undefined> {
+		const session = await this.getAnyAdoSession(options);
 		return session ? Buffer.from(`PAT:${session.accessToken}`, 'utf8').toString('base64') : undefined;
 	}
 }
