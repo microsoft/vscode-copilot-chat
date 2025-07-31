@@ -2123,6 +2123,11 @@
 						"type": "boolean",
 						"default": true,
 						"description": "%github.copilot.config.autoFix%"
+					},
+					"github.copilot.chat.customInstructionsInSystemMessage": {
+						"type": "boolean",
+						"default": true,
+						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
 					}
 				}
 			},
@@ -2641,11 +2646,6 @@
 							"experimental"
 						],
 						"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
-					},
-					"github.copilot.chat.customInstructionsInSystemMessage": {
-						"type": "boolean",
-						"default": true,
-						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
 					},
 					"github.copilot.chat.edits.newNotebook.enabled": {
 						"type": "boolean",
