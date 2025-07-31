@@ -257,7 +257,23 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		} catch (err: unknown) {
 			const timeToError = Date.now() - baseTelemetry.issuedTime;
 			const processed = this.processError(err, chatParams.ourRequestId);
-			this._sendResponseErrorTelemetry(processed, telemetryProperties, chatParams, chatEndpoint, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages));
+			if (processed.type === ChatFetchResponseType.Canceled) {
+				this._sendCancellationTelemetry({
+					source: telemetryProperties.messageSource ?? 'unknown',
+					requestId: chatParams.ourRequestId,
+					model: chatEndpoint.model,
+				}, {
+					totalTokenMax: chatEndpoint.modelMaxPromptTokens ?? -1,
+					promptTokenCount: tokenCount,
+					tokenCountMax: maxResponseTokens,
+					timeToFirstToken: undefined,
+					timeToCancelled: timeToError,
+					isVisionRequest: this.filterImageMessages(messages) ? 1 : -1,
+					isBYOK: chatEndpoint instanceof OpenAIEndpoint ? 1 : -1
+				});
+			} else {
+				this._sendResponseErrorTelemetry(processed, telemetryProperties, chatParams, chatEndpoint, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages));
+			}
 			pendingLoggedChatRequest?.resolve(processed);
 			return processed;
 		}
@@ -285,7 +301,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			totalTokenMax: number;
 			promptTokenCount: number;
 			tokenCountMax: number;
-			timeToFirstToken: number;
+			timeToFirstToken: number | undefined;
 			timeToCancelled: number;
 			isVisionRequest: number;
 			isBYOK: number;
@@ -571,39 +587,50 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				requestId: requestId,
 				serverRequestId: undefined,
 			};
-		} if (isCancellationError(err)) {
+		}
+		if (isCancellationError(err)) {
 			return {
 				type: ChatFetchResponseType.Canceled,
 				reason: 'Got a cancellation error',
 				requestId: requestId,
 				serverRequestId: undefined,
 			};
+		}
+		if (err && (
+			(err instanceof Error && err.message === 'Premature close') ||
+			(typeof err === 'object' && (err as any).code === 'ERR_STREAM_PREMATURE_CLOSE') /* to be extra sure */)
+		) {
+			return {
+				type: ChatFetchResponseType.Canceled,
+				reason: 'Stream closed prematurely',
+				requestId: requestId,
+				serverRequestId: undefined,
+			};
+		}
+		this._logService.error(errorsUtil.fromUnknown(err), `Error on conversation request`);
+		this._telemetryService.sendGHTelemetryException(err, 'Error on conversation request');
+		// this.logger.exception(err, `Error on conversation request`);
+		if (fetcher.isInternetDisconnectedError(err)) {
+			return {
+				type: ChatFetchResponseType.Failed,
+				reason: `It appears you're not connected to the internet, please check your network connection and try again.`,
+				requestId: requestId,
+				serverRequestId: undefined,
+			};
+		} else if (fetcher.isFetcherError(err)) {
+			return {
+				type: ChatFetchResponseType.Failed,
+				reason: fetcher.getUserMessageForFetcherError(err),
+				requestId: requestId,
+				serverRequestId: undefined,
+			};
 		} else {
-			this._logService.error(errorsUtil.fromUnknown(err), `Error on conversation request`);
-			this._telemetryService.sendGHTelemetryException(err, 'Error on conversation request');
-			// this.logger.exception(err, `Error on conversation request`);
-			if (fetcher.isInternetDisconnectedError(err)) {
-				return {
-					type: ChatFetchResponseType.Failed,
-					reason: `It appears you're not connected to the internet, please check your network connection and try again.`,
-					requestId: requestId,
-					serverRequestId: undefined,
-				};
-			} else if (fetcher.isFetcherError(err)) {
-				return {
-					type: ChatFetchResponseType.Failed,
-					reason: fetcher.getUserMessageForFetcherError(err),
-					requestId: requestId,
-					serverRequestId: undefined,
-				};
-			} else {
-				return {
-					type: ChatFetchResponseType.Failed,
-					reason: 'Error on conversation request. Check the log for more details.',
-					requestId: requestId,
-					serverRequestId: undefined,
-				};
-			}
+			return {
+				type: ChatFetchResponseType.Failed,
+				reason: 'Error on conversation request. Check the log for more details.',
+				requestId: requestId,
+				serverRequestId: undefined,
+			};
 		}
 	}
 }
