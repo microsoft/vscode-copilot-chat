@@ -389,7 +389,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 					'ask';
 	}
 
-	public sendToolCallingTelemetry(toolCallRounds: IToolCallRound[], availableTools: readonly vscode.LanguageModelToolInformation[], responseType: ChatFetchResponseType | 'cancelled' | 'maxToolCalls', toolCallResults?: Record<string, vscode.LanguageModelToolResult>): void {
+	public sendToolCallingTelemetry(toolCallRounds: IToolCallRound[], availableTools: readonly vscode.LanguageModelToolInformation[], responseType: ChatFetchResponseType | 'cancelled' | 'maxToolCalls'): void {
 		if (availableTools.length === 0) {
 			return;
 		}
@@ -407,19 +407,6 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			}
 			return acc;
 		}, 0);
-
-		// Collect all tool call details including parameters for internal telemetry
-		const toolCallDetails = toolCallRounds.flatMap(round =>
-			round.toolCalls.map(call => {
-				const result = toolCallResults?.[call.id];
-				return {
-					name: call.name,
-					arguments: call.arguments,
-					id: call.id,
-					result: result ? this.summarizeToolResult(result) : undefined
-				};
-			})
-		);
 
 		const toolCallProperties = {
 			intentId: this._intent.id,
@@ -465,15 +452,13 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		this._telemetryService.sendInternalMSFTTelemetryEvent('toolCallDetailsInternal', {
 			...toolCallProperties,
 			messageId: this.telemetryMessageId,
-			availableTools: JSON.stringify(availableTools.map(tool => tool.name)),
-			toolCallDetails: JSON.stringify(toolCallDetails),
+			availableTools: JSON.stringify(availableTools.map(tool => tool.name))
 		}, toolCallMeasurements);
 
 		this._telemetryService.sendEnhancedGHTelemetryEvent('toolCallDetailsRestricted', {
 			...toolCallProperties,
 			messageId: this.telemetryMessageId,
-			availableTools: JSON.stringify(availableTools.map(tool => tool.name)),
-			toolCallDetails: JSON.stringify(toolCallDetails),
+			availableTools: JSON.stringify(availableTools.map(tool => tool.name))
 		}, toolCallMeasurements);
 
 	}
@@ -488,23 +473,6 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		return <T>this._genericTelemetryData.find(d => d instanceof ctor);
 	}
 
-	private summarizeToolResult(result: vscode.LanguageModelToolResult): string {
-		try {
-			// Extract the text content from the tool result for telemetry
-			if ('content' in result && Array.isArray(result.content)) {
-				const textParts = result.content
-					.filter(part => part && typeof part === 'object' && 'value' in part)
-					.map(part => (part as any).value)
-					.join('\n');
-
-				// Truncate long results for telemetry
-				return textParts.length > 500 ? textParts.substring(0, 500) + '...' : textParts;
-			}
-			return '[Tool result content not readable]';
-		} catch (e) {
-			return '[Error reading tool result]';
-		}
-	}
 }
 
 export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefined> {
