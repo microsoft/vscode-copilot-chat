@@ -455,7 +455,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			availableTools: JSON.stringify(availableTools.map(tool => tool.name))
 		}, toolCallMeasurements);
 
-		this._telemetryService.sendEnhancedGHTelemetryEvent('toolCallDetailsRestricted', {
+		this._telemetryService.sendEnhancedGHTelemetryEvent('toolCallDetailsExternal', {
 			...toolCallProperties,
 			messageId: this.telemetryMessageId,
 			availableTools: JSON.stringify(availableTools.map(tool => tool.name))
