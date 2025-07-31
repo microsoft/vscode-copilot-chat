@@ -385,6 +385,7 @@ export interface IVSCodeObservableTextDocument extends IObservableDocument {
 	kind: 'textDocument';
 	readonly textDocument: TextDocument;
 	fromOffsetRange(textDocument: TextDocument, range: OffsetRange): Range | undefined;
+	fromRange(textDocument: TextDocument, range: Range): Range | undefined;
 	toOffsetRange(textDocument: TextDocument, range: Range): OffsetRange | undefined;
 }
 
@@ -443,6 +444,10 @@ class VSCodeObservableTextDocument extends AbstractVSCodeObservableDocument impl
 	toOffsetRange(textDocument: TextDocument, range: Range): OffsetRange | undefined {
 		return new OffsetRange(textDocument.offsetAt(range.start), textDocument.offsetAt(range.end));
 	}
+
+	fromRange(_textDocument: TextDocument, range: Range): Range | undefined {
+		return range;
+	}
 }
 
 export interface IVSCodeObservableNotebookDocument extends IObservableDocument {
@@ -458,6 +463,7 @@ export interface IVSCodeObservableNotebookDocument extends IObservableDocument {
 	 * The range provided could span multiple cells, so it returns an array of tuples containing the cell document and the range within that cell.
 	 */
 	fromOffsetRange(range: OffsetRange): [TextDocument, Range][];
+	fromRange(textDocument: TextDocument, range: Range): Range | undefined;
 	fromRange(range: Range): [TextDocument, Range][];
 	projectDiagnostics(cell: TextDocument, diagnostics: readonly Diagnostic[]): Diagnostic[];
 }
@@ -495,8 +501,20 @@ class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument 
 		}
 		return undefined;
 	}
-	fromRange(range: Range): [TextDocument, Range][] {
-		return this.altNotebook.fromAltRange(range).map(r => [r[0].document, r[1]]);
+	fromRange(textDocument: TextDocument, range: Range): Range | undefined;
+	fromRange(range: Range): [TextDocument, Range][];
+	fromRange(arg1: TextDocument | Range, range?: Range): Range | undefined | [TextDocument, Range][] {
+		if (arg1 instanceof Range) {
+			return this.altNotebook.fromAltRange(arg1).map(r => [r[0].document, r[1]]);
+		} else if (range !== undefined) {
+			const cell = this.altNotebook.getCell(arg1);
+			if (!cell) {
+				return undefined;
+			}
+			const results = this.altNotebook.fromAltRange(range);
+			const found = results.find(r => r[0].document === arg1);
+			return found ? found[1] : undefined;
+		}
 	}
 	projectDiagnostics(textDocument: TextDocument, diagnostics: readonly Diagnostic[]): Diagnostic[] {
 		const cell = this.altNotebook.getCell(textDocument);

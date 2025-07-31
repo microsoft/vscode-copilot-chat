@@ -5,11 +5,11 @@
 
 import * as vscode from 'vscode';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { autorun } from '../../../util/vs/base/common/observableInternal';
 import { getContributedToolName } from '../common/toolNames';
 import { IToolsService } from '../common/toolsService';
-
-import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IToolGroupingCache, IToolGroupingService } from '../common/virtualTools/virtualToolTypes';
+
 import '../node/allTools';
 import './allTools';
 
@@ -18,7 +18,6 @@ export class ToolsContribution extends Disposable {
 		@IToolsService toolsService: IToolsService,
 		@IToolGroupingCache toolGrouping: IToolGroupingCache,
 		@IToolGroupingService toolGroupingService: IToolGroupingService,
-		@IExperimentationService experimentationService: IExperimentationService
 	) {
 		super();
 
@@ -31,8 +30,8 @@ export class ToolsContribution extends Disposable {
 			vscode.window.showInformationMessage('Tool groups have been reset. They will be regenerated on the next agent request.');
 		}));
 
-		experimentationService.initializePromise.then(() => {
-			vscode.commands.executeCommand('setContext', 'chat.toolGroupingThreshold', toolGroupingService.threshold);
-		});
+		this._register(autorun(reader => {
+			vscode.commands.executeCommand('setContext', 'chat.toolGroupingThreshold', toolGroupingService.threshold.read(reader));
+		}));
 	}
 }

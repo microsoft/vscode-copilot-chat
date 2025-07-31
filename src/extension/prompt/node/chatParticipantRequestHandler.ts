@@ -11,6 +11,7 @@ import { CanceledMessage, ChatLocation } from '../../../platform/chat/common/com
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { FilterReason } from '../../../platform/networking/common/openai';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
 import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
@@ -413,7 +414,11 @@ function createTurnFromVSCodeChatHistoryTurns(
 	if (!chatResponseTurn.result.errorDetails) {
 		status = TurnStatus.Success;
 	} else if (chatResponseTurn.result.errorDetails?.responseIsFiltered) {
-		status = TurnStatus.Filtered;
+		if (chatResponseTurn.result.metadata?.category === FilterReason.Prompt) {
+			status = TurnStatus.PromptFiltered;
+		} else {
+			status = TurnStatus.Filtered;
+		}
 	} else if (chatResponseTurn.result.errorDetails.message === 'Cancelled' || chatResponseTurn.result.errorDetails.message === CanceledMessage.message) {
 		status = TurnStatus.Cancelled;
 	} else {
