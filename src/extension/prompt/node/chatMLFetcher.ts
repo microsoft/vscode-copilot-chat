@@ -232,23 +232,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					return result;
 				}
 				case FetchResponseKind.Canceled:
-					/* __GDPR__
-						"response.cancelled" : {
-							"owner": "digitarald",
-							"comment": "Report canceled service responses for quality.",
-							"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
-							"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source for why the request was made" },
-							"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the request" },
-							"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
-							"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens", "isMeasurement": true },
-							"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
-							"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
-							"timeToCancelled": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
-							"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
-							"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true }
-						}
-					*/
-					this._telemetryService.sendTelemetryEvent('response.cancelled', { github: true, microsoft: true }, {
+					this._sendCancellationTelemetry({
 						source: telemetryProperties.messageSource ?? 'unknown',
 						requestId: chatParams.ourRequestId,
 						model: chatEndpoint.model,
@@ -277,6 +261,65 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			pendingLoggedChatRequest?.resolve(processed);
 			return processed;
 		}
+	}
+
+	private _sendCancellationTelemetry(
+		{
+			source,
+			requestId,
+			model,
+		}: {
+			source: string;
+			requestId: string;
+			model: string;
+		},
+		{
+			totalTokenMax,
+			promptTokenCount,
+			tokenCountMax,
+			timeToFirstToken,
+			timeToCancelled,
+			isVisionRequest,
+			isBYOK
+		}: {
+			totalTokenMax: number;
+			promptTokenCount: number;
+			tokenCountMax: number;
+			timeToFirstToken: number;
+			timeToCancelled: number;
+			isVisionRequest: number;
+			isBYOK: number;
+		}
+	) {
+		/* __GDPR__
+			"response.cancelled" : {
+				"owner": "digitarald",
+				"comment": "Report canceled service responses for quality.",
+				"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
+				"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source for why the request was made" },
+				"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the request" },
+				"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
+				"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens", "isMeasurement": true },
+				"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
+				"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
+				"timeToCancelled": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
+				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
+				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true }
+			}
+		*/
+		this._telemetryService.sendTelemetryEvent('response.cancelled', { github: true, microsoft: true }, {
+			source,
+			requestId,
+			model,
+		}, {
+			totalTokenMax,
+			promptTokenCount,
+			tokenCountMax,
+			timeToFirstToken,
+			timeToCancelled,
+			isVisionRequest,
+			isBYOK
+		});
 	}
 
 	private _sendResponseErrorTelemetry(
