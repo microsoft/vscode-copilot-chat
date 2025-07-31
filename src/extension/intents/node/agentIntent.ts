@@ -70,7 +70,7 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 		}
 
 		allowTools[ToolName.RunTests] = await testService.hasAnyTests();
-		allowTools[ToolName.CoreCreateAndRunTask] = !!(configurationService.getConfig(ConfigKey.AgentCanRunTasks) && tasksService.getTasks().length);
+		allowTools[ToolName.CoreRunTask] = !!(configurationService.getConfig(ConfigKey.AgentCanRunTasks) && tasksService.getTasks().length);
 
 		return toolsService.getEnabledTools(request, tool => {
 			if (typeof allowTools[tool.name] === 'boolean') {
