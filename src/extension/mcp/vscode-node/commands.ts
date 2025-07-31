@@ -83,7 +83,8 @@ export class McpSetupCommands extends Disposable {
 		super();
 		this._register(toDisposable(() => this.pendingSetup?.cts.dispose(true)));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.flow', (args: { name: string }) => {
-			if (this.pendingSetup?.name !== args.name) {
+			// allow case-insensitive comparison
+			if (this.pendingSetup?.name.toUpperCase() !== args.name.toUpperCase()) {
 				return undefined;
 			}
 
