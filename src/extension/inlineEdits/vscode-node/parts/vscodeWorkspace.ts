@@ -387,6 +387,7 @@ export interface IVSCodeObservableTextDocument extends IObservableDocument {
 	fromOffsetRange(textDocument: TextDocument, range: OffsetRange): Range | undefined;
 	fromRange(textDocument: TextDocument, range: Range): Range | undefined;
 	toOffsetRange(textDocument: TextDocument, range: Range): OffsetRange | undefined;
+	toRange(textDocument: TextDocument, range: Range): Range | undefined;
 }
 
 abstract class AbstractVSCodeObservableDocument {
@@ -445,6 +446,10 @@ class VSCodeObservableTextDocument extends AbstractVSCodeObservableDocument impl
 		return new OffsetRange(textDocument.offsetAt(range.start), textDocument.offsetAt(range.end));
 	}
 
+	toRange(_textDocument: TextDocument, range: Range): Range | undefined {
+		return range;
+	}
+
 	fromRange(_textDocument: TextDocument, range: Range): Range | undefined {
 		return range;
 	}
@@ -466,6 +471,7 @@ export interface IVSCodeObservableNotebookDocument extends IObservableDocument {
 	fromRange(textDocument: TextDocument, range: Range): Range | undefined;
 	fromRange(range: Range): [TextDocument, Range][];
 	projectDiagnostics(cell: TextDocument, diagnostics: readonly Diagnostic[]): Diagnostic[];
+	toRange(textDocument: TextDocument, range: Range): Range | undefined;
 }
 
 class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument implements IVSCodeObservableNotebookDocument {
@@ -522,6 +528,14 @@ class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument 
 			return [];
 		}
 		return toAltDiagnostics(this.altNotebook, cell, diagnostics);
+	}
+	toRange(textDocument: TextDocument, range: Range): Range | undefined {
+		const cell = this.altNotebook.getCell(textDocument);
+		if (!cell) {
+			return undefined;
+		}
+		const ranges = this.altNotebook.toAltRange(cell, [range]);
+		return ranges.length > 0 ? ranges[0] : undefined;
 	}
 }
 
@@ -691,4 +705,3 @@ export function editFromTextDocumentContentChangeEvents(events: readonly TextDoc
 	const replacementsInApplicationOrder = events.map(e => StringReplacement.replace(OffsetRange.ofStartAndLength(e.rangeOffset, e.rangeLength), e.text));
 	return StringEdit.composeSequentialReplacements(replacementsInApplicationOrder);
 }
-
