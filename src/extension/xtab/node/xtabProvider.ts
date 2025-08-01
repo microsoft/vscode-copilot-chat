@@ -828,8 +828,10 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		const apiKey = this.configService.getConfig(ConfigKey.Internal.InlineEditsXtabProviderApiKey);
 		const hasOverriddenUrlAndApiKey = url !== undefined && apiKey !== undefined;
 
+		const configuredModelName = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderModelName, this.expService);
+
 		if (hasOverriddenUrlAndApiKey) {
-			return this.instaService.createInstance(XtabEndpoint, url, apiKey);
+			return this.instaService.createInstance(XtabEndpoint, url, apiKey, configuredModelName);
 		}
 
 		const modelName = this.forceUseDefaultModel

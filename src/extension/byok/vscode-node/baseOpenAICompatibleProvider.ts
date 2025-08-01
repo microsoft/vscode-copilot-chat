@@ -22,7 +22,7 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 		public readonly authType: BYOKAuthType,
 		private readonly _name: string,
 		private readonly _baseUrl: string,
-		private _knownModels: BYOKKnownModels | undefined,
+		protected _knownModels: BYOKKnownModels | undefined,
 		private readonly _byokStorageService: IBYOKStorageService,
 		@IFetcherService protected readonly _fetcherService: IFetcherService,
 		@ILogService protected readonly _logService: ILogService,

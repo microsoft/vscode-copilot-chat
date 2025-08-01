@@ -35,7 +35,9 @@ interface PromptStringInputInfo {
 	password?: boolean;
 }
 
-type ValidatePackageResult = { state: 'ok'; publisher: string; version?: string } | { state: 'error'; error: string };
+type ValidatePackageResult =
+	{ state: 'ok'; publisher: string; name?: string; version?: string }
+	| { state: 'error'; error: string };
 
 interface NpmPackageResponse {
 	maintainers?: Array<{ name: string }>;
@@ -48,6 +50,7 @@ interface PyPiPackageResponse {
 		author?: string;
 		author_email?: string;
 		description?: string;
+		name?: string;
 		version?: string;
 	};
 }
@@ -83,7 +86,8 @@ export class McpSetupCommands extends Disposable {
 		super();
 		this._register(toDisposable(() => this.pendingSetup?.cts.dispose(true)));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.flow', (args: { name: string }) => {
-			if (this.pendingSetup?.name !== args.name) {
+			// allow case-insensitive comparison
+			if (this.pendingSetup?.name.toUpperCase() !== args.name.toUpperCase()) {
 				return undefined;
 			}
 
@@ -199,9 +203,11 @@ export class McpSetupCommands extends Disposable {
 					return { state: 'error', error: `Package ${args.name} not found in PyPI registry` };
 				}
 				const data = await response.json() as PyPiPackageResponse;
+				const publisher = data.info?.author || data.info?.author_email || 'unknown';
+				const name = data.info?.name || args.name;
 				const version = data.info?.version;
-				this.enqueuePendingSetup(args.targetConfig, args.name, args.type, data.info?.description, version);
-				return { state: 'ok', publisher: data.info?.author || data.info?.author_email || 'unknown', version };
+				this.enqueuePendingSetup(args.targetConfig, name, args.type, data.info?.description, version);
+				return { state: 'ok', publisher, name, version };
 			} else if (args.type === 'nuget') {
 				// read the service index to find the search URL
 				// https://learn.microsoft.com/en-us/nuget/api/service-index
@@ -255,7 +261,7 @@ export class McpSetupCommands extends Disposable {
 				}
 
 				this.enqueuePendingSetup(args.targetConfig, id, args.type, description, version);
-				return { state: 'ok', publisher, version };
+				return { state: 'ok', publisher, name: id, version };
 			} else if (args.type === 'docker') {
 				// Docker Hub API uses namespace/repository format
 				// Handle both formats: 'namespace/repository' or just 'repository' (assumes 'library/' namespace)

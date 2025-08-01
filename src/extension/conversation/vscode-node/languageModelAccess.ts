@@ -11,8 +11,9 @@ import { IBlockedExtensionService } from '../../../platform/chat/common/blockedE
 import { ChatFetchResponseType, ChatLocation, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { getTextPart } from '../../../platform/chat/common/globalStringUtils';
 import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
+import { AutoChatEndpoint, isAutoModeEnabled } from '../../../platform/endpoint/common/autoChatEndpoint';
+import { IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
-import { AutoChatEndpoint, isAutoModeEnabled } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -25,6 +26,7 @@ import { BaseTokensPerCompletion } from '../../../platform/tokenizer/node/tokeni
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
 import { isDefined, isNumber, isString, isStringArray } from '../../../util/vs/base/common/types';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ExtensionMode } from '../../../vscodeTypes';
@@ -51,7 +53,9 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@IEmbeddingsComputer private readonly _embeddingsComputer: IEmbeddingsComputer,
 		@IVSCodeExtensionContext private readonly _vsCodeExtensionContext: IVSCodeExtensionContext,
-		@IExperimentationService private readonly _expService: IExperimentationService
+		@IExperimentationService private readonly _expService: IExperimentationService,
+		@IAutomodeService private readonly _automodeService: IAutomodeService,
+		@IEnvService private readonly _envService: IEnvService
 	) {
 		super();
 
@@ -96,11 +100,11 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 		const models: vscode.LanguageModelChatInformation[] = [];
 		const chatEndpoints = await this._endpointProvider.getAllChatEndpoints();
-		if (isAutoModeEnabled(this._expService)) {
-			chatEndpoints.push(this._instantiationService.createInstance(AutoChatEndpoint));
-		}
 
 		const defaultChatEndpoint = chatEndpoints.find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1') ?? chatEndpoints[0];
+		if (isAutoModeEnabled(this._expService, this._envService)) {
+			chatEndpoints.push(await this._automodeService.resolveAutoModeEndpoint(generateUuid(), chatEndpoints));
+		}
 		const seenFamilies = new Set<string>();
 
 		for (const endpoint of chatEndpoints) {
@@ -140,7 +144,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 			const model: vscode.LanguageModelChatInformation = {
 				id: endpoint.model,
-				name: endpoint.name,
+				name: endpoint.model === AutoChatEndpoint.id ? 'Auto' : endpoint.name,
 				family: endpoint.family,
 				description: modelDescription,
 				cost: multiplierString,
