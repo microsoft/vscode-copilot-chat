@@ -6,16 +6,18 @@
 import { Raw } from '@vscode/prompt-tsx';
 import { ClientHttp2Stream } from 'http2';
 import { OpenAI } from 'openai';
+import { ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { ILogService } from '../../../platform/log/common/logService';
 import { FinishedCallback, IResponseDelta, isOpenAiFunctionTool, OpenAiResponsesFunctionTool } from '../../../platform/networking/common/fetch';
 import { Response } from '../../../platform/networking/common/fetcherService';
-import { IChatEndpoint, IEndpointBody } from '../../../platform/networking/common/networking';
+import { IChatEndpoint, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { CAPIChatMessage, ChatCompletion, FinishedCompletionReason, TokenLogProb } from '../../../platform/networking/common/openai';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { binaryIndexOf } from '../../../util/vs/base/common/buffer';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Lazy } from '../../../util/vs/base/common/lazy';
 import { SSEParser } from '../../../util/vs/base/common/sseParser';
 import { isDefined } from '../../../util/vs/base/common/types';
@@ -112,6 +114,15 @@ export class OpenAIResponsesEndpoint extends OpenAIEndpoint {
 		}, () => {
 			body.destroy();
 		});
+	}
+
+	public override async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
+		const response = await super.makeChatRequest2(options, token);
+		if (response.type === ChatFetchResponseType.InvalidStatefulMarker) {
+			return super.makeChatRequest2({ ...options, statefulMarker: undefined }, token);
+		}
+
+		return response;
 	}
 }
 

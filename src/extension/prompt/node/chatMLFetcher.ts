@@ -531,6 +531,9 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		if (response.failKind === ChatFailKind.NotFound) {
 			return { type: ChatFetchResponseType.NotFound, reason, requestId, serverRequestId };
 		}
+		if (response.failKind === ChatFailKind.InvalidPreviousResponseId) {
+			return { type: ChatFetchResponseType.InvalidStatefulMarker, reason, requestId, serverRequestId };
+		}
 
 		return { type: ChatFetchResponseType.Failed, reason, requestId, serverRequestId };
 	}

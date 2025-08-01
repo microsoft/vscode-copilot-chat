@@ -97,6 +97,7 @@ export enum ChatFailKind {
 	AgentUnauthorized = 'unauthorized',
 	AgentFailedDependency = 'failedDependency',
 	ValidationFailed = 'validationFailed',
+	InvalidPreviousResponseId = 'invalidPreviousResponseId',
 	NotFound = 'notFound',
 	Unknown = 'unknown',
 }
@@ -299,6 +300,16 @@ async function handleError(
 				failKind: ChatFailKind.AgentUnauthorized,
 				reason: response.statusText || response.statusText,
 				data: jsonData
+			};
+		}
+
+		if (response.status === 400 && jsonData?.code === 'previous_response_not_found') {
+			return {
+				type: FetchResponseKind.Failed,
+				modelRequestId: modelRequestIdObj,
+				failKind: ChatFailKind.InvalidPreviousResponseId,
+				reason: jsonData.message || 'Invalid previous response ID',
+				data: jsonData,
 			};
 		}
 
