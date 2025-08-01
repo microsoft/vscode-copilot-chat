@@ -1059,8 +1059,7 @@
 					"newWorkspace",
 					"runVscodeCommand",
 					"getProjectSetupInfo",
-					"installExtension",
-					"createAndRunTask"
+					"installExtension"
 				]
 			}
 		],
