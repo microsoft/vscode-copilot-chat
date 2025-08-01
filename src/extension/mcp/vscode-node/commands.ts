@@ -58,6 +58,7 @@ interface PyPiPackageResponse {
 		author?: string;
 		author_email?: string;
 		description?: string;
+		name?: string;
 		version?: string;
 	};
 }
@@ -85,7 +86,8 @@ export class McpSetupCommands extends Disposable {
 		super();
 		this._register(toDisposable(() => this.pendingSetup?.cts.dispose(true)));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.flow', (args: { name: string }) => {
-			if (this.pendingSetup?.name !== args.name) {
+			// allow case-insensitive comparison
+			if (this.pendingSetup?.name.toUpperCase() !== args.name.toUpperCase()) {
 				return undefined;
 			}
 
@@ -215,14 +217,10 @@ export class McpSetupCommands extends Disposable {
 					return { state: 'error', error: `Package ${args.name} not found in PyPI registry` };
 				}
 				const data = await response.json() as PyPiPackageResponse;
+				const publisher = data.info?.author || data.info?.author_email || 'unknown';
+				const name = data.info?.name || args.name;
 				const version = data.info?.version;
-				return {
-					state: 'ok',
-					publisher: data.info?.author || data.info?.author_email || 'unknown',
-					name: args.name,
-					version: version,
-					readme: data.info?.description,
-				};
+				return { state: 'ok', publisher, name, version, readme: data.info?.description };
 			} else if (args.type === 'nuget') {
 				return await getNuGetPackageMetadata(args);
 			} else if (args.type === 'docker') {

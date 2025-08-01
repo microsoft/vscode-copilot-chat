@@ -74,7 +74,7 @@ export class GitHubPullRequestProviders implements Disposable {
 				this.titleAndDescriptionProvider = this.disposables.add(this.instantiationService.createInstance(GitHubPullRequestTitleAndDescriptionGenerator));
 			}
 			// This string "Copilot" needs to be in here. It's how we an tell which provider to use in the PR extension.
-			this.disposables.add(this.gitHubExtensionApi.registerTitleAndDescriptionProvider(l10n.t('Generate with Copilot'), this.titleAndDescriptionProvider));
+			this.disposables.add(this.gitHubExtensionApi.registerTitleAndDescriptionProvider(l10n.t('Generate Title and Message'), this.titleAndDescriptionProvider));
 			this.logService.info('Successfully registered GitHub PR title and description provider.');
 		} catch (e) {
 			// Catch errors in case there's a breaking API change.
