@@ -13,7 +13,7 @@ import { ITokenizer } from '../../../../util/common/tokenizer';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { toErrorMessage } from '../../../../util/vs/base/common/errorMessage';
 import { isCancellationError } from '../../../../util/vs/base/common/errors';
-import { LanguageModelDataPart, LanguageModelPromptTsxPart, ToolResultAudience, LanguageModelTextPart, LanguageModelToolResult, LanguageModelTextPart2, LanguageModelDataPart2 } from '../../../../vscodeTypes';
+import { LanguageModelDataPart, LanguageModelDataPart2, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelTextPart2, LanguageModelToolResult, ToolResultAudience } from '../../../../vscodeTypes';
 import { isImageDataPart } from '../../../conversation/common/languageModelChatMessageHelpers';
 import { IResultMetadata } from '../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCall, IToolCallRound } from '../../../prompt/common/intents';
@@ -86,7 +86,9 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 			keepWith: useKeepWith(),
 		}));
 		const children: PromptElement[] = [];
-		children.push(<AssistantMessage toolCalls={assistantToolCalls}>{round.response}</AssistantMessage>);
+		const statefulMarkerData = round.statefulMarker ? { type: 'statefulMarker', value: round.statefulMarker } : undefined;
+		const statefulMarker = round.statefulMarker ? <opaque value={statefulMarkerData} /> : undefined;
+		children.push(<AssistantMessage toolCalls={assistantToolCalls}>{statefulMarker}{round.response}</AssistantMessage>);
 
 		// Tool call elements should be rendered with the later elements first, allowed to grow to fill the available space
 		// Each tool 'reserves' 1/(N*4) of the available space just so that newer tool calls don't completely elimate

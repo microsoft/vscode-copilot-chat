@@ -430,6 +430,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				parameters: toolInfo.inputSchema,
 			} satisfies OpenAiFunctionDef;
 		}) : undefined;
+		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
@@ -441,6 +442,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						id: this.createInternalToolCallId(call.id),
 						arguments: call.arguments === '' ? '{}' : call.arguments
 					})));
+				}
+				if (delta.statefulMarker) {
+					statefulMarker = delta.statefulMarker;
 				}
 
 				return stopEarly ? text.length : undefined;
@@ -484,6 +488,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					toolCalls,
 					toolInputRetry,
 					undefined,
+					statefulMarker
 				),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
