@@ -20,7 +20,7 @@ import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, ICopilotToolCall, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
-import { IChatEndpoint, IEndpointBody, IMakeChatRequestOptions, postRequest } from '../../networking/common/networking';
+import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions, postRequest } from '../../networking/common/networking';
 import { CAPIChatMessage, ChatCompletion, FinishedCompletionReason } from '../../networking/common/openai';
 import { prepareChatCompletionForReturn } from '../../networking/node/chatStream';
 import { SSEProcessor } from '../../networking/node/stream';
@@ -244,6 +244,10 @@ export class ChatEndpoint implements IChatEndpoint {
 			// Add the messages & model back
 			body['messages'] = newMessages;
 		}
+	}
+
+	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		return createCapiRequestBody(this.model, options);
 	}
 
 	public async processResponseFromChatEndpoint(

@@ -21,7 +21,7 @@ import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/t
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { FinishedCallback, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams } from './fetch';
 import { FetchOptions, IAbortController, IFetcherService, Response } from './fetcherService';
-import { ChatCompletion } from './openai';
+import { ChatCompletion, rawMessageToCAPI } from './openai';
 
 /**
  * Encapsulates all the functionality related to making GET/POST requests using
@@ -62,6 +62,7 @@ export interface IEndpointBody {
 	/** General or completions: */
 	tools?: (OpenAiFunctionTool | OpenAiResponsesFunctionTool)[];
 	model?: string;
+	previous_response_id?: string;
 	max_tokens?: number;
 	max_completion_tokens?: number;
 	temperature?: number;
@@ -71,6 +72,7 @@ export interface IEndpointBody {
 	n?: number;
 	input?: readonly any[];
 	intent?: boolean;
+	intent_threshold?: number;
 	state?: 'enabled';
 	snippy?: { enabled: boolean };
 	stream_options?: { include_usage?: boolean };
@@ -139,6 +141,11 @@ export interface IMakeChatRequestOptions {
 	telemetryProperties?: TelemetryProperties;
 	/** (CAPI-only) Intent classifier details */
 	intentParams?: IntentParams;
+}
+
+export interface ICreateEndpointBodyOptions extends IMakeChatRequestOptions {
+	requestId: string;
+	postOptions: OptionalChatRequestParams;
 }
 
 export interface IChatEndpoint extends IEndpoint {
@@ -210,7 +217,45 @@ export interface IChatEndpoint extends IEndpoint {
 	 */
 	makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse>;
 
+	/**
+	 * Creates the request body to be sent to the endpoint based on the request.
+	 */
+	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody;
+
 	cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint;
+}
+
+/** Function to create a standard request body for CAPI completions */
+export function createCapiRequestBody(model: string, options: ICreateEndpointBodyOptions) {
+	// FIXME@ulugbekna: need to investigate why language configs have such stop words, eg
+	// python has `\ndef` and `\nclass` which must be stop words for ghost text
+	// const stops = getLanguageConfig<string[]>(accessor, ConfigKey.Stops);
+
+	const request: IEndpointBody = {
+		messages: rawMessageToCAPI(options.messages),
+		model,
+		// stop: stops,
+	};
+
+	if (options.statefulMarker) {
+		request.previous_response_id = options.statefulMarker.id;
+		request.messages = options.messages.slice(options.statefulMarker.index);
+	}
+
+	if (options.postOptions) {
+		Object.assign(request, options.postOptions);
+	}
+
+	// todo@connor4312/lramos: this was present but, from what I can tell, was
+	// never used in current code paths.
+	// if (options.intentParams) {
+	// 	request.intent = options.intentParams.intent;
+	// 	if (options.intentParams.intent_threshold) {
+	// 		request.intent_threshold = options.intentParams.intent_threshold;
+	// 	}
+	// }
+
+	return request;
 }
 
 function networkRequest(

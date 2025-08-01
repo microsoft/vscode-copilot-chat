@@ -20,8 +20,8 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
-import { ChatCompletion, FilterReason, FinishedCompletionReason, rawMessageToCAPI } from '../../../platform/networking/common/openai';
-import { ChatFailKind, ChatParams, ChatRequestCanceled, ChatRequestFailed, ChatResults, fetchAndStreamChat, FetchResponseKind } from '../../../platform/openai/node/fetch';
+import { ChatCompletion, FilterReason, FinishedCompletionReason } from '../../../platform/networking/common/openai';
+import { ChatFailKind, ChatRequestCanceled, ChatRequestFailed, ChatResults, fetchAndStreamChat, FetchResponseKind } from '../../../platform/openai/node/fetch';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService, TelemetryProperties } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
@@ -100,7 +100,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 	 * Note: the returned array of strings may be less than `n` (e.g., in case there were errors during streaming)
 	 */
 	public async fetchMany(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponses> {
-		let { debugName, endpoint: chatEndpoint, finishedCb, location, messages, requestOptions, source, statefulMarker, telemetryProperties, userInitiatedRequest } = opts;
+		let { debugName, endpoint: chatEndpoint, finishedCb, location, messages, requestOptions, source, telemetryProperties, userInitiatedRequest } = opts;
 		if (!telemetryProperties) {
 			telemetryProperties = {};
 		}
@@ -122,17 +122,12 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		}
 
 		const postOptions = this.preparePostOptions(requestOptions);
-		const model_name = chatEndpoint.model;
+		const requestBody = chatEndpoint.createRequestBody({
+			...opts,
+			requestId: ourRequestId,
+			postOptions
+		});
 
-		const chatParams: ChatParams = {
-			messages: rawMessageToCAPI(messages),
-			model: model_name,
-			ourRequestId,
-			location,
-			postOptions,
-			secretKey: requestOptions.secretKey,
-			statefulMarker,
-		};
 
 		const baseTelemetry = TelemetryData.createAndMarkAsIssued({
 			...telemetryProperties,
@@ -140,12 +135,19 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			uiKind: ChatLocation.toString(location)
 		});
 
-		const pendingLoggedChatRequest = this._requestLogger.logChatRequest(debugName, chatEndpoint, chatParams);
+		const pendingLoggedChatRequest = this._requestLogger.logChatRequest(debugName, chatEndpoint, {
+			messages: opts.messages,
+			model: chatEndpoint.model,
+			ourRequestId,
+			location: opts.location,
+			postOptions,
+			tools: requestBody.tools,
+		});
 		let tokenCount = -1;
 		try {
 			let response: ChatResults | ChatRequestFailed | ChatRequestCanceled;
 			const streamRecorder = new FetchStreamRecorder(finishedCb);
-			const payloadValidationResult = isValidChatPayload(chatParams);
+			const payloadValidationResult = isValidChatPayload(opts.messages, postOptions);
 			if (!payloadValidationResult.isValid) {
 				response = {
 					type: FetchResponseKind.Failed,
@@ -165,9 +167,13 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					this._authenticationService,
 					this._interactionService,
 					chatEndpoint,
-					chatParams,
+					requestBody,
 					baseTelemetry,
 					streamRecorder.callback,
+					requestOptions.secretKey,
+					opts.location,
+					ourRequestId,
+					postOptions.n,
 					userInitiatedRequest,
 					token,
 					telemetryProperties
@@ -185,14 +191,14 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			pendingLoggedChatRequest?.markTimeToFirstToken(timeToFirstToken);
 			switch (response.type) {
 				case FetchResponseKind.Success: {
-					const result = await this.processSuccessfulResponse(response, messages, chatParams.ourRequestId, maxResponseTokens, tokenCount, timeToFirstToken, baseTelemetry, chatEndpoint, userInitiatedRequest);
+					const result = await this.processSuccessfulResponse(response, messages, ourRequestId, maxResponseTokens, tokenCount, timeToFirstToken, baseTelemetry, chatEndpoint, userInitiatedRequest);
 					pendingLoggedChatRequest?.resolve(result, streamRecorder.deltas);
 					return result;
 				}
 				case FetchResponseKind.Canceled:
 					this._sendCancellationTelemetry({
 						source: telemetryProperties.messageSource ?? 'unknown',
-						requestId: chatParams.ourRequestId,
+						requestId: ourRequestId,
 						model: chatEndpoint.model,
 					}, {
 						totalTokenMax: chatEndpoint.modelMaxPromptTokens ?? -1,
@@ -204,21 +210,21 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						isBYOK: chatEndpoint instanceof OpenAIEndpoint ? 1 : -1
 					});
 					pendingLoggedChatRequest?.resolveWithCancelation();
-					return this.processCanceledResponse(response, chatParams.ourRequestId);
+					return this.processCanceledResponse(response, ourRequestId);
 				case FetchResponseKind.Failed: {
-					const processed = this.processFailedResponse(response, chatParams.ourRequestId);
-					this._sendResponseErrorTelemetry(processed, telemetryProperties, chatParams, chatEndpoint, tokenCount, maxResponseTokens, timeToFirstToken, this.filterImageMessages(messages));
+					const processed = this.processFailedResponse(response, ourRequestId);
+					this._sendResponseErrorTelemetry(processed, telemetryProperties, ourRequestId, chatEndpoint, tokenCount, maxResponseTokens, timeToFirstToken, this.filterImageMessages(messages));
 					pendingLoggedChatRequest?.resolve(processed);
 					return processed;
 				}
 			}
 		} catch (err: unknown) {
 			const timeToError = Date.now() - baseTelemetry.issuedTime;
-			const processed = this.processError(err, chatParams.ourRequestId);
+			const processed = this.processError(err, ourRequestId);
 			if (processed.type === ChatFetchResponseType.Canceled) {
 				this._sendCancellationTelemetry({
 					source: telemetryProperties.messageSource ?? 'unknown',
-					requestId: chatParams.ourRequestId,
+					requestId: ourRequestId,
 					model: chatEndpoint.model,
 				}, {
 					totalTokenMax: chatEndpoint.modelMaxPromptTokens ?? -1,
@@ -230,7 +236,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					isBYOK: chatEndpoint instanceof OpenAIEndpoint ? 1 : -1
 				});
 			} else {
-				this._sendResponseErrorTelemetry(processed, telemetryProperties, chatParams, chatEndpoint, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages));
+				this._sendResponseErrorTelemetry(processed, telemetryProperties, ourRequestId, chatEndpoint, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages));
 			}
 			pendingLoggedChatRequest?.resolve(processed);
 			return processed;
@@ -299,7 +305,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 	private _sendResponseErrorTelemetry(
 		processed: ChatFetchError,
 		telemetryProperties: TelemetryProperties | undefined,
-		chatParams: ChatParams,
+		ourRequestId: string,
 		chatEndpointInfo: IChatEndpoint,
 		tokenCount: number,
 		maxResponseTokens: number,
@@ -327,7 +333,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			type: processed.type,
 			reason: processed.reason,
 			source: telemetryProperties?.messageSource ?? 'unknown',
-			requestId: chatParams.ourRequestId,
+			requestId: ourRequestId,
 			model: chatEndpointInfo.model,
 		}, {
 			totalTokenMax: chatEndpointInfo.modelMaxPromptTokens ?? -1,
@@ -601,24 +607,24 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
  * @param params The params being sent in the chat request
  * @returns Whether the chat payload is valid
  */
-function isValidChatPayload(params: ChatParams): { isValid: boolean; reason: string } {
-	if (params.messages.length === 0) {
+function isValidChatPayload(messages: Raw.ChatMessage[], postOptions: OptionalChatRequestParams): { isValid: boolean; reason: string } {
+	if (messages.length === 0) {
 		return { isValid: false, reason: asUnexpected('No messages provided') };
 	}
-	if (params?.postOptions?.max_tokens && params?.postOptions?.max_tokens < 1) {
+	if (postOptions?.max_tokens && postOptions?.max_tokens < 1) {
 		return { isValid: false, reason: asUnexpected('Invalid response token parameter') };
 	}
 
 	const functionNamePattern = /^[a-zA-Z0-9_-]+$/;
 	if (
-		params.postOptions?.functions?.some(f => !f.name.match(functionNamePattern)) ||
-		params.postOptions?.function_call?.name && !params.postOptions.function_call.name.match(functionNamePattern)
+		postOptions?.functions?.some(f => !f.name.match(functionNamePattern)) ||
+		postOptions?.function_call?.name && !postOptions.function_call.name.match(functionNamePattern)
 	) {
 		return { isValid: false, reason: asUnexpected('Function names must match ^[a-zA-Z0-9_-]+$') };
 	}
 
-	if (params.postOptions?.tools && params.postOptions.tools.length > HARD_TOOL_LIMIT) {
-		return { isValid: false, reason: `Tool limit exceeded (${params.postOptions.tools.length}/${HARD_TOOL_LIMIT}). Click "Configure Tools" in the chat input to disable ${params.postOptions.tools.length - HARD_TOOL_LIMIT} tools and retry.` };
+	if (postOptions?.tools && postOptions.tools.length > HARD_TOOL_LIMIT) {
+		return { isValid: false, reason: `Tool limit exceeded (${postOptions.tools.length}/${HARD_TOOL_LIMIT}). Click "Configure Tools" in the chat input to disable ${postOptions.tools.length - HARD_TOOL_LIMIT} tools and retry.` };
 	}
 
 	return { isValid: true, reason: '' };

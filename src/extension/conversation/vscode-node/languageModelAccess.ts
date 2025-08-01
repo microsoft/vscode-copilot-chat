@@ -403,7 +403,6 @@ export class CopilotLanguageModelWrapper extends Disposable {
 
 	async provideLanguageModelResponse(endpoint: IChatEndpoint, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.LanguageModelChatRequestOptions, extensionId: string, progress: vscode.Progress<vscode.ChatResponseFragment2>, token: vscode.CancellationToken): Promise<any> {
 		const finishCallback: FinishedCallback = async (_text, index, delta): Promise<undefined> => {
-			console.log('delta', delta);
 			if (delta.text) {
 				progress.report({ index, part: new vscode.LanguageModelTextPart(delta.text) });
 			}

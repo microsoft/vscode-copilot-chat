@@ -474,6 +474,8 @@ export class DefaultIntentRequestHandler {
 				this.turn.setResponse(TurnStatus.Error, undefined, baseModelTelemetry.properties.messageId, chatResult);
 				return chatResult;
 			}
+			case ChatFetchResponseType.InvalidStatefulMarker:
+				throw new Error('unreachable'); // retried within the endpoint
 		}
 	}
 }

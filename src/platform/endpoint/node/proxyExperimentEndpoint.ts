@@ -13,7 +13,7 @@ import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { Response } from '../../networking/common/fetcherService';
-import { IChatEndpoint, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
+import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
@@ -132,6 +132,10 @@ export class ProxyExperimentEndpoint implements IChatEndpoint {
 
 	acquireTokenizer(): ITokenizer {
 		return this.selectedEndpoint.acquireTokenizer();
+	}
+
+	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		return this.selectedEndpoint.createRequestBody(options);
 	}
 }
 

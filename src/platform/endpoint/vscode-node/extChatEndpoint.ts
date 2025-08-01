@@ -14,9 +14,9 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { IntentParams } from '../../chat/common/chatMLFetcher';
 import { ChatFetchResponseType, ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { ILogService } from '../../log/common/logService';
-import { FinishedCallback, OptionalChatRequestParams } from '../../networking/common/fetch';
+import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { Response } from '../../networking/common/fetcherService';
-import { IChatEndpoint, IMakeChatRequestOptions } from '../../networking/common/networking';
+import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
@@ -213,7 +213,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		const vscodeMessages = this.convertToApiChatMessage(messages);
 
 		const vscodeOptions: vscode.LanguageModelChatRequestOptions = {
-			tools: (requestOptions?.tools ?? []).map(tool => ({
+			tools: ((requestOptions?.tools ?? []) as OpenAiFunctionTool[]).map(tool => ({
 				name: tool.function.name,
 				description: tool.function.description,
 				inputSchema: tool.function.parameters,
@@ -273,6 +273,10 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 				serverRequestId: undefined
 			};
 		}
+	}
+
+	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		throw new Error('unreachable'); // this endpoint does not call into fetchers
 	}
 
 	cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {

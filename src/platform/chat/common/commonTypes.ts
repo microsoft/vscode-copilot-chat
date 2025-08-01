@@ -286,6 +286,9 @@ export function getErrorDetailsFromChatFetchError(fetchResult: ChatFetchError, c
 			return { message: l10n.t(`Sorry, no response was returned.`) };
 		case ChatFetchResponseType.ExtensionBlocked:
 			return { message: l10n.t(`Sorry, something went wrong.`) };
+		case ChatFetchResponseType.InvalidStatefulMarker:
+			// should be unreachable, retried within the endpoint
+			return { message: l10n.t(`Your chat session state is invalid, please start a new chat.`) };
 	}
 }
 

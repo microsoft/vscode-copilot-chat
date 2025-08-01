@@ -13,7 +13,7 @@ import { CHAT_MODEL } from '../../../configuration/common/configurationService';
 import { ILogService } from '../../../log/common/logService';
 import { FinishedCallback, OptionalChatRequestParams } from '../../../networking/common/fetch';
 import { Response } from '../../../networking/common/fetcherService';
-import { IChatEndpoint, IEndpointBody, IMakeChatRequestOptions } from '../../../networking/common/networking';
+import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../networking/common/networking';
 import { ChatCompletion } from '../../../networking/common/openai';
 import { ITelemetryService, TelemetryProperties } from '../../../telemetry/common/telemetry';
 import { TelemetryData } from '../../../telemetry/common/telemetryData';
@@ -59,6 +59,10 @@ export class MockEndpoint implements IChatEndpoint {
 			...options,
 			endpoint: this,
 		}, token);
+	}
+
+	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		return createCapiRequestBody(this.model, options);
 	}
 
 	public async makeChatRequest(

@@ -12,7 +12,7 @@ import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { Response } from '../../networking/common/fetcherService';
-import { IChatEndpoint, IMakeChatRequestOptions } from '../../networking/common/networking';
+import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
@@ -61,6 +61,9 @@ export class AutoChatEndpoint implements IChatEndpoint {
 		throw new Error('Method not implemented.');
 	}
 	cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {
+		throw new Error('Method not implemented.');
+	}
+	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
 		throw new Error('Method not implemented.');
 	}
 	acquireTokenizer(): ITokenizer {
