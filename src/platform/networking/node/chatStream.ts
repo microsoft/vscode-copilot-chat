@@ -14,7 +14,7 @@ import { FinishedCompletion, convertToAPIJsonData } from './stream';
 // TODO @lramos15 - Find a better file for this, since this file is for the chat stream and should not be telemetry related
 export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData) {
 	const telemetryDataWithPrompt = telemetryData.extendedBy({
-		messagesJson: JSON.stringify(messages)
+		messagesJson: JSON.stringify(messages),
 	});
 	telemetryService.sendEnhancedGHTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
