@@ -64,6 +64,7 @@ export interface IEndpointBody {
 	model?: string;
 	previous_response_id?: string;
 	max_tokens?: number;
+	max_output_tokens?: number;
 	max_completion_tokens?: number;
 	temperature?: number;
 	top_p?: number;
@@ -71,6 +72,9 @@ export interface IEndpointBody {
 	messages?: any[];
 	n?: number;
 	input?: readonly any[];
+	reasoning?: { effort?: string; summary?: string };
+	tool_choice?: OptionalChatRequestParams['tool_choice'] | { type: 'function'; name: string };
+	top_logprobs?: number;
 	intent?: boolean;
 	intent_threshold?: number;
 	state?: 'enabled';

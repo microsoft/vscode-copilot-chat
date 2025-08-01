@@ -8,10 +8,10 @@ import { ClientHttp2Stream } from 'http2';
 import type { OpenAI } from 'openai';
 import { ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { ILogService } from '../../../platform/log/common/logService';
-import { FinishedCallback, IResponseDelta, isOpenAiFunctionTool, OpenAiResponsesFunctionTool } from '../../../platform/networking/common/fetch';
+import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../../platform/networking/common/fetch';
 import { Response } from '../../../platform/networking/common/fetcherService';
-import { IChatEndpoint, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
-import { CAPIChatMessage, ChatCompletion, FinishedCompletionReason, TokenLogProb } from '../../../platform/networking/common/openai';
+import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { ChatCompletion, FinishedCompletionReason, TokenLogProb } from '../../../platform/networking/common/openai';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
@@ -31,65 +31,33 @@ export class OpenAIResponsesEndpoint extends OpenAIEndpoint {
 		return this.instantiationService.createInstance(OpenAIResponsesEndpoint, newModelInfo, this._apiKey, this._modelUrl);
 	}
 
-	override interceptBody(body: IEndpointBody | undefined): void {
-		super.interceptBody(body);
-		if (!body) {
-			return;
-		}
+	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		return {
+			model: this.model,
+			input: rawMessagesToResponseAPI(options.statefulMarker ? options.messages.slice(options.statefulMarker.index) : options.messages),
+			reasoning: this._modelInfo.capabilities.supports.thinking ? { summary: 'concise' } : undefined,
+			stream: true,
+			tools: options.requestOptions?.tools?.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
+				...tool.function,
+				type: 'function',
+				strict: false,
+				parameters: (tool.function.parameters || {}) as Record<string, unknown>,
+			})),
+			previous_response_id: options.statefulMarker?.id,
 
-		// responses API uses input instead of messages
-		if (body.messages) {
-			const input: OpenAI.Responses.ResponseInputItem[] = [];
-			for (const message of body.messages as CAPIChatMessage[]) {
-				switch (message.role) {
-					case 'assistant':
-						if (message.content) {
-							input.push({ role: 'assistant', content: message.content });
-						}
-						if (message.tool_calls) {
-							for (const toolCall of message.tool_calls) {
-								input.push({ type: 'function_call', name: toolCall.function.name, arguments: toolCall.function.arguments, call_id: toolCall.id });
-							}
-						}
-						break;
-					case 'tool':
-						if (message.tool_call_id) {
-							const asText = typeof message.content === 'string' ? message.content : message.content.filter(c => c.type === 'text').map(c => c.text).join('');
-							const asImages = typeof message.content === 'string' ? [] : message.content.filter(c => c.type === 'image_url').map((c): OpenAI.Responses.ResponseInputImage => ({ type: 'input_image', detail: c.image_url.detail || 'auto', image_url: c.image_url.url }));
+			// Only a subset of completion post options are supported, and some
+			// are renamed. Handle them manually:
+			temperature: options.postOptions.temperature,
+			top_p: options.postOptions.top_p,
+			max_output_tokens: options.postOptions.max_tokens,
+			tool_choice: typeof options.postOptions.tool_choice === 'object'
+				? { type: 'function', name: options.postOptions.tool_choice.function.name }
+				: options.postOptions.tool_choice,
+			// top_logprobs is documented but not in the API types yet
+			//@ts-expect-error
+			top_logprobs: options.postOptions.logprobs ? 3 : undefined,
 
-							// todod@connor4312: hack while responses API only supports text output from tools
-							input.push({ type: 'function_call_output', call_id: message.tool_call_id, output: asText });
-							if (asImages.length) {
-								input.push({ role: 'user', content: [{ type: 'input_text', text: 'Image associated with the above tool call:' }, ...asImages] });
-							}
-						}
-						break;
-					case 'user':
-					case 'system':
-						input.push({
-							role: message.role,
-							content: typeof message.content === 'string' ? message.content : message.content.map((c): OpenAI.Responses.ResponseInputContent => {
-								if (c.type === 'text') {
-									return { type: 'input_text', text: c.text };
-								} else {
-									return { type: 'input_image', detail: c.image_url.detail || 'auto', image_url: c.image_url.url };
-								}
-							})
-						});
-						break;
-				}
-			}
-
-			body.input = input;
-			body.messages = undefined;
-		}
-
-		body.n = undefined;
-		body.stream_options = undefined;
-
-		if (body?.tools) {
-			body.tools = body.tools.map((tool): OpenAiResponsesFunctionTool => isOpenAiFunctionTool(tool) ? ({ ...tool.function, type: 'function' }) : tool);
-		}
+		} satisfies OpenAI.Responses.ResponseCreateParamsStreaming;
 	}
 
 	public override async processResponseFromChatEndpoint(telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData): Promise<AsyncIterableObject<ChatCompletion>> {
@@ -232,4 +200,66 @@ function mapLogProp(text: Lazy<Uint8Array>, lp: OpenAI.Responses.ResponseTextDel
 		bytes,
 		logprob: lp.logprob!,
 	};
+}
+
+function rawContentToResponsesContent(part: Raw.ChatCompletionContentPart): OpenAI.Responses.ResponseInputContent | undefined {
+	switch (part.type) {
+		case Raw.ChatCompletionContentPartKind.Text:
+			return { type: 'input_text', text: part.text };
+		case Raw.ChatCompletionContentPartKind.Image:
+			return { type: 'input_image', detail: part.imageUrl.detail || 'auto', image_url: part.imageUrl.url };
+		case Raw.ChatCompletionContentPartKind.Opaque: {
+			const maybeCast = part.value as OpenAI.Responses.ResponseInputContent;
+			if (maybeCast.type === 'input_text' || maybeCast.type === 'input_image' || maybeCast.type === 'input_file') {
+				return maybeCast;
+			}
+		}
+	}
+}
+
+function rawMessagesToResponseAPI(messages: readonly Raw.ChatMessage[]): OpenAI.Responses.ResponseInputItem[] {
+	const input: OpenAI.Responses.ResponseInputItem[] = [];
+	for (const message of messages) {
+		switch (message.role) {
+			case Raw.ChatRole.Assistant:
+				if (message.content.length) {
+					input.push({ role: 'assistant', content: message.content.map(rawContentToResponsesContent).filter(isDefined) });
+				}
+				if (message.toolCalls) {
+					for (const toolCall of message.toolCalls) {
+						input.push({ type: 'function_call', name: toolCall.function.name, arguments: toolCall.function.arguments, call_id: toolCall.id });
+					}
+				}
+				break;
+			case Raw.ChatRole.Tool:
+				if (message.toolCallId) {
+					const asText = message.content
+						.filter(c => c.type === Raw.ChatCompletionContentPartKind.Text)
+						.map(c => c.text)
+						.join('');
+					const asImages = message.content
+						.filter(c => c.type === Raw.ChatCompletionContentPartKind.Image)
+						.map((c): OpenAI.Responses.ResponseInputImage => ({
+							type: 'input_image',
+							detail: c.imageUrl.detail || 'auto',
+							image_url: c.imageUrl.url,
+						}));
+
+					// todod@connor4312: hack while responses API only supports text output from tools
+					input.push({ type: 'function_call_output', call_id: message.toolCallId, output: asText });
+					if (asImages.length) {
+						input.push({ role: 'user', content: [{ type: 'input_text', text: 'Image associated with the above tool call:' }, ...asImages] });
+					}
+				}
+				break;
+			case Raw.ChatRole.User:
+				input.push({ role: 'user', content: message.content.map(rawContentToResponsesContent).filter(isDefined) });
+				break;
+			case Raw.ChatRole.System:
+				input.push({ role: 'system', content: message.content.map(rawContentToResponsesContent).filter(isDefined) });
+				break;
+		}
+	}
+
+	return input;
 }
