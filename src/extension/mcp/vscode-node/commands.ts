@@ -88,6 +88,7 @@ export class McpSetupCommands extends Disposable {
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.flow', (args: { name: string }) => {
 			// allow case-insensitive comparison
 			if (this.pendingSetup?.name.toUpperCase() !== args.name.toUpperCase()) {
+				vscode.window.showErrorMessage(`Failed to generate MCP server configuration with a matching package name. Expected '${args.name}' but got '${this.pendingSetup?.name}' from generated configuration.`);
 				return undefined;
 			}
 
