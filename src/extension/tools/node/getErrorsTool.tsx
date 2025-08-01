@@ -44,27 +44,32 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 	}
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IGetErrorsParams>, token: CancellationToken) {
-		const diagnostics = await Promise.all(options.input.filePaths.map(async (filePath, i): Promise<{ context: DiagnosticContext; uri: URI; diagnostics: vscode.Diagnostic[] }> => {
-			const uri = resolveToolInputPath(filePath, this.promptPathRepresentationService);
-			const range = options.input.ranges?.[i];
-			if (!uri) {
-				throw new Error(`Invalid input path ${filePath}`);
+		const diagnostics = await Promise.all(options.input.filePaths.map(async (filePath, i): Promise<{ context: DiagnosticContext; uri: URI; diagnostics: vscode.Diagnostic[] } | [URI, vscode.Diagnostic[]][]> => {
+			if (filePath) {
+				const uri = resolveToolInputPath(filePath, this.promptPathRepresentationService);
+				const range = options.input.ranges?.[i];
+				if (!uri) {
+					throw new Error(`Invalid input path ${filePath}`);
+				}
+
+				let diagnostics = range
+					? findDiagnosticForSelectionAndPrompt(this.languageDiagnosticsService, uri, new Range(...range), undefined)
+					: this.languageDiagnosticsService.getDiagnostics(uri);
+
+				diagnostics = diagnostics.filter(d => d.severity <= DiagnosticSeverity.Warning);
+
+				const document = await this.workspaceService.openTextDocumentAndSnapshot(uri);
+				checkCancellation(token);
+
+				return {
+					context: { document, language: getLanguage(document) },
+					diagnostics,
+					uri,
+				};
 			}
-
-			let diagnostics = range
-				? findDiagnosticForSelectionAndPrompt(this.languageDiagnosticsService, uri, new Range(...range), undefined)
-				: this.languageDiagnosticsService.getDiagnostics(uri);
-
-			diagnostics = diagnostics.filter(d => d.severity <= DiagnosticSeverity.Warning);
-
-			const document = await this.workspaceService.openTextDocumentAndSnapshot(uri);
-			checkCancellation(token);
-
-			return {
-				context: { document, language: getLanguage(document) },
-				diagnostics,
-				uri,
-			};
+			else {
+				return this.languageDiagnosticsService.getAllDiagnostics();
+			}
 		}));
 
 		checkCancellation(token);
