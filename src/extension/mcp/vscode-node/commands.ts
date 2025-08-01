@@ -203,12 +203,11 @@ export class McpSetupCommands extends Disposable {
 					return { state: 'error', error: `Package ${args.name} not found in npm registry` };
 				}
 				const data = await response.json() as NpmPackageResponse;
-				const version = data['dist-tags']?.latest;
 				return {
 					state: 'ok',
 					publisher: data.maintainers?.[0]?.name || 'unknown',
 					name: args.name,
-					version: version,
+					version: data['dist-tags']?.latest,
 					readme: data.readme,
 				};
 			} else if (args.type === 'pip') {
@@ -217,10 +216,13 @@ export class McpSetupCommands extends Disposable {
 					return { state: 'error', error: `Package ${args.name} not found in PyPI registry` };
 				}
 				const data = await response.json() as PyPiPackageResponse;
-				const publisher = data.info?.author || data.info?.author_email || 'unknown';
-				const name = data.info?.name || args.name;
-				const version = data.info?.version;
-				return { state: 'ok', publisher, name, version, readme: data.info?.description };
+				return {
+					state: 'ok',
+					publisher: data.info?.author || data.info?.author_email || 'unknown',
+					name: data.info?.name || args.name,
+					version: data.info?.version,
+					readme: data.info?.description
+				};
 			} else if (args.type === 'nuget') {
 				return await getNuGetPackageMetadata(args);
 			} else if (args.type === 'docker') {

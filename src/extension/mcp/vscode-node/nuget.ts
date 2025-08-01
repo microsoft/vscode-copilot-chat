@@ -73,5 +73,11 @@ export async function getNuGetPackageMetadata(args: IValidatePackageArgs): Promi
 		}
 	}
 
-	return { state: 'ok', publisher, name, version, readme };
+	return {
+		state: 'ok',
+		publisher,
+		name,
+		version,
+		readme
+	};
 }
