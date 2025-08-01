@@ -451,8 +451,16 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 
 		this._telemetryService.sendInternalMSFTTelemetryEvent('toolCallDetailsInternal', {
 			...toolCallProperties,
-			availableTools: JSON.stringify(availableTools.map(tool => tool.name)),
+			messageId: this.telemetryMessageId,
+			availableTools: JSON.stringify(availableTools.map(tool => tool.name))
 		}, toolCallMeasurements);
+
+		this._telemetryService.sendEnhancedGHTelemetryEvent('toolCallDetailsExternal', {
+			...toolCallProperties,
+			messageId: this.telemetryMessageId,
+			availableTools: JSON.stringify(availableTools.map(tool => tool.name))
+		}, toolCallMeasurements);
+
 	}
 
 	protected abstract _sendInternalRequestTelemetryEvent(): void;
@@ -464,6 +472,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 	protected _getTelemetryData<T extends TelemetryData>(ctor: new (...args: any[]) => T): T | undefined {
 		return <T>this._genericTelemetryData.find(d => d instanceof ctor);
 	}
+
 }
 
 export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefined> {
