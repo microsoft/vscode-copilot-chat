@@ -98,8 +98,9 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 		if (this.authType === BYOKAuthType.None) {
 			return;
 		}
-		this._apiKey = await promptForAPIKey(this._name, await this._byokStorageService.getAPIKey(this._name) !== undefined);
-		if (this._apiKey) {
+		const newAPIKey = await promptForAPIKey(this._name, await this._byokStorageService.getAPIKey(this._name) !== undefined);
+		if (newAPIKey) {
+			this._apiKey = newAPIKey;
 			this._byokStorageService.storeAPIKey(this._name, this._apiKey, BYOKAuthType.GlobalApiKey);
 		}
 	}
