@@ -7,6 +7,7 @@ import { AssistantMessage, BasePromptElementProps, PromptRenderer as BasePromptR
 import type { ChatParticipantToolToken, LanguageModelToolResult2, LanguageModelToolTokenizationOptions } from 'vscode';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
+import { StatefulMarkerContainer } from '../../../../platform/endpoint/common/statefulMarkerContainer';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { ITokenizer } from '../../../../util/common/tokenizer';
@@ -86,8 +87,9 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 			keepWith: useKeepWith(),
 		}));
 		const children: PromptElement[] = [];
-		const statefulMarkerData = round.statefulMarker ? { type: 'statefulMarker', value: round.statefulMarker } : undefined;
-		const statefulMarker = round.statefulMarker ? <opaque value={statefulMarkerData} /> : undefined;
+
+		// Don't include this when rendering and triggering summarization
+		const statefulMarker = round.statefulMarker && <StatefulMarkerContainer statefulMarker={round.statefulMarker} />;
 		children.push(<AssistantMessage toolCalls={assistantToolCalls}>{statefulMarker}{round.response}</AssistantMessage>);
 
 		// Tool call elements should be rendered with the later elements first, allowed to grow to fill the available space

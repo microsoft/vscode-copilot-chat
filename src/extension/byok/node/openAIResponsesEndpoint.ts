@@ -7,6 +7,7 @@ import { Raw } from '@vscode/prompt-tsx';
 import { ClientHttp2Stream } from 'http2';
 import type { OpenAI } from 'openai';
 import { ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
+import { rawPartAsStatefulMarker } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { ILogService } from '../../../platform/log/common/logService';
 import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../../platform/networking/common/fetch';
 import { Response } from '../../../platform/networking/common/fetcherService';
@@ -34,7 +35,7 @@ export class OpenAIResponsesEndpoint extends OpenAIEndpoint {
 	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
 		return {
 			model: this.model,
-			input: rawMessagesToResponseAPI(options.statefulMarker ? options.messages.slice(options.statefulMarker.index) : options.messages),
+			...rawMessagesToResponseAPI(options.messages),
 			reasoning: this._modelInfo.capabilities.supports.thinking ? { summary: 'concise' } : undefined,
 			stream: true,
 			tools: options.requestOptions?.tools?.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
@@ -43,8 +44,6 @@ export class OpenAIResponsesEndpoint extends OpenAIEndpoint {
 				strict: false,
 				parameters: (tool.function.parameters || {}) as Record<string, unknown>,
 			})),
-			previous_response_id: options.statefulMarker?.id,
-
 			// Only a subset of completion post options are supported, and some
 			// are renamed. Handle them manually:
 			temperature: options.postOptions.temperature,
@@ -56,7 +55,6 @@ export class OpenAIResponsesEndpoint extends OpenAIEndpoint {
 			// top_logprobs is documented but not in the API types yet
 			//@ts-expect-error
 			top_logprobs: options.postOptions.logprobs ? 3 : undefined,
-
 		} satisfies OpenAI.Responses.ResponseCreateParamsStreaming;
 	}
 
@@ -84,10 +82,20 @@ export class OpenAIResponsesEndpoint extends OpenAIEndpoint {
 		});
 	}
 
+	override interceptBody(body: IEndpointBody | undefined): void {
+		super.interceptBody(body);
+		if (!body) {
+			return;
+		}
+
+		body.n = undefined;
+		body.stream_options = undefined;
+	}
+
 	public override async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
 		const response = await super.makeChatRequest2(options, token);
 		if (response.type === ChatFetchResponseType.InvalidStatefulMarker) {
-			return super.makeChatRequest2({ ...options, statefulMarker: undefined }, token);
+			return super.makeChatRequest2({ ...options, ignoreStatefulMarker: true }, token);
 		}
 
 		return response;
@@ -217,13 +225,51 @@ function rawContentToResponsesContent(part: Raw.ChatCompletionContentPart): Open
 	}
 }
 
-function rawMessagesToResponseAPI(messages: readonly Raw.ChatMessage[]): OpenAI.Responses.ResponseInputItem[] {
+function rawContentToResponsesOutputContent(part: Raw.ChatCompletionContentPart): OpenAI.Responses.ResponseOutputText | OpenAI.Responses.ResponseOutputRefusal | undefined {
+	switch (part.type) {
+		case Raw.ChatCompletionContentPartKind.Text:
+			return { type: 'output_text', text: part.text, annotations: [] };
+	}
+}
+
+function getStatefulMarkerAndIndex(messages: readonly Raw.ChatMessage[]): { statefulMarker: string; index: number } | undefined {
+	for (let idx = messages.length - 1; idx >= 0; idx--) {
+		const message = messages[idx];
+		if (message.role === Raw.ChatRole.Assistant) {
+			for (const part of message.content) {
+				if (part.type === Raw.ChatCompletionContentPartKind.Opaque) {
+					const statefulMarker = rawPartAsStatefulMarker(part);
+					if (statefulMarker) {
+						return { statefulMarker, index: idx };
+					}
+				}
+			}
+		}
+	}
+	return undefined;
+}
+
+function rawMessagesToResponseAPI(messages: readonly Raw.ChatMessage[]): { input: OpenAI.Responses.ResponseInputItem[]; previous_response_id?: string } {
+	const statefulMarkerAndIndex = getStatefulMarkerAndIndex(messages);
+	let previousResponseId: string | undefined;
+	if (statefulMarkerAndIndex) {
+		previousResponseId = statefulMarkerAndIndex.statefulMarker;
+		messages = messages.slice(statefulMarkerAndIndex.index + 1);
+	}
+
 	const input: OpenAI.Responses.ResponseInputItem[] = [];
 	for (const message of messages) {
 		switch (message.role) {
 			case Raw.ChatRole.Assistant:
 				if (message.content.length) {
-					input.push({ role: 'assistant', content: message.content.map(rawContentToResponsesContent).filter(isDefined) });
+					input.push({
+						role: 'assistant',
+						content: message.content.map(rawContentToResponsesOutputContent).filter(isDefined),
+						// I don't know what this does. These seem optional but are required in the types
+						id: 'msg_123',
+						status: 'completed',
+						type: 'message',
+					} satisfies OpenAI.Responses.ResponseOutputMessage);
 				}
 				if (message.toolCalls) {
 					for (const toolCall of message.toolCalls) {
@@ -261,5 +307,5 @@ function rawMessagesToResponseAPI(messages: readonly Raw.ChatMessage[]): OpenAI.
 		}
 	}
 
-	return input;
+	return { input, previous_response_id: previousResponseId };
 }

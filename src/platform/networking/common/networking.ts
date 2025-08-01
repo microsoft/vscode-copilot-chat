@@ -71,7 +71,6 @@ export interface IEndpointBody {
 	stream?: boolean;
 	messages?: any[];
 	n?: number;
-	input?: readonly any[];
 	reasoning?: { effort?: string; summary?: string };
 	tool_choice?: OptionalChatRequestParams['tool_choice'] | { type: 'function'; name: string };
 	top_logprobs?: number;
@@ -98,6 +97,9 @@ export interface IEndpointBody {
 	/** Code search: */
 	scoping_query?: string;
 	include_embeddings?: boolean;
+	/** Responses API: */
+	input?: readonly any[];
+	truncation?: 'auto' | 'disabled';
 }
 
 export interface IEndpoint {
@@ -129,8 +131,8 @@ export interface IMakeChatRequestOptions {
 	debugName: string;
 	/** The array of chat messages to send */
 	messages: Raw.ChatMessage[];
-	/** Optional marker for responses where {@link supportsStatefulResponses} is true. No effect otherwise. */
-	statefulMarker?: { index: number; id: string };
+	// todo
+	ignoreStatefulMarker?: boolean;
 	/** Streaming callback for each response part. */
 	finishedCb: FinishedCallback | undefined;
 	/** Location where the chat message is being sent. */
@@ -240,11 +242,6 @@ export function createCapiRequestBody(model: string, options: ICreateEndpointBod
 		model,
 		// stop: stops,
 	};
-
-	if (options.statefulMarker) {
-		request.previous_response_id = options.statefulMarker.id;
-		request.messages = options.messages.slice(options.statefulMarker.index);
-	}
 
 	if (options.postOptions) {
 		Object.assign(request, options.postOptions);

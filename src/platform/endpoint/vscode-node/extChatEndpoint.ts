@@ -22,6 +22,7 @@ import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { CustomDataPartMimeTypes } from '../common/endpointTypes';
+import { rawPartAsStatefulMarker } from '../common/statefulMarkerContainer';
 
 export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	private readonly _maxTokens: number;
@@ -144,6 +145,11 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 					}
 				} else if (contentPart.type === Raw.ChatCompletionContentPartKind.CacheBreakpoint) {
 					apiContent.push(new vscode.LanguageModelDataPart(new TextEncoder().encode('ephemeral'), CustomDataPartMimeTypes.CacheControl));
+				} else if (contentPart.type === Raw.ChatCompletionContentPartKind.Opaque) {
+					const statefulMarker = rawPartAsStatefulMarker(contentPart);
+					if (statefulMarker) {
+						apiContent.push(new vscode.LanguageModelDataPart(new TextEncoder().encode(statefulMarker), CustomDataPartMimeTypes.StatefulMarker));
+					}
 				}
 			}
 
