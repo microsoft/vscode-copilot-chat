@@ -12,10 +12,9 @@ import { APIJsonData, CAPIChatMessage, ChatCompletion, rawMessageToCAPI } from '
 import { FinishedCompletion, convertToAPIJsonData } from './stream';
 
 // TODO @lramos15 - Find a better file for this, since this file is for the chat stream and should not be telemetry related
-export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, turnIndex?: number) {
+export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData) {
 	const telemetryDataWithPrompt = telemetryData.extendedBy({
-		messagesJson: JSON.stringify(messages),
-		...(turnIndex !== undefined ? { turnIndex: turnIndex.toString() } : {}),
+		messagesJson: JSON.stringify(messages)
 	});
 	telemetryService.sendEnhancedGHTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
@@ -25,8 +24,7 @@ export function prepareChatCompletionForReturn(
 	telemetryService: ITelemetryService,
 	logService: ILogService,
 	c: FinishedCompletion,
-	telemetryData: TelemetryData,
-	turnIndex?: number
+	telemetryData: TelemetryData
 ): ChatCompletion {
 	let messageContent = c.solution.text.join('');
 
@@ -48,12 +46,7 @@ export function prepareChatCompletionForReturn(
 		content: toTextParts(messageContent),
 	};
 
-	// Try to get turnIndex from telemetryData properties first, fallback to parameter
-	const effectiveTurnIndex = telemetryData.properties.turnIndex ?
-		parseInt(telemetryData.properties.turnIndex as string, 10) :
-		turnIndex;
-
-	sendEngineMessagesTelemetry(telemetryService, [rawMessageToCAPI(message)], telemetryData, effectiveTurnIndex);
+	sendEngineMessagesTelemetry(telemetryService, [rawMessageToCAPI(message)], telemetryData);
 	return {
 		message: message,
 		choiceIndex: c.index,

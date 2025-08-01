@@ -101,8 +101,7 @@ export class McpToolCallingLoop extends ToolCallingLoop<IMcpToolCallingLoopOptio
 			firstFetchCall,
 			{
 				messageId: randomUUID(),
-				messageSource: McpToolCallingLoop.ID,
-				turnIndex: this.options.conversation.turns.length.toString(),
+				messageSource: McpToolCallingLoop.ID
 			},
 			{ intent: true }
 		);
