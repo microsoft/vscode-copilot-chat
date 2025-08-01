@@ -18,10 +18,11 @@ import { ChatLocation as VsCodeChatLocation } from '../../../vscodeTypes';
 import { Conversation, Turn } from '../../prompt/common/conversation';
 import { McpToolCallingLoop } from './mcpToolCallingLoop';
 import { McpPickRef } from './mcpToolCallingTools';
+import { getNuGetPackageMetadata } from './nuget';
 
 type PackageType = 'npm' | 'pip' | 'docker' | 'nuget';
 
-interface IValidatePackageArgs {
+export interface IValidatePackageArgs {
 	type: PackageType;
 	name: string;
 	targetConfig: JsonSchema;
@@ -35,8 +36,15 @@ interface PromptStringInputInfo {
 	password?: boolean;
 }
 
-type ValidatePackageResult =
-	{ state: 'ok'; publisher: string; name?: string; version?: string }
+export interface IPendingSetupArgs {
+	name: string;
+	version?: string;
+	readme?: string;
+}
+
+// contract with https://github.com/microsoft/vscode/blob/main/src/vs/workbench/contrib/mcp/browser/mcpCommandsAddConfiguration.ts
+export type ValidatePackageResult =
+	{ state: 'ok'; publisher: string; name?: string; version?: string } & IPendingSetupArgs
 	| { state: 'error'; error: string };
 
 interface NpmPackageResponse {
@@ -53,14 +61,6 @@ interface PyPiPackageResponse {
 		name?: string;
 		version?: string;
 	};
-}
-
-interface NuGetServiceIndexResponse {
-	resources?: Array<{ "@id": string; "@type": string }>;
-}
-
-interface NuGetSearchResponse {
-	data?: Array<{ id: string; version: string; description?: string; owners?: Array<string> }>;
 }
 
 interface DockerHubResponse {
@@ -88,6 +88,7 @@ export class McpSetupCommands extends Disposable {
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.flow', (args: { name: string }) => {
 			// allow case-insensitive comparison
 			if (this.pendingSetup?.name.toUpperCase() !== args.name.toUpperCase()) {
+				vscode.window.showErrorMessage(`Failed to generate MCP server configuration with a matching package name. Expected '${args.name}' but got '${this.pendingSetup?.name}' from generated configuration.`);
 				return undefined;
 			}
 
@@ -95,21 +96,30 @@ export class McpSetupCommands extends Disposable {
 			return this.pendingSetup.done;
 		}));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.validatePackage', async (args: IValidatePackageArgs): Promise<ValidatePackageResult> => {
-			return this.validatePackageRegistry(args);
+			const result = await this.validatePackageRegistry(args);
+			if (result.state === 'ok') {
+				this.enqueuePendingSetup(args, result);
+
+				// return the minimal result to avoid leaking implementation details
+				// not all package information is needed to request consent to install the package
+				return { state: 'ok', publisher: result.publisher, name: result.name, version: result.version };
+			} else {
+				return { state: 'error', error: result.error };
+			}
 		}));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.check', () => {
 			return 1;
 		}));
 	}
 
-	private async enqueuePendingSetup(targetSchema: JsonSchema, packageName: string, packageType: PackageType, packageReadme: string | undefined, packageVersion: string | undefined) {
+	private async enqueuePendingSetup(validateArgs: IValidatePackageArgs, pendingArgs: IPendingSetupArgs) {
 		const cts = new CancellationTokenSource();
 		const canPrompt = new DeferredPromise<void>();
 		const pickRef = new McpPickRef(raceCancellation(canPrompt.p, cts.token));
 
 		// we start doing the prompt in the background so the first call is speedy
 		const done = (async () => {
-			const fakePrompt = `Generate an MCP configuration for ${packageName}`;
+			const fakePrompt = `Generate an MCP configuration for ${validateArgs.name}`;
 			const mcpLoop = this.instantiationService.createInstance(McpToolCallingLoop, {
 				toolCallLimit: 100, // limited via `getAvailableTools` in the loop
 				conversation: new Conversation(generateUuid(), [new Turn(undefined, { type: 'user', message: fakePrompt })]),
@@ -130,18 +140,18 @@ export class McpSetupCommands extends Disposable {
 					id: '1'
 				},
 				props: {
-					targetSchema,
-					packageName,
-					packageVersion,
-					packageType,
+					targetSchema: validateArgs.targetConfig,
+					packageName: pendingArgs.name, // prefer the resolved name, not the input
+					packageVersion: pendingArgs.version,
+					packageType: validateArgs.type,
 					pickRef,
-					packageReadme: packageReadme || '<empty>',
+					packageReadme: pendingArgs.readme || '<empty>',
 				},
 			});
 
 			const toolCallLoopResult = await mcpLoop.run(undefined, cts.token);
 			if (toolCallLoopResult.response.type !== ChatFetchResponseType.Success) {
-				vscode.window.showErrorMessage(`Failed to generate MCP configuration for ${packageName}: ${toolCallLoopResult.response.reason}`);
+				vscode.window.showErrorMessage(`Failed to generate MCP configuration for ${validateArgs.name}: ${toolCallLoopResult.response.reason}`);
 				return undefined;
 			}
 
@@ -183,7 +193,7 @@ export class McpSetupCommands extends Disposable {
 		});
 
 		this.pendingSetup?.cts.dispose(true);
-		this.pendingSetup = { cts, name: packageName, canPrompt, done };
+		this.pendingSetup = { cts, name: pendingArgs.name, canPrompt, done };
 	}
 
 	private async validatePackageRegistry(args: IValidatePackageArgs): Promise<ValidatePackageResult> {
@@ -195,8 +205,13 @@ export class McpSetupCommands extends Disposable {
 				}
 				const data = await response.json() as NpmPackageResponse;
 				const version = data['dist-tags']?.latest;
-				this.enqueuePendingSetup(args.targetConfig, args.name, args.type, data.readme, version);
-				return { state: 'ok', publisher: data.maintainers?.[0]?.name || 'unknown', version };
+				return {
+					state: 'ok',
+					publisher: data.maintainers?.[0]?.name || 'unknown',
+					name: args.name,
+					version,
+					readme: data.readme,
+				};
 			} else if (args.type === 'pip') {
 				const response = await fetch(`https://pypi.org/pypi/${encodeURIComponent(args.name)}/json`);
 				if (!response.ok) {
@@ -206,62 +221,15 @@ export class McpSetupCommands extends Disposable {
 				const publisher = data.info?.author || data.info?.author_email || 'unknown';
 				const name = data.info?.name || args.name;
 				const version = data.info?.version;
-				this.enqueuePendingSetup(args.targetConfig, name, args.type, data.info?.description, version);
-				return { state: 'ok', publisher, name, version };
+				return {
+					state: 'ok',
+					publisher,
+					name,
+					version,
+					readme: data.info?.description
+				};
 			} else if (args.type === 'nuget') {
-				// read the service index to find the search URL
-				// https://learn.microsoft.com/en-us/nuget/api/service-index
-				const serviceIndexUrl = `https://api.nuget.org/v3/index.json`;
-				const serviceIndexResponse = await fetch(serviceIndexUrl);
-				if (!serviceIndexResponse.ok) {
-					return { state: 'error', error: `Unable to load the NuGet.org registry service index (${serviceIndexUrl})` };
-				}
-
-				// find the search query URL
-				// https://learn.microsoft.com/en-us/nuget/api/search-query-service-resource
-				const serviceIndex = await serviceIndexResponse.json() as NuGetServiceIndexResponse;
-				const searchBaseUrl = serviceIndex.resources?.find(resource => resource['@type'] === 'SearchQueryService/3.5.0')?.['@id'];
-				if (!searchBaseUrl) {
-					return { state: 'error', error: `Package search URL not found in the NuGet.org registry service index` };
-				}
-
-				// search for the package by ID
-				// https://learn.microsoft.com/en-us/nuget/consume-packages/finding-and-choosing-packages#search-syntax
-				const searchQueryUrl = `${searchBaseUrl}?q=packageid:${encodeURIComponent(args.name)}&prerelease=true&semVerLevel=2.0.0`;
-				const searchResponse = await fetch(searchQueryUrl);
-				if (!searchResponse.ok) {
-					return { state: 'error', error: `Failed to search for ${args.name} in then NuGet.org registry` };
-				}
-				const data = await searchResponse.json() as NuGetSearchResponse;
-				if (!data.data?.[0]) {
-					return { state: 'error', error: `Package ${args.name} not found on NuGet.org` };
-				}
-
-				const id = data.data[0].id ?? args.name;
-				let version = data.data[0].version;
-				if (version.indexOf('+') !== -1) {
-					// NuGet versions can have a + sign for build metadata, we strip it for MCP config and API calls
-					// e.g. 1.0.0+build123 -> 1.0.0
-					version = version.split('+')[0];
-				}
-				const publisher = data.data[0].owners ? data.data[0].owners.join(', ') : 'unknown';
-
-				// Try to fetch the package readme
-				// https://learn.microsoft.com/en-us/nuget/api/readme-template-resource
-				const readmeTemplate = serviceIndex.resources?.find(resource => resource['@type'] === 'ReadmeUriTemplate/6.13.0')?.['@id'];
-				let description = data.data[0].description || undefined;
-				if (readmeTemplate) {
-					const readmeUrl = readmeTemplate
-						.replace('{lower_id}', encodeURIComponent(id.toLowerCase()))
-						.replace('{lower_version}', encodeURIComponent(version.toLowerCase()));
-					const readmeResponse = await fetch(readmeUrl);
-					if (readmeResponse.ok) {
-						description = await readmeResponse.text();
-					}
-				}
-
-				this.enqueuePendingSetup(args.targetConfig, id, args.type, description, version);
-				return { state: 'ok', publisher, name: id, version };
+				return await getNuGetPackageMetadata(args);
 			} else if (args.type === 'docker') {
 				// Docker Hub API uses namespace/repository format
 				// Handle both formats: 'namespace/repository' or just 'repository' (assumes 'library/' namespace)
@@ -274,8 +242,12 @@ export class McpSetupCommands extends Disposable {
 					return { state: 'error', error: `Docker image ${args.name} not found in Docker Hub registry` };
 				}
 				const data = await response.json() as DockerHubResponse;
-				this.enqueuePendingSetup(args.targetConfig, args.name, args.type, data.full_description || data.description, undefined);
-				return { state: 'ok', publisher: data.namespace || data.user || 'unknown' };
+				return {
+					state: 'ok',
+					publisher: data.namespace || data.user || 'unknown',
+					name: args.name,
+					readme: data.full_description || data.description,
+				};
 			}
 			return { state: 'error', error: `Unsupported package type: ${args.type}` };
 		} catch (error) {
