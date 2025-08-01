@@ -245,6 +245,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 					nEntries: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffNEntries, this.expService),
 					maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffMaxTokens, this.expService),
 					onlyForDocsInPrompt: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffOnlyForDocsInPrompt, this.expService),
+					useRelativePaths: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffUseRelativePaths, this.expService),
 				}
 			};
 		}
@@ -774,6 +775,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 				return new NoNextEditReason.GotCancelled('afterFetchCall');
 			case ChatFetchResponseType.OffTopic:
 			case ChatFetchResponseType.Filtered:
+			case ChatFetchResponseType.PromptFiltered:
 			case ChatFetchResponseType.Length:
 			case ChatFetchResponseType.RateLimited:
 			case ChatFetchResponseType.QuotaExceeded:
@@ -826,8 +828,10 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		const apiKey = this.configService.getConfig(ConfigKey.Internal.InlineEditsXtabProviderApiKey);
 		const hasOverriddenUrlAndApiKey = url !== undefined && apiKey !== undefined;
 
+		const configuredModelName = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderModelName, this.expService);
+
 		if (hasOverriddenUrlAndApiKey) {
-			return this.instaService.createInstance(XtabEndpoint, url, apiKey);
+			return this.instaService.createInstance(XtabEndpoint, url, apiKey, configuredModelName);
 		}
 
 		const modelName = this.forceUseDefaultModel

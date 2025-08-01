@@ -6,6 +6,7 @@
 import type { LanguageModelToolInformation } from 'vscode';
 import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
+import { IObservable } from '../../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { computeToolGroupingMinThreshold, ToolGrouping } from './toolGrouping';
 import { IToolGrouping, IToolGroupingService } from './virtualToolTypes';
@@ -13,14 +14,14 @@ import { IToolGrouping, IToolGroupingService } from './virtualToolTypes';
 export class ToolGroupingService implements IToolGroupingService {
 	declare readonly _serviceBrand: undefined;
 
+	public threshold: IObservable<number>;
+
 	constructor(
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IExperimentationService private readonly _experimentationService: IExperimentationService
-	) { }
-
-	public get threshold() {
-		return computeToolGroupingMinThreshold(this._experimentationService, this._configurationService);
+		@IConfigurationService configurationService: IConfigurationService,
+		@IExperimentationService experimentationService: IExperimentationService
+	) {
+		this.threshold = computeToolGroupingMinThreshold(experimentationService, configurationService);
 	}
 
 	create(tools: readonly LanguageModelToolInformation[]): IToolGrouping {

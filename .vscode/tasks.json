@@ -5,7 +5,7 @@
 			"label": "compile",
 			"type": "npm",
 			"script": "compile",
-			"problemMatcher": "$esbuild"
+			"problemMatcher": "$esbuild",
 		},
 		{
 			"type": "npm",

@@ -207,8 +207,10 @@ function getEditDiffHistory(
 	request: StatelessNextEditRequest,
 	docsInPrompt: Set<DocumentId>,
 	computeTokens: (s: string) => number,
-	{ onlyForDocsInPrompt, maxTokens, nEntries }: DiffHistoryOptions
+	{ onlyForDocsInPrompt, maxTokens, nEntries, useRelativePaths }: DiffHistoryOptions
 ) {
+	const workspacePath = useRelativePaths ? request.getActiveDocument().workspaceRoot?.path : undefined;
+
 	let tokenBudget = maxTokens;
 
 	const allDiffs: string[] = [];
@@ -227,7 +229,7 @@ function getEditDiffHistory(
 			continue;
 		}
 
-		const docDiff = generateDocDiff(entry);
+		const docDiff = generateDocDiff(entry, workspacePath);
 		if (docDiff === null) {
 			continue;
 		}
@@ -255,7 +257,7 @@ function getEditDiffHistory(
 	return promptPiece;
 }
 
-function generateDocDiff(entry: IXtabHistoryEditEntry): string | null {
+function generateDocDiff(entry: IXtabHistoryEditEntry, workspacePath: string | undefined): string | null {
 	const docDiffLines: string[] = [];
 
 	const lineEdit = RootedEdit.toLineEdit(entry.edit);
@@ -280,7 +282,7 @@ function generateDocDiff(entry: IXtabHistoryEditEntry): string | null {
 		return null;
 	}
 
-	const uniquePath = toUniquePath(entry.docId, undefined);
+	const uniquePath = toUniquePath(entry.docId, workspacePath);
 
 	const docDiff = [
 		`--- ${uniquePath}`,

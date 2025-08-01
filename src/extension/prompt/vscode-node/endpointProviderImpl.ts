@@ -6,10 +6,11 @@
 import { LanguageModelChat, type ChatRequest } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, EMBEDDING_MODEL, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { AutoChatEndpoint } from '../../../platform/endpoint/common/autoChatEndpoint';
+import { IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { ChatEndpointFamily, EmbeddingsEndpointFamily, IChatModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
-import { AutoChatEndpoint, resolveAutoChatEndpoint } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { CopilotChatEndpoint } from '../../../platform/endpoint/node/copilotChatEndpoint';
 import { EmbeddingEndpoint } from '../../../platform/endpoint/node/embeddingsEndpoint';
 import { IModelMetadataFetcher, ModelMetadataFetcher } from '../../../platform/endpoint/node/modelMetadataFetcher';
@@ -38,6 +39,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IFetcherService fetcher: IFetcherService,
+		@IAutomodeService private readonly _autoModeService: IAutomodeService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@ILogService private readonly _logService: ILogService,
@@ -140,7 +142,9 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 			if (experimentModelConfig && model && model.id === experimentModelConfig.id) {
 				endpoint = (await this.getAllChatEndpoints()).find(e => e.model === experimentModelConfig.selected) || await this.getChatEndpoint('gpt-4.1');
 			} else if (model && model.vendor === 'copilot' && model.id === AutoChatEndpoint.id) {
-				return resolveAutoChatEndpoint(this, this._expService, (requestOrFamilyOrModel as ChatRequest)?.prompt);
+				// TODO @lramos15 - This may be the ugliest cast I've ever seen but our types seem to be incorrect
+				const conversationdId = ((requestOrFamilyOrModel as ChatRequest).toolInvocationToken as { sessionId: string }).sessionId || 'unknown';
+				return this._autoModeService.getCachedAutoEndpoint(conversationdId) || this._autoModeService.resolveAutoModeEndpoint(conversationdId, await this.getAllChatEndpoints());
 			} else if (model && model.vendor === 'copilot') {
 				let modelMetadata = await this._modelFetcher.getChatModelFromApiModel(model);
 				if (modelMetadata) {

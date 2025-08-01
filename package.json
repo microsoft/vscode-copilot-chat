@@ -2,7 +2,7 @@
 	"name": "copilot-chat",
 	"displayName": "GitHub Copilot Chat",
 	"description": "AI chat features powered by Copilot",
-	"version": "0.30.0",
+	"version": "0.31.0",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
 	"internalLargeStorageAriaKey": "ec712b3202c5462fb6877acae7f1f9d7-c19ad55e-3e3c-4f99-984b-827f6d95bd9e-6917",
@@ -550,10 +550,6 @@
 						"projectType": {
 							"type": "string",
 							"description": "The type of project to create. Supported values are: 'python-script', 'python-project', 'mcp-server', 'model-context-protocol-server', 'vscode-extension', 'next-js', 'vite' and 'other'"
-						},
-						"language": {
-							"type": "string",
-							"description": "The programming language for the project. Supported: 'javascript', 'typescript', 'python' and 'other'."
 						}
 					},
 					"required": [
@@ -1547,11 +1543,13 @@
 			},
 			{
 				"vendor": "azure",
-				"displayName": "Azure"
+				"displayName": "Azure",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "anthropic",
-				"displayName": "Anthropic"
+				"displayName": "Anthropic",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "ollama",
@@ -1559,19 +1557,23 @@
 			},
 			{
 				"vendor": "openai",
-				"displayName": "OpenAI"
+				"displayName": "OpenAI",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "gemini",
-				"displayName": "Gemini"
+				"displayName": "Gemini",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "groq",
-				"displayName": "Groq"
+				"displayName": "Groq",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "openrouter",
-				"displayName": "OpenRouter"
+				"displayName": "OpenRouter",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			}
 		],
 		"interactiveSession": [
@@ -2001,6 +2003,10 @@
 				"title": "Disable Follow Cell Execution from Chat",
 				"shortTitle": "Unfollow",
 				"icon": "$(pinned-dirty)"
+			},
+			{
+				"command": "github.copilot.chat.manageBYOK",
+				"title": "Manage Bring Your Own Key Vendor"
 			}
 		],
 		"configuration": [
@@ -2116,6 +2122,11 @@
 						"type": "boolean",
 						"default": true,
 						"description": "%github.copilot.config.autoFix%"
+					},
+					"github.copilot.chat.customInstructionsInSystemMessage": {
+						"type": "boolean",
+						"default": true,
+						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
 					}
 				}
 			},
@@ -2635,14 +2646,6 @@
 						],
 						"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
 					},
-					"github.copilot.chat.customInstructionsInSystemMessage": {
-						"type": "boolean",
-						"default": true,
-						"tags": [
-							"experimental"
-						],
-						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
-					},
 					"github.copilot.chat.edits.newNotebook.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -2669,13 +2672,15 @@
 						],
 						"description": "%github.copilot.config.summarizeAgentConversationHistory.enabled%"
 					},
-					"github.copilot.chat.virtualTools.enabled": {
-						"type": "boolean",
-						"default": false,
+					"github.copilot.chat.virtualTools.threshold": {
+						"type": "number",
+						"minimum": 0,
+						"maximum": 128,
+						"default": 128,
 						"tags": [
 							"experimental"
 						],
-						"description": "%github.copilot.config.virtualTools.enabled%"
+						"markdownDescription": "%github.copilot.config.virtualTools.threshold%"
 					},
 					"github.copilot.chat.azureModels": {
 						"type": "object",
@@ -3659,7 +3664,7 @@
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@roamhq/mac-ca": "^1.0.7",
-		"@vscode/copilot-api": "^0.1.1",
+		"@vscode/copilot-api": "^0.1.3",
 		"@vscode/extension-telemetry": "^1.0.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",

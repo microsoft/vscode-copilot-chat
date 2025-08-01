@@ -38,11 +38,12 @@ export class OpenRouterLMProvider extends BaseOpenAICompatibleLMProvider {
 				knownModels[model.id] = {
 					name: model.name,
 					toolCalling: model.supported_parameters?.includes('tools') ?? false,
-					vision: model.input_modalities?.includes('image') ?? false,
+					vision: model.architecture?.input_modalities?.includes('image') ?? false,
 					maxInputTokens: model.top_provider.context_length - 16000,
 					maxOutputTokens: 16000
 				};
 			}
+			this._knownModels = knownModels;
 			return knownModels;
 		} catch (error) {
 			this._logService.error(error, `Error fetching available OpenRouter models`);

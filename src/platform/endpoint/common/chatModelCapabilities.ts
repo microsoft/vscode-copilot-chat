@@ -6,6 +6,16 @@
 import type { LanguageModelChat } from 'vscode';
 import type { IChatEndpoint } from '../../networking/common/networking';
 
+
+function getSha256Hash(text: string): Promise<string> {
+	const encoder = new TextEncoder();
+	const data = encoder.encode(text);
+	return crypto.subtle.digest('SHA-256', data).then(hashBuffer => {
+		const hashArray = Array.from(new Uint8Array(hashBuffer));
+		return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+	});
+}
+
 /**
  * Returns whether the instructions should be given in a user message instead
  * of a system message when talking to the model.
@@ -25,7 +35,17 @@ export function modelPrefersInstructionsAfterHistory(modelFamily: string) {
 /**
  * Model supports apply_patch as an edit tool.
  */
-export function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint): boolean {
+export async function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
+	if (model.family === 'gpt-4.1' || model.family === 'o4-mini') {
+		return true;
+	}
+	return await getSha256Hash(model.family) === 'a99dd17dfee04155d863268596b7f6dd36d0a6531cd326348dbe7416142a21a3';
+}
+
+/**
+ * Model prefers JSON notebook representation.
+ */
+export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat | IChatEndpoint): boolean {
 	return model.family === 'gpt-4.1' || model.family === 'o4-mini';
 }
 

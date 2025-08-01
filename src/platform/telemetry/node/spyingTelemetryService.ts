@@ -121,3 +121,8 @@ export class SpyingTelemetryService implements ITelemetryService {
 type TelemetryEventMapKeysFilteredByEventName<TEventName> = {
 	[TKey in keyof TelemetryEventMap]: TelemetryEventMap[TKey]['eventName'] extends TEventName ? TKey : never
 }[keyof TelemetryEventMap];
+
+declare global {
+	interface TelemetryEventMap {
+	}
+}
