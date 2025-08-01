@@ -10,9 +10,10 @@ import { IFetcherService } from '../../../platform/networking/common/fetcherServ
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotLanguageModelWrapper } from '../../conversation/vscode-node/languageModelAccess';
 import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, resolveModelInfo } from '../common/byokProvider';
-import { OpenAIEndpoint, OpenAIResponsesEndpoint } from '../node/openAIEndpoint';
+import { OpenAIEndpoint } from '../node/openAIEndpoint';
 import { IBYOKStorageService } from './byokStorageService';
 import { promptForAPIKey } from './byokUIService';
+import { OpenAIResponsesEndpoint } from '../node/openAIResponsesEndpoint';
 
 export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvider<LanguageModelChatInformation> {
 
@@ -95,9 +96,9 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 	private async getEndpointImpl(model: LanguageModelChatInformation): Promise<OpenAIEndpoint> {
 		const modelInfo: IChatModelInformation = await this.getModelInfo(model.id, this._apiKey);
 		if (modelInfo.capabilities.supports.statefulResponses) {
-			return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, this._apiKey ?? '', `${this._baseUrl}/responses`);
+			return this._instantiationService.createInstance(OpenAIResponsesEndpoint, modelInfo, this._apiKey ?? '', `${this._baseUrl}/responses`);
 		} else {
-			return this._instantiationService.createInstance(OpenAIResponsesEndpoint, modelInfo, this._apiKey ?? '', `${this._baseUrl}/chat/completions`);
+			return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, this._apiKey ?? '', `${this._baseUrl}/chat/completions`);
 		}
 	}
 

@@ -69,7 +69,7 @@ const staticContentUUID = '8444605d-6c67-42c5-bbcb-a04b83f9f76e';
  * For non-content deltas, the text is ignored.
  * @param delta The IResponseDelta to convert
  */
-export function *fromResponseDelta(delta: IResponseDelta): Iterable<ResponsePart>  {
+export function* fromResponseDelta(delta: IResponseDelta): Iterable<ResponsePart> {
 	if (delta.text && delta.text.length > 0) {
 		yield {
 			kind: ResponsePartKind.ContentDelta,
@@ -92,7 +92,7 @@ export function *fromResponseDelta(delta: IResponseDelta): Iterable<ResponsePart
 		};
 	}
 	if (delta.copilotToolCalls && delta.copilotToolCalls.length > 0) {
-		for (const toolCall of delta.copilotToolCalls)  {
+		for (const toolCall of delta.copilotToolCalls) {
 			yield {
 				kind: ResponsePartKind.ToolCall,
 				partId: toolCall.id,

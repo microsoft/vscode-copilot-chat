@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { OpenAI } from '@vscode/prompt-tsx';
-import { ClientHttp2Stream } from 'http2';
 import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
@@ -13,17 +12,11 @@ import { IDomainService } from '../../../platform/endpoint/common/domainService'
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { IEnvService } from '../../../platform/env/common/envService';
-import { ILogService } from '../../../platform/log/common/logService';
-import { FinishedCallback } from '../../../platform/networking/common/fetch';
-import { IFetcherService, Response } from '../../../platform/networking/common/fetcherService';
+import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IChatEndpoint, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
-import { ChatCompletion } from '../../../platform/networking/common/openai';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
-import { AsyncIterableObject } from '../../../util/vs/base/common/async';
-import { SSEParser } from '../../../util/vs/base/common/sseParser';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 
 function hydrateBYOKErrorMessages(response: ChatResponse): ChatResponse {

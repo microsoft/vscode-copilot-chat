@@ -121,7 +121,7 @@ export class SpyingChatMLFetcher extends AbstractChatMLFetcher {
 			}
 		};
 
-		const respPromise = this.fetcher.fetchMany({...opts, finishedCb: captureToolCallsCb}, token);
+		const respPromise = this.fetcher.fetchMany({ ...opts, finishedCb: captureToolCallsCb }, token);
 
 		this.requestCollector.addInterceptedRequest(respPromise.then(resp => {
 			let cacheKey: string | undefined;

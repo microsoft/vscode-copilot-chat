@@ -106,7 +106,7 @@ export class ProxyExperimentEndpoint implements IChatEndpoint {
 		return this.selectedEndpoint.tokenizer;
 	}
 
-	get supportsStatefulResponses()  {
+	get supportsStatefulResponses() {
 		return this.selectedEndpoint.supportsStatefulResponses;
 	}
 

@@ -19,7 +19,7 @@ import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from './fetch';
+import { FinishedCallback, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams } from './fetch';
 import { FetchOptions, IAbortController, IFetcherService, Response } from './fetcherService';
 import { ChatCompletion } from './openai';
 
@@ -60,8 +60,7 @@ const requestTimeoutMs = 30 * 1000; // 30 seconds
  */
 export interface IEndpointBody {
 	/** General or completions: */
-	tools?: OpenAiFunctionTool[];
-	inputs?: string[];
+	tools?: (OpenAiFunctionTool | OpenAiResponsesFunctionTool)[];
 	model?: string;
 	max_tokens?: number;
 	max_completion_tokens?: number;
@@ -69,6 +68,8 @@ export interface IEndpointBody {
 	top_p?: number;
 	stream?: boolean;
 	messages?: any[];
+	n?: number;
+	input?: readonly any[];
 	intent?: boolean;
 	state?: 'enabled';
 	snippy?: { enabled: boolean };

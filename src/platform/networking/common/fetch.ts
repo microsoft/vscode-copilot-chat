@@ -274,6 +274,14 @@ export interface OpenAiFunctionTool {
 	type: 'function';
 }
 
+export interface OpenAiResponsesFunctionTool extends OpenAiFunctionDef {
+	type: 'function';
+}
+
+export function isOpenAiFunctionTool(tool: OpenAiResponsesFunctionTool | OpenAiFunctionTool): tool is OpenAiFunctionTool {
+	return (tool as OpenAiFunctionTool).function !== undefined;
+}
+
 /**
  * Options for streaming response. Only set this when you set stream: true.
  *
