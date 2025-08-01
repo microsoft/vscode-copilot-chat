@@ -8,11 +8,11 @@ import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { FetchStreamRecorder, IChatMLFetcher, IntentParams, Source } from '../../../platform/chat/common/chatMLFetcher';
 import { IChatQuotaService } from '../../../platform/chat/common/chatQuotaService';
-import { ChatFetchError, ChatFetchResponseType, ChatLocation, ChatResponse, ChatResponses } from '../../../platform/chat/common/commonTypes';
+import { ChatFetchError, ChatFetchResponseType, ChatFetchRetriableError, ChatLocation, ChatResponse, ChatResponses } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
-import { getTextPart } from '../../../platform/chat/common/globalStringUtils';
+import { getTextPart, toTextParts } from '../../../platform/chat/common/globalStringUtils';
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
-import { HARD_TOOL_LIMIT } from '../../../platform/configuration/common/configurationService';
+import { ConfigKey, HARD_TOOL_LIMIT, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IEnvService } from '../../../platform/env/common/envService';
@@ -23,6 +23,7 @@ import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { ChatCompletion, FilterReason, FinishedCompletionReason, rawMessageToCAPI } from '../../../platform/networking/common/openai';
 import { ChatFailKind, ChatParams, ChatRequestCanceled, ChatRequestFailed, ChatResults, fetchAndStreamChat, FetchResponseKind } from '../../../platform/openai/node/fetch';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { calculateLineRepetitionStats, isRepetitive } from '../../../util/common/anomalyDetection';
@@ -72,7 +73,7 @@ export abstract class AbstractChatMLFetcher implements IChatMLFetcher {
 		requestOptions?: Omit<OptionalChatRequestParams, 'n'>,
 		userInitiatedRequest?: boolean,
 		telemetryProperties?: TelemetryProperties,
-		intentParams?: IntentParams
+		intentParams?: IntentParams,
 	): Promise<ChatResponse> {
 		const resp = await this.fetchMany(
 			debugName,
@@ -107,7 +108,8 @@ export abstract class AbstractChatMLFetcher implements IChatMLFetcher {
 		requestOptions?: OptionalChatRequestParams,
 		userInitiatedRequest?: boolean,
 		telemetryProperties?: TelemetryProperties,
-		intentParams?: IntentParams
+		intentParams?: IntentParams,
+		isFilterRetry?: boolean
 	): Promise<ChatResponses>;
 }
 
@@ -125,6 +127,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		@IInteractionService private readonly _interactionService: IInteractionService,
 		@IChatQuotaService private readonly _chatQuotaService: IChatQuotaService,
 		@IConversationOptions options: IConversationOptions,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
 	) {
 		super(options);
 	}
@@ -143,6 +147,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		requestOptions?: OptionalChatRequestParams,
 		userInitiatedRequest?: boolean,
 		telemetryProperties?: TelemetryProperties,
+		intentParams?: IntentParams,
+		isFilterRetry?: boolean
 	): Promise<ChatResponses> {
 		if (!telemetryProperties) {
 			telemetryProperties = {};
@@ -228,6 +234,58 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			switch (response.type) {
 				case FetchResponseKind.Success: {
 					const result = await this.processSuccessfulResponse(response, messages, chatParams.ourRequestId, maxResponseTokens, tokenCount, timeToFirstToken, baseTelemetry, chatEndpoint, userInitiatedRequest);
+
+					// Handle FilteredRetry case with augmented messages
+					if (result.type === ChatFetchResponseType.FilteredRetry) {
+
+						if (isFilterRetry !== true) {
+							streamRecorder.callback("", 0, { text: "", retryReason: result.category });
+
+							const filteredContent = result.value[0];
+							if (filteredContent) {
+								const retryMessage = (result.category === FilterReason.Copyright) ?
+									`The previous response (copied below) was filtered due to being too similar to existing public code. Please suggest something similar in function that does not match public code. Here's the previous response: ${filteredContent}\n\n` :
+									`The previous response (copied below) was filtered due to triggering our content safety filters, which looks for hateful, self-harm, sexual, or violent content. Please suggest something similar in content that does not trigger these filters. Here's the previous response: ${filteredContent}\n\n`;
+								const augmentedMessages: Raw.ChatMessage[] = [
+									...messages,
+									{
+										role: Raw.ChatRole.User,
+										content: toTextParts(retryMessage)
+									}
+								];
+
+								// Retry with augmented messages
+								const retryResult = await this.fetchMany(
+									'retry-' + debugName,
+									augmentedMessages,
+									finishedCb,
+									token,
+									location,
+									chatEndpoint,
+									source,
+									requestOptions,
+									false, // do not mark the retry as user initiated
+									{ ...telemetryProperties, retryAfterFilterCategory: result.category ?? 'uncategorized' },
+									intentParams,
+									true,
+								);
+
+								pendingLoggedChatRequest?.resolve(retryResult, streamRecorder.deltas);
+								if (retryResult.type === ChatFetchResponseType.Success) {
+									return retryResult;
+								}
+							}
+						}
+
+						return {
+							type: ChatFetchResponseType.Filtered,
+							category: result.category,
+							reason: 'Response got filtered.',
+							requestId: result.requestId,
+							serverRequestId: result.serverRequestId
+						};
+					}
+
 					pendingLoggedChatRequest?.resolve(result, streamRecorder.deltas);
 					return result;
 				}
@@ -236,6 +294,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						source: telemetryProperties.messageSource ?? 'unknown',
 						requestId: chatParams.ourRequestId,
 						model: chatEndpoint.model,
+						...(telemetryProperties.retryAfterFilterCategory ? { retryAfterFilterCategory: telemetryProperties.retryAfterFilterCategory } : {}),
 					}, {
 						totalTokenMax: chatEndpoint.modelMaxPromptTokens ?? -1,
 						promptTokenCount: tokenCount,
@@ -320,7 +379,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
 				"timeToCancelled": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
 				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
-				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true }
+				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
+				"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
 			}
 		*/
 		this._telemetryService.sendTelemetryEvent('response.cancelled', { github: true, microsoft: true }, {
@@ -362,7 +422,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
 				"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
 				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
-				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true }
+				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
+				"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
 			}
 		*/
 		this._telemetryService.sendTelemetryEvent('response.error', { github: true, microsoft: true }, {
@@ -371,6 +432,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			source: telemetryProperties?.messageSource ?? 'unknown',
 			requestId: chatParams.ourRequestId,
 			model: chatEndpointInfo.model,
+			...(telemetryProperties?.retryAfterFilterCategory ? { retryAfterFilterCategory: telemetryProperties.retryAfterFilterCategory } : {})
 		}, {
 			totalTokenMax: chatEndpointInfo.modelMaxPromptTokens ?? -1,
 			promptTokenCount: tokenCount,
@@ -391,7 +453,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		baseTelemetry?: TelemetryData,
 		chatEndpointInfo?: IChatEndpoint,
 		userInitiatedRequest?: boolean
-	): Promise<ChatResponses> {
+	): Promise<ChatResponses | ChatFetchRetriableError<string[]>> {
 
 		const completions: ChatCompletion[] = [];
 
@@ -417,7 +479,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
 					"timeToComplete": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to complete the request", "isMeasurement": true },
 					"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
-					"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true }
+					"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
+					"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
 				}
 			*/
 			this._telemetryService.sendTelemetryEvent('response.success', { github: true, microsoft: true }, {
@@ -426,7 +489,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				source: baseTelemetry?.properties.messageSource ?? 'unknown',
 				initiatorType: userInitiatedRequest ? 'user' : 'agent',
 				model: chatEndpointInfo?.model,
-				requestId
+				requestId,
+				...(baseTelemetry?.properties.retryAfterFilterCategory ? { retryAfterFilterCategory: baseTelemetry.properties.retryAfterFilterCategory } : {}),
 			}, {
 				totalTokenMax: chatEndpointInfo?.modelMaxPromptTokens ?? -1,
 				tokenCountMax: maxResponseTokens,
@@ -459,15 +523,28 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 		const result = completions.at(0);
 
+		const isRetryAfterFilteredResponseEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.EnableRetryAfterFilteredResponse, this.experimentationService);
+
 		switch (result?.finishReason) {
 			case FinishedCompletionReason.ContentFilter:
-				return {
-					type: ChatFetchResponseType.Filtered,
-					category: result.filterReason ?? FilterReason.Copyright,
-					reason: 'Response got filtered.',
-					requestId: requestId,
-					serverRequestId: result.requestId.headerRequestId,
-				};
+				if (isRetryAfterFilteredResponseEnabled) {
+					return {
+						type: ChatFetchResponseType.FilteredRetry,
+						category: result.filterReason ?? FilterReason.Copyright,
+						reason: 'Response got filtered.',
+						value: completions.map(c => getTextPart(c.message.content)),
+						requestId: requestId,
+						serverRequestId: result.requestId.headerRequestId,
+					};
+				} else {
+					return {
+						type: ChatFetchResponseType.Filtered,
+						category: result.filterReason ?? FilterReason.Copyright,
+						reason: 'Response got filtered.',
+						requestId: requestId,
+						serverRequestId: result.requestId.headerRequestId
+					};
+				}
 			case FinishedCompletionReason.Length:
 				return {
 					type: ChatFetchResponseType.Length,

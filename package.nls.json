@@ -134,6 +134,7 @@
 	"github.copilot.config.setupTests.enabled": "Enables the `/setupTests` intent and prompting in `/tests` generation.",
 	"github.copilot.config.byok.ollamaEndpoint": "The endpoint to use for the Ollama when accessed via bring your own key. Defaults to localhost.",
 	"github.copilot.config.virtualTools.threshold": "This setting defines the tool count over which virtual tools should be used. Virtual tools group similar sets of tools together and they allow the model to activate them on-demand. Certain tool groups will optimistically be pre-activated. We are actively developing this feature and you experience degraded tool calling once the threshold is hit.\n\nMay be set to `0` to disable virtual tools.",
+	"github.copilot.config.retryAfterFilteredResponse.enabled": "Enables retrying after a filtered response. If enabled, Copilot Chat will retry the request after a content filter blocks the response.",
 	"github.copilot.command.fixTestFailure": "Fix Test Failure",
 	"copilot.description": "Ask or edit in context",
 	"copilot.edits.description": "Edit files in your workspace",
