@@ -49,7 +49,7 @@ export async function getNuGetPackageMetadata(args: IValidatePackageArgs): Promi
 		return { state: 'error', error: `Package ${args.name} not found on NuGet.org` };
 	}
 
-	const id = data.data[0].id ?? args.name;
+	const name = data.data[0].id ?? args.name;
 	let version = data.data[0].version;
 	if (version.indexOf('+') !== -1) {
 		// NuGet versions can have a + sign for build metadata, we strip it for MCP config and API calls
@@ -62,22 +62,16 @@ export async function getNuGetPackageMetadata(args: IValidatePackageArgs): Promi
 	// Try to fetch the package readme
 	// https://learn.microsoft.com/en-us/nuget/api/readme-template-resource
 	const readmeTemplate = serviceIndex.resources?.find(resource => resource['@type'] === 'ReadmeUriTemplate/6.13.0')?.['@id'];
-	let description = data.data[0].description || undefined;
+	let readme = data.data[0].description || undefined;
 	if (readmeTemplate) {
 		const readmeUrl = readmeTemplate
-			.replace('{lower_id}', encodeURIComponent(id.toLowerCase()))
+			.replace('{lower_id}', encodeURIComponent(name.toLowerCase()))
 			.replace('{lower_version}', encodeURIComponent(version.toLowerCase()));
 		const readmeResponse = await fetch(readmeUrl);
 		if (readmeResponse.ok) {
-			description = await readmeResponse.text();
+			readme = await readmeResponse.text();
 		}
 	}
 
-	return {
-		state: 'ok',
-		publisher: publisher,
-		name: id,
-		version: version,
-		readme: description,
-	};
+	return { state: 'ok', publisher, name, version, readme };
 }
