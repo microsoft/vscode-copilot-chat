@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
-import { BasePromptElementProps, ChatResponseReferencePartStatusKind, PromptElement, PromptReference, PromptSizing, UserMessage, Image as BaseImage } from '@vscode/prompt-tsx';
+import { Image as BaseImage, BasePromptElementProps, ChatResponseReferencePartStatusKind, PromptElement, PromptReference, PromptSizing, UserMessage } from '@vscode/prompt-tsx';
 import { Uri } from '../../../../vscodeTypes';
 import { IPromptEndpoint } from '../base/promptRenderer';
 
@@ -12,6 +12,7 @@ export interface ImageProps extends BasePromptElementProps {
 	variableName: string;
 	variableValue: Uint8Array | Promise<Uint8Array>;
 	omitReferences?: boolean;
+	url?: string;
 	reference?: Uri;
 }
 
@@ -46,6 +47,12 @@ export class Image extends PromptElement<ImageProps, unknown> {
 			const decodedString = decoder.decode(variable);
 			if (/^https?:\/\/.+/.test(decodedString)) {
 				decoded = decodedString;
+			}
+
+			if (this.props.url) {
+				decoded = this.props.url;
+				console.log(this.props.url);
+
 			}
 
 			return (

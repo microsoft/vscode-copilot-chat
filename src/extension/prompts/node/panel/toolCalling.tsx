@@ -13,7 +13,7 @@ import { ITokenizer } from '../../../../util/common/tokenizer';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { toErrorMessage } from '../../../../util/vs/base/common/errorMessage';
 import { isCancellationError } from '../../../../util/vs/base/common/errors';
-import { LanguageModelDataPart, LanguageModelPromptTsxPart, ToolResultAudience, LanguageModelTextPart, LanguageModelToolResult, LanguageModelTextPart2, LanguageModelDataPart2 } from '../../../../vscodeTypes';
+import { LanguageModelDataPart, LanguageModelDataPart2, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelTextPart2, LanguageModelToolResult, ToolResultAudience } from '../../../../vscodeTypes';
 import { isImageDataPart } from '../../../conversation/common/languageModelChatMessageHelpers';
 import { IResultMetadata } from '../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCall, IToolCallRound } from '../../../prompt/common/intents';
@@ -295,7 +295,13 @@ enum ToolInvocationOutcome {
 export function imageDataPartToTSX(part: LanguageModelDataPart) {
 	if (isImageDataPart(part)) {
 		const base64 = Buffer.from(part.data).toString('base64');
-		return <Image src={`data:${part.mimeType};base64,${base64}`} />;
+		const decodedString = new TextDecoder().decode(part.data);
+
+		// Check if the decoded data is a URL
+		const isUrl = /^https?:\/\/.+/.test(decodedString);
+		const src = isUrl ? decodedString : `data:${part.mimeType};base64,${base64}`;
+
+		return <Image src={src} />;
 	}
 }
 
