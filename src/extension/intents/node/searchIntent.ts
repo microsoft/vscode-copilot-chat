@@ -12,6 +12,7 @@ import { IEndpointProvider } from '../../../platform/endpoint/common/endpointPro
 import { isPreRelease } from '../../../platform/env/common/packagejson';
 import { IResponseDelta } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
+import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { extractCodeBlocks } from '../../../util/common/markdown';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -121,10 +122,11 @@ class SearchResponseProcessor extends PseudoStopStartResponseProcessor {
 
 	private _response = '';
 
-	constructor() {
+	constructor(@IThinkingDataService readonly _thinkingDataService: IThinkingDataService) {
 		super(
 			[{ start: '[ARGS END]', stop: '[ARGS START]' }],
 			(delta) => jsonToTable(parseSearchParams(delta.join(''))),
+			_thinkingDataService
 		);
 	}
 

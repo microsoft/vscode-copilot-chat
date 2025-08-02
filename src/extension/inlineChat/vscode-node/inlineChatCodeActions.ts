@@ -308,7 +308,7 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 		try {
 			documentableNode = await treeSitterAST.getDocumentableNodeIfOnIdentifier(offsetRange);
 		} catch (e) {
-			this.logger.logger.error(e, 'RefactorsProvider: getDocumentableNodeIfOnIdentifier failed');
+			this.logger.error(e, 'RefactorsProvider: getDocumentableNodeIfOnIdentifier failed');
 			this.telemetryService.sendGHTelemetryException(e, 'RefactorsProvider: getDocumentableNodeIfOnIdentifier failed');
 		}
 
@@ -364,7 +364,7 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 		try {
 			testableNode = await treeSitterAST.getTestableNode(offsetRange);
 		} catch (e) {
-			this.logger.logger.error(e, 'RefactorsProvider: getTestableNode failed');
+			this.logger.error(e, 'RefactorsProvider: getTestableNode failed');
 			this.telemetryService.sendGHTelemetryException(e, 'RefactorsProvider: getTestableNode failed');
 		}
 

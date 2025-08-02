@@ -16,6 +16,7 @@ import { ITracer, createTracer } from '../../../util/common/tracing';
 import { Disposable, DisposableMap, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { IObservableSignal, observableSignal } from '../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { CompletionsProvider } from '../../completions/vscode-node/completionsProvider';
 import { createNextEditProvider } from '../node/createNextEditProvider';
 import { DebugRecorder } from '../node/debugRecorder';
 import { NextEditProvider } from '../node/nextEditProvider';
@@ -41,6 +42,7 @@ export class InlineEditModel extends Disposable {
 		public readonly workspace: VSCodeWorkspace,
 		historyContextProvider: NesHistoryContextProvider,
 		public readonly diagnosticsBasedProvider: DiagnosticsNextEditProvider | undefined,
+		public readonly completionsProvider: CompletionsProvider | undefined,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@ILogService private readonly _logService: ILogService,
@@ -107,7 +109,7 @@ class InlineEditTriggerer extends Disposable {
 	) {
 		super();
 
-		this._tracer = createTracer(['NES', 'Triggerer'], (s) => this._logService.logger.trace(s));
+		this._tracer = createTracer(['NES', 'Triggerer'], (s) => this._logService.trace(s));
 
 		this.registerListeners();
 	}

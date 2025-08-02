@@ -92,7 +92,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 		if (httpError !== undefined) {
 			this._telemetryService.sendGHTelemetryEvent('auth.reset_token_' + httpError);
 		}
-		this._logService.logger.debug(`Resetting copilot token on HTTP error ${httpError || 'unknown'}`);
+		this._logService.debug(`Resetting copilot token on HTTP error ${httpError || 'unknown'}`);
 		this.copilotToken = undefined;
 	}
 
@@ -108,7 +108,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 		this._telemetryService.sendGHTelemetryEvent('auth.new_login');
 		const response = await this.fetchCopilotToken(githubToken);
 		if (!response) {
-			this._logService.logger.warn('Failed to get copilot token');
+			this._logService.warn('Failed to get copilot token');
 			this._telemetryService.sendGHTelemetryErrorEvent('auth.request_failed');
 			return { kind: 'failure', reason: 'FailedToGetToken' };
 		}
@@ -116,25 +116,25 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 		// FIXME: Unverified type after inputting response
 		const tokenInfo: undefined | TokenInfo = await jsonVerboseError(response);
 		if (!tokenInfo) {
-			this._logService.logger.warn('Failed to get copilot token');
+			this._logService.warn('Failed to get copilot token');
 			this._telemetryService.sendGHTelemetryErrorEvent('auth.request_read_failed');
 			return { kind: 'failure', reason: 'FailedToGetToken' };
 		}
 
 		if (response.status === 401) {
-			this._logService.logger.warn('Failed to get copilot token due to 401 status');
+			this._logService.warn('Failed to get copilot token due to 401 status');
 			this._telemetryService.sendGHTelemetryErrorEvent('auth.unknown_401');
 			return { kind: 'failure', reason: 'HTTP401' };
 		}
 
 		if (response.status === 403 && tokenInfo.message?.startsWith('API rate limit exceeded')) {
-			this._logService.logger.warn('Failed to get copilot token due to exceeding API rate limit');
+			this._logService.warn('Failed to get copilot token due to exceeding API rate limit');
 			this._telemetryService.sendGHTelemetryErrorEvent('auth.rate_limited');
 			return { kind: 'failure', reason: 'RateLimited' };
 		}
 
 		if (!response.ok || !tokenInfo.token) {
-			this._logService.logger.warn(`Invalid copilot token: missing token: ${response.status} ${response.statusText}`);
+			this._logService.warn(`Invalid copilot token: missing token: ${response.status} ${response.statusText}`);
 			const data = TelemetryData.createAndMarkAsIssued({
 				status: response.status.toString(),
 				status_text: response.statusText,

@@ -12,7 +12,6 @@ import { CHAT_MODEL, EMBEDDING_MODEL } from '../../../configuration/common/confi
 import { IEnvService } from '../../../env/common/envService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
-import { IThinkingDataService } from '../../../thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../../common/capiClient';
 import { IDomainService } from '../../common/domainService';
@@ -32,8 +31,7 @@ export class CAPITestEndpoint extends ChatEndpoint {
 		@IAuthenticationService authService: IAuthenticationService,
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
-		@IInstantiationService instantiationService: IInstantiationService,
-		@IThinkingDataService thinkingDataService: IThinkingDataService
+		@IInstantiationService instantiationService: IInstantiationService
 	) {
 		super(modelMetadata,
 			domainService,
@@ -44,8 +42,7 @@ export class CAPITestEndpoint extends ChatEndpoint {
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
-			instantiationService,
-			thinkingDataService
+			instantiationService
 		);
 	}
 

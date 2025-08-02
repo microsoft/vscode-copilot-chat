@@ -3,9 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ThinkingData } from './thinking';
+import { RawThinkingDelta, ThinkingDelta } from './thinking';
 
-export function getThinkingText(thinking: ThinkingData | undefined): string {
+function getThinkingDeltaText(thinking: RawThinkingDelta | undefined): string | undefined {
 	if (!thinking) {
 		return '';
 	}
@@ -15,10 +15,13 @@ export function getThinkingText(thinking: ThinkingData | undefined): string {
 	if (thinking.reasoning_text) {
 		return thinking.reasoning_text;
 	}
-	return '';
+	if (thinking.thinking) {
+		return thinking.thinking;
+	}
+	return undefined;
 }
 
-export function getThinkingId(thinking: ThinkingData | undefined): string | undefined {
+function getThinkingDeltaId(thinking: RawThinkingDelta | undefined): string | undefined {
 	if (!thinking) {
 		return undefined;
 	}
@@ -27,6 +30,28 @@ export function getThinkingId(thinking: ThinkingData | undefined): string | unde
 	}
 	if (thinking.reasoning_opaque) {
 		return thinking.reasoning_opaque;
+	}
+	if (thinking.signature) {
+		return thinking.signature;
+	}
+	return undefined;
+}
+
+export function extractThinkingDeltaFromChoice(choice: { message?: RawThinkingDelta; delta?: RawThinkingDelta }): ThinkingDelta | undefined {
+	const thinking = choice.message || choice.delta;
+	if (!thinking) {
+		return undefined;
+	}
+
+	const id = getThinkingDeltaId(thinking);
+	const text = getThinkingDeltaText(thinking);
+
+	if (id && text) {
+		return { id, text };
+	} else if (text) {
+		return { text };
+	} else if (id) {
+		return { id };
 	}
 	return undefined;
 }

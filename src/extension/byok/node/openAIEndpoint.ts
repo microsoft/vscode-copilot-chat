@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { Raw } from '@vscode/prompt-tsx';
+import { OpenAI, Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IChatMLFetcher, IntentParams, Source } from '../../../platform/chat/common/chatMLFetcher';
@@ -56,7 +56,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService private instantiationService: IInstantiationService,
-		@IThinkingDataService thinkingDataService: IThinkingDataService
+		@IThinkingDataService private thinkingDataService: IThinkingDataService
 	) {
 		super(
 			_modelInfo,
@@ -68,8 +68,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
-			instantiationService,
-			thinkingDataService
+			instantiationService
 		);
 	}
 
@@ -79,7 +78,31 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		if (body?.tools?.length === 0) {
 			delete body.tools;
 		}
+
+		if (body?.messages) {
+			const newMessages = body.messages.map((message: OpenAI.ChatMessage) => {
+				if (message.role === OpenAI.ChatRole.Assistant && message.tool_calls && message.tool_calls.length > 0) {
+					const id = message.tool_calls[0].id;
+					const thinking = this.thinkingDataService.get(id);
+					if (thinking?.id) {
+						return {
+							...message,
+							cot_id: thinking.id,
+							cot_summary: thinking.text,
+						};
+					}
+				}
+				return message;
+			});
+			body.messages = newMessages;
+		}
+
 		if (body) {
+			if (this._modelInfo.capabilities.supports.thinking) {
+				delete body.temperature;
+				body['max_completion_tokens'] = body.max_tokens;
+				delete body.max_tokens;
+			}
 			// Removing max tokens defaults to the maximum which is what we want for BYOK
 			delete body.max_tokens;
 			body['stream_options'] = { 'include_usage': true };

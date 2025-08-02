@@ -129,7 +129,11 @@ exports[`SSEProcessor > real world snapshots > multiple tool calls > finishedCal
 					"arguments": "\\"filePath\\":\\"/Users/roblou/code/debugtest/server.js\\",\\"explanation\\":\\"Adding dad jokes functionality\\",\\"code\\": \\"const http = require('http');\\\\n\\\\nconst dadJokes = [\\\\n    'Why don\\\\\\\\'t eggs tell jokes? They\\\\'d crack up!',\\\\n    'What do you call a fake noodle? An impasta!',\\\\n    'Why did the scarecrow win an award? Because he was outstanding in his field!'\\\\n];\\\\n\\\\nconst server = http.createServer((req, res) => {\\\\n    console.log(\`\${req.method} \${req.url}\`);\\\\n    const randomJoke = dadJokes[Math.floor(Math.random() * dadJokes.length)];\\\\n    res.statusCode = 200;\\\\n    res.setHeader('Content-Type', 'text/plain');\\\\n    res.end(\`\${ randomJoke}\\\\\\n\`); \\\\n});\\\\n\\\\n// ...existing code...\\"}",
 					"id": "tooluse_2SRF2HShTXOoLdGrjWuGiw"
 				}
-			]
+			],
+			"thinking": {
+				"text": "",
+				"metadata": "tooluse_448k6WHnTpS28K0Bd1bhgA"
+			}
 		}
 	}
 ]"
@@ -479,7 +483,11 @@ exports[`SSEProcessor > real world snapshots > single tool call > finishedCallba
 					"arguments": "{\\"query\\":\\"linkedlist\\"}",
 					"id": "call_ZQkSp6hzLvcGcH2L2CmaBkXM"
 				}
-			]
+			],
+			"thinking": {
+				"text": "",
+				"metadata": "call_ZQkSp6hzLvcGcH2L2CmaBkXM"
+			}
 		}
 	}
 ]"
@@ -537,7 +545,11 @@ exports[`SSEProcessor > real world snapshots > single tool call with annotations
 					"arguments": "{\\"filePath\\":\\"/tmp/astro/src/pages/lists/[id]/index.astro\\",\\"code\\":\\"<UrlList />\\",\\"explanation\\":\\"Integrate the UrlList component into the list view page to display and manage URLs.\\"}",
 					"id": "call_YEMsUraDh71gogljRLa7vyGP"
 				}
-			]
+			],
+			"thinking": {
+				"text": "",
+				"metadata": "call_YEMsUraDh71gogljRLa7vyGP"
+			}
 		}
 	}
 ]"

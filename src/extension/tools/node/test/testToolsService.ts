@@ -199,5 +199,16 @@ export function getPackagejsonToolsForTest() {
 	const tools = new Set(packageJson.contributes.languageModelTools
 		.filter(tool => (tool.canBeReferencedInPrompt || toolsetReferenceNames.has(tool.toolReferenceName)))
 		.map(tool => getToolName(tool.name)));
+
+	// Add core tools that should be enabled for the agent.
+	// Normally, vscode is in control of deciding which tools are enabled for a chat request, but in the simulator, the extension has to decide this.
+	// Since it can't get info like `canBeReferencedInPrompt` from the extension API, we have to hardcode tool names here.
+	tools.add(ToolName.CoreRunInTerminal);
+	tools.add(ToolName.CoreGetTerminalOutput);
+	tools.add(ToolName.CoreCreateAndRunTask);
+	tools.add(ToolName.CoreGetTaskOutput);
+	tools.add(ToolName.CoreRunTask);
+	tools.add(ToolName.CoreRunTest);
+
 	return tools;
 }

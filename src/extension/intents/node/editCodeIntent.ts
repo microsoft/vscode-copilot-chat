@@ -331,7 +331,7 @@ export class EditCodeIntentInvocation implements IIntentInvocation {
 		@IToolsService protected readonly toolsService: IToolsService,
 		@IConfigurationService protected readonly configurationService: IConfigurationService,
 		@IEditLogService private readonly editLogService: IEditLogService,
-		@ICommandService private readonly commandService: ICommandService,
+		@ICommandService protected readonly commandService: ICommandService,
 		@ITelemetryService protected readonly telemetryService: ITelemetryService,
 		@INotebookService private readonly notebookService: INotebookService,
 	) { }

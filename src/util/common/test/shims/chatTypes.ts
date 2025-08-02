@@ -100,6 +100,22 @@ export class ChatResponseExtensionsPart {
 	}
 }
 
+export class ChatResponsePullRequestPart {
+	readonly uri: vscode.Uri;
+	readonly linkTag: string;
+	readonly title: string;
+	readonly description: string;
+	readonly author: string;
+	constructor(uri: vscode.Uri, title: string, description: string, author: string, linkTag: string) {
+		this.uri = uri;
+		this.title = title;
+		this.description = description;
+		this.author = author;
+		this.linkTag = linkTag;
+	}
+}
+
+
 export class ChatResponseCodeCitationPart {
 	value: vscode.Uri;
 	license: string;
@@ -247,6 +263,18 @@ export class LanguageModelTextPart implements vscode.LanguageModelTextPart {
 	}
 }
 
+export enum ToolResultAudience {
+	Assistant = 0,
+	User = 1,
+}
+
+export class LanguageModelTextPart2 extends LanguageModelTextPart {
+	audience: ToolResultAudience[] | undefined;
+	constructor(value: string, audience?: ToolResultAudience[]) {
+		super(value);
+		this.audience = audience;
+	}
+}
 export class LanguageModelDataPart implements vscode.LanguageModelDataPart {
 	mimeType: string;
 	data: Uint8Array<ArrayBufferLike>;
@@ -268,7 +296,14 @@ export class LanguageModelDataPart implements vscode.LanguageModelDataPart {
 	static text(value: string): vscode.LanguageModelDataPart {
 		return new LanguageModelDataPart(VSBuffer.fromString(value).buffer, 'text/plain');
 	}
+}
 
+export class LanguageModelDataPart2 extends LanguageModelDataPart {
+	audience: ToolResultAudience[] | undefined;
+	constructor(data: Uint8Array, mimeType: string, audience?: ToolResultAudience[]) {
+		super(data, mimeType);
+		this.audience = audience;
+	}
 }
 
 export enum ChatImageMimeType {

@@ -5,7 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { LanguageModelTextPart, LanguageModelToolInformation } from 'vscode';
-import { HARD_TOOL_LIMIT } from '../../../../../platform/configuration/common/configurationService';
+import { HARD_TOOL_LIMIT, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry';
 import { ITestingServicesAccessor } from '../../../../../platform/test/node/services';
 import { shuffle } from '../../../../../util/vs/base/common/arrays';
@@ -17,6 +17,7 @@ import { ToolGrouping } from '../../../common/virtualTools/toolGrouping';
 import { VIRTUAL_TOOL_NAME_PREFIX, VirtualTool } from '../../../common/virtualTools/virtualTool';
 import { TRIM_THRESHOLD } from '../../../common/virtualTools/virtualToolsConstants';
 import { IToolCategorization } from '../../../common/virtualTools/virtualToolTypes';
+import { IExperimentationService } from '../../../../../platform/telemetry/common/nullExperimentationService';
 
 describe('Virtual Tools - Grouping', () => {
 	let accessor: ITestingServicesAccessor;
@@ -28,8 +29,10 @@ describe('Virtual Tools - Grouping', () => {
 			_tools: readonly LanguageModelToolInformation[],
 			@IInstantiationService _instantiationService: IInstantiationService,
 			@ITelemetryService _telemetryService: ITelemetryService,
+			@IConfigurationService _configurationService: IConfigurationService,
+			@IExperimentationService _experimentationService: IExperimentationService
 		) {
-			super(_tools, _instantiationService, _telemetryService);
+			super(_tools, _instantiationService, _telemetryService, _configurationService, _experimentationService);
 			this._grouper = mockGrouper;
 		}
 

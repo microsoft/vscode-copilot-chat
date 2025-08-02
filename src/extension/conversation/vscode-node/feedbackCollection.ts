@@ -34,29 +34,29 @@ export function startFeedbackCollection(accessor: ServicesAccessor) {
 	disposables.add(vscode.workspace.onDidChangeTextDocument(async event => {
 		if (event.document.uri.scheme === 'file' && event.contentChanges.length && event.document === vscode.window.activeTextEditor?.document) {
 			try {
-				logService.logger.warn('Document changed, delaying diagnostics request');
+				logService.warn('Document changed, delaying diagnostics request');
 				const version = event.document.version;
 				await new Promise(resolve => setTimeout(resolve, requestDelay));
 				if (version !== event.document.version) {
-					logService.logger.warn('Skipping diagnostics request because the document has changed');
+					logService.warn('Skipping diagnostics request because the document has changed');
 					return;
 				}
 				const now = Date.now();
 				const before = now - maxRequestsInterval;
 				requestTimes = requestTimes.filter(t => t > before);
 				if (requestTimes.length >= maxRequests) {
-					logService.logger.warn('Max requests reached, skipping diagnostics request');
+					logService.warn('Max requests reached, skipping diagnostics request');
 					return;
 				}
 				requestTimes.push(now);
-				logService.logger.trace('Requesting diagnostics');
+				logService.trace('Requesting diagnostics');
 
 				const selection = vscode.window.activeTextEditor?.selection;
 
 				// TODO: Use all changes in the current document.
 				const change = await instantiationService.invokeFunction(CurrentChange.getCurrentChange, event.document, selection.start);
 				if (!change) {
-					logService.logger.trace('No change found in the current document at the current position.');
+					logService.trace('No change found in the current document at the current position.');
 					return [];
 				}
 
@@ -73,7 +73,7 @@ export function startFeedbackCollection(accessor: ServicesAccessor) {
 					collection.set(event.document.uri, diagnostics);
 				}
 			} catch (err) {
-				logService.logger.error(err, 'Error generating diagnostics');
+				logService.error(err, 'Error generating diagnostics');
 			}
 		}
 	}));

@@ -8,4 +8,5 @@ export interface INesConfigs {
 	isRevisedCacheStrategy: boolean;
 	isCacheTracksRejections: boolean;
 	isRecentlyShownCacheEnabled: boolean;
+	debounceUseCoreRequestTime: boolean;
 }

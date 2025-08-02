@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 
+import { RequestMetadata } from '@vscode/copilot-api';
 import type { LanguageModelChat } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { TokenizerType } from '../../../util/common/tokenizer';
@@ -31,6 +32,7 @@ export type IChatModelCapabilities = {
 		streaming: boolean | undefined;
 		vision?: boolean;
 		prediction?: boolean;
+		thinking?: boolean;
 	};
 };
 
@@ -60,7 +62,10 @@ export interface IModelAPIResponse {
 	capabilities: IChatModelCapabilities | IEmbeddingModelCapabilities | ICompletionsModelCapabilities;
 }
 
-export type IChatModelInformation = IModelAPIResponse & { capabilities: IChatModelCapabilities };
+export type IChatModelInformation = IModelAPIResponse & {
+	capabilities: IChatModelCapabilities;
+	urlOrRequestMetadata?: string | RequestMetadata;
+};
 export type IEmbeddingModelInformation = IModelAPIResponse & { capabilities: IEmbeddingModelCapabilities };
 
 export function isChatModelInformation(model: IModelAPIResponse): model is IChatModelInformation {
