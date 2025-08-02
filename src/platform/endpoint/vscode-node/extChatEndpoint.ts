@@ -251,6 +251,10 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 						numToolsCalled++;
 						await finishedCb(text, 0, { text: '', copilotToolCalls: functionCalls });
 					}
+				} else if (chunk instanceof vscode.LanguageModelDataPart) {
+					if (chunk.mimeType === CustomDataPartMimeTypes.StatefulMarker) {
+						await finishedCb?.(text, 0, { text: '', statefulMarker: chunk.data.toString() });
+					}
 				}
 			}
 

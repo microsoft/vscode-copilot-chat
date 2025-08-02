@@ -32,6 +32,7 @@ import { IExtensionContribution } from '../../common/contributions';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { isImageDataPart } from '../common/languageModelChatMessageHelpers';
 import { LanguageModelAccessPrompt } from './languageModelAccessPrompt';
+import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 
 export class LanguageModelAccess extends Disposable implements IExtensionContribution {
 
@@ -423,6 +424,11 @@ export class CopilotLanguageModelWrapper extends Disposable {
 				// @karthiknadig: remove this when LM API becomes available
 				this._thinkingDataService.update(index, delta.thinking);
 			}
+
+			if (delta.statefulMarker) {
+				progress.report({ index, part: new vscode.LanguageModelDataPart(new TextEncoder().encode(delta.statefulMarker), CustomDataPartMimeTypes.StatefulMarker) });
+			}
+
 			return undefined;
 		};
 		return this._provideLanguageModelResponse(endpoint, messages, options, extensionId, finishCallback, token);
