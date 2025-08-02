@@ -51,6 +51,7 @@ export const enum ToolName {
 	CoreRunTask = 'run_task',
 	CoreGetTaskOutput = 'get_task_output',
 	CoreRunTest = 'runTests',
+	CoreTodoListTool = 'manage_todo_list',
 }
 
 // When updating this, also update contributedToolNameToToolNames
