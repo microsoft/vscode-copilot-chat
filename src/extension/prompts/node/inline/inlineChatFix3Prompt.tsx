@@ -296,7 +296,8 @@ export class PatchEditFixReplyInterpreter implements ReplyInterpreter {
 		}
 		context.addAnnotations(res.annotations);
 		if (edits.length) {
-			outputStream.textEdit(this.documentUri, edits);
+			// If we have edits, we apply them in reverse order to avoid issues with ranges changing as we apply edits
+			outputStream.textEdit(this.documentUri, edits.reverse());
 		} else if (!res.otherPatches.length && !res.otherSections.length) {
 			outputStream.warning(l10n.t('The edit generation was not successful. Please try again.'));
 		}
