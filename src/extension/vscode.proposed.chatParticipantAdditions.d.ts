@@ -97,6 +97,21 @@ declare module 'vscode' {
 		constructor(value: string, task?: (progress: Progress<ChatResponseWarningPart | ChatResponseReferencePart>) => Thenable<string | void>);
 	}
 
+	/**
+ * A specialized progress part for displaying thinking/reasoning steps.
+ */
+	export class ChatResponseThinkingProgressPart extends ChatResponseProgressPart {
+		value: string;
+		id?: string;
+		metadata?: string;
+
+		/**
+		 * Creates a new thinking progress part.
+		 * @param value An initial progress message
+		 * @param task A task that will emit thinking parts during its execution
+		 */
+		constructor(value: string, id?: string, metadata?: string)
+	}
 	export class ChatResponseReferencePart2 {
 		/**
 		 * The reference target.
@@ -192,6 +207,8 @@ declare module 'vscode' {
 		* @returns This stream.
 		*/
 		progress(value: string, task?: (progress: Progress<ChatResponseWarningPart | ChatResponseReferencePart>) => Thenable<string | void>): void;
+
+		thinkingProgress(value: string, id?: string, metadata?: string): void;
 
 		textEdit(target: Uri, edits: TextEdit | TextEdit[]): void;
 
