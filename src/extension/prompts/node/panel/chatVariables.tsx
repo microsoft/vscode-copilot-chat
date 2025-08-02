@@ -187,7 +187,7 @@ export async function renderChatVariables(chatVariables: ChatVariablesCollection
 				</Tag>
 			);
 		} else if (variableValue instanceof ChatReferenceBinaryData) {
-			elements.push(<Image variableName={variableName} variableValue={await variableValue.data()} reference={variableValue.reference} omitReferences={omitReferences}></Image>);
+			elements.push(<Image variableName={variableName} variableValue={await variableValue.data()} reference={variableValue.reference} omitReferences={omitReferences} url={variableValue.url}></Image>);
 		} else if (typeof ChatReferenceDiagnostic !== 'undefined' && variableValue instanceof ChatReferenceDiagnostic) { // check undefined to avoid breaking old Insiders versions
 			elements.push(<DiagnosticVariable diagnostics={variableValue.diagnostics} />);
 		}
