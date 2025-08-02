@@ -280,7 +280,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		const hasEditFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
 		const hasEditNotebookTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditNotebook);
 		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreRunInTerminal);
-		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1') && this.props.chatVariables.hasVariables() ?
+		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1' || this.props.endpoint.family === process.env.CHAT_MODEL_FAMILY) && this.props.chatVariables.hasVariables() ?
 			' (See <attachments> above for file contents. You may not need to search or read the file again.)'
 			: '';
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;
@@ -302,6 +302,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 					<RepoContext />
 					<Tag name='reminderInstructions'>
 						{/* Critical reminders that are effective when repeated right next to the user message */}
+						{getExplanationReminder(this.props.endpoint.family)}
 						{getKeepGoingReminder(this.props.endpoint.family)}
 						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint))}
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
@@ -347,7 +348,8 @@ class ToolReferencesHint extends PromptElement<ToolReferencesHintProps> {
 		return <>
 			<Tag name='toolReferences'>
 				The user attached the following tools to this message. The userRequest may refer to them using the tool name with "#". These tools are likely relevant to the user's query:<br />
-				{this.props.toolReferences.map(tool => `- ${tool.name}`).join('\n')}
+				{this.props.toolReferences.map(tool => `- ${tool.name}`).join('\n')} <br />
+				Start by using the most relevant tool attached to this message - the user expects you to act with it first.<br />
 			</Tag>
 		</>;
 	}
@@ -636,10 +638,21 @@ export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringToo
  * Remind gpt-4.1 to keep going and not stop to ask questions...
  */
 export function getKeepGoingReminder(modelFamily: string | undefined) {
-	return modelFamily === 'gpt-4.1' ?
+	return modelFamily === 'gpt-4.1' || modelFamily === process.env.CHAT_MODEL_FAMILY ?
 		<>
 			You are an agent - you must keep going until the user's query is completely resolved, before ending your turn and yielding back to the user. ONLY terminate your turn when you are sure that the problem is solved, or you absolutely cannot continue.<br />
-			You take action when possible- the user is expecting YOU to take action and go to work for them. Don't ask unnecessary questions about the details if you can simply DO something useful instead.<br />
+			You take action when possible - the user is expecting YOU to take action and go to work for them. Don't ask unnecessary questions about the details if you can simply DO something useful instead.<br />
+			Do NOT stop after completing only part of the request. Only terminate your turn when you are sure that the problem is solved.<br />
+			Do NOT end your response with "Anything else?" unless additional input is required to proceed.<br />
+		</>
+		: undefined;
+}
+
+export function getExplanationReminder(modelFamily: string | undefined) {
+	return modelFamily === process.env.CHAT_MODEL_FAMILY ?
+		<>
+			Every so often, explain to the user the action you are going to take if it is notable. <br />
+			Likely not before every tool call, but when you have determined the right next steps or are making significant progress on the problem.<br />
 		</>
 		: undefined;
 }
