@@ -110,15 +110,6 @@ export interface ICopilotError {
 	identifier?: string;
 }
 
-export interface ICopilotKnowledgeBaseReference {
-	type: 'github.knowledge-base';
-	id: string;
-	data: {
-		type: 'knowledge-base';
-		id: string;
-	};
-}
-
 export function isCopilotWebReference(reference: unknown) {
 	return typeof reference === 'object' && !!reference && 'title' in reference && 'excerpt' in reference && 'url' in reference;
 }
