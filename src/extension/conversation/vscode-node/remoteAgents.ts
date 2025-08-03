@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import { RequestType } from '@vscode/copilot-api';
 import { Raw } from '@vscode/prompt-tsx';
-import { ChatCompletionItem, ChatContext, ChatPromptReference, ChatRequest, ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseReferencePart, ChatResponseTurn, ChatResponseWarningPart, ChatVariableLevel, Disposable, DynamicChatParticipantProps, Location, MarkdownString, Position, Progress, QuickPickItem, Range, TextDocument, TextEditor, ThemeIcon, chat, commands, l10n } from 'vscode';
+import { ChatCompletionItem, ChatContext, ChatPromptReference, ChatRequest, ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseReferencePart, ChatResponseTurn, ChatResponseWarningPart, ChatVariableLevel, Disposable, DynamicChatParticipantProps, Location, MarkdownString, Position, Progress, Range, TextDocument, TextEditor, ThemeIcon, chat, commands, l10n } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
@@ -17,7 +17,7 @@ import { IGithubRepositoryService } from '../../../platform/github/common/github
 import { HAS_IGNORED_FILES_MESSAGE, IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ICopilotReference } from '../../../platform/networking/common/fetch';
-import { IFetcherService, Response } from '../../../platform/networking/common/fetcherService';
+import { Response } from '../../../platform/networking/common/fetcherService';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { DeferredPromise } from '../../../util/vs/base/common/async';
@@ -46,13 +46,6 @@ interface IAgentsResponse {
 }
 
 const agentRegistrations = new Map<string, Disposable>();
-
-export class SSOQuickPickItem implements QuickPickItem {
-	public readonly iconPath = new ThemeIcon('lock');
-	constructor(public label: string) { }
-}
-
-const SSO_CONFIRMATION_TEXT = l10n.t('Sign in again to {0}', 'GitHub');
 
 const GITHUB_PLATFORM_AGENT_NAME = 'github';
 const GITHUB_PLATFORM_AGENT_ID = 'platform';
@@ -101,7 +94,6 @@ export class RemoteAgentContribution implements IDisposable {
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
-		@IFetcherService private readonly fetcherService: IFetcherService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@ICAPIClientService private readonly capiClientService: ICAPIClientService,
 		@IPromptVariablesService private readonly promptVariablesService: IPromptVariablesService,
@@ -233,11 +225,7 @@ export class RemoteAgentContribution implements IDisposable {
 			let accessToken: string | undefined;
 			if (request.acceptedConfirmationData) {
 				for (const data of request.acceptedConfirmationData) {
-					if (data?.ssoSignIn) {
-						await this.authenticationService.getPermissiveGitHubSession({ forceNewSession: true });
-						responseStream.markdown(l10n.t('Please complete the sign-in process in your browser.'));
-						return { metadata } satisfies ICopilotChatResult;
-					} else if (data?.url) {
+					if (data?.url) {
 						// Store that the user has authorized the agent
 						await this.setAuthorized(slug, request.prompt.startsWith(l10n.t('Authorize for all workspaces')));
 						await commands.executeCommand('vscode.open', Uri.parse(data.url));
@@ -345,7 +333,6 @@ export class RemoteAgentContribution implements IDisposable {
 				let reportedProgress: Progress<ChatResponseWarningPart | ChatResponseReferencePart2> | undefined = undefined;
 				let pendingProgress: { resolvedMessage: string; deferred: DeferredPromise<string> } | undefined;
 				let hadCopilotErrorsOrConfirmations = false;
-				let githubSSOHeaderValue: string | undefined;
 
 				const response = await endpoint.makeChatRequest(
 					'remoteAgent',
@@ -444,9 +431,7 @@ export class RemoteAgentContribution implements IDisposable {
 						if (delta.copilotErrors && typeof responseStream.warning === 'function') {
 							hadCopilotErrorsOrConfirmations = true;
 							for (const error of delta.copilotErrors) {
-								if (error.code === 'sso') {
-									githubSSOHeaderValue = error.identifier;
-								} else if (reportedProgress) {
+								if (reportedProgress) {
 									reportedProgress?.report(new ChatResponseWarningPart(error.message));
 								} else {
 									responseStream.warning(error.message);
@@ -485,12 +470,6 @@ export class RemoteAgentContribution implements IDisposable {
 				metadata['copilot_references'] = [...new Set(reportedReferences.values()).values(), ...agentReferences];
 				if (response.type === ChatFetchResponseType.Success && hasIgnoredFiles) {
 					responseStream.markdown(HAS_IGNORED_FILES_MESSAGE);
-				}
-
-				if (githubSSOHeaderValue && accessToken) {
-					const orgName = this.updateMissingSSOOrganizationInfo(githubSSOHeaderValue, accessToken);
-					const ssoMessage = orgName ? l10n.t('Please grant permission to read resources protected by SSO in the {0} organization.', orgName) : l10n.t('Please grant permission to read resources protected by SSO.');
-					responseStream.confirmation(SSO_CONFIRMATION_TEXT, ssoMessage, { ssoSignIn: true }, [l10n.t('Sign In')]);
 				}
 
 				if (response.type !== ChatFetchResponseType.Success) {
@@ -735,31 +714,6 @@ export class RemoteAgentContribution implements IDisposable {
 		}
 
 		return { copilot_skills: [] };
-	}
-
-	private async updateMissingSSOOrganizationInfo(xGithubSSOHeader: string, authToken: string): Promise<string | undefined> {
-		// Parse missing orgs
-		const missingOrganizations = xGithubSSOHeader?.split('partial-results; organizations=')[1];
-		if (missingOrganizations) {
-			const organizationsMissingSSO = missingOrganizations.split(',');
-			this.logService.debug(`Missing knowledge bases SSO for ${organizationsMissingSSO.length} organizations: ${missingOrganizations}`);
-
-			const orgName = await this.getOrganizationName(authToken, parseInt(organizationsMissingSSO[0]));
-			return orgName;
-		}
-	}
-
-	private async getOrganizationName(authToken: string, id: number) {
-		const org = await this.fetcherService.fetch(`https://api.github.com/user/${id}`, {
-			method: 'GET',
-			headers: {
-				Authorization: `Bearer ${authToken}`
-			}
-		});
-		if (org.ok) {
-			return (await org.json()).name;
-		}
-		return undefined;
 	}
 
 	private async getPlatformAgentSkills() {
