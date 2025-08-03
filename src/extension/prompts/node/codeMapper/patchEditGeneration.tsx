@@ -37,8 +37,8 @@ export class PatchEditRules extends PromptElement {
 				Each modification consist of three sections headed by `{Marker.FILEPATH}`, `{Marker.FIND}` and `{Marker.REPLACE}`.<br />
 				After {Marker.FILEPATH} add the path to the file that needs to be changed.<br />
 				After {Marker.FIND} add a code block containing a section of the program that will be replaced.<br />
-				Add multiple lines so that a find tool can find and identify a section of the programm. Start and end with a line that will not be modified. <br />
-				Include all comments and empty lines exactly as they appear in the original source code. Do not abreviate any line or summarize the code with `...`. <br />
+				Add multiple lines so that a find tool can find and identify a section of the program. Start and end with a line that will not be modified. <br />
+				Include all comments and empty lines exactly as they appear in the original source code. Do not abbreviate any line or summarize the code with `...`. <br />
 				After {Marker.REPLACE} add a code block with the updated version of the original code in the find section. Maintain the same indentation and code style as in the original code.<br />
 				After all modifications, add {Marker.COMPLETE}.<br />
 			</>

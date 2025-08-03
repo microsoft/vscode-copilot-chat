@@ -89,7 +89,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 		children.push(<AssistantMessage toolCalls={assistantToolCalls}>{round.response}</AssistantMessage>);
 
 		// Tool call elements should be rendered with the later elements first, allowed to grow to fill the available space
-		// Each tool 'reserves' 1/(N*4) of the available space just so that newer tool calls don't completely elimate
+		// Each tool 'reserves' 1/(N*4) of the available space just so that newer tool calls don't completely eliminate
 		// older tool calls.
 		const reserve1N = (1 / (total * 4)) / fixedNameToolCalls.length;
 		// todo@connor4312: historical tool calls don't need to reserve and can all be flexed together

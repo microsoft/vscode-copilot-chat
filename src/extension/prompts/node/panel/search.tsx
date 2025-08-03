@@ -92,7 +92,7 @@ export class SearchPrompt extends PromptElement<SearchPromptProps> {
 						Find all CamelCase words in all files under the 'src/extensions' directory.<br />
 						<br />
 						### Answer:<br />
-						Perform a regex search for camelCase variables by checking for any word that has a lowercase letter followed by an uppercase letter, followed by any number of lowercase letters. You can use `\b[a-z]+[A-Z][a-z]+\b` to acheive this.<br />
+						Perform a regex search for camelCase variables by checking for any word that has a lowercase letter followed by an uppercase letter, followed by any number of lowercase letters. You can use `\b[a-z]+[A-Z][a-z]+\b` to achieve this.<br />
 						This must be case-sensitive since the capitalization of the letters in our regex matters.<br />
 						<br />
 						[ARGS START]<br />
@@ -207,7 +207,7 @@ export class SearchPrompt extends PromptElement<SearchPromptProps> {
 						[ARGS END]<br />
 						<br />
 						### Question:<br />
-						Search for actionbar files outside of my "extensions" directoy<br />
+						Search for actionbar files outside of my "extensions" directory<br />
 						<br />
 						### Answer:<br />
 						To do this, use the query `actionbar` in all files except the ones in `extensions`.<br />
