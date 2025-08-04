@@ -15,4 +15,54 @@ glob.sync(`*.ts`, { cwd: __dirname }).forEach((file) => {
 	rules[path.basename(file, '.ts')] = require(`./${file}`);
 });
 
+rules['no-restricted-copilot-pr-string'] = {
+	meta: {
+		type: 'problem',
+		docs: {
+			description: 'Ensure "Generate with Copilot" string in GitHubPullRequestProviders is never changed',
+			category: 'Best Practices'
+		},
+		schema: [
+			{
+				type: 'object',
+				properties: {
+					className: { type: 'string' },
+					string: { type: 'string' }
+				},
+				additionalProperties: false
+			}
+		]
+	},
+	create(context) {
+		const options = context.options[0] || {};
+		const className = options.className || 'GitHubPullRequestProviders';
+		const requiredString = options.string || 'Generate with Copilot';
+
+		let inTargetClass = false;
+
+		return {
+			ClassDeclaration(node) {
+				if (node.id && node.id.name === className) {
+					inTargetClass = true;
+				}
+			},
+			'ClassDeclaration:exit'(node) {
+				if (node.id && node.id.name === className) {
+					inTargetClass = false;
+				}
+			},
+			Literal(node) {
+				if (inTargetClass && typeof node.value === 'string' && node.value.includes('Generate')) {
+					if (node.value !== requiredString) {
+						context.report({
+							node,
+							message: `String literal in ${className} must be exactly "${requiredString}" as the string is referenced in the GitHub Pull Request extension. Talk to alexr00 if you need to change it.`
+						});
+					}
+				}
+			}
+		};
+	}
+};
+
 exports.rules = rules;
