@@ -413,6 +413,12 @@ export interface IBaseVSCodeObservableDocument extends IObservableDocument {
 	 * If this is a Notebook Document, then this method converts a range within the provided Notebook Cell to an Offset within the Observable document. If the provided document does not belong to the Notebook Cell, it returns undefined.
 	 */
 	toOffsetRange(textDocument: TextDocument, range: Range): OffsetRange | undefined;
+	/**
+	 * Converts the Range of the provided Text Document into a Range within the Observable Document.
+	 * If this is a Text Document, then this returns the same value passed in.
+	 * If this is a Notebook Document, then this method converts a range within the provided Notebook Cell to a Range within the Observable document. If the provided document does not belong to the Notebook Cell, it returns undefined.
+	 */
+	toRange(textDocument: TextDocument, range: Range): Range | undefined;
 }
 
 export interface IVSCodeObservableTextDocument extends IObservableDocument, IBaseVSCodeObservableDocument {
@@ -502,6 +508,9 @@ class VSCodeObservableTextDocument extends AbstractVSCodeObservableDocument impl
 			return undefined;
 		}
 	}
+	toRange(_textDocument: TextDocument, range: Range): Range | undefined {
+		return range;
+	}
 }
 
 export interface IVSCodeObservableNotebookDocument extends IObservableDocument, IBaseVSCodeObservableDocument {
@@ -572,6 +581,14 @@ class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument 
 			return [];
 		}
 		return toAltDiagnostics(this.altNotebook, cell, diagnostics);
+	}
+	toRange(textDocument: TextDocument, range: Range): Range | undefined {
+		const cell = this.altNotebook.getCell(textDocument);
+		if (!cell) {
+			return undefined;
+		}
+		const ranges = this.altNotebook.toAltRange(cell, [range]);
+		return ranges.length > 0 ? ranges[0] : undefined;
 	}
 }
 
