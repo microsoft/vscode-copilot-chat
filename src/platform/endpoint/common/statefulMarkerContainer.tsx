@@ -44,3 +44,20 @@ export function rawPartAsStatefulMarker(part: Raw.ChatCompletionContentPartOpaqu
 	}
 	return;
 }
+
+export function getStatefulMarkerAndIndex(messages: readonly Raw.ChatMessage[]): { statefulMarker: string; index: number } | undefined {
+	for (let idx = messages.length - 1; idx >= 0; idx--) {
+		const message = messages[idx];
+		if (message.role === Raw.ChatRole.Assistant) {
+			for (const part of message.content) {
+				if (part.type === Raw.ChatCompletionContentPartKind.Opaque) {
+					const statefulMarker = rawPartAsStatefulMarker(part);
+					if (statefulMarker) {
+						return { statefulMarker, index: idx };
+					}
+				}
+			}
+		}
+	}
+	return undefined;
+}

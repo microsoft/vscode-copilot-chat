@@ -7,7 +7,7 @@ import { Raw } from '@vscode/prompt-tsx';
 import { ClientHttp2Stream } from 'http2';
 import type { OpenAI } from 'openai';
 import { ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
-import { rawPartAsStatefulMarker } from '../../../platform/endpoint/common/statefulMarkerContainer';
+import { getStatefulMarkerAndIndex } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { ILogService } from '../../../platform/log/common/logService';
 import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../../platform/networking/common/fetch';
 import { Response } from '../../../platform/networking/common/fetcherService';
@@ -230,23 +230,6 @@ function rawContentToResponsesOutputContent(part: Raw.ChatCompletionContentPart)
 		case Raw.ChatCompletionContentPartKind.Text:
 			return { type: 'output_text', text: part.text, annotations: [] };
 	}
-}
-
-function getStatefulMarkerAndIndex(messages: readonly Raw.ChatMessage[]): { statefulMarker: string; index: number } | undefined {
-	for (let idx = messages.length - 1; idx >= 0; idx--) {
-		const message = messages[idx];
-		if (message.role === Raw.ChatRole.Assistant) {
-			for (const part of message.content) {
-				if (part.type === Raw.ChatCompletionContentPartKind.Opaque) {
-					const statefulMarker = rawPartAsStatefulMarker(part);
-					if (statefulMarker) {
-						return { statefulMarker, index: idx };
-					}
-				}
-			}
-		}
-	}
-	return undefined;
 }
 
 function rawMessagesToResponseAPI(messages: readonly Raw.ChatMessage[], ignoreStatefulMarker: boolean): { input: OpenAI.Responses.ResponseInputItem[]; previous_response_id?: string } {

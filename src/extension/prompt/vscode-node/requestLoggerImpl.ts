@@ -18,6 +18,7 @@ import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { safeStringify } from '../../../util/vs/base/common/objects';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { renderToolResultToStringNoBudget } from './requestLoggerToolResult';
+import { getStatefulMarkerAndIndex } from '../../../platform/endpoint/common/statefulMarkerContainer';
 
 export class RequestLogger extends AbstractRequestLogger {
 
@@ -259,6 +260,15 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(`endTime          : ${entry.endTime.toJSON()}`);
 		result.push(`duration         : ${entry.endTime.getTime() - entry.startTime.getTime()}ms`);
 		result.push(`ourRequestId     : ${entry.chatParams.ourRequestId}`);
+
+		let statefulMarker: { statefulMarker: string; index: number } | undefined;
+		if ('messages' in entry.chatParams) {
+			statefulMarker = getStatefulMarkerAndIndex(entry.chatParams.messages);
+		}
+		if (statefulMarker) {
+			result.push(`lastResponseId   : ${statefulMarker?.statefulMarker}`);
+		}
+
 		if (entry.type === LoggedRequestKind.ChatMLSuccess) {
 			result.push(`requestId        : ${entry.result.requestId}`);
 			result.push(`serverRequestId  : ${entry.result.serverRequestId}`);

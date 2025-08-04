@@ -2735,6 +2735,14 @@
 							"additionalProperties": false
 						},
 						"markdownDescription": "Configure custom Azure OpenAI models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
+					},
+					"github.copilot.chat.byok.responsesApi": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental"
+						],
+						"markdownDescription": "%github.copilot.config.byok.responsesApi%"
 					}
 				}
 			}
