@@ -38,6 +38,7 @@ import { AnyDiagnosticCompletionItem, AnyDiagnosticCompletionProvider } from './
 import { AsyncDiagnosticCompletionProvider } from './diagnosticsBasedCompletions/asyncDiagnosticsCompletionProvider';
 import { Diagnostic, DiagnosticCompletionItem, DiagnosticInlineEditRequestLogContext, DiagnosticSeverity, distanceToClosestDiagnostic, IDiagnosticCompletionProvider, log, logList, sortDiagnosticsByDistance, toInternalPosition } from './diagnosticsBasedCompletions/diagnosticsCompletions';
 import { ImportDiagnosticCompletionItem, ImportDiagnosticCompletionProvider } from './diagnosticsBasedCompletions/importDiagnosticsCompletionProvider';
+import { isNotebookCell } from '../../../../util/common/notebooks';
 
 interface IDiagnosticsCompletionState<T extends DiagnosticCompletionItem = DiagnosticCompletionItem> {
 	completionItem: T | null;
@@ -226,9 +227,13 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 
 		this._rejectionCollector = new RejectionCollector(this._workspace, s => this._tracer.trace(s));
 
+		const isValidEditor = (editor: vscode.TextEditor | undefined): editor is vscode.TextEditor => {
+			return !!editor && (isNotebookCell(editor.document.uri) || isEditorFromEditorGrid(editor));
+		};
+
 		this._register(this._languageDiagnosticsService.onDidChangeDiagnostics(async e => {
 			const activeEditor = this._tabsAndEditorsService.activeTextEditor;
-			if (!activeEditor || !isEditorFromEditorGrid(activeEditor)) {
+			if (!isValidEditor(activeEditor)) {
 				return;
 			}
 
@@ -241,8 +246,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 		}));
 
 		this._register(this._tabsAndEditorsService.onDidChangeActiveTextEditor(async e => {
-			const activeEditor = e;
-			if (!activeEditor || !isEditorFromEditorGrid(activeEditor)) {
+			if (!isValidEditor(e)) {
 				return;
 			}
 
@@ -251,7 +255,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 
 		this._register(vscode.window.onDidChangeTextEditorSelection(async e => {
 			const activeEditor = this._tabsAndEditorsService.activeTextEditor;
-			if (!activeEditor || !isEditorFromEditorGrid(activeEditor)) {
+			if (!isValidEditor(activeEditor)) {
 				return;
 			}
 
@@ -291,9 +295,14 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 		const workspaceDocument = this._workspace.getDocumentByTextDocument(activeTextEditor.document);
 		if (!workspaceDocument) { return; }
 
-		const log = new DiagnosticInlineEditRequestLogContext();
+		const range = new vscode.Range(activeTextEditor.selection.active, activeTextEditor.selection.active);
+		const selection = workspaceDocument.toRange(activeTextEditor.document, range);
+		if (!selection) {
+			return;
+		}
 
-		const cursor = toInternalPosition(activeTextEditor.selection.active);
+		const cursor = toInternalPosition(selection.start);
+		const log = new DiagnosticInlineEditRequestLogContext();
 
 		const { availableDiagnostics, relevantDiagnostics } = this._getDiagnostics(workspaceDocument, cursor, log);
 		const diagnosticsSorted = sortDiagnosticsByDistance(relevantDiagnostics, cursor);
