@@ -26,8 +26,11 @@ import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { checkCancellation, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
 
 interface IGetErrorsParams {
-	filePaths: string[];
+	// Note that empty array is not the same as absence; empty array
+	// will not return any errors. Absence returns all errors.
+	filePaths?: string[];
 	// sparse array of ranges, as numbers because it goes through JSON
+	// ignored if filePaths is missing / null.
 	ranges?: ([a: number, b: number, c: number, d: number] | undefined)[];
 }
 
@@ -44,34 +47,41 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 	}
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IGetErrorsParams>, token: CancellationToken) {
-		const diagnostics = await Promise.all(options.input.filePaths.map(async (filePath, i): Promise<{ context: DiagnosticContext; uri: URI; diagnostics: vscode.Diagnostic[] } | [URI, vscode.Diagnostic[]][]> => {
-			if (filePath) {
-				const uri = resolveToolInputPath(filePath, this.promptPathRepresentationService);
-				const range = options.input.ranges?.[i];
-				if (!uri) {
-					throw new Error(`Invalid input path ${filePath}`);
-				}
+		const getAll = () => this.languageDiagnosticsService.getAllDiagnostics()
+			.map(d => ({ uri: d[0], diagnostics: d[1].filter(e => e.severity <= DiagnosticSeverity.Warning) }))
+			// filter any documents w/o warnings or errors
+			.filter(d => d.diagnostics.length > 0);
 
-				let diagnostics = range
-					? findDiagnosticForSelectionAndPrompt(this.languageDiagnosticsService, uri, new Range(...range), undefined)
-					: this.languageDiagnosticsService.getDiagnostics(uri);
-
-				diagnostics = diagnostics.filter(d => d.severity <= DiagnosticSeverity.Warning);
-
-				const document = await this.workspaceService.openTextDocumentAndSnapshot(uri);
-				checkCancellation(token);
-
-				return {
-					context: { document, language: getLanguage(document) },
-					diagnostics,
-					uri,
-				};
+		const getSome = (filePaths: string[]) => filePaths.map((filePath, i) => {
+			const uri = resolveToolInputPath(filePath, this.promptPathRepresentationService);
+			const range = options.input.ranges?.[i];
+			if (!uri) {
+				throw new Error(`Invalid input path ${filePath}`);
 			}
-			else {
-				return this.languageDiagnosticsService.getAllDiagnostics();
-			}
-		}));
 
+			let diagnostics = range
+				? findDiagnosticForSelectionAndPrompt(this.languageDiagnosticsService, uri, new Range(...range), undefined)
+				: this.languageDiagnosticsService.getDiagnostics(uri);
+
+			diagnostics = diagnostics.filter(d => d.severity <= DiagnosticSeverity.Warning);
+
+			return {
+				diagnostics,
+				uri,
+			};
+		});
+
+		const ds = options.input.filePaths ? getSome(options.input.filePaths) : getAll();
+
+		const diagnostics = await Promise.all(ds.map((async ({ uri, diagnostics }) => {
+			const document = await this.workspaceService.openTextDocumentAndSnapshot(uri);
+			checkCancellation(token);
+			return {
+				uri,
+				diagnostics,
+				context: { document, language: getLanguage(document) }
+			};
+		})));
 		checkCancellation(token);
 
 		const result = new ExtendedLanguageModelToolResult([
@@ -90,18 +100,22 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IGetErrorsParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
-		if (!options.input.filePaths?.length) {
-			throw new Error('No file paths provided');
+		if (!options.input.filePaths) {
+			// When no file paths provided, check all files with diagnostics
+			return {
+				invocationMessage: new MarkdownString(l10n.t`Checking all files for problems`),
+			};
 		}
+		else {
+			const uris = options.input.filePaths.map(filePath => resolveToolInputPath(filePath, this.promptPathRepresentationService));
+			if (uris.some(uri => uri === undefined)) {
+				throw new Error('Invalid file path provided');
+			}
 
-		const uris = options.input.filePaths.map(filePath => resolveToolInputPath(filePath, this.promptPathRepresentationService));
-		if (uris.some(uri => uri === undefined)) {
-			throw new Error('Invalid file path provided');
+			return {
+				invocationMessage: new MarkdownString(l10n.t`Checking ${this.formatURIs(uris)}`),
+			};
 		}
-
-		return {
-			invocationMessage: new MarkdownString(l10n.t`Checking ${this.formatURIs(uris)}`),
-		};
 	}
 
 	private formatURIs(uris: URI[]): string {
