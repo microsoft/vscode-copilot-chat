@@ -69,6 +69,7 @@ Please include the following with each issue:
 - Node 22.x
 - Python >= 3.10, <= 3.12
 - Git Large File Storage (LFS) - for running tests
+- (Windows) Visual Studio Build Tools >=2019 - for building with node-gyp [see node-gyp docs](https://github.com/nodejs/node-gyp?tab=readme-ov-file#on-windows)
 
 ### First-time setup
 - on Windows you need to run `Set-ExecutionPolicy Unrestricted` as admin in Powershell.

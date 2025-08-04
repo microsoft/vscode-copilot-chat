@@ -31,18 +31,18 @@ export class GitDiffService implements IGitDiffService {
 	}
 
 	async getChangeDiffs(repositoryOrUri: Repository | Uri, changes: Change[]): Promise<Diff[]> {
-		this._logService.logger.debug(`[GitDiffService] Changes (before context exclusion): ${changes.length} file(s)`);
+		this._logService.debug(`[GitDiffService] Changes (before context exclusion): ${changes.length} file(s)`);
 
 		const repository = await this._resolveRepository(repositoryOrUri);
 		if (!repository) {
-			this._logService.logger.debug(`[GitDiffService] Repository not found for uri: ${repositoryOrUri.toString()}`);
+			this._logService.debug(`[GitDiffService] Repository not found for uri: ${repositoryOrUri.toString()}`);
 			return [];
 		}
 
 		const diffs: Diff[] = [];
 		for (const change of changes) {
 			if (await this._ignoreService.isCopilotIgnored(change.uri)) {
-				this._logService.logger.debug(`[GitDiffService] Ignoring change due to content exclusion rule based on uri: ${change.uri.toString()}`);
+				this._logService.debug(`[GitDiffService] Ignoring change due to content exclusion rule based on uri: ${change.uri.toString()}`);
 				continue;
 			}
 
@@ -63,7 +63,7 @@ export class GitDiffService implements IGitDiffService {
 			}
 		}
 
-		this._logService.logger.debug(`[GitDiffService] Changes (after context exclusion): ${diffs.length} file(s)`);
+		this._logService.debug(`[GitDiffService] Changes (after context exclusion): ${diffs.length} file(s)`);
 
 		return diffs;
 	}

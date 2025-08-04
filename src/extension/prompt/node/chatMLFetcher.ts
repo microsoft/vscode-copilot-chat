@@ -232,23 +232,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					return result;
 				}
 				case FetchResponseKind.Canceled:
-					/* __GDPR__
-						"response.cancelled" : {
-							"owner": "digitarald",
-							"comment": "Report canceled service responses for quality.",
-							"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
-							"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source for why the request was made" },
-							"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the request" },
-							"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
-							"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens", "isMeasurement": true },
-							"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
-							"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
-							"timeToCancelled": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
-							"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
-							"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true }
-						}
-					*/
-					this._telemetryService.sendTelemetryEvent('response.cancelled', { github: true, microsoft: true }, {
+					this._sendCancellationTelemetry({
 						source: telemetryProperties.messageSource ?? 'unknown',
 						requestId: chatParams.ourRequestId,
 						model: chatEndpoint.model,
@@ -273,10 +257,85 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		} catch (err: unknown) {
 			const timeToError = Date.now() - baseTelemetry.issuedTime;
 			const processed = this.processError(err, chatParams.ourRequestId);
-			this._sendResponseErrorTelemetry(processed, telemetryProperties, chatParams, chatEndpoint, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages));
+			if (processed.type === ChatFetchResponseType.Canceled) {
+				this._sendCancellationTelemetry({
+					source: telemetryProperties.messageSource ?? 'unknown',
+					requestId: chatParams.ourRequestId,
+					model: chatEndpoint.model,
+				}, {
+					totalTokenMax: chatEndpoint.modelMaxPromptTokens ?? -1,
+					promptTokenCount: tokenCount,
+					tokenCountMax: maxResponseTokens,
+					timeToFirstToken: undefined,
+					timeToCancelled: timeToError,
+					isVisionRequest: this.filterImageMessages(messages) ? 1 : -1,
+					isBYOK: chatEndpoint instanceof OpenAIEndpoint ? 1 : -1
+				});
+			} else {
+				this._sendResponseErrorTelemetry(processed, telemetryProperties, chatParams, chatEndpoint, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages));
+			}
 			pendingLoggedChatRequest?.resolve(processed);
 			return processed;
 		}
+	}
+
+	private _sendCancellationTelemetry(
+		{
+			source,
+			requestId,
+			model,
+		}: {
+			source: string;
+			requestId: string;
+			model: string;
+		},
+		{
+			totalTokenMax,
+			promptTokenCount,
+			tokenCountMax,
+			timeToFirstToken,
+			timeToCancelled,
+			isVisionRequest,
+			isBYOK
+		}: {
+			totalTokenMax: number;
+			promptTokenCount: number;
+			tokenCountMax: number;
+			timeToFirstToken: number | undefined;
+			timeToCancelled: number;
+			isVisionRequest: number;
+			isBYOK: number;
+		}
+	) {
+		/* __GDPR__
+			"response.cancelled" : {
+				"owner": "digitarald",
+				"comment": "Report canceled service responses for quality.",
+				"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
+				"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source for why the request was made" },
+				"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the request" },
+				"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
+				"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens", "isMeasurement": true },
+				"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
+				"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
+				"timeToCancelled": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
+				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
+				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true }
+			}
+		*/
+		this._telemetryService.sendTelemetryEvent('response.cancelled', { github: true, microsoft: true }, {
+			source,
+			requestId,
+			model,
+		}, {
+			totalTokenMax,
+			promptTokenCount,
+			tokenCountMax,
+			timeToFirstToken,
+			timeToCancelled,
+			isVisionRequest,
+			isBYOK
+		});
 	}
 
 	private _sendResponseErrorTelemetry(
@@ -499,7 +558,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			return { type: ChatFetchResponseType.Failed, reason, requestId, serverRequestId };
 		}
 		if (response.failKind === ChatFailKind.ContentFilter) {
-			return { type: ChatFetchResponseType.Filtered, reason, category: FilterReason.Prompt, requestId, serverRequestId };
+			return { type: ChatFetchResponseType.PromptFiltered, reason, category: FilterReason.Prompt, requestId, serverRequestId };
 		}
 		if (response.failKind === ChatFailKind.AgentUnauthorized) {
 			return { type: ChatFetchResponseType.AgentUnauthorized, reason, authorizationUrl: response.data!.authorize_url, requestId, serverRequestId };
@@ -528,39 +587,50 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				requestId: requestId,
 				serverRequestId: undefined,
 			};
-		} if (isCancellationError(err)) {
+		}
+		if (isCancellationError(err)) {
 			return {
 				type: ChatFetchResponseType.Canceled,
 				reason: 'Got a cancellation error',
 				requestId: requestId,
 				serverRequestId: undefined,
 			};
+		}
+		if (err && (
+			(err instanceof Error && err.message === 'Premature close') ||
+			(typeof err === 'object' && (err as any).code === 'ERR_STREAM_PREMATURE_CLOSE') /* to be extra sure */)
+		) {
+			return {
+				type: ChatFetchResponseType.Canceled,
+				reason: 'Stream closed prematurely',
+				requestId: requestId,
+				serverRequestId: undefined,
+			};
+		}
+		this._logService.error(errorsUtil.fromUnknown(err), `Error on conversation request`);
+		this._telemetryService.sendGHTelemetryException(err, 'Error on conversation request');
+		// this.logger.exception(err, `Error on conversation request`);
+		if (fetcher.isInternetDisconnectedError(err)) {
+			return {
+				type: ChatFetchResponseType.Failed,
+				reason: `It appears you're not connected to the internet, please check your network connection and try again.`,
+				requestId: requestId,
+				serverRequestId: undefined,
+			};
+		} else if (fetcher.isFetcherError(err)) {
+			return {
+				type: ChatFetchResponseType.Failed,
+				reason: fetcher.getUserMessageForFetcherError(err),
+				requestId: requestId,
+				serverRequestId: undefined,
+			};
 		} else {
-			this._logService.logger.error(errorsUtil.fromUnknown(err), `Error on conversation request`);
-			this._telemetryService.sendGHTelemetryException(err, 'Error on conversation request');
-			// this.logger.exception(err, `Error on conversation request`);
-			if (fetcher.isInternetDisconnectedError(err)) {
-				return {
-					type: ChatFetchResponseType.Failed,
-					reason: `It appears you're not connected to the internet, please check your network connection and try again.`,
-					requestId: requestId,
-					serverRequestId: undefined,
-				};
-			} else if (fetcher.isFetcherError(err)) {
-				return {
-					type: ChatFetchResponseType.Failed,
-					reason: fetcher.getUserMessageForFetcherError(err),
-					requestId: requestId,
-					serverRequestId: undefined,
-				};
-			} else {
-				return {
-					type: ChatFetchResponseType.Failed,
-					reason: 'Error on conversation request. Check the log for more details.',
-					requestId: requestId,
-					serverRequestId: undefined,
-				};
-			}
+			return {
+				type: ChatFetchResponseType.Failed,
+				reason: 'Error on conversation request. Check the log for more details.',
+				requestId: requestId,
+				serverRequestId: undefined,
+			};
 		}
 	}
 }

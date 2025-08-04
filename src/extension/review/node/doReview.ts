@@ -143,7 +143,7 @@ export async function doReview(
 				notificationService.showInformationMessage(l10n.t('Code review generation failed.'), { modal: true, detail: result.reason }, showLog)
 			);
 			if (res === showLog) {
-				logService.showPublicLog();
+				logService.show();
 			}
 		} else if (result.type === 'success' && result.comments.length === 0) {
 			if (result.excludedComments?.length) {

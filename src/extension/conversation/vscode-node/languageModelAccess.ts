@@ -11,8 +11,9 @@ import { IBlockedExtensionService } from '../../../platform/chat/common/blockedE
 import { ChatFetchResponseType, ChatLocation, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { getTextPart } from '../../../platform/chat/common/globalStringUtils';
 import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
+import { AutoChatEndpoint, isAutoModeEnabled } from '../../../platform/endpoint/common/autoChatEndpoint';
+import { IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
-import { AutoChatEndpoint, isAutoModeEnabled } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -20,10 +21,12 @@ import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from 
 import { IChatEndpoint, IEndpoint } from '../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { BaseTokensPerCompletion } from '../../../platform/tokenizer/node/tokenizer';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
 import { isDefined, isNumber, isString, isStringArray } from '../../../util/vs/base/common/types';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ExtensionMode } from '../../../vscodeTypes';
@@ -50,14 +53,16 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@IEmbeddingsComputer private readonly _embeddingsComputer: IEmbeddingsComputer,
 		@IVSCodeExtensionContext private readonly _vsCodeExtensionContext: IVSCodeExtensionContext,
-		@IExperimentationService private readonly _expService: IExperimentationService
+		@IExperimentationService private readonly _expService: IExperimentationService,
+		@IAutomodeService private readonly _automodeService: IAutomodeService,
+		@IEnvService private readonly _envService: IEnvService
 	) {
 		super();
 
 		this._lmWrapper = this._instantiationService.createInstance(CopilotLanguageModelWrapper);
 
 		if (this._vsCodeExtensionContext.extensionMode === ExtensionMode.Test) {
-			this._logService.logger.warn('[LanguageModelAccess] LanguageModels and Embeddings are NOT AVAILABLE in test mode.');
+			this._logService.warn('[LanguageModelAccess] LanguageModels and Embeddings are NOT AVAILABLE in test mode.');
 			return;
 		}
 
@@ -95,11 +100,11 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 		const models: vscode.LanguageModelChatInformation[] = [];
 		const chatEndpoints = await this._endpointProvider.getAllChatEndpoints();
-		if (isAutoModeEnabled(this._expService)) {
-			chatEndpoints.push(this._instantiationService.createInstance(AutoChatEndpoint));
-		}
 
 		const defaultChatEndpoint = chatEndpoints.find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1') ?? chatEndpoints[0];
+		if (isAutoModeEnabled(this._expService, this._envService)) {
+			chatEndpoints.push(await this._automodeService.resolveAutoModeEndpoint(generateUuid(), chatEndpoints));
+		}
 		const seenFamilies = new Set<string>();
 
 		for (const endpoint of chatEndpoints) {
@@ -139,7 +144,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 			const model: vscode.LanguageModelChatInformation = {
 				id: endpoint.model,
-				name: endpoint.name,
+				name: endpoint.model === AutoChatEndpoint.id ? 'Auto' : endpoint.name,
 				family: endpoint.family,
 				description: modelDescription,
 				cost: multiplierString,
@@ -234,15 +239,15 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		try {
 			await this._authenticationService.getCopilotToken();
 		} catch (e) {
-			this._logService.logger.warn('[LanguageModelAccess] LanguageModel/Embeddings are not available without auth token');
-			this._logService.logger.error(e);
+			this._logService.warn('[LanguageModelAccess] LanguageModel/Embeddings are not available without auth token');
+			this._logService.error(e);
 			return undefined;
 		}
 
 		const session = this._authenticationService.anyGitHubSession;
 		if (!session) {
 			// At this point, we should have auth, but log just in case we don't so we have record of it
-			this._logService.logger.error('[LanguageModelAccess] Auth token not present when we expected it to be');
+			this._logService.error('[LanguageModelAccess] Auth token not present when we expected it to be');
 			return undefined;
 		}
 
@@ -262,7 +267,8 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ILogService private readonly _logService: ILogService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
-		@IEnvService private readonly _envService: IEnvService
+		@IEnvService private readonly _envService: IEnvService,
+		@IThinkingDataService private readonly _thinkingDataService: IThinkingDataService
 	) {
 		super();
 	}
@@ -410,10 +416,16 @@ export class CopilotLanguageModelWrapper extends Disposable {
 						const parameters = JSON.parse(call.arguments);
 						progress.report({ index, part: new vscode.LanguageModelToolCallPart(call.id, call.name, parameters) });
 					} catch (err) {
-						this._logService.logger.error(err, `Got invalid JSON for tool call: ${call.arguments}`);
+						this._logService.error(err, `Got invalid JSON for tool call: ${call.arguments}`);
 						throw new Error('Invalid JSON for tool call');
 					}
 				}
+			}
+			if (delta.thinking) {
+				// progress.report({ index, part: new vscode.LanguageModelThinkingPart(delta.thinking) });
+
+				// @karthiknadig: remove this when LM API becomes available
+				this._thinkingDataService.update(index, delta.thinking);
 			}
 			return undefined;
 		};

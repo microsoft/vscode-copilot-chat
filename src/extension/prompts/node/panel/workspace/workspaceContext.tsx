@@ -273,7 +273,7 @@ export class WorkspaceContext extends PromptElement<WorkspaceContextProps, Works
 			readonly query: Promise<string | undefined>;
 			readonly queryAndKeywords: Promise<ResolvedWorkspaceChunkQuery>;
 		}>(() => {
-			this.logService.logger.debug('[Workspace Resolver] Asking the model to update the user question and provide queries...');
+			this.logService.debug('[Workspace Resolver] Asking the model to update the user question and provide queries...');
 
 			const keywordTokenBudget = 200;
 

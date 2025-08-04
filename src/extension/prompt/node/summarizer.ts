@@ -137,7 +137,7 @@ export class ChatSummarizerProvider implements vscode.ChatSummarizer {
 			}
 			return summary;
 		} else {
-			this.logService.logger.error(`Failed to fetch conversation summary because of response type (${response.type}) and reason (${response.reason})`);
+			this.logService.error(`Failed to fetch conversation summary because of response type (${response.type}) and reason (${response.reason})`);
 			return '';
 		}
 	}

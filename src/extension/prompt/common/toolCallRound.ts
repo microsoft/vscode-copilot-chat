@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ThinkingData } from '../../../platform/thinking/common/thinking';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IToolCall, IToolCallRound } from './intents';
 
@@ -27,7 +26,6 @@ export class ToolCallRound implements IToolCallRound {
 		public readonly toolCalls: IToolCall[],
 		public readonly toolInputRetry: number = 0,
 		public readonly id: string = ToolCallRound.generateID(),
-		public readonly thinking?: ThinkingData
 	) { }
 
 	private static generateID(): string {

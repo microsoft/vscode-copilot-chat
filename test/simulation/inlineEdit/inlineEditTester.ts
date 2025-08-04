@@ -25,6 +25,7 @@ import { ObservableWorkspace } from '../../../src/platform/inlineEdits/common/ob
 import { IHistoryContextProvider } from '../../../src/platform/inlineEdits/common/workspaceEditTracker/historyContextProvider';
 import { NesHistoryContextProvider } from '../../../src/platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { NesXtabHistoryTracker } from '../../../src/platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
+import { INotebookService } from '../../../src/platform/notebook/common/notebookService';
 import { IExperimentationService } from '../../../src/platform/telemetry/common/nullExperimentationService';
 import { TestingServiceCollection } from '../../../src/platform/test/node/services';
 import { TaskQueue } from '../../../src/util/common/async';
@@ -129,6 +130,7 @@ export class InlineEditTester {
 		const configService = accessor.get(IConfigurationService);
 		const expService = accessor.get(IExperimentationService);
 		const gitExtensionService = accessor.get(IGitExtensionService);
+		const notebookService = accessor.get(INotebookService);
 
 		const history = historyContextProvider.getHistoryContext(docId)!;
 		let i = 0;
@@ -165,9 +167,9 @@ export class InlineEditTester {
 
 		const historyContext = historyContextProvider.getHistoryContext(docId)!;
 		const activeDocument = historyContext.getMostRecentDocument(); // TODO
-		const context: InlineCompletionContext = { triggerKind: 1, selectedCompletionInfo: undefined, requestUuid: generateUuid() };
+		const context: InlineCompletionContext = { triggerKind: 1, selectedCompletionInfo: undefined, requestUuid: generateUuid(), requestIssuedDateTime: Date.now() };
 		const logContext = new InlineEditRequestLogContext(activeDocument.docId.toString(), 1, context);
-		const telemetryBuilder = new NextEditProviderTelemetryBuilder(gitExtensionService, nextEditProvider.ID, workspace.getDocument(activeDocument.docId)!);
+		const telemetryBuilder = new NextEditProviderTelemetryBuilder(gitExtensionService, notebookService, nextEditProvider.ID, workspace.getDocument(activeDocument.docId)!);
 
 		let nextEditResult: NextEditResult;
 		try {

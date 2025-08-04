@@ -7,12 +7,18 @@ import type { LanguageModelToolInformation, LanguageModelToolResult } from 'vsco
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { VirtualTool } from './virtualTool';
+import { IObservable } from '../../../../util/vs/base/common/observableInternal';
 
 export interface IToolGrouping {
 	/**
 	 * Gets or sets the list of tools available for the group.
 	 */
 	tools: readonly LanguageModelToolInformation[];
+
+	/**
+	 * Whether tool grouping logic is enabled at the current tool threshold.
+	 */
+	isEnabled: boolean;
 
 	/**
 	 * Should be called for each model tool call. Returns a tool result if the
@@ -52,6 +58,10 @@ export interface IToolGrouping {
 
 export interface IToolGroupingService {
 	_serviceBrand: undefined;
+	/**
+	 * The current tool count threshold for grouping to kick in.
+	 */
+	threshold: IObservable<number>;
 	/**
 	 * Creates a tool grouping for a request, based on its conversation and the
 	 * initial set of tools.
