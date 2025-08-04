@@ -34,16 +34,13 @@ export class StatefulMarkerContainer extends PromptElement<IStatefulMarkerContai
  */
 export function rawPartAsStatefulMarker(part: Raw.ChatCompletionContentPartOpaque): string | undefined {
 	const value = part.value;
-	if (typeof value !== 'string') {
+	if (!value || typeof value !== 'object') {
 		return;
 	}
 
-	let data: IStatefulMarkerContainer | undefined;
-	try {
-		data = JSON.parse(value);
-		if (data?.type === CustomDataPartMimeTypes.StatefulMarker && typeof data.value === 'string') {
-			return data.value;
-		}
-	} catch (e) { }
+	const data = value as IStatefulMarkerContainer;
+	if (data.type === CustomDataPartMimeTypes.StatefulMarker && typeof data.value === 'string') {
+		return data.value;
+	}
 	return;
 }
