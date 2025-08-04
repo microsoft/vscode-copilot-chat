@@ -115,12 +115,12 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 			const sanitizedModelName = endpoint.name.replace(/\(Preview\)/g, '').trim();
 			let modelDescription: string | undefined;
-			if (endpoint.multiplier) {
+			if (endpoint.model === AutoChatEndpoint.id) {
+				modelDescription = localize('languageModel.autoTooltip', 'Auto automatically selects the best model for your request based on current capacity. Auto is counted at a variable rate based on the model selected.');
+			} else if (endpoint.multiplier) {
 				modelDescription = localize('languageModel.costTooltip', '{0} ({1}) is counted at a {2}x rate.', sanitizedModelName, endpoint.version, endpoint.multiplier);
 			} else if (endpoint.isFallback && endpoint.multiplier === 0) {
 				modelDescription = localize('languageModel.baseTooltip', '{0} ({1}) does not count towards your premium request limit. This model may be slowed during times of high congestion.', sanitizedModelName, endpoint.version);
-			} else if (endpoint.model === AutoChatEndpoint.id) {
-				modelDescription = localize('languageModel.autoTooltip', 'Auto is a model that automatically selects the best model for your request.');
 			} else {
 				modelDescription = `${sanitizedModelName} (${endpoint.version})`;
 			}

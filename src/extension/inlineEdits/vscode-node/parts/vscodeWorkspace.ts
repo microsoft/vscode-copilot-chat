@@ -381,12 +381,49 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 	}
 }
 
-export interface IVSCodeObservableTextDocument extends IObservableDocument {
+
+export interface IBaseVSCodeObservableDocument extends IObservableDocument {
+	/**
+	 * Converts the OffsetRange of the Observable document to a range within the provided Text document.
+	 * If this is a Text Document, performs a simple OffsetRange to Range translation.
+	 * If this is a Notebook Document, then this method converts an offset range of the Observable document to a range within the provided notebook cell. If the range provided does not belong to the provided cell (as identified by TextDocument), it returns undefined.
+	 */
+	fromOffsetRange(textDocument: TextDocument, range: OffsetRange): Range | undefined;
+	/**
+	 * Converts the OffsetRange of the Observable document to range(s) within the provided Text document.
+	 * If this is a Text Document, performs a simple OffsetRange to Range translation.
+	 * If this is a Notebook Document, then this method converts an offset range of the Observable document to a range(s) of multiple notebook cells.
+	 */
+	fromOffsetRange(range: OffsetRange): [TextDocument, Range][];
+	/**
+	 * Converts the Range of the Observable document to a range within the provided Text document.
+	 * If this is a Text Document, then this returns the same value passed in.
+	 * If this is a Notebook Document, then this method converts a range of the Observable document to a range within the provided notebook cell. If the range provided does not belong to the provided cell (as identified by TextDocument), it returns undefined.
+	*/
+	fromRange(textDocument: TextDocument, range: Range): Range | undefined;
+	/**
+	 * Converts the Range of the Observable document to range(s) within the provided Text document.
+	 * If this is a Text Document, then this returns the same value passed in.
+	 * If this is a Notebook Document, then this method converts a range of the Observable document to a range(s) of multiple notebook cells.
+	 */
+	fromRange(range: Range): [TextDocument, Range][];
+	/**
+	 * Converts the Range of the provided Text Document into an OffsetRange within the Observable Document.
+	 * If this is a Text Document, performs a simple Range to OffsetRange translation.
+	 * If this is a Notebook Document, then this method converts a range within the provided Notebook Cell to an Offset within the Observable document. If the provided document does not belong to the Notebook Cell, it returns undefined.
+	 */
+	toOffsetRange(textDocument: TextDocument, range: Range): OffsetRange | undefined;
+	/**
+	 * Converts the Range of the provided Text Document into a Range within the Observable Document.
+	 * If this is a Text Document, then this returns the same value passed in.
+	 * If this is a Notebook Document, then this method converts a range within the provided Notebook Cell to a Range within the Observable document. If the provided document does not belong to the Notebook Cell, it returns undefined.
+	 */
+	toRange(textDocument: TextDocument, range: Range): Range | undefined;
+}
+
+export interface IVSCodeObservableTextDocument extends IObservableDocument, IBaseVSCodeObservableDocument {
 	kind: 'textDocument';
 	readonly textDocument: TextDocument;
-	fromOffsetRange(textDocument: TextDocument, range: OffsetRange): Range | undefined;
-	fromRange(textDocument: TextDocument, range: Range): Range | undefined;
-	toOffsetRange(textDocument: TextDocument, range: Range): OffsetRange | undefined;
 }
 
 abstract class AbstractVSCodeObservableDocument {
@@ -432,39 +469,53 @@ class VSCodeObservableTextDocument extends AbstractVSCodeObservableDocument impl
 		super(id, value, versionId, selection, visibleRanges, languageId, diagnostics);
 	}
 
-	fromOffsetRange(textDocument: TextDocument, range: OffsetRange): Range {
+	fromOffsetRange(textDocument: TextDocument, range: OffsetRange): Range | undefined;
+	fromOffsetRange(range: OffsetRange): [TextDocument, Range][];
+	fromOffsetRange(arg1: TextDocument | OffsetRange, range?: OffsetRange): Range | undefined | [TextDocument, Range][] {
+		let textDocument: TextDocument = this.textDocument;
+		let offsetRange: OffsetRange | undefined;
+
+		if (arg1 instanceof OffsetRange) {
+			offsetRange = arg1;
+		} else if (range !== undefined) {
+			textDocument = arg1;
+			offsetRange = range;
+		}
 		if (textDocument !== this.textDocument) {
 			throw new Error('TextDocument does not match the one of this observable document.');
 		}
+		if (!offsetRange) {
+			throw new Error('OffsetRange is not defined.');
+		}
 		return new Range(
-			textDocument.positionAt(range.start),
-			textDocument.positionAt(range.endExclusive)
+			textDocument.positionAt(offsetRange.start),
+			textDocument.positionAt(offsetRange.endExclusive)
 		);
 	}
 	toOffsetRange(textDocument: TextDocument, range: Range): OffsetRange | undefined {
 		return new OffsetRange(textDocument.offsetAt(range.start), textDocument.offsetAt(range.end));
 	}
 
-	fromRange(_textDocument: TextDocument, range: Range): Range | undefined {
+	fromRange(textDocument: TextDocument, range: Range): Range | undefined;
+	fromRange(range: Range): [TextDocument, Range][];
+
+	fromRange(arg1: TextDocument | Range, range?: Range): Range | undefined | [TextDocument, Range][] {
+		if (arg1 instanceof Range) {
+			return range;
+		} else if (range !== undefined) {
+			return range;
+		} else {
+			return undefined;
+		}
+	}
+	toRange(_textDocument: TextDocument, range: Range): Range | undefined {
 		return range;
 	}
 }
 
-export interface IVSCodeObservableNotebookDocument extends IObservableDocument {
+export interface IVSCodeObservableNotebookDocument extends IObservableDocument, IBaseVSCodeObservableDocument {
 	kind: 'notebookDocument';
 	readonly notebook: NotebookDocument;
-	/**
-	 * Converts an offset range of Notebook Text document to a range within the provided notebook cell.
-	 * If the range does not belong to the cell, it returns undefined.
-	 */
-	fromOffsetRange(textDocument: TextDocument, range: OffsetRange): Range | undefined;
-	/**
-	 * Converts an offset range of Notebook Text document to a range within the notebook cell(s).
-	 * The range provided could span multiple cells, so it returns an array of tuples containing the cell document and the range within that cell.
-	 */
-	fromOffsetRange(range: OffsetRange): [TextDocument, Range][];
-	fromRange(textDocument: TextDocument, range: Range): Range | undefined;
-	fromRange(range: Range): [TextDocument, Range][];
 	projectDiagnostics(cell: TextDocument, diagnostics: readonly Diagnostic[]): Diagnostic[];
 }
 
@@ -516,12 +567,28 @@ class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument 
 			return found ? found[1] : undefined;
 		}
 	}
+	toOffsetRange(textDocument: TextDocument, range: Range): OffsetRange | undefined {
+		const cell = this.altNotebook.getCell(textDocument);
+		if (!cell) {
+			return undefined;
+		}
+		const offsetRanges = this.altNotebook.toAltOffsetRange(cell, [range]);
+		return offsetRanges.length ? offsetRanges[0] : undefined;
+	}
 	projectDiagnostics(textDocument: TextDocument, diagnostics: readonly Diagnostic[]): Diagnostic[] {
 		const cell = this.altNotebook.getCell(textDocument);
 		if (!cell) {
 			return [];
 		}
 		return toAltDiagnostics(this.altNotebook, cell, diagnostics);
+	}
+	toRange(textDocument: TextDocument, range: Range): Range | undefined {
+		const cell = this.altNotebook.getCell(textDocument);
+		if (!cell) {
+			return undefined;
+		}
+		const ranges = this.altNotebook.toAltRange(cell, [range]);
+		return ranges.length > 0 ? ranges[0] : undefined;
 	}
 }
 

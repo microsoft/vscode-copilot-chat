@@ -91,6 +91,11 @@ export type RequestContext = {
 	requestId: string;
 
 	/**
+	 * The opportunity ID provided by VS Code core.
+	 */
+	opportunityId?: string;
+
+	/**
 	 * The time budget in milliseconds to compute the context.
 	 */
 	timeBudget?: number;

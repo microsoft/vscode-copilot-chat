@@ -87,6 +87,7 @@ export enum ChatFetchResponseType {
 	OffTopic = 'offTopic',
 	Canceled = 'canceled',
 	Filtered = 'filtered',
+	FilteredRetry = 'filteredRetry',
 	PromptFiltered = 'promptFiltered',
 	Length = 'length',
 	RateLimited = 'rateLimited',
@@ -160,10 +161,16 @@ export type ChatFetchError =
 	 */
 	| { type: ChatFetchResponseType.Unknown; reason: string; requestId: string; serverRequestId: string | undefined };
 
+export type ChatFetchRetriableError<T> =
+	/**
+	 * We requested conversation, the response was filtered by RAI, but we want to retry.
+	 */
+	{ type: ChatFetchResponseType.FilteredRetry; reason: string; category: FilterReason; value: T; requestId: string; serverRequestId: string | undefined }
+
 export type FetchSuccess<T> =
 	{ type: ChatFetchResponseType.Success; value: T; requestId: string; serverRequestId: string | undefined; usage: APIUsage | undefined };
 
-export type FetchResponse<T> = FetchSuccess<T> | ChatFetchError;
+export type FetchResponse<T> = FetchSuccess<T> | ChatFetchError
 
 export type ChatResponse = FetchResponse<string>;
 

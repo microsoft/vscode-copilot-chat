@@ -348,6 +348,12 @@ export enum ChatRequestEditedFileEventKind {
 	UserModification = 3,
 }
 
+export enum ChatResponseClearToPreviousToolInvocationReason {
+	NoReason = 0,
+	FilteredContentRetry = 1,
+	CopyrightContentRetry = 2,
+}
+
 export class LanguageModelToolExtensionSource implements vscode.LanguageModelToolExtensionSource {
 	constructor(public readonly id: string, public readonly label: string) { }
 }

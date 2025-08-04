@@ -18,7 +18,6 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 	});
 	telemetryService.sendEnhancedGHTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
-
 }
 
 export function prepareChatCompletionForReturn(
@@ -46,6 +45,7 @@ export function prepareChatCompletionForReturn(
 		role: Raw.ChatRole.Assistant,
 		content: toTextParts(messageContent),
 	};
+
 	sendEngineMessagesTelemetry(telemetryService, [rawMessageToCAPI(message)], telemetryData);
 	return {
 		message: message,
