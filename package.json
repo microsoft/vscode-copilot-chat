@@ -2126,8 +2126,7 @@
 				"command": "github.copilot.chat.manageModels",
 				"title": "Manage Models...",
 				"icon": "$(settings-gear)",
-				"category": "GitHub Copilot",
-				"enablement": "github.copilot.byokEnabled"
+				"category": "GitHub Copilot"
 			},
 			{
 				"command": "github.copilot.chat.debug.showElements",
@@ -2915,8 +2914,7 @@
 		"menus": {
 			"chat/modelPicker": [
 				{
-					"command": "github.copilot.chat.manageModels",
-					"when": "github.copilot.byokEnabled"
+					"command": "github.copilot.chat.manageModels"
 				}
 			],
 			"editor/title": [

@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { commands, Disposable as VSCodeDisposable, window } from 'vscode';
+import { commands, Uri, Disposable as VSCodeDisposable, window } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
@@ -31,6 +31,7 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 	private _registeredModelDisposables = new Map<string, VSCodeDisposable>();
 	private _byokUIService!: BYOKUIService; // Set in authChange, so ok to !
 	private readonly _byokStorageService: IBYOKStorageService;
+	private _byokDisclaimerShown = false; // Session‑scoped disclaimer gate
 
 	constructor(
 		@IFetcherService private readonly _fetcherService: IFetcherService,
@@ -126,6 +127,25 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 	}
 
 	private async registerModelCommand() {
+		// One‑time disclaimer: make it clear that BYOK models are external and not covered by Copilot guarantees.
+		if (!this._byokDisclaimerShown) {
+			this._byokDisclaimerShown = true; // ensure we only show once per session
+			const detail = 'Models you configure here are provided by external services that you choose. Your prompts and code may be sent to those services and are subject to their terms. GitHub Copilot\'s data handling, compliance, and quality guarantees do NOT apply to BYOK models.';
+			const learnMore = 'Learn More';
+			const continueLabel = 'Continue';
+			const selection = await window.showWarningMessage('Bring Your Own Model', { modal: true, detail }, continueLabel, learnMore);
+			if (selection === learnMore) {
+				try {
+					await commands.executeCommand('vscode.open', Uri.parse('https://code.visualstudio.com/docs/copilot/language-models'));
+				} catch (err) {
+					this._logService.logger.error('Failed to open BYOK docs', err);
+				}
+			}
+			if (selection !== continueLabel) {
+				return; // user cancelled
+			}
+		}
+
 		// Start the model management flow - this will handle both provider selection and model selection
 		const result = await this._byokUIService.startModelManagementFlow();
 		if (!result) {

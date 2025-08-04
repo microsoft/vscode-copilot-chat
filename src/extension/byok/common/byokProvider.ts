@@ -134,10 +134,13 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
  * Determines if Bring Your Own Key (BYOK) functionality is enabled for the current user.
  *
  * BYOK availability rules:
- * - Internal users: Always enabled
- * - Individual users: Always enabled (backward compatibility)
- * - Business/Enterprise users: Requires "Editor Preview Features" to be enabled by admin
- * - GitHub Enterprise Server: Not available
+ * - GitHub Enterprise Server: Not available (cloud endpoints required)
+ * - All cloud Copilot plans (internal, individual, business, enterprise): Enabled
+ *
+ * NOTE: we previously gated Business/Enterprise tenants behind the "Editor Preview Features" org
+ * policy. That restriction has been removed. We instead surface an in-product disclaimer when a
+ * user opens the Manage Models UI to make it clear that externally configured (BYOK) models are
+ * not covered by Copilot model quality, data handling, or compliance guarantees.
  *
  * @param copilotToken The user's Copilot token (without the actual token value)
  * @param capiClientService Service to check if running on GitHub Enterprise
@@ -146,25 +149,11 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 export function isBYOKEnabled(copilotToken: Omit<CopilotToken, "token">, capiClientService: ICAPIClientService): boolean {
 	const isGHE = capiClientService.dotcomAPIURL !== 'https://api.github.com';
 
-	// Not available on GitHub Enterprise
+	// Not available on GitHub Enterprise Server instances (cloud only)
 	if (isGHE) {
 		return false;
 	}
 
-	// Always allow for internal users
-	if (copilotToken.isInternal) {
-		return true;
-	}
-
-	// Allow for individual users without preview features gating (backward compatibility)
-	if (copilotToken.isIndividual) {
-		return true;
-	}
-
-	// For business and enterprise users, require Editor Preview Features to be enabled
-	if (copilotToken.copilotPlan === 'business' || copilotToken.copilotPlan === 'enterprise') {
-		return copilotToken.isEditorPreviewFeaturesEnabled();
-	}
-
-	return false;
+	// Enabled for all cloud Copilot users regardless of SKU or preview policy.
+	return true;
 }

@@ -170,7 +170,7 @@ function createQuickPickWithBackButton<T extends QuickPickItem>(
 
 
 async function createErrorModal(errorMessage: string, currentStep: ConfigurationStep): Promise<StateResult> {
-	const result = await window.showErrorMessage('Unexpected Error - Manage Models - Preview', { detail: errorMessage, modal: true }, 'Retry', 'Go Back');
+	const result = await window.showErrorMessage('Unexpected Error - Manage Models', { detail: errorMessage, modal: true }, 'Retry', 'Go Back');
 	if (result === 'Retry') {
 		return { nextStep: currentStep };
 	} else if (result === 'Go Back') {
@@ -322,7 +322,7 @@ export class BYOKUIService {
 
 		// Use manual quick pick creation for item button handling
 		const quickPick = window.createQuickPick<ProviderQuickPickItem>();
-		quickPick.title = 'Manage Models - Preview';
+		quickPick.title = 'Manage Models';
 		quickPick.ignoreFocusOut = false;
 		quickPick.placeholder = 'Select a provider';
 		quickPick.items = quickPickItems;
@@ -408,7 +408,7 @@ export class BYOKUIService {
 		const quickPick = window.createQuickPick<ModelQuickPickItem>();
 		quickPick.busy = true;
 		quickPick.buttons = [QuickInputButtons.Back];
-		quickPick.title = `Manage ${state.providerName} Models - Preview`;
+		quickPick.title = `Manage ${state.providerName} Models`;
 		quickPick.ignoreFocusOut = true;
 		quickPick.placeholder = `Fetching models...`;
 		quickPick.canSelectMany = true;
@@ -758,7 +758,7 @@ export class BYOKUIService {
 
 	private async promptForAPIKey(contextName: string, reconfigure: boolean = false): Promise<string | undefined> {
 		const prompt = reconfigure ? `Enter new ${contextName} API Key or leave blank to delete saved key` : `Enter ${contextName} API Key`;
-		const title = reconfigure ? `Reconfigure ${contextName} API Key - Preview` : `Enter ${contextName} API Key - Preview`;
+		const title = reconfigure ? `Reconfigure ${contextName} API Key` : `Enter ${contextName} API Key`;
 
 		const result = await createInputBoxWithBackButton({
 			prompt: prompt,
