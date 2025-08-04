@@ -87,7 +87,19 @@ export class ConversationHistory extends PromptElement<ConversationHistoryProps>
 				history.push(<ChatVariablesAndQuery priority={900} chatVariables={promptVariables} query={turn.request.message} omitReferences={true} embeddedInsideUserMessage={false} />);
 			}
 			if (turn.responseMessage?.type === 'model' && ![TurnStatus.OffTopic, TurnStatus.Filtered].includes(turn.responseStatus)) {
-				history.push(<AssistantMessage name={turn.responseMessage.name}>{turn.responseMessage.message}</AssistantMessage>);
+				// Get token count/context window from metadata if available
+				const meta = turn.resultMetadata as any;
+				const tokenCount = meta?.tokenCount ?? meta?.usage?.total_tokens;
+				const contextWindow = meta?.contextWindow ?? meta?.modelMaxPromptTokens;
+				const showTokenInfo = typeof tokenCount === 'number' && typeof contextWindow === 'number';
+				history.push(
+					<AssistantMessage name={turn.responseMessage.name}>
+						<Chunk>
+							{turn.responseMessage.message}
+							{showTokenInfo ? `  [${tokenCount} / ${contextWindow} tokens]` : ''}
+						</Chunk>
+					</AssistantMessage>
+				);
 			}
 		});
 
