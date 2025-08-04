@@ -12,6 +12,8 @@ import { ChatFetchResponseType, ChatLocation, getErrorDetailsFromChatFetchError 
 import { getTextPart } from '../../../platform/chat/common/globalStringUtils';
 import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
+import { encodeStatefulMarker } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { AutoChatEndpoint, isAutoModeEnabled } from '../../../platform/endpoint/node/autoChatEndpoint';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
@@ -32,7 +34,6 @@ import { IExtensionContribution } from '../../common/contributions';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { isImageDataPart } from '../common/languageModelChatMessageHelpers';
 import { LanguageModelAccessPrompt } from './languageModelAccessPrompt';
-import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 
 export class LanguageModelAccess extends Disposable implements IExtensionContribution {
 
@@ -426,7 +427,10 @@ export class CopilotLanguageModelWrapper extends Disposable {
 			}
 
 			if (delta.statefulMarker) {
-				progress.report({ index, part: new vscode.LanguageModelDataPart(new TextEncoder().encode(delta.statefulMarker), CustomDataPartMimeTypes.StatefulMarker) });
+				progress.report({
+					index,
+					part: new vscode.LanguageModelDataPart(encodeStatefulMarker(endpoint.model, delta.statefulMarker), CustomDataPartMimeTypes.StatefulMarker)
+				});
 			}
 
 			return undefined;

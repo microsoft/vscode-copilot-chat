@@ -7,12 +7,12 @@
 import { AssistantMessage, PromptElement, PromptElementProps, SystemMessage, ToolMessage, UserMessage } from '@vscode/prompt-tsx';
 import * as vscode from 'vscode';
 import { LanguageModelTextPart } from 'vscode';
+import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
+import { decodeStatefulMarker, StatefulMarkerContainer } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { SafetyRules } from '../../prompts/node/base/safetyRules';
 import { EditorIntegrationRules } from '../../prompts/node/panel/editorIntegrationRules';
 import { imageDataPartToTSX, ToolResult } from '../../prompts/node/panel/toolCalling';
 import { isImageDataPart } from '../common/languageModelChatMessageHelpers';
-import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
-import { StatefulMarkerContainer } from '../../../platform/endpoint/common/statefulMarkerContainer';
 
 export type Props = PromptElementProps<{
 	noSafety: boolean;
@@ -35,7 +35,7 @@ export class LanguageModelAccessPrompt extends PromptElement<Props> {
 
 			} else if (message.role === vscode.LanguageModelChatMessageRole.Assistant) {
 				const statefulMarkerPart = message.content.find(part => part instanceof vscode.LanguageModelDataPart && part.mimeType === CustomDataPartMimeTypes.StatefulMarker) as vscode.LanguageModelDataPart | undefined;
-				const statefulMarker = statefulMarkerPart?.data.toString();
+				const statefulMarker = statefulMarkerPart && decodeStatefulMarker(statefulMarkerPart.data);
 				const filteredContent = message.content.filter(part => !(part instanceof vscode.LanguageModelDataPart));
 				// There should only be one string part per message
 				const content = filteredContent.find(part => part instanceof LanguageModelTextPart);

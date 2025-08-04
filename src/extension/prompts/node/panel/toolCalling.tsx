@@ -43,6 +43,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 	constructor(
 		props: PromptElementProps<ChatToolCallsProps>,
 		@IToolsService private readonly toolsService: IToolsService,
+		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint
 	) {
 		super(props);
 	}
@@ -89,7 +90,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 		const children: PromptElement[] = [];
 
 		// Don't include this when rendering and triggering summarization
-		const statefulMarker = round.statefulMarker && <StatefulMarkerContainer statefulMarker={round.statefulMarker} />;
+		const statefulMarker = round.statefulMarker && <StatefulMarkerContainer statefulMarker={{ modelId: this.promptEndpoint.model, marker: round.statefulMarker }} />;
 		children.push(<AssistantMessage toolCalls={assistantToolCalls}>{statefulMarker}{round.response}</AssistantMessage>);
 
 		// Tool call elements should be rendered with the later elements first, allowed to grow to fill the available space

@@ -53,7 +53,7 @@ export function messageToMarkdown(message: Raw.ChatMessage): string {
 
 	const statefulMarker = mapFindFirst(message.content, c => c.type === Raw.ChatCompletionContentPartKind.Opaque ? rawPartAsStatefulMarker(c) : undefined);
 	if (statefulMarker) {
-		str += `\nresponse_id: ${statefulMarker}`;
+		str += `\nresponse_id: ${statefulMarker.marker} with ${statefulMarker.modelId}`;
 	}
 
 	str += '\n~~~\n';

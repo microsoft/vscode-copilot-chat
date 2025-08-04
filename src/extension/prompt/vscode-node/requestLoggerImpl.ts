@@ -7,6 +7,7 @@ import { HTMLTracer, IChatEndpointInfo, RenderPromptResult } from '@vscode/promp
 import { CancellationToken, DocumentLink, DocumentLinkProvider, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult2, languages, Range, TextDocument, Uri, workspace } from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
+import { getAllStatefulMarkersAndIndicies } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { ILogService } from '../../../platform/log/common/logService';
 import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
 import { IResponseDelta } from '../../../platform/networking/common/fetch';
@@ -15,10 +16,10 @@ import { ThinkingData } from '../../../platform/thinking/common/thinking';
 import { createFencedCodeBlock } from '../../../util/common/markdown';
 import { assertNever } from '../../../util/vs/base/common/assert';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
+import { Iterable } from '../../../util/vs/base/common/iterator';
 import { safeStringify } from '../../../util/vs/base/common/objects';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { renderToolResultToStringNoBudget } from './requestLoggerToolResult';
-import { getStatefulMarkerAndIndex } from '../../../platform/endpoint/common/statefulMarkerContainer';
 
 export class RequestLogger extends AbstractRequestLogger {
 
@@ -261,12 +262,12 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(`duration         : ${entry.endTime.getTime() - entry.startTime.getTime()}ms`);
 		result.push(`ourRequestId     : ${entry.chatParams.ourRequestId}`);
 
-		let statefulMarker: { statefulMarker: string; index: number } | undefined;
+		let statefulMarker: { statefulMarker: { modelId: string; marker: string }; index: number } | undefined;
 		if ('messages' in entry.chatParams) {
-			statefulMarker = getStatefulMarkerAndIndex(entry.chatParams.messages);
+			statefulMarker = Iterable.first(getAllStatefulMarkersAndIndicies(entry.chatParams.messages));
 		}
 		if (statefulMarker) {
-			result.push(`lastResponseId   : ${statefulMarker?.statefulMarker}`);
+			result.push(`lastResponseId   : ${statefulMarker.statefulMarker.marker} using ${statefulMarker.statefulMarker.modelId}`);
 		}
 
 		if (entry.type === LoggedRequestKind.ChatMLSuccess) {

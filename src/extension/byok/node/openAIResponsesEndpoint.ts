@@ -35,7 +35,7 @@ export class OpenAIResponsesEndpoint extends OpenAIEndpoint {
 	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
 		return {
 			model: this.model,
-			...rawMessagesToResponseAPI(options.messages, !!options.ignoreStatefulMarker),
+			...rawMessagesToResponseAPI(this.model, options.messages, !!options.ignoreStatefulMarker),
 			reasoning: this._modelInfo.capabilities.supports.thinking ? { summary: 'concise' } : undefined,
 			stream: true,
 			tools: options.requestOptions?.tools?.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
@@ -232,8 +232,8 @@ function rawContentToResponsesOutputContent(part: Raw.ChatCompletionContentPart)
 	}
 }
 
-function rawMessagesToResponseAPI(messages: readonly Raw.ChatMessage[], ignoreStatefulMarker: boolean): { input: OpenAI.Responses.ResponseInputItem[]; previous_response_id?: string } {
-	const statefulMarkerAndIndex = !ignoreStatefulMarker && getStatefulMarkerAndIndex(messages);
+function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMessage[], ignoreStatefulMarker: boolean): { input: OpenAI.Responses.ResponseInputItem[]; previous_response_id?: string } {
+	const statefulMarkerAndIndex = !ignoreStatefulMarker && getStatefulMarkerAndIndex(modelId, messages);
 	let previousResponseId: string | undefined;
 	if (statefulMarkerAndIndex) {
 		previousResponseId = statefulMarkerAndIndex.statefulMarker;

@@ -22,7 +22,7 @@ import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { CustomDataPartMimeTypes } from '../common/endpointTypes';
-import { rawPartAsStatefulMarker } from '../common/statefulMarkerContainer';
+import { decodeStatefulMarker, encodeStatefulMarker, rawPartAsStatefulMarker } from '../common/statefulMarkerContainer';
 
 export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	private readonly _maxTokens: number;
@@ -148,7 +148,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 				} else if (contentPart.type === Raw.ChatCompletionContentPartKind.Opaque) {
 					const statefulMarker = rawPartAsStatefulMarker(contentPart);
 					if (statefulMarker) {
-						apiContent.push(new vscode.LanguageModelDataPart(new TextEncoder().encode(statefulMarker), CustomDataPartMimeTypes.StatefulMarker));
+						apiContent.push(new vscode.LanguageModelDataPart(encodeStatefulMarker(statefulMarker.modelId, statefulMarker.marker), CustomDataPartMimeTypes.StatefulMarker));
 					}
 				}
 			}
@@ -253,7 +253,8 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 					}
 				} else if (chunk instanceof vscode.LanguageModelDataPart) {
 					if (chunk.mimeType === CustomDataPartMimeTypes.StatefulMarker) {
-						await finishedCb?.(text, 0, { text: '', statefulMarker: chunk.data.toString() });
+						const decoded = decodeStatefulMarker(chunk.data);
+						await finishedCb?.(text, 0, { text: '', statefulMarker: decoded.marker });
 					}
 				}
 			}
