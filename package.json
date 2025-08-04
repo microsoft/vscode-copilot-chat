@@ -460,7 +460,7 @@
 				"displayName": "%copilot.tools.testFailure.name%",
 				"icon": "$(beaker)",
 				"userDescription": "%copilot.testFailure.tool.description%",
-				"modelDescription": "Includes test failure information in the prompt.",
+				"modelDescription": "Inspect recent test failures from the most recent workspace test run. Use this tool after running tests (runTests) when one or more tests failed. It returns a structured, ranked list of failing tests with failure messages, expected/actual output, and stack frames to guide debugging. After making fixes, call runTests again to validate. Use readFile, listDirectory, or findFiles tools to inspect referenced code.",
 				"inputSchema": {},
 				"tags": [
 					"vscode_editing_with_tests",
