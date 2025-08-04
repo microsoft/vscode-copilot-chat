@@ -136,6 +136,31 @@ export class DefaultIntentRequestHandler {
 			mixin(chatResult, { metadata: metadataFragment }, true);
 			const baseModelTelemetry = createTelemetryWithId();
 			chatResult = await this.processResult(resultDetails.response, responseMessage, chatResult, metadataFragment, baseModelTelemetry, resultDetails.toolCallRounds);
+
+			// --- augment metadata with token usage/context window ---------------------------------
+			// We want to surface the number of tokens used in the final request that produced this
+			// response, along with the effective model context window. This enables lightweight UI
+			// affordances (e.g. inline footer text) to visualize prompt size vs available budget.
+			//
+			// IMPORTANT: Do NOT change Auto model behavior. We simply read the already-resolved
+			// endpoint (which may itself be the resolved backing model for Auto) and record numbers.
+			// No additional resolution or overrides are performed here.
+			try {
+				// Count tokens in the LAST request that was sent to the model (post tool-calling loop).
+				// This corresponds to the messages array used in the final fetch that yielded the model reply.
+				const ep = intentInvocation.endpoint;
+				const tokenizer = ep.acquireTokenizer();
+				const lastMsgs = resultDetails.lastRequestMessages ?? [];
+				const tokenCount = await tokenizer.countMessagesTokens(lastMsgs);
+				const contextWindow = ep.modelMaxPromptTokens;
+				// Merge into metadata; preserve any existing metadata fields.
+				const existingMeta: any = chatResult.metadata ?? {};
+				// chatResult.metadata is read-only in the ChatResult type, so build a new object.
+				chatResult = { ...chatResult, metadata: { ...existingMeta, tokenCount, contextWindow } };
+			} catch {
+				// ignore token counting failures; metadata will simply omit token info
+			}
+			// -----------------------------------------------------------------------------------------
 			if (chatResult.errorDetails && intentInvocation.modifyErrorDetails) {
 				chatResult.errorDetails = intentInvocation.modifyErrorDetails(chatResult.errorDetails, resultDetails.response);
 			}

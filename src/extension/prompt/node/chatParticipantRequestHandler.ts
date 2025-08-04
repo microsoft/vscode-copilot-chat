@@ -264,13 +264,16 @@ export class ChatParticipantRequestHandler {
 			// mixin fixed metadata shape into result. Modified in place because the object is already
 			// cached in the conversation store and we want the full information when looking this up
 			// later
+			// Merge in required metadata fields. Preserve any existing metadata (e.g. tokenCount/contextWindow injected downstream).
+			const existingMeta: any = (result as ICopilotChatResult).metadata ?? {};
 			mixin(result, {
 				metadata: {
+					...existingMeta,
 					modelMessageId: this.turn.responseId ?? '',
 					responseId: this.turn.id,
 					sessionId: this.conversation.sessionId,
 					agentId: this.chatAgentArgs.agentId,
-					command: this.request.command
+					command: this.request.command,
 				}
 			} satisfies ICopilotChatResult, true);
 
