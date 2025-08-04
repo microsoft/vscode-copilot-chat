@@ -2,6 +2,13 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import * as cp from 'child_process';
+import * as fs from 'fs/promises';
+import * as os from 'os';
+import path from 'path';
+import { ILogService } from '../../../platform/log/common/logService';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { randomPath } from '../../../util/vs/base/common/extpath';
 import { IValidatePackageArgs, ValidatePackageResult } from './commands';
 
 interface NuGetServiceIndexResponse {
@@ -20,7 +27,150 @@ interface NuGetSearchResponse {
 	data?: Array<NuGetSearchPackageItem>;
 }
 
-export async function getNuGetPackageMetadata(args: IValidatePackageArgs): Promise<ValidatePackageResult> {
+async function executeWithTimeout(
+	command: string,
+	args: string[],
+	cwd: string,
+	timeoutMs: number = 60000,
+	cancellationToken?: CancellationToken) {
+
+	return await new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve, reject) => {
+		const stdout: string[] = [];
+		const stderr: string[] = [];
+		let settled = false;
+
+		const child: cp.ChildProcessWithoutNullStreams = cp.spawn(command, args, {
+			stdio: "pipe",
+			env: { ...process.env },
+			cwd: cwd,
+		});
+
+		child.stdout.setEncoding('utf8');
+		child.stderr.setEncoding('utf8');
+
+		child.stdout.on('data', (data) => stdout.push(data));
+		child.stderr.on('data', (data) => stderr.push(data));
+
+		const timeoutHandler = setTimeout(() => {
+			if (!settled) {
+				settled = true;
+				child.kill('SIGTERM');
+				setTimeout(() => {
+					if (!child.killed) {
+						child.kill('SIGKILL');
+					}
+				}, 10000);
+				reject(new Error(`Process timed out after ${timeoutMs}ms`));
+			}
+		}, timeoutMs);
+
+		const cancellationHandler = cancellationToken?.onCancellationRequested(() => {
+			if (!settled) {
+				settled = true;
+				clearTimeout(timeoutHandler);
+				child.kill('SIGTERM');
+				setTimeout(() => {
+					if (!child.killed) {
+						child.kill('SIGKILL');
+					}
+				}, 10000);
+				reject(new Error(`Process cancelled`));
+			}
+		});
+
+		child.on('error', (error) => {
+			if (!settled) {
+				settled = true;
+				clearTimeout(timeoutHandler);
+				cancellationHandler?.dispose();
+				reject(error);
+			}
+		});
+
+		child.on('close', (code) => {
+			if (!settled) {
+				settled = true;
+				clearTimeout(timeoutHandler);
+				cancellationHandler?.dispose();
+				resolve({
+					stdout: stdout.join(''),
+					stderr: stderr.join(''),
+					exitCode: code ?? -1
+				});
+			}
+		});
+	});
+}
+
+async function getServerManifest(id: string, version: string, logService: ILogService): Promise<string | undefined> {
+	const installDir = randomPath(os.tmpdir(), "vscode-nuget-mcp");
+	try {
+		await fs.mkdir(installDir, { recursive: true });
+
+		// use the same cwd as local MCP servers
+		// this allow any path-based configuration to be consistent
+		const cwd = os.homedir();
+		const installResult = await executeWithTimeout('dotnet', [
+			"tool",
+			"install",
+			`${id}@${version}`,
+			"--tool-path",
+			installDir
+		], cwd);
+
+		if (installResult.exitCode === 0) {
+			const lowerId = id.toLowerCase();
+			const lowerVersion = version.toLowerCase();
+			const serverJsonPath = path.join(
+				installDir,
+				".store",
+				lowerId,
+				lowerVersion,
+				lowerId,
+				lowerVersion,
+				".mcp",
+				"server.json");
+			try {
+				await fs.access(serverJsonPath, fs.constants.R_OK);
+			} catch {
+				logService.info(`No server.json found in NuGet package ${id}@${version}.`);
+				return undefined;
+			}
+			const json = await fs.readFile(serverJsonPath, 'utf8');
+			const manifest = JSON.parse(json);
+
+			// force the ID and version of matching NuGet package in the server.json to the one we installed
+			// this handles cases where the server.json in the package is stale
+			if (manifest?.packages) {
+				for (const pkg of manifest.packages) {
+					if (pkg?.registry_name === "nuget") {
+						pkg.name = id;
+						pkg.version = version;
+					}
+				}
+			}
+
+			return manifest;
+		} else {
+			logService.warn(`Install of NuGet package ${id}@${version} failed with exit code ${installResult.exitCode}. Proceeding without server.json.
+stdout: ${installResult.stdout}
+stderr: ${installResult.stderr}`);
+		}
+	} catch (e) {
+		logService.warn(`
+Failed to install NuGet package ${id}@${version}. Proceeding without server.json.
+Error: ${e}`);
+	} finally {
+		try {
+			await fs.rm(installDir, { recursive: true, force: true });
+		} catch (e) {
+			logService.warn(`Failed to clean up temporary .NET tool install directory ${installDir}.
+Error: ${e}`);
+		}
+	}
+}
+
+export async function getNuGetPackageMetadata(args: IValidatePackageArgs, logService: ILogService): Promise<ValidatePackageResult> {
 	// read the service index to find the search URL
 	// https://learn.microsoft.com/en-us/nuget/api/service-index
 	const serviceIndexUrl = `https://api.nuget.org/v3/index.json`;
@@ -46,7 +196,7 @@ export async function getNuGetPackageMetadata(args: IValidatePackageArgs): Promi
 	}
 	const data = await searchResponse.json() as NuGetSearchResponse;
 	if (!data.data?.[0]) {
-		return { state: 'error', error: `Package ${args.name} not found on NuGet.org` };
+		return { state: 'error', errorType: 'NotFound', error: `Package ${args.name} not found on NuGet.org` };
 	}
 
 	const name = data.data[0].id ?? args.name;
@@ -78,6 +228,11 @@ export async function getNuGetPackageMetadata(args: IValidatePackageArgs): Promi
 		publisher,
 		name,
 		version,
-		readme
+		readme,
+		getServerManifest: async (installConsent) => {
+			// getting the server.json downloads the package, so wait for consent
+			await installConsent;
+			return await getServerManifest(name, version, logService);
+		},
 	};
 }
