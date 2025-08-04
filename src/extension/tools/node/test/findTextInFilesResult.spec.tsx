@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { PromptElement, UserMessage } from '@vscode/prompt-tsx';
+import { PromptElement, Raw, UserMessage } from '@vscode/prompt-tsx';
 import { afterAll, beforeAll, expect, suite, test } from 'vitest';
 import type * as vscode from 'vscode';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
@@ -39,7 +39,10 @@ suite('FindTextInFilesResult', () => {
 		const renderer = PromptRenderer.create(services.get(IInstantiationService), endpoint, clz, {});
 
 		const r = await renderer.render();
-		return r.messages.map(m => m.content).join('\n').replace(/\\+/g, '/');
+		return r.messages
+			.map(m => m.content
+				.map(c => c.type === Raw.ChatCompletionContentPartKind.Text ? c.text : JSON.stringify(c)).join('')
+			).join('\n').replace(/\\+/g, '/');
 	}
 
 	test('returns simple single line matches', async () => {
@@ -55,7 +58,15 @@ suite('FindTextInFilesResult', () => {
 				],
 				uri: URI.file('/file.txt'),
 			}
-		])).toMatchInlineSnapshot(`"[object Object]"`);
+		])).toMatchInlineSnapshot(`
+			"1 match
+			<match path="/file.txt" line=6>
+			Line before
+			This is a test
+			Line after
+			</match>
+			"
+		`);
 	});
 
 	test('elides long single line content before match', async () => {
@@ -71,7 +82,15 @@ suite('FindTextInFilesResult', () => {
 				],
 				uri: URI.file('/file.txt'),
 			}
-		])).toMatchInlineSnapshot(`"[object Object]"`);
+		])).toMatchInlineSnapshot(`
+			"1 match
+			<match path="/file.txt" line=6>
+			...rebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebeforebefore
+			This is a test
+			Line after
+			</match>
+			"
+		`);
 	});
 
 	test('elides long single line content after match', async () => {
@@ -85,7 +104,15 @@ suite('FindTextInFilesResult', () => {
 				}],
 				uri: URI.file('/file.txt'),
 			}
-		])).toMatchInlineSnapshot(`"[object Object]"`);
+		])).toMatchInlineSnapshot(`
+			"1 match
+			<match path="/file.txt" line=6>
+			Line before
+			This is a test
+			Line afterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafterafteraf...
+			</match>
+			"
+		`);
 	});
 
 	test('adjusts line number if prefix text is omitted', async () => {
@@ -100,7 +127,16 @@ suite('FindTextInFilesResult', () => {
 				}],
 				uri: URI.file('/file.txt'),
 			}
-		])).toMatchInlineSnapshot(`"[object Object]"`);
+		])).toMatchInlineSnapshot(`
+			"1 match
+			<match path="/file.txt" line=6>
+			...ne beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine before
+			Line beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine beforeLine before
+			This is a test
+			Line after
+			</match>
+			"
+		`);
 	});
 
 	test('elides text on the same line as the match', async () => {
@@ -114,6 +150,12 @@ suite('FindTextInFilesResult', () => {
 				}],
 				uri: URI.file('/file.txt'),
 			}
-		])).toMatchInlineSnapshot(`"[object Object]"`);
+		])).toMatchInlineSnapshot(`
+			"1 match
+			<match path="/file.txt" line=6>
+			...xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxThis is a testyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy...
+			</match>
+			"
+		`);
 	});
 });
