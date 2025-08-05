@@ -2,7 +2,7 @@
 	"name": "copilot-chat",
 	"displayName": "GitHub Copilot Chat",
 	"description": "AI chat features powered by Copilot",
-	"version": "0.30.0",
+	"version": "0.31.0",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
 	"internalLargeStorageAriaKey": "ec712b3202c5462fb6877acae7f1f9d7-c19ad55e-3e3c-4f99-984b-827f6d95bd9e-6917",
@@ -2122,6 +2122,11 @@
 						"type": "boolean",
 						"default": true,
 						"description": "%github.copilot.config.autoFix%"
+					},
+					"github.copilot.chat.customInstructionsInSystemMessage": {
+						"type": "boolean",
+						"default": true,
+						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
 					}
 				}
 			},
@@ -2641,14 +2646,6 @@
 						],
 						"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
 					},
-					"github.copilot.chat.customInstructionsInSystemMessage": {
-						"type": "boolean",
-						"default": true,
-						"tags": [
-							"experimental"
-						],
-						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
-					},
 					"github.copilot.chat.edits.newNotebook.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -2735,6 +2732,14 @@
 							"additionalProperties": false
 						},
 						"markdownDescription": "Configure custom Azure OpenAI models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
+					},
+					"github.copilot.chat.enableRetryAfterFilteredResponse": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental"
+						],
+						"description": "%github.copilot.config.retryAfterFilteredResponse.enabled%"
 					}
 				}
 			}
@@ -2988,7 +2993,8 @@
 				},
 				{
 					"command": "github.copilot.debug.showChatLogView",
-					"when": "view == workbench.panel.chat.view.copilot"
+					"when": "view == workbench.panel.chat.view.copilot",
+					"group": "3_show"
 				}
 			],
 			"view/item/context": [

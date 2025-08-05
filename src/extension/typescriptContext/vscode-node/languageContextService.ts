@@ -135,6 +135,7 @@ class TelemetrySender {
 					"owner": "dirkb",
 					"comment": "Telemetry for copilot inline completion context",
 					"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
+					"opportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The opportunity id" },
 					"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The source of the request" },
 					"trigger": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The trigger kind of the request" },
 					"cacheRequest": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The cache request that was used to populate the cache" },
@@ -165,6 +166,7 @@ class TelemetrySender {
 				'typescript-context-plugin.completion-context.request',
 				{
 					requestId: context.requestId,
+					opportunityId: context.opportunityId ?? 'unknown',
 					source: context.source ?? KnownSources.unknown,
 					trigger: context.trigger ?? TriggerKind.unknown,
 					cacheRequest: cacheRequest ?? 'unknown',
@@ -233,6 +235,7 @@ class TelemetrySender {
 				"owner": "dirkb",
 				"comment": "Telemetry for copilot inline completion context on timeout",
 				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
+				"opportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The opportunity id" },
 				"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The source of the request" },
 				"total": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Total number of context items", "isMeasurement": true },
 				"snippets": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of code snippets", "isMeasurement": true },
@@ -247,6 +250,7 @@ class TelemetrySender {
 			'typescript-context-plugin.completion-context.on-timeout',
 			{
 				requestId: context.requestId,
+				opportunityId: context.opportunityId ?? 'unknown',
 				source: context.source ?? KnownSources.unknown,
 				items: JSON.stringify(items),
 				cacheState: cacheState.toString()
@@ -268,6 +272,7 @@ class TelemetrySender {
 				"owner": "dirkb",
 				"comment": "Telemetry for copilot inline completion context in failure case",
 				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
+				"opportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The opportunity id" },
 				"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The source of the request" },
 				"code:": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The failure code" },
 				"message": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "The failure message" },
@@ -278,6 +283,7 @@ class TelemetrySender {
 			'typescript-context-plugin.completion-context.failed',
 			{
 				requestId: context.requestId,
+				opportunityId: context.opportunityId ?? 'unknown',
 				source: context.source ?? KnownSources.unknown,
 				code: data.error,
 				message: data.message,
@@ -292,6 +298,7 @@ class TelemetrySender {
 				"owner": "dirkb",
 				"comment": "Telemetry for copilot inline completion context in cancellation case",
 				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
+				"opportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The opportunity id" },
 				"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The source of the request" }
 			}
 		*/
@@ -299,6 +306,7 @@ class TelemetrySender {
 			'typescript-context-plugin.completion-context.cancelled',
 			{
 				requestId: context.requestId,
+				opportunityId: context.opportunityId ?? 'unknown',
 				source: context.source ?? KnownSources.unknown
 			}
 		);
@@ -1627,6 +1635,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 					}
 					const context: RequestContext = {
 						requestId: request.completionId,
+						opportunityId: request.opportunityId,
 						timeBudget: request.timeBudget,
 						tokenBudget: tokenBudget,
 						source: KnownSources.completion,

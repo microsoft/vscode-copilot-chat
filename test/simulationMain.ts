@@ -809,7 +809,8 @@ function parseModelConfigFile(modelConfigFilePath: string): IModelConfig[] {
 			"version": "<model version>",
 			"type": "<model type>", // 'openai' or 'azureOpenai'
 			"useDeveloperRole": <boolean>, // optional, defaults to false
-			"capabilities": {
+			"url": "<endpoint URL>",
+			"capabilities"?: {
 				"supports"?: {
 					"parallel_tool_calls"?: <boolean>,
 					"streaming"?: <boolean>,
@@ -819,23 +820,41 @@ function parseModelConfigFile(modelConfigFilePath: string): IModelConfig[] {
 				},
 				"limits"?: {
 					"max_prompt_tokens"?: <number>,
-					"max_output_tokens"?: <number>
+					"max_output_tokens"?: <number>,
+					"max_context_window_tokens"?: <number>
 				}
 			},
-			"url": "<endpoint URL>",
-			"apiKeyEnvName": "<environment variable name for API key>"
+			"auth?": {
+				"useBearerHeader"?: <boolean>, // Use Bearer token for authentication. Defaults to false
+				"useApiKeyHeader"?: <boolean>, // Use API key for authentication. Defaults to false
+				"apiKeyEnvName": "<environment variable name for API key to be used for the above headers>"
+			},
+			"overrides"?: {
+				"requestHeaders"?: { "<header name>": "<header value>" }, // optional, custom request headers
+				"temperature"?: <number> | null, // optional, if null removes from request body
+				"top_p"?: <number> | null, // optional, if null removes from request body
+				"snippy"?: <boolean> | null, // optional, if null removes from request body
+				"max_tokens"?: <number> | null, // optional, if null removes from request body
+				"max_completion_tokens"?: <number> | null, // optional, if null removes from request body
+				"intent"?: <boolean> | null // optional, if null removes from request body
+			}
 		},
 		...
 	```
 	*/
 
-	const checkProperty = (obj: any, prop: string, type: 'string' | 'boolean' | 'number' | 'object', optional?: boolean) => {
+	const checkProperty = (obj: any, prop: string, type: 'string' | 'boolean' | 'number' | 'object', optional?: boolean, nullable?: boolean) => {
 		if (!(prop in obj)) {
 			if (optional) {
 				return;
 			}
 			throw new Error(`Missing property '${prop}' in model configuration file ${resolvedModelConfigFilePath}`);
 		}
+
+		if (nullable && obj[prop] === null) {
+			return;
+		}
+
 		if (typeof obj[prop] !== type) {
 			throw new Error(`Property '${prop}' in model configuration file ${resolvedModelConfigFilePath} must be of type '${type}', but got '${typeof obj[prop]}'`);
 		}
@@ -854,44 +873,79 @@ function parseModelConfigFile(modelConfigFilePath: string): IModelConfig[] {
 			throw new Error(`Model type '${model.type}' is not supported. Only 'openai' and 'azureOpenai' are allowed.`);
 		}
 		checkProperty(model, 'useDeveloperRole', 'boolean', true);
-		checkProperty(model, 'capabilities', 'object');
+		checkProperty(model, 'url', 'string');
+
+		checkProperty(model, 'capabilities', 'object', true);
 		checkProperty(model.capabilities, 'supports', 'object', true);
-		if (model.capabilities.supports) {
+		if (model.capabilities?.supports) {
 			checkProperty(model.capabilities.supports, 'parallel_tool_calls', 'boolean', true);
 			checkProperty(model.capabilities.supports, 'streaming', 'boolean', true);
 			checkProperty(model.capabilities.supports, 'tool_calls', 'boolean', true);
 			checkProperty(model.capabilities.supports, 'vision', 'boolean', true);
 			checkProperty(model.capabilities.supports, 'prediction', 'boolean', true);
 		}
+
 		checkProperty(model.capabilities, 'limits', 'object', true);
-		if (model.capabilities.limits) {
+		if (model.capabilities?.limits) {
 			checkProperty(model.capabilities.limits, 'max_prompt_tokens', 'number', true);
 			checkProperty(model.capabilities.limits, 'max_output_tokens', 'number', true);
+			checkProperty(model.capabilities.limits, 'max_context_window_tokens', 'number', true);
 		}
-		checkProperty(model, 'url', 'string');
-		checkProperty(model, 'apiKeyEnvName', 'string');
+
+		checkProperty(model, 'auth', 'object', true);
+		if (model.auth) {
+			checkProperty(model.auth, 'useBearerHeader', 'boolean', true);
+			checkProperty(model.auth, 'useApiKeyHeader', 'boolean', true);
+			checkProperty(model.auth, 'apiKeyEnvName', 'string');
+		}
+
+		checkProperty(model, 'overrides', 'object', true);
+		if (model.overrides) {
+			const overrides = model.overrides;
+			checkProperty(overrides, 'requestHeaders', 'object', true, true);
+			checkProperty(overrides, 'temperature', 'number', true, true);
+			checkProperty(overrides, 'top_p', 'number', true, true);
+			checkProperty(overrides, 'snippy', 'boolean', true, true);
+			checkProperty(overrides, 'intent', 'boolean', true, true);
+			checkProperty(overrides, 'max_tokens', 'number', true, true);
+			checkProperty(overrides, 'max_completion_tokens', 'number', true, true);
+		}
+
 		modelConfigs.push({
 			id: modelId,
 			name: model.name,
 			version: model.version,
 			type: model.type,
 			useDeveloperRole: model.useDeveloperRole ?? false,
+			url: model.url,
 			capabilities: {
 				supports: {
-					parallel_tool_calls: model.capabilities.supports.parallel_tool_calls ?? false,
-					streaming: model.capabilities.supports.streaming ?? false,
-					tool_calls: model.capabilities.supports.tool_calls ?? false,
-					vision: model.capabilities.supports.vision ?? false,
-					prediction: model.capabilities.supports.prediction ?? false
+					parallel_tool_calls: model.capabilities?.supports?.parallel_tool_calls ?? false,
+					streaming: model.capabilities?.supports?.streaming ?? false,
+					tool_calls: model.capabilities?.supports?.tool_calls ?? false,
+					vision: model.capabilities?.supports?.vision ?? false,
+					prediction: model.capabilities?.supports?.prediction ?? false
 				},
 				limits: {
-					max_prompt_tokens: model.capabilities.limits.max_prompt_tokens ?? 128000,
-					max_output_tokens: model.capabilities.limits.max_output_tokens ?? Number.MAX_SAFE_INTEGER
+					max_prompt_tokens: model.capabilities?.limits?.max_prompt_tokens ?? 128000,
+					max_output_tokens: model.capabilities?.limits?.max_output_tokens ?? Number.MAX_SAFE_INTEGER,
+					max_context_window_tokens: model.capabilities?.limits?.max_context_window_tokens
 				}
 			},
-			url: model.url,
-			apiKeyEnvName: model.apiKeyEnvName
-
+			auth: {
+				useBearerHeader: model.auth?.useBearerHeader ?? false,
+				useApiKeyHeader: model.auth?.useApiKeyHeader ?? false,
+				apiKeyEnvName: model.auth?.apiKeyEnvName
+			},
+			overrides: {
+				requestHeaders: model.overrides?.hasOwnProperty('requestHeaders') ? model.overrides.requestHeaders : {},
+				temperature: model.overrides?.hasOwnProperty('temperature') ? model.overrides.temperature : undefined,
+				top_p: model.overrides?.hasOwnProperty('top_p') ? model.overrides.top_p : undefined,
+				snippy: model.overrides?.hasOwnProperty('snippy') ? model.overrides.snippy : undefined,
+				intent: model.overrides?.hasOwnProperty('intent') ? model.overrides.intent : undefined,
+				max_tokens: model.overrides?.hasOwnProperty('max_tokens') ? model.overrides.max_tokens : undefined,
+				max_completion_tokens: model.overrides?.hasOwnProperty('max_completion_tokens') ? model.overrides.max_completion_tokens : undefined,
+			}
 		});
 	}
 
