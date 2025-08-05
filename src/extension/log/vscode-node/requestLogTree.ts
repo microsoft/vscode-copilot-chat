@@ -135,19 +135,34 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 		}));
 
 		// Save the currently opened chat log (ccreq:*.copilotmd) to a file
-		this._register(vscode.commands.registerCommand(saveCurrentMarkdownCommand, async () => {
-			const editor = vscode.window.activeTextEditor;
-			if (!editor) {
+		this._register(vscode.commands.registerCommand(saveCurrentMarkdownCommand, async (...args: any[]) => {
+			// Accept resource from menu invocation (editor/title passes the resource)
+			let resource: vscode.Uri | undefined;
+			const first = args?.[0];
+			if (first instanceof vscode.Uri) {
+				resource = first;
+			} else if (first && typeof first === 'object') {
+				// Some menu invocations pass { resource: Uri }
+				const candidate = (first as { resource?: vscode.Uri }).resource;
+				if (candidate instanceof vscode.Uri) {
+					resource = candidate;
+				}
+			}
+
+			// Fallback to the active editor's document
+			resource ??= vscode.window.activeTextEditor?.document.uri;
+			if (!resource) {
+				vscode.window.showWarningMessage('No document is active to save.');
 				return;
 			}
 
-			const { document } = editor;
-			if (document.uri.scheme !== ChatRequestScheme.chatRequestScheme) {
+			if (resource.scheme !== ChatRequestScheme.chatRequestScheme) {
+				vscode.window.showWarningMessage('This command only works for Copilot request documents.');
 				return;
 			}
 
 			// Determine a default filename from the virtual URI
-			const parsed = ChatRequestScheme.parseUri(document.uri.toString());
+			const parsed = ChatRequestScheme.parseUri(resource.toString());
 			const defaultBase = parsed && parsed.kind === 'request' ? parsed.id : 'latestrequest';
 			const defaultFilename = `${defaultBase}.copilotmd`;
 
@@ -162,12 +177,13 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 			});
 
 			if (!saveUri) {
-				return;
+				return; // User cancelled
 			}
 
 			try {
-				const content = document.getText();
-				await vscode.workspace.fs.writeFile(saveUri, Buffer.from(content, 'utf8'));
+				// Read the text from the virtual document URI explicitly
+				const doc = await vscode.workspace.openTextDocument(resource);
+				await vscode.workspace.fs.writeFile(saveUri, Buffer.from(doc.getText(), 'utf8'));
 
 				const openAction = 'Open File';
 				const result = await vscode.window.showInformationMessage(
