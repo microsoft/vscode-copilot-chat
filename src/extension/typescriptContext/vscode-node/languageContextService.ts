@@ -1638,7 +1638,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 						opportunityId: request.opportunityId,
 						timeBudget: request.timeBudget,
 						tokenBudget: tokenBudget,
-						source: KnownSources.completion,
+						source: request.source === 'nes' ? KnownSources.nes : KnownSources.completion,
 						trigger: TriggerKind.completion,
 						proposedEdits: isSpeculativeRequest ? [] : undefined,
 						sampleTelemetry: self.getSampleTelemetry(request.activeExperiments)
