@@ -64,10 +64,13 @@ export namespace Copilot {
 		resolver: ContextResolver<T>;
 	}
 
+	export type ResolveOnTimeoutResult<T> = T | readonly T[];
+	export type ResolveResult<T> = Promise<T> | Promise<readonly T[]> | AsyncIterable<T>;
+
 	export interface ContextResolver<T extends SupportedContextItem> {
-		resolve(request: ResolveRequest, token: vscode.CancellationToken): Promise<T> | Promise<T[]> | AsyncIterable<T>;
+		resolve(request: ResolveRequest, token: vscode.CancellationToken): ResolveResult<T>;
 		// Optional method to be invoked if the request timed out. This requests additional context items.
-		resolveOnTimeout?(request: ResolveRequest): T | readonly T[] | undefined;
+		resolveOnTimeout?(request: ResolveRequest): ResolveOnTimeoutResult<T> | undefined;
 	}
 
 	/**
@@ -79,11 +82,26 @@ export namespace Copilot {
 	 * - the timeBudget the provider has to provide context items
 	 * - the previousUsageStatistics, which contains information about the last request to the provider
 	 */
-	export type Status = 'full' | 'partial' | 'none';
+	export type ResolutionStatus = 'full' | 'partial' | 'none' | 'error';
+	export type UsageStatus = ResolutionStatus | 'partial_content_excluded' | 'none_content_excluded';
+
+	export type ContextItemUsageDetails = {
+		id: string;
+		type: SupportedContextItemType;
+		origin?: ContextItemOrigin;
+	} & (
+			| {
+				usage: Extract<UsageStatus, 'full' | 'partial' | 'partial_content_excluded'>;
+				expectedTokens: number;
+				actualTokens: number;
+			}
+			| { usage: Extract<UsageStatus, 'none' | 'none_content_excluded' | 'error'> }
+		);
 
 	export type ContextUsageStatistics = {
-		usage: Status;
-		resolution: Status;
+		usage: UsageStatus;
+		resolution: ResolutionStatus;
+		usageDetails?: ContextItemUsageDetails[];
 	};
 
 	interface TextEdit {
@@ -109,6 +127,11 @@ export namespace Copilot {
 		uri: DocumentUri;
 		languageId: string;
 		version: number;
+		// Position and offset are relative to the provided version of the document.
+		// The position after an edit is applied is found in ProposedTextEdit.positionAfterEdit.
+		/**
+		 * @deprecated Use `position` instead.
+		 */
 		offset: number;
 		position?: Position;
 		proposedEdits?: ProposedTextEdit[];
@@ -128,14 +151,35 @@ export namespace Copilot {
 		 * After the time budget runs out, the request will be cancelled via the CancellationToken.
 		 * Providers can use this value as a hint when computing context. Providers should expect the
 		 * request to be cancelled once the time budget runs out.
+		 *
+		 * @deprecated Use `timeoutEnd` instead.
 		 */
 		timeBudget: number;
+
+		/**
+		 * Unix timestamp representing the exact time the request will be cancelled via the CancellationToken.
+		 */
+		timeoutEnd: number;
 
 		/**
 		 * Various statistics about the last completion request. This can be used by the context provider
 		 * to make decisions about what context to provide for the current call.
 		 */
 		previousUsageStatistics?: ContextUsageStatistics;
+
+		/**
+		 * Data from completionItem
+		 *
+		 * See https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#completionItem
+		 */
+		data?: unknown;
+
+		/**
+		 * Allows specifying the source of the context item, e.g., 'nes'.
+		 *
+		 * @experimental
+		 */
+		source: string;
 	}
 
 	/**
@@ -151,6 +195,19 @@ export namespace Copilot {
 		 * Default value is 0.
 		 */
 		importance?: number;
+
+		/**
+		 * A unique ID for the context item, used to provide detailed statistics about
+		 * the item's usage. If an ID is not provided, it will be generated randomly.
+		 */
+		id?: string;
+
+		/**
+		 * Specifies where the context item comes from, mostly relevant for LSP providers.
+		 * - request: context is provided in the completion request
+		 * - update: context is provided via context/update
+		 */
+		origin?: ContextItemOrigin;
 	}
 
 	// A key-value pair used for short string snippets.
@@ -168,5 +225,7 @@ export namespace Copilot {
 	}
 
 	export type SupportedContextItem = Trait | CodeSnippet;
+	export type SupportedContextItemType = 'Trait' | 'CodeSnippet';
+	export type ContextItemOrigin = 'request' | 'update';
 
 }
