@@ -368,7 +368,9 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 					offset: textDoc.offsetAt(cursorPositionVscode)
 				},
 				activeExperiments: new Map(),
-				timeBudget: debounceTime
+				timeBudget: debounceTime,
+				timeoutEnd: Date.now() + debounceTime,
+				source: 'nes',
 			};
 			const langCtxItems: LanguageContextEntry[] = [];
 			const getContextPromise = async () => {
