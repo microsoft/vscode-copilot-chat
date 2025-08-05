@@ -164,13 +164,13 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 			// Determine a default filename from the virtual URI
 			const parsed = ChatRequestScheme.parseUri(resource.toString());
 			const defaultBase = parsed && parsed.kind === 'request' ? parsed.id : 'latestrequest';
-			const defaultFilename = `${defaultBase}.copilotmd`;
+			const defaultFilename = `${defaultBase}.md`;
 
 			const saveUri = await vscode.window.showSaveDialog({
 				defaultUri: vscode.Uri.file(path.join(os.homedir(), defaultFilename)),
 				filters: {
-					'Copilot Markdown': ['copilotmd'],
 					'Markdown': ['md'],
+					'Copilot Markdown': ['copilotmd'],
 					'All Files': ['*']
 				},
 				title: 'Save Markdown As'
