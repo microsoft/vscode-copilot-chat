@@ -44,7 +44,7 @@ import { UserPreferences } from '../panel/preferences';
 import { ChatToolCalls } from '../panel/toolCalling';
 import { MultirootWorkspaceStructure } from '../panel/workspace/workspaceStructure';
 import { AgentConversationHistory } from './agentConversationHistory';
-import { DefaultAgentPrompt, SweBenchAgentPrompt } from './agentInstructions';
+import { DefaultAgentPrompt, GPT41AgentPrompt, SweBenchAgentPrompt } from './agentInstructions';
 import { SummarizedConversationHistory } from './summarizedConversationHistory';
 
 export interface AgentPromptProps extends GenericBasePromptElementProps {
@@ -83,11 +83,17 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const instructions = this.configurationService.getConfig(ConfigKey.Internal.SweBenchAgentPrompt) ?
 			<SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} /> :
-			<DefaultAgentPrompt
-				availableTools={this.props.promptContext.tools?.availableTools}
-				modelFamily={this.props.endpoint.family}
-				codesearchMode={this.props.codesearchMode}
-			/>;
+			this.props.endpoint.family === 'gpt-4.1' ?
+				<GPT41AgentPrompt
+					availableTools={this.props.promptContext.tools?.availableTools}
+					modelFamily={this.props.endpoint.family}
+					codesearchMode={this.props.codesearchMode}
+				/> :
+				<DefaultAgentPrompt
+					availableTools={this.props.promptContext.tools?.availableTools}
+					modelFamily={this.props.endpoint.family}
+					codesearchMode={this.props.codesearchMode}
+				/>;
 
 		const omitBaseAgentInstructions = this.configurationService.getConfig(ConfigKey.Internal.OmitBaseAgentInstructions);
 		const baseAgentInstructions = <>
@@ -638,8 +644,14 @@ export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringToo
 export function getKeepGoingReminder(modelFamily: string | undefined) {
 	return modelFamily === 'gpt-4.1' ?
 		<>
-			You are an agent - you must keep going until the user's query is completely resolved, before ending your turn and yielding back to the user. ONLY terminate your turn when you are sure that the problem is solved, or you absolutely cannot continue.<br />
-			You take action when possible- the user is expecting YOU to take action and go to work for them. Don't ask unnecessary questions about the details if you can simply DO something useful instead.<br />
+			You are an agent - you must keep going until the user's query is completely resolved, before ending your turn and yielding back to the user.<br />
+			Your thinking should be thorough and so it's fine if it's very long. However, avoid unnecessary repetition and verbosity. You should be concise, but thorough.<br />
+			You MUST iterate and keep going until the problem is solved.<br />
+			You have everything you need to resolve this problem. I want you to fully solve this autonomously before coming back to me. <br />
+			Only terminate your turn when you are sure that the problem is solved and all items have been checked off. Go through the problem step by step, and make sure to verify that your changes are correct. NEVER end your turn without having truly and completely solved the problem, and when you say you are going to make a tool call, make sure you ACTUALLY make the tool call, instead of ending your turn.<br />
+			Take your time and think through every step - remember to check your solution rigorously and watch out for boundary cases, especially with the changes you made. Your solution must be perfect. If not, continue working on it. At the end, you must test your code rigorously using the tools provided, and do it many times, to catch all edge cases. If it is not robust, iterate more and make it perfect. Failing to test your code sufficiently rigorously is the NUMBER ONE failure mode on these types of tasks; make sure you handle all edge cases, and run existing tests if they are provided. <br />
+			You MUST plan extensively before each function call, and reflect extensively on the outcomes of the previous function calls. DO NOT do this entire process by making function calls only, as this can impair your ability to solve the problem and think insightfully.<br />
+			You are a highly capable and autonomous agent, and you can definitely solve this problem without needing to ask the user for further input.<br />
 		</>
 		: undefined;
 }
