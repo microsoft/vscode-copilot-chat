@@ -92,9 +92,17 @@ export class GetNotebookCellOutputTool implements ICopilotTool<IGetNotebookCellO
 	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IGetNotebookCellOutputToolParams>): vscode.ProviderResult<vscode.PreparedToolInvocation> {
+		const { filePath, cellId } = options.input;
+		
+		const confirmationMessages = {
+			title: l10n.t`Read Notebook Cell Output`,
+			message: new MarkdownString(l10n.t`Read output from cell ${cellId} in ${filePath}`),
+		};
+
 		return {
 			invocationMessage: l10n.t`Reading cell output`,
 			pastTenseMessage: l10n.t`Read cell output`,
+			confirmationMessages,
 		};
 	}
 
