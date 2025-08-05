@@ -21,6 +21,7 @@ import { Range } from '../../../../../util/vs/editor/common/core/range';
 import { OffsetRange } from '../../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { INextEditDisplayLocation } from '../../../node/nextEditResult';
 import { IVSCodeObservableDocument, IVSCodeObservableNotebookDocument, IVSCodeObservableTextDocument } from '../../parts/vscodeWorkspace';
+import { coalesce } from '../../../../../util/vs/base/common/arrays';
 
 export interface IDiagnosticCodeAction {
 	edit: TextReplacement;
@@ -312,10 +313,21 @@ export class CodeAction {
 	}
 
 	getEditForWorkspaceDocument(workspaceDocument: IVSCodeObservableDocument): TextReplacement[] | undefined {
-		if (!this.edit) {
+		const edit = this.edit;
+		if (!edit) {
 			return undefined;
 		}
-		return this.edit.get(workspaceDocument.id.toUri()).map(toInternalTextEdit);
+		if (workspaceDocument.kind === 'textDocument') {
+			return edit.get(workspaceDocument.id.toUri()).map(e => toInternalTextEdit(e.range, e.newText));
+		} else if (workspaceDocument.kind === 'notebookDocument') {
+			const edits = coalesce(workspaceDocument.notebook.getCells().flatMap(cell => {
+				return edit.get(cell.document.uri).map(e => {
+					const range = workspaceDocument.toRange(cell.document, e.range);
+					return range ? toInternalTextEdit(range, e.newText) : undefined;
+				});
+			}));
+			return edits.length ? edits : undefined;
+		}
 	}
 
 	getDiagnosticsReferencedInCommand(): Diagnostic[] {
@@ -377,8 +389,8 @@ export function toExternalPosition(position: Position): vscode.Position {
 	return new vscode.Position(position.lineNumber - 1, position.column - 1);
 }
 
-export function toInternalTextEdit(edit: vscode.TextEdit): TextReplacement {
-	return new TextReplacement(toInternalRange(edit.range), edit.newText);
+export function toInternalTextEdit(range: vscode.Range, newText: string): TextReplacement {
+	return new TextReplacement(toInternalRange(range), newText);
 }
 
 export function toExternalTextEdit(edit: TextReplacement): vscode.TextEdit {

@@ -2993,7 +2993,8 @@
 				},
 				{
 					"command": "github.copilot.debug.showChatLogView",
-					"when": "view == workbench.panel.chat.view.copilot"
+					"when": "view == workbench.panel.chat.view.copilot",
+					"group": "3_show"
 				}
 			],
 			"view/item/context": [
