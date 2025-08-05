@@ -51,8 +51,6 @@ export class Image extends PromptElement<ImageProps, unknown> {
 
 			if (this.props.url) {
 				decoded = this.props.url;
-				console.log(this.props.url);
-
 			}
 
 			return (
