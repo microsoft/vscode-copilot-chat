@@ -210,10 +210,10 @@ export class RunNotebookCellTool implements ICopilotTool<IRunNotebookCellToolPar
 
 		const cellContent = this.formatRunMessage(cell, reason);
 		const disclaimerText = `$(info) ` + l10n.t('Cell execution output may contain malicious code or attempt prompt injection attacks.');
-		
+
 		// Prepend disclaimer to the cell content
-		const messageWithDisclaimer = new MarkdownString(`${disclaimerText}\n\n${cellContent.value}`, { supportThemeIcons: true });
-		
+		const messageWithDisclaimer = new MarkdownString(`${disclaimerText}\n\n${cellContent.value}`, true);
+
 		const confirmationMessages = {
 			title: l10n.t`Run Notebook Cell`,
 			message: messageWithDisclaimer,
