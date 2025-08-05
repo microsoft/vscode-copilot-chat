@@ -185,7 +185,7 @@ Use the `chat.mcp.autostart:newAndOutdated` setting to control this behavior. Yo
 
 ![Screenshot showing the hover of the refresh MCP server icon, enabling you to configure the auto-start behavior.](https://code.visualstudio.com/assets/updates/1_103/mcp-refresh-tip.png)
 
-The first time an MCP server is started after being updated or changed, we now show a dialog asking you to trust the server. Giving trust to these servers is particularly important with autostart turned on to running undesirable commands unknowingly.
+The first time an MCP server is started after being updated or changed, we now show a dialog asking you to trust the server. Giving trust to these servers is particularly important with autostart turned on to prevent running undesirable commands unknowingly.
 
 Learn more about [using MCP servers in VS Code](https://code.visualstudio.com/docs/copilot/chat/mcp-servers) in our documentation.
 
