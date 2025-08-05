@@ -22,6 +22,7 @@ import { IExtensionContribution } from '../../common/contributions';
 const showHtmlCommand = 'vscode.copilot.chat.showRequestHtmlItem';
 const exportLogItemCommand = 'github.copilot.chat.debug.exportLogItem';
 const exportPromptArchiveCommand = 'github.copilot.chat.debug.exportPromptArchive';
+const saveCurrentMarkdownCommand = 'github.copilot.chat.debug.saveCurrentMarkdown';
 
 export class RequestLogTree extends Disposable implements IExtensionContribution {
 	readonly id = 'requestLogTree';
@@ -130,6 +131,55 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				}
 			} catch (error) {
 				vscode.window.showErrorMessage(`Failed to export log entry: ${error}`);
+			}
+		}));
+
+		// Save the currently opened chat log (ccreq:*.copilotmd) to a file
+		this._register(vscode.commands.registerCommand(saveCurrentMarkdownCommand, async () => {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor) {
+				return;
+			}
+
+			const { document } = editor;
+			if (document.uri.scheme !== ChatRequestScheme.chatRequestScheme) {
+				return;
+			}
+
+			// Determine a default filename from the virtual URI
+			const parsed = ChatRequestScheme.parseUri(document.uri.toString());
+			const defaultBase = parsed && parsed.kind === 'request' ? parsed.id : 'latestrequest';
+			const defaultFilename = `${defaultBase}.copilotmd`;
+
+			const saveUri = await vscode.window.showSaveDialog({
+				defaultUri: vscode.Uri.file(path.join(os.homedir(), defaultFilename)),
+				filters: {
+					'Copilot Markdown': ['copilotmd'],
+					'Markdown': ['md'],
+					'All Files': ['*']
+				},
+				title: 'Save Markdown As'
+			});
+
+			if (!saveUri) {
+				return;
+			}
+
+			try {
+				const content = document.getText();
+				await vscode.workspace.fs.writeFile(saveUri, Buffer.from(content, 'utf8'));
+
+				const openAction = 'Open File';
+				const result = await vscode.window.showInformationMessage(
+					`Successfully saved to ${saveUri.fsPath}`,
+					openAction
+				);
+
+				if (result === openAction) {
+					await vscode.commands.executeCommand('vscode.open', saveUri);
+				}
+			} catch (error) {
+				vscode.window.showErrorMessage(`Failed to save markdown: ${error}`);
 			}
 		}));
 
