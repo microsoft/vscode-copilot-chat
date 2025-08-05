@@ -20,7 +20,7 @@ import { NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDo
 import { ChainedStatelessNextEditProvider, IgnoreTriviaWhitespaceChangesAspect } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
 import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
-import { ContextItem, ContextKind } from '../../../platform/languageServer/common/languageContextService';
+import { ContextKind, SnippetContext } from '../../../platform/languageServer/common/languageContextService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { OptionalChatRequestParams, Prediction } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
@@ -376,20 +376,17 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 				source: 'nes',
 			};
 
-			const isSnippetIgnored = async (item: ContextItem): Promise<boolean> => {
-				if (item.kind === ContextKind.Snippet && item.additionalUris) {
-					const isIgnored = await raceFilter(item.additionalUris.map(uri => this.ignoreService.isCopilotIgnored(uri)), r => r);
-					return !!isIgnored;
-				} else {
-					return false;
-				}
+			const isSnippetIgnored = async (item: SnippetContext): Promise<boolean> => {
+				const uris = [item.uri, ...(item.additionalUris ?? [])];
+				const isIgnored = await raceFilter(uris.map(uri => this.ignoreService.isCopilotIgnored(uri)), r => r);
+				return !!isIgnored;
 			};
 
 			const langCtxItems: LanguageContextEntry[] = [];
 			const getContextPromise = async () => {
 				const ctxIter = this.langCtxService.getContextItems(textDoc, ctxRequest, cancellationToken);
 				for await (const item of ctxIter) {
-					if (await isSnippetIgnored(item)) {
+					if (item.kind === ContextKind.Snippet && await isSnippetIgnored(item)) {
 						// If the snippet is ignored, we don't want to include it in the context
 						continue;
 					}
@@ -402,12 +399,12 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 			const end = Date.now();
 
 			const langCtxOnTimeout = this.langCtxService.getContextItemsOnTimeout(textDoc, ctxRequest);
-			for (const context of langCtxOnTimeout) {
-				if (await isSnippetIgnored(context)) {
+			for (const item of langCtxOnTimeout) {
+				if (item.kind === ContextKind.Snippet && await isSnippetIgnored(item)) {
 					// If the snippet is ignored, we don't want to include it in the context
 					continue;
 				}
-				langCtxItems.push({ context, timeStamp: end, onTimeout: true });
+				langCtxItems.push({ context: item, timeStamp: end, onTimeout: true });
 			}
 
 			return { start, end, items: langCtxItems };
