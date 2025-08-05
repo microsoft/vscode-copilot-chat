@@ -13,7 +13,6 @@ import { ObservableGit } from '../../../../platform/inlineEdits/common/observabl
 import { IObservableDocument } from '../../../../platform/inlineEdits/common/observableWorkspace';
 import { autorunWithChanges } from '../../../../platform/inlineEdits/common/utils/observable';
 import { WorkspaceDocumentEditHistory } from '../../../../platform/inlineEdits/common/workspaceEditTracker/workspaceDocumentEditTracker';
-import { ILanguageDiagnosticsService } from '../../../../platform/languages/common/languageDiagnosticsService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { ITabsAndEditorsService } from '../../../../platform/tabs/common/tabsAndEditorsService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -25,7 +24,7 @@ import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/
 import { BugIndicatingError } from '../../../../util/vs/base/common/errors';
 import { Emitter } from '../../../../util/vs/base/common/event';
 import { Disposable, DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { autorun, derived, IObservable } from '../../../../util/vs/base/common/observableInternal';
+import { autorun, derived, IObservable, runOnChange } from '../../../../util/vs/base/common/observableInternal';
 import { isEqual } from '../../../../util/vs/base/common/resources';
 import { StringEdit } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { Position } from '../../../../util/vs/editor/common/core/position';
@@ -198,7 +197,6 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 		@IWorkspaceService workspaceService: IWorkspaceService,
 		@IFileSystemService fileSystemService: IFileSystemService,
 		@ITabsAndEditorsService private readonly _tabsAndEditorsService: ITabsAndEditorsService,
-		@ILanguageDiagnosticsService private readonly _languageDiagnosticsService: ILanguageDiagnosticsService
 	) {
 		super();
 
@@ -226,27 +224,22 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 
 		this._rejectionCollector = new RejectionCollector(this._workspace, s => this._tracer.trace(s));
 
-		this._register(this._languageDiagnosticsService.onDidChangeDiagnostics(async e => {
+		this._register(autorun(reader => {
+			const activeDocument = this._workspace.lastActiveDocument.read(reader);
+			if (!activeDocument) { return; }
+
 			const activeEditor = this._tabsAndEditorsService.activeTextEditor;
-			if (!activeEditor || !isEditorFromEditorGrid(activeEditor)) {
+			if (!activeEditor || !isEditorFromEditorGrid(activeEditor) || !isEqual(activeDocument.id.toUri(), activeEditor.document.uri)) {
 				return;
 			}
 
-			const diagnosticsChangedForActiveEditor = e.uris.some(uri => isEqual(uri, activeEditor.document.uri));
-			if (!diagnosticsChangedForActiveEditor) {
-				return;
-			}
-
+			// update state because document changed
 			this._updateState();
-		}));
 
-		this._register(this._tabsAndEditorsService.onDidChangeActiveTextEditor(async e => {
-			const activeEditor = e;
-			if (!activeEditor || !isEditorFromEditorGrid(activeEditor)) {
-				return;
-			}
-
-			this._updateState();
+			// update state because diagnostics changed
+			reader.store.add(runOnChange(activeDocument.diagnostics, () => {
+				this._updateState();
+			}));
 		}));
 
 		this._register(vscode.window.onDidChangeTextEditorSelection(async e => {
@@ -308,16 +301,9 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 	}
 
 	private _getDiagnostics(workspaceDocument: IVSCodeObservableDocument, cursor: Position, logContext: DiagnosticInlineEditRequestLogContext): { availableDiagnostics: Diagnostic[]; relevantDiagnostics: Diagnostic[] } {
-		const diagnostics = workspaceDocument.kind === 'textDocument' ?
-			this._languageDiagnosticsService
-				.getDiagnostics(workspaceDocument.textDocument.uri) :
-			workspaceDocument.notebook.getCells().flatMap(cell => this._languageDiagnosticsService
-				.getDiagnostics(cell.document.uri)
-				.flatMap(diagnostic => workspaceDocument.projectDiagnostics(cell.document, [diagnostic])));
-		const availableDiagnostics = diagnostics
-			.map(diagnostic => Diagnostic.fromVSCodeDiagnostic(diagnostic))
-			.filter(diagnostic => diagnostic.severity !== DiagnosticSeverity.Information)
-			.filter(diagnostic => diagnostic.severity !== DiagnosticSeverity.Hint);
+		const transformer = workspaceDocument.value.get().getTransformer();
+		const diagnostics = workspaceDocument.diagnostics.get();
+		const availableDiagnostics = diagnostics.map(d => new Diagnostic(d.message, d.severity === 'error' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning, transformer.getRange(d.range), d.code));
 
 		if (availableDiagnostics.length === 0) {
 			return { availableDiagnostics: [], relevantDiagnostics: [] };

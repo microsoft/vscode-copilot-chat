@@ -310,7 +310,8 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 			doc.textDocument.uri,
 			diagnostic.message,
 			diagnostic.severity === DiagnosticSeverity.Error ? 'error' : 'warning',
-			range
+			range,
+			diagnostic.code && !(typeof diagnostic.code === 'number') && !(typeof diagnostic.code === 'string') ? diagnostic.code.value : diagnostic.code,
 		);
 		return diag;
 	}
@@ -332,7 +333,8 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 			altNotebook.notebook.uri,
 			diagnostic.message,
 			diagnostic.severity === DiagnosticSeverity.Error ? 'error' : 'warning',
-			offsetRanges[0]
+			offsetRanges[0],
+			diagnostic.code && !(typeof diagnostic.code === 'number') && !(typeof diagnostic.code === 'string') ? diagnostic.code.value : diagnostic.code,
 		);
 		return diag;
 	}

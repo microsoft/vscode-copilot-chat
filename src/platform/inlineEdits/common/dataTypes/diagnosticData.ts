@@ -12,6 +12,7 @@ export class DiagnosticData {
 		public readonly message: string,
 		public readonly severity: 'error' | 'warning',
 		public readonly range: OffsetRange,
+		public readonly code: string | number | undefined,
 	) { }
 
 	public toString(): string {
