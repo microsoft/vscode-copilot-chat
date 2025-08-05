@@ -228,10 +228,8 @@ export class Diagnostic {
 		return new Diagnostic(
 			diagnostic.message,
 			DiagnosticSeverity.fromVSCode(diagnostic.severity),
-			diagnostic.source,
 			toInternalRange(diagnostic.range),
 			diagnostic.code && !(typeof diagnostic.code === 'number') && !(typeof diagnostic.code === 'string') ? diagnostic.code.value : diagnostic.code,
-			diagnostic,
 		);
 	}
 
@@ -248,20 +246,17 @@ export class Diagnostic {
 		return this._isValid;
 	}
 
-	private constructor(
+	constructor(
 		public readonly message: string,
 		public readonly severity: DiagnosticSeverity,
-		public readonly source: string | undefined,
 		private _range: Range,
 		public readonly code: string | number | undefined,
-		public readonly reference: vscode.Diagnostic
 	) { }
 
 	equals(other: Diagnostic): boolean {
 		return this.code === other.code
 			&& this.isValid() === other.isValid()
 			&& this.severity === other.severity
-			&& this.source === other.source
 			&& this.message === other.message
 			&& Range.equalsRange(this._range, other._range);
 	}
