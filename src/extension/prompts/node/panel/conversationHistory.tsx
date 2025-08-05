@@ -87,11 +87,7 @@ export class ConversationHistory extends PromptElement<ConversationHistoryProps>
 				history.push(<ChatVariablesAndQuery priority={900} chatVariables={promptVariables} query={turn.request.message} omitReferences={true} embeddedInsideUserMessage={false} />);
 			}
 			if (turn.responseMessage?.type === 'model' && ![TurnStatus.OffTopic, TurnStatus.Filtered].includes(turn.responseStatus)) {
-				history.push(
-					<AssistantMessage name={turn.responseMessage.name}>
-						{turn.responseMessage.message}
-					</AssistantMessage>
-				);
+				history.push(<AssistantMessage name={turn.responseMessage.name}>{turn.responseMessage.message}</AssistantMessage>);
 			}
 		});
 
@@ -176,9 +172,7 @@ export class ConversationHistoryWithTools extends PromptElement<ConversationHist
 					isHistorical={!(toolCallResultInNextTurn && i === contextHistory.length - 1)}
 				/>);
 			} else if (turn.responseMessage) {
-				history.push(
-					<AssistantMessage>{turn.responseMessage?.message ?? ''}</AssistantMessage>
-				);
+				history.push(<AssistantMessage>{turn.responseMessage?.message}</AssistantMessage>);
 			}
 		}
 
