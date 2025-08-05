@@ -25,6 +25,7 @@
   * [API updates](#api-updates)
     * [Making breaking changes to API](#making-breaking-changes-to-api)
     * [Making additive changes to API](#making-additive-changes-to-api)
+  * [Running with Code OSS](#running-with-code-oss)
 
 # Creating good issues
 
@@ -330,3 +331,73 @@ Examples of additive changes
 - Adding a new response type to `ChatResponseStream`
 - Adding a new API proposal
 - Adding a new method to an existing interface
+
+## Running with Code OSS
+
+You can run the extension from Code OSS, provided that you follow along these steps:
+- Create a top level `product.overrides.json` in the `vscode` repository
+- Add below contents as JSON
+- Run the extension launch configuration in Code OSS
+
+```json
+{
+   "defaultChatAgent": {
+      "extensionId": "GitHub.copilot",
+      "chatExtensionId": "GitHub.copilot-chat",
+      "documentationUrl": "https://aka.ms/github-copilot-overview",
+      "termsStatementUrl": "https://aka.ms/github-copilot-terms-statement",
+      "privacyStatementUrl": "https://aka.ms/github-copilot-privacy-statement",
+      "skusDocumentationUrl": "https://aka.ms/github-copilot-plans",
+      "publicCodeMatchesUrl": "https://aka.ms/github-copilot-match-public-code",
+      "manageSettingsUrl": "https://aka.ms/github-copilot-settings",
+      "managePlanUrl": "https://aka.ms/github-copilot-manage-plan",
+      "manageOverageUrl": "https://aka.ms/github-copilot-manage-overage",
+      "upgradePlanUrl": "https://aka.ms/github-copilot-upgrade-plan",
+      "signUpUrl": "https://aka.ms/github-sign-up",
+      "provider": {
+         "default": {
+            "id": "github",
+            "name": "GitHub"
+         },
+         "enterprise": {
+            "id": "github-enterprise",
+            "name": "GHE.com"
+         },
+         "google": {
+            "id": "google",
+            "name": "Google"
+         },
+         "apple": {
+            "id": "apple",
+            "name": "Apple"
+         }
+      },
+      "providerUriSetting": "github-enterprise.uri",
+      "providerScopes": [
+         [
+            "user:email"
+         ],
+         [
+            "read:user"
+         ],
+         [
+            "read:user",
+            "user:email",
+            "repo",
+            "workflow"
+         ]
+      ],
+      "entitlementUrl": "https://api.github.com/copilot_internal/user",
+      "entitlementSignupLimitedUrl": "https://api.github.com/copilot_internal/subscribe_limited_user",
+      "chatQuotaExceededContext": "github.copilot.chat.quotaExceeded",
+      "completionsQuotaExceededContext": "github.copilot.completions.quotaExceeded",
+      "walkthroughCommand": "github.copilot.open.walkthrough",
+      "completionsMenuCommand": "github.copilot.toggleStatusMenu",
+      "completionsRefreshTokenCommand": "github.copilot.signIn",
+      "chatRefreshTokenCommand": "github.copilot.refreshToken",
+      "completionsAdvancedSetting": "github.copilot.advanced",
+      "completionsEnablementSetting": "github.copilot.enable",
+      "nextEditSuggestionsSetting": "github.copilot.nextEditSuggestions.enabled"
+   }
+}
+```
