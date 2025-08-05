@@ -87,19 +87,9 @@ export class ConversationHistory extends PromptElement<ConversationHistoryProps>
 				history.push(<ChatVariablesAndQuery priority={900} chatVariables={promptVariables} query={turn.request.message} omitReferences={true} embeddedInsideUserMessage={false} />);
 			}
 			if (turn.responseMessage?.type === 'model' && ![TurnStatus.OffTopic, TurnStatus.Filtered].includes(turn.responseStatus)) {
-				// Get token usage + context window from ChatResult metadata injected by request handler.
-				// Fall back to raw usage/modelMaxPromptTokens when absent (older turns).
-				const meta = turn.resultMetadata as any;
-				const tokenCount = meta?.tokenCount ?? meta?.usage?.total_tokens;
-				const contextWindow = meta?.contextWindow ?? meta?.modelMaxPromptTokens;
-				const showTokenInfo = typeof tokenCount === 'number' && typeof contextWindow === 'number';
-				let message = turn.responseMessage.message;
-				if (showTokenInfo) {
-					message += `\n\n_Tokens used: ${tokenCount} / ${contextWindow}_`;
-				}
 				history.push(
 					<AssistantMessage name={turn.responseMessage.name}>
-						{message}
+						{turn.responseMessage.message}
 					</AssistantMessage>
 				);
 			}
@@ -186,17 +176,8 @@ export class ConversationHistoryWithTools extends PromptElement<ConversationHist
 					isHistorical={!(toolCallResultInNextTurn && i === contextHistory.length - 1)}
 				/>);
 			} else if (turn.responseMessage) {
-				// Render token info in footer details if available (tokenCount/contextWindow injected in metadata)
-				const metaAny = metadata as any;
-				const tokenCount = metaAny?.tokenCount ?? metaAny?.usage?.total_tokens;
-				const contextWindow = metaAny?.contextWindow ?? metaAny?.modelMaxPromptTokens;
-				const showTokenInfo = typeof tokenCount === 'number' && typeof contextWindow === 'number';
-				let message = turn.responseMessage?.message ?? '';
-				if (showTokenInfo) {
-					message += `\n\n_Tokens used: ${tokenCount} / ${contextWindow}_`;
-				}
 				history.push(
-					<AssistantMessage>{message}</AssistantMessage>
+					<AssistantMessage>{turn.responseMessage?.message ?? ''}</AssistantMessage>
 				);
 			}
 		}

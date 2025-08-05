@@ -153,10 +153,17 @@ export class DefaultIntentRequestHandler {
 				const lastMsgs = resultDetails.lastRequestMessages ?? [];
 				const tokenCount = await tokenizer.countMessagesTokens(lastMsgs);
 				const contextWindow = ep.modelMaxPromptTokens;
-				// Merge into metadata; preserve any existing metadata fields.
+
+				// Merge into metadata with structured token usage information
 				const existingMeta: any = chatResult.metadata ?? {};
+				const tokenUsage = typeof tokenCount === 'number' && typeof contextWindow === 'number' ? {
+					promptTokens: tokenCount,
+					totalTokens: tokenCount, // For now, only tracking prompt tokens
+					contextWindow: contextWindow
+				} : undefined;
+
 				// chatResult.metadata is read-only in the ChatResult type, so build a new object.
-				chatResult = { ...chatResult, metadata: { ...existingMeta, tokenCount, contextWindow } };
+				chatResult = { ...chatResult, metadata: { ...existingMeta, tokenCount, contextWindow, tokenUsage } };
 			} catch {
 				// ignore token counting failures; metadata will simply omit token info
 			}

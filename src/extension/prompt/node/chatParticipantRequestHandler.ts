@@ -256,7 +256,14 @@ export class ChatParticipantRequestHandler {
 
 				result = await chatResult;
 				const endpoint = await this._endpointProvider.getChatEndpoint(this.request);
-				result.details = `${endpoint.name} • ${endpoint.multiplier ?? 0}x`;
+
+				// Build details string with model info and token usage if available
+				let details = `${endpoint.name} • ${endpoint.multiplier ?? 0}x`;
+				if (result.metadata?.tokenUsage) {
+					const { totalTokens, contextWindow } = result.metadata.tokenUsage;
+					details += ` • ${totalTokens}/${contextWindow} tokens`;
+				}
+				result.details = details;
 			}
 
 			this._conversationStore.addConversation(this.turn.id, this.conversation);
