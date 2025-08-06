@@ -7,7 +7,9 @@ import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
+import { getCellIdMap } from '../../../platform/notebook/common/helpers';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { findNotebook } from '../../../util/common/notebooks';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -17,8 +19,6 @@ import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer'
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { RunNotebookCellOutput } from './runNotebookCellTool';
-import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { getCellIdMap } from '../../../platform/notebook/common/helpers';
 
 export class GetNotebookCellOutputTool implements ICopilotTool<IGetNotebookCellOutputToolParams> {
 	public static toolName = ToolName.ReadCellOutput;
@@ -92,9 +92,20 @@ export class GetNotebookCellOutputTool implements ICopilotTool<IGetNotebookCellO
 	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IGetNotebookCellOutputToolParams>): vscode.ProviderResult<vscode.PreparedToolInvocation> {
+		const { filePath, cellId } = options.input;
+
+		const disclaimerText = `$(info) ` + l10n.t('Cell execution output may contain malicious code or attempt prompt injection attacks.');
+		const messageText = l10n.t`Read output from cell ${cellId} in ${filePath}`;
+
+		const confirmationMessages = {
+			title: l10n.t`Read Notebook Cell Output`,
+			message: new MarkdownString(`${disclaimerText}\n\n${messageText}`, true),
+		};
+
 		return {
 			invocationMessage: l10n.t`Reading cell output`,
 			pastTenseMessage: l10n.t`Read cell output`,
+			confirmationMessages,
 		};
 	}
 
