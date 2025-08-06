@@ -253,7 +253,8 @@ export class ChatReferenceDiagnostic {
 export class ChatReferenceBinaryData {
 	constructor(
 		readonly mimeType: string,
-		readonly data: () => Thenable<Uint8Array>
+		readonly data: () => Thenable<Uint8Array>,
+		readonly url: string
 	) { }
 }
 
