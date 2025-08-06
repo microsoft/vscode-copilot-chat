@@ -37,6 +37,26 @@ for arg in "$@"; do
     esac
 done
 
+# Check if Git LFS is configured in the repository
+is_git_lfs_configured() {
+    # Method 1: Check for .gitattributes with LFS filters
+    if [ -f ".gitattributes" ] && grep -q "filter=lfs" ".gitattributes"; then
+        return 0  # true in bash
+    fi
+
+    # Method 2: Check if any LFS pointers exist in the repo
+    if git lfs ls-files 2>/dev/null | grep -q .; then
+        return 0  # true
+    fi
+
+    # Method 3: Check Git config for LFS settings
+    if git config --local --get-regexp "lfs" | grep -q .; then
+        return 0  # true
+    fi
+
+    return 1  # false in bash
+}
+
 # Validate environment
 validate_environment() {
     # Check if we're in a git repository
@@ -57,6 +77,18 @@ validate_environment() {
         if [ "$AUTO_MODE" = false ]; then
             read -p "Continue anyway? (y/N): " confirm
             [[ "$confirm" == [yY] ]] || exit 0
+        fi
+    fi
+
+    # Check if Git LFS is actually configured in this repository
+    if ! is_git_lfs_configured; then
+        echo "Warning: Git LFS does not appear to be configured in this repository"
+        if [ "$AUTO_MODE" = false ]; then
+            read -p "Continue anyway? (y/N): " confirm
+            [[ "$confirm" == [yY] ]] || exit 0
+        else
+            echo "Skipping hook modifications as Git LFS is not configured"
+            exit 0
         fi
     fi
 }
