@@ -500,11 +500,7 @@ interface IDefaultToolLoopOptions extends IToolCallingLoopOptions {
 
 class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 	public telemetry!: ChatTelemetry;
-	/**
-	 * todo@connor4312: we don't have a good representation of chat sessions yet.
-	 * For now global state trimmed occasionally via LRU is... fine. But not ideal.
-	 */
-	private static toolGrouping?: IToolGrouping;
+	private toolGrouping?: IToolGrouping;
 
 	constructor(
 		options: IDefaultToolLoopOptions,
@@ -524,7 +520,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 
 		this._register(this.onDidBuildPrompt(({ result, tools, promptTokenLength }) => {
 			if (result.metadata.get(SummarizedConversationHistoryMetadata)) {
-				DefaultToolCallingLoop.toolGrouping?.didInvalidateCache();
+				this.toolGrouping?.didInvalidateCache();
 			}
 
 			this.telemetry = telemetryBuilder.makeRequest(
@@ -541,7 +537,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		}));
 
 		this._register(this.onDidReceiveResponse(() => {
-			DefaultToolCallingLoop.toolGrouping?.didTakeTurn();
+			this.toolGrouping?.didTakeTurn();
 		}));
 	}
 
@@ -564,7 +560,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 	private async _doMirroredCallWithVirtualTools(delta: IResponseDelta, messages: Raw.ChatMessage[], requestOptions: OptionalChatRequestParams) {
 		const shouldDo = !this._didParallelToolCallLoop
 			&& this._copilotTokenStore.copilotToken?.isInternal
-			&& !DefaultToolCallingLoop.toolGrouping?.isEnabled;
+			&& !this.toolGrouping?.isEnabled;
 		if (!shouldDo) {
 			return;
 		}
@@ -581,7 +577,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 
 		const token = CancellationToken.None;
 		const allTools = await this.options.invocation.getAvailableTools?.() ?? [];
-		const grouping = this.toolGroupingService.create(allTools);
+		const grouping = this.toolGroupingService.create(this.options.conversation.sessionId, allTools);
 		const computed = await grouping.compute(token);
 
 		const container = grouping.getContainerFor(candidateCall.name);
@@ -641,7 +637,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 	}
 
 	private _handleVirtualCalls(context: Mutable<IBuildPromptContext>) {
-		if (!DefaultToolCallingLoop.toolGrouping) {
+		if (!this.toolGrouping) {
 			return;
 		}
 
@@ -649,7 +645,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 			if (context.toolCallResults?.[call.id]) {
 				continue;
 			}
-			const expanded = DefaultToolCallingLoop.toolGrouping.didCall(context.toolCallRounds!.length, call.name);
+			const expanded = this.toolGrouping.didCall(context.toolCallRounds!.length, call.name);
 			if (expanded) {
 				context.toolCallResults ??= {};
 				context.toolCallResults[call.id] = expanded;
@@ -696,17 +692,17 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 
 	protected override async getAvailableTools(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<LanguageModelToolInformation[]> {
 		const tools = await this.options.invocation.getAvailableTools?.() ?? [];
-		if (DefaultToolCallingLoop.toolGrouping) {
-			DefaultToolCallingLoop.toolGrouping.tools = tools;
+		if (this.toolGrouping) {
+			this.toolGrouping.tools = tools;
 		} else {
-			DefaultToolCallingLoop.toolGrouping = this.toolGroupingService.create(tools);
+			this.toolGrouping = this.toolGroupingService.create(this.options.conversation.sessionId, tools);
 		}
 
-		if (!DefaultToolCallingLoop.toolGrouping.isEnabled) {
+		if (!this.toolGrouping.isEnabled) {
 			return tools;
 		}
 
-		const computePromise = DefaultToolCallingLoop.toolGrouping.compute(token);
+		const computePromise = this.toolGrouping.compute(token);
 
 		// Show progress if this takes a moment...
 		const timeout = setTimeout(() => {
