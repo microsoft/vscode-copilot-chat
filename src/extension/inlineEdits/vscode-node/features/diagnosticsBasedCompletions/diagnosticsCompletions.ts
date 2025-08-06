@@ -232,7 +232,6 @@ export class Diagnostic {
 			diagnostic.source,
 			toInternalRange(diagnostic.range),
 			diagnostic.code && !(typeof diagnostic.code === 'number') && !(typeof diagnostic.code === 'string') ? diagnostic.code.value : diagnostic.code,
-			diagnostic,
 		);
 	}
 
@@ -255,7 +254,6 @@ export class Diagnostic {
 		public readonly source: string | undefined,
 		private _range: Range,
 		public readonly code: string | number | undefined,
-		public readonly reference: vscode.Diagnostic
 	) { }
 
 	equals(other: Diagnostic): boolean {
@@ -288,9 +286,6 @@ export class CodeAction {
 			action.diagnostics?.map(diagnostic => Diagnostic.fromVSCodeDiagnostic(diagnostic)) ?? [],
 			action.edit,
 			action.command,
-			action.kind,
-			action.isPreferred,
-			action.disabled
 		);
 	}
 
@@ -298,18 +293,11 @@ export class CodeAction {
 		public readonly title: string,
 		public readonly diagnostics: Diagnostic[],
 		private readonly edit?: vscode.WorkspaceEdit,
-		public readonly command?: vscode.Command,
-		protected readonly kind?: vscode.CodeActionKind,
-		public readonly isPreferred?: boolean,
-		public readonly disabled?: { readonly reason: string }
+		private readonly command?: vscode.Command,
 	) { }
 
 	toString(): string {
 		return this.title;
-	}
-
-	hasEdit(): boolean {
-		return this.edit !== undefined;
 	}
 
 	getEditForWorkspaceDocument(workspaceDocument: IVSCodeObservableDocument): TextReplacement[] | undefined {

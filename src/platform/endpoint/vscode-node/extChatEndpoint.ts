@@ -256,6 +256,19 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 						const decoded = decodeStatefulMarker(chunk.data);
 						await finishedCb?.(text, 0, { text: '', statefulMarker: decoded.marker });
 					}
+				} else if (chunk instanceof vscode.LanguageModelThinkingPart) {
+					text += chunk.value;
+					// Call finishedCb with the current chunk of thinking text with a specific thinking field
+					if (finishedCb) {
+						await finishedCb(text, 0, {
+							text: '',  // Use empty text to avoid creating markdown part
+							thinking: {
+								text: chunk.value,
+								id: chunk.id || '',
+								metadata: chunk.metadata
+							}
+						});
+					}
 				}
 			}
 
