@@ -14,6 +14,8 @@ import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } fro
 import { AutoChatEndpoint, isAutoModeEnabled } from '../../../platform/endpoint/common/autoChatEndpoint';
 import { IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
+import { encodeStatefulMarker } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -428,6 +430,14 @@ export class CopilotLanguageModelWrapper extends Disposable {
 				// @karthiknadig: remove this when LM API becomes available
 				this._thinkingDataService.update(index, delta.thinking);
 			}
+
+			if (delta.statefulMarker) {
+				progress.report({
+					index,
+					part: new vscode.LanguageModelDataPart(encodeStatefulMarker(endpoint.model, delta.statefulMarker), CustomDataPartMimeTypes.StatefulMarker)
+				});
+			}
+
 			return undefined;
 		};
 		return this._provideLanguageModelResponse(endpoint, messages, options, extensionId, finishCallback, token);

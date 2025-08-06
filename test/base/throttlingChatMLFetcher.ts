@@ -2,15 +2,11 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
 import { AbstractChatMLFetcher } from '../../src/extension/prompt/node/chatMLFetcher';
-import { IChatMLFetcher, IntentParams, Source } from '../../src/platform/chat/common/chatMLFetcher';
-import { ChatFetchResponseType, ChatLocation, ChatResponses } from '../../src/platform/chat/common/commonTypes';
+import { IChatMLFetcher, IFetchMLOptions } from '../../src/platform/chat/common/chatMLFetcher';
+import { ChatFetchResponseType, ChatResponses } from '../../src/platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../src/platform/chat/common/conversationOptions';
-import { FinishedCallback, OptionalChatRequestParams } from '../../src/platform/networking/common/fetch';
-import { IChatEndpoint } from '../../src/platform/networking/common/networking';
-import { TelemetryProperties } from '../../src/platform/telemetry/common/telemetry';
 import { IThrottledWorkerOptions } from '../../src/util/vs/base/common/async';
 import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
@@ -177,38 +173,14 @@ export class ThrottlingChatMLFetcher extends AbstractChatMLFetcher {
 		this._fetcher = instantiationService.createInstance(fetcherDescriptor);
 	}
 
-	override async fetchMany(
-		debugName: string,
-		messages: Raw.ChatMessage[],
-		finishedCb: FinishedCallback | undefined,
-		token: CancellationToken,
-		location: ChatLocation,
-		endpoint: IChatEndpoint,
-		source: Source | undefined,
-		requestOptions: OptionalChatRequestParams,
-		userInitiatedRequest?: boolean,
-		telemetryProperties?: TelemetryProperties | undefined,
-		intentParams?: IntentParams | undefined
-	): Promise<ChatResponses> {
-		const taskLauncher = this._modelTaskLaunchers.getThrottler(endpoint.model);
+	override async fetchMany(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponses> {
+		const taskLauncher = this._modelTaskLaunchers.getThrottler(opts.endpoint.model);
 
 		return new Promise<ChatResponses>((resolve, reject) => {
 			taskLauncher.work([async () => {
 				try {
-					const result = await this._modelTaskLaunchers.executeWithRateLimitHandling(endpoint.model, () =>
-						this._fetcher.fetchMany(
-							debugName,
-							messages,
-							finishedCb,
-							token,
-							location,
-							endpoint,
-							source,
-							requestOptions,
-							userInitiatedRequest,
-							telemetryProperties,
-							intentParams
-						)
+					const result = await this._modelTaskLaunchers.executeWithRateLimitHandling(opts.endpoint.model, () =>
+						this._fetcher.fetchMany(opts, token)
 					);
 					resolve(result);
 				} catch (error) {

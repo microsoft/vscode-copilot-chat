@@ -220,7 +220,10 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 			this.configurationService.getConfig<number | undefined>(ConfigKey.Internal.SummarizeAgentConversationHistoryThreshold) ?? this.endpoint.modelMaxPromptTokens,
 			this.endpoint.modelMaxPromptTokens
 		);
-		const safeBudget = Math.floor((baseBudget - toolTokens) * 0.85);
+		const useTruncation = this.configurationService.getConfig(ConfigKey.Internal.UseResponsesApiTruncation);
+		const safeBudget = useTruncation ?
+			Number.MAX_SAFE_INTEGER :
+			Math.floor((baseBudget - toolTokens) * 0.85);
 		const endpoint = toolTokens > 0 ? this.endpoint.cloneWithTokenOverride(safeBudget) : this.endpoint;
 		const summarizationEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.SummarizeAgentConversationHistory, this.experimentationService) && this.prompt === AgentPrompt;
 		this.logService.debug(`AgentIntent: rendering with budget=${safeBudget} (baseBudget: ${baseBudget}, toolTokens: ${toolTokens}), summarizationEnabled=${summarizationEnabled}`);

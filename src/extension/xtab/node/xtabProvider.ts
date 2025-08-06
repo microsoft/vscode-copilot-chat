@@ -804,6 +804,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 			case ChatFetchResponseType.ExtensionBlocked:
 			case ChatFetchResponseType.AgentUnauthorized:
 			case ChatFetchResponseType.AgentFailedDependency:
+			case ChatFetchResponseType.InvalidStatefulMarker:
 				return new NoNextEditReason.Uncategorized(errors.fromUnknown(fetchError));
 			case ChatFetchResponseType.BadRequest:
 			case ChatFetchResponseType.NotFound:

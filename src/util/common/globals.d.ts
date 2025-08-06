@@ -7,6 +7,6 @@ export { };
 
 declare global {
 
-	type TextDecoder = { decode: (input: Uint8Array) => string };
+	type TextDecoder = { decode: (input: Uint8Array, opts?: { stream?: boolean }) => string };
 	type TextEncoder = { encode: (input: string) => Uint8Array };
 }

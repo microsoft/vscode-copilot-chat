@@ -15,7 +15,7 @@ import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession, NullEditSurv
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { HAS_IGNORED_FILES_MESSAGE } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { FinishedCallback, IResponseDelta, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
+import { IResponseDelta, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { FilterReason } from '../../../platform/networking/common/openai';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ISurveyService } from '../../../platform/survey/common/surveyService';
@@ -36,7 +36,7 @@ import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEdi
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
 import { CopilotInteractiveEditorResponse, InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
 import { PauseController } from '../../intents/node/pauseController';
-import { EmptyPromptError, isToolCallLimitCancellation, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
+import { EmptyPromptError, isToolCallLimitCancellation, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallingLoopFetchOptions, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ResponseStreamWithLinkification } from '../../linkify/common/responseStreamWithLinkification';
 import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/summarizedConversationHistory';
@@ -506,6 +506,8 @@ export class DefaultIntentRequestHandler {
 				this.turn.setResponse(TurnStatus.Error, undefined, baseModelTelemetry.properties.messageId, chatResult);
 				return chatResult;
 			}
+			case ChatFetchResponseType.InvalidStatefulMarker:
+				throw new Error('unreachable'); // retried within the endpoint
 		}
 	}
 }
@@ -693,38 +695,35 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		return buildPromptResult;
 	}
 
-	protected override async fetch(messages: Raw.ChatMessage[], finishedCb: FinishedCallback, requestOptions: OptionalChatRequestParams, firstFetchCall: boolean, token: CancellationToken): Promise<ChatResponse> {
+	protected override async fetch(opts: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
 		const messageSourcePrefix = this.options.location === ChatLocation.Editor ? 'inline' : 'chat';
-		return this.options.invocation.endpoint.makeChatRequest(
-			`${ChatLocation.toStringShorter(this.options.location)}/${this.options.intent?.id}`,
-			messages,
-			(text, index, delta) => {
+		return this.options.invocation.endpoint.makeChatRequest2({
+			...opts,
+			debugName: `${ChatLocation.toStringShorter(this.options.location)}/${this.options.intent?.id}`,
+			finishedCb: (text, index, delta) => {
 				this.telemetry.markReceivedToken();
-				this._doMirroredCallWithVirtualTools(delta, messages, requestOptions);
-				return finishedCb(text, index, delta);
+				this._doMirroredCallWithVirtualTools(delta, opts.messages, opts.requestOptions!);
+				return opts.finishedCb!(text, index, delta);
 			},
-			token,
-			this.options.overrideRequestLocation ?? this.options.location,
-			undefined,
-			{
-				...requestOptions,
+			location: this.options.overrideRequestLocation ?? this.options.location,
+			requestOptions: {
+				...opts.requestOptions,
 				tools: normalizeToolSchema(
 					this.options.invocation.endpoint.family,
-					requestOptions.tools,
+					opts.requestOptions.tools,
 					(tool, rule) => {
 						this._logService.warn(`Tool ${tool} failed validation: ${rule}`);
 					},
 				),
 				temperature: this.calculateTemperature(),
 			},
-			firstFetchCall, // The first tool call is user initiated and then the rest are just considered part of the loop
-			{
+			telemetryProperties: {
 				messageId: this.telemetry.telemetryMessageId,
 				conversationId: this.options.conversation.sessionId,
 				messageSource: this.options.intent?.id && this.options.intent.id !== UnknownIntent.ID ? `${messageSourcePrefix}.${this.options.intent.id}` : `${messageSourcePrefix}.user`,
 			},
-			{ intent: true }
-		);
+			intentParams: { intent: true }
+		}, token);
 	}
 
 	protected override async getAvailableTools(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<LanguageModelToolInformation[]> {
