@@ -57,7 +57,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 					</Tag>
 				</>}
 				When reading files, prefer reading large meaningful chunks rather than consecutive small sections to minimize tool calls and gain better context.<br />
-				Don't make assumptions about the situation—gather context first, then perform the task or answer the question.<br />
+				Don't make assumptions about the situation- gather context first, then perform the task or answer the question.<br />
 				{isEnvModelFamily && <>
 					Under-specification policy: If details are missing, infer 1-2 reasonable assumptions from the repository conventions and proceed. Note assumptions briefly and continue; ask only when truly blocked.<br />
 					Proactive extras: After satisfying the explicit ask, implement small, low-risk adjacent improvements that clearly add value (tests, types, docs, wiring). If a follow-up is larger or risky, list it as next steps.<br />
