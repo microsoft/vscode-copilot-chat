@@ -33,5 +33,6 @@
 	"containerUser": "node",
 	"onCreateCommand": {
 		"npmInstall": "npm install || true"
-	}
+	},
+	"postCreateCommand": "bash .devcontainer/fix-lfs-husky-hooks.sh --autoMergeLfsHusky; git lfs pull"
 }
