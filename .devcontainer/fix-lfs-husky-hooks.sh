@@ -100,10 +100,19 @@ merge_hooks() {
             # Extract Husky header (first 2 lines typically)
             HUSKY_HEADER=$(head -n 2 "$HUSKY_DIR/$hook")
 
-            # Create merged hook
+            # Extract existing content after header (preserving custom hook logic)
+            EXISTING_CONTENT=$(tail -n +3 "$HUSKY_DIR/$hook")
+
+            # Create merged hook with: header + LFS hook + existing content
             {
                 echo "$HUSKY_HEADER"
                 echo "$LFS_HOOK"
+                # Only add existing content if it's not empty
+                if [ -n "$EXISTING_CONTENT" ]; then
+                    echo ""  # Add separator line
+                    echo "# Original hook content"
+                    echo "$EXISTING_CONTENT"
+                fi
             } > "$HUSKY_DIR/$hook.new"
 
             # Verify the new file was created successfully
