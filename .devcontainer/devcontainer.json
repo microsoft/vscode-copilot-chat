@@ -34,5 +34,5 @@
 	"onCreateCommand": {
 		"npmInstall": "npm install || true"
 	},
-	"postCreateCommand": "bash .devcontainer/fix-lfs-husky-hooks.sh --autoMergeLfsHusky; git lfs pull"
+	"postCreateCommand": "cd ${containerWorkspaceFolder}; bash .devcontainer/fix-lfs-husky-hooks.sh --autoMergeLfsHusky; git lfs pull"
 }
