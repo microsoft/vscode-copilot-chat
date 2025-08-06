@@ -66,7 +66,7 @@ export interface IToolGroupingService {
 	 * Creates a tool grouping for a request, based on its conversation and the
 	 * initial set of tools.
 	 */
-	create(tools: readonly LanguageModelToolInformation[]): IToolGrouping;
+	create(sessionId: string, tools: readonly LanguageModelToolInformation[]): IToolGrouping;
 }
 
 export const IToolGroupingService = createServiceIdentifier<IToolGroupingService>('IToolGroupingService');
