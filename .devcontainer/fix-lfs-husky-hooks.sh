@@ -99,6 +99,20 @@ validate_environment() {
 
 # Create backup of hooks
 backup_hooks() {
+    # Check if any hook needs modification before creating backup
+    local needs_backup=false
+    for hook in "${HOOKS[@]}"; do
+        if [ -f "$HUSKY_DIR/$hook" ] && ! grep -q "=== BEGIN GIT LFS HOOK" "$HUSKY_DIR/$hook"; then
+            needs_backup=true
+            break
+        fi
+    done
+
+    if [ "$needs_backup" = false ]; then
+        echo "No backup needed - all hooks already configured"
+        return
+    fi
+
     echo "Creating backup of hooks in $BACKUP_DIR"
     mkdir -p "$BACKUP_DIR"
     for hook in "${HOOKS[@]}"; do
