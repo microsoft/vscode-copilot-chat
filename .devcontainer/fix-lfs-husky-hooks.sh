@@ -150,7 +150,7 @@ merge_hooks() {
             fi
 
             # Find the Husky initialization line to extract header and remaining content
-            HEADER_END=$(grep -n '^\. "$(dirname "$0")/h"' "$HUSKY_DIR/$hook" | cut -d: -f1)
+            HEADER_END=$(grep -n '^[[:space:]]*\. "$(dirname "\$0")/h"' "$HUSKY_DIR/$hook" | cut -d: -f1)
             if [ -n "$HEADER_END" ]; then
                 # Extract header (up to and including the initialization line)
                 HUSKY_HEADER=$(head -n "$HEADER_END" "$HUSKY_DIR/$hook")
@@ -187,7 +187,11 @@ merge_hooks() {
 
             # Replace the original with the new version and make executable
             mv "$HUSKY_DIR/$hook.new" "$HUSKY_DIR/$hook"
-            chmod +x "$HUSKY_DIR/$hook"
+
+            if ! chmod +x "$HUSKY_DIR/$hook"; then
+                echo "⚠ Error: Could not make $hook executable"
+                continue
+            fi
             echo "✓ $hook: Successfully merged"
         else
             echo "Creating new hook: $hook"
