@@ -33,7 +33,7 @@ import { IToolsService } from '../common/toolsService';
 import { ActionType } from './applyPatch/parser';
 import { CorrectedEditResult, healReplaceStringParams } from './editFileHealing';
 import { EditFileResult } from './editFileToolResult';
-import { EditError, NoMatchError, applyEdit } from './editFileToolUtils';
+import { EditError, NoChangeError, NoMatchError, applyEdit } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileOkForTool, resolveToolInputPath } from './toolUtils';
 
@@ -249,6 +249,7 @@ export class ReplaceStringTool implements ICopilotTool<IReplaceStringToolParams>
 			let healed: CorrectedEditResult;
 			try {
 				healed = await healReplaceStringParams(
+					options.model,
 					document.getText(),
 					{
 						explanation: options.input.explanation,
@@ -260,6 +261,9 @@ export class ReplaceStringTool implements ICopilotTool<IReplaceStringToolParams>
 					await this.endpointProvider.getChatEndpoint(CHAT_MODEL.GPT4OMINI),
 					token
 				);
+				if (healed.params.oldString === healed.params.newString) {
+					throw new NoChangeError('change was identical after healing', document.uri.fsPath);
+				}
 			} catch (e2) {
 				this.sendHealingTelemetry(options, String(e2), undefined);
 				throw e; // original error
