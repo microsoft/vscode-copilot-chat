@@ -16,7 +16,7 @@ set -eo pipefail
 
 # Configuration
 HUSKY_DIR=".husky/_"
-BACKUP_DIR=".husky/_backups/$(date +%Y%m%d_%H%M%S)"
+BACKUP_DIR="$HUSKY_DIR/_backups/$(date +%Y%m%d_%H%M%S)"
 HOOKS=("pre-push" "post-checkout" "post-commit" "post-merge")
 AUTO_MODE=false
 
