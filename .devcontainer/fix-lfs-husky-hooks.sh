@@ -92,7 +92,7 @@ validate_environment() {
             [[ "$confirm" == [yY] ]] || exit 0
         else
             echo "Skipping hook modifications as Git LFS is not configured"
-            exit 0
+            exit 0  # Changed from exit 2 to exit 0 for DevContainer compatibility
         fi
     fi
 }
@@ -135,11 +135,18 @@ merge_hooks() {
                 continue
             fi
 
-            # Extract Husky header (first 2 lines typically)
-            HUSKY_HEADER=$(head -n 2 "$HUSKY_DIR/$hook")
-
-            # Extract existing content after header (preserving custom hook logic)
-            EXISTING_CONTENT=$(tail -n +3 "$HUSKY_DIR/$hook")
+            # Find the Husky initialization line to extract header and remaining content
+            HEADER_END=$(grep -n '^\. "$(dirname "$0")/h"' "$HUSKY_DIR/$hook" | cut -d: -f1)
+            if [ -n "$HEADER_END" ]; then
+                # Extract header (up to and including the initialization line)
+                HUSKY_HEADER=$(head -n "$HEADER_END" "$HUSKY_DIR/$hook")
+                # Extract content after the header
+                EXISTING_CONTENT=$(tail -n +$((HEADER_END + 1)) "$HUSKY_DIR/$hook")
+            else
+                # Fallback: assume standard 2-line header
+                HUSKY_HEADER=$(head -n 2 "$HUSKY_DIR/$hook" 2>/dev/null || echo "")
+                EXISTING_CONTENT=$(tail -n +3 "$HUSKY_DIR/$hook" 2>/dev/null || echo "")
+            fi
 
             # Create merged hook with: header + LFS hook + existing content
             {
