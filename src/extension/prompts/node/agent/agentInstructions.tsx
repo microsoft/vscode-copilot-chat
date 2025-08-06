@@ -5,6 +5,7 @@
 
 import { BasePromptElementProps, PromptElement, PromptSizing } from '@vscode/prompt-tsx';
 import type { LanguageModelToolInformation } from 'vscode';
+import { LanguageModelToolMCPSource } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { InstructionMessage } from '../base/instructionMessage';
@@ -110,6 +111,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				].join('\n')}
 			</Tag>}
 			{hasApplyPatchTool && <ApplyPatchInstructions {...this.props} />}
+			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
@@ -120,6 +122,23 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 			</Tag>
 			<ResponseTranslationRules />
 		</InstructionMessage>;
+	}
+}
+
+class McpToolInstructions extends PromptElement<{ tools: readonly LanguageModelToolInformation[] } & BasePromptElementProps> {
+	render() {
+		const instructions = new Map<string, string>();
+		for (const tool of this.props.tools) {
+			if (tool.source instanceof LanguageModelToolMCPSource && tool.source.instructions) {
+				// MCP tools are labelled `mcp_servername_toolname`, give instructions for `mcp_servername` prefixes
+				const [, serverLabel] = tool.name.split('_');
+				instructions.set(`mcp_${serverLabel}`, tool.source.instructions);
+			}
+		}
+
+		return <>{[...instructions].map(([prefix, instruction]) => (
+			<Tag name='instruction' attrs={{ forToolsWithPrefix: prefix }}>{instruction}</Tag>
+		))}</>;
 	}
 }
 
