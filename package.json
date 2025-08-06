@@ -2739,7 +2739,8 @@
 						"type": "boolean",
 						"default": false,
 						"tags": [
-							"experimental"
+							"experimental",
+							"onExP"
 						],
 						"description": "%github.copilot.config.retryAfterFilteredResponse.enabled%"
 					}
