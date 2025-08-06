@@ -77,6 +77,10 @@ validate_environment() {
         if [ "$AUTO_MODE" = false ]; then
             read -p "Continue anyway? (y/N): " confirm
             [[ "$confirm" == [yY] ]] || exit 0
+        else
+            echo "Error: Git LFS is not installed and --auto mode is enabled"
+            echo "Please install Git LFS first or run without --auto to be prompted"
+            exit 1
         fi
     fi
 
