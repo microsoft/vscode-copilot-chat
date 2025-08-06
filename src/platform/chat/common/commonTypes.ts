@@ -176,7 +176,7 @@ export type ChatFetchRetriableError<T> =
 export type FetchSuccess<T> =
 	{ type: ChatFetchResponseType.Success; value: T; requestId: string; serverRequestId: string | undefined; usage: APIUsage | undefined };
 
-export type FetchResponse<T> = FetchSuccess<T> | ChatFetchError
+export type FetchResponse<T> = FetchSuccess<T> | ChatFetchError;
 
 export type ChatResponse = FetchResponse<string>;
 

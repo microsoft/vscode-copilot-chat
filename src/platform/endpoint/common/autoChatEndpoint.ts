@@ -32,7 +32,7 @@ export class AutoChatEndpoint implements IChatEndpoint {
 	supportsVision: boolean = this._wrappedEndpoint.supportsVision;
 	supportsPrediction: boolean = this._wrappedEndpoint.supportsPrediction;
 	showInModelPicker: boolean = true;
-	supportsStatefulResponses: boolean = false;
+	supportsStatefulResponses: boolean = this._wrappedEndpoint.supportsStatefulResponses;
 	isPremium?: boolean | undefined = this._wrappedEndpoint.isPremium;
 	multiplier?: number | undefined = this._wrappedEndpoint.multiplier;
 	restrictedToSkus?: string[] | undefined = this._wrappedEndpoint.restrictedToSkus;
@@ -59,7 +59,7 @@ export class AutoChatEndpoint implements IChatEndpoint {
 	}
 
 	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
-		throw new Error('Method not implemented.');
+		return this._wrappedEndpoint.createRequestBody(options);
 	}
 
 	processResponseFromChatEndpoint(telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData, cancellationToken?: CancellationToken): Promise<AsyncIterableObject<ChatCompletion>> {
