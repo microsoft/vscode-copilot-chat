@@ -15,7 +15,8 @@
 set -eo pipefail
 
 # Configuration
-HUSKY_DIR=".husky/_"
+HUSKY_DIR=".husky"
+HUSKY_TEMPLATES_DIR="$HUSKY_DIR/_"
 BACKUP_DIR="$HUSKY_DIR/_backups/$(date +%Y%m%d_%H%M%S)"
 HOOKS=("pre-push" "post-checkout" "post-commit" "post-merge")
 AUTO_MODE=false
@@ -102,7 +103,7 @@ backup_hooks() {
     # Check if any hook needs modification before creating backup
     local needs_backup=false
     for hook in "${HOOKS[@]}"; do
-        if [ -f "$HUSKY_DIR/$hook" ] && ! grep -q "=== BEGIN GIT LFS HOOK" "$HUSKY_DIR/$hook"; then
+        if [ -f "$HUSKY_TEMPLATES_DIR/$hook" ] && ! grep -q "=== BEGIN GIT LFS HOOK" "$HUSKY_TEMPLATES_DIR/$hook"; then
             needs_backup=true
             break
         fi
@@ -116,8 +117,8 @@ backup_hooks() {
     echo "Creating backup of hooks in $BACKUP_DIR"
     mkdir -p "$BACKUP_DIR"
     for hook in "${HOOKS[@]}"; do
-        if [ -f "$HUSKY_DIR/$hook" ]; then
-            cp "$HUSKY_DIR/$hook" "$BACKUP_DIR/$hook"
+        if [ -f "$HUSKY_TEMPLATES_DIR/$hook" ]; then
+            cp "$HUSKY_TEMPLATES_DIR/$hook" "$BACKUP_DIR/$hook"
             echo "✓ Backed up $hook"
         fi
     done
@@ -142,9 +143,9 @@ merge_hooks() {
         # Generate Git LFS hook content
         LFS_HOOK=$(generate_lfs_hook "$hook")
 
-        if [ -f "$HUSKY_DIR/$hook" ]; then
+        if [ -f "$HUSKY_TEMPLATES_DIR/$hook" ]; then
             # Check if hook already contains Git LFS content with our specific markers
-            if grep -q "=== BEGIN GIT LFS HOOK (added by fix-lfs-husky-hooks.sh) ===" "$HUSKY_DIR/$hook"; then
+            if grep -q "=== BEGIN GIT LFS HOOK (added by fix-lfs-husky-hooks.sh) ===" "$HUSKY_TEMPLATES_DIR/$hook"; then
                 echo "✓ $hook: Already contains Git LFS hook"
                 continue
             fi
@@ -156,19 +157,19 @@ merge_hooks() {
                 echo "$LFS_HOOK"
                 echo ""
                 # Get all content except the shebang line
-                tail -n +2 "$HUSKY_DIR/$hook"
-            } > "$HUSKY_DIR/$hook.new"
+                tail -n +2 "$HUSKY_TEMPLATES_DIR/$hook"
+            } > "$HUSKY_TEMPLATES_DIR/$hook.new"
 
             # Verify the new file was created successfully
-            if [ ! -s "$HUSKY_DIR/$hook.new" ]; then
+            if [ ! -s "$HUSKY_TEMPLATES_DIR/$hook.new" ]; then
                 echo "⚠ Error creating new hook file for $hook"
                 continue
             fi
 
             # Replace the original with the new version and make executable
-            mv "$HUSKY_DIR/$hook.new" "$HUSKY_DIR/$hook"
+            mv "$HUSKY_TEMPLATES_DIR/$hook.new" "$HUSKY_TEMPLATES_DIR/$hook"
 
-            if ! chmod +x "$HUSKY_DIR/$hook"; then
+            if ! chmod +x "$HUSKY_TEMPLATES_DIR/$hook"; then
                 echo "⚠ Error: Could not make $hook executable"
                 continue
             fi
@@ -181,8 +182,8 @@ merge_hooks() {
                 echo "$LFS_HOOK"
                 echo ""
                 echo '. "$(dirname "$0")/h"'
-            } > "$HUSKY_DIR/$hook"
-            chmod +x "$HUSKY_DIR/$hook"
+            } > "$HUSKY_TEMPLATES_DIR/$hook"
+            chmod +x "$HUSKY_TEMPLATES_DIR/$hook"
             echo "✓ $hook: Created"
         fi
     done
