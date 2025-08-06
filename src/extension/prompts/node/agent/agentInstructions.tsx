@@ -12,7 +12,7 @@ import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { Tag } from '../base/tag';
 import { CodeBlockFormattingRules, EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
 import { MathIntegrationRules } from '../panel/editorIntegrationRules';
-import { getKeepGoingReminder } from './agentPrompt';
+import { KeepGoingReminder } from './agentPrompt';
 
 // Types and interfaces for reusable components
 interface ToolCapabilities {
@@ -42,7 +42,7 @@ function detectToolCapabilities(availableTools: readonly LanguageModelToolInform
 		hasCodebaseTool: !!availableTools?.find(tool => tool.name === ToolName.Codebase),
 		hasUpdateUserPreferencesTool: !!availableTools?.find(tool => tool.name === ToolName.UpdateUserPreferences),
 		hasFetchTool: !!availableTools?.find(tool => tool.name === ToolName.FetchWebPage),
-		hasTodoListTool: !!availableTools?.find(tool => tool.name === ToolName.ManageTodoList),
+		hasTodoListTool: !!availableTools?.find(tool => tool.name === ToolName.CoreManageTodoList),
 		hasGetErrorsTool: !!availableTools?.find(tool => tool.name === ToolName.GetErrors) || !!toolsService?.getTool(ToolName.GetErrors),
 		get hasSomeEditTool() { return this.hasInsertEditTool || this.hasReplaceStringTool || this.hasApplyPatchTool; }
 	};
@@ -65,7 +65,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 			<Tag name='instructions'>
 				You are a highly sophisticated automated coding agent with expert-level knowledge across many different programming languages and frameworks.<br />
 				The user will ask a question, or ask you to perform a task, and it may require lots of research to answer correctly. There is a selection of tools that let you perform actions or retrieve helpful context to answer the user's question.<br />
-				{getKeepGoingReminder(this.props.modelFamily)}
+				<KeepGoingReminder modelFamily={this.props.modelFamily} />
 				You will be given some context and attachments along with the user prompt. You can use them if they are relevant to the task, and ignore them if not.{tools.hasReadFileTool && <> Some attachments may be summarized. You can use the {ToolName.ReadFile} tool to read more context, but only do this if the attached file is incomplete.</>}<br />
 				If you can infer the project type (languages, frameworks, and libraries) from the user's query or the context that you have, make sure to keep them in mind when making changes.<br />
 				{!this.props.codesearchMode && <>If the user wants you to implement a feature and they have not specified the files to edit, first break down the user's request into smaller concepts and think about the kinds of files you need to grasp each concept.<br /></>}
@@ -160,7 +160,7 @@ export class GPT41AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 		return <InstructionMessage>
 			<Tag name='gpt41AgentInstructions'>
 				You are a highly sophisticated coding agent with expert-level knowledge across programming languages and frameworks.<br />
-				{getKeepGoingReminder(this.props.modelFamily)}
+				<KeepGoingReminder modelFamily={this.props.modelFamily} />
 				You will be given some context and attachments along with the user prompt. You can use them if they are relevant to the task, and ignore them if not.{tools.hasReadFileTool && <> Some attachments may be summarized. You can use the {ToolName.ReadFile} tool to read more context, but only do this if the attached file is incomplete.</>}<br />
 				If you can infer the project type (languages, frameworks, and libraries) from the user's query or the context that you have, make sure to keep them in mind when making changes.<br />
 				Use multiple tools as needed, and do not give up until the task is complete or impossible.<br />
@@ -173,7 +173,7 @@ export class GPT41AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				# Workflow<br />
 				1. Understand the problem deeply. Carefully read the issue and think critically about what is required.<br />
 				2. Investigate the codebase. Explore relevant files, search for key functions, and gather context.<br />
-				3. Develop a clear, step-by-step plan. Break down the fix into manageable, incremental steps. Display those steps in a todo list ({tools.hasTodoListTool ? `using the ${ToolName.ManageTodoList} tool` : 'using standard checkbox markdown syntax'}).<br />
+				3. Develop a clear, step-by-step plan. Break down the fix into manageable, incremental steps. Display those steps in a todo list ({tools.hasTodoListTool ? `using the ${ToolName.CoreManageTodoList} tool` : 'using standard checkbox markdown syntax'}).<br />
 				4. Implement the fix incrementally. Make small, testable code changes.<br />
 				5. Debug as needed. Use debugging techniques to isolate and resolve issues.<br />
 				6. Test frequently. Run tests after each change to verify correctness.<br />
@@ -203,7 +203,7 @@ export class GPT41AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- Outline a specific, simple, and verifiable sequence of steps to fix the problem.<br />
 				- Create a todo list to track your progress.<br />
 				- Each time you check off a step, update the todo list.<br />
-				- Make sure that you ACTUALLY continue on to the next step after checkin off a step instead of ending your turn and asking the user what they want to do next.<br />
+				- Make sure that you ACTUALLY continue on to the next step after checking off a step instead of ending your turn and asking the user what they want to do next.<br />
 				<br />
 				## 4. Making Code Changes<br />
 				- Before editing, always read the relevant file contents or section to ensure complete context.<br />
@@ -213,7 +213,7 @@ export class GPT41AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- Whenever you detect that a project requires an environment variable (such as an API key or secret), always check if a .env file exists in the project root. If it does not exist, automatically create a .env file with a placeholder for the required variable(s) and inform the user. Do this proactively, without waiting for the user to request it.<br />
 				<br />
 				## 5. Debugging<br />
-				- Use the `get_errors` tool to check for any problems in the code<br />
+				{tools.hasGetErrorsTool && <>- Use the {ToolName.GetErrors} tool to check for any problems in the code<br /></>}
 				- Make code changes only if you have high confidence they can solve the problem<br />
 				- When debugging, try to determine the root cause rather than addressing symptoms<br />
 				- Debug for as long as needed to identify the root cause and identify a fix<br />
@@ -351,7 +351,7 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 
 		return <InstructionMessage>
 			<Tag name="mostImportantInstructions">
-				{getKeepGoingReminder(this.props.modelFamily)}
+				<KeepGoingReminder modelFamily={this.props.modelFamily} />
 				1. Make sure you fully understand the issue described by user and can confidently reproduce it.<br />
 				2. For each file you plan to modify, add it to Git staging using `git add` before making any edits. You must do it only once for each file before starting editing.<br />
 				3. Create comprehensive test cases in your reproduction script to cover both the described issue and potential edge cases.<br />

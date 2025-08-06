@@ -778,6 +778,7 @@ export namespace ConfigKey {
 	export const CustomInstructionsInSystemMessage = defineSetting<boolean>('chat.customInstructionsInSystemMessage', true);
 
 	export const EnableRetryAfterFilteredResponse = defineExpSetting<boolean>('chat.enableRetryAfterFilteredResponse', false);
+	export const EnableAlternateGpt41Prompt = defineExpSetting<boolean>('chat.alternateGpt41Prompt.enabled', false);
 }
 
 export function getAllConfigKeys(): string[] {

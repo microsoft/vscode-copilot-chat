@@ -18,6 +18,7 @@ import { IAlternativeNotebookContentService } from '../../../../platform/noteboo
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { ITabsAndEditorsService } from '../../../../platform/tabs/common/tabsAndEditorsService';
 import { ITasksService } from '../../../../platform/tasks/common/tasksService';
+import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { basename } from '../../../../util/vs/base/common/path';
@@ -75,6 +76,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		props: AgentPromptProps,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint,
 	) {
 		super(props);
@@ -83,7 +85,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const instructions = this.configurationService.getConfig(ConfigKey.Internal.SweBenchAgentPrompt) ?
 			<SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} /> :
-			this.props.endpoint.family === 'gpt-4.1' ?
+			this.props.endpoint.family === 'gpt-4.1' && this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGpt41Prompt, this.experimentationService) ?
 				<GPT41AgentPrompt
 					availableTools={this.props.promptContext.tools?.availableTools}
 					modelFamily={this.props.endpoint.family}
@@ -308,7 +310,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 					<RepoContext />
 					<Tag name='reminderInstructions'>
 						{/* Critical reminders that are effective when repeated right next to the user message */}
-						{getKeepGoingReminder(this.props.endpoint.family)}
+						<KeepGoingReminder modelFamily={this.props.endpoint.family} />
 						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint))}
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
 					</Tag>
@@ -638,22 +640,44 @@ export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringToo
 	return lines;
 }
 
-/**
- * Remind gpt-4.1 to keep going and not stop to ask questions...
- */
-export function getKeepGoingReminder(modelFamily: string | undefined) {
-	return modelFamily === 'gpt-4.1' ?
-		<>
-			You are an agent - you must keep going until the user's query is completely resolved, before ending your turn and yielding back to the user.<br />
-			Your thinking should be thorough and so it's fine if it's very long. However, avoid unnecessary repetition and verbosity. You should be concise, but thorough.<br />
-			You MUST iterate and keep going until the problem is solved.<br />
-			You have everything you need to resolve this problem. I want you to fully solve this autonomously before coming back to me. <br />
-			Only terminate your turn when you are sure that the problem is solved and all items have been checked off. Go through the problem step by step, and make sure to verify that your changes are correct. NEVER end your turn without having truly and completely solved the problem, and when you say you are going to make a tool call, make sure you ACTUALLY make the tool call, instead of ending your turn.<br />
-			Take your time and think through every step - remember to check your solution rigorously and watch out for boundary cases, especially with the changes you made. Your solution must be perfect. If not, continue working on it. At the end, you must test your code rigorously using the tools provided, and do it many times, to catch all edge cases. If it is not robust, iterate more and make it perfect. Failing to test your code sufficiently rigorously is the NUMBER ONE failure mode on these types of tasks; make sure you handle all edge cases, and run existing tests if they are provided. <br />
-			You MUST plan extensively before each function call, and reflect extensively on the outcomes of the previous function calls. DO NOT do this entire process by making function calls only, as this can impair your ability to solve the problem and think insightfully.<br />
-			You are a highly capable and autonomous agent, and you can definitely solve this problem without needing to ask the user for further input.<br />
-		</>
-		: undefined;
+export interface IKeepGoingReminderProps extends BasePromptElementProps {
+	modelFamily: string | undefined;
+}
+
+export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
+	constructor(
+		props: IKeepGoingReminderProps,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+	) {
+		super(props);
+	}
+
+	async render(state: void, sizing: PromptSizing) {
+		if (this.props.modelFamily !== 'gpt-4.1') {
+			return;
+		}
+
+		if (this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGpt41Prompt, this.experimentationService)) {
+			// Extended reminder
+			return <>
+				You are an agent - you must keep going until the user's query is completely resolved, before ending your turn and yielding back to the user.<br />
+				Your thinking should be thorough and so it's fine if it's very long. However, avoid unnecessary repetition and verbosity. You should be concise, but thorough.<br />
+				You MUST iterate and keep going until the problem is solved.<br />
+				You have everything you need to resolve this problem. I want you to fully solve this autonomously before coming back to me. <br />
+				Only terminate your turn when you are sure that the problem is solved and all items have been checked off. Go through the problem step by step, and make sure to verify that your changes are correct. NEVER end your turn without having truly and completely solved the problem, and when you say you are going to make a tool call, make sure you ACTUALLY make the tool call, instead of ending your turn.<br />
+				Take your time and think through every step - remember to check your solution rigorously and watch out for boundary cases, especially with the changes you made. Your solution must be perfect. If not, continue working on it. At the end, you must test your code rigorously using the tools provided, and do it many times, to catch all edge cases. If it is not robust, iterate more and make it perfect. Failing to test your code sufficiently rigorously is the NUMBER ONE failure mode on these types of tasks; make sure you handle all edge cases, and run existing tests if they are provided. <br />
+				You MUST plan extensively before each function call, and reflect extensively on the outcomes of the previous function calls. DO NOT do this entire process by making function calls only, as this can impair your ability to solve the problem and think insightfully.<br />
+				You are a highly capable and autonomous agent, and you can definitely solve this problem without needing to ask the user for further input.<br />
+			</>;
+		} else {
+			// Original reminder
+			return <>
+				You are an agent - you must keep going until the user's query is completely resolved, before ending your turn and yielding back to the user. ONLY terminate your turn when you are sure that the problem is solved, or you absolutely cannot continue.<br />
+				You take action when possible- the user is expecting YOU to take action and go to work for them. Don't ask unnecessary questions about the details if you can simply DO something useful instead.<br />
+			</>;
+		}
+	}
 }
 
 export interface EditedFileEventsProps extends BasePromptElementProps {
