@@ -91,6 +91,7 @@ export interface IEndpointBody {
 	/** Code search: */
 	scoping_query?: string;
 	include_embeddings?: boolean;
+	reasoning_effort?: string;
 }
 
 export interface IEndpoint {
