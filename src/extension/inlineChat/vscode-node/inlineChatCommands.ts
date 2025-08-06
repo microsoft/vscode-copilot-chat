@@ -392,7 +392,7 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 			} else if (value instanceof vscode.ChatResponseMarkdownPart) {
 				markdown += value.value.value;
 			}
-		});
+		}, () => { });
 
 		const requestHandler = instantiationService.createInstance(ChatParticipantRequestHandler, [], request, stream, CancellationToken.None, {
 			agentId: getChatParticipantIdFromName(editorAgentName),

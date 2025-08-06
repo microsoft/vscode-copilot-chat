@@ -5,7 +5,7 @@
 
 import { ThinkingData, ThinkingDelta } from '../../thinking/common/thinking';
 import { Response } from './fetcherService';
-import { ChoiceLogProbs } from './openai';
+import { ChoiceLogProbs, FilterReason } from './openai';
 
 
 // Request helpers
@@ -147,6 +147,7 @@ export interface IResponseDelta {
 	_deprecatedCopilotFunctionCalls?: ICopilotFunctionCall[];
 	copilotConfirmation?: ICopilotConfirmation;
 	thinking?: ThinkingDelta;
+	retryReason?: FilterReason;
 	/** Marker for the current response, which should be presented in `IMakeChatRequestOptions` on the next call */
 	statefulMarker?: string;
 }

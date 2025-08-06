@@ -35,6 +35,7 @@ import { IDialogService } from '../../dialog/common/dialogService';
 import { IDiffService } from '../../diff/common/diffService';
 import { DiffServiceImpl } from '../../diff/node/diffServiceImpl';
 import { IEditSurvivalTrackerService, NullEditSurvivalTrackerService } from '../../editSurvivalTracking/common/editSurvivalTrackerService';
+import { AutomodeService, IAutomodeService } from '../../endpoint/common/automodeService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IDomainService } from '../../endpoint/common/domainService';
 import { CAPIClientImpl } from '../../endpoint/node/capiClientImpl';
@@ -211,6 +212,7 @@ export function _createBaselineServices(): TestingServiceCollection {
 	testingServiceCollection.define(IAuthenticationChatUpgradeService, new SyncDescriptor(AuthenticationChatUpgradeService));
 	testingServiceCollection.define(IOctoKitService, new SyncDescriptor(OctoKitService));
 	testingServiceCollection.define(IInteractionService, new SyncDescriptor(InteractionService));
+	testingServiceCollection.define(IAutomodeService, new SyncDescriptor(AutomodeService));
 	testingServiceCollection.define(IWorkbenchService, new SyncDescriptor(TestWorkbenchService));
 	testingServiceCollection.define(ICustomInstructionsService, new SyncDescriptor(CustomInstructionsService));
 	testingServiceCollection.define(ISurveyService, new SyncDescriptor(NullSurveyService));

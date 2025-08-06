@@ -147,6 +147,8 @@ export interface IMakeChatRequestOptions {
 	telemetryProperties?: TelemetryProperties;
 	/** (CAPI-only) Intent classifier details */
 	intentParams?: IntentParams;
+	/** Whether this request is retrying a filtered response */
+	isFilterRetry?: boolean;
 }
 
 export interface ICreateEndpointBodyOptions extends IMakeChatRequestOptions {

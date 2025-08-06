@@ -23,7 +23,7 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 		public readonly authType: BYOKAuthType,
 		private readonly _name: string,
 		private readonly _baseUrl: string,
-		private _knownModels: BYOKKnownModels | undefined,
+		protected _knownModels: BYOKKnownModels | undefined,
 		private readonly _byokStorageService: IBYOKStorageService,
 		@IFetcherService protected readonly _fetcherService: IFetcherService,
 		@ILogService protected readonly _logService: ILogService,
@@ -106,8 +106,9 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 		if (this.authType === BYOKAuthType.None) {
 			return;
 		}
-		this._apiKey = await promptForAPIKey(this._name, await this._byokStorageService.getAPIKey(this._name) !== undefined);
-		if (this._apiKey) {
+		const newAPIKey = await promptForAPIKey(this._name, await this._byokStorageService.getAPIKey(this._name) !== undefined);
+		if (newAPIKey) {
+			this._apiKey = newAPIKey;
 			this._byokStorageService.storeAPIKey(this._name, this._apiKey, BYOKAuthType.GlobalApiKey);
 		}
 	}

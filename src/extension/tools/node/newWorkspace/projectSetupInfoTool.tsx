@@ -100,7 +100,7 @@ const setupInfo: ProjectSetupInfo[] = [
 			'Follow these rules strictly and do not deviate from them.',
 			'1. First, visit https://github.com/modelcontextprotocol to find the correct SDK and setup instructions for the requested language. Default to TypeScript if no language is specified.',
 			`2. Use the ${ToolName.FetchWebPage} to find the correct implementation instructions from https://modelcontextprotocol.io/llms-full.txt`,
-			'3. Update the `copilot-instructions.md` to include references to the SDK documentation',
+			'3. Update the copilot-instructions.md file in the .github directory to include references to the SDK documentation',
 			'4. Create an `mcp.json` file in the `.vscode` folder in the project root with the following content: `{ "servers": { "mcp-server-name": { "type": "stdio", "command": "command-to-run", "args": [list-of-args] } } }`.',
 			'- mcp-server-name: The name of the MCP server. Create a unique name that reflects what this MCP server does.',
 			'- command-to-run: The command to run to start the MCP server. This is the command you would use to run the project you just created.',
