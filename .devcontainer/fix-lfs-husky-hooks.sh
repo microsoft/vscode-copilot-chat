@@ -154,8 +154,13 @@ merge_hooks() {
             if [ -n "$HEADER_END" ]; then
                 # Extract header (up to and including the initialization line)
                 HUSKY_HEADER=$(head -n "$HEADER_END" "$HUSKY_DIR/$hook")
-                # Extract content after the header
-                EXISTING_CONTENT=$(tail -n +$((HEADER_END + 1)) "$HUSKY_DIR/$hook")
+                # Extract content after the header, checking if there are more lines
+                TOTAL_LINES=$(wc -l < "$HUSKY_DIR/$hook")
+                if [ "$TOTAL_LINES" -gt "$HEADER_END" ]; then
+                    EXISTING_CONTENT=$(tail -n +$((HEADER_END + 1)) "$HUSKY_DIR/$hook")
+                else
+                    EXISTING_CONTENT=""
+                fi
             else
                 # Fallback: assume standard 2-line header
                 HUSKY_HEADER=$(head -n 2 "$HUSKY_DIR/$hook" 2>/dev/null || echo "")
@@ -170,7 +175,7 @@ merge_hooks() {
                 if [ -n "$EXISTING_CONTENT" ]; then
                     echo ""  # Add separator line
                     echo "# Original hook content"
-                    echo "$EXISTING_CONTENT"
+                    printf "%s\n" "$EXISTING_CONTENT"
                 fi
             } > "$HUSKY_DIR/$hook.new"
 
