@@ -149,34 +149,14 @@ merge_hooks() {
                 continue
             fi
 
-            # Find the Husky initialization line to extract header and remaining content
-            HEADER_END=$(grep -n '^[[:space:]]*\. "$(dirname "\$0")/h"' "$HUSKY_DIR/$hook" | cut -d: -f1)
-            if [ -n "$HEADER_END" ]; then
-                # Extract header (up to and including the initialization line)
-                HUSKY_HEADER=$(head -n "$HEADER_END" "$HUSKY_DIR/$hook")
-                # Extract content after the header, checking if there are more lines
-                TOTAL_LINES=$(wc -l < "$HUSKY_DIR/$hook")
-                if [ "$TOTAL_LINES" -gt "$HEADER_END" ]; then
-                    EXISTING_CONTENT=$(tail -n +$((HEADER_END + 1)) "$HUSKY_DIR/$hook")
-                else
-                    EXISTING_CONTENT=""
-                fi
-            else
-                # Fallback: assume standard 2-line header
-                HUSKY_HEADER=$(head -n 2 "$HUSKY_DIR/$hook" 2>/dev/null || echo "")
-                EXISTING_CONTENT=$(tail -n +3 "$HUSKY_DIR/$hook" 2>/dev/null || echo "")
-            fi
-
-            # Create merged hook with: header + LFS hook + existing content
+            # For Husky we need to place Git LFS content BEFORE the husky initialization
+            # to ensure Git LFS commands run before the husky script redirects to the parent hook
             {
-                echo "$HUSKY_HEADER"
+                echo '#!/usr/bin/env sh'
                 echo "$LFS_HOOK"
-                # Only add existing content if it's not empty
-                if [ -n "$EXISTING_CONTENT" ]; then
-                    echo ""  # Add separator line
-                    echo "# Original hook content"
-                    printf "%s\n" "$EXISTING_CONTENT"
-                fi
+                echo ""
+                # Get all content except the shebang line
+                tail -n +2 "$HUSKY_DIR/$hook"
             } > "$HUSKY_DIR/$hook.new"
 
             # Verify the new file was created successfully
@@ -198,8 +178,9 @@ merge_hooks() {
             # Create new hook with both Husky and Git LFS parts
             {
                 echo '#!/usr/bin/env sh'
-                echo '. "$(dirname "$0")/h"'
                 echo "$LFS_HOOK"
+                echo ""
+                echo '. "$(dirname "$0")/h"'
             } > "$HUSKY_DIR/$hook"
             chmod +x "$HUSKY_DIR/$hook"
             echo "✓ $hook: Created"
