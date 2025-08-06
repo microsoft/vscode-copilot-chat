@@ -113,8 +113,10 @@ backup_hooks() {
 generate_lfs_hook() {
     local hook_type="$1"
     cat << EOF
+# === BEGIN GIT LFS HOOK (added by fix-lfs-husky-hooks.sh) ===
 command -v git-lfs >/dev/null 2>&1 || { printf >&2 "\n%s\n\n" "This repository is configured for Git LFS but 'git-lfs' was not found on your path. If you no longer wish to use Git LFS, remove this hook by deleting the '$hook_type' file in the hooks directory (set by 'core.hookspath'; usually '.git/hooks' but with husky it is '.husky/_')."; exit 2; }
 git lfs $hook_type "\$@"
+# === END GIT LFS HOOK ===
 EOF
 }
 
@@ -127,8 +129,8 @@ merge_hooks() {
         LFS_HOOK=$(generate_lfs_hook "$hook")
 
         if [ -f "$HUSKY_DIR/$hook" ]; then
-            # Check if hook already contains Git LFS content
-            if grep -q "git lfs $hook" "$HUSKY_DIR/$hook"; then
+            # Check if hook already contains Git LFS content with our specific markers
+            if grep -q "=== BEGIN GIT LFS HOOK (added by fix-lfs-husky-hooks.sh) ===" "$HUSKY_DIR/$hook"; then
                 echo "✓ $hook: Already contains Git LFS hook"
                 continue
             fi
