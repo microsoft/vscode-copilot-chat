@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Diagnostic, DiagnosticSeverity, EndOfLine, languages, NotebookDocument, Range, TextDocument, TextDocumentChangeEvent, TextDocumentContentChangeEvent, TextEditor, Uri, window, workspace } from 'vscode';
+import { CancellationToken, CodeAction, CodeActionKind, commands, Diagnostic, DiagnosticSeverity, EndOfLine, languages, NotebookDocument, Range, TextDocument, TextDocumentChangeEvent, TextDocumentContentChangeEvent, TextEditor, Uri, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { DiagnosticData } from '../../../../platform/inlineEdits/common/dataTypes/diagnosticData';
@@ -30,6 +30,10 @@ import { StringEdit, StringReplacement } from '../../../../util/vs/editor/common
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { CodeActionData } from '../../../../platform/inlineEdits/common/dataTypes/codeActionData';
+import { TextReplacement } from '../../../../util/vs/editor/common/core/edits/textEdit';
+import { toInternalTextEdit } from '../utils/translations';
+import { asPromise, raceCancellation, raceTimeout } from '../../../../util/vs/base/common/async';
 
 export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable {
 	private readonly _openDocuments = observableValue<readonly IVSCodeObservableDocument[], { added: readonly IVSCodeObservableDocument[]; removed: readonly IVSCodeObservableDocument[] }>(this, []);
@@ -74,7 +78,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 			if (!doc) {
 				return;
 			}
-			if (doc.kind === 'textDocument') {
+			if (doc instanceof VSCodeObservableTextDocument) {
 				const edit = editFromTextDocumentContentChangeEvents(e.contentChanges);
 				const editWithReason = new StringEditWithReason(edit.replacements, EditReason.create(e.detailedReason?.metadata as any));
 				transaction(tx => {
@@ -95,7 +99,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 
 		this._store.add(workspace.onDidChangeNotebookDocument(e => {
 			const doc = this._getDocumentByDocumentAndUpdateShouldTrack(e.notebook.uri);
-			if (!doc || !e.contentChanges.length || doc.kind !== 'notebookDocument') {
+			if (!doc || !e.contentChanges.length || doc instanceof VSCodeObservableTextDocument) {
 				return;
 			}
 			const edit = toAltNotebookChangeEdit(doc.altNotebook, e.contentChanges);
@@ -115,7 +119,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 			if (!doc) {
 				return;
 			}
-			const selections = doc.kind === 'textDocument' ?
+			const selections = doc instanceof VSCodeObservableTextDocument ?
 				coalesce(e.selections.map(s => doc.toOffsetRange(e.textEditor.document, s))) :
 				this.getNotebookSelections(doc.notebook, e.textEditor);
 			doc.selection.set(selections, undefined);
@@ -126,7 +130,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 			if (!doc) {
 				return;
 			}
-			const visibleRanges = doc.kind === 'textDocument' ?
+			const visibleRanges = doc instanceof VSCodeObservableTextDocument ?
 				coalesce(e.visibleRanges.map(r => doc.toOffsetRange(e.textEditor.document, r))) :
 				this.getNotebookVisibleRanges(doc.notebook);
 			doc.visibleRanges.set(visibleRanges, undefined);
@@ -138,7 +142,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 				if (!document) {
 					return;
 				}
-				const diagnostics = document.kind === 'textDocument' ?
+				const diagnostics = document instanceof VSCodeObservableTextDocument ?
 					this._createTextDocumentDiagnosticData(document) :
 					this._createNotebookDiagnosticData(document.altNotebook);
 				document.diagnostics.set(diagnostics, undefined);
@@ -299,20 +303,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 	}
 
 	private _createDiagnosticData(diagnostic: Diagnostic, doc: VSCodeObservableTextDocument): DiagnosticData | undefined {
-		if (!diagnostic.source || (diagnostic.severity !== DiagnosticSeverity.Error && diagnostic.severity !== DiagnosticSeverity.Warning)) {
-			return undefined;
-		}
-		const range = doc.toOffsetRange(doc.textDocument, diagnostic.range);
-		if (!range) {
-			return undefined;
-		}
-		const diag: DiagnosticData = new DiagnosticData(
-			doc.textDocument.uri,
-			diagnostic.message,
-			diagnostic.severity === DiagnosticSeverity.Error ? 'error' : 'warning',
-			range
-		);
-		return diag;
+		return toDiagnosticData(diagnostic, doc.textDocument.uri, (range) => doc.toOffsetRange(doc.textDocument, range));
 	}
 
 	private _createNotebookDiagnosticData(altNotebook: IAlternativeNotebookDocument) {
@@ -320,21 +311,14 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 	}
 
 	private _createNotebookCellDiagnosticData(diagnostic: Diagnostic, altNotebook: IAlternativeNotebookDocument, doc: TextDocument): DiagnosticData | undefined {
-		if (!diagnostic.source || (diagnostic.severity !== DiagnosticSeverity.Error && diagnostic.severity !== DiagnosticSeverity.Warning)) {
-			return undefined;
-		}
 		const cell = altNotebook.getCell(doc);
-		const offsetRanges = cell ? altNotebook.toAltOffsetRange(cell, [diagnostic.range]) : [];
-		if (!cell || !offsetRanges.length) {
+		if (!cell) {
 			return undefined;
 		}
-		const diag: DiagnosticData = new DiagnosticData(
-			altNotebook.notebook.uri,
-			diagnostic.message,
-			diagnostic.severity === DiagnosticSeverity.Error ? 'error' : 'warning',
-			offsetRanges[0]
-		);
-		return diag;
+		return toDiagnosticData(diagnostic, altNotebook.notebook.uri, range => {
+			const offsetRanges = altNotebook.toAltOffsetRange(cell, [range]);
+			return offsetRanges.length ? offsetRanges[0] : undefined;
+		});
 	}
 
 	private readonly _obsDocsWithUpdateIgnored = derived(this, reader => {
@@ -419,6 +403,11 @@ export interface IBaseVSCodeObservableDocument extends IObservableDocument {
 	 * If this is a Notebook Document, then this method converts a range within the provided Notebook Cell to a Range within the Observable document. If the provided document does not belong to the Notebook Cell, it returns undefined.
 	 */
 	toRange(textDocument: TextDocument, range: Range): Range | undefined;
+	/**
+	 * Gets code actions for the specific range within the document
+	 * @param itemResolveCount Number of code actions to resolve (too large numbers slow down code actions)
+	 */
+	getCodeActions(range: OffsetRange, itemResolveCount: number, token: CancellationToken): Promise<CodeActionData[] | undefined>;
 }
 
 export interface IVSCodeObservableTextDocument extends IObservableDocument, IBaseVSCodeObservableDocument {
@@ -454,6 +443,7 @@ abstract class AbstractVSCodeObservableDocument {
 
 
 class VSCodeObservableTextDocument extends AbstractVSCodeObservableDocument implements IVSCodeObservableTextDocument {
+	/** @deprecated Do not use this */
 	public kind: 'textDocument' = 'textDocument';
 
 	constructor(
@@ -511,15 +501,32 @@ class VSCodeObservableTextDocument extends AbstractVSCodeObservableDocument impl
 	toRange(_textDocument: TextDocument, range: Range): Range | undefined {
 		return range;
 	}
+	async getCodeActions(offsetRange: OffsetRange, itemResolveCount: number, token: CancellationToken): Promise<CodeActionData[] | undefined> {
+		const range = this.fromOffsetRange(this.textDocument, offsetRange);
+		if (!range) {
+			return;
+		}
+		const actions = await raceTimeout(
+			raceCancellation(
+				getQuickFixCodeActions(this.textDocument.uri, range, itemResolveCount),
+				token
+			),
+			1000
+		);
+
+		return actions?.map(action => toCodeActionData(action, this, range => this.toOffsetRange(this.textDocument, range)));
+	}
 }
 
 export interface IVSCodeObservableNotebookDocument extends IObservableDocument, IBaseVSCodeObservableDocument {
 	kind: 'notebookDocument';
 	readonly notebook: NotebookDocument;
+	/** @deprecated Do not use this. Use diagnostics property instead. */
 	projectDiagnostics(cell: TextDocument, diagnostics: readonly Diagnostic[]): Diagnostic[];
 }
 
 class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument implements IVSCodeObservableNotebookDocument {
+	/** @deprecated Do not use this */
 	public kind: 'notebookDocument' = 'notebookDocument';
 
 	constructor(
@@ -589,6 +596,30 @@ class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument 
 		}
 		const ranges = this.altNotebook.toAltRange(cell, [range]);
 		return ranges.length > 0 ? ranges[0] : undefined;
+	}
+	async getCodeActions(offsetRange: OffsetRange, itemResolveCount: number, token: CancellationToken): Promise<CodeActionData[] | undefined> {
+		const cellRanges = this.fromOffsetRange(offsetRange);
+		if (!cellRanges || cellRanges.length === 0) {
+			return;
+		}
+		return Promise.all(cellRanges.map(async ([cellTextDocument, range]) => {
+			const cell = this.altNotebook.getCell(cellTextDocument);
+			if (!cell) {
+				return undefined;
+			}
+			const actions = await raceTimeout(
+				raceCancellation(
+					getQuickFixCodeActions(cellTextDocument.uri, range, itemResolveCount),
+					token
+				),
+				1000
+			);
+
+			return actions?.map(action => toCodeActionData(action, this, (range) => {
+				const offsetRanges = this.altNotebook.toAltOffsetRange(cell, [range]);
+				return offsetRanges.length ? offsetRanges[0] : undefined;
+			}));
+		})).then(results => coalesce(results.flat()));
 	}
 }
 
@@ -759,3 +790,81 @@ export function editFromTextDocumentContentChangeEvents(events: readonly TextDoc
 	return StringEdit.composeSequentialReplacements(replacementsInApplicationOrder);
 }
 
+
+function toDiagnosticData(diagnostic: Diagnostic, uri: URI, translateRange: (range: Range) => OffsetRange | undefined) {
+	if (!diagnostic.source || (diagnostic.severity !== DiagnosticSeverity.Error && diagnostic.severity !== DiagnosticSeverity.Warning)) {
+		return undefined;
+	}
+
+	const range = translateRange(diagnostic.range);
+	if (!range) {
+		return undefined;
+	}
+	return new DiagnosticData(
+		uri,
+		diagnostic.message,
+		diagnostic.severity === DiagnosticSeverity.Error ? 'error' : 'warning',
+		range,
+		diagnostic.code && !(typeof diagnostic.code === 'number') && !(typeof diagnostic.code === 'string') ? diagnostic.code.value : diagnostic.code,
+		diagnostic.source
+	);
+}
+
+function toCodeActionData(codeAction: CodeAction, workspaceDocument: IVSCodeObservableDocument, translateRange: (range: Range) => OffsetRange | undefined): CodeActionData {
+	const uri = workspaceDocument.id.toUri();
+	const diagnostics = coalesce((codeAction.diagnostics || []).map(d => toDiagnosticData(d, uri, translateRange))).concat(
+		getCommandDiagnostics(codeAction, uri, translateRange)
+	);
+
+	const codeActionData = new CodeActionData(
+		codeAction.title,
+		diagnostics,
+		getDocumentEdits(codeAction, workspaceDocument),
+	);
+	return codeActionData;
+}
+
+function getCommandDiagnostics(codeAction: CodeAction, uri: URI, translateRange: (range: Range) => OffsetRange | undefined): DiagnosticData[] {
+	const commandArgs = codeAction.command?.arguments || [];
+
+	return coalesce(commandArgs.map(arg => {
+		if (arg && typeof arg === 'object' && 'diagnostic' in arg) {
+			const diagnostic = arg.diagnostic;
+			// @benibenj Can we not check `diagnostic instanceOf vscode.Diagnostic?
+			if (diagnostic && typeof diagnostic === 'object' && 'range' in diagnostic && 'message' in diagnostic && 'severity' in diagnostic) {
+				return toDiagnosticData(diagnostic, uri, translateRange);
+			}
+		}
+	}));
+}
+
+function getDocumentEdits(codeAction: CodeAction, workspaceDocument: IVSCodeObservableDocument): TextReplacement[] | undefined {
+	const edit = codeAction.edit;
+	if (!edit) {
+		return undefined;
+	}
+
+	if (workspaceDocument instanceof VSCodeObservableTextDocument) {
+		return edit.get(workspaceDocument.id.toUri()).map(e => toInternalTextEdit(e.range, e.newText));
+	} else if (workspaceDocument instanceof VSCodeObservableNotebookDocument) {
+		const edits = coalesce(workspaceDocument.notebook.getCells().flatMap(cell =>
+			edit.get(cell.document.uri).map(e => {
+				const range = workspaceDocument.toRange(cell.document, e.range);
+				return range ? toInternalTextEdit(range, e.newText) : undefined;
+			})
+		));
+		return edits.length ? edits : undefined;
+	}
+}
+
+async function getQuickFixCodeActions(uri: Uri, range: Range, itemResolveCount: number): Promise<CodeAction[]> {
+	return asPromise(
+		() => commands.executeCommand<CodeAction[]>(
+			'vscode.executeCodeActionProvider',
+			uri,
+			range,
+			CodeActionKind.QuickFix.value,
+			itemResolveCount
+		)
+	);
+}
