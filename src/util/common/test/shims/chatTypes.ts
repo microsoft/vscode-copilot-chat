@@ -46,6 +46,17 @@ export class ChatResponseProgressPart {
 	}
 }
 
+export class ChatResponseThinkingProgressPart {
+	value: string;
+	id?: string;
+	metadata?: string;
+	constructor(value: string, id?: string, metadata?: string) {
+		this.value = value;
+		this.id = id;
+		this.metadata = metadata;
+	}
+}
+
 export class ChatResponseProgressPart2 {
 	value: string;
 	task?: (progress: vscode.Progress<vscode.ChatResponseWarningPart>) => Thenable<string | void>;

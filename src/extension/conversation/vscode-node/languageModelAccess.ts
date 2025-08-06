@@ -422,7 +422,8 @@ export class CopilotLanguageModelWrapper extends Disposable {
 				}
 			}
 			if (delta.thinking) {
-				// progress.report({ index, part: new vscode.LanguageModelThinkingPart(delta.thinking) });
+				const text = delta.thinking.text ?? '';
+				progress.report({ index, part: new vscode.LanguageModelThinkingPart(text, delta.thinking.id, delta.thinking.metadata) });
 
 				// @karthiknadig: remove this when LM API becomes available
 				this._thinkingDataService.update(index, delta.thinking);
