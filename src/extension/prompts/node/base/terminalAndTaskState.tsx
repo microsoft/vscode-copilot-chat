@@ -28,10 +28,16 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 		const allTasks = this.tasksService.getTasks()?.[0]?.[1] ?? [];
 		const tasks = Array.isArray(allTasks) ? allTasks : [];
 		const taskTerminalPids = new Set<number>();
-		const filteredTasks = tasks.filter(t => this.tasksService.getTerminalForTask(t));
-		for (const exec of filteredTasks) {
-			if (exec.label) {
-				taskTerminalPids.add(await exec.processId);
+		const taskWithTerminals = await Promise.all(tasks.map(async (task) => {
+			const terminal = await this.tasksService.getTerminalForTask(task);
+			const terminalPid = terminal ? await terminal.processId : undefined;
+			if (terminalPid) {
+				taskTerminalPids.add(terminalPid);
+				return task;
+			}
+		}));
+		for (const exec of taskWithTerminals) {
+			if (exec?.label) {
 				resultTasks.push({
 					name: exec.label,
 					isBackground: exec.isBackground,
@@ -105,17 +111,6 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 										</>
 									) : ''}
 									Output: {'{'}Use {ToolName.CoreGetTerminalOutput} for terminal with ID: {term.pid}.{'}'}<br />
-								</>
-							))}
-						</>
-					)}
-					{resultTerminals.length > 0 && (
-						<>
-							User created Terminals:<br />
-							{resultTerminals.map((term) => (
-								<>
-									Terminal: {term.name}<br />
-									Output: {'{'}Use {ToolName.CoreGetTerminalOutput} for terminal with pid: {term.pid}.{'}'}<br />
 								</>
 							))}
 						</>

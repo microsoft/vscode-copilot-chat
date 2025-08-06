@@ -7,9 +7,11 @@ import * as l10n from '@vscode/l10n';
 import type { ChatResponseStream, ChatVulnerability } from 'vscode';
 import { IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { IResponseDelta } from '../../../platform/networking/common/fetch';
+import { FilterReason } from '../../../platform/networking/common/openai';
 import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { URI } from '../../../util/vs/base/common/uri';
+import { ChatResponseClearToPreviousToolInvocationReason } from '../../../vscodeTypes';
 import { getContributedToolName } from '../../tools/common/toolNames';
 import { IResponseProcessor, IResponseProcessorContext } from './intents';
 
@@ -149,6 +151,17 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 	}
 
 	protected applyDelta(delta: IResponseDelta, progress: ChatResponseStream): void {
+		if (delta.retryReason) {
+			this.stagedDeltasToApply = [];
+			this.currentStartStop = undefined;
+			this.nonReportedDeltas = [];
+			if (delta.retryReason === FilterReason.Copyright) {
+				progress.clearToPreviousToolInvocation(ChatResponseClearToPreviousToolInvocationReason.CopyrightContentRetry);
+			} else {
+				progress.clearToPreviousToolInvocation(ChatResponseClearToPreviousToolInvocationReason.FilteredContentRetry);
+			}
+			return;
+		}
 		if (this.currentStartStop === undefined) {
 			const stopWord = this.checkForKeyWords(this.stopStartMappings.map(e => e.stop), delta, delta => this.applyDeltaToProgress(delta, progress));
 			if (stopWord) {

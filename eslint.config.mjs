@@ -317,6 +317,13 @@ export default tseslint.config(
 			'local/no-bad-gdpr-comment': ['error'],
 			'local/no-gdpr-event-name-mismatch': ['error'],
 			'local/no-unlayered-files': ['error'],
+			'local/no-restricted-copilot-pr-string': [
+				'error',
+				{
+					className: 'GitHubPullRequestProviders',
+					string: 'Generate with Copilot'
+				}
+			],
 		}
 	},
 	{
