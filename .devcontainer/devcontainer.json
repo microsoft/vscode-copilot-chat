@@ -30,7 +30,6 @@
 	},
 	"containerUser": "node",
 	"onCreateCommand": {
-		"initGitLfs": "git lfs install --force",
 		"npmInstall": "npm install || true"
 	}
 }
