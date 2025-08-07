@@ -124,7 +124,7 @@ export class EditCodePrompt2 extends PromptElement<AgentPromptProps> {
 	}
 }
 
-export class EditCode2UserMessage extends PromptElement<AgentPromptProps> {
+class EditCode2UserMessage extends PromptElement<AgentPromptProps> {
 	constructor(
 		props: AgentPromptProps,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,

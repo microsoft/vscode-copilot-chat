@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { RequestMetadata } from '@vscode/copilot-api';
 import { HTMLTracer, IChatEndpointInfo, Raw, RenderPromptResult } from '@vscode/prompt-tsx';
 import { AsyncLocalStorage } from 'async_hooks';
 import type { Event } from 'vscode';
@@ -16,6 +17,7 @@ import { ThemeIcon } from '../../../util/vs/base/common/themables';
 import { assertType } from '../../../util/vs/base/common/types';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { ChatRequest, LanguageModelToolResult2 } from '../../../vscodeTypes';
+import type { IModelAPIResponse } from '../../endpoint/common/endpointProvider';
 import { Completion } from '../../nesFetch/common/completionsAPI';
 import { CompletionsFetchFailure, ModelParams } from '../../nesFetch/common/completionsFetchService';
 import { IFetchRequestParams } from '../../nesFetch/node/completionsFetchServiceImpl';
@@ -118,6 +120,8 @@ export interface IRequestLogger {
 
 	logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void;
 
+	logModelListCall(requestId: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void;
+
 	logChatRequest(debugName: string, chatEndpoint: IChatEndpointLogInfo, chatParams: ILoggedPendingRequest): PendingLoggedChatRequest;
 
 	logCompletionRequest(debugName: string, chatEndpoint: IChatEndpointLogInfo, chatParams: ICompletionFetchRequestLogParams, requestId: string): PendingLoggedCompletionRequest;
@@ -216,6 +220,7 @@ export abstract class AbstractRequestLogger extends Disposable implements IReque
 		return requestLogStorage.run(request, () => fn());
 	}
 
+	public abstract logModelListCall(id: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void;
 	public abstract logToolCall(id: string, name: string | undefined, args: unknown, response: LanguageModelToolResult2): void;
 
 	public logChatRequest(debugName: string, chatEndpoint: IChatEndpoint, chatParams: ILoggedPendingRequest): PendingLoggedChatRequest {
