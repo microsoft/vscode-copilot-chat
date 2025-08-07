@@ -1259,7 +1259,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				contextItemResult.updateResponse(body, token);
 				this.telemetrySender.sendRequestTelemetry(document, position, context, contextItemResult, timeTaken, { before: cacheState, after: this.runnableResultManager.getCacheState() }, undefined);
 				isDebugging && forDebugging?.length;
-				this._onCachePopulated.fire({ document, position, results: resolved, summary: contextItemResult });
+				this._onCachePopulated.fire({ document, position, source: context.source, results: resolved, summary: contextItemResult });
 			} else if (protocol.ComputeContextResponse.isError(response)) {
 				this.telemetrySender.sendRequestFailureTelemetry(context, response.body);
 				console.error('Error populating cache:', response.body.message, response.body.stack);
@@ -1333,7 +1333,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				{ before: cacheState, after: cacheState }, cacheRequest
 			);
 			isDebugging && forDebugging?.length;
-			this._onContextComputed.fire({ document, position, results: runnableResults, summary: contextItemResult });
+			this._onContextComputed.fire({ document, position, source: context.source, results: runnableResults, summary: contextItemResult });
 		}
 		return;
 	}
