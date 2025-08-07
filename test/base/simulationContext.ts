@@ -19,7 +19,7 @@ import { IChunkingEndpointClient } from '../../src/platform/chunking/common/chun
 import { ChunkingEndpointClientImpl } from '../../src/platform/chunking/common/chunkingEndpointClientImpl';
 import { INaiveChunkingService, NaiveChunkingService } from '../../src/platform/chunking/node/naiveChunkerService';
 import { CHAT_MODEL, Config, ConfigKey, ExperimentBasedConfig, ExperimentBasedConfigType, globalConfigRegistry, IConfigurationService } from '../../src/platform/configuration/common/configurationService';
-import { DefaultsOnlyConfigurationService } from '../../src/platform/configuration/test/common/defaultsOnlyConfigurationService';
+import { DefaultsOnlyConfigurationService } from '../../src/platform/configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../src/platform/configuration/test/common/inMemoryConfigurationService';
 import { IEmbeddingsComputer } from '../../src/platform/embeddings/common/embeddingsComputer';
 import { RemoteEmbeddingsComputer } from '../../src/platform/embeddings/common/remoteEmbeddingsComputer';

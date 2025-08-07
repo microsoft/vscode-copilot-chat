@@ -6,7 +6,7 @@ import { outdent } from 'outdent';
 import { assert, beforeAll, describe, expect, it } from 'vitest';
 import type { InlineCompletionContext } from 'vscode';
 import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { DefaultsOnlyConfigurationService } from '../../../../platform/configuration/test/common/defaultsOnlyConfigurationService';
+import { DefaultsOnlyConfigurationService } from '../../../../platform/configuration/common/defaultsOnlyConfigurationService';
 import { IGitExtensionService } from '../../../../platform/git/common/gitExtensionService';
 import { NullGitExtensionService } from '../../../../platform/git/common/nullGitExtensionService';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';

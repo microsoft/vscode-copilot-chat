@@ -4,8 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { ConfigurationScope } from 'vscode';
-import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
-import { AbstractConfigurationService, BaseConfig, Config, ExperimentBasedConfig, ExperimentBasedConfigType, InspectConfigResult } from '../../common/configurationService';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
+import { AbstractConfigurationService, BaseConfig, Config, ExperimentBasedConfig, ExperimentBasedConfigType, InspectConfigResult } from './configurationService';
 
 /** Provides only the default values, ignoring the user's settings or exp. */
 
