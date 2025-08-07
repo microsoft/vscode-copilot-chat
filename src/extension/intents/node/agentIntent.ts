@@ -158,9 +158,7 @@ export class AgentIntent extends EditCodeIntent {
 export class AgentIntentInvocation extends EditCodeIntentInvocation {
 
 	public override get linkification(): IntentLinkificationOptions {
-		// on by default:
-		const enabled = this.configurationService.getConfig(ConfigKey.Internal.EditLinkification) !== false;
-		return { disable: !enabled };
+		return { disable: false };
 	}
 
 	public override readonly codeblocksRepresentEdits = false;
