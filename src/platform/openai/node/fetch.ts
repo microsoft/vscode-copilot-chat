@@ -6,6 +6,7 @@
 import { ClientHttp2Stream } from 'http2';
 import type { CancellationToken } from 'vscode';
 import { createRequestHMAC } from '../../../util/common/crypto';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IntentParams } from '../../chat/common/chatMLFetcher';
 import { IChatQuotaService } from '../../chat/common/chatQuotaService';
@@ -139,6 +140,9 @@ export async function fetchAndStreamChat(
 		};
 	}
 
+	// Generate unique ID to link input and output messages
+	const modelCallId = generateUuid();
+
 	const response = await fetchWithInstrumentation(
 		logService,
 		telemetryService,
@@ -154,7 +158,7 @@ export async function fetchAndStreamChat(
 		location,
 		userInitiatedRequest,
 		cancel,
-		telemetryProperties);
+		{ ...telemetryProperties, modelCallId });
 
 	if (cancel?.isCancellationRequested) {
 		const body = await response!.body();
@@ -179,13 +183,16 @@ export async function fetchAndStreamChat(
 		return handleError(logService, telemetryService, authenticationService, telemetryData, response, ourRequestId);
 	}
 
+	// Extend baseTelemetryData with modelCallId for output messages
+	const extendedBaseTelemetryData = baseTelemetryData.extendedBy({ modelCallId });
+
 	const chatCompletions = await chatEndpointInfo.processResponseFromChatEndpoint(
 		telemetryService,
 		logService,
 		response,
-		nChoices ?? /* OpenAI's default */  1,
+		nChoices ?? /* OpenAI's default */ 1,
 		finishedCb,
-		baseTelemetryData,
+		extendedBaseTelemetryData,
 		cancel
 	);
 
@@ -470,7 +477,7 @@ async function fetchWithInstrumentation(
 		endpoint: 'completions',
 		engineName: 'chat',
 		uiKind: ChatLocation.toString(location),
-		...telemetryProperties
+		...telemetryProperties // This includes the modelCallId from fetchAndStreamChat
 	}, {
 		maxTokenWindow: chatEndpoint.modelMaxPromptTokens
 	});
@@ -557,7 +564,7 @@ async function fetchWithInstrumentation(
 			throw error;
 		})
 		.finally(() => {
-			sendEngineMessagesTelemetry(telemetryService, request.messages!, telemetryData);
+			sendEngineMessagesTelemetry(telemetryService, request.messages!, telemetryData, false, logService);
 		});
 }
 
