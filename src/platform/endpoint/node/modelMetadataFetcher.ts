@@ -245,7 +245,7 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 			this._requestLogger.logModelListCall(requestId, requestMetadata, data);
 			for (const model of data) {
 				// Skip completion models. We don't handle them so we only want chat + embeddings
-				if (model.capabilities.type === 'completions') {
+				if (model.capabilities.type === 'completion') {
 					continue;
 				}
 				// The base model is whatever model is deemed "fallback" by the server
@@ -293,7 +293,7 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 
 			const data: IModelAPIResponse = await response.json();
 			this._requestLogger.logModelListCall(requestId, requestMetadata, [data]);
-			if (data.capabilities.type === 'completions') {
+			if (data.capabilities.type === 'completion') {
 				return;
 			}
 			// Functions that call this method, check the family map first so this shouldn't result in duplicate entries

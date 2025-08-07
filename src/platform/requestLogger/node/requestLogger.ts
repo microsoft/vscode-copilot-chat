@@ -140,7 +140,6 @@ export const enum LoggedRequestKind {
 	CompletionSuccess = 'CompletionSuccess',
 	CompletionFailure = 'CompletionFailure',
 	MarkdownContentRequest = 'MarkdownContentRequest',
-	ModelListRequest = 'ModelListRequest'
 }
 
 export type IChatEndpointLogInfo = Partial<Pick<IChatEndpoint, 'model' | 'modelMaxPromptTokens' | 'urlOrRequestMetadata'>>;
@@ -186,12 +185,6 @@ export interface IMarkdownContentRequest {
 	markdownContent: string;
 }
 
-export interface ILoggedModelListCall {
-	type: LoggedRequestKind.ModelListRequest;
-	requestMetadata: RequestMetadata;
-	models: IModelAPIResponse[];
-}
-
 export interface ILoggedCompletionSuccessRequest extends ILoggedChatMLRequest {
 	type: LoggedRequestKind.CompletionSuccess;
 	timeToFirstToken: number | undefined;
@@ -212,7 +205,6 @@ export type LoggedRequest = (
 	| IMarkdownContentRequest
 	| ILoggedCompletionSuccessRequest
 	| ILoggedCompletionFailureRequest
-	| ILoggedModelListCall
 );
 
 const requestLogStorage = new AsyncLocalStorage<ChatRequest>();
