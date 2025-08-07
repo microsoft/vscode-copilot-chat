@@ -6,6 +6,7 @@
 import { CancellationToken, CodeAction, CodeActionKind, commands, Diagnostic, DiagnosticSeverity, EndOfLine, languages, NotebookDocument, Range, TextDocument, TextDocumentChangeEvent, TextDocumentContentChangeEvent, TextEditor, Uri, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
+import { CodeActionData } from '../../../../platform/inlineEdits/common/dataTypes/codeActionData';
 import { DiagnosticData } from '../../../../platform/inlineEdits/common/dataTypes/diagnosticData';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { LanguageId } from '../../../../platform/inlineEdits/common/dataTypes/languageId';
@@ -19,6 +20,7 @@ import { IWorkspaceService } from '../../../../platform/workspace/common/workspa
 import { getLanguage } from '../../../../util/common/languages';
 import { findNotebook, isNotebookCellOrNotebookChatInput } from '../../../../util/common/notebooks';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
+import { asPromise, raceCancellation, raceTimeout } from '../../../../util/vs/base/common/async';
 import { diffMaps } from '../../../../util/vs/base/common/collections';
 import { onUnexpectedError } from '../../../../util/vs/base/common/errors';
 import { Disposable, DisposableStore, IDisposable } from '../../../../util/vs/base/common/lifecycle';
@@ -27,13 +29,11 @@ import { autorun, derived, IObservable, IReader, ISettableObservable, mapObserva
 import { isDefined } from '../../../../util/vs/base/common/types';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { StringEdit, StringReplacement } from '../../../../util/vs/editor/common/core/edits/stringEdit';
+import { TextReplacement } from '../../../../util/vs/editor/common/core/edits/textEdit';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { CodeActionData } from '../../../../platform/inlineEdits/common/dataTypes/codeActionData';
-import { TextReplacement } from '../../../../util/vs/editor/common/core/edits/textEdit';
 import { toInternalTextEdit } from '../utils/translations';
-import { asPromise, raceCancellation, raceTimeout } from '../../../../util/vs/base/common/async';
 
 export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable {
 	private readonly _openDocuments = observableValue<readonly IVSCodeObservableDocument[], { added: readonly IVSCodeObservableDocument[]; removed: readonly IVSCodeObservableDocument[] }>(this, []);
@@ -815,6 +815,13 @@ function toCodeActionData(codeAction: CodeAction, workspaceDocument: IVSCodeObse
 	const diagnostics = coalesce((codeAction.diagnostics || []).map(d => toDiagnosticData(d, uri, translateRange))).concat(
 		getCommandDiagnostics(codeAction, uri, translateRange)
 	);
+
+	// remove no-op edits
+	let documentEdits = getDocumentEdits(codeAction, workspaceDocument);
+	if (documentEdits) {
+		const documentContent = workspaceDocument.value.get();
+		documentEdits = documentEdits.filter(edit => documentContent.getValueOfRange(edit.range) !== edit.text);
+	}
 
 	const codeActionData = new CodeActionData(
 		codeAction.title,
