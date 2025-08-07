@@ -397,9 +397,9 @@ export class RequestLogger extends AbstractRequestLogger {
 
 		result.push(`## Metadata`);
 		result.push(`~~~`);
-		result.push(`requestId       : ${requestId}`);
+		result.push(`requestId        : ${requestId}`);
 		result.push(`requestType      : ${requestMetadata?.type || 'unknown'}`);
-		result.push(`isModelLab      : ${(requestMetadata as { type: string; isModelLab?: boolean }) ? 'yes' : 'no'}`);
+		result.push(`isModelLab       : ${(requestMetadata as { type: string; isModelLab?: boolean }).isModelLab ? 'yes' : 'no'}`);
 		if (requestMetadata.type === RequestType.ListModel) {
 			result.push(`requestedModel   : ${(requestMetadata as { type: string; modelId: string })?.modelId || 'unknown'}`);
 		}
