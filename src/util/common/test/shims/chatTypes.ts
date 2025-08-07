@@ -46,6 +46,17 @@ export class ChatResponseProgressPart {
 	}
 }
 
+export class ChatResponseThinkingProgressPart {
+	value: string;
+	id?: string;
+	metadata?: string;
+	constructor(value: string, id?: string, metadata?: string) {
+		this.value = value;
+		this.id = id;
+		this.metadata = metadata;
+	}
+}
+
 export class ChatResponseProgressPart2 {
 	value: string;
 	task?: (progress: vscode.Progress<vscode.ChatResponseWarningPart>) => Thenable<string | void>;
@@ -263,14 +274,15 @@ export class LanguageModelTextPart implements vscode.LanguageModelTextPart {
 	}
 }
 
-export enum ToolResultAudience {
+export enum LanguageModelPartAudience {
 	Assistant = 0,
 	User = 1,
+	Extension = 2,
 }
 
 export class LanguageModelTextPart2 extends LanguageModelTextPart {
-	audience: ToolResultAudience[] | undefined;
-	constructor(value: string, audience?: ToolResultAudience[]) {
+	audience: LanguageModelPartAudience[] | undefined;
+	constructor(value: string, audience?: LanguageModelPartAudience[]) {
 		super(value);
 		this.audience = audience;
 	}
@@ -299,8 +311,8 @@ export class LanguageModelDataPart implements vscode.LanguageModelDataPart {
 }
 
 export class LanguageModelDataPart2 extends LanguageModelDataPart {
-	audience: ToolResultAudience[] | undefined;
-	constructor(data: Uint8Array, mimeType: string, audience?: ToolResultAudience[]) {
+	audience: LanguageModelPartAudience[] | undefined;
+	constructor(data: Uint8Array, mimeType: string, audience?: LanguageModelPartAudience[]) {
 		super(data, mimeType);
 		this.audience = audience;
 	}

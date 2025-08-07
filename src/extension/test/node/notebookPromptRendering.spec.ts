@@ -269,6 +269,7 @@ describe('Notebook Prompt Rendering', function () {
 			supportsToolCalls: false,
 			supportsVision: false,
 			supportsPrediction: false,
+			supportsStatefulResponses: false,
 			isPremium: false,
 			multiplier: 0,
 			maxOutputTokens: 4096,
@@ -288,6 +289,8 @@ describe('Notebook Prompt Rendering', function () {
 			processResponseFromChatEndpoint: async () => { throw new Error('Method not implemented.'); },
 			acceptChatPolicy: async () => true,
 			cloneWithTokenOverride: () => endpoint,
+			createRequestBody: () => { return {}; },
+			makeChatRequest2: () => { throw new Error('Method not implemented.'); },
 			makeChatRequest: async () => { throw new Error('Method not implemented.'); },
 		};
 		const progressReporter = { report() { } };

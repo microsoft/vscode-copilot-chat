@@ -83,7 +83,6 @@ export class ToolGrouping implements IToolGrouping {
 				}
 			*/
 			this._telemetryService.sendMSFTTelemetryEvent('virtualTools.called', {
-				owner: 'connor4312',
 				callName: tool.name,
 			}, {
 				turnNo: localTurnNumber,

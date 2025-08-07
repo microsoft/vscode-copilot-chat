@@ -19,9 +19,9 @@ import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from './fetch';
+import { FinishedCallback, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams } from './fetch';
 import { FetchOptions, IAbortController, IFetcherService, Response } from './fetcherService';
-import { ChatCompletion } from './openai';
+import { ChatCompletion, rawMessageToCAPI } from './openai';
 
 /**
  * Encapsulates all the functionality related to making GET/POST requests using
@@ -60,16 +60,22 @@ const requestTimeoutMs = 30 * 1000; // 30 seconds
  */
 export interface IEndpointBody {
 	/** General or completions: */
-	tools?: OpenAiFunctionTool[];
-	inputs?: string[];
+	tools?: (OpenAiFunctionTool | OpenAiResponsesFunctionTool)[];
 	model?: string;
+	previous_response_id?: string;
 	max_tokens?: number;
+	max_output_tokens?: number;
 	max_completion_tokens?: number;
 	temperature?: number;
 	top_p?: number;
 	stream?: boolean;
 	messages?: any[];
+	n?: number;
+	reasoning?: { effort?: string; summary?: string };
+	tool_choice?: OptionalChatRequestParams['tool_choice'] | { type: 'function'; name: string };
+	top_logprobs?: number;
 	intent?: boolean;
+	intent_threshold?: number;
 	state?: 'enabled';
 	snippy?: { enabled: boolean };
 	stream_options?: { include_usage?: boolean };
@@ -91,6 +97,9 @@ export interface IEndpointBody {
 	/** Code search: */
 	scoping_query?: string;
 	include_embeddings?: boolean;
+	/** Responses API: */
+	input?: readonly any[];
+	truncation?: 'auto' | 'disabled';
 }
 
 export interface IEndpoint {
@@ -117,6 +126,36 @@ export interface IEmbeddingEndpoint extends IEndpoint {
 	readonly model: EMBEDDING_MODEL;
 }
 
+export interface IMakeChatRequestOptions {
+	/** The debug name for this request */
+	debugName: string;
+	/** The array of chat messages to send */
+	messages: Raw.ChatMessage[];
+	// todo
+	ignoreStatefulMarker?: boolean;
+	/** Streaming callback for each response part. */
+	finishedCb: FinishedCallback | undefined;
+	/** Location where the chat message is being sent. */
+	location: ChatLocation;
+	/** Optional source of the chat request */
+	source?: Source;
+	/** Additional request options */
+	requestOptions?: Omit<OptionalChatRequestParams, 'n'>;
+	/** Indicates if the request was user-initiated */
+	userInitiatedRequest?: boolean;
+	/** (CAPI-only) Optional telemetry properties for analytics */
+	telemetryProperties?: TelemetryProperties;
+	/** (CAPI-only) Intent classifier details */
+	intentParams?: IntentParams;
+	/** Whether this request is retrying a filtered response */
+	isFilterRetry?: boolean;
+}
+
+export interface ICreateEndpointBodyOptions extends IMakeChatRequestOptions {
+	requestId: string;
+	postOptions: OptionalChatRequestParams;
+}
+
 export interface IChatEndpoint extends IEndpoint {
 	readonly maxOutputTokens: number;
 	/** The model ID- this may change and will be `copilot-base` for the base model. Use `family` to switch behavior based on model type. */
@@ -124,6 +163,7 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly supportsToolCalls: boolean;
 	readonly supportsVision: boolean;
 	readonly supportsPrediction: boolean;
+	readonly supportsStatefulResponses: boolean;
 	readonly showInModelPicker: boolean;
 	readonly isPremium?: boolean;
 	readonly multiplier?: number;
@@ -179,7 +219,46 @@ export interface IChatEndpoint extends IEndpoint {
 		intentParams?: IntentParams
 	): Promise<ChatResponse>;
 
+	/**
+	 * Flights a request from the chat endpoint returning a chat response.
+	 * Most of the time this is ChatMLFetcher#fetchOne, but it can be overridden for special cases.
+	 */
+	makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse>;
+
+	/**
+	 * Creates the request body to be sent to the endpoint based on the request.
+	 */
+	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody;
+
 	cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint;
+}
+
+/** Function to create a standard request body for CAPI completions */
+export function createCapiRequestBody(model: string, options: ICreateEndpointBodyOptions) {
+	// FIXME@ulugbekna: need to investigate why language configs have such stop words, eg
+	// python has `\ndef` and `\nclass` which must be stop words for ghost text
+	// const stops = getLanguageConfig<string[]>(accessor, ConfigKey.Stops);
+
+	const request: IEndpointBody = {
+		messages: rawMessageToCAPI(options.messages),
+		model,
+		// stop: stops,
+	};
+
+	if (options.postOptions) {
+		Object.assign(request, options.postOptions);
+	}
+
+	// todo@connor4312/lramos: this was present but, from what I can tell, was
+	// never used in current code paths.
+	// if (options.intentParams) {
+	// 	request.intent = options.intentParams.intent;
+	// 	if (options.intentParams.intent_threshold) {
+	// 		request.intent_threshold = options.intentParams.intent_threshold;
+	// 	}
+	// }
+
+	return request;
 }
 
 function networkRequest(

@@ -67,10 +67,16 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 		return this;
 	}
 
+	thinkingProgress(value: string, id?: string, metadata?: string): ChatResponseStream {
+		this.enqueue(() => this._progress.thinkingProgress(value, id, metadata), false);
+		return this;
+	}
+
 	warning(value: string | MarkdownString): ChatResponseStream {
 		this.enqueue(() => this._progress.warning(value), false);
 		return this;
 	}
+
 
 	reference(value: Uri | Location): ChatResponseStream {
 		this.enqueue(() => this._progress.reference(value), false);
