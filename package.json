@@ -1576,6 +1576,10 @@
 				"vendor": "openrouter",
 				"displayName": "OpenRouter",
 				"managementCommand": "github.copilot.chat.manageBYOK"
+			},
+			{
+				"vendor": "github",
+				"displayName": "GitHub Models"
 			}
 		],
 		"interactiveSession": [

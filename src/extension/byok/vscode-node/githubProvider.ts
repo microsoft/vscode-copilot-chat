@@ -19,7 +19,7 @@ export class GitHubProvider extends BaseOpenAICompatibleLMProvider {
 		@IInstantiationService _instantiationService: IInstantiationService,
 	) {
 		super(
-			BYOKAuthType.None,
+			BYOKAuthType.GlobalApiKey,
 			GitHubProvider.providerName,
 			'https://models.github.ai/inference',
 			undefined,
@@ -30,9 +30,38 @@ export class GitHubProvider extends BaseOpenAICompatibleLMProvider {
 		);
 	}
 
+	/**
+	 * Gets the GitHub access token using VS Code's authentication API
+	 * @returns Promise<string | undefined> GitHub access token if available
+	 */
+	private async getGitHubToken(): Promise<string | undefined> {
+		const session = await authentication.getSession(
+			'github',
+			['repo', 'user:email'],
+			{ createIfNone: true }
+		);
+		return session?.accessToken;
+	}
+
 	protected override async getAllModels(): Promise<BYOKKnownModels> {
 		try {
-			const response = await this._fetcherService.fetch('https://models.github.ai/catalog/models', { method: 'GET' });
+			const githubToken = await this.getGitHubToken();
+			if (!githubToken) {
+				throw new Error('GitHub token is not available. Cannot fetch models.');
+			}
+			const response = await this._fetcherService.fetch('https://models.github.ai/catalog/models', {
+				method: 'GET',
+				headers: {
+					'Accept': 'application/vnd.github+json',
+					'Authorization': `Bearer ${githubToken}`,
+					'X-GitHub-Api-Version': '2022-11-28'
+				}
+			});
+
+			if (!response.ok) {
+				throw new Error(`Failed to fetch GitHub models: ${response.statusText}`);
+			}
+
 			const models: any = await response.json();
 			const knownModels: BYOKKnownModels = {};
 			for (const model of models) {
@@ -50,17 +79,5 @@ export class GitHubProvider extends BaseOpenAICompatibleLMProvider {
 			this._logService.error('Error fetching available GitHub models:', error);
 			throw error;
 		}
-	}
-	/**
-	 * Gets the GitHub access token using VS Code's authentication API
-	 * @returns Promise<string | undefined> GitHub access token if available
-	 */
-	async getGitHubToken(): Promise<string | undefined> {
-		const session = await authentication.getSession(
-			'github',
-			['repo', 'user:email'],
-			{ createIfNone: true }
-		);
-		return session?.accessToken;
 	}
 }
