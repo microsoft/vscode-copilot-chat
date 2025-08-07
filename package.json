@@ -2731,7 +2731,8 @@
 						"type": "boolean",
 						"default": false,
 						"tags": [
-							"experimental"
+							"experimental",
+							"onExP"
 						],
 						"markdownDescription": "%github.copilot.config.byok.responsesApi%"
 					},
