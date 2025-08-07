@@ -1285,9 +1285,9 @@
   {
     "name": "edit-inline2 [inline] [cpp] - edit for macro",
     "contentFilterCount": 0,
-    "passCount": 7,
-    "failCount": 3,
-    "score": 0.7
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "edit-inline2 [inline] [csharp] - issue release#275: Inline Diff refinement causes massive duplication of code",
@@ -3105,9 +3105,9 @@
   {
     "name": "fix-inline2 (TSC) [inline] [typescript] - 22222 Error 2322 - type undefined is not assignable to type",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "fix-inline2 (TSC) [inline] [typescript] - can not assign to parameter of type",
