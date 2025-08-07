@@ -9957,9 +9957,9 @@
   {
     "name": "startDebugging [panel] -  chrome OS app port 3000",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "startDebugging [panel] -  node app",
@@ -11826,6 +11826,9 @@
   {
     "name": "toolCalling [panel] - find all phone numbers in markdown files in the codebase",
     "contentFilterCount": 0,
+    "passCount": 4,
+    "failCount": 6,
+    "score": 0.4
     "passCount": 4,
     "failCount": 6,
     "score": 0.4

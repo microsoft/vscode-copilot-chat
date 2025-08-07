@@ -13,7 +13,7 @@ import { CHAT_MODEL } from '../../../configuration/common/configurationService';
 import { ILogService } from '../../../log/common/logService';
 import { FinishedCallback, OptionalChatRequestParams } from '../../../networking/common/fetch';
 import { Response } from '../../../networking/common/fetcherService';
-import { IChatEndpoint, IEndpointBody } from '../../../networking/common/networking';
+import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../networking/common/networking';
 import { ChatCompletion } from '../../../networking/common/openai';
 import { ITelemetryService, TelemetryProperties } from '../../../telemetry/common/telemetry';
 import { TelemetryData } from '../../../telemetry/common/telemetryData';
@@ -34,6 +34,7 @@ export class MockEndpoint implements IChatEndpoint {
 	supportsVision: boolean = false;
 	supportsPrediction: boolean = true;
 	showInModelPicker: boolean = true;
+	supportsStatefulResponses: boolean = false;
 	isDefault: boolean = false;
 	isFallback: boolean = false;
 	policy: 'enabled' | { terms: string } = 'enabled';
@@ -52,6 +53,18 @@ export class MockEndpoint implements IChatEndpoint {
 		throw new Error('Method not implemented.');
 	}
 
+	makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
+		return this._chatMLFetcher.fetchOne({
+			requestOptions: {},
+			...options,
+			endpoint: this,
+		}, token);
+	}
+
+	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		return createCapiRequestBody(this.model, options);
+	}
+
 	public async makeChatRequest(
 		debugName: string,
 		messages: Raw.ChatMessage[],
@@ -64,19 +77,17 @@ export class MockEndpoint implements IChatEndpoint {
 		telemetryProperties?: TelemetryProperties,
 		intentParams?: IntentParams
 	): Promise<ChatResponse> {
-		return this._chatMLFetcher.fetchOne(
+		return this.makeChatRequest2({
 			debugName,
 			messages,
 			finishedCb,
-			token,
 			location,
-			this,
 			source,
 			requestOptions,
 			userInitiatedRequest,
 			telemetryProperties,
 			intentParams
-		);
+		}, token);
 	}
 
 	cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {

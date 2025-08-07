@@ -84,7 +84,7 @@ declare module 'vscode' {
 		constructor(toolName: string);
 	}
 
-	export type ExtendedChatResponsePart = ChatResponsePart | ChatResponseTextEditPart | ChatResponseNotebookEditPart | ChatResponseConfirmationPart | ChatResponseCodeCitationPart | ChatResponseReferencePart2 | ChatResponseMovePart | ChatResponseExtensionsPart | ChatPrepareToolInvocationPart;
+	export type ExtendedChatResponsePart = ChatResponsePart | ChatResponseTextEditPart | ChatResponseNotebookEditPart | ChatResponseConfirmationPart | ChatResponseCodeCitationPart | ChatResponseReferencePart2 | ChatResponseMovePart | ChatResponseExtensionsPart | ChatResponsePullRequestPart | ChatPrepareToolInvocationPart;
 
 	export class ChatResponseWarningPart {
 		value: MarkdownString;
@@ -97,6 +97,21 @@ declare module 'vscode' {
 		constructor(value: string, task?: (progress: Progress<ChatResponseWarningPart | ChatResponseReferencePart>) => Thenable<string | void>);
 	}
 
+	/**
+ * A specialized progress part for displaying thinking/reasoning steps.
+ */
+	export class ChatResponseThinkingProgressPart extends ChatResponseProgressPart {
+		value: string;
+		id?: string;
+		metadata?: string;
+
+		/**
+		 * Creates a new thinking progress part.
+		 * @param value An initial progress message
+		 * @param task A task that will emit thinking parts during its execution
+		 */
+		constructor(value: string, id?: string, metadata?: string)
+	}
 	export class ChatResponseReferencePart2 {
 		/**
 		 * The reference target.
@@ -171,6 +186,16 @@ declare module 'vscode' {
 		constructor(extensions: string[]);
 	}
 
+	export class ChatResponsePullRequestPart {
+		readonly uri: Uri;
+		readonly linkTag: string;
+		readonly title: string;
+		readonly description: string;
+		readonly author: string;
+		constructor(uri: Uri, title: string, description: string, author: string, linkTag: string);
+	}
+
+
 	export interface ChatResponseStream {
 
 		/**
@@ -182,6 +207,8 @@ declare module 'vscode' {
 		* @returns This stream.
 		*/
 		progress(value: string, task?: (progress: Progress<ChatResponseWarningPart | ChatResponseReferencePart>) => Thenable<string | void>): void;
+
+		thinkingProgress(value: string, id?: string, metadata?: string): void;
 
 		textEdit(target: Uri, edits: TextEdit | TextEdit[]): void;
 
@@ -225,6 +252,8 @@ declare module 'vscode' {
 		prepareToolInvocation(toolName: string): void;
 
 		push(part: ExtendedChatResponsePart): void;
+
+		clearToPreviousToolInvocation(reason: ChatResponseClearToPreviousToolInvocationReason): void;
 	}
 
 	export enum ChatResponseReferencePartStatusKind {
@@ -233,6 +262,11 @@ declare module 'vscode' {
 		Omitted = 3
 	}
 
+	export enum ChatResponseClearToPreviousToolInvocationReason {
+		NoReason = 0,
+		FilteredContentRetry = 1,
+		CopyrightContentRetry = 2,
+	}
 
 	/**
 	 * Does this piggy-back on the existing ChatRequest, or is it a different type of request entirely?
@@ -351,6 +385,7 @@ declare module 'vscode' {
 			participant?: string;
 			command?: string;
 		};
+		details?: string;
 	}
 
 	export namespace chat {

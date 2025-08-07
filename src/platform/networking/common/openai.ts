@@ -250,7 +250,7 @@ export interface ChoiceLogProbs {
 	content: ChoiceLogProbsContent[];
 }
 
-interface TokenLogProb {
+export interface TokenLogProb {
 	bytes: number[];
 	token: string;
 	logprob: number;

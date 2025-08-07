@@ -7,15 +7,16 @@ import { HTMLTracer, IChatEndpointInfo, RenderPromptResult } from '@vscode/promp
 import { CancellationToken, DocumentLink, DocumentLinkProvider, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult2, languages, Range, TextDocument, Uri, workspace } from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
+import { getAllStatefulMarkersAndIndicies } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { ILogService } from '../../../platform/log/common/logService';
 import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
 import { IResponseDelta } from '../../../platform/networking/common/fetch';
 import { AbstractRequestLogger, ChatRequestScheme, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
 import { ThinkingData } from '../../../platform/thinking/common/thinking';
-import { getThinkingId, getThinkingText } from '../../../platform/thinking/common/thinkingUtils';
 import { createFencedCodeBlock } from '../../../util/common/markdown';
 import { assertNever } from '../../../util/vs/base/common/assert';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
+import { Iterable } from '../../../util/vs/base/common/iterator';
 import { safeStringify } from '../../../util/vs/base/common/objects';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { renderToolResultToStringNoBudget } from './requestLoggerToolResult';
@@ -77,7 +78,7 @@ export class RequestLogger extends AbstractRequestLogger {
 	public override addPromptTrace(elementName: string, endpoint: IChatEndpointInfo, result: RenderPromptResult, trace: HTMLTracer): void {
 		const id = generateUuid().substring(0, 8);
 		this._addEntry({ kind: LoggedInfoKind.Element, id, name: elementName, tokens: result.tokenCount, maxTokens: endpoint.modelMaxPromptTokens, trace, chatRequest: this.currentRequest })
-			.catch(e => this._logService.logger.error(e));
+			.catch(e => this._logService.error(e));
 	}
 
 	public addEntry(entry: LoggedRequest): void {
@@ -93,10 +94,10 @@ export class RequestLogger extends AbstractRequestLogger {
 						entry.type === LoggedRequestKind.MarkdownContentRequest ? 'markdown' :
 							`${entry.type === LoggedRequestKind.ChatMLCancelation ? 'cancelled' : entry.result.type} | ${entry.chatEndpoint.model} | ${entry.endTime.getTime() - entry.startTime.getTime()}ms | [${entry.debugName}]`;
 
-					this._logService.logger.info(`${ChatRequestScheme.buildUri({ kind: 'request', id: id })} | ${extraData}`);
+					this._logService.info(`${ChatRequestScheme.buildUri({ kind: 'request', id: id })} | ${extraData}`);
 				}
 			})
-			.catch(e => this._logService.logger.error(e));
+			.catch(e => this._logService.error(e));
 	}
 
 	private _shouldLog(entry: LoggedRequest) {
@@ -116,7 +117,7 @@ export class RequestLogger extends AbstractRequestLogger {
 	private async _addEntry(entry: LoggedInfo): Promise<boolean> {
 		if (this._isFirst) {
 			this._isFirst = false;
-			this._logService.logger.info(`Latest entry: ${ChatRequestScheme.buildUri({ kind: 'latest' })}`);
+			this._logService.info(`Latest entry: ${ChatRequestScheme.buildUri({ kind: 'latest' })}`);
 		}
 
 
@@ -207,14 +208,14 @@ export class RequestLogger extends AbstractRequestLogger {
 
 		if (entry.thinking) {
 			result.push(`## Thinking`);
-			const thinkingId = getThinkingId(entry.thinking);
-			if (thinkingId) {
-				result.push(`thinkingId: ${thinkingId}`);
+			if (entry.thinking.id) {
+				result.push(`thinkingId: ${entry.thinking.id}`);
 			}
-			result.push(`~~~`);
-			const thinkingText = getThinkingText(entry.thinking);
-			result.push(thinkingText);
-			result.push(`~~~`);
+			if (entry.thinking.text) {
+				result.push(`~~~`);
+				result.push(entry.thinking.text);
+				result.push(`~~~`);
+			}
 		}
 
 		return result.join('\n');
@@ -260,6 +261,15 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(`endTime          : ${entry.endTime.toJSON()}`);
 		result.push(`duration         : ${entry.endTime.getTime() - entry.startTime.getTime()}ms`);
 		result.push(`ourRequestId     : ${entry.chatParams.ourRequestId}`);
+
+		let statefulMarker: { statefulMarker: { modelId: string; marker: string }; index: number } | undefined;
+		if ('messages' in entry.chatParams) {
+			statefulMarker = Iterable.first(getAllStatefulMarkersAndIndicies(entry.chatParams.messages));
+		}
+		if (statefulMarker) {
+			result.push(`lastResponseId   : ${statefulMarker.statefulMarker.marker} using ${statefulMarker.statefulMarker.modelId}`);
+		}
+
 		if (entry.type === LoggedRequestKind.ChatMLSuccess) {
 			result.push(`requestId        : ${entry.result.requestId}`);
 			result.push(`serverRequestId  : ${entry.result.serverRequestId}`);

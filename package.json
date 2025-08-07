@@ -2,7 +2,7 @@
 	"name": "copilot-chat",
 	"displayName": "GitHub Copilot Chat",
 	"description": "AI chat features powered by Copilot",
-	"version": "0.30.0",
+	"version": "0.31.0",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
 	"internalLargeStorageAriaKey": "ec712b3202c5462fb6877acae7f1f9d7-c19ad55e-3e3c-4f99-984b-827f6d95bd9e-6917",
@@ -22,7 +22,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.103.0-20250721",
+		"vscode": "^1.103.0-20250728",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -240,6 +240,8 @@
 				"displayName": "%copilot.tools.think.name%",
 				"name": "copilot_think",
 				"tags": [],
+				"canBeReferencedInPrompt": true,
+				"toolReferenceName": "think",
 				"when": "config.github.copilot.chat.agent.thinkingTool",
 				"modelDescription": "Use this tool to think deeply about the user's request and organize your thoughts. This tool helps improve response quality by allowing the model to consider the request carefully, brainstorm solutions, and plan complex tasks. It's particularly useful for:\n\n1. Exploring repository issues and brainstorming bug fixes\n2. Analyzing test results and planning fixes\n3. Planning complex refactoring approaches\n4. Designing new features and architecture\n5. Organizing debugging hypotheses\n\nThe tool logs your thought process for transparency but doesn't execute any code or make changes.",
 				"inputSchema": {
@@ -391,35 +393,6 @@
 				}
 			},
 			{
-				"name": "copilot_getTaskOutput",
-				"toolReferenceName": "getTaskOutput",
-				"displayName": "%copilot.tools.getTaskOutput.name%",
-				"modelDescription": "Retrieves the output of a VS Code task.\n- Use this tool when the user is trying to understand the current project state, debug issues, or analyze task-related errors, output, or status.",
-				"tags": [],
-				"when": "!config.chat.agent.terminal.newTaskToolsEnabled",
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"workspaceFolder": {
-							"type": "string",
-							"description": "The workspace folder path containing the task"
-						},
-						"id": {
-							"type": "string",
-							"description": "The task ID to run."
-						},
-						"maxCharsToRetrieve": {
-							"type": "number",
-							"description": "The maximum number of characters to retrieve from the terminal output."
-						}
-					},
-					"required": [
-						"id",
-						"workspaceFolder"
-					]
-				}
-			},
-			{
 				"name": "copilot_getErrors",
 				"displayName": "%copilot.tools.getErrors.name%",
 				"toolReferenceName": "problems",
@@ -525,33 +498,6 @@
 				"when": "config.github.copilot.chat.enableUserPreferences"
 			},
 			{
-				"name": "copilot_runTests1",
-				"toolReferenceName": "runTests1",
-				"canBeReferencedInPrompt": false,
-				"when": "!chat.coreTestFailureToolEnabled",
-				"displayName": "%copilot.tools.runTests.name%",
-				"modelDescription": "Runs unit tests in files. Use this tool if the user asks to run tests or when you want to validate changes using unit tests. When possible, always try to provide `files` paths containing the relevant unit tests in order to avoid unnecessarily long test runs.",
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"files": {
-							"type": "array",
-							"items": {
-								"type": "string"
-							},
-							"description": "Test files to run. If not provided, all test files will be run."
-						}
-					}
-				},
-				"tags": [
-					"vscode_editing_with_tests",
-					"enable_other_tool_copilot_readFile",
-					"enable_other_tool_copilot_listDirectory",
-					"enable_other_tool_copilot_findFiles",
-					"enable_other_tool_copilot_runTests"
-				]
-			},
-			{
 				"name": "copilot_getTerminalSelection",
 				"toolReferenceName": "terminalSelection",
 				"displayName": "%github.copilot.tools.terminalSelection.name%",
@@ -595,80 +541,6 @@
 				]
 			},
 			{
-				"name": "copilot_createAndRunTask",
-				"displayName": "%github.copilot.tools.createAndRunTask.name%",
-				"toolReferenceName": "createAndRunTask",
-				"canBeReferencedInPrompt": false,
-				"icon": "$(json)",
-				"userDescription": "%github.copilot.tools.createAndRunTask.userDescription%",
-				"when": "config.github.copilot.chat.agent.runTasks",
-				"modelDescription": "For a workspace, this tool will create a task based on the package.json, README.md, and project structure so that the project can be built and run.",
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"workspaceFolder": {
-							"type": "string",
-							"description": "The absolute path of the workspace folder where the tasks.json file will be created."
-						},
-						"task": {
-							"type": "object",
-							"description": "The task to add to the new tasks.json file.",
-							"properties": {
-								"label": {
-									"type": "string",
-									"description": "The label of the task."
-								},
-								"type": {
-									"type": "string",
-									"description": "The type of the task. The only supported value is 'shell'.",
-									"enum": [
-										"shell"
-									]
-								},
-								"command": {
-									"type": "string",
-									"description": "The shell command to run for the task. Use this to specify commands for building or running the application."
-								},
-								"args": {
-									"type": "array",
-									"description": "The arguments to pass to the command.",
-									"items": {
-										"type": "string"
-									}
-								},
-								"isBackground": {
-									"type": "boolean",
-									"description": "Whether the task runs in the background without blocking the UI or other tasks. Set to true for long-running processes like watch tasks or servers that should continue executing without requiring user attention. When false, the task will block the terminal until completion."
-								},
-								"problemMatcher": {
-									"type": "array",
-									"description": "The problem matcher to use to parse task output for errors and warnings. Can be a predefined matcher like '$tsc' (TypeScript), '$eslint-stylish', '$gcc', etc., or a custom pattern defined in tasks.json. This helps VS Code display errors in the Problems panel and enables quick navigation to error locations.",
-									"items": {
-										"type": "string"
-									}
-								},
-								"group": {
-									"type": "string",
-									"description": "The group to which the task belongs."
-								}
-							},
-							"required": [
-								"label",
-								"type",
-								"command"
-							]
-						}
-					},
-					"required": [
-						"task",
-						"workspaceFolder"
-					]
-				},
-				"tags": [
-					"enable_other_tool_copilot_getProjectSetupInfo"
-				]
-			},
-			{
 				"name": "copilot_getProjectSetupInfo",
 				"displayName": "%github.copilot.tools.getProjectSetupInfo.name%",
 				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
@@ -680,10 +552,6 @@
 						"projectType": {
 							"type": "string",
 							"description": "The type of project to create. Supported values are: 'python-script', 'python-project', 'mcp-server', 'model-context-protocol-server', 'vscode-extension', 'next-js', 'vite' and 'other'"
-						},
-						"language": {
-							"type": "string",
-							"description": "The programming language for the project. Supported: 'javascript', 'typescript', 'python' and 'other'."
 						}
 					},
 					"required": [
@@ -769,30 +637,6 @@
 					]
 				},
 				"tags": []
-			},
-			{
-				"name": "copilot_runVsCodeTask",
-				"displayName": "runVsCodeTask",
-				"toolReferenceName": "runTask",
-				"modelDescription": "Runs a VS Code task.\n\n- If you see that an appropriate task exists for building or running code, prefer to use this tool to run the task instead of using the run_in_terminal tool.\n- Make sure that any appropriate build or watch task is running before trying to run tests or execute code.\n- If the user asks to run a task, use this tool to do so.",
-				"when": "!config.chat.agent.terminal.newTaskToolsEnabled",
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"workspaceFolder": {
-							"type": "string",
-							"description": "The workspace folder path containing the task"
-						},
-						"id": {
-							"type": "string",
-							"description": "The task ID to run."
-						}
-					},
-					"required": [
-						"workspaceFolder",
-						"id"
-					]
-				}
 			},
 			{
 				"name": "copilot_insertEdit",
@@ -1219,15 +1063,6 @@
 					"getProjectSetupInfo",
 					"installExtension"
 				]
-			},
-			{
-				"name": "runTasks",
-				"description": "%copilot.toolSet.runTasks.description%",
-				"tools": [
-					"createAndRunTask",
-					"runTask",
-					"getTaskOutput"
-				]
 			}
 		],
 		"chatParticipants": [
@@ -1482,7 +1317,7 @@
 				]
 			},
 			{
-				"id": "github.copilot.notebook",
+				"id": "github.copilot.notebookEditorAgent",
 				"name": "GitHubCopilot",
 				"fullName": "GitHub Copilot",
 				"description": "%copilot.description%",
@@ -1490,7 +1325,7 @@
 				"locations": [
 					"notebook"
 				],
-				"when": "!config.inlineChat.enableV2 && !config.github.copilot.chat.advanced.inlineChat2",
+				"when": "config.inlineChat.enableV2",
 				"commands": [
 					{
 						"name": "fix",
@@ -1710,11 +1545,13 @@
 			},
 			{
 				"vendor": "azure",
-				"displayName": "Azure"
+				"displayName": "Azure",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "anthropic",
-				"displayName": "Anthropic"
+				"displayName": "Anthropic",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "ollama",
@@ -1722,19 +1559,23 @@
 			},
 			{
 				"vendor": "openai",
-				"displayName": "OpenAI"
+				"displayName": "OpenAI",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "gemini",
-				"displayName": "Gemini"
+				"displayName": "Gemini",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "groq",
-				"displayName": "Groq"
+				"displayName": "Groq",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "openrouter",
-				"displayName": "OpenRouter"
+				"displayName": "OpenRouter",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			}
 		],
 		"interactiveSession": [
@@ -2164,6 +2005,10 @@
 				"title": "Disable Follow Cell Execution from Chat",
 				"shortTitle": "Unfollow",
 				"icon": "$(pinned-dirty)"
+			},
+			{
+				"command": "github.copilot.chat.manageBYOK",
+				"title": "Manage Bring Your Own Key Vendor"
 			}
 		],
 		"configuration": [
@@ -2279,6 +2124,11 @@
 						"type": "boolean",
 						"default": true,
 						"description": "%github.copilot.config.autoFix%"
+					},
+					"github.copilot.chat.customInstructionsInSystemMessage": {
+						"type": "boolean",
+						"default": true,
+						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
 					}
 				}
 			},
@@ -2782,6 +2632,14 @@
 						],
 						"description": "%github.copilot.config.newWorkspaceCreation.enabled%"
 					},
+					"github.copilot.chat.newWorkspace.useContext7": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental"
+						],
+						"markdownDescription": "%github.copilot.config.newWorkspace.useContext7%"
+					},
 					"github.copilot.chat.agent.currentEditorContext.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -2789,14 +2647,6 @@
 							"experimental"
 						],
 						"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
-					},
-					"github.copilot.chat.customInstructionsInSystemMessage": {
-						"type": "boolean",
-						"default": false,
-						"tags": [
-							"experimental"
-						],
-						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
 					},
 					"github.copilot.chat.edits.newNotebook.enabled": {
 						"type": "boolean",
@@ -2824,13 +2674,15 @@
 						],
 						"description": "%github.copilot.config.summarizeAgentConversationHistory.enabled%"
 					},
-					"github.copilot.chat.virtualTools.enabled": {
-						"type": "boolean",
-						"default": false,
+					"github.copilot.chat.virtualTools.threshold": {
+						"type": "number",
+						"minimum": 0,
+						"maximum": 128,
+						"default": 128,
 						"tags": [
 							"experimental"
 						],
-						"description": "%github.copilot.config.virtualTools.enabled%"
+						"markdownDescription": "%github.copilot.config.virtualTools.threshold%"
 					},
 					"github.copilot.chat.azureModels": {
 						"type": "object",
@@ -2864,6 +2716,11 @@
 								"maxOutputTokens": {
 									"type": "number",
 									"description": "Maximum number of output tokens supported by the model"
+								},
+								"thinking": {
+									"type": "boolean",
+									"default": false,
+									"description": "Whether the model supports thinking capabilities"
 								}
 							},
 							"required": [
@@ -2877,6 +2734,22 @@
 							"additionalProperties": false
 						},
 						"markdownDescription": "Configure custom Azure OpenAI models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
+					},
+					"github.copilot.chat.byok.responsesApi": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental"
+						],
+						"markdownDescription": "%github.copilot.config.byok.responsesApi%"
+					},
+					"github.copilot.chat.enableRetryAfterFilteredResponse": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental"
+						],
+						"description": "%github.copilot.config.retryAfterFilteredResponse.enabled%"
 					}
 				}
 			}
@@ -3130,7 +3003,8 @@
 				},
 				{
 					"command": "github.copilot.debug.showChatLogView",
-					"when": "view == workbench.panel.chat.view.copilot"
+					"when": "view == workbench.panel.chat.view.copilot",
+					"group": "3_show"
 				}
 			],
 			"view/item/context": [
@@ -3783,6 +3657,7 @@
 		"monaco-editor": "0.44.0",
 		"npm-run-all": "^4.1.5",
 		"open": "^10.1.2",
+		"openai": "^5.11.0",
 		"outdent": "^0.8.0",
 		"picomatch": "^4.0.2",
 		"playwright": "^1.54.0",
@@ -3809,7 +3684,7 @@
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@roamhq/mac-ca": "^1.0.7",
-		"@vscode/copilot-api": "^0.1.1",
+		"@vscode/copilot-api": "^0.1.3",
 		"@vscode/extension-telemetry": "^1.0.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",

@@ -241,25 +241,25 @@ async function loadSystemCertificates(proxyAgent: any, logService: ILogService):
 		const certificates = await proxyAgent.loadSystemCertificates({
 			log: {
 				trace(message: string, ..._args: any[]) {
-					logService.logger.trace(message);
+					logService.trace(message);
 				},
 				debug(message: string, ..._args: any[]) {
-					logService.logger.debug(message);
+					logService.debug(message);
 				},
 				info(message: string, ..._args: any[]) {
-					logService.logger.info(message);
+					logService.info(message);
 				},
 				warn(message: string, ..._args: any[]) {
-					logService.logger.warn(message);
+					logService.warn(message);
 				},
 				error(message: string | Error, ..._args: any[]) {
-					logService.logger.error(typeof message === 'string' ? message : String(message));
+					logService.error(typeof message === 'string' ? message : String(message));
 				},
 			} satisfies ProxyAgentLog
 		});
 		return Array.isArray(certificates) ? certificates : undefined;
 	} catch (err) {
-		logService.logger.error(err);
+		logService.error(err);
 		return undefined;
 	}
 }
@@ -366,22 +366,22 @@ export function collectFetcherTelemetry(accessor: ServicesAccessor): void {
 	const now = Date.now();
 	const previous = extensionContext.globalState.get<number>('lastCollectFetcherTelemetryTime', 0);
 	if (now - previous < 26 * 60 * 60 * 1000) {
-		logService.logger.debug(`Refetch model metadata: Skipped.`);
+		logService.debug(`Refetch model metadata: Skipped.`);
 		return;
 	}
 
 	(async () => {
 		await extensionContext.globalState.update('lastCollectFetcherTelemetryTime', now);
 
-		logService.logger.debug(`Refetch model metadata: Exclude other windows.`);
+		logService.debug(`Refetch model metadata: Exclude other windows.`);
 		const windowUUID = generateUuid();
 		await extensionContext.globalState.update('lastCollectFetcherTelemetryUUID', windowUUID);
 		await timeout(5000);
 		if (extensionContext.globalState.get<string>('lastCollectFetcherTelemetryUUID') !== windowUUID) {
-			logService.logger.debug(`Refetch model metadata: Other window won.`);
+			logService.debug(`Refetch model metadata: Other window won.`);
 			return;
 		}
-		logService.logger.debug(`Refetch model metadata: This window won.`);
+		logService.debug(`Refetch model metadata: This window won.`);
 
 		const userAgentLibraryUpdate = (original: string) => `${vscode.env.remoteName || 'local'}-on-${process.platform}-after-${currentUserAgentLibrary}-using-${original}`;
 		const fetchers = [
@@ -421,14 +421,14 @@ export function collectFetcherTelemetry(accessor: ServicesAccessor): void {
 					await response.json();
 				}
 
-				logService.logger.info(`Refetch model metadata: Succeeded in ${Date.now() - requestStartTime}ms ${requestId} (${response.headers.get('x-github-request-id')}) using ${fetcher.getUserAgentLibrary()} with status ${response.status}.`);
+				logService.info(`Refetch model metadata: Succeeded in ${Date.now() - requestStartTime}ms ${requestId} (${response.headers.get('x-github-request-id')}) using ${fetcher.getUserAgentLibrary()} with status ${response.status}.`);
 			} catch (e) {
-				logService.logger.info(`Refetch model metadata: Failed in ${Date.now() - requestStartTime}ms ${requestId} using ${fetcher.getUserAgentLibrary()}.`);
+				logService.info(`Refetch model metadata: Failed in ${Date.now() - requestStartTime}ms ${requestId} using ${fetcher.getUserAgentLibrary()}.`);
 			} finally {
 				modifiedInstaService.dispose();
 			}
 		}
 	})().catch(err => {
-		logService.logger.error(err);
+		logService.error(err);
 	});
 }

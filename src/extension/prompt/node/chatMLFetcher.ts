@@ -6,23 +6,24 @@
 import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { FetchStreamRecorder, IChatMLFetcher, IntentParams, Source } from '../../../platform/chat/common/chatMLFetcher';
+import { FetchStreamRecorder, IChatMLFetcher, IFetchMLOptions, Source } from '../../../platform/chat/common/chatMLFetcher';
 import { IChatQuotaService } from '../../../platform/chat/common/chatQuotaService';
-import { ChatFetchError, ChatFetchResponseType, ChatLocation, ChatResponse, ChatResponses } from '../../../platform/chat/common/commonTypes';
+import { ChatFetchError, ChatFetchResponseType, ChatFetchRetriableError, ChatLocation, ChatResponse, ChatResponses } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
-import { getTextPart } from '../../../platform/chat/common/globalStringUtils';
+import { getTextPart, toTextParts } from '../../../platform/chat/common/globalStringUtils';
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
-import { HARD_TOOL_LIMIT } from '../../../platform/configuration/common/configurationService';
+import { ConfigKey, HARD_TOOL_LIMIT, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { FinishedCallback, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
+import { OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
-import { ChatCompletion, FilterReason, FinishedCompletionReason, rawMessageToCAPI } from '../../../platform/networking/common/openai';
-import { ChatFailKind, ChatParams, ChatRequestCanceled, ChatRequestFailed, ChatResults, fetchAndStreamChat, FetchResponseKind } from '../../../platform/openai/node/fetch';
+import { ChatCompletion, FilterReason, FinishedCompletionReason } from '../../../platform/networking/common/openai';
+import { ChatFailKind, ChatRequestCanceled, ChatRequestFailed, ChatResults, fetchAndStreamChat, FetchResponseKind } from '../../../platform/openai/node/fetch';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { calculateLineRepetitionStats, isRepetitive } from '../../../util/common/anomalyDetection';
@@ -61,32 +62,11 @@ export abstract class AbstractChatMLFetcher implements IChatMLFetcher {
 	protected readonly _onDidMakeChatMLRequest = new Emitter<IMadeChatRequestEvent>();
 	readonly onDidMakeChatMLRequest = this._onDidMakeChatMLRequest.event;
 
-	public async fetchOne(
-		debugName: string,
-		messages: Raw.ChatMessage[],
-		finishedCb: FinishedCallback | undefined,
-		token: CancellationToken,
-		location: ChatLocation,
-		endpoint: IChatEndpoint,
-		source: Source,
-		requestOptions?: Omit<OptionalChatRequestParams, 'n'>,
-		userInitiatedRequest?: boolean,
-		telemetryProperties?: TelemetryProperties,
-		intentParams?: IntentParams
-	): Promise<ChatResponse> {
-		const resp = await this.fetchMany(
-			debugName,
-			messages,
-			finishedCb,
-			token,
-			location,
-			endpoint,
-			source,
-			{ ...requestOptions, n: 1 },
-			userInitiatedRequest,
-			telemetryProperties,
-			intentParams
-		);
+	public async fetchOne(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponse> {
+		const resp = await this.fetchMany({
+			...opts,
+			requestOptions: { ...opts.requestOptions, n: 1 }
+		}, token);
 		if (resp.type === ChatFetchResponseType.Success) {
 			return { ...resp, value: resp.value[0] };
 		}
@@ -96,19 +76,7 @@ export abstract class AbstractChatMLFetcher implements IChatMLFetcher {
 	/**
 	 * Note: the returned array of strings may be less than `n` (e.g., in case there were errors during streaming)
 	 */
-	public abstract fetchMany(
-		debugName: string,
-		messages: Raw.ChatMessage[],
-		finishedCb: FinishedCallback | undefined,
-		token: CancellationToken,
-		location: ChatLocation,
-		chatEndpointInfo: IChatEndpoint,
-		source?: Source,
-		requestOptions?: OptionalChatRequestParams,
-		userInitiatedRequest?: boolean,
-		telemetryProperties?: TelemetryProperties,
-		intentParams?: IntentParams
-	): Promise<ChatResponses>;
+	public abstract fetchMany(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponses>;
 }
 
 export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
@@ -125,6 +93,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		@IInteractionService private readonly _interactionService: IInteractionService,
 		@IChatQuotaService private readonly _chatQuotaService: IChatQuotaService,
 		@IConversationOptions options: IConversationOptions,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
 	) {
 		super(options);
 	}
@@ -132,18 +102,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 	/**
 	 * Note: the returned array of strings may be less than `n` (e.g., in case there were errors during streaming)
 	 */
-	public async fetchMany(
-		debugName: string,
-		messages: Raw.ChatMessage[],
-		finishedCb: FinishedCallback | undefined,
-		token: CancellationToken,
-		location: ChatLocation,
-		chatEndpoint: IChatEndpoint,
-		source?: Source,
-		requestOptions?: OptionalChatRequestParams,
-		userInitiatedRequest?: boolean,
-		telemetryProperties?: TelemetryProperties,
-	): Promise<ChatResponses> {
+	public async fetchMany(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponses> {
+		let { debugName, endpoint: chatEndpoint, finishedCb, location, messages, requestOptions, source, telemetryProperties, userInitiatedRequest } = opts;
 		if (!telemetryProperties) {
 			telemetryProperties = {};
 		}
@@ -165,16 +125,12 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		}
 
 		const postOptions = this.preparePostOptions(requestOptions);
-		const model_name = chatEndpoint.model;
+		const requestBody = chatEndpoint.createRequestBody({
+			...opts,
+			requestId: ourRequestId,
+			postOptions
+		});
 
-		const chatParams: ChatParams = {
-			messages: rawMessageToCAPI(messages),
-			model: model_name,
-			ourRequestId,
-			location,
-			postOptions,
-			secretKey: requestOptions.secretKey
-		};
 
 		const baseTelemetry = TelemetryData.createAndMarkAsIssued({
 			...telemetryProperties,
@@ -182,12 +138,19 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			uiKind: ChatLocation.toString(location)
 		});
 
-		const pendingLoggedChatRequest = this._requestLogger.logChatRequest(debugName, chatEndpoint, chatParams);
+		const pendingLoggedChatRequest = this._requestLogger.logChatRequest(debugName, chatEndpoint, {
+			messages: opts.messages,
+			model: chatEndpoint.model,
+			ourRequestId,
+			location: opts.location,
+			postOptions,
+			tools: requestBody.tools,
+		});
 		let tokenCount = -1;
 		try {
 			let response: ChatResults | ChatRequestFailed | ChatRequestCanceled;
 			const streamRecorder = new FetchStreamRecorder(finishedCb);
-			const payloadValidationResult = isValidChatPayload(chatParams);
+			const payloadValidationResult = isValidChatPayload(opts.messages, postOptions);
 			if (!payloadValidationResult.isValid) {
 				response = {
 					type: FetchResponseKind.Failed,
@@ -207,9 +170,13 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					this._authenticationService,
 					this._interactionService,
 					chatEndpoint,
-					chatParams,
+					requestBody,
 					baseTelemetry,
 					streamRecorder.callback,
+					requestOptions.secretKey,
+					opts.location,
+					ourRequestId,
+					postOptions.n,
 					userInitiatedRequest,
 					token,
 					telemetryProperties
@@ -227,31 +194,67 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			pendingLoggedChatRequest?.markTimeToFirstToken(timeToFirstToken);
 			switch (response.type) {
 				case FetchResponseKind.Success: {
-					const result = await this.processSuccessfulResponse(response, messages, chatParams.ourRequestId, maxResponseTokens, tokenCount, timeToFirstToken, baseTelemetry, chatEndpoint, userInitiatedRequest);
+					const result = await this.processSuccessfulResponse(response, messages, ourRequestId, maxResponseTokens, tokenCount, timeToFirstToken, baseTelemetry, chatEndpoint, userInitiatedRequest);
+
+					// Handle FilteredRetry case with augmented messages
+					if (result.type === ChatFetchResponseType.FilteredRetry) {
+
+						if (opts.isFilterRetry !== true) {
+							streamRecorder.callback("", 0, { text: "", retryReason: result.category });
+
+							const filteredContent = result.value[0];
+							if (filteredContent) {
+								const retryMessage = (result.category === FilterReason.Copyright) ?
+									`The previous response (copied below) was filtered due to being too similar to existing public code. Please suggest something similar in function that does not match public code. Here's the previous response: ${filteredContent}\n\n` :
+									`The previous response (copied below) was filtered due to triggering our content safety filters, which looks for hateful, self-harm, sexual, or violent content. Please suggest something similar in content that does not trigger these filters. Here's the previous response: ${filteredContent}\n\n`;
+								const augmentedMessages: Raw.ChatMessage[] = [
+									...messages,
+									{
+										role: Raw.ChatRole.User,
+										content: toTextParts(retryMessage)
+									}
+								];
+
+								// Retry with augmented messages
+								const retryResult = await this.fetchMany({
+									debugName: 'retry-' + debugName,
+									messages: augmentedMessages,
+									finishedCb,
+									location,
+									endpoint: chatEndpoint,
+									source,
+									requestOptions,
+									userInitiatedRequest: false, // do not mark the retry as user initiated
+									telemetryProperties: { ...telemetryProperties, retryAfterFilterCategory: result.category ?? 'uncategorized' },
+									intentParams: opts.intentParams,
+									isFilterRetry: true,
+								}, token);
+
+								pendingLoggedChatRequest?.resolve(retryResult, streamRecorder.deltas);
+								if (retryResult.type === ChatFetchResponseType.Success) {
+									return retryResult;
+								}
+							}
+						}
+
+						return {
+							type: ChatFetchResponseType.Filtered,
+							category: result.category,
+							reason: 'Response got filtered.',
+							requestId: result.requestId,
+							serverRequestId: result.serverRequestId
+						};
+					}
+
 					pendingLoggedChatRequest?.resolve(result, streamRecorder.deltas);
 					return result;
 				}
 				case FetchResponseKind.Canceled:
-					/* __GDPR__
-						"response.cancelled" : {
-							"owner": "digitarald",
-							"comment": "Report canceled service responses for quality.",
-							"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
-							"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source for why the request was made" },
-							"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the request" },
-							"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
-							"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens", "isMeasurement": true },
-							"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
-							"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
-							"timeToCancelled": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
-							"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
-							"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true }
-						}
-					*/
-					this._telemetryService.sendTelemetryEvent('response.cancelled', { github: true, microsoft: true }, {
+					this._sendCancellationTelemetry({
 						source: telemetryProperties.messageSource ?? 'unknown',
-						requestId: chatParams.ourRequestId,
+						requestId: ourRequestId,
 						model: chatEndpoint.model,
+						...(telemetryProperties.retryAfterFilterCategory ? { retryAfterFilterCategory: telemetryProperties.retryAfterFilterCategory } : {}),
 					}, {
 						totalTokenMax: chatEndpoint.modelMaxPromptTokens ?? -1,
 						promptTokenCount: tokenCount,
@@ -262,27 +265,103 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						isBYOK: chatEndpoint instanceof OpenAIEndpoint ? 1 : -1
 					});
 					pendingLoggedChatRequest?.resolveWithCancelation();
-					return this.processCanceledResponse(response, chatParams.ourRequestId);
+					return this.processCanceledResponse(response, ourRequestId);
 				case FetchResponseKind.Failed: {
-					const processed = this.processFailedResponse(response, chatParams.ourRequestId);
-					this._sendResponseErrorTelemetry(processed, telemetryProperties, chatParams, chatEndpoint, tokenCount, maxResponseTokens, timeToFirstToken, this.filterImageMessages(messages));
+					const processed = this.processFailedResponse(response, ourRequestId);
+					this._sendResponseErrorTelemetry(processed, telemetryProperties, ourRequestId, chatEndpoint, tokenCount, maxResponseTokens, timeToFirstToken, this.filterImageMessages(messages));
 					pendingLoggedChatRequest?.resolve(processed);
 					return processed;
 				}
 			}
 		} catch (err: unknown) {
 			const timeToError = Date.now() - baseTelemetry.issuedTime;
-			const processed = this.processError(err, chatParams.ourRequestId);
-			this._sendResponseErrorTelemetry(processed, telemetryProperties, chatParams, chatEndpoint, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages));
+			const processed = this.processError(err, ourRequestId);
+			if (processed.type === ChatFetchResponseType.Canceled) {
+				this._sendCancellationTelemetry({
+					source: telemetryProperties.messageSource ?? 'unknown',
+					requestId: ourRequestId,
+					model: chatEndpoint.model,
+				}, {
+					totalTokenMax: chatEndpoint.modelMaxPromptTokens ?? -1,
+					promptTokenCount: tokenCount,
+					tokenCountMax: maxResponseTokens,
+					timeToFirstToken: undefined,
+					timeToCancelled: timeToError,
+					isVisionRequest: this.filterImageMessages(messages) ? 1 : -1,
+					isBYOK: chatEndpoint instanceof OpenAIEndpoint ? 1 : -1
+				});
+			} else {
+				this._sendResponseErrorTelemetry(processed, telemetryProperties, ourRequestId, chatEndpoint, tokenCount, maxResponseTokens, timeToError, this.filterImageMessages(messages));
+			}
 			pendingLoggedChatRequest?.resolve(processed);
 			return processed;
 		}
 	}
 
+	private _sendCancellationTelemetry(
+		{
+			source,
+			requestId,
+			model,
+		}: {
+			source: string;
+			requestId: string;
+			model: string;
+		},
+		{
+			totalTokenMax,
+			promptTokenCount,
+			tokenCountMax,
+			timeToFirstToken,
+			timeToCancelled,
+			isVisionRequest,
+			isBYOK
+		}: {
+			totalTokenMax: number;
+			promptTokenCount: number;
+			tokenCountMax: number;
+			timeToFirstToken: number | undefined;
+			timeToCancelled: number;
+			isVisionRequest: number;
+			isBYOK: number;
+		}
+	) {
+		/* __GDPR__
+			"response.cancelled" : {
+				"owner": "digitarald",
+				"comment": "Report canceled service responses for quality.",
+				"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
+				"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source for why the request was made" },
+				"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the request" },
+				"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
+				"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens", "isMeasurement": true },
+				"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
+				"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
+				"timeToCancelled": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
+				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
+				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
+				"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
+			}
+		*/
+		this._telemetryService.sendTelemetryEvent('response.cancelled', { github: true, microsoft: true }, {
+			source,
+			requestId,
+			model,
+		}, {
+			totalTokenMax,
+			promptTokenCount,
+			tokenCountMax,
+			timeToFirstToken,
+			timeToCancelled,
+			isVisionRequest,
+			isBYOK
+		});
+	}
+
 	private _sendResponseErrorTelemetry(
 		processed: ChatFetchError,
 		telemetryProperties: TelemetryProperties | undefined,
-		chatParams: ChatParams,
+		ourRequestId: string,
 		chatEndpointInfo: IChatEndpoint,
 		tokenCount: number,
 		maxResponseTokens: number,
@@ -303,15 +382,17 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
 				"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
 				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
-				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true }
+				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
+				"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
 			}
 		*/
 		this._telemetryService.sendTelemetryEvent('response.error', { github: true, microsoft: true }, {
 			type: processed.type,
 			reason: processed.reason,
 			source: telemetryProperties?.messageSource ?? 'unknown',
-			requestId: chatParams.ourRequestId,
+			requestId: ourRequestId,
 			model: chatEndpointInfo.model,
+			...(telemetryProperties?.retryAfterFilterCategory ? { retryAfterFilterCategory: telemetryProperties.retryAfterFilterCategory } : {})
 		}, {
 			totalTokenMax: chatEndpointInfo.modelMaxPromptTokens ?? -1,
 			promptTokenCount: tokenCount,
@@ -332,7 +413,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		baseTelemetry?: TelemetryData,
 		chatEndpointInfo?: IChatEndpoint,
 		userInitiatedRequest?: boolean
-	): Promise<ChatResponses> {
+	): Promise<ChatResponses | ChatFetchRetriableError<string[]>> {
 
 		const completions: ChatCompletion[] = [];
 
@@ -353,12 +434,14 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					"promptCacheTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens hitting cache as reported by server", "isMeasurement": true },
 					"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
 					"tokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of generated tokens", "isMeasurement": true },
+					"reasoning_tokens": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of reasoning tokens", "isMeasurement": true },
 					"acceptedPredictionTokens": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tokens in the prediction that appeared in the completion", "isMeasurement": true },
 					"rejectedPredictionTokens": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tokens in the prediction that appeared in the completion", "isMeasurement": true },
 					"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
 					"timeToComplete": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to complete the request", "isMeasurement": true },
 					"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
-					"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true }
+					"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
+					"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
 				}
 			*/
 			this._telemetryService.sendTelemetryEvent('response.success', { github: true, microsoft: true }, {
@@ -367,7 +450,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				source: baseTelemetry?.properties.messageSource ?? 'unknown',
 				initiatorType: userInitiatedRequest ? 'user' : 'agent',
 				model: chatEndpointInfo?.model,
-				requestId
+				requestId,
+				...(baseTelemetry?.properties.retryAfterFilterCategory ? { retryAfterFilterCategory: baseTelemetry.properties.retryAfterFilterCategory } : {}),
 			}, {
 				totalTokenMax: chatEndpointInfo?.modelMaxPromptTokens ?? -1,
 				tokenCountMax: maxResponseTokens,
@@ -375,6 +459,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				promptCacheTokenCount: chatCompletion.usage?.prompt_tokens_details?.cached_tokens,
 				clientPromptTokenCount: promptTokenCount,
 				tokenCount: chatCompletion.usage?.total_tokens,
+				reasoningTokens: chatCompletion.usage?.completion_tokens_details?.reasoning_tokens,
 				acceptedPredictionTokens: chatCompletion.usage?.completion_tokens_details?.accepted_prediction_tokens,
 				rejectedPredictionTokens: chatCompletion.usage?.completion_tokens_details?.rejected_prediction_tokens,
 				timeToFirstToken,
@@ -400,15 +485,28 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 		const result = completions.at(0);
 
+		const isRetryAfterFilteredResponseEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.EnableRetryAfterFilteredResponse, this.experimentationService);
+
 		switch (result?.finishReason) {
 			case FinishedCompletionReason.ContentFilter:
-				return {
-					type: ChatFetchResponseType.Filtered,
-					category: result.filterReason ?? FilterReason.Copyright,
-					reason: 'Response got filtered.',
-					requestId: requestId,
-					serverRequestId: result.requestId.headerRequestId,
-				};
+				if (isRetryAfterFilteredResponseEnabled) {
+					return {
+						type: ChatFetchResponseType.FilteredRetry,
+						category: result.filterReason ?? FilterReason.Copyright,
+						reason: 'Response got filtered.',
+						value: completions.map(c => getTextPart(c.message.content)),
+						requestId: requestId,
+						serverRequestId: result.requestId.headerRequestId,
+					};
+				} else {
+					return {
+						type: ChatFetchResponseType.Filtered,
+						category: result.filterReason ?? FilterReason.Copyright,
+						reason: 'Response got filtered.',
+						requestId: requestId,
+						serverRequestId: result.requestId.headerRequestId
+					};
+				}
 			case FinishedCompletionReason.Length:
 				return {
 					type: ChatFetchResponseType.Length,
@@ -499,7 +597,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			return { type: ChatFetchResponseType.Failed, reason, requestId, serverRequestId };
 		}
 		if (response.failKind === ChatFailKind.ContentFilter) {
-			return { type: ChatFetchResponseType.Filtered, reason, category: FilterReason.Prompt, requestId, serverRequestId };
+			return { type: ChatFetchResponseType.PromptFiltered, reason, category: FilterReason.Prompt, requestId, serverRequestId };
 		}
 		if (response.failKind === ChatFailKind.AgentUnauthorized) {
 			return { type: ChatFetchResponseType.AgentUnauthorized, reason, authorizationUrl: response.data!.authorize_url, requestId, serverRequestId };
@@ -513,6 +611,9 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		}
 		if (response.failKind === ChatFailKind.NotFound) {
 			return { type: ChatFetchResponseType.NotFound, reason, requestId, serverRequestId };
+		}
+		if (response.failKind === ChatFailKind.InvalidPreviousResponseId) {
+			return { type: ChatFetchResponseType.InvalidStatefulMarker, reason, requestId, serverRequestId };
 		}
 
 		return { type: ChatFetchResponseType.Failed, reason, requestId, serverRequestId };
@@ -528,39 +629,50 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				requestId: requestId,
 				serverRequestId: undefined,
 			};
-		} if (isCancellationError(err)) {
+		}
+		if (isCancellationError(err)) {
 			return {
 				type: ChatFetchResponseType.Canceled,
 				reason: 'Got a cancellation error',
 				requestId: requestId,
 				serverRequestId: undefined,
 			};
+		}
+		if (err && (
+			(err instanceof Error && err.message === 'Premature close') ||
+			(typeof err === 'object' && (err as any).code === 'ERR_STREAM_PREMATURE_CLOSE') /* to be extra sure */)
+		) {
+			return {
+				type: ChatFetchResponseType.Canceled,
+				reason: 'Stream closed prematurely',
+				requestId: requestId,
+				serverRequestId: undefined,
+			};
+		}
+		this._logService.error(errorsUtil.fromUnknown(err), `Error on conversation request`);
+		this._telemetryService.sendGHTelemetryException(err, 'Error on conversation request');
+		// this.logger.exception(err, `Error on conversation request`);
+		if (fetcher.isInternetDisconnectedError(err)) {
+			return {
+				type: ChatFetchResponseType.Failed,
+				reason: `It appears you're not connected to the internet, please check your network connection and try again.`,
+				requestId: requestId,
+				serverRequestId: undefined,
+			};
+		} else if (fetcher.isFetcherError(err)) {
+			return {
+				type: ChatFetchResponseType.Failed,
+				reason: fetcher.getUserMessageForFetcherError(err),
+				requestId: requestId,
+				serverRequestId: undefined,
+			};
 		} else {
-			this._logService.logger.error(errorsUtil.fromUnknown(err), `Error on conversation request`);
-			this._telemetryService.sendGHTelemetryException(err, 'Error on conversation request');
-			// this.logger.exception(err, `Error on conversation request`);
-			if (fetcher.isInternetDisconnectedError(err)) {
-				return {
-					type: ChatFetchResponseType.Failed,
-					reason: `It appears you're not connected to the internet, please check your network connection and try again.`,
-					requestId: requestId,
-					serverRequestId: undefined,
-				};
-			} else if (fetcher.isFetcherError(err)) {
-				return {
-					type: ChatFetchResponseType.Failed,
-					reason: fetcher.getUserMessageForFetcherError(err),
-					requestId: requestId,
-					serverRequestId: undefined,
-				};
-			} else {
-				return {
-					type: ChatFetchResponseType.Failed,
-					reason: 'Error on conversation request. Check the log for more details.',
-					requestId: requestId,
-					serverRequestId: undefined,
-				};
-			}
+			return {
+				type: ChatFetchResponseType.Failed,
+				reason: 'Error on conversation request. Check the log for more details.',
+				requestId: requestId,
+				serverRequestId: undefined,
+			};
 		}
 	}
 }
@@ -570,24 +682,24 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
  * @param params The params being sent in the chat request
  * @returns Whether the chat payload is valid
  */
-function isValidChatPayload(params: ChatParams): { isValid: boolean; reason: string } {
-	if (params.messages.length === 0) {
+function isValidChatPayload(messages: Raw.ChatMessage[], postOptions: OptionalChatRequestParams): { isValid: boolean; reason: string } {
+	if (messages.length === 0) {
 		return { isValid: false, reason: asUnexpected('No messages provided') };
 	}
-	if (params?.postOptions?.max_tokens && params?.postOptions?.max_tokens < 1) {
+	if (postOptions?.max_tokens && postOptions?.max_tokens < 1) {
 		return { isValid: false, reason: asUnexpected('Invalid response token parameter') };
 	}
 
 	const functionNamePattern = /^[a-zA-Z0-9_-]+$/;
 	if (
-		params.postOptions?.functions?.some(f => !f.name.match(functionNamePattern)) ||
-		params.postOptions?.function_call?.name && !params.postOptions.function_call.name.match(functionNamePattern)
+		postOptions?.functions?.some(f => !f.name.match(functionNamePattern)) ||
+		postOptions?.function_call?.name && !postOptions.function_call.name.match(functionNamePattern)
 	) {
 		return { isValid: false, reason: asUnexpected('Function names must match ^[a-zA-Z0-9_-]+$') };
 	}
 
-	if (params.postOptions?.tools && params.postOptions.tools.length > HARD_TOOL_LIMIT) {
-		return { isValid: false, reason: `Tool limit exceeded (${params.postOptions.tools.length}/${HARD_TOOL_LIMIT}). Click "Configure Tools" in the chat input to disable ${params.postOptions.tools.length - HARD_TOOL_LIMIT} tools and retry.` };
+	if (postOptions?.tools && postOptions.tools.length > HARD_TOOL_LIMIT) {
+		return { isValid: false, reason: `Tool limit exceeded (${postOptions.tools.length}/${HARD_TOOL_LIMIT}). Click "Configure Tools" in the chat input to disable ${postOptions.tools.length - HARD_TOOL_LIMIT} tools and retry.` };
 	}
 
 	return { isValid: true, reason: '' };

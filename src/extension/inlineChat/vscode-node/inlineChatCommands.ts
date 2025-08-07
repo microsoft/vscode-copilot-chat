@@ -392,7 +392,7 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 			} else if (value instanceof vscode.ChatResponseMarkdownPart) {
 				markdown += value.value.value;
 			}
-		});
+		}, () => { });
 
 		const requestHandler = instantiationService.createInstance(ChatParticipantRequestHandler, [], request, stream, CancellationToken.None, {
 			agentId: getChatParticipantIdFromName(editorAgentName),
@@ -412,7 +412,7 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 		return suggestion;
 	})()
 		.catch(err => {
-			logService.logger.error(err, 'Error fetching suggestion');
+			logService.error(err, 'Error fetching suggestion');
 			comment.suggestion = {
 				markdown: `Error fetching suggestion: ${err?.message}`,
 				edits: [],

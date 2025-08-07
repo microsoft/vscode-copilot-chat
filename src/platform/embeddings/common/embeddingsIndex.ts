@@ -547,7 +547,7 @@ export abstract class BaseEmbeddingsIndex<V extends { key: string; embedding?: E
 
 		this._items = latestEmbeddingsIndex;
 
-		this.logService.logger.debug(`Embeddings for ${this.cacheKey} calculated in ${Date.now() - startTime}ms`);
+		this.logService.debug(`Embeddings for ${this.cacheKey} calculated in ${Date.now() - startTime}ms`);
 		this.isIndexLoaded = true;
 	}
 

@@ -3,15 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { AsyncIterableObject, AsyncIterableSource } from '../../../util/vs/base/common/async';
 import { Event } from '../../../util/vs/base/common/event';
 import { FinishedCallback, IResponseDelta, OptionalChatRequestParams } from '../../networking/common/fetch';
-import { IChatEndpoint } from '../../networking/common/networking';
-import { TelemetryProperties } from '../../telemetry/common/telemetry';
-import { ChatLocation, ChatResponse, ChatResponses } from './commonTypes';
+import { IChatEndpoint, IMakeChatRequestOptions } from '../../networking/common/networking';
+import { ChatResponse, ChatResponses } from './commonTypes';
 
 export interface IntentParams {
 
@@ -30,6 +28,12 @@ export interface IResponsePart {
 	readonly text: string;
 	readonly delta: IResponseDelta;
 }
+
+export interface IFetchMLOptions extends IMakeChatRequestOptions {
+	endpoint: IChatEndpoint;
+	requestOptions: OptionalChatRequestParams;
+}
+
 
 export const IChatMLFetcher = createServiceIdentifier<IChatMLFetcher>('IChatMLFetcher');
 
@@ -52,36 +56,12 @@ export interface IChatMLFetcher {
 	 * @param telemetryProperties messageSource/messageId are included in telemetry, optional, defaults to debugName
 	 * @param intentParams { intent: true } enables the offtopic classifier
 	 */
-	fetchOne(
-		debugName: string,
-		messages: Raw.ChatMessage[],
-		finishedCb: FinishedCallback | undefined,
-		token: CancellationToken,
-		location: ChatLocation,
-		endpoint: IChatEndpoint,
-		source?: Source,
-		requestOptions?: Omit<OptionalChatRequestParams, 'n'>,
-		userInitiatedRequest?: boolean,
-		telemetryProperties?: TelemetryProperties,
-		intentParams?: IntentParams
-	): Promise<ChatResponse>;
+	fetchOne(options: IFetchMLOptions, token: CancellationToken): Promise<ChatResponse>;
 
 	/**
 	 * Note: the returned array of strings may be less than `n` (e.g., in case there were errors during streaming)
 	 */
-	fetchMany(
-		debugName: string,
-		messages: Raw.ChatMessage[],
-		finishedCb: FinishedCallback | undefined,
-		token: CancellationToken,
-		location: ChatLocation,
-		chatEndpointInfo: IChatEndpoint,
-		source?: Source,
-		requestOptions?: OptionalChatRequestParams,
-		userInitiatedRequest?: boolean,
-		telemetryProperties?: TelemetryProperties,
-		intentParams?: IntentParams
-	): Promise<ChatResponses>;
+	fetchMany(options: IFetchMLOptions, token: CancellationToken): Promise<ChatResponses>;
 }
 
 export class FetchStreamSource {

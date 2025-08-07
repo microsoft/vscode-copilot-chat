@@ -117,7 +117,7 @@ class DiskCache extends Disposable implements IWorkspaceChunkAndEmbeddingCache {
 
 			const data: PersistedCache = JSON.parse(new TextDecoder().decode(file));
 			if (data.version !== DiskCache.version) {
-				logService.logger.debug(`WorkspaceChunkAndEmbeddingCache: invalidating cache due to version mismatch. Expected ${DiskCache.version} but found ${data.version}`);
+				logService.debug(`WorkspaceChunkAndEmbeddingCache: invalidating cache due to version mismatch. Expected ${DiskCache.version} but found ${data.version}`);
 				return undefined;
 			}
 
@@ -127,7 +127,7 @@ class DiskCache extends Disposable implements IWorkspaceChunkAndEmbeddingCache {
 				(data.embeddingModel === undefined && embeddingType !== EmbeddingType.text3small_512)
 				|| (data.embeddingModel !== undefined && data.embeddingModel !== embeddingType.id)
 			) {
-				logService.logger.debug(`WorkspaceChunkAndEmbeddingCache: invalidating cache due to embeddings type mismatch. Expected ${embeddingType} but found ${data.embeddingModel}`);
+				logService.debug(`WorkspaceChunkAndEmbeddingCache: invalidating cache due to embeddings type mismatch. Expected ${embeddingType} but found ${data.embeddingModel}`);
 				return undefined;
 			}
 
@@ -165,7 +165,7 @@ class DiskCache extends Disposable implements IWorkspaceChunkAndEmbeddingCache {
 
 			const cacheValues = await instantiationService.invokeFunction(accessor => DiskCache.readDiskCache(accessor, embeddingType, cacheRoot, logService));
 			if (cacheValues) {
-				logService.logger.debug(`Restoring workspace chunk + embeddings cache from ${cachePath.fsPath}`);
+				logService.debug(`Restoring workspace chunk + embeddings cache from ${cachePath.fsPath}`);
 
 				for (const [uriStr, entry] of cacheValues) {
 					const docUri = URI.parse(uriStr);
@@ -346,7 +346,7 @@ class DiskCache extends Disposable implements IWorkspaceChunkAndEmbeddingCache {
 		};
 		await this.fileSystem.writeFile(this.cachePath, new TextEncoder().encode(JSON.stringify(data)));
 
-		this.logService.logger.debug(`Wrote workspace chunk + embeddings cache to ${this.cachePath.fsPath}`);
+		this.logService.debug(`Wrote workspace chunk + embeddings cache to ${this.cachePath.fsPath}`);
 	}
 }
 

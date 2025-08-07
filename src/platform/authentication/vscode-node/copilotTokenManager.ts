@@ -45,11 +45,11 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
 		if (!this.copilotToken || this.copilotToken.expires_at - (60 * 5 /* 5min */) < nowSeconds() || force) {
 			try {
-				this._logService.logger.debug(`Getting CopilotToken (force: ${force})...`);
+				this._logService.debug(`Getting CopilotToken (force: ${force})...`);
 				this.copilotToken = await this._authShowWarnings();
-				this._logService.logger.debug(`Got CopilotToken (force: ${force}).`);
+				this._logService.debug(`Got CopilotToken (force: ${force}).`);
 			} catch (e) {
-				this._logService.logger.debug(`Getting CopilotToken (force: ${force}) threw error: ${e}`);
+				this._logService.debug(`Getting CopilotToken (force: ${force}) threw error: ${e}`);
 				this.copilotToken = undefined;
 				throw e;
 			}
@@ -60,15 +60,15 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 	private async _auth(): Promise<TokenInfoOrError> {
 		const session = await getAnyAuthSession(this.configurationService, { silent: true });
 		if (!session) {
-			this._logService.logger.warn('GitHub login failed');
+			this._logService.warn('GitHub login failed');
 			this._telemetryService.sendGHTelemetryErrorEvent('auth.github_login_failed');
 			return { kind: 'failure', reason: 'GitHubLoginFailed' };
 		}
 		// Log the steps by default, but only log actual token values when the log level is set to debug.
-		this._logService.logger.info(`Logged in as ${session.account.label}`);
+		this._logService.info(`Logged in as ${session.account.label}`);
 		const tokenResult = await this.authFromGitHubToken(session.accessToken);
 		if (tokenResult.kind === 'success') {
-			this._logService.logger.info(`Got Copilot token for ${session.account.label}`);
+			this._logService.info(`Got Copilot token for ${session.account.label}`);
 		}
 		return tokenResult;
 	}

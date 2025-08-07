@@ -108,9 +108,9 @@ export class AlternativeNotebookContentEditGenerator implements IAlternativeNote
 					const eolForNewCell = this.getEOLForNewCell(notebookOrUri, NotebookCellKind.Code);
 					const cellData = new NotebookCellData(NotebookCellKind.Code, linesCollected.join(eolForNewCell), 'python');
 					yield NotebookEdit.insertCells(0, [cellData]);
-					this.logger.logger.info(`No new cells were emitted for ${uri.toString()}. Emitting a new cell with the contents of the code.`);
+					this.logger.info(`No new cells were emitted for ${uri.toString()}. Emitting a new cell with the contents of the code.`);
 				} else {
-					this.logger.logger.warn(`No new cells were emitted for ${uri.toString()}`);
+					this.logger.warn(`No new cells were emitted for ${uri.toString()}`);
 				}
 			}
 		}
@@ -279,7 +279,7 @@ export class AlternativeNotebookContentEditGenerator implements IAlternativeNote
 		// If the format is correct, then we should have emitted some edits.
 		// If we don't exit here we end up deleting all the cells in the notebook.
 		if (!editsEmitted && allLines.length) {
-			this.logger.logger.warn(`No edits generated for notebook ${notebookOrUri.uri.toString()}. This is likely due to an invalid format. Expected format: ${format}. Provided content as follows:\n\n${allLines.join('\n')}`);
+			this.logger.warn(`No edits generated for notebook ${notebookOrUri.uri.toString()}. This is likely due to an invalid format. Expected format: ${format}. Provided content as follows:\n\n${allLines.join('\n')}`);
 			return;
 		}
 

@@ -63,8 +63,9 @@ export class StatelessNextEditRequest<TFirstEdit = any> {
 		public readonly xtabEditHistory: IXtabHistoryEntry[],
 		public readonly firstEdit: DeferredPromise<Result<TFirstEdit, NoNextEditReason>>,
 		public readonly logContext: InlineEditRequestLogContext,
-		public readonly recordingBookmark?: DebugRecorderBookmark,
-		public readonly recording?: LogEntry[],
+		public readonly recordingBookmark: DebugRecorderBookmark | undefined,
+		public readonly recording: LogEntry[] | undefined,
+		public readonly providerRequestStartDateTime: number | undefined,
 	) {
 		assert(documents.length > 0);
 		assert(activeDocumentIdx >= 0 && activeDocumentIdx < documents.length);

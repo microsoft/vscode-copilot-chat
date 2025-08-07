@@ -20,7 +20,8 @@ import { Position } from '../../../../../util/vs/editor/common/core/position';
 import { Range } from '../../../../../util/vs/editor/common/core/range';
 import { OffsetRange } from '../../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { INextEditDisplayLocation } from '../../../node/nextEditResult';
-import { IVSCodeObservableDocument } from '../../parts/vscodeWorkspace';
+import { IVSCodeObservableDocument, IVSCodeObservableNotebookDocument, IVSCodeObservableTextDocument } from '../../parts/vscodeWorkspace';
+import { coalesce } from '../../../../../util/vs/base/common/arrays';
 
 export interface IDiagnosticCodeAction {
 	edit: TextReplacement;
@@ -158,15 +159,7 @@ export class DiagnosticInlineEditRequestLogContext {
 }
 
 export async function getCodeActionsForDiagnostic(diagnostic: Diagnostic, workspaceDocument: IVSCodeObservableDocument, token: CancellationToken): Promise<CodeAction[] | undefined> {
-	const executeCodeActionProviderPromise = asPromise(
-		() => vscode.commands.executeCommand<vscode.CodeAction[]>(
-			'vscode.executeCodeActionProvider',
-			workspaceDocument.id.toUri(),
-			toExternalRange(diagnostic.range),
-			vscode.CodeActionKind.QuickFix.value,
-			3
-		)
-	);
+	const executeCodeActionProviderPromise = workspaceDocument.kind === 'textDocument' ? getCodeActionsForTextDocumentDiagnostic(diagnostic, workspaceDocument) : getCodeActionsForNotebookDocumentDiagnostic(diagnostic, workspaceDocument);
 
 	const codeActions = await raceTimeout(
 		raceCancellation(
@@ -181,6 +174,35 @@ export async function getCodeActionsForDiagnostic(diagnostic: Diagnostic, worksp
 	}
 
 	return codeActions.map(action => CodeAction.fromVSCodeCodeAction(action));
+}
+async function getCodeActionsForUriRange(uri: vscode.Uri, range: vscode.Range): Promise<vscode.CodeAction[]> {
+	return asPromise(
+		() => vscode.commands.executeCommand<vscode.CodeAction[]>(
+			'vscode.executeCodeActionProvider',
+			uri,
+			range,
+			vscode.CodeActionKind.QuickFix.value,
+			3
+		)
+	);
+}
+
+async function getCodeActionsForTextDocumentDiagnostic(diagnostic: Diagnostic, workspaceDocument: IVSCodeObservableTextDocument): Promise<vscode.CodeAction[]> {
+	return getCodeActionsForUriRange(workspaceDocument.id.toUri(), toExternalRange(diagnostic.range));
+}
+
+async function getCodeActionsForNotebookDocumentDiagnostic(diagnostic: Diagnostic, workspaceDocument: IVSCodeObservableNotebookDocument): Promise<vscode.CodeAction[]> {
+	const cellRanges = workspaceDocument.fromRange(toExternalRange(diagnostic.range));
+	if (!cellRanges || cellRanges.length === 0) {
+		return [];
+	}
+	return Promise.all(cellRanges.map(async ([cell, range]) => {
+		const actions = await getCodeActionsForUriRange(cell.uri, range);
+		return actions.map(action => {
+			action.diagnostics = action.diagnostics ? workspaceDocument.projectDiagnostics(cell, action.diagnostics) : undefined;
+			return action;
+		});
+	})).then(results => results.flat());
 }
 
 export enum DiagnosticSeverity {
@@ -210,7 +232,6 @@ export class Diagnostic {
 			diagnostic.source,
 			toInternalRange(diagnostic.range),
 			diagnostic.code && !(typeof diagnostic.code === 'number') && !(typeof diagnostic.code === 'string') ? diagnostic.code.value : diagnostic.code,
-			diagnostic,
 		);
 	}
 
@@ -233,7 +254,6 @@ export class Diagnostic {
 		public readonly source: string | undefined,
 		private _range: Range,
 		public readonly code: string | number | undefined,
-		public readonly reference: vscode.Diagnostic
 	) { }
 
 	equals(other: Diagnostic): boolean {
@@ -266,9 +286,6 @@ export class CodeAction {
 			action.diagnostics?.map(diagnostic => Diagnostic.fromVSCodeDiagnostic(diagnostic)) ?? [],
 			action.edit,
 			action.command,
-			action.kind,
-			action.isPreferred,
-			action.disabled
 		);
 	}
 
@@ -276,25 +293,29 @@ export class CodeAction {
 		public readonly title: string,
 		public readonly diagnostics: Diagnostic[],
 		private readonly edit?: vscode.WorkspaceEdit,
-		public readonly command?: vscode.Command,
-		protected readonly kind?: vscode.CodeActionKind,
-		public readonly isPreferred?: boolean,
-		public readonly disabled?: { readonly reason: string }
+		private readonly command?: vscode.Command,
 	) { }
 
 	toString(): string {
 		return this.title;
 	}
 
-	hasEdit(): boolean {
-		return this.edit !== undefined;
-	}
-
 	getEditForWorkspaceDocument(workspaceDocument: IVSCodeObservableDocument): TextReplacement[] | undefined {
-		if (!this.edit) {
+		const edit = this.edit;
+		if (!edit) {
 			return undefined;
 		}
-		return this.edit.get(workspaceDocument.id.toUri()).map(toInternalTextEdit);
+		if (workspaceDocument.kind === 'textDocument') {
+			return edit.get(workspaceDocument.id.toUri()).map(e => toInternalTextEdit(e.range, e.newText));
+		} else if (workspaceDocument.kind === 'notebookDocument') {
+			const edits = coalesce(workspaceDocument.notebook.getCells().flatMap(cell => {
+				return edit.get(cell.document.uri).map(e => {
+					const range = workspaceDocument.toRange(cell.document, e.range);
+					return range ? toInternalTextEdit(range, e.newText) : undefined;
+				});
+			}));
+			return edits.length ? edits : undefined;
+		}
 	}
 
 	getDiagnosticsReferencedInCommand(): Diagnostic[] {
@@ -356,8 +377,8 @@ export function toExternalPosition(position: Position): vscode.Position {
 	return new vscode.Position(position.lineNumber - 1, position.column - 1);
 }
 
-export function toInternalTextEdit(edit: vscode.TextEdit): TextReplacement {
-	return new TextReplacement(toInternalRange(edit.range), edit.newText);
+export function toInternalTextEdit(range: vscode.Range, newText: string): TextReplacement {
+	return new TextReplacement(toInternalRange(range), newText);
 }
 
 export function toExternalTextEdit(edit: TextReplacement): vscode.TextEdit {

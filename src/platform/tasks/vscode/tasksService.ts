@@ -90,8 +90,8 @@ export class TasksService extends DisposableStore implements ITasksService {
 				(!key.command || taskDefinition.command === key.command))) {
 				return terminal;
 			}
-			this.logService.logger.debug(`getTerminalForTask: no terminal found for task definition: ${JSON.stringify(taskDefinition)} matching ${JSON.stringify(key)}`);
-			this.logService.logger.debug(`getTerminalForTask: current stored terminals: ${[...this.latestTerminalForTaskDefinition.values()].map(t => t.name).join(', ')}`);
+			this.logService.debug(`getTerminalForTask: no terminal found for task definition: ${JSON.stringify(taskDefinition)} matching ${JSON.stringify(key)}`);
+			this.logService.debug(`getTerminalForTask: current stored terminals: ${[...this.latestTerminalForTaskDefinition.values()].map(t => t.name).join(', ')}`);
 		}
 	}
 	private _getTaskId(taskDefinition: vscode.TaskDefinition): string | undefined {

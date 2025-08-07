@@ -5,14 +5,12 @@
 import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
 import { AbstractChatMLFetcher } from '../../src/extension/prompt/node/chatMLFetcher';
-import { IChatMLFetcher, IntentParams, Source } from '../../src/platform/chat/common/chatMLFetcher';
-import { ChatLocation, ChatResponses } from '../../src/platform/chat/common/commonTypes';
+import { IChatMLFetcher, IFetchMLOptions } from '../../src/platform/chat/common/chatMLFetcher';
+import { ChatResponses } from '../../src/platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../src/platform/chat/common/conversationOptions';
 import { roleToString } from '../../src/platform/chat/common/globalStringUtils';
-import { FinishedCallback, ICopilotToolCall, OptionalChatRequestParams } from '../../src/platform/networking/common/fetch';
-import { IChatEndpoint } from '../../src/platform/networking/common/networking';
+import { FinishedCallback, ICopilotToolCall } from '../../src/platform/networking/common/fetch';
 import { APIUsage } from '../../src/platform/networking/common/openai';
-import { TelemetryProperties } from '../../src/platform/telemetry/common/telemetry';
 import { TaskQueue } from '../../src/util/common/async';
 import { coalesce } from '../../src/util/vs/base/common/arrays';
 import { isDisposable } from '../../src/util/vs/base/common/lifecycle';
@@ -111,43 +109,19 @@ export class SpyingChatMLFetcher extends AbstractChatMLFetcher {
 		}
 	}
 
-	override async fetchMany(
-		debugName: string,
-		messages: Raw.ChatMessage[],
-		finishedCb: FinishedCallback | undefined,
-		token: CancellationToken,
-		location: ChatLocation,
-		endpoint: IChatEndpoint,
-		source: Source | undefined,
-		requestOptions: OptionalChatRequestParams,
-		userInitiatedRequest?: boolean,
-		telemetryProperties?: TelemetryProperties | undefined,
-		intentParams?: IntentParams | undefined
-	): Promise<ChatResponses> {
+	override async fetchMany(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponses> {
 
 		const toolCalls: ICopilotToolCall[] = [];
 		const captureToolCallsCb: FinishedCallback = async (text, idx, delta) => {
 			if (delta.copilotToolCalls) {
 				toolCalls.push(...delta.copilotToolCalls);
 			}
-			if (finishedCb) {
-				return finishedCb(text, idx, delta);
+			if (opts.finishedCb) {
+				return opts.finishedCb(text, idx, delta);
 			}
 		};
 
-		const respPromise = this.fetcher.fetchMany(
-			debugName,
-			messages,
-			captureToolCallsCb,
-			token,
-			location,
-			endpoint,
-			source,
-			requestOptions,
-			userInitiatedRequest,
-			telemetryProperties,
-			intentParams
-		);
+		const respPromise = this.fetcher.fetchMany({ ...opts, finishedCb: captureToolCallsCb }, token);
 
 		this.requestCollector.addInterceptedRequest(respPromise.then(resp => {
 			let cacheKey: string | undefined;
@@ -155,7 +129,7 @@ export class SpyingChatMLFetcher extends AbstractChatMLFetcher {
 				cacheKey = (resp as ResponseWithMeta).cacheKey;
 			}
 			(resp as ISerialisedChatResponse).copilotFunctionCalls = toolCalls;
-			return new InterceptedRequest(messages.map(message => {
+			return new InterceptedRequest(opts.messages.map(message => {
 				return {
 					role: roleToString(message.role),
 					content: message.content,
@@ -163,7 +137,7 @@ export class SpyingChatMLFetcher extends AbstractChatMLFetcher {
 					tool_calls: message.role === Raw.ChatRole.Assistant ? message.toolCalls : undefined,
 					name: message.name,
 				};
-			}), requestOptions, resp, cacheKey, endpoint.model);
+			}), opts.requestOptions, resp, cacheKey, opts.endpoint.model);
 		}));
 
 		return await respPromise;
