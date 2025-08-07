@@ -173,11 +173,6 @@ export async function renderPromptElement<P extends BasePromptElementProps>(
 
 // The below all exists to wrap `renderElementJSON` to call our instantiation service
 
-export interface IPromptTsxBudgetInformation {
-	tokenBudget: number;
-	countTokens(text: string, token?: CancellationToken): Thenable<number>;
-}
-
 class PromptRendererForJSON<P extends BasePromptElementProps> extends BasePromptRenderer<P, OutputMode.Raw> {
 	constructor(
 		ctor: PromptElementCtor<P, any>,

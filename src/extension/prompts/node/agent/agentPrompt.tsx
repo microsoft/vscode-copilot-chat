@@ -317,12 +317,12 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 	}
 }
 
-export interface FrozenMessageContentProps extends BasePromptElementProps {
+interface FrozenMessageContentProps extends BasePromptElementProps {
 	readonly frozenContent: Raw.ChatCompletionContentPart[];
 	readonly enableCacheBreakpoints?: boolean;
 }
 
-export class FrozenContentUserMessage extends PromptElement<FrozenMessageContentProps> {
+class FrozenContentUserMessage extends PromptElement<FrozenMessageContentProps> {
 	async render(state: void, sizing: PromptSizing) {
 		return <UserMessage priority={this.props.priority}>
 			<Chunk>
@@ -661,7 +661,7 @@ export function getKeepGoingReminder(modelFamily: string | undefined) {
 			: undefined;
 }
 
-export function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {
+function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {
 	return modelFamily === 'gpt-5' ?
 		<>
 			Skip filler acknowledgements like “Sounds good” or “Okay, I will…”. Open with a purposeful one-liner about what you're doing next.<br />
