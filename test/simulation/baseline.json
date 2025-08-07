@@ -1586,9 +1586,9 @@
   {
     "name": "edit-inline2 [inline] [typescriptreact] - issue #7487",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "explain (expanded context) [panel] [cpp] - includes and interprets variables",
@@ -2587,9 +2587,9 @@
   {
     "name": "fix-inline2 (cpp) [inline] [cpp] - code fix for C++",
     "contentFilterCount": 0,
-    "passCount": 1,
-    "failCount": 9,
-    "score": 0.1
+    "passCount": 5,
+    "failCount": 5,
+    "score": 0.5
   },
   {
     "name": "fix-inline2 (eslint) [inline] [typescript] - (AML-10-1) do not access hasOwnProperty",
@@ -3098,9 +3098,9 @@
   {
     "name": "fix-inline2 (TSC) [inline] [typescript] - (AML-10-31) Parameter data implicitly has an any type.",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "fix-inline2 (TSC) [inline] [typescript] - 22222 Error 2322 - type undefined is not assignable to type",
@@ -7763,9 +7763,9 @@
   {
     "name": "multifile-edit-claude [panel] [typescript] - fs provider: move function from one file to another - (claude-3.5-sonnet)",
     "contentFilterCount": 0,
-    "passCount": 4,
-    "failCount": 6,
-    "score": 0.4
+    "passCount": 5,
+    "failCount": 5,
+    "score": 0.5
   },
   {
     "name": "multifile-edit-claude [panel] [typescript] - import new helper function - (claude-3.5-sonnet)",
@@ -9264,9 +9264,9 @@
   {
     "name": "notebookEdits (modification - json) [panel] [python] - notebook code cell deletion",
     "contentFilterCount": 0,
-    "passCount": 6,
-    "failCount": 4,
-    "score": 0.6
+    "passCount": 7,
+    "failCount": 3,
+    "score": 0.7
   },
   {
     "name": "notebookEdits (modification - json) [panel] [python] - re-organize python imports to top of the notebook",
@@ -9481,9 +9481,9 @@
   {
     "name": "notebookEdits (modification - xml) [panel] [python] - re-organize python imports to top of the notebook",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "notebooks (toolCalling) [panel] - Edit cell tool",

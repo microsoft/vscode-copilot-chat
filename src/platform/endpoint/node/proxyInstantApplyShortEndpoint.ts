@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { RequestType } from '@vscode/copilot-api';
-import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
@@ -13,15 +12,14 @@ import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../configuratio
 import { IEnvService } from '../../env/common/envService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
 import { IChatModelInformation } from '../common/endpointProvider';
 import { ChatEndpoint } from './chatEndpoint';
 
-export class Proxy4oEndpoint extends ChatEndpoint {
-
-	_serviceBrand: undefined;
+export class ProxyInstantApplyShortEndpoint extends ChatEndpoint {
 
 	constructor(
 		@IDomainService domainService: IDomainService,
@@ -36,8 +34,7 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
 	) {
-		const model = configurationService.getExperimentBasedConfig<string>(ConfigKey.Internal.InstantApplyModelName, experimentationService) ?? CHAT_MODEL.GPT4OPROXY;
-
+		const model = configurationService.getExperimentBasedConfig<string>(ConfigKey.Internal.InstantApplyShortModelName, experimentationService) ?? CHAT_MODEL.SHORT_INSTANT_APPLY;
 		const modelInfo: IChatModelInformation = {
 			id: model,
 			name: model,
@@ -77,7 +74,6 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 		}
 		return headers;
 	}
-
 
 	override get urlOrRequestMetadata() {
 		return { type: RequestType.ProxyChatCompletions };
