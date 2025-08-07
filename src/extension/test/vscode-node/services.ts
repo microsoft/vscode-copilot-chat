@@ -7,7 +7,10 @@ import { CopilotTokenStore, ICopilotTokenStore } from '../../../platform/authent
 import { BlockedExtensionService, IBlockedExtensionService } from '../../../platform/chat/common/blockedExtensionService';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { IChatSessionService } from '../../../platform/chat/common/chatSessionService';
+import { TestChatSessionService } from '../../../platform/chat/test/common/testChatSessionService';
 import { INaiveChunkingService, NaiveChunkingService } from '../../../platform/chunking/node/naiveChunkerService';
+import { MockRunCommandExecutionService } from '../../../platform/commands/common/mockRunCommandExecutionService';
+import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { DefaultsOnlyConfigurationService } from '../../../platform/configuration/test/common/defaultsOnlyConfigurationService';
 import { IDebugOutputService } from '../../../platform/debug/common/debugOutputService';
@@ -55,6 +58,8 @@ import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogg
 import { IReviewService } from '../../../platform/review/common/reviewService';
 import { IScopeSelector } from '../../../platform/scopeSelection/common/scopeSelection';
 import { ScopeSelectorImpl } from '../../../platform/scopeSelection/vscode-node/scopeSelectionImpl';
+import { ISearchService } from '../../../platform/search/common/searchService';
+import { SearchServiceImpl } from '../../../platform/search/vscode-node/searchServiceImpl';
 import { ISimulationTestContext, NulSimulationTestContext } from '../../../platform/simulationTestContext/common/simulationTestContext';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
 import { TabsAndEditorsServiceImpl } from '../../../platform/tabs/vscode/tabsAndEditorsServiceImpl';
@@ -94,6 +99,9 @@ import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMa
 import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inline/fixCookbookService';
 import { WorkspaceMutationManager } from '../../testing/node/setupTestsFileManager';
 import { IToolsService, NullToolsService } from '../../tools/common/toolsService';
+import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
+import { ToolGroupingCache } from '../../tools/common/virtualTools/virtualToolGroupCache';
+import { IToolGroupingCache, IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
 
 /**
  * A default context for VSCode extension testing, building on general one in `lib`.
@@ -106,7 +114,7 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(ISimulationTestContext, new SyncDescriptor(NulSimulationTestContext));
 	testingServiceCollection.define(IRequestLogger, new SyncDescriptor(NullRequestLogger));
 	testingServiceCollection.define(IFeedbackReporter, new SyncDescriptor(NullFeedbackReporterImpl));
-	testingServiceCollection.define(IEndpointProvider, new SyncDescriptor(TestEndpointProvider, [undefined, undefined, undefined, undefined, undefined, false]));
+	testingServiceCollection.define(IEndpointProvider, new SyncDescriptor(TestEndpointProvider, [undefined, undefined, undefined, undefined, undefined, false, undefined]));
 	testingServiceCollection.define(ICopilotTokenStore, new SyncDescriptor(CopilotTokenStore));
 	testingServiceCollection.define(IDomainService, new SyncDescriptor(DomainService));
 	testingServiceCollection.define(ICAPIClientService, new SyncDescriptor(CAPIClientImpl));
@@ -158,9 +166,13 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(IScopeSelector, new SyncDescriptor(ScopeSelectorImpl));
 	testingServiceCollection.define(IPromptPathRepresentationService, new SyncDescriptor(PromptPathRepresentationService));
 	testingServiceCollection.define(IToolsService, new SyncDescriptor(NullToolsService));
-	testingServiceCollection.define(IChatSessionService, new SyncDescriptor(NullToolsService));
+	testingServiceCollection.define(IChatSessionService, new SyncDescriptor(TestChatSessionService));
 	testingServiceCollection.define(INotebookService, new SyncDescriptor(SimulationNotebookService));
 	testingServiceCollection.define(IThinkingDataService, new SyncDescriptor(ThinkingDataImpl));
+	testingServiceCollection.define(IRunCommandExecutionService, new SyncDescriptor(MockRunCommandExecutionService));
+	testingServiceCollection.define(ISearchService, new SyncDescriptor(SearchServiceImpl));
+	testingServiceCollection.define(IToolGroupingCache, new SyncDescriptor(ToolGroupingCache));
+	testingServiceCollection.define(IToolGroupingService, new SyncDescriptor(ToolGroupingService));
 
 	return testingServiceCollection;
 }
