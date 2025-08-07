@@ -46,11 +46,12 @@ export interface IPendingSetupArgs {
 }
 
 type ValidatePackageErrorType = 'NotFound' | 'Other';
+type FlowFinalState = 'Done' | 'Failed' | 'NameMismatch';
 
 // contract with https://github.com/microsoft/vscode/blob/main/src/vs/workbench/contrib/mcp/browser/mcpCommandsAddConfiguration.ts
 export type ValidatePackageResult =
 	{ state: 'ok'; publisher: string; name?: string; version?: string } & IPendingSetupArgs
-	| { state: 'error'; error: string; errorType?: ValidatePackageErrorType };
+	| { state: 'error'; error: string; helpUri?: string; helpUriLabel?: string; errorType?: ValidatePackageErrorType };
 
 type AssistedServerConfiguration = {
 	type: 'vscode';
@@ -106,7 +107,7 @@ export class McpSetupCommands extends Disposable {
 		super();
 		this._register(toDisposable(() => this.pendingSetup?.cts.dispose(true)));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.flow', async (args: { name: string }) => {
-			let finalState = 'Failed';
+			let finalState: FlowFinalState = 'Failed';
 			let result;
 			try {
 				// allow case-insensitive comparison
@@ -174,7 +175,7 @@ export class McpSetupCommands extends Disposable {
 			// not all package information is needed to request consent to install the package
 			return result.state === 'ok' ?
 				{ state: 'ok', publisher: result.publisher, name: result.name, version: result.version } :
-				{ state: 'error', error: result.error };
+				{ state: 'error', error: result.error, helpUri: result.helpUri, helpUriLabel: result.helpUriLabel, errorType: result.errorType };
 		}));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.check', () => {
 			return 1;
