@@ -280,7 +280,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		const hasEditFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
 		const hasEditNotebookTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditNotebook);
 		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreRunInTerminal);
-		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1' || this.props.endpoint.family === process.env.CHAT_MODEL_FAMILY) && this.props.chatVariables.hasVariables() ?
+		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1' || this.props.endpoint.family === 'gpt-5') && this.props.chatVariables.hasVariables() ?
 			' (See <attachments> above for file contents. You may not need to search or read the file again.)'
 			: '';
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;
@@ -352,7 +352,7 @@ class ToolReferencesHint extends PromptElement<ToolReferencesHintProps> {
 			<Tag name='toolReferences'>
 				The user attached the following tools to this message. The userRequest may refer to them using the tool name with "#". These tools are likely relevant to the user's query:<br />
 				{this.props.toolReferences.map(tool => `- ${tool.name}`).join('\n')} <br />
-				{this.props.modelFamily === process.env.CHAT_MODEL_FAMILY && <>
+				{this.props.modelFamily === 'gpt-5' && <>
 					Start by using the most relevant tool attached to this message—the user expects you to act with it first.<br />
 				</>}
 			</Tag>
@@ -648,7 +648,7 @@ export function getKeepGoingReminder(modelFamily: string | undefined) {
 			You are an agent - you must keep going until the user's query is completely resolved, before ending your turn and yielding back to the user. ONLY terminate your turn when you are sure that the problem is solved, or you absolutely cannot continue.<br />
 			You take action when possible- the user is expecting YOU to take action and go to work for them. Don't ask unnecessary questions about the details if you can simply DO something useful instead.<br />
 		</>
-		: modelFamily === process.env.CHAT_MODEL_FAMILY ?
+		: modelFamily === 'gpt-5' ?
 			<>
 				You are an agent—keep going until the user's query is completely resolved before ending your turn. ONLY stop if solved or genuinely blocked.<br />
 				Take action when possible; the user expects you to do useful work without unnecessary questions.<br />
@@ -662,7 +662,7 @@ export function getKeepGoingReminder(modelFamily: string | undefined) {
 }
 
 export function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {
-	return modelFamily === process.env.CHAT_MODEL_FAMILY ?
+	return modelFamily === 'gpt-5' ?
 		<>
 			Skip filler acknowledgements like “Sounds good” or “Okay, I will…”. Open with a purposeful one-liner about what you're doing next.<br />
 			When sharing setup or run steps, present terminal commands in fenced code blocks with the correct language tag. Keep commands copyable and on separate lines.<br />
