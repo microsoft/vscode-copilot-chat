@@ -374,11 +374,11 @@ export class NewFilesLocationHint extends PromptElement {
 	}
 }
 
-export interface TextDocumentWorkingSetEntryPromptProps extends BasePromptElementProps {
+interface TextDocumentWorkingSetEntryPromptProps extends BasePromptElementProps {
 	readonly entry: ITextDocumentWorkingSetEntry;
 }
 
-export class TextDocumentWorkingSetEntry extends PromptElement<TextDocumentWorkingSetEntryPromptProps> {
+class TextDocumentWorkingSetEntry extends PromptElement<TextDocumentWorkingSetEntryPromptProps> {
 	constructor(
 		props: TextDocumentWorkingSetEntryPromptProps,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
@@ -435,11 +435,11 @@ export class TextDocumentWorkingSetEntry extends PromptElement<TextDocumentWorki
 	}
 }
 
-export interface NotebookWorkingSetEntryPromptProps extends BasePromptElementProps {
+interface NotebookWorkingSetEntryPromptProps extends BasePromptElementProps {
 	readonly entry: INotebookWorkingSetEntry;
 }
 
-export class NotebookWorkingSetEntry extends PromptElement<NotebookWorkingSetEntryPromptProps> {
+class NotebookWorkingSetEntry extends PromptElement<NotebookWorkingSetEntryPromptProps> {
 	constructor(
 		props: NotebookWorkingSetEntryPromptProps,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
