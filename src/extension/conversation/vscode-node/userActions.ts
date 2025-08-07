@@ -185,34 +185,32 @@ export class UserFeedbackService implements IUserFeedbackService {
 					}
 				}
 				break;
-			case 'chatEditingHunkAction':
+			case 'chatEditingHunkAction': {
+				const outcome = outcomes.get(e.action.outcome);
+				if (outcome) {
 
-				/* __GDPR__
-					"panel.edit.action" : {
-						"owner": "joyceerhl",
-						"comment": "Counts accept/reject actions for a proposed edit from panel chat",
-						"languageId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Language of the currently open document." },
-						"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Id for the message request that is being followed-up." },
-						"participant": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the chat participant for this message." },
-						"command": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The command used for the chat participant." },
-						"outcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The user decision taken for the edited file" },
-						"hasRemainingEdits": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether there are additional unactioned edits in the file." },
-						"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the document is a notebook." },
-						"isNotebookCell": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the document is a notebook cell." },
-						"lineCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The number of lines in the edit." }
-					}
-				*/
-				this.telemetryService.sendMSFTTelemetryEvent('panel.edit.action', {
-					languageId: document?.languageId,
-					requestId: result.metadata?.responseId,
-					participant: agentId,
-					outcome: outcomes.get(e.action.outcome) ?? 'unknown',
-					hasRemainingEdits: String(e.action.hasRemainingEdits),
-				}, {
-					isNotebook: this.notebookService.hasSupportedNotebooks(e.action.uri) ? 1 : 0,
-					isNotebookCell: e.action.uri.scheme === Schemas.vscodeNotebookCell ? 1 : 0,
-					lineCount: e.action.lineCount
-				});
+					const properties = {
+						requestId: result.metadata?.responseId ?? '',
+						languageId: document?.languageId ?? '',
+						outcome,
+					};
+					const measurements = {
+						hasRemainingEdits: e.action.hasRemainingEdits ? 1 : 0,
+						isNotebook: this.notebookService.hasSupportedNotebooks(e.action.uri) ? 1 : 0,
+						isNotebookCell: e.action.uri.scheme === Schemas.vscodeNotebookCell ? 1 : 0,
+						lineCount: e.action.lineCount
+					};
+
+					sendUserActionTelemetry(
+						this.telemetryService,
+						document ?? vscode.window.activeTextEditor?.document,
+						properties,
+						measurements,
+						'edit.hunk.action'
+					);
+				}
+				break;
+			}
 		}
 
 		if (e.action.kind === 'copy' || e.action.kind === 'insert') {
