@@ -160,6 +160,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		let targetDocumentId = docId;
 
 		const cacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheDelay, this._expService);
+		const minimumResponseDelay = cacheDelay;
 
 		if (recentlyShownCachedEdit) {
 			tracer.trace('using recently shown cached edit');
@@ -174,8 +175,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			// back-date the recording bookmark of the cached edit to the bookmark of the original request.
 			logContext.recordingBookmark = req.log.recordingBookmark;
 
-			await timeout(cacheDelay);
-
 		} else if (cachedEdit) {
 			tracer.trace('using cached edit');
 			edit = cachedEdit.rebasedEdit || cachedEdit.edit;
@@ -187,8 +186,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			telemetryBuilder.setSubsequentEditOrder(cachedEdit.rebasedEditIndex ?? cachedEdit.subsequentN);
 			// back-date the recording bookmark of the cached edit to the bookmark of the original request.
 			logContext.recordingBookmark = req.log.recordingBookmark;
-
-			await timeout(cacheDelay);
 
 		} else {
 			tracer.trace('fetching next edit');
@@ -232,6 +229,9 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				}
 			}
 		}
+
+		const fetchLatency = Date.now() - this._lastTriggerTime;
+		await timeout(minimumResponseDelay - fetchLatency);
 
 		telemetryBuilder.markEndTime();
 
