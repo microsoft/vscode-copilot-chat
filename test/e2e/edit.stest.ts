@@ -11,9 +11,10 @@ import { IReadFileParamsV1 } from '../../src/extension/tools/node/readFileTool';
 import { deserializeWorkbenchState } from '../../src/platform/test/node/promptContextModel';
 import { ssuite, stest } from '../base/stest';
 import { generateToolTestRunner } from './toolSimTest';
+import { shouldSkipAgentTests } from './tools.stest';
 
 
-ssuite({ title: 'edit', subtitle: 'toolCalling', location: 'panel' }, () => {
+ssuite.optional(shouldSkipAgentTests, { title: 'edit', subtitle: 'toolCalling', location: 'panel' }, () => {
 	const scenarioFolder = path.join(__dirname, '..', 'test/scenarios/test-tools');
 	const getState = () => deserializeWorkbenchState(scenarioFolder, path.join(scenarioFolder, 'chatSetup.state.json'));
 
