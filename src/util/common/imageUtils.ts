@@ -157,7 +157,7 @@ export function extractImageAttributes(line: string, refineExisting?: boolean): 
 
 /**
  * Upload image data to GitHub Copilot chat attachments endpoint
- * @param binaryData The image binary data as VSBuffer
+ * @param binaryData The image binary data as Uint8Array
  * @param name The name for the uploaded file
  * @param mimeType The MIME type of the image
  * @param token The authentication token for GitHub API
