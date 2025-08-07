@@ -3,15 +3,17 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { RequestMetadata } from '@vscode/copilot-api';
 import { HTMLTracer, IChatEndpointInfo, RenderPromptResult } from '@vscode/prompt-tsx';
 import { CancellationToken, DocumentLink, DocumentLinkProvider, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult2, languages, Range, TextDocument, Uri, workspace } from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
+import { IModelAPIResponse } from '../../../platform/endpoint/common/endpointProvider';
 import { getAllStatefulMarkersAndIndicies } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { ILogService } from '../../../platform/log/common/logService';
 import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
 import { IResponseDelta } from '../../../platform/networking/common/fetch';
-import { AbstractRequestLogger, ChatRequestScheme, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
+import { AbstractRequestLogger, ChatRequestScheme, ILoggedModelListCall, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
 import { ThinkingData } from '../../../platform/thinking/common/thinking';
 import { createFencedCodeBlock } from '../../../util/common/markdown';
 import { assertNever } from '../../../util/vs/base/common/assert';
@@ -61,6 +63,19 @@ export class RequestLogger extends AbstractRequestLogger {
 
 	private _onDidChangeRequests = new Emitter<void>();
 	public readonly onDidChangeRequests = this._onDidChangeRequests.event;
+
+	public override logModelListCall(id: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void {
+		this._addEntry({
+			kind: LoggedInfoKind.Request,
+			id,
+			entry: {
+				type: LoggedRequestKind.ModelListRequest,
+				requestMetadata,
+				models
+			},
+			chatRequest: undefined
+		});
+	}
 
 	public override logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void {
 		this._addEntry({
@@ -226,6 +241,10 @@ export class RequestLogger extends AbstractRequestLogger {
 			return entry.markdownContent;
 		}
 
+		if (entry.type === LoggedRequestKind.ModelListRequest) {
+			return this._renderModelListToMarkdown(entry);
+		}
+
 		const result: string[] = [];
 		result.push(`> 🚨 Note: This log may contain personal information such as the contents of your files or terminal output. Please review the contents carefully before sharing.`);
 		result.push(`# ${entry.debugName} - ${id}`);
@@ -375,5 +394,9 @@ export class RequestLogger extends AbstractRequestLogger {
 		}).join('');
 
 		return `### ${capitalizedRole}\n~~~md\n${message}\n~~~\n`;
+	}
+
+	private _renderModelListToMarkdown(entry: ILoggedModelListCall): string {
+		return '';
 	}
 }
