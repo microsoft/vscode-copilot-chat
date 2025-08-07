@@ -131,7 +131,8 @@
 		"textDocumentChangeReason",
 		"resolvers",
 		"taskExecutionTerminal",
-		"dataChannels"
+		"dataChannels",
+		"languageModelThinkingPart"
 	],
 	"contributes": {
 		"languageModelTools": [
