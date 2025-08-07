@@ -20,6 +20,12 @@ export type Props = PromptElementProps<{
 }>;
 
 export class LanguageModelAccessPrompt extends PromptElement<Props> {
+	// constructor(
+	// 	props: Props,
+	// 	@IAuthenticationService readonly authService: IAuthenticationService
+	// ) {
+	// 	super(props);
+	// }
 	render() {
 
 		const systemMessages: string[] = [];

@@ -5,11 +5,13 @@
 
 import { AssistantMessage, BasePromptElementProps, PromptRenderer as BasePromptRenderer, Chunk, IfEmpty, Image, JSONTree, PromptElement, PromptElementProps, PromptMetadata, PromptPiece, PromptSizing, TokenLimit, ToolCall, ToolMessage, useKeepWith, UserMessage } from '@vscode/prompt-tsx';
 import type { ChatParticipantToolToken, LanguageModelToolResult2, LanguageModelToolTokenizationOptions } from 'vscode';
+import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { StatefulMarkerContainer } from '../../../../platform/endpoint/common/statefulMarkerContainer';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
+import { chatImageUploader } from '../../../../util/common/imageUtils';
 import { ITokenizer } from '../../../../util/common/tokenizer';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { toErrorMessage } from '../../../../util/vs/base/common/errorMessage';
@@ -297,10 +299,25 @@ enum ToolInvocationOutcome {
 	Cancelled = 'cancelled',
 }
 
-export function imageDataPartToTSX(part: LanguageModelDataPart) {
+export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToken?: string, vendor?: string, logService?: ILogService) {
 	if (isImageDataPart(part)) {
 		const base64 = Buffer.from(part.data).toString('base64');
-		return <Image src={`data:${part.mimeType};base64,${base64}`} />;
+		let imageSource = `data:${part.mimeType};base64,${base64}`;
+
+		if (githubToken && vendor === 'copilot') {
+			try {
+				const uri = await chatImageUploader(part.data, 'mcp-image', part.mimeType, githubToken);
+				if (uri) {
+					imageSource = uri.toString();
+				}
+			} catch (error) {
+				if (logService) {
+					logService.warn(`Image upload failed, using base64 fallback: ${error}`);
+				}
+			}
+		}
+
+		return <Image src={imageSource} />;
 	}
 }
 
@@ -340,6 +357,16 @@ interface IPrimitiveToolResultProps extends BasePromptElementProps {
 }
 
 class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptElement<T> {
+
+	constructor(
+		props: T,
+		@IPromptEndpoint protected readonly endpoint: IPromptEndpoint,
+		@IAuthenticationService private readonly authService: IAuthenticationService,
+		@ILogService private readonly logService?: ILogService
+	) {
+		super(props);
+	}
+
 	async render(): Promise<PromptPiece | undefined> {
 		return (
 			<>
@@ -368,8 +395,9 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 		return part.audience.includes(LanguageModelPartAudience.Assistant);
 	}
 
-	protected onData(part: LanguageModelDataPart) {
-		return Promise.resolve(imageDataPartToTSX(part));
+	protected async onData(part: LanguageModelDataPart) {
+		const githubToken = (await this.authService.getAnyGitHubSession())?.accessToken;
+		return Promise.resolve(imageDataPartToTSX(part, githubToken, this.endpoint.vendor, this.logService));
 	}
 
 	protected onTSX(part: JSONTree.PromptElementJSON) {
@@ -396,9 +424,11 @@ export interface IToolResultProps extends IPrimitiveToolResultProps {
 export class ToolResult extends PrimitiveToolResult<IToolResultProps> {
 	constructor(
 		props: PromptElementProps<IToolResultProps>,
-		@IPromptEndpoint private readonly endpoint: IPromptEndpoint,
+		@IPromptEndpoint endpoint: IPromptEndpoint,
+		@IAuthenticationService authService: IAuthenticationService,
+		@ILogService logService: ILogService
 	) {
-		super(props);
+		super(props, endpoint, authService, logService);
 	}
 
 	protected override async onTSX(part: JSONTree.PromptElementJSON): Promise<any> {
