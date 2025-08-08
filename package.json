@@ -400,22 +400,19 @@
 				"canBeReferencedInPrompt": true,
 				"icon": "$(error)",
 				"userDescription": "%copilot.tools.errors.description%",
-				"modelDescription": "Get any compile or lint errors in a code file. If the user mentions errors or problems in a file, they may be referring to these. Use the tool to see the same errors that the user is seeing. Also use this tool after editing a file to validate the change.",
+				"modelDescription": "Get any compile or lint errors in a specific file or across all files. If the user mentions errors or problems in a file, they may be referring to these. Use the tool to see the same errors that the user is seeing. If the user asks you to analyze all errors, or does not specify a file, use this tool to gather errors for all files. Also use this tool after editing a file to validate the change.",
 				"tags": [],
 				"inputSchema": {
 					"type": "object",
 					"properties": {
 						"filePaths": {
-							"description": "The absolute paths to the files to check for errors.",
+							"description": "The absolute paths to the files to check for errors. Omit 'filePaths' when retrieving all errors.",
 							"type": "array",
 							"items": {
 								"type": "string"
 							}
 						}
-					},
-					"required": [
-						"filePaths"
-					]
+					}
 				}
 			},
 			{
