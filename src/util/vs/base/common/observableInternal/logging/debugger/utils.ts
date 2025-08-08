@@ -17,7 +17,7 @@ export class Debouncer implements IDisposable {
 		this._timeout = setTimeout(() => {
 			this._timeout = undefined;
 			fn();
-		}, timeoutMs);
+		}, timeoutMs) as any;
 	}
 
 	dispose(): void {
@@ -35,7 +35,7 @@ export class Throttler implements IDisposable {
 			this._timeout = setTimeout(() => {
 				this._timeout = undefined;
 				fn();
-			}, timeoutMs);
+			}, timeoutMs) as any;
 		}
 	}
 

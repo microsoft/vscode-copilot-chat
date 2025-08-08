@@ -289,7 +289,7 @@ export namespace Event {
 						if (handle) {
 							clearTimeout(handle);
 						}
-						handle = setTimeout(doFire, delay);
+						handle = setTimeout(doFire, delay) as any;
 					} else {
 						if (handle === undefined) {
 							handle = null;
@@ -1420,7 +1420,7 @@ export class DebounceEmitter<T> extends PauseableEmitter<T> {
 			this._handle = setTimeout(() => {
 				this._handle = undefined;
 				this.resume();
-			}, this._delay);
+			}, this._delay) as any;
 		}
 		super.fire(event);
 	}

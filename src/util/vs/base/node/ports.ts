@@ -175,7 +175,7 @@ export function findFreePortFaster(startPort: number, giveUpAfter: number, timeo
 	return new Promise<number>(resolve => {
 		timeoutHandle = setTimeout(() => {
 			doResolve(0, resolve);
-		}, timeout);
+		}, timeout) as any;
 
 		server.on('listening', () => {
 			doResolve(startPort, resolve);

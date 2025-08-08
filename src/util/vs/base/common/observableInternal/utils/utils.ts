@@ -52,7 +52,7 @@ export function debouncedObservableDeprecated<T>(observable: IObservable<T>, deb
 			transaction(tx => {
 				debouncedObservable.set(value, tx);
 			});
-		}, debounceMs);
+		}, debounceMs) as any;
 
 	}));
 
@@ -82,7 +82,7 @@ export function debouncedObservable<T>(observable: IObservable<T>, debounceMs: n
 				timeout = setTimeout(() => {
 					lastValue = value;
 					cb();
-				}, debounceMs);
+				}, debounceMs) as any;
 			}
 		});
 		return {
@@ -114,7 +114,7 @@ export function wasEventTriggeredRecently(event: Event<any>, timeoutMs: number, 
 		}
 		timeout = setTimeout(() => {
 			observable.set(false, undefined);
-		}, timeoutMs);
+		}, timeoutMs) as any;
 	}));
 
 	return observable;

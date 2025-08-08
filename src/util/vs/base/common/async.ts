@@ -517,7 +517,7 @@ export class AutoOpenBarrier extends Barrier {
 
 	constructor(autoOpenTimeMs: number) {
 		super();
-		this._timeout = setTimeout(() => this.open(), autoOpenTimeMs);
+		this._timeout = setTimeout(() => this.open(), autoOpenTimeMs) as any;
 	}
 
 	override open(): void {
@@ -1034,7 +1034,7 @@ export class TimeoutTimer implements IDisposable {
 		this._token = setTimeout(() => {
 			this._token = undefined;
 			runner();
-		}, timeout);
+		}, timeout) as any;
 	}
 
 	setIfNotSet(runner: () => void, timeout: number): void {
@@ -1049,7 +1049,7 @@ export class TimeoutTimer implements IDisposable {
 		this._token = setTimeout(() => {
 			this._token = undefined;
 			runner();
-		}, timeout);
+		}, timeout) as any;
 	}
 }
 
@@ -1123,7 +1123,7 @@ export class RunOnceScheduler implements IDisposable {
 	 */
 	schedule(delay = this.timeout): void {
 		this.cancel();
-		this.timeoutToken = setTimeout(this.timeoutHandler, delay);
+		this.timeoutToken = setTimeout(this.timeoutHandler, delay) as any;
 	}
 
 	get delay(): number {
@@ -1209,7 +1209,7 @@ export class ProcessTimeRunOnceScheduler {
 		}
 		this.cancel();
 		this.counter = Math.ceil(delay / 1000);
-		this.intervalToken = setInterval(this.intervalHandler, 1000);
+		this.intervalToken = setInterval(this.intervalHandler, 1000) as any;
 	}
 
 	/**
