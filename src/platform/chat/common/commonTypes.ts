@@ -97,6 +97,7 @@ export enum ChatFetchResponseType {
 	NotFound = 'notFound',
 	Failed = 'failed',
 	Unknown = 'unknown',
+	NetworkError = 'networkError',
 	AgentUnauthorized = 'agent_unauthorized',
 	AgentFailedDependency = 'agent_failed_dependency',
 	InvalidStatefulMarker = 'invalid_stateful_marker',
@@ -156,6 +157,10 @@ export type ChatFetchError =
 	 * unexpected went wrong.
 	 */
 	| { type: ChatFetchResponseType.Failed; reason: string; requestId: string; serverRequestId: string | undefined; streamError?: APIErrorResponse }
+	/**
+	 * We requested conversation, but didn't come up with any results because of a network error
+	 */
+	| { type: ChatFetchResponseType.NetworkError; reason: string; requestId: string; serverRequestId: string | undefined; streamError?: APIErrorResponse }
 	/**
 	 * We requested conversation, but didn't come up with any results for some "unknown"
 	 * reason, such as slur redaction or snippy.
@@ -274,6 +279,8 @@ export function getErrorDetailsFromChatFetchError(fetchResult: ChatFetchError, c
 		case ChatFetchResponseType.BadRequest:
 		case ChatFetchResponseType.Failed:
 			return { message: l10n.t(`Sorry, your request failed. Please try again. Request id: {0}\n\nReason: {1}`, fetchResult.requestId, fetchResult.reason) };
+		case ChatFetchResponseType.NetworkError:
+			return { message: l10n.t(`Sorry, there was a network error. Please try again later. Request id: {0}\n\nReason: {1}`, fetchResult.requestId, fetchResult.reason) };
 		case ChatFetchResponseType.Filtered:
 		case ChatFetchResponseType.PromptFiltered:
 			return {
