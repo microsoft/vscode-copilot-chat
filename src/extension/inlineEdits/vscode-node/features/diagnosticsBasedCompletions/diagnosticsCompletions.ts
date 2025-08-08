@@ -245,13 +245,29 @@ export function isDiagnosticWithinDistance(workspaceDocument: IObservableDocumen
 }
 
 export function sortDiagnosticsByDistance(workspaceDocument: IObservableDocument, diagnostics: Diagnostic[], position: Position): Diagnostic[] {
+	const transformer = workspaceDocument.value.get().getTransformer();
 	return diagnostics.sort((a, b) => {
 		const aDistance = diagnosticDistanceToPosition(workspaceDocument, a, position);
 		const bDistance = diagnosticDistanceToPosition(workspaceDocument, b, position);
-		if (aDistance.lineDelta === bDistance.lineDelta) {
+
+		if (aDistance.lineDelta !== bDistance.lineDelta) {
+			return aDistance.lineDelta - bDistance.lineDelta;
+		}
+
+		const aPosition = transformer.getPosition(a.range.start);
+		const bPosition = transformer.getPosition(b.range.start);
+
+		if (aPosition.lineNumber !== bPosition.lineNumber) {
 			return aDistance.characterDelta - bDistance.characterDelta;
 		}
-		return aDistance.lineDelta - bDistance.lineDelta;
+
+		if (aDistance.lineDelta < 2) {
+			return aDistance.characterDelta - bDistance.characterDelta;
+		}
+
+		// If both diagnostics are on the same line and are more than 1 line away from the cursor
+		// always prefer the first diagnostic to minimize recomputation and flickering on cursor move
+		return -1;
 	});
 }
 
