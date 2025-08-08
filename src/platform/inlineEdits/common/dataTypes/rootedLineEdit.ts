@@ -40,7 +40,7 @@ export class RootedLineEdit {
 
 	public removeCommonSuffixPrefixLines(): RootedLineEdit {
 		const isNotEmptyEdit = (edit: LineReplacement) => !edit.lineRange.isEmpty || edit.newLines.length > 0;
-		const newEdit = this.edit.edits.map(e => e.removeCommonSuffixPrefixLines(this.base)).filter(e => isNotEmptyEdit(e));
+		const newEdit = this.edit.replacements.map(e => e.removeCommonSuffixPrefixLines(this.base)).filter(e => isNotEmptyEdit(e));
 		return new RootedLineEdit(this.base, new LineEdit(newEdit));
 	}
 }

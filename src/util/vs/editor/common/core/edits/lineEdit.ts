@@ -8,12 +8,12 @@
 import { compareBy, groupAdjacentBy, numberComparator } from '../../../../base/common/arrays';
 import { assert, checkAdjacentItems } from '../../../../base/common/assert';
 import { splitLines } from '../../../../base/common/strings';
-import { LineRange } from '../ranges/lineRange';
-import { StringEdit, StringReplacement } from './stringEdit';
 import { Position } from '../position';
 import { Range } from '../range';
-import { TextReplacement, TextEdit } from './textEdit';
+import { LineRange } from '../ranges/lineRange';
 import { AbstractText } from '../text/abstractText';
+import { BaseStringEdit, StringEdit, StringReplacement } from './stringEdit';
+import { TextEdit, TextReplacement } from './textEdit';
 
 export class LineEdit {
 	public static readonly empty = new LineEdit([]);
@@ -22,7 +22,7 @@ export class LineEdit {
 		return new LineEdit(data.map(e => LineReplacement.deserialize(e)));
 	}
 
-	public static fromEdit(edit: StringEdit, initialValue: AbstractText): LineEdit {
+	public static fromEdit(edit: BaseStringEdit, initialValue: AbstractText): LineEdit {
 		const textEdit = TextEdit.fromStringEdit(edit, initialValue);
 		return LineEdit.fromTextEdit(textEdit, initialValue);
 	}
