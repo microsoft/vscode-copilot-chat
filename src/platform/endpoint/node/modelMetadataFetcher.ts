@@ -292,6 +292,10 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 			);
 
 			const data: IModelAPIResponse = await response.json();
+			if (response.status !== 200) {
+				this._logService.error(`Failed to fetch model ${modelId} (requestId: ${requestId}): ${JSON.stringify(data)}`);
+				return;
+			}
 			this._requestLogger.logModelListCall(requestId, requestMetadata, [data]);
 			if (data.capabilities.type === 'completion') {
 				return;
