@@ -180,7 +180,7 @@ class WorkspaceInformation {
 
 export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletionProvider<ImportDiagnosticCompletionItem> {
 
-	public static SupportedLanguages = new Set<string>(['typescript', 'javascript', 'typescriptreact', 'javascriptreact', 'python']);
+	public static SupportedLanguages = new Set<string>(['typescript', 'javascript', 'typescriptreact', 'javascriptreact', 'python', 'java']);
 
 	public readonly providerName = 'import';
 
@@ -198,12 +198,14 @@ export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletion
 
 		const javascriptImportHandler = new JavascriptImportHandler();
 		const pythonImportHandler = new PythonImportHandler();
+		const javaImportHandler = new JavaImportHandler();
 		this._importHandlers = new Map<string, ILanguageImportHandler>([
 			['javascript', javascriptImportHandler],
 			['typescript', javascriptImportHandler],
 			['typescriptreact', javascriptImportHandler],
 			['javascriptreact', javascriptImportHandler],
 			['python', pythonImportHandler],
+			['java', javaImportHandler],
 		]);
 	}
 
@@ -316,7 +318,7 @@ export class ImportDiagnosticCompletionProvider implements IDiagnosticCompletion
 			// The diagnostic might have changed in the meantime to a different range
 			// So we need to get the import name from the referenced diagnostic
 			let codeActionImportName = importName;
-			if (codeAction.diagnostics) {
+			if (codeAction.diagnostics && codeAction.diagnostics.length > 0) {
 				codeActionImportName = codeAction.diagnostics[0].range.substring(documentContent.value);
 			}
 
@@ -487,5 +489,30 @@ class PythonImportHandler implements ILanguageImportHandler {
 		}
 
 		return ImportSource.unknown;
+	}
+}
+
+class JavaImportHandler implements ILanguageImportHandler {
+
+	isImportDiagnostic(diagnostic: Diagnostic): boolean {
+		return String(diagnostic.data.code) === '16777218' || diagnostic.message.endsWith('cannot be resolved to a type');
+	}
+
+	isImportCodeAction(codeAction: CodeActionData): boolean {
+		return codeAction.title.startsWith('Import');
+	}
+
+	isImportInIgnoreList(importCodeAction: ImportCodeAction): boolean {
+		return false;
+	}
+
+	getImportDetails(codeAction: CodeActionData, importName: string, workspaceInfo: WorkspaceInformation): ImportDetails | null {
+		return {
+			importName,
+			importPath: codeAction.title.split(`\'`)[2].trim(),
+			labelShort: 'import ' + importName,
+			labelDeduped: codeAction.title,
+			importSource: ImportSource.unknown
+		};
 	}
 }
