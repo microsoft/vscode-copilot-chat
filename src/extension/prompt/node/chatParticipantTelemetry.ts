@@ -358,7 +358,8 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 				response,
 				this.telemetryMessageId, // That's the message id of the user message
 				this._documentContext?.document,
-				this._userTelemetry.extendedBy({ replyType: interactionOutcome.kind })
+				this._userTelemetry.extendedBy({ replyType: interactionOutcome.kind }),
+				this._getModeName()
 			);
 		}
 
