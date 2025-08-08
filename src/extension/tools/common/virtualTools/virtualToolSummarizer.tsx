@@ -56,12 +56,25 @@ function processCategorizationResponse(json: { name: string; summary: string; to
 }
 
 function validateAndCleanupCategories(categories: ISummarizedToolCategory[]): ISummarizedToolCategory[] {
-	const seen = new Set<string>();
-	return categories.map(category => ({
-		...category,
-		name: normalizeGroupName(category.name),
-		tools: deduplicateTools(category.tools, seen),
-	}));
+	const byName = new Map<string, ISummarizedToolCategory>();
+	for (const category of categories) {
+		const name = normalizeGroupName(category.name);
+		const existing = byName.get(name);
+		if (!existing) {
+			byName.set(category.name, { tools: category.tools, name, summary: category.summary });
+		} else {
+			if (category.summary && category.summary !== existing.summary) {
+				existing.summary = `${existing.summary}\n\n${category.summary}`;
+			}
+			existing.tools = existing.tools.concat(category.tools);
+		}
+	}
+
+	for (const category of byName.values()) {
+		category.tools = deduplicateTools(category.tools);
+	}
+
+	return [...byName.values()];
 }
 
 /**
@@ -216,7 +229,7 @@ class CategorizerSummaryPrompt extends PromptElement<BasePromptElementProps & { 
 			<SystemMessage>
 				Context: There are many tools available for a user. However, the number of tools can be large, and it is not always practical to present all of them at once. We need to create logical groups for the user to pick from at a glance.<br />
 				<br />
-				The user present you with the tools available to them, and you must group them into logical categories and provide a summary of each one. The summary should include the capabilities of the tools and when they should be used. Every tool MUST be a part of EXACTLY one category.<br />
+				The user present you with the tools available to them, and you must group them into logical categories and provide a summary of each one. The summary should include the capabilities of the tools and when they should be used. Every tool MUST be a part of EXACTLY one category. Category names in your response MUST be unique—do not reuse the same name for different categories. If two categories would share a base name, append a short, descriptive suffix to disambiguate (e.g., python_tools_testing vs python_tools_packaging).<br />
 			</SystemMessage>
 			<UserMessage>
 				{this.props.tools.map(tool => <ToolInformation tool={tool} />)}<br />
@@ -232,7 +245,7 @@ class CategorizerSummaryPrompt extends PromptElement<BasePromptElementProps & { 
 						properties: {
 							name: {
 								type: 'string',
-								description: 'A short name for the category. It may only contain the characters a-z, A-Z, 0-9, and underscores.',
+								description: 'A short, unique name for the category across this response. It may only contain the characters a-z, A-Z, 0-9, and underscores. If a potential collision exists, add a short suffix to keep names unique (e.g., _testing, _packaging).',
 								example: 'foo_language_tools'
 							},
 							tools: {
@@ -273,7 +286,7 @@ class ExistingGroupCategorizerPrompt extends PromptElement<BasePromptElementProp
 				<br />
 				The user will provide you with the existing categories and their current tools, as well as the new tools that need to be categorized. You must assign each new tool to either an existing category (if it fits well) or create new categories as needed. You should also return all existing tools in their current categories unless there's a compelling reason to reorganize them.<br />
 				<br />
-				Every tool (both existing and new) MUST be part of EXACTLY one category in your response.<br />
+				Every tool (both existing and new) MUST be part of EXACTLY one category in your response. Category names MUST be unique within the response. If a new category would conflict with an existing category name, choose a distinct, disambiguating name.<br />
 			</SystemMessage>
 			<UserMessage>
 				**Existing Categories:**<br />
@@ -300,7 +313,7 @@ class ExistingGroupCategorizerPrompt extends PromptElement<BasePromptElementProp
 						properties: {
 							name: {
 								type: 'string',
-								description: 'A short name for the category. It may only contain the characters a-z, A-Z, 0-9, and underscores.',
+								description: 'A short, unique name for the category across this response. It may only contain the characters a-z, A-Z, 0-9, and underscores. Do not reuse names; add a short suffix if needed to avoid collisions.',
 								example: 'foo_language_tools'
 							},
 							tools: {
