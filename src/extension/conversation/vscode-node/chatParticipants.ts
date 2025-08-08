@@ -81,6 +81,7 @@ class ChatAgents implements IDisposable {
 		this._disposables.add(this.registerEditingAgentEditor());
 		this._disposables.add(this.registerEditsAgent());
 		this._disposables.add(this.registerEditorDefaultAgent());
+		this._disposables.add(this.registerNotebookEditorDefaultAgent());
 		this._disposables.add(this.registerNotebookDefaultAgent());
 		this._disposables.add(this.registerWorkspaceAgent());
 		this._disposables.add(this.registerVSCodeAgent());
@@ -230,6 +231,13 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 
 	private registerEditorDefaultAgent(): IDisposable {
 		const defaultAgent = this.createAgent(editorAgentName, Intent.Editor);
+		defaultAgent.iconPath = new vscode.ThemeIcon('copilot');
+
+		return defaultAgent;
+	}
+
+	private registerNotebookEditorDefaultAgent(): IDisposable {
+		const defaultAgent = this.createAgent('notebook', Intent.Editor);
 		defaultAgent.iconPath = new vscode.ThemeIcon('copilot');
 
 		return defaultAgent;
