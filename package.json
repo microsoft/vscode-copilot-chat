@@ -22,7 +22,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.103.0-20250728",
+		"vscode": "^1.104.0",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -131,7 +131,8 @@
 		"textDocumentChangeReason",
 		"resolvers",
 		"taskExecutionTerminal",
-		"dataChannels"
+		"dataChannels",
+		"languageModelThinkingPart"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -240,6 +241,8 @@
 				"displayName": "%copilot.tools.think.name%",
 				"name": "copilot_think",
 				"tags": [],
+				"canBeReferencedInPrompt": true,
+				"toolReferenceName": "think",
 				"when": "config.github.copilot.chat.agent.thinkingTool",
 				"modelDescription": "Use this tool to think deeply about the user's request and organize your thoughts. This tool helps improve response quality by allowing the model to consider the request carefully, brainstorm solutions, and plan complex tasks. It's particularly useful for:\n\n1. Exploring repository issues and brainstorming bug fixes\n2. Analyzing test results and planning fixes\n3. Planning complex refactoring approaches\n4. Designing new features and architecture\n5. Organizing debugging hypotheses\n\nThe tool logs your thought process for transparency but doesn't execute any code or make changes.",
 				"inputSchema": {
@@ -730,7 +733,7 @@
 				"name": "copilot_replaceString",
 				"toolReferenceName": "replaceString",
 				"displayName": "%copilot.tools.replaceString.name%",
-				"modelDescription": "This is a tool for making edits in an existing file in the workspace. For moving or renaming files, use run in terminal tool with the 'mv' command instead. For larger edits, split them into smaller edits and call the edit tool multiple times to ensure accuracy. Before editing, always ensure you have the context to understand the file's contents and context. To edit a file, provide: 1) filePath (absolute path), 2) oldString (MUST be the exact literal text to replace including all whitespace, indentation, newlines, and surrounding code etc), and 3) newString (MUST be the exact literal text to replace \\`oldString\\` with (also including all whitespace, indentation, newlines, and surrounding code etc.). Ensure the resulting code is correct and idiomatic.). Each use of this tool replaces exactly ONE occurrence of oldString.\n\nCRITICAL for \\`oldString\\`: Must uniquely identify the single instance to change. Include at least 3 lines of context BEFORE and AFTER the target text, matching whitespace and indentation precisely. If this string matches multiple locations, or does not match exactly, the tool will fail. Never use ...existing code... comments in the oldString or newString.",
+				"modelDescription": "This is a tool for making edits in an existing file in the workspace. For moving or renaming files, use run in terminal tool with the 'mv' command instead. For larger edits, split them into smaller edits and call the edit tool multiple times to ensure accuracy. Before editing, always ensure you have the context to understand the file's contents and context. To edit a file, provide: 1) filePath (absolute path), 2) oldString (MUST be the exact literal text to replace including all whitespace, indentation, newlines, and surrounding code etc), and 3) newString (MUST be the exact literal text to replace \\`oldString\\` with (also including all whitespace, indentation, newlines, and surrounding code etc.). Ensure the resulting code is correct and idiomatic.). Each use of this tool replaces exactly ONE occurrence of oldString.\n\nCRITICAL for \\`oldString\\`: Must uniquely identify the single instance to change. Include at least 3 lines of context BEFORE and AFTER the target text, matching whitespace and indentation precisely. If this string matches multiple locations, or does not match exactly, the tool will fail. Never use 'Lines 123-456 omitted' from summarized documents or ...existing code... comments in the oldString or newString.",
 				"when": "!config.github.copilot.chat.disableReplaceTool",
 				"inputSchema": {
 					"type": "object",
@@ -2234,14 +2237,6 @@
 						],
 						"markdownDescription": "%github.copilot.config.codesearch.enabled%"
 					},
-					"github.copilot.chat.edits.codesearch.enabled": {
-						"type": "boolean",
-						"default": false,
-						"tags": [
-							"preview"
-						],
-						"markdownDeprecationMessage": "%github.copilot.config.edits.codesearch.enabled%"
-					},
 					"github.copilot.chat.byok.ollamaEndpoint": {
 						"type": "string",
 						"default": "http://localhost:11434",
@@ -2729,6 +2724,23 @@
 							"additionalProperties": false
 						},
 						"markdownDescription": "Configure custom Azure OpenAI models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
+					},
+					"github.copilot.chat.byok.responsesApi": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental",
+							"onExP"
+						],
+						"markdownDescription": "%github.copilot.config.byok.responsesApi%"
+					},
+					"github.copilot.chat.enableRetryAfterFilteredResponse": {
+						"type": "boolean",
+						"default": true,
+						"tags": [
+							"experimental"
+						],
+						"description": "%github.copilot.config.retryAfterFilteredResponse.enabled%"
 					}
 				}
 			}
@@ -2982,7 +2994,8 @@
 				},
 				{
 					"command": "github.copilot.debug.showChatLogView",
-					"when": "view == workbench.panel.chat.view.copilot"
+					"when": "view == workbench.panel.chat.view.copilot",
+					"group": "3_show"
 				}
 			],
 			"view/item/context": [
@@ -3635,6 +3648,7 @@
 		"monaco-editor": "0.44.0",
 		"npm-run-all": "^4.1.5",
 		"open": "^10.1.2",
+		"openai": "^5.11.0",
 		"outdent": "^0.8.0",
 		"picomatch": "^4.0.2",
 		"playwright": "^1.54.0",

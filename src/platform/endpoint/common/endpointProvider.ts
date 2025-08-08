@@ -33,6 +33,7 @@ export type IChatModelCapabilities = {
 		vision?: boolean;
 		prediction?: boolean;
 		thinking?: boolean;
+		statefulResponses?: boolean;
 	};
 };
 
@@ -44,7 +45,7 @@ export type IEmbeddingModelCapabilities = {
 };
 
 type ICompletionsModelCapabilities = {
-	type: 'completions';
+	type: 'completion';
 	family: string;
 	tokenizer: TokenizerType;
 }

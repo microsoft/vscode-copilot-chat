@@ -11,7 +11,8 @@ import { FetchStreamSource, IResponsePart } from '../../../platform/chat/common/
 import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
-import { FinishedCallback, OpenAiFunctionDef, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
+import { OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
+import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
@@ -23,7 +24,7 @@ import { Mutable } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponsePullRequestPart, LanguageModelDataPart2, LanguageModelToolResult2, MarkdownString, ToolResultAudience } from '../../../vscodeTypes';
+import { ChatResponsePullRequestPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelToolResult2, MarkdownString } from '../../../vscodeTypes';
 import { InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
 import { Conversation, IResultMetadata, ResponseStreamParticipant, TurnStatus } from '../../prompt/common/conversation';
@@ -80,6 +81,8 @@ export interface IToolCallingBuiltPromptEvent {
 	result: IBuildPromptResult;
 	tools: LanguageModelToolInformation[];
 }
+
+export type ToolCallingLoopFetchOptions = Required<Pick<IMakeChatRequestOptions, 'messages' | 'finishedCb' | 'requestOptions' | 'userInitiatedRequest'>>;
 
 /**
  * This is a base class that can be used to implement a tool calling loop
@@ -156,10 +159,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	protected abstract fetch(
-		messages: Raw.ChatMessage[],
-		finishedCb: FinishedCallback,
-		requestOptions: OptionalChatRequestParams,
-		firstFetchCall: boolean,
+		options: ToolCallingLoopFetchOptions,
 		token: CancellationToken
 	): Promise<ChatResponse>;
 
@@ -214,7 +214,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			const result = this.toolCallResults[toolRound.toolCallId];
 			if (result instanceof LanguageModelToolResult2) {
 				for (const part of result.content) {
-					if (part instanceof LanguageModelDataPart2 && part.mimeType === 'application/pull-request+json' && part.audience?.includes(ToolResultAudience.User)) {
+					if (part instanceof LanguageModelDataPart2 && part.mimeType === 'application/pull-request+json' && part.audience?.includes(LanguageModelPartAudience.User)) {
 						const data: { uri: string; title: string; description: string; author: string; linkTag: string } = JSON.parse(part.data.toString());
 						outputStream?.push(new ChatResponsePullRequestPart(URI.parse(data.uri), data.title, data.description, data.author, data.linkTag));
 					}
@@ -430,11 +430,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				parameters: toolInfo.inputSchema,
 			} satisfies OpenAiFunctionDef;
 		}) : undefined;
+		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
-		const fixedMessages = this.applyMessagePostProcessing(buildPromptResult.messages);
-		const fetchResult = await this.fetch(
-			fixedMessages,
-			async (text, _, delta) => {
+		const fetchResult = await this.fetch({
+			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
+			finishedCb: async (text, _, delta) => {
 				fetchStreamSource?.update(text, delta);
 				if (delta.copilotToolCalls) {
 					toolCalls.push(...delta.copilotToolCalls.map((call): IToolCall => ({
@@ -443,10 +443,13 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						arguments: call.arguments === '' ? '{}' : call.arguments
 					})));
 				}
+				if (delta.statefulMarker) {
+					statefulMarker = delta.statefulMarker;
+				}
 
 				return stopEarly ? text.length : undefined;
 			},
-			{
+			requestOptions: {
 				tools: promptContextTools?.map(tool => ({
 					function: {
 						name: tool.name,
@@ -456,9 +459,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					type: 'function',
 				})),
 			},
-			iterationNumber === 0 && !isContinuation,
-			token,
-		);
+			userInitiatedRequest: iterationNumber === 0 && !isContinuation
+		}, token);
 
 		fetchStreamSource?.resolve();
 		const chatResult = await processResponsePromise ?? undefined;
@@ -486,6 +488,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					toolCalls,
 					toolInputRetry,
 					undefined,
+					statefulMarker
 				),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,

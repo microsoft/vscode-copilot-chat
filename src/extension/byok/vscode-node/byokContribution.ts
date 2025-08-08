@@ -26,6 +26,7 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 	public readonly id: string = 'byok-contribution';
 	private readonly _byokStorageService: IBYOKStorageService;
 	private readonly _providers: Map<string, BYOKModelProvider<LanguageModelChatInformation>> = new Map();
+	private _byokProvidersRegistered = false;
 
 	constructor(
 		@IFetcherService private readonly _fetcherService: IFetcherService,
@@ -52,7 +53,8 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 	}
 
 	private async _authChange(authService: IAuthenticationService, instantiationService: IInstantiationService) {
-		if (authService.copilotToken && isBYOKEnabled(authService.copilotToken, this._capiClientService)) {
+		if (authService.copilotToken && isBYOKEnabled(authService.copilotToken, this._capiClientService) && !this._byokProvidersRegistered) {
+			this._byokProvidersRegistered = true;
 			// Update known models list from CDN so all providers have the same list
 			const knownModels = await this.fetchKnownModelList(this._fetcherService);
 			this._providers.set(OllamaLMProvider.providerName.toLowerCase(), instantiationService.createInstance(OllamaLMProvider, this._configurationService.getConfig(ConfigKey.OllamaEndpoint), this._byokStorageService));

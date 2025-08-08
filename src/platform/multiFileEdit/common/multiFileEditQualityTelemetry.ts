@@ -171,6 +171,8 @@ export class MultiFileEditInternalTelemetryService extends Disposable implements
 				messageText: edit.prompt,
 				suggestion: outcome,
 				completionTextJson: documentText, // Note that this is not necessarily the same as the model output because the user may have made manual edits
+				conversationId: edit.chatSessionId,
+				messageId: edit.chatRequestId,
 			});
 			this.telemetryService.sendEnhancedGHTelemetryEvent('fastApply/editOutcome', gitHubEnhancedTelemetryProperties);
 			this.logService.debug(`Sent telemetry for ${uri.toString()} with request ID ${edit.chatRequestId}, SD request ID ${edit.speculationRequestId}, and outcome ${outcome}`);

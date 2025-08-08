@@ -75,7 +75,8 @@ export class LanguageContextProviderService extends Disposable implements ILangu
 				kind: ContextKind.Snippet,
 				priority: LanguageContextProviderService.convertImportanceToPriority(ctx.importance),
 				uri: URI.parse(ctx.uri),
-				value: ctx.value
+				value: ctx.value,
+				additionalUris: ctx.additionalUris?.map(uri => URI.parse(uri)),
 			} satisfies SnippetContext;
 		} else {
 			const ctx = item as Copilot.Trait;

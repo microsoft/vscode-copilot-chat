@@ -13,6 +13,7 @@ import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapab
 import { OpenAIEndpoint } from '../node/openAIEndpoint';
 import { IBYOKStorageService } from './byokStorageService';
 import { promptForAPIKey } from './byokUIService';
+import { OpenAIResponsesEndpoint } from '../node/openAIResponsesEndpoint';
 
 export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvider<LanguageModelChatInformation> {
 
@@ -84,14 +85,21 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 		}
 	}
 	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: LanguageModelChatRequestHandleOptions, progress: Progress<ChatResponseFragment2>, token: CancellationToken): Promise<any> {
-		const modelInfo: IChatModelInformation = await this.getModelInfo(model.id, this._apiKey);
-		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, this._apiKey ?? '', `${this._baseUrl}/chat/completions`);
+		const openAIChatEndpoint = await this.getEndpointImpl(model);
 		return this._lmWrapper.provideLanguageModelResponse(openAIChatEndpoint, messages, options, options.extensionId, progress, token);
 	}
 	async provideTokenCount(model: LanguageModelChatInformation, text: string | LanguageModelChatMessage | LanguageModelChatMessage2, token: CancellationToken): Promise<number> {
-		const modelInfo: IChatModelInformation = await this.getModelInfo(model.id, this._apiKey);
-		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, this._apiKey ?? '', `${this._baseUrl}/chat/completions`);
+		const openAIChatEndpoint = await this.getEndpointImpl(model);
 		return this._lmWrapper.provideTokenCount(openAIChatEndpoint, text);
+	}
+
+	private async getEndpointImpl(model: LanguageModelChatInformation): Promise<OpenAIEndpoint> {
+		const modelInfo: IChatModelInformation = await this.getModelInfo(model.id, this._apiKey);
+		if (modelInfo.capabilities.supports.statefulResponses) {
+			return this._instantiationService.createInstance(OpenAIResponsesEndpoint, modelInfo, this._apiKey ?? '', `${this._baseUrl}/responses`);
+		} else {
+			return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, this._apiKey ?? '', `${this._baseUrl}/chat/completions`);
+		}
 	}
 
 	async updateAPIKey(): Promise<void> {

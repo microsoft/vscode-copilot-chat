@@ -51,6 +51,7 @@ export const enum ToolName {
 	CoreRunTask = 'run_task',
 	CoreGetTaskOutput = 'get_task_output',
 	CoreRunTest = 'runTests',
+	CoreTodoListTool = 'manage_todo_list',
 }
 
 // When updating this, also update contributedToolNameToToolNames
@@ -159,12 +160,3 @@ export function mapContributedToolNamesInString(str: string): string {
 export function mapContributedToolNamesInSchema(inputSchema: object): object {
 	return cloneAndChange(inputSchema, value => typeof value === 'string' ? mapContributedToolNamesInString(value) : undefined);
 }
-
-/**
- * Tools that can mutate code in the working set and that should be run prior
- * to forming an additional request with the model, to avoid that request
- * having outdated contents.
- */
-export const prerunTools: ReadonlySet<ToolName> = new Set([
-	ToolName.EditFile
-]);

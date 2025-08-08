@@ -63,9 +63,11 @@ export interface IGitService extends IDisposable {
  */
 export function getGitHubRepoInfoFromContext(repoContext: RepoContext): { id: GithubRepoId; remoteUrl: string } | undefined {
 	for (const remoteUrl of getOrderedRemoteUrlsFromContext(repoContext)) {
-		const id = getGithubRepoIdFromFetchUrl(remoteUrl);
-		if (id) {
-			return { id, remoteUrl };
+		if (remoteUrl) {
+			const id = getGithubRepoIdFromFetchUrl(remoteUrl);
+			if (id) {
+				return { id, remoteUrl };
+			}
 		}
 	}
 	return undefined;

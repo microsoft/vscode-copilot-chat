@@ -16,6 +16,7 @@ import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { getRequest } from '../../networking/common/networking';
+import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
@@ -78,6 +79,7 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 		private readonly collectFetcherTelemetry: ((accessor: ServicesAccessor) => void) | undefined,
 		protected readonly _isModelLab: boolean,
 		@IFetcherService private readonly _fetcher: IFetcherService,
+		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IDomainService private readonly _domainService: IDomainService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
@@ -209,6 +211,7 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 
 		const copilotToken = (await this._authService.getCopilotToken()).token;
 		const requestId = generateUuid();
+		const requestMetadata = { type: RequestType.Models, isModelLab: this._isModelLab };
 
 		try {
 			const response = await getRequest(
@@ -217,7 +220,7 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 				this._telemetryService,
 				this._domainService,
 				this._capiClientService,
-				{ type: RequestType.Models, isModelLab: this._isModelLab },
+				requestMetadata,
 				copilotToken,
 				await createRequestHMAC(process.env.HMAC_SECRET),
 				'model-access',
@@ -239,9 +242,10 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 			this._familyMap.clear();
 
 			const data: IModelAPIResponse[] = (await response.json()).data;
+			this._requestLogger.logModelListCall(requestId, requestMetadata, data);
 			for (const model of data) {
 				// Skip completion models. We don't handle them so we only want chat + embeddings
-				if (model.capabilities.type === 'completions') {
+				if (model.capabilities.type === 'completion') {
 					continue;
 				}
 				// The base model is whatever model is deemed "fallback" by the server
@@ -270,6 +274,8 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 
 	private async _fetchModel(modelId: string): Promise<IModelAPIResponse | undefined> {
 		const copilotToken = (await this._authService.getCopilotToken()).token;
+		const requestId = generateUuid();
+		const requestMetadata = { type: RequestType.ListModel, modelId: modelId };
 
 		try {
 			const response = await getRequest(
@@ -278,15 +284,20 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 				this._telemetryService,
 				this._domainService,
 				this._capiClientService,
-				{ type: RequestType.ListModel, modelId: modelId },
+				requestMetadata,
 				copilotToken,
 				await createRequestHMAC(process.env.HMAC_SECRET),
 				'model-access',
-				generateUuid(),
+				requestId,
 			);
 
 			const data: IModelAPIResponse = await response.json();
-			if (data.capabilities.type === 'completions') {
+			if (response.status !== 200) {
+				this._logService.error(`Failed to fetch model ${modelId} (requestId: ${requestId}): ${JSON.stringify(data)}`);
+				return;
+			}
+			this._requestLogger.logModelListCall(requestId, requestMetadata, [data]);
+			if (data.capabilities.type === 'completion') {
 				return;
 			}
 			// Functions that call this method, check the family map first so this shouldn't result in duplicate entries

@@ -196,6 +196,16 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 
 	//#endregion
 
+	//#region Ado
+
+	protected _anyAdoSession: AuthenticationSession | undefined;
+	get anyAdoSession(): AuthenticationSession | undefined {
+		return this._anyAdoSession;
+	}
+	protected abstract getAnyAdoSession(options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined>;
+
+	//#endregion
+
 	//#region Copilot Token
 
 	private _copilotTokenError: Error | undefined;
@@ -243,6 +253,7 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 	protected async _handleAuthChangeEvent(): Promise<void> {
 		const anyGitHubSessionBefore = this._anyGitHubSession;
 		const permissiveGitHubSessionBefore = this._permissiveGitHubSession;
+		const anyAdoSessionBefore = this._anyAdoSession;
 		const copilotTokenBefore = this._tokenStore.copilotToken;
 		const copilotTokenErrorBefore = this._copilotTokenError;
 
@@ -250,6 +261,7 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 		const resolved = await Promise.allSettled([
 			this.getAnyGitHubSession({ silent: true }),
 			this.getPermissiveGitHubSession({ silent: true }),
+			this.getAnyAdoSession({ silent: true }),
 		]);
 		for (const res of resolved) {
 			if (res.status === 'rejected') {
@@ -270,6 +282,12 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 				// Ignore errors
 			}
 			this._logService.debug('Minted a new CopilotToken.');
+			return;
+		}
+
+		if (anyAdoSessionBefore?.accessToken !== this._anyAdoSession?.accessToken) {
+			this._logService.debug('Ado auth state changed, firing event.');
+			this._onDidAdoAuthenticationChange.fire();
 			return;
 		}
 
