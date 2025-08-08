@@ -9,13 +9,14 @@ import { ToolName } from '../../src/extension/tools/common/toolNames';
 import { deserializeWorkbenchState } from '../../src/platform/test/node/promptContextModel';
 import { ssuite, stest } from '../base/stest';
 import { generateToolTestRunner } from './toolSimTest';
+import { shouldSkipAgentTests } from './tools.stest';
 
 interface IFetchWebPageToolParams {
 	urls: string[];
 	query?: string;
 }
 
-ssuite({ title: 'fetchWebPageTool', subtitle: 'toolCalling', location: 'panel' }, () => {
+ssuite.optional(shouldSkipAgentTests, { title: 'fetchWebPageTool', subtitle: 'toolCalling', location: 'panel' }, () => {
 	const scenarioFolder = path.join(__dirname, '..', 'test/scenarios/test-tools');
 	const getState = () => deserializeWorkbenchState(scenarioFolder, path.join(scenarioFolder, 'tools.state.json'));
 

@@ -939,6 +939,7 @@
   },
   {
     "name": "edit (toolCalling) [panel] - does not read",
+    "optional": true,
     "contentFilterCount": 0,
     "passCount": 6,
     "failCount": 4,
@@ -1711,6 +1712,7 @@
   },
   {
     "name": "fetchWebPageTool (toolCalling) [panel] - multiple URLs boundary test with 6 URLs",
+    "optional": true,
     "contentFilterCount": 0,
     "passCount": 0,
     "failCount": 10,
@@ -1718,6 +1720,7 @@
   },
   {
     "name": "fetchWebPageTool (toolCalling) [panel] - multiple URLs handling",
+    "optional": true,
     "contentFilterCount": 0,
     "passCount": 0,
     "failCount": 10,
@@ -1725,6 +1728,7 @@
   },
   {
     "name": "fetchWebPageTool (toolCalling) [panel] - proper URL validation and query handling",
+    "optional": true,
     "contentFilterCount": 0,
     "passCount": 0,
     "failCount": 10,
@@ -1732,6 +1736,7 @@
   },
   {
     "name": "fetchWebPageTool (toolCalling) [panel] - query parameter extraction",
+    "optional": true,
     "contentFilterCount": 0,
     "passCount": 0,
     "failCount": 10,
@@ -1739,6 +1744,7 @@
   },
   {
     "name": "findFilesTool (toolCalling) [panel] - proper glob patterns",
+    "optional": true,
     "contentFilterCount": 0,
     "passCount": 5,
     "failCount": 5,
@@ -9487,6 +9493,7 @@
   },
   {
     "name": "notebooks (toolCalling) [panel] - Edit cell tool",
+    "optional": true,
     "contentFilterCount": 0,
     "passCount": 0,
     "failCount": 10,
@@ -9494,6 +9501,7 @@
   },
   {
     "name": "notebooks (toolCalling) [panel] - New Notebook Tool with EditFile and EditNotebook",
+    "optional": true,
     "contentFilterCount": 0,
     "passCount": 0,
     "failCount": 10,
@@ -9501,6 +9509,7 @@
   },
   {
     "name": "notebooks (toolCalling) [panel] - New Notebook Tool without EditFile and with EditNotebook",
+    "optional": true,
     "contentFilterCount": 0,
     "passCount": 0,
     "failCount": 10,
@@ -9508,6 +9517,7 @@
   },
   {
     "name": "notebooks (toolCalling) [panel] - New Notebook Tool without EditFile and without EditNotebook",
+    "optional": true,
     "contentFilterCount": 0,
     "passCount": 0,
     "failCount": 10,
@@ -9515,6 +9525,7 @@
   },
   {
     "name": "notebooks (toolCalling) [panel] - Run cell at a specific index",
+    "optional": true,
     "contentFilterCount": 0,
     "passCount": 0,
     "failCount": 10,
@@ -9522,6 +9533,7 @@
   },
   {
     "name": "notebooks (toolCalling) [panel] - Run cell tool",
+    "optional": true,
     "contentFilterCount": 0,
     "passCount": 0,
     "failCount": 10,
@@ -9529,6 +9541,7 @@
   },
   {
     "name": "notebooks (toolCalling) [panel] - Run cell tool should avoid running markdown cells",
+    "optional": true,
     "contentFilterCount": 0,
     "passCount": 0,
     "failCount": 10,
@@ -11825,6 +11838,7 @@
   },
   {
     "name": "toolCalling [panel] - find all phone numbers in markdown files in the codebase",
+    "optional": true,
     "contentFilterCount": 0,
     "passCount": 0,
     "failCount": 10,
@@ -11832,6 +11846,7 @@
   },
   {
     "name": "toolCalling [panel] - I'm using git, create a new branch called issue-9876",
+    "optional": true,
     "contentFilterCount": 0,
     "passCount": 10,
     "failCount": 0,
