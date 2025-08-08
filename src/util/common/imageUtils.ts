@@ -3,7 +3,6 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { URI } from '../vs/base/common/uri';
 
 
 export function getImageDimensions(base64: string) {
@@ -153,47 +152,4 @@ export function extractImageAttributes(line: string, refineExisting?: boolean): 
 	}
 
 	return imagePath;
-}
-
-/**
- * Upload image data to GitHub Copilot chat attachments endpoint
- * @param binaryData The image binary data as Uint8Array
- * @param name The name for the uploaded file
- * @param mimeType The MIME type of the image
- * @param token The authentication token for GitHub API
- * @returns Promise<URI> The URI of the uploaded image
- */
-export async function chatImageUploader(binaryData: Uint8Array, name: string, mimeType: string | undefined, token: string | undefined): Promise<URI> {
-	if (!mimeType || !token) {
-		throw new Error('Missing required mimeType or token for image upload');
-	}
-
-	const sanitizedName = name.replace(/\s+/g, '').replace(/%20/g, '');
-	let uploadName = sanitizedName;
-	const subtype = mimeType.split('/')[1].split('+')[0].toLowerCase();
-	if (!uploadName.toLowerCase().endsWith(`.${subtype}`)) {
-		uploadName = `${uploadName}.${subtype}`;
-	}
-	const url = `https://uploads.github.com/copilot/chat/attachments?name=${uploadName}&content_type=${mimeType}`;
-
-	const init: RequestInit = {
-		method: 'POST',
-		body: binaryData,
-		credentials: 'include',
-		headers: {
-			'Content-Type': 'application/octet-stream',
-			'Authorization': `Bearer ${token}`
-		}
-	};
-
-	try {
-		const response = await fetch(url, init);
-		if (!response.ok) {
-			throw new Error(`Invalid GitHub URL provided: ${response.status} ${response.statusText}`);
-		}
-		const result = await response.json() as { url: string };
-		return URI.parse(result.url);
-	} catch (error) {
-		throw new Error(`Error uploading image: ${error}`);
-	}
 }

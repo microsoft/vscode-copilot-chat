@@ -28,6 +28,8 @@ import { IGithubRepositoryService } from '../../../platform/github/common/github
 import { GithubRepositoryService } from '../../../platform/github/node/githubRepositoryService';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { VsCodeIgnoreService } from '../../../platform/ignore/vscode-node/ignoreService';
+import { IImageService } from '../../../platform/image/common/imageService';
+import { ImageServiceImpl } from '../../../platform/image/node/imageServiceImpl';
 import { ILanguageContextService } from '../../../platform/languageServer/common/languageContextService';
 import { ICompletionsFetchService } from '../../../platform/nesFetch/common/completionsFetchService';
 import { CompletionsFetchService } from '../../../platform/nesFetch/node/completionsFetchServiceImpl';
@@ -121,6 +123,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IFetcherService, new SyncDescriptor(FetcherService, [undefined]));
 	builder.define(IDomainService, new SyncDescriptor(DomainService));
 	builder.define(ICAPIClientService, new SyncDescriptor(CAPIClientImpl));
+	builder.define(IImageService, new SyncDescriptor(ImageServiceImpl));
 
 	builder.define(ITelemetryUserConfig, new SyncDescriptor(TelemetryUserConfigImpl, [undefined, undefined]));
 	const internalAIKey = extensionContext.extension.packageJSON.internalAIKey ?? '';

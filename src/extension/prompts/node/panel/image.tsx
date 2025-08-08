@@ -6,8 +6,9 @@
 import * as l10n from '@vscode/l10n';
 import { Image as BaseImage, BasePromptElementProps, ChatResponseReferencePartStatusKind, PromptElement, PromptReference, PromptSizing, UserMessage } from '@vscode/prompt-tsx';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
+import { IImageService } from '../../../../platform/image/common/imageService';
 import { ILogService } from '../../../../platform/log/common/logService';
-import { chatImageUploader, getMimeType } from '../../../../util/common/imageUtils';
+import { getMimeType } from '../../../../util/common/imageUtils';
 import { Uri } from '../../../../vscodeTypes';
 import { IPromptEndpoint } from '../base/promptRenderer';
 
@@ -23,7 +24,8 @@ export class Image extends PromptElement<ImageProps, unknown> {
 		props: ImageProps,
 		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint,
 		@IAuthenticationService private readonly authService: IAuthenticationService,
-		@ILogService private readonly logService: ILogService
+		@ILogService private readonly logService: ILogService,
+		@IImageService private readonly imageService: IImageService
 	) {
 		super(props);
 	}
@@ -50,7 +52,7 @@ export class Image extends PromptElement<ImageProps, unknown> {
 			if (this.promptEndpoint.vendor === 'copilot') {
 				try {
 					const githubToken = (await this.authService.getAnyGitHubSession())?.accessToken;
-					const uri = await chatImageUploader(variable, this.props.variableName, getMimeType(imageSource), githubToken);
+					const uri = await this.imageService.uploadChatImageAttachment(variable, this.props.variableName, getMimeType(imageSource) ?? 'image/png', githubToken);
 					if (uri) {
 						imageSource = uri.toString();
 					}
