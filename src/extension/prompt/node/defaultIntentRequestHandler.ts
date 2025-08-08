@@ -729,6 +729,9 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 			this.toolGrouping.tools = tools;
 		} else {
 			this.toolGrouping = this.toolGroupingService.create(this.options.conversation.sessionId, tools);
+			for (const ref of this.options.request.toolReferences) {
+				this.toolGrouping.ensureExpanded(ref.name);
+			}
 		}
 
 		if (!this.toolGrouping.isEnabled) {

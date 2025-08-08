@@ -45,6 +45,11 @@ export interface IToolGrouping {
 	getContainerFor(toolName: string): VirtualTool | undefined;
 
 	/**
+	 * Ensures the given tool is available in the next call to `compute`.
+	 */
+	ensureExpanded(toolName: string): void;
+
+	/**
 	 * Returns a list of tools that should be used for the given request.
 	 * Internally re-reads the request and conversation state.
 	 */
