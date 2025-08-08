@@ -425,6 +425,7 @@ export class DefaultIntentRequestHandler {
 				return chatResult;
 			}
 			case ChatFetchResponseType.BadRequest:
+			case ChatFetchResponseType.NetworkError:
 			case ChatFetchResponseType.Failed: {
 				const errorDetails = getErrorDetailsFromChatFetchError(fetchResult, (await this._authenticationService.getCopilotToken()).copilotPlan);
 				const chatResult = { errorDetails, metadata: metadataFragment };
