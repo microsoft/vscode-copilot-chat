@@ -487,6 +487,8 @@ declare module 'vscode' {
 		hasRemainingEdits: boolean;
 		outcome: ChatEditingHunkActionOutcome;
 		lineCount: number;
+		linesAdded: number;
+		linesRemoved: number;
 	}
 
 	export enum ChatEditingSessionActionOutcome {
