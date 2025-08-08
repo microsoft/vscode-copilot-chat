@@ -230,7 +230,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 			} else if (error instanceof InvalidPatchFormatError) {
 				this.sendApplyPatchTelemetry(error.kindForTelemetry, options, '', !!healed, !!notebookUri);
 			} else {
-				this.sendApplyPatchTelemetry('processPatchFailed', options, error.file, !!healed, !!notebookUri);
+				this.sendApplyPatchTelemetry('processPatchFailed', options, error.file, !!healed, !!notebookUri, error);
 			}
 
 
@@ -296,7 +296,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 								notebookEdits.set(result.path, result.edits);
 								path = result.path;
 							} catch (error) {
-								this.sendApplyPatchTelemetry('invalidNotebookEdit', options, altDoc.getText(), !!healed, true);
+								this.sendApplyPatchTelemetry('invalidNotebookEdit', options, altDoc.getText(), !!healed, true, error);
 								return new LanguageModelToolResult([
 									new LanguageModelTextPart('Applying patch failed with error: ' + error.message),
 									new LanguageModelTextPart(`Use the ${ToolName.EditNotebook} tool to edit notebook files such as ${file}.`),
@@ -418,7 +418,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		} catch (error) {
 			const isNotebook = Object.values(docText).length === 1 ? (!!mapFindFirst(Object.values(docText), v => v.notebookUri)) : undefined;
 			// TODO parser.ts could annotate DiffError with a telemetry detail if we want
-			this.sendApplyPatchTelemetry('error', options, undefined, false, isNotebook);
+			this.sendApplyPatchTelemetry('error', options, undefined, false, isNotebook, error);
 			return new LanguageModelToolResult([
 				new LanguageModelTextPart('Applying patch failed with error: ' + error.message),
 			]);
@@ -529,7 +529,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		return { commit };
 	}
 
-	private async sendApplyPatchTelemetry(outcome: string, options: vscode.LanguageModelToolInvocationOptions<IApplyPatchToolParams>, file: string | undefined, healed: boolean, isNotebook: boolean | undefined) {
+	private async sendApplyPatchTelemetry(outcome: string, options: vscode.LanguageModelToolInvocationOptions<IApplyPatchToolParams>, file: string | undefined, healed: boolean, isNotebook: boolean | undefined, unexpectedError?: Error) {
 		const model = options.model && (await this.endpointProvider.getChatEndpoint(options.model)).model;
 
 		/* __GDPR__
@@ -541,7 +541,8 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 				"outcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the invocation was successful, or a failure reason" },
 				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" },
 				"healed": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the input was healed" },
-				"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the input was a notebook, 1 = yes, 0 = no, other = Unknown" }
+				"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the input was a notebook, 1 = yes, 0 = no, other = Unknown" },
+				"error": { "classification": "CallstackOrException", "purpose": "FeatureInsight", "comment": "Unexpected error that occurrs during application" }
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent('applyPatchToolInvoked',
@@ -550,6 +551,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 				interactionId: options.chatRequestId,
 				outcome,
 				model,
+				error: unexpectedError?.stack || unexpectedError?.message,
 			},
 			{
 				healed: healed ? 1 : 0,
