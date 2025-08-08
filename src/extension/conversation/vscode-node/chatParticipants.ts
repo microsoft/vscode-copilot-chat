@@ -219,7 +219,6 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 		const markdownString = new vscode.MarkdownString(helpPostfix);
 		markdownString.isTrusted = { enabledCommands: ['inlineChat.start', 'github.copilot.open.walkthrough'] };
 		defaultAgent.helpTextPostfix = markdownString;
-		defaultAgent.helpTextVariablesPrefix = vscode.l10n.t('You can also help me understand your question by using the following variables to give me extra context:');
 
 		defaultAgent.additionalWelcomeMessage = this.additionalWelcomeMessage;
 		defaultAgent.titleProvider = this.instantiationService.createInstance(ChatTitleProvider);
