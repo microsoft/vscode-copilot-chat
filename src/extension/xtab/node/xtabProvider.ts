@@ -810,6 +810,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 			case ChatFetchResponseType.BadRequest:
 			case ChatFetchResponseType.NotFound:
 			case ChatFetchResponseType.Failed:
+			case ChatFetchResponseType.NetworkError:
 			case ChatFetchResponseType.Unknown:
 				return new NoNextEditReason.FetchFailure(errors.fromUnknown(fetchError));
 		}

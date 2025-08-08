@@ -10,8 +10,9 @@ import { getCellId } from '../../src/platform/notebook/common/helpers';
 import { deserializeWorkbenchState } from '../../src/platform/test/node/promptContextModel';
 import { ssuite, stest } from '../base/stest';
 import { generateToolTestRunner } from './toolSimTest';
+import { shouldSkipAgentTests } from './tools.stest';
 
-ssuite({
+ssuite.optional(shouldSkipAgentTests, {
 	title: 'notebooks', subtitle: 'toolCalling', location: 'panel', configurations: []
 }, (inputPath) => {
 	const scenarioFolder = inputPath ?? path.join(__dirname, '..', 'test/scenarios/test-notebook-tools');
