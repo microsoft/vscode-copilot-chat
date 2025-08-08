@@ -78,8 +78,8 @@ suite('FindTextInFiles', () => {
 		setup(new RelativePattern(URI.file(workspaceFolder), ''));
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
-		const prepared = await tool.prepareInvocation({ input: { query: 'hello `world`', includePattern: workspaceFolder }, }, CancellationToken.None);
-		expect((prepared?.invocationMessage as any as MarkdownString).value).toMatchInlineSnapshot(`"Searching text for \`\` hello \`world\` \`\` (\`/test/workspace\`)"`);
+		const prepared = await tool.prepareInvocation({ input: { query: 'hello `world`' }, }, CancellationToken.None);
+		expect((prepared?.invocationMessage as any as MarkdownString).value).toMatchInlineSnapshot(`"Searching text for \`\` hello \`world\` \`\`"`);
 	});
 });
 
