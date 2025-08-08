@@ -5,6 +5,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { CancelablePromise } from './async';
 import { CancellationToken } from './cancellation';
 import { diffSets } from './collections';
 import { onUnexpectedError } from './errors';
@@ -258,7 +259,7 @@ export namespace Event {
 	export function debounce<I, O>(event: Event<I>, merge: (last: O | undefined, event: I) => O, delay: number | typeof MicrotaskDelay = 100, leading = false, flushOnListenerRemove = false, leakWarningThreshold?: number, disposable?: DisposableStore): Event<O> {
 		let subscription: IDisposable;
 		let output: O | undefined = undefined;
-		let handle: any = undefined;
+		let handle: Timeout | undefined | null = undefined;
 		let numDebouncedCalls = 0;
 		let doFire: (() => void) | undefined;
 
@@ -285,11 +286,13 @@ export namespace Event {
 					};
 
 					if (typeof delay === 'number') {
-						clearTimeout(handle);
+						if (handle) {
+							clearTimeout(handle);
+						}
 						handle = setTimeout(doFire, delay);
 					} else {
 						if (handle === undefined) {
-							handle = 0;
+							handle = null;
 							queueMicrotask(doFire);
 						}
 					}
@@ -324,7 +327,7 @@ export namespace Event {
 	 * event is accessible to "third parties", e.g the event is a public property. Otherwise a leaked listener on the
 	 * returned event causes this utility to leak a listener on the original event.
 	 */
-	export function accumulate<T>(event: Event<T>, delay: number = 0, disposable?: DisposableStore): Event<T[]> {
+	export function accumulate<T>(event: Event<T>, delay: number | typeof MicrotaskDelay = 0, disposable?: DisposableStore): Event<T[]> {
 		return Event.debounce<T, T[]>(event, (last, e) => {
 			if (!last) {
 				return [e];
@@ -598,26 +601,16 @@ export namespace Event {
 	/**
 	 * Creates a promise out of an event, using the {@link Event.once} helper.
 	 */
-	export function toPromise<T>(event: Event<T>, disposables?: IDisposable[] | DisposableStore): Promise<T> {
-		return new Promise(resolve => once(event)(resolve, null, disposables));
-	}
+	export function toPromise<T>(event: Event<T>, disposables?: IDisposable[] | DisposableStore): CancelablePromise<T> {
+		let cancelRef: () => void;
+		const promise = new Promise((resolve, reject) => {
+			const listener = once(event)(resolve, null, disposables);
+			// not resolved, matching the behavior of a normal disposal
+			cancelRef = () => listener.dispose();
+		}) as CancelablePromise<T>;
+		promise.cancel = cancelRef!;
 
-	/**
-	 * Creates an event out of a promise that fires once when the promise is
-	 * resolved with the result of the promise or `undefined`.
-	 */
-	export function fromPromise<T>(promise: Promise<T>): Event<T | undefined> {
-		const result = new Emitter<T | undefined>();
-
-		promise.then(res => {
-			result.fire(res);
-		}, () => {
-			result.fire(undefined);
-		}).finally(() => {
-			result.dispose();
-		});
-
-		return result.event;
+		return promise;
 	}
 
 	/**
@@ -1414,7 +1407,7 @@ export class PauseableEmitter<T> extends Emitter<T> {
 export class DebounceEmitter<T> extends PauseableEmitter<T> {
 
 	private readonly _delay: number;
-	private _handle: any | undefined;
+	private _handle: Timeout | undefined;
 
 	constructor(options: EmitterOptions & { merge: (input: T[]) => T; delay?: number }) {
 		super(options);

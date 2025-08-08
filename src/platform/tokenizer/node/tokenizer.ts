@@ -281,7 +281,7 @@ class BPETokenizer extends Disposable implements ITokenizer {
 				this._tokenizer = undefined;
 			});
 
-			let timeout: NodeJS.Timeout;
+			let timeout: Timeout;
 
 			return {
 				encode: (text, allowedSpecial) => {

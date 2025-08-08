@@ -142,7 +142,7 @@ export class NesXtabHistoryTracker extends Disposable {
 
 		const currentLineEdit = RootedEdit.toLineEdit(currentRootedEdit);
 
-		if (!currentLineEdit.isEmpty() && !lastLineEdit.isEmpty() && lastLineEdit.edits[0].lineRange.startLineNumber === currentLineEdit.edits[0].lineRange.startLineNumber) {
+		if (!currentLineEdit.isEmpty() && !lastLineEdit.isEmpty() && lastLineEdit.replacements[0].lineRange.startLineNumber === currentLineEdit.replacements[0].lineRange.startLineNumber) {
 			// merge edits
 			previousRecord.removeFromHistory();
 			const composedEdit = lastRootedEdit.edit.compose(currentEdit);

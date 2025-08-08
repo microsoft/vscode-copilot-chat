@@ -34,6 +34,7 @@ import { CodeActionData } from '../../../../platform/inlineEdits/common/dataType
 import { TextReplacement } from '../../../../util/vs/editor/common/core/edits/textEdit';
 import { toInternalTextEdit } from '../utils/translations';
 import { asPromise, raceCancellation, raceTimeout } from '../../../../util/vs/base/common/async';
+import { assertStoreNotDisposed } from '../../../../util/common/lifecycle';
 
 export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable {
 	private readonly _openDocuments = observableValue<readonly IVSCodeObservableDocument[], { added: readonly IVSCodeObservableDocument[]; removed: readonly IVSCodeObservableDocument[] }>(this, []);
@@ -344,7 +345,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 	 * Returns undefined for documents that are not tracked (e.g. filtered out).
 	*/
 	public getDocumentByTextDocument(doc: TextDocument, reader?: IReader): IVSCodeObservableDocument | undefined {
-		this._store.assertNotDisposed();
+		assertStoreNotDisposed(this._store);
 
 		const internalDoc = this._getInternalDocument(doc.uri, reader);
 		if (!internalDoc) {

@@ -7,10 +7,10 @@
 
 import { compareBy, numberComparator } from './arrays';
 import { groupBy } from './collections';
-import { BugIndicatingError, onUnexpectedError } from './errors';
+import { SetMap } from './map';
 import { createSingleCallFunction } from './functional';
 import { Iterable } from './iterator';
-import { SetMap } from './map';
+import { BugIndicatingError, onUnexpectedError } from './errors';
 
 // #region Disposable Tracking
 
@@ -489,12 +489,6 @@ export class DisposableStore implements IDisposable {
 			setParentOfDisposable(o, null);
 		}
 	}
-
-	public assertNotDisposed(): void {
-		if (this._isDisposed) {
-			onUnexpectedError(new BugIndicatingError('Object disposed'));
-		}
-	}
 }
 
 /**
@@ -643,35 +637,6 @@ export class RefCountedDisposable {
 	}
 }
 
-/**
- * A safe disposable can be `unset` so that a leaked reference (listener)
- * can be cut-off.
- */
-export class SafeDisposable implements IDisposable {
-
-	dispose: () => void = () => { };
-	unset: () => void = () => { };
-	isset: () => boolean = () => false;
-
-	constructor() {
-		trackDisposable(this);
-	}
-
-	set(fn: Function) {
-		let callback: Function | undefined = fn;
-		this.unset = () => callback = undefined;
-		this.isset = () => callback !== undefined;
-		this.dispose = () => {
-			if (callback) {
-				callback();
-				callback = undefined;
-				markAsDisposed(this);
-			}
-		};
-		return this;
-	}
-}
-
 export interface IReference<T> extends IDisposable {
 	readonly object: T;
 }
@@ -804,6 +769,7 @@ export class DisposableMap<K, V extends IDisposable = IDisposable> implements ID
 		}
 
 		this._store.set(key, value);
+		setParentOfDisposable(value, this);
 	}
 
 	/**
@@ -820,8 +786,17 @@ export class DisposableMap<K, V extends IDisposable = IDisposable> implements ID
 	 */
 	deleteAndLeak(key: K): V | undefined {
 		const value = this._store.get(key);
+		if (value) {
+			setParentOfDisposable(value, null);
+		}
 		this._store.delete(key);
 		return value;
+	}
+
+	public assertNotDisposed(): void {
+		if (this._isDisposed) {
+			onUnexpectedError(new BugIndicatingError('Object disposed'));
+		}
 	}
 
 	keys(): IterableIterator<K> {

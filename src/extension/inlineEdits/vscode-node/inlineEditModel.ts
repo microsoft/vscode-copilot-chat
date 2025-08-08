@@ -65,15 +65,15 @@ class LastChange extends Disposable {
 	public lastEditedTimestamp: number;
 	public lineNumberTriggers: Map<number /* lineNumber */, number /* timestamp */>;
 
-	private _timeout: NodeJS.Timeout | undefined;
-	public set timeout(value: NodeJS.Timeout | undefined) {
+	private _timeout: Timeout | undefined;
+	public set timeout(value: Timeout | undefined) {
 		if (value !== undefined) {
 			// TODO: we can end up collecting multiple timeouts, but also they could be cleared as debouncing happens
 			this._register(toDisposable(() => clearTimeout(value)));
 		}
 		this._timeout = value;
 	}
-	public get timeout(): NodeJS.Timeout | undefined {
+	public get timeout(): Timeout | undefined {
 		return this._timeout;
 	}
 
