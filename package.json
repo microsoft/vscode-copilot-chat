@@ -2762,6 +2762,14 @@
 							"experimental"
 						],
 						"description": "%github.copilot.config.retryAfterFilteredResponse.enabled%"
+					},
+					"github.copilot.chat.alternateGptPrompt.enabled": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental"
+						],
+						"description": "%github.copilot.config.alternateGptPrompt.enabled%"
 					}
 				}
 			}

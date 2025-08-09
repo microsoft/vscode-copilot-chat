@@ -44,7 +44,7 @@ export const enum ToolName {
 	CreateDirectory = 'create_directory',
 	RunVscodeCmd = 'run_vscode_command',
 	GetTaskOutput = 'get_task_output',
-
+	CoreManageTodoList = 'manage_todo_list',
 	CoreRunInTerminal = 'run_in_terminal',
 	CoreGetTerminalOutput = 'get_terminal_output',
 	CoreCreateAndRunTask = 'create_and_run_task',

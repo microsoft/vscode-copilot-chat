@@ -9,7 +9,7 @@ import { truncate } from '../../../../util/vs/base/common/strings';
 import { IToolCall, IToolCallRound } from '../../../prompt/common/intents';
 import { Tag } from '../base/tag';
 import { ToolResult } from '../panel/toolCalling';
-import { getKeepGoingReminder } from './agentPrompt';
+import { KeepGoingReminder } from './agentPrompt';
 import { SummarizedAgentHistoryProps } from './summarizedConversationHistory';
 
 /**
@@ -81,11 +81,10 @@ export class SimpleSummarizedHistory extends PromptElement<SummarizedAgentHistor
 		}
 
 		if (entry.round.summary) {
-			const keepGoingReminder = getKeepGoingReminder(this.props.endpoint.family);
 			return <ChunkTag name='conversation-summary' priority={priorityOverride}>
 				{entry.round.summary}
-				{keepGoingReminder && <Tag name='reminderInstructions'>
-					{keepGoingReminder}
+				{this.props.endpoint.family === 'gpt-4.1' && <Tag name='reminderInstructions'>
+					<KeepGoingReminder modelFamily={this.props.endpoint.family} />
 				</Tag>}
 			</ChunkTag>;
 		}
