@@ -5,7 +5,6 @@
 
 
 import { Raw, RenderPromptResult } from '@vscode/prompt-tsx';
-import { isObject } from 'util';
 import { afterEach, beforeEach, expect, suite, test } from 'vitest';
 import type { ChatLanguageModelToolReference, ChatPromptReference, ChatRequest, ExtendedChatResponsePart, LanguageModelChat } from 'vscode';
 import { IChatMLFetcher } from '../../../../platform/chat/common/chatMLFetcher';
@@ -20,7 +19,7 @@ import { ITestingServicesAccessor } from '../../../../platform/test/node/service
 import { ChatResponseStreamImpl } from '../../../../util/common/chatResponseStreamImpl';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Event } from '../../../../util/vs/base/common/event';
-import { isUndefinedOrNull } from '../../../../util/vs/base/common/types';
+import { isObject, isUndefinedOrNull } from '../../../../util/vs/base/common/types';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatLocation, ChatResponseConfirmationPart, LanguageModelTextPart, LanguageModelToolResult } from '../../../../vscodeTypes';
