@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { TextEditor } from 'vscode';
+import type { TextEditor, Uri } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
@@ -69,7 +69,7 @@ export async function doReview(
 	workspaceService: IWorkspaceService,
 	commandService: IRunCommandExecutionService,
 	notificationService: INotificationService,
-	group: 'selection' | 'index' | 'workingTree' | 'all' | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
+	group: 'selection' | 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
 	progressLocation: ProgressLocation,
 	cancellationToken?: CancellationToken
 ): Promise<FeedbackResult | undefined> {
@@ -121,7 +121,7 @@ export async function doReview(
 		try {
 			const copilotToken = await authService.getCopilotToken();
 			const canUseGitHubAgent = (group === 'index' || group === 'workingTree' || group === 'all' || typeof group === 'object') && copilotToken.isCopilotCodeReviewEnabled;
-			result = canUseGitHubAgent ? await githubReview(logService, gitExtensionService, authService, capiClientService, domainService, fetcherService, envService, ignoreService, workspaceService, group, progress, tokenSource.token) : await review(instantiationService, gitExtensionService, workspaceService, group, editor, progress, tokenSource.token);
+			result = canUseGitHubAgent ? await githubReview(logService, gitExtensionService, authService, capiClientService, domainService, fetcherService, envService, ignoreService, workspaceService, group, progress, tokenSource.token) : await review(instantiationService, gitExtensionService, workspaceService, typeof group === 'object' && 'group' in group ? group.group : group, editor, progress, tokenSource.token);
 		} catch (err) {
 			result = { type: 'error', reason: err.message, severity: err.severity };
 		} finally {
