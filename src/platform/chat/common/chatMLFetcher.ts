@@ -11,15 +11,6 @@ import { FinishedCallback, IResponseDelta, OptionalChatRequestParams } from '../
 import { IChatEndpoint, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatResponse, ChatResponses } from './commonTypes';
 
-export interface IntentParams {
-
-	/** Copilot-only: whether to run intent classifier for off-topic detection */
-	intent?: boolean;
-
-	/** Copilot-only: threshold for intent classifier */
-	intent_threshold?: number;
-}
-
 export interface Source {
 	readonly extensionId?: string;
 }
@@ -43,19 +34,6 @@ export interface IChatMLFetcher {
 
 	readonly onDidMakeChatMLRequest: Event<{ readonly model: string; readonly source?: Source; readonly tokenCount?: number }>;
 
-	/**
-	 * @param debugName A helpful name for the request, shown in logs and used in telemetry if telemetryProperties.messageSource isn't set. Using a single camelCase word is advised.
-	 * @param messages The list of messages to send to the model
-	 * @param finishedCb A callback that streams response content
-	 * @param token A cancel token
-	 * @param location The location of the feature making this request
-	 * @param endpoint The chat model info
-	 * @param source The participant/extension making this request, if applicable
-	 * @param requestOptions To override the default request options
-	 * @param userInitiatedRequest Whether or not the request is the user's or some background / auxillary request. Used for billing.
-	 * @param telemetryProperties messageSource/messageId are included in telemetry, optional, defaults to debugName
-	 * @param intentParams { intent: true } enables the offtopic classifier
-	 */
 	fetchOne(options: IFetchMLOptions, token: CancellationToken): Promise<ChatResponse>;
 
 	/**
