@@ -5,7 +5,7 @@
 
 import { ChatResponseReferencePartStatusKind } from '@vscode/prompt-tsx';
 import type { ChatResponseFileTree, ChatResponseStream, ChatVulnerability, Command, ExtendedChatResponsePart, Location, NotebookEdit, Progress, Uri } from 'vscode';
-import { ChatPrepareToolInvocationPart, ChatResponseAnchorPart, ChatResponseClearToPreviousToolInvocationReason, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseWarningPart, MarkdownString, TextEdit } from '../../vscodeTypes';
+import { ChatPrepareToolInvocationPart, ChatResponseAnchorPart, ChatResponseClearToPreviousToolInvocationReason, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseWarningPart, MarkdownString, TextEdit } from '../../vscodeTypes';
 import type { ThemeIcon } from '../vs/base/common/themables';
 
 
@@ -71,6 +71,10 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 
 	anchor(value: Uri | Location, title?: string | undefined): void {
 		this._push(new ChatResponseAnchorPart(value, title));
+	}
+
+	thinkingProgress(value: string, id?: string, metadata?: string): void {
+		this._push(new ChatResponseThinkingProgressPart(value));
 	}
 
 	button(command: Command): void {

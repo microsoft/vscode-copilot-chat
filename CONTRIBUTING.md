@@ -334,7 +334,9 @@ Examples of additive changes
 
 ## Running with Code OSS
 
-You can run the extension from Code OSS, provided that you follow along these steps:
+### Desktop
+
+You can run the extension from Code OSS Desktop, provided that you follow along these steps:
 - Create a top level `product.overrides.json` in the `vscode` repository
 - Add below contents as JSON
 - Run the extension launch configuration in Code OSS
@@ -399,5 +401,86 @@ You can run the extension from Code OSS, provided that you follow along these st
       "completionsEnablementSetting": "github.copilot.enable",
       "nextEditSuggestionsSetting": "github.copilot.nextEditSuggestions.enabled"
    }
+}
+```
+
+### Web
+
+Code OSS for Web unfortunately does not support the `product.overrides.json` trick. You have to manually copy the
+contents of the `defaultChatAgent` property into the `src/vs/platform/product/common/product.ts` file [here](https://github.com/microsoft/vscode/blob/d499211732305086bbac4e603392e540dee05bd2/src/vs/platform/product/common/product.ts#L72).
+
+For example:
+
+```ts
+Object.assign(product, {
+		version: '1.102.0-dev',
+		nameShort: 'Code - OSS Dev',
+		nameLong: 'Code - OSS Dev',
+		applicationName: 'code-oss',
+		dataFolderName: '.vscode-oss',
+		urlProtocol: 'code-oss',
+		reportIssueUrl: 'https://github.com/microsoft/vscode/issues/new',
+		licenseName: 'MIT',
+		licenseUrl: 'https://github.com/microsoft/vscode/blob/main/LICENSE.txt',
+		serverLicenseUrl: 'https://github.com/microsoft/vscode/blob/main/LICENSE.txt',
+		defaultChatAgent: {
+			'extensionId': 'GitHub.copilot',
+			'chatExtensionId': 'GitHub.copilot-chat',
+			'documentationUrl': 'https://aka.ms/github-copilot-overview',
+			'termsStatementUrl': 'https://aka.ms/github-copilot-terms-statement',
+			'privacyStatementUrl': 'https://aka.ms/github-copilot-privacy-statement',
+			'skusDocumentationUrl': 'https://aka.ms/github-copilot-plans',
+			'publicCodeMatchesUrl': 'https://aka.ms/github-copilot-match-public-code',
+			'manageSettingsUrl': 'https://aka.ms/github-copilot-settings',
+			'managePlanUrl': 'https://aka.ms/github-copilot-manage-plan',
+			'manageOverageUrl': 'https://aka.ms/github-copilot-manage-overage',
+			'upgradePlanUrl': 'https://aka.ms/github-copilot-upgrade-plan',
+			'signUpUrl': 'https://aka.ms/github-sign-up',
+			'provider': {
+				'default': {
+					'id': 'github',
+					'name': 'GitHub'
+				},
+				'enterprise': {
+					'id': 'github-enterprise',
+					'name': 'GHE.com'
+				},
+				'google': {
+					'id': 'google',
+					'name': 'Google'
+				},
+				'apple': {
+					'id': 'apple',
+					'name': 'Apple'
+				}
+			},
+			'providerUriSetting': 'github-enterprise.uri',
+			'providerScopes': [
+				[
+					'user:email'
+				],
+				[
+					'read:user'
+				],
+				[
+					'read:user',
+					'user:email',
+					'repo',
+					'workflow'
+				]
+			],
+			'entitlementUrl': 'https://api.github.com/copilot_internal/user',
+			'entitlementSignupLimitedUrl': 'https://api.github.com/copilot_internal/subscribe_limited_user',
+			'chatQuotaExceededContext': 'github.copilot.chat.quotaExceeded',
+			'completionsQuotaExceededContext': 'github.copilot.completions.quotaExceeded',
+			'walkthroughCommand': 'github.copilot.open.walkthrough',
+			'completionsMenuCommand': 'github.copilot.toggleStatusMenu',
+			'completionsRefreshTokenCommand': 'github.copilot.signIn',
+			'chatRefreshTokenCommand': 'github.copilot.refreshToken',
+			'completionsAdvancedSetting': 'github.copilot.advanced',
+			'completionsEnablementSetting': 'github.copilot.enable',
+			'nextEditSuggestionsSetting': 'github.copilot.nextEditSuggestions.enabled'
+		}
+	});
 }
 ```

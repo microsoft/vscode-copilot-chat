@@ -13,7 +13,6 @@ import { IToolCall, IToolCallRound } from './intents';
  * and retry information if there were input validation issues.
  */
 export class ToolCallRound implements IToolCallRound {
-
 	public summary: string | undefined;
 
 	/**
@@ -26,6 +25,7 @@ export class ToolCallRound implements IToolCallRound {
 		public readonly toolCalls: IToolCall[],
 		public readonly toolInputRetry: number = 0,
 		public readonly id: string = ToolCallRound.generateID(),
+		public readonly statefulMarker?: string
 	) { }
 
 	private static generateID(): string {

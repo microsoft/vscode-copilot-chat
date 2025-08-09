@@ -12,7 +12,7 @@ import { deepClone, mixin } from '../../../util/vs/base/common/objects';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
-import { IChatMLFetcher, IntentParams, Source } from '../../chat/common/chatMLFetcher';
+import { IChatMLFetcher, Source } from '../../chat/common/chatMLFetcher';
 import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { getTextPart } from '../../chat/common/globalStringUtils';
 import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
@@ -20,7 +20,7 @@ import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, ICopilotToolCall, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
-import { IChatEndpoint, IEndpointBody, postRequest } from '../../networking/common/networking';
+import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions, postRequest } from '../../networking/common/networking';
 import { CAPIChatMessage, ChatCompletion, FinishedCompletionReason } from '../../networking/common/openai';
 import { prepareChatCompletionForReturn } from '../../networking/node/chatStream';
 import { SSEProcessor } from '../../networking/node/stream';
@@ -152,6 +152,7 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly supportsToolCalls: boolean;
 	public readonly supportsVision: boolean;
 	public readonly supportsPrediction: boolean;
+	public readonly supportsStatefulResponses: boolean;
 	public readonly isPremium?: boolean | undefined;
 	public readonly multiplier?: number | undefined;
 	public readonly restrictedToSkus?: string[] | undefined;
@@ -190,6 +191,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		this.supportsVision = !!_modelMetadata.capabilities.supports.vision;
 		this.supportsPrediction = !!_modelMetadata.capabilities.supports.prediction;
 		this._supportsStreaming = !!_modelMetadata.capabilities.supports.streaming;
+		this.supportsStatefulResponses = !!_modelMetadata.capabilities.supports.statefulResponses;
 		this._policyDetails = _modelMetadata.policy;
 	}
 
@@ -244,6 +246,10 @@ export class ChatEndpoint implements IChatEndpoint {
 		}
 	}
 
+	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		return createCapiRequestBody(this.model, options);
+	}
+
 	public async processResponseFromChatEndpoint(
 		telemetryService: ITelemetryService,
 		logService: ILogService,
@@ -294,6 +300,14 @@ export class ChatEndpoint implements IChatEndpoint {
 		return this._tokenizerProvider.acquireTokenizer(this);
 	}
 
+	public async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken) {
+		return this._chatMLFetcher.fetchOne({
+			requestOptions: {},
+			...options,
+			endpoint: this,
+		}, token);
+	}
+
 	public async makeChatRequest(
 		debugName: string,
 		messages: Raw.ChatMessage[],
@@ -304,21 +318,17 @@ export class ChatEndpoint implements IChatEndpoint {
 		requestOptions?: Omit<OptionalChatRequestParams, 'n'>,
 		userInitiatedRequest?: boolean,
 		telemetryProperties?: TelemetryProperties,
-		intentParams?: IntentParams
 	): Promise<ChatResponse> {
-		return this._chatMLFetcher.fetchOne(
+		return this.makeChatRequest2({
 			debugName,
 			messages,
 			finishedCb,
-			token,
 			location,
-			this,
 			source,
 			requestOptions,
 			userInitiatedRequest,
 			telemetryProperties,
-			intentParams
-		);
+		}, token);
 	}
 
 	public cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {

@@ -288,10 +288,12 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		const hasEditFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
 		const hasEditNotebookTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditNotebook);
 		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreRunInTerminal);
-		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1') && this.props.chatVariables.hasVariables() ?
+		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1' || this.props.endpoint.family === 'gpt-5') && this.props.chatVariables.hasVariables() ?
 			' (See <attachments> above for file contents. You may not need to search or read the file again.)'
 			: '';
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;
+		const hasTodoTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreTodoListTool);
+
 		return (
 			<>
 				<UserMessage>
@@ -299,7 +301,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 					<TokenLimit max={sizing.tokenBudget / 6} flexGrow={3} priority={898}>
 						<ChatVariables chatVariables={this.props.chatVariables} isAgent={true} omitReferences />
 					</TokenLimit>
-					<ToolReferencesHint toolReferences={this.props.toolReferences} />
+					<ToolReferencesHint toolReferences={this.props.toolReferences} modelFamily={this.props.endpoint.family} />
 					<Tag name='context'>
 						<CurrentDatePrompt />
 						<EditedFileEvents editedFileEvents={this.props.editedFileEvents} />
@@ -313,6 +315,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<KeepGoingReminder modelFamily={this.props.endpoint.family} />
 						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint))}
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
+						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
 					</Tag>
 					{query && <Tag name='userRequest' priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
@@ -322,12 +325,12 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 	}
 }
 
-export interface FrozenMessageContentProps extends BasePromptElementProps {
+interface FrozenMessageContentProps extends BasePromptElementProps {
 	readonly frozenContent: Raw.ChatCompletionContentPart[];
 	readonly enableCacheBreakpoints?: boolean;
 }
 
-export class FrozenContentUserMessage extends PromptElement<FrozenMessageContentProps> {
+class FrozenContentUserMessage extends PromptElement<FrozenMessageContentProps> {
 	async render(state: void, sizing: PromptSizing) {
 		return <UserMessage priority={this.props.priority}>
 			<Chunk>
@@ -341,6 +344,7 @@ export class FrozenContentUserMessage extends PromptElement<FrozenMessageContent
 
 interface ToolReferencesHintProps extends BasePromptElementProps {
 	readonly toolReferences: readonly InternalToolReference[];
+	readonly modelFamily?: string;
 }
 
 /**
@@ -355,7 +359,10 @@ class ToolReferencesHint extends PromptElement<ToolReferencesHintProps> {
 		return <>
 			<Tag name='toolReferences'>
 				The user attached the following tools to this message. The userRequest may refer to them using the tool name with "#". These tools are likely relevant to the user's query:<br />
-				{this.props.toolReferences.map(tool => `- ${tool.name}`).join('\n')}
+				{this.props.toolReferences.map(tool => `- ${tool.name}`).join('\n')} <br />
+				{this.props.modelFamily === 'gpt-5' && <>
+					Start by using the most relevant tool attached to this message—the user expects you to act with it first.<br />
+				</>}
 			</Tag>
 		</>;
 	}
@@ -658,24 +665,36 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 			return;
 		}
 
-		if (this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGpt41Prompt, this.experimentationService)) {
-			// Extended reminder
-			return <>
-				You are an agent - you must keep going until the user's query is completely resolved, before ending your turn and yielding back to the user.<br />
-				Your thinking should be thorough and so it's fine if it's very long. However, avoid unnecessary repetition and verbosity. You should be concise, but thorough.<br />
-				You MUST iterate and keep going until the problem is solved.<br />
-				You have everything you need to resolve this problem. I want you to fully solve this autonomously before coming back to me. <br />
-				Only terminate your turn when you are sure that the problem is solved and all items have been checked off. Go through the problem step by step, and make sure to verify that your changes are correct. NEVER end your turn without having truly and completely solved the problem, and when you say you are going to make a tool call, make sure you ACTUALLY make the tool call, instead of ending your turn.<br />
-				Take your time and think through every step - remember to check your solution rigorously and watch out for boundary cases, especially with the changes you made. Your solution must be perfect. If not, continue working on it. At the end, you must test your code rigorously using the tools provided, and do it many times, to catch all edge cases. If it is not robust, iterate more and make it perfect. Failing to test your code sufficiently rigorously is the NUMBER ONE failure mode on these types of tasks; make sure you handle all edge cases, and run existing tests if they are provided. <br />
-				You MUST plan extensively before each function call, and reflect extensively on the outcomes of the previous function calls. DO NOT do this entire process by making function calls only, as this can impair your ability to solve the problem and think insightfully.<br />
-				You are a highly capable and autonomous agent, and you can definitely solve this problem without needing to ask the user for further input.<br />
-			</>;
-		} else {
-			// Original reminder
-			return <>
-				You are an agent - you must keep going until the user's query is completely resolved, before ending your turn and yielding back to the user. ONLY terminate your turn when you are sure that the problem is solved, or you absolutely cannot continue.<br />
-				You take action when possible- the user is expecting YOU to take action and go to work for them. Don't ask unnecessary questions about the details if you can simply DO something useful instead.<br />
-			</>;
+		if (this.props.modelFamily === 'gpt-4.1' || this.props.modelFamily === 'gpt-5') {
+			if (this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGpt41Prompt, this.experimentationService)) {
+				// Extended reminder
+				return <>
+					You are an agent - you must keep going until the user's query is completely resolved, before ending your turn and yielding back to the user.<br />
+					Your thinking should be thorough and so it's fine if it's very long. However, avoid unnecessary repetition and verbosity. You should be concise, but thorough.<br />
+					You MUST iterate and keep going until the problem is solved.<br />
+					You have everything you need to resolve this problem. I want you to fully solve this autonomously before coming back to me. <br />
+					Only terminate your turn when you are sure that the problem is solved and all items have been checked off. Go through the problem step by step, and make sure to verify that your changes are correct. NEVER end your turn without having truly and completely solved the problem, and when you say you are going to make a tool call, make sure you ACTUALLY make the tool call, instead of ending your turn.<br />
+					Take your time and think through every step - remember to check your solution rigorously and watch out for boundary cases, especially with the changes you made. Your solution must be perfect. If not, continue working on it. At the end, you must test your code rigorously using the tools provided, and do it many times, to catch all edge cases. If it is not robust, iterate more and make it perfect. Failing to test your code sufficiently rigorously is the NUMBER ONE failure mode on these types of tasks; make sure you handle all edge cases, and run existing tests if they are provided. <br />
+					You MUST plan extensively before each function call, and reflect extensively on the outcomes of the previous function calls. DO NOT do this entire process by making function calls only, as this can impair your ability to solve the problem and think insightfully.<br />
+					You are a highly capable and autonomous agent, and you can definitely solve this problem without needing to ask the user for further input.<br />
+				</>;
+			} else if (this.props.modelFamily === 'gpt-5') {
+				return <>
+					You are an agent—keep going until the user's query is completely resolved before ending your turn. ONLY stop if solved or genuinely blocked.<br />
+					Take action when possible; the user expects you to do useful work without unnecessary questions.<br />
+					After any parallel, read-only context gathering, give a concise progress update and what's next.<br />
+					Avoid repetition across turns: don't restate unchanged plans or sections (like the todo list) verbatim; provide delta updates or only the parts that changed.<br />
+					Tool batches: You MUST preface each batch with a one-sentence why/what/outcome preamble.<br />
+					Progress cadence: After 3 to 5 tool calls, or when you create/edit &gt; ~3 files in a burst, pause and post a compact checkpoint.<br />
+					Requirements coverage: Read the user's ask in full, extract each requirement into checklist items, and keep them visible. Do not omit a requirement. If something cannot be done with available tools, note why briefly and propose a viable alternative.<br />
+				</>;
+			} else {
+				// Original reminder
+				return <>
+					You are an agent - you must keep going until the user's query is completely resolved, before ending your turn and yielding back to the user. ONLY terminate your turn when you are sure that the problem is solved, or you absolutely cannot continue.<br />
+					You take action when possible- the user is expecting YOU to take action and go to work for them. Don't ask unnecessary questions about the details if you can simply DO something useful instead.<br />
+				</>;
+			}
 		}
 	}
 }

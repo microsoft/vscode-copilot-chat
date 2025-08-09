@@ -44,8 +44,8 @@
 	{
 		"name": "intent [inline] - /tests cannot be intent-detected",
 		"requests": [
-			"9f5296ff170552d9f1fe62d941d16c1ab4d9d0709189007d8f0d2c551fe4ceb5",
-			"c0cf979443521a3562e1d4c86a7396e0dc78414defbcd69cf46d58acb3bd8ac0"
+			"96af144ee99d565bdbc7e41cac980c348feae87372e45a1ad5673d6e298d12f8",
+			"9f5296ff170552d9f1fe62d941d16c1ab4d9d0709189007d8f0d2c551fe4ceb5"
 		]
 	},
 	{

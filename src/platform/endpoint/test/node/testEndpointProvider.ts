@@ -17,6 +17,7 @@ import { IEnvService } from '../../../env/common/envService';
 import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { IChatEndpoint, IEmbeddingEndpoint } from '../../../networking/common/networking';
+import { IRequestLogger } from '../../../requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../../common/capiClient';
@@ -77,11 +78,13 @@ export class TestModelMetadataFetcher extends ModelMetadataFetcher {
 		@ITelemetryService _telemetryService: ITelemetryService,
 		@ILogService _logService: ILogService,
 		@IInstantiationService _instantiationService: IInstantiationService,
+		@IRequestLogger _requestLogger: IRequestLogger,
 	) {
 		super(
 			collectFetcherTelemetry,
 			_isModelLab,
 			_fetcher,
+			_requestLogger,
 			_domainService,
 			_capiClientService,
 			_configService,

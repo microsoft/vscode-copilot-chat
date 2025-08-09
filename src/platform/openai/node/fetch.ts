@@ -6,8 +6,8 @@
 import { ClientHttp2Stream } from 'http2';
 import type { CancellationToken } from 'vscode';
 import { createRequestHMAC } from '../../../util/common/crypto';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IAuthenticationService } from '../../authentication/common/authentication';
-import { IntentParams } from '../../chat/common/chatMLFetcher';
 import { IChatQuotaService } from '../../chat/common/chatQuotaService';
 import { ChatLocation } from '../../chat/common/commonTypes';
 import { IInteractionService } from '../../chat/common/interactionService';
@@ -17,7 +17,7 @@ import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, OptionalChatRequestParams, RequestId, getProcessingTime, getRequestId } from '../../networking/common/fetch';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
-import { IChatEndpoint, postRequest, stringifyUrlOrRequestMetadata } from '../../networking/common/networking';
+import { IChatEndpoint, IEndpointBody, postRequest, stringifyUrlOrRequestMetadata } from '../../networking/common/networking';
 import { CAPIChatMessage, ChatCompletion } from '../../networking/common/openai';
 import { sendEngineMessagesTelemetry } from '../../networking/node/chatStream';
 import { sendCommunicationErrorTelemetry } from '../../networking/node/stream';
@@ -41,21 +41,8 @@ interface CopilotOnlyParams {
 	copilot_thread_id?: string;
 }
 
-export declare interface ChatRequest extends
-	RequiredChatRequestParams, OptionalChatRequestParams, CopilotOnlyParams, IntentParams {
-}
-
-export interface ChatParams {
-	messages: CAPIChatMessage[];
-	model: string;
-	location: ChatLocation;
-	allowEmptyChoices?: boolean;
-	postOptions?: OptionalChatRequestParams;
-	ourRequestId: string;
-	requestLogProbs?: boolean;
-	intent?: boolean;
-	intent_threshold?: number;
-	secretKey?: string;
+export interface ChatRequest extends
+	RequiredChatRequestParams, OptionalChatRequestParams, CopilotOnlyParams {
 }
 
 export enum FetchResponseKind {
@@ -96,6 +83,7 @@ export enum ChatFailKind {
 	AgentUnauthorized = 'unauthorized',
 	AgentFailedDependency = 'failedDependency',
 	ValidationFailed = 'validationFailed',
+	InvalidPreviousResponseId = 'invalidPreviousResponseId',
 	NotFound = 'notFound',
 	Unknown = 'unknown',
 }
@@ -118,24 +106,26 @@ export async function fetchAndStreamChat(
 	authenticationService: IAuthenticationService,
 	interactionService: IInteractionService,
 	chatEndpointInfo: IChatEndpoint,
-	params: ChatParams,
+	request: IEndpointBody,
 	baseTelemetryData: TelemetryData,
 	finishedCb: FinishedCallback,
+	secretKey: string | undefined,
+	location: ChatLocation,
+	ourRequestId: string,
+	nChoices: number | undefined,
 	userInitiatedRequest?: boolean,
 	cancel?: CancellationToken | undefined,
 	telemetryProperties?: TelemetryProperties | undefined
 ): Promise<ChatResults | ChatRequestFailed | ChatRequestCanceled> {
-	const request = createChatRequest(params);
-
 	if (cancel?.isCancellationRequested) {
 		return { type: FetchResponseKind.Canceled, reason: 'before fetch request' };
 	}
 
 	logService.debug(`modelMaxPromptTokens ${chatEndpointInfo.modelMaxPromptTokens}`);
 	logService.debug(`modelMaxResponseTokens ${request.max_tokens ?? 2048}`);
-	logService.debug(`chat model ${params.model}`);
+	logService.debug(`chat model ${chatEndpointInfo.model}`);
 
-	const secretKey = params.secretKey ?? (await authenticationService.getCopilotToken()).token;
+	secretKey ??= (await authenticationService.getCopilotToken()).token;
 	if (!secretKey) {
 		// If no key is set we error
 		const urlOrRequestMetadata = stringifyUrlOrRequestMetadata(chatEndpointInfo.urlOrRequestMetadata);
@@ -149,6 +139,9 @@ export async function fetchAndStreamChat(
 		};
 	}
 
+	// Generate unique ID to link input and output messages
+	const modelCallId = generateUuid();
+
 	const response = await fetchWithInstrumentation(
 		logService,
 		telemetryService,
@@ -158,13 +151,13 @@ export async function fetchAndStreamChat(
 		capiClientService,
 		interactionService,
 		chatEndpointInfo,
-		params.ourRequestId,
+		ourRequestId,
 		request,
 		secretKey,
-		params.location,
+		location,
 		userInitiatedRequest,
 		cancel,
-		telemetryProperties);
+		{ ...telemetryProperties, modelCallId });
 
 	if (cancel?.isCancellationRequested) {
 		const body = await response!.body();
@@ -184,19 +177,21 @@ export async function fetchAndStreamChat(
 	}
 
 	if (response.status !== 200) {
-		const telemetryData = createTelemetryData(chatEndpointInfo, params.location, params.ourRequestId);
-		logService.info('Request ID for failed request: ' + params.ourRequestId);
-		return handleError(logService, telemetryService, authenticationService, telemetryData, response, params.ourRequestId);
+		const telemetryData = createTelemetryData(chatEndpointInfo, location, ourRequestId);
+		logService.info('Request ID for failed request: ' + ourRequestId);
+		return handleError(logService, telemetryService, authenticationService, telemetryData, response, ourRequestId);
 	}
 
-	const nChoices = params.postOptions?.n ?? /* OpenAI's default */ 1;
+	// Extend baseTelemetryData with modelCallId for output messages
+	const extendedBaseTelemetryData = baseTelemetryData.extendedBy({ modelCallId });
+
 	const chatCompletions = await chatEndpointInfo.processResponseFromChatEndpoint(
 		telemetryService,
 		logService,
 		response,
-		nChoices,
+		nChoices ?? /* OpenAI's default */ 1,
 		finishedCb,
-		baseTelemetryData,
+		extendedBaseTelemetryData,
 		cancel
 	);
 
@@ -222,32 +217,6 @@ function createTelemetryData(chatEndpointInfo: IChatEndpoint, location: ChatLoca
 		uiKind: ChatLocation.toString(location),
 		headerRequestId
 	});
-}
-
-function createChatRequest(params: ChatParams): ChatRequest {
-
-	// FIXME@ulugbekna: need to investigate why language configs have such stop words, eg
-	// python has `\ndef` and `\nclass` which must be stop words for ghost text
-	// const stops = getLanguageConfig<string[]>(accessor, ConfigKey.Stops);
-
-	const request: ChatRequest = {
-		messages: params.messages,
-		model: params.model,
-		// stop: stops,
-	};
-
-	if (params.postOptions) {
-		Object.assign(request, params.postOptions);
-	}
-
-	if (params.intent) {
-		request['intent'] = params.intent;
-		if (params.intent_threshold) {
-			request['intent_threshold'] = params.intent_threshold;
-		}
-	}
-
-	return request;
 }
 
 async function handleError(
@@ -293,6 +262,16 @@ async function handleError(
 				failKind: ChatFailKind.AgentUnauthorized,
 				reason: response.statusText || response.statusText,
 				data: jsonData
+			};
+		}
+
+		if (response.status === 400 && jsonData?.code === 'previous_response_not_found') {
+			return {
+				type: FetchResponseKind.Failed,
+				modelRequestId: modelRequestIdObj,
+				failKind: ChatFailKind.InvalidPreviousResponseId,
+				reason: jsonData.message || 'Invalid previous response ID',
+				data: jsonData,
 			};
 		}
 
@@ -477,7 +456,7 @@ async function fetchWithInstrumentation(
 	interactionService: IInteractionService,
 	chatEndpoint: IChatEndpoint,
 	ourRequestId: string,
-	request: Partial<ChatRequest>,
+	request: IEndpointBody,
 	secretKey: string,
 	location: ChatLocation,
 	userInitiatedRequest?: boolean,
@@ -490,14 +469,14 @@ async function fetchWithInstrumentation(
 		'X-Interaction-Id': interactionService.interactionId,
 		'X-Initiator': userInitiatedRequest ? 'user' : 'agent', // Agent = a system request / not the primary user query.
 	};
-	if (request.messages?.some(m => Array.isArray(m.content) ? m.content.some(c => 'image_url' in c) : false) && chatEndpoint.supportsVision) {
+	if (request.messages?.some((m: CAPIChatMessage) => Array.isArray(m.content) ? m.content.some(c => 'image_url' in c) : false) && chatEndpoint.supportsVision) {
 		additionalHeaders['Copilot-Vision-Request'] = 'true';
 	}
 	const telemetryData = TelemetryData.createAndMarkAsIssued({
 		endpoint: 'completions',
 		engineName: 'chat',
 		uiKind: ChatLocation.toString(location),
-		...telemetryProperties
+		...telemetryProperties // This includes the modelCallId from fetchAndStreamChat
 	}, {
 		maxTokenWindow: chatEndpoint.modelMaxPromptTokens
 	});
@@ -550,7 +529,11 @@ async function fetchWithInstrumentation(
 
 		logService.debug(`request.response: [${stringifyUrlOrRequestMetadata(chatEndpoint.urlOrRequestMetadata)}], took ${totalTimeMs} ms`);
 
-		logService.debug(`messages: ${JSON.stringify(request.messages)}`);
+		if (request.messages) {
+			logService.debug(`messages: ${JSON.stringify(request.messages)}`);
+		} else if (request.input) {
+			logService.debug(`input: ${JSON.stringify(request.input)}`);
+		}
 
 		telemetryService.sendGHTelemetryEvent('request.response', telemetryData.properties, telemetryData.measurements);
 
@@ -580,7 +563,7 @@ async function fetchWithInstrumentation(
 			throw error;
 		})
 		.finally(() => {
-			sendEngineMessagesTelemetry(telemetryService, request.messages!, telemetryData);
+			sendEngineMessagesTelemetry(telemetryService, request.messages ?? [], telemetryData, false, logService);
 		});
 }
 

@@ -30,6 +30,7 @@ export namespace ResolvedRunnableResult {
 export type ContextComputedEvent = {
 	document: vscode.TextDocument;
 	position: vscode.Position;
+	source?: string;
 	results: ReadonlyArray<ResolvedRunnableResult>;
 	summary: ContextItemSummary;
 }

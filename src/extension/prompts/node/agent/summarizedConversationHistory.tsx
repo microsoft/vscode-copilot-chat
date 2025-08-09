@@ -614,7 +614,7 @@ class ConversationHistorySummarizer {
 	}
 }
 
-export class AgentPromptWithSummaryPrompt extends PromptElement<AgentPromptProps> {
+class AgentPromptWithSummaryPrompt extends PromptElement<AgentPromptProps> {
 	override async render(state: void, sizing: PromptSizing) {
 		return <>
 			<AgentPrompt {...this.props} />

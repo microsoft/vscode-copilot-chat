@@ -109,6 +109,11 @@ export namespace Copilot {
 		uri: DocumentUri;
 		languageId: string;
 		version: number;
+		// Position and offset are relative to the provided version of the document.
+		// The position after an edit is applied is found in ProposedTextEdit.positionAfterEdit.
+		/**
+		 * @deprecated Use `position` instead.
+		 */
 		offset: number;
 		position?: Position;
 		proposedEdits?: ProposedTextEdit[];
@@ -128,14 +133,35 @@ export namespace Copilot {
 		 * After the time budget runs out, the request will be cancelled via the CancellationToken.
 		 * Providers can use this value as a hint when computing context. Providers should expect the
 		 * request to be cancelled once the time budget runs out.
+		 *
+		 * @deprecated Use `timeoutEnd` instead.
 		 */
 		timeBudget: number;
+
+		/**
+		 * Unix timestamp representing the exact time the request will be cancelled via the CancellationToken.
+		 */
+		timeoutEnd: number;
 
 		/**
 		 * Various statistics about the last completion request. This can be used by the context provider
 		 * to make decisions about what context to provide for the current call.
 		 */
 		previousUsageStatistics?: ContextUsageStatistics;
+
+		/**
+		 * Data from completionItem
+		 *
+		 * See https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#completionItem
+		 */
+		data?: unknown;
+
+		/**
+		 * Allows specifying the source of the context item, e.g., 'nes'.
+		 *
+		 * @experimental
+		 */
+		source: string;
 	}
 
 	/**

@@ -97,6 +97,21 @@ declare module 'vscode' {
 		constructor(value: string, task?: (progress: Progress<ChatResponseWarningPart | ChatResponseReferencePart>) => Thenable<string | void>);
 	}
 
+	/**
+ * A specialized progress part for displaying thinking/reasoning steps.
+ */
+	export class ChatResponseThinkingProgressPart extends ChatResponseProgressPart {
+		value: string;
+		id?: string;
+		metadata?: string;
+
+		/**
+		 * Creates a new thinking progress part.
+		 * @param value An initial progress message
+		 * @param task A task that will emit thinking parts during its execution
+		 */
+		constructor(value: string, id?: string, metadata?: string)
+	}
 	export class ChatResponseReferencePart2 {
 		/**
 		 * The reference target.
@@ -192,6 +207,8 @@ declare module 'vscode' {
 		* @returns This stream.
 		*/
 		progress(value: string, task?: (progress: Progress<ChatResponseWarningPart | ChatResponseReferencePart>) => Thenable<string | void>): void;
+
+		thinkingProgress(value: string, id?: string, metadata?: string): void;
 
 		textEdit(target: Uri, edits: TextEdit | TextEdit[]): void;
 
@@ -463,6 +480,17 @@ declare module 'vscode' {
 		outcome: ChatEditingSessionActionOutcome;
 	}
 
+	export interface ChatEditingHunkAction {
+		// eslint-disable-next-line local/vscode-dts-string-type-literals
+		kind: 'chatEditingHunkAction';
+		uri: Uri;
+		hasRemainingEdits: boolean;
+		outcome: ChatEditingHunkActionOutcome;
+		lineCount: number;
+		linesAdded: number;
+		linesRemoved: number;
+	}
+
 	export enum ChatEditingSessionActionOutcome {
 		Accepted = 1,
 		Rejected = 2,
@@ -471,7 +499,7 @@ declare module 'vscode' {
 
 	export interface ChatUserActionEvent {
 		readonly result: ChatResult;
-		readonly action: ChatCopyAction | ChatInsertAction | ChatApplyAction | ChatTerminalAction | ChatCommandAction | ChatFollowupAction | ChatBugReportAction | ChatEditorAction | ChatEditingSessionAction;
+		readonly action: ChatCopyAction | ChatInsertAction | ChatApplyAction | ChatTerminalAction | ChatCommandAction | ChatFollowupAction | ChatBugReportAction | ChatEditorAction | ChatEditingSessionAction | ChatEditingHunkAction;
 	}
 
 	export interface ChatPromptReference {

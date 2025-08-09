@@ -14,6 +14,8 @@ import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } fro
 import { AutoChatEndpoint, isAutoModeEnabled } from '../../../platform/endpoint/common/autoChatEndpoint';
 import { IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
+import { encodeStatefulMarker } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -373,7 +375,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 			{ type: 'function', function: { name: _options.tools[0].name } } :
 			undefined;
 
-		const result = await endpoint.makeChatRequest('copilotLanguageModelWrapper', messages, callback, token, ChatLocation.Other, { extensionId }, options, true, telemetryProperties, { intent: true });
+		const result = await endpoint.makeChatRequest('copilotLanguageModelWrapper', messages, callback, token, ChatLocation.Other, { extensionId }, options, true, telemetryProperties);
 
 		if (result.type !== ChatFetchResponseType.Success) {
 			if (result.type === ChatFetchResponseType.ExtensionBlocked) {
@@ -422,11 +424,20 @@ export class CopilotLanguageModelWrapper extends Disposable {
 				}
 			}
 			if (delta.thinking) {
-				// progress.report({ index, part: new vscode.LanguageModelThinkingPart(delta.thinking) });
+				const text = delta.thinking.text ?? '';
+				progress.report({ index, part: new vscode.LanguageModelThinkingPart(text, delta.thinking.id, delta.thinking.metadata) });
 
 				// @karthiknadig: remove this when LM API becomes available
 				this._thinkingDataService.update(index, delta.thinking);
 			}
+
+			if (delta.statefulMarker) {
+				progress.report({
+					index,
+					part: new vscode.LanguageModelDataPart(encodeStatefulMarker(endpoint.model, delta.statefulMarker), CustomDataPartMimeTypes.StatefulMarker)
+				});
+			}
+
 			return undefined;
 		};
 		return this._provideLanguageModelResponse(endpoint, messages, options, extensionId, finishCallback, token);

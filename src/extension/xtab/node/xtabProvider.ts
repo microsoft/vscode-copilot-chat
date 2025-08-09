@@ -10,6 +10,7 @@ import { toTextParts } from '../../../platform/chat/common/globalStringUtils';
 import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { createProxyXtabEndpoint } from '../../../platform/endpoint/node/proxyXtabEndpoint';
+import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
 import { LanguageContextEntry, LanguageContextResponse } from '../../../platform/inlineEdits/common/dataTypes/languageContext';
 import * as xtabPromptOptions from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
@@ -19,6 +20,7 @@ import { NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDo
 import { ChainedStatelessNextEditProvider, IgnoreTriviaWhitespaceChangesAspect } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
 import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
+import { ContextKind, SnippetContext } from '../../../platform/languageServer/common/languageContextService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { OptionalChatRequestParams, Prediction } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
@@ -28,7 +30,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import * as errors from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { createTracer, ITracer } from '../../../util/common/tracing';
-import { AsyncIterableObject, DeferredPromise, raceTimeout, timeout } from '../../../util/vs/base/common/async';
+import { AsyncIterableObject, DeferredPromise, raceFilter, raceTimeout, timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { LineEdit, LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
@@ -90,6 +92,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		@ILogService private readonly logService: ILogService,
 		@ILanguageContextProviderService private readonly langCtxService: ILanguageContextProviderService,
 		@ILanguageDiagnosticsService private readonly langDiagService: ILanguageDiagnosticsService,
+		@IIgnoreService private readonly ignoreService: IIgnoreService,
 	) {
 		super(XtabProvider.ID, [
 			base => new IgnoreImportChangesAspect(base),
@@ -368,12 +371,25 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 					offset: textDoc.offsetAt(cursorPositionVscode)
 				},
 				activeExperiments: new Map(),
-				timeBudget: debounceTime
+				timeBudget: debounceTime,
+				timeoutEnd: Date.now() + debounceTime,
+				source: 'nes',
 			};
+
+			const isSnippetIgnored = async (item: SnippetContext): Promise<boolean> => {
+				const uris = [item.uri, ...(item.additionalUris ?? [])];
+				const isIgnored = await raceFilter(uris.map(uri => this.ignoreService.isCopilotIgnored(uri)), r => r);
+				return !!isIgnored;
+			};
+
 			const langCtxItems: LanguageContextEntry[] = [];
 			const getContextPromise = async () => {
 				const ctxIter = this.langCtxService.getContextItems(textDoc, ctxRequest, cancellationToken);
 				for await (const item of ctxIter) {
+					if (item.kind === ContextKind.Snippet && await isSnippetIgnored(item)) {
+						// If the snippet is ignored, we don't want to include it in the context
+						continue;
+					}
 					langCtxItems.push({ context: item, timeStamp: Date.now(), onTimeout: false });
 				}
 			};
@@ -383,7 +399,13 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 			const end = Date.now();
 
 			const langCtxOnTimeout = this.langCtxService.getContextItemsOnTimeout(textDoc, ctxRequest);
-			langCtxItems.push(...langCtxOnTimeout.map(context => ({ context, timeStamp: end, onTimeout: true })));
+			for (const item of langCtxOnTimeout) {
+				if (item.kind === ContextKind.Snippet && await isSnippetIgnored(item)) {
+					// If the snippet is ignored, we don't want to include it in the context
+					continue;
+				}
+				langCtxItems.push({ context: item, timeStamp: end, onTimeout: true });
+			}
 
 			return { start, end, items: langCtxItems };
 
@@ -782,10 +804,12 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 			case ChatFetchResponseType.ExtensionBlocked:
 			case ChatFetchResponseType.AgentUnauthorized:
 			case ChatFetchResponseType.AgentFailedDependency:
+			case ChatFetchResponseType.InvalidStatefulMarker:
 				return new NoNextEditReason.Uncategorized(errors.fromUnknown(fetchError));
 			case ChatFetchResponseType.BadRequest:
 			case ChatFetchResponseType.NotFound:
 			case ChatFetchResponseType.Failed:
+			case ChatFetchResponseType.NetworkError:
 			case ChatFetchResponseType.Unknown:
 				return new NoNextEditReason.FetchFailure(errors.fromUnknown(fetchError));
 		}

@@ -150,12 +150,6 @@ export class UserFeedbackService implements IUserFeedbackService {
 						});
 					}
 
-					const outcomes = new Map([
-						[vscode.ChatEditingSessionActionOutcome.Accepted, 'accepted'],
-						[vscode.ChatEditingSessionActionOutcome.Rejected, 'rejected'],
-						[vscode.ChatEditingSessionActionOutcome.Saved, 'saved']
-					]);
-
 					/* __GDPR__
 						"panel.edit.feedback" : {
 							"owner": "joyceerhl",
@@ -191,6 +185,34 @@ export class UserFeedbackService implements IUserFeedbackService {
 					}
 				}
 				break;
+			case 'chatEditingHunkAction': {
+				const outcome = outcomes.get(e.action.outcome);
+				if (outcome) {
+
+					const properties = {
+						requestId: result.metadata?.responseId ?? '',
+						languageId: document?.languageId ?? '',
+						outcome,
+					};
+					const measurements = {
+						hasRemainingEdits: e.action.hasRemainingEdits ? 1 : 0,
+						isNotebook: this.notebookService.hasSupportedNotebooks(e.action.uri) ? 1 : 0,
+						isNotebookCell: e.action.uri.scheme === Schemas.vscodeNotebookCell ? 1 : 0,
+						lineCount: e.action.lineCount,
+						linesAdded: e.action.linesAdded,
+						linesRemoved: e.action.linesRemoved,
+					};
+
+					sendUserActionTelemetry(
+						this.telemetryService,
+						document ?? vscode.window.activeTextEditor?.document,
+						properties,
+						measurements,
+						'edit.hunk.action'
+					);
+				}
+				break;
+			}
 		}
 
 		if (e.action.kind === 'copy' || e.action.kind === 'insert') {
@@ -554,3 +576,9 @@ function reportInlineEditSurvivalEvent(res: EditSurvivalResult, sharedProps: Tel
 		didBranchChange: res.didBranchChange ? 1 : 0,
 	});
 }
+
+const outcomes = new Map([
+	[vscode.ChatEditingSessionActionOutcome.Accepted, 'accepted'],
+	[vscode.ChatEditingSessionActionOutcome.Rejected, 'rejected'],
+	[vscode.ChatEditingSessionActionOutcome.Saved, 'saved']
+]);
