@@ -433,6 +433,7 @@ export class DefaultIntentRequestHandler {
 				return chatResult;
 			}
 			case ChatFetchResponseType.BadRequest:
+			case ChatFetchResponseType.NetworkError:
 			case ChatFetchResponseType.Failed: {
 				const errorDetails = getErrorDetailsFromChatFetchError(fetchResult, (await this._authenticationService.getCopilotToken()).copilotPlan);
 				const chatResult = { errorDetails, metadata: metadataFragment };
@@ -704,6 +705,9 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 			this.toolGrouping.tools = tools;
 		} else {
 			this.toolGrouping = this.toolGroupingService.create(this.options.conversation.sessionId, tools);
+			for (const ref of this.options.request.toolReferences) {
+				this.toolGrouping.ensureExpanded(ref.name);
+			}
 		}
 
 		if (!this.toolGrouping.isEnabled) {

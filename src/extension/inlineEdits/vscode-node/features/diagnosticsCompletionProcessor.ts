@@ -13,10 +13,10 @@ import { ObservableGit } from '../../../../platform/inlineEdits/common/observabl
 import { IObservableDocument } from '../../../../platform/inlineEdits/common/observableWorkspace';
 import { autorunWithChanges } from '../../../../platform/inlineEdits/common/utils/observable';
 import { WorkspaceDocumentEditHistory } from '../../../../platform/inlineEdits/common/workspaceEditTracker/workspaceDocumentEditTracker';
-import { ILanguageDiagnosticsService } from '../../../../platform/languages/common/languageDiagnosticsService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { ITabsAndEditorsService } from '../../../../platform/tabs/common/tabsAndEditorsService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { isNotebookCell } from '../../../../util/common/notebooks';
 import { createTracer, ITracer } from '../../../../util/common/tracing';
 import { equals } from '../../../../util/vs/base/common/arrays';
 import { findFirstMonotonous } from '../../../../util/vs/base/common/arraysFind';
@@ -25,20 +25,20 @@ import { CancellationToken, CancellationTokenSource } from '../../../../util/vs/
 import { BugIndicatingError } from '../../../../util/vs/base/common/errors';
 import { Emitter } from '../../../../util/vs/base/common/event';
 import { Disposable, DisposableStore } from '../../../../util/vs/base/common/lifecycle';
-import { autorun, derived, IObservable } from '../../../../util/vs/base/common/observableInternal';
+import { autorun, derived, IObservable, runOnChange } from '../../../../util/vs/base/common/observableInternal';
 import { isEqual } from '../../../../util/vs/base/common/resources';
 import { StringEdit } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { Position } from '../../../../util/vs/editor/common/core/position';
-import { Range } from '../../../../util/vs/editor/common/core/range';
+import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
 import { getInformationDelta, InformationDelta } from '../../common/ghNearbyNesProvider';
 import { RejectionCollector } from '../../common/rejectionCollector';
 import { IVSCodeObservableDocument, VSCodeWorkspace } from '../parts/vscodeWorkspace';
 import { AnyDiagnosticCompletionItem, AnyDiagnosticCompletionProvider } from './diagnosticsBasedCompletions/anyDiagnosticsCompletionProvider';
 import { AsyncDiagnosticCompletionProvider } from './diagnosticsBasedCompletions/asyncDiagnosticsCompletionProvider';
-import { Diagnostic, DiagnosticCompletionItem, DiagnosticInlineEditRequestLogContext, DiagnosticSeverity, distanceToClosestDiagnostic, IDiagnosticCompletionProvider, log, logList, sortDiagnosticsByDistance, toInternalPosition } from './diagnosticsBasedCompletions/diagnosticsCompletions';
+import { Diagnostic, DiagnosticCompletionItem, DiagnosticInlineEditRequestLogContext, distanceToClosestDiagnostic, IDiagnosticCompletionProvider, log, logList, sortDiagnosticsByDistance } from './diagnosticsBasedCompletions/diagnosticsCompletions';
 import { ImportDiagnosticCompletionItem, ImportDiagnosticCompletionProvider } from './diagnosticsBasedCompletions/importDiagnosticsCompletionProvider';
-import { isNotebookCell } from '../../../../util/common/notebooks';
+import { toInternalPosition } from '../utils/translations';
 
 interface IDiagnosticsCompletionState<T extends DiagnosticCompletionItem = DiagnosticCompletionItem> {
 	completionItem: T | null;
@@ -59,28 +59,24 @@ export class DiagnosticsCollection {
 	private _diagnostics: Diagnostic[] = [];
 
 	applyEdit(previous: StringText, edit: StringEdit, after: StringText): boolean {
-		const transformerBefore = previous.getTransformer();
-		const transformerAfter = after.getTransformer();
 
 		let hasInvalidated = false;
 		for (const diagnostic of this._diagnostics) {
 			const oldRange = diagnostic.range;
-			const oldOffsetRange = transformerBefore.getOffsetRange(oldRange);
-			const newOffsetRange = applyEditsToRanges([oldOffsetRange], edit)[0];
+			const newRange = applyEditsToRanges([oldRange], edit)[0];
 
 			// If the range shrank then the diagnostic will have changed
-			if (!newOffsetRange || newOffsetRange.length < oldOffsetRange.length) {
+			if (!newRange || newRange.length < oldRange.length) {
 				diagnostic.invalidate();
 				hasInvalidated = true;
 				continue;
 			}
 
-			const contentAtOldRange = previous.getValueOfRange(oldRange);
+			const contentAtOldRange = oldRange.substring(previous.value);
 
-			// If the range stays the same then the diagnostic is still valid
-			if (newOffsetRange.length === oldOffsetRange.length) {
-				const newRange = transformerAfter.getRange(newOffsetRange);
-				const contentAtNewRange = after.getValueOfRange(newRange);
+			// If the range stays the same then the diagnostic is still valid if the content is the same
+			if (newRange.length === oldRange.length) {
+				const contentAtNewRange = newRange.substring(after.value);
 				if (contentAtOldRange === contentAtNewRange) {
 					diagnostic.updateRange(newRange);
 				} else {
@@ -91,17 +87,8 @@ export class DiagnosticsCollection {
 			}
 
 			// If the range grew then we need to check what got added
-			const sameLengthPrefixRange = Range.fromPositions(
-				transformerAfter.getPosition(newOffsetRange.start),
-				transformerAfter.getPosition(newOffsetRange.start + oldOffsetRange.length)
-			);
-			const sameLengthSuffixRange = Range.fromPositions(
-				transformerAfter.getPosition(newOffsetRange.endExclusive - oldOffsetRange.length),
-				transformerAfter.getPosition(newOffsetRange.endExclusive)
-			);
-
-			const isSamePrefix = contentAtOldRange === after.getValueOfRange(sameLengthPrefixRange);
-			const isSameSuffix = contentAtOldRange === after.getValueOfRange(sameLengthSuffixRange);
+			const isSamePrefix = contentAtOldRange === new OffsetRange(newRange.start, newRange.start + oldRange.length).substring(after.value);
+			const isSameSuffix = contentAtOldRange === new OffsetRange(newRange.endExclusive - oldRange.length, newRange.endExclusive).substring(after.value);
 			if (!isSamePrefix && !isSameSuffix) {
 				// The content at the diagnostic range has changed
 				diagnostic.invalidate();
@@ -111,17 +98,11 @@ export class DiagnosticsCollection {
 
 			let edgeCharacter;
 			if (isSamePrefix) {
-				const offsetAfterOldRange = newOffsetRange.endExclusive - (newOffsetRange.length - oldOffsetRange.length);
-				edgeCharacter = after.getValueOfRange(Range.fromPositions(
-					transformerAfter.getPosition(offsetAfterOldRange),
-					transformerAfter.getPosition(offsetAfterOldRange + 1)
-				));
+				const offsetAfterOldRange = newRange.start + oldRange.length;
+				edgeCharacter = new OffsetRange(offsetAfterOldRange, offsetAfterOldRange + 1).substring(after.value);
 			} else {
-				const offsetBeforeOldRange = newOffsetRange.start + (oldOffsetRange.length - newOffsetRange.length) + 1;
-				edgeCharacter = after.getValueOfRange(Range.fromPositions(
-					transformerAfter.getPosition(offsetBeforeOldRange),
-					transformerAfter.getPosition(offsetBeforeOldRange + 1)
-				));
+				const offsetBeforeOldRange = newRange.endExclusive - oldRange.length - 1;
+				edgeCharacter = new OffsetRange(offsetBeforeOldRange, offsetBeforeOldRange + 1).substring(after.value);
 			}
 
 			if (edgeCharacter.length !== 1 || /^[a-zA-Z0-9_]$/.test(edgeCharacter)) {
@@ -132,20 +113,14 @@ export class DiagnosticsCollection {
 			}
 
 			// We need to update the range of the diagnostic after applying the edits
-			let newRange: Range;
+			let updatedRange: OffsetRange;
 			if (isSamePrefix) {
-				newRange = Range.fromPositions(
-					transformerAfter.getPosition(newOffsetRange.start),
-					transformerAfter.getPosition(newOffsetRange.start + oldOffsetRange.length)
-				);
+				updatedRange = new OffsetRange(newRange.start, newRange.start + oldRange.length);
 			} else {
-				newRange = Range.fromPositions(
-					transformerAfter.getPosition(newOffsetRange.endExclusive - oldOffsetRange.length),
-					transformerAfter.getPosition(newOffsetRange.endExclusive)
-				);
+				updatedRange = new OffsetRange(newRange.endExclusive - oldRange.length, newRange.endExclusive);
 			}
 
-			diagnostic.updateRange(newRange);
+			diagnostic.updateRange(updatedRange);
 		}
 
 		return hasInvalidated;
@@ -199,7 +174,6 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 		@IWorkspaceService workspaceService: IWorkspaceService,
 		@IFileSystemService fileSystemService: IFileSystemService,
 		@ITabsAndEditorsService private readonly _tabsAndEditorsService: ITabsAndEditorsService,
-		@ILanguageDiagnosticsService private readonly _languageDiagnosticsService: ILanguageDiagnosticsService
 	) {
 		super();
 
@@ -231,26 +205,22 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 			return !!editor && (isNotebookCell(editor.document.uri) || isEditorFromEditorGrid(editor));
 		};
 
-		this._register(this._languageDiagnosticsService.onDidChangeDiagnostics(async e => {
+		this._register(autorun(reader => {
+			const activeDocument = this._workspace.lastActiveDocument.read(reader);
+			if (!activeDocument) { return; }
+
 			const activeEditor = this._tabsAndEditorsService.activeTextEditor;
-			if (!isValidEditor(activeEditor)) {
+			if (!activeEditor || !isEditorFromEditorGrid(activeEditor) || !isEqual(activeDocument.id.toUri(), activeEditor.document.uri)) {
 				return;
 			}
 
-			const diagnosticsChangedForActiveEditor = e.uris.some(uri => isEqual(uri, activeEditor.document.uri));
-			if (!diagnosticsChangedForActiveEditor) {
-				return;
-			}
-
+			// update state because document changed
 			this._updateState();
-		}));
 
-		this._register(this._tabsAndEditorsService.onDidChangeActiveTextEditor(async e => {
-			if (!isValidEditor(e)) {
-				return;
-			}
-
-			this._updateState();
+			// update state because diagnostics changed
+			reader.store.add(runOnChange(activeDocument.diagnostics, () => {
+				this._updateState();
+			}));
 		}));
 
 		this._register(vscode.window.onDidChangeTextEditorSelection(async e => {
@@ -305,7 +275,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 		const log = new DiagnosticInlineEditRequestLogContext();
 
 		const { availableDiagnostics, relevantDiagnostics } = this._getDiagnostics(workspaceDocument, cursor, log);
-		const diagnosticsSorted = sortDiagnosticsByDistance(relevantDiagnostics, cursor);
+		const diagnosticsSorted = sortDiagnosticsByDistance(workspaceDocument, relevantDiagnostics, cursor);
 
 		if (this._currentDiagnostics.isEqualAndUpdate(diagnosticsSorted)) {
 			return;
@@ -317,16 +287,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 	}
 
 	private _getDiagnostics(workspaceDocument: IVSCodeObservableDocument, cursor: Position, logContext: DiagnosticInlineEditRequestLogContext): { availableDiagnostics: Diagnostic[]; relevantDiagnostics: Diagnostic[] } {
-		const diagnostics = workspaceDocument.kind === 'textDocument' ?
-			this._languageDiagnosticsService
-				.getDiagnostics(workspaceDocument.textDocument.uri) :
-			workspaceDocument.notebook.getCells().flatMap(cell => this._languageDiagnosticsService
-				.getDiagnostics(cell.document.uri)
-				.flatMap(diagnostic => workspaceDocument.projectDiagnostics(cell.document, [diagnostic])));
-		const availableDiagnostics = diagnostics
-			.map(diagnostic => Diagnostic.fromVSCodeDiagnostic(diagnostic))
-			.filter(diagnostic => diagnostic.severity !== DiagnosticSeverity.Information)
-			.filter(diagnostic => diagnostic.severity !== DiagnosticSeverity.Hint);
+		const availableDiagnostics = workspaceDocument.diagnostics.get().map(d => new Diagnostic(d));
 
 		if (availableDiagnostics.length === 0) {
 			return { availableDiagnostics: [], relevantDiagnostics: [] };
@@ -345,7 +306,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 		const providers = this._diagnosticsCompletionProviders.get();
 
 		let relevantDiagnostics = [...availableDiagnostics];
-		relevantDiagnostics = filterDiagnosticsAndLog(relevantDiagnostics, 'Filtered by provider', ds => ds.filter(diagnostic => providers.some(provider => provider.providesCompletionsForDiagnostic(diagnostic, language, cursor))));
+		relevantDiagnostics = filterDiagnosticsAndLog(relevantDiagnostics, 'Filtered by provider', ds => ds.filter(diagnostic => providers.some(provider => provider.providesCompletionsForDiagnostic(workspaceDocument, diagnostic, language, cursor))));
 		relevantDiagnostics = filterDiagnosticsAndLog(relevantDiagnostics, 'Filtered by recent acceptance', ds => ds.filter(diagnostic => !this._hasDiagnosticRecentlyBeenAccepted(diagnostic)));
 		relevantDiagnostics = filterDiagnosticsAndLog(relevantDiagnostics, 'Filtered by no recent edit', ds => this._filterDiagnosticsByRecentEditNearby(ds, workspaceDocument));
 
@@ -365,14 +326,14 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 
 		// Distance to the closest diagnostic which is not supported by any provider
 		const allNoneSupportedDiagnostics = allDiagnostics.filter(diagnostic => !diagnosticsSorted.includes(diagnostic));
-		telemetryBuilder.setDistanceToUnknownDiagnostic(distanceToClosestDiagnostic(allNoneSupportedDiagnostics, cursor));
+		telemetryBuilder.setDistanceToUnknownDiagnostic(distanceToClosestDiagnostic(workspaceDocument, allNoneSupportedDiagnostics, cursor));
 
 		// Distance to the closest none result diagnostic
 		const allAlternativeDiagnostics = allDiagnostics.filter(diagnostic => !completionItem || !completionItem.diagnostic.equals(diagnostic));
-		telemetryBuilder.setDistanceToAlternativeDiagnostic(distanceToClosestDiagnostic(allAlternativeDiagnostics, cursor));
+		telemetryBuilder.setDistanceToAlternativeDiagnostic(distanceToClosestDiagnostic(workspaceDocument, allAlternativeDiagnostics, cursor));
 
 		if (completionItem) {
-			const hasDiagnosticForSameRange = allAlternativeDiagnostics.some(diagnostic => completionItem.diagnostic.range.equalsRange(diagnostic.range));
+			const hasDiagnosticForSameRange = allAlternativeDiagnostics.some(diagnostic => completionItem.diagnostic.range.equals(diagnostic.range));
 			telemetryBuilder.setHasAlternativeDiagnosticForSameRange(hasDiagnosticForSameRange);
 		}
 
@@ -561,14 +522,10 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 			return [];
 		}
 
-		const transformer = document.value.get().getTransformer();
-
 		return diagnostics.filter(diagnostic => {
-			const currentOffsetRange = transformer.getOffsetRange(diagnostic.range);
 			const newRanges = recentEdits.getNewRanges();
-
-			const potentialIntersection = findFirstMonotonous(newRanges, (r) => r.endExclusive >= currentOffsetRange.start);
-			return potentialIntersection?.intersectsOrTouches(currentOffsetRange);
+			const potentialIntersection = findFirstMonotonous(newRanges, (r) => r.endExclusive >= diagnostic.range.start);
+			return potentialIntersection?.intersectsOrTouches(diagnostic.range);
 		});
 	}
 }

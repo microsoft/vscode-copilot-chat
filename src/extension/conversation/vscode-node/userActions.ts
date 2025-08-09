@@ -198,7 +198,9 @@ export class UserFeedbackService implements IUserFeedbackService {
 						hasRemainingEdits: e.action.hasRemainingEdits ? 1 : 0,
 						isNotebook: this.notebookService.hasSupportedNotebooks(e.action.uri) ? 1 : 0,
 						isNotebookCell: e.action.uri.scheme === Schemas.vscodeNotebookCell ? 1 : 0,
-						lineCount: e.action.lineCount
+						lineCount: e.action.lineCount,
+						linesAdded: e.action.linesAdded,
+						linesRemoved: e.action.linesRemoved,
 					};
 
 					sendUserActionTelemetry(
