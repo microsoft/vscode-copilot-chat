@@ -102,6 +102,10 @@ export class ProxyExperimentEndpoint implements IChatEndpoint {
 		return this.selectedEndpoint.version;
 	}
 
+	get vendor(): string | undefined {
+		return this.selectedEndpoint.vendor;
+	}
+
 	get tokenizer(): TokenizerType {
 		return this.selectedEndpoint.tokenizer;
 	}

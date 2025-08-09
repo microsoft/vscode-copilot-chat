@@ -45,6 +45,7 @@ export class AutoChatEndpoint implements IChatEndpoint {
 	version: string = this._wrappedEndpoint.version;
 	family: string = this._wrappedEndpoint.family;
 	tokenizer: TokenizerType = this._wrappedEndpoint.tokenizer;
+	vendor?: string = this._wrappedEndpoint.vendor;
 
 	constructor(
 		private readonly _wrappedEndpoint: IChatEndpoint,

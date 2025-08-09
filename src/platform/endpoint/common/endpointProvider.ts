@@ -55,6 +55,7 @@ export interface IModelAPIResponse {
 	name: string;
 	policy?: ModelPolicy;
 	model_picker_enabled: boolean;
+	vendor?: string;
 	preview?: boolean;
 	is_chat_default: boolean;
 	is_chat_fallback: boolean;

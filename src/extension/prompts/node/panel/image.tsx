@@ -4,7 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
-import { BasePromptElementProps, ChatResponseReferencePartStatusKind, PromptElement, PromptReference, PromptSizing, UserMessage, Image as BaseImage } from '@vscode/prompt-tsx';
+import { Image as BaseImage, BasePromptElementProps, ChatResponseReferencePartStatusKind, PromptElement, PromptReference, PromptSizing, UserMessage } from '@vscode/prompt-tsx';
+import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
+import { IImageService } from '../../../../platform/image/common/imageService';
+import { ILogService } from '../../../../platform/log/common/logService';
+import { getMimeType } from '../../../../util/common/imageUtils';
 import { Uri } from '../../../../vscodeTypes';
 import { IPromptEndpoint } from '../base/promptRenderer';
 
@@ -18,7 +22,10 @@ export interface ImageProps extends BasePromptElementProps {
 export class Image extends PromptElement<ImageProps, unknown> {
 	constructor(
 		props: ImageProps,
-		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint
+		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint,
+		@IAuthenticationService private readonly authService: IAuthenticationService,
+		@ILogService private readonly logService: ILogService,
+		@IImageService private readonly imageService: IImageService
 	) {
 		super(props);
 	}
@@ -41,16 +48,22 @@ export class Image extends PromptElement<ImageProps, unknown> {
 				);
 			}
 			const variable = await this.props.variableValue;
-			let decoded = Buffer.from(variable).toString('base64');
-			const decoder = new TextDecoder();
-			const decodedString = decoder.decode(variable);
-			if (/^https?:\/\/.+/.test(decodedString)) {
-				decoded = decodedString;
+			let imageSource = Buffer.from(variable).toString('base64');
+			if (this.promptEndpoint.vendor === 'copilot') {
+				try {
+					const githubToken = (await this.authService.getAnyGitHubSession())?.accessToken;
+					const uri = await this.imageService.uploadChatImageAttachment(variable, this.props.variableName, getMimeType(imageSource) ?? 'image/png', githubToken);
+					if (uri) {
+						imageSource = uri.toString();
+					}
+				} catch (error) {
+					this.logService.warn(`Image upload failed, using base64 fallback: ${error}`);
+				}
 			}
 
 			return (
 				<UserMessage priority={0}>
-					<BaseImage src={decoded} detail='high' />
+					<BaseImage src={imageSource} detail='high' />
 					{this.props.reference && (
 						<references value={[new PromptReference(this.props.variableName ? { variableName: this.props.variableName, value: fillerUri } : fillerUri, undefined)]} />
 					)}

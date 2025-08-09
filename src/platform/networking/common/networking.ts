@@ -171,6 +171,7 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly isDefault: boolean;
 	readonly isFallback: boolean;
 	readonly policy: 'enabled' | { terms: string };
+	readonly vendor?: string;
 	/**
 	 * Handles processing of responses from a chat endpoint. Each endpoint can have different response formats.
 	 * @param telemetryService The telemetry service
