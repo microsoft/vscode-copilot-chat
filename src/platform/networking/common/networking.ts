@@ -10,7 +10,7 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { CancellationError } from '../../../util/vs/base/common/errors';
-import { IntentParams, Source } from '../../chat/common/chatMLFetcher';
+import { Source } from '../../chat/common/chatMLFetcher';
 import type { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { EMBEDDING_MODEL } from '../../configuration/common/configurationService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
@@ -145,8 +145,6 @@ export interface IMakeChatRequestOptions {
 	userInitiatedRequest?: boolean;
 	/** (CAPI-only) Optional telemetry properties for analytics */
 	telemetryProperties?: TelemetryProperties;
-	/** (CAPI-only) Intent classifier details */
-	intentParams?: IntentParams;
 	/** Whether this request is retrying a filtered response */
 	isFilterRetry?: boolean;
 }
@@ -216,7 +214,6 @@ export interface IChatEndpoint extends IEndpoint {
 		requestOptions?: Omit<OptionalChatRequestParams, 'n'>,
 		userInitiatedRequest?: boolean,
 		telemetryProperties?: TelemetryProperties,
-		intentParams?: IntentParams
 	): Promise<ChatResponse>;
 
 	/**
@@ -248,15 +245,6 @@ export function createCapiRequestBody(model: string, options: ICreateEndpointBod
 	if (options.postOptions) {
 		Object.assign(request, options.postOptions);
 	}
-
-	// todo@connor4312/lramos: this was present but, from what I can tell, was
-	// never used in current code paths.
-	// if (options.intentParams) {
-	// 	request.intent = options.intentParams.intent;
-	// 	if (options.intentParams.intent_threshold) {
-	// 		request.intent_threshold = options.intentParams.intent_threshold;
-	// 	}
-	// }
 
 	return request;
 }

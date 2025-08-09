@@ -7,7 +7,7 @@ import { Raw } from '@vscode/prompt-tsx';
 import { ITokenizer, TokenizerType } from '../../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
-import { IChatMLFetcher, IntentParams, Source } from '../../../chat/common/chatMLFetcher';
+import { IChatMLFetcher, Source } from '../../../chat/common/chatMLFetcher';
 import { ChatLocation, ChatResponse } from '../../../chat/common/commonTypes';
 import { CHAT_MODEL } from '../../../configuration/common/configurationService';
 import { ILogService } from '../../../log/common/logService';
@@ -75,7 +75,6 @@ export class MockEndpoint implements IChatEndpoint {
 		requestOptions?: Omit<OptionalChatRequestParams, 'n'>,
 		userInitiatedRequest?: boolean,
 		telemetryProperties?: TelemetryProperties,
-		intentParams?: IntentParams
 	): Promise<ChatResponse> {
 		return this.makeChatRequest2({
 			debugName,
@@ -86,7 +85,6 @@ export class MockEndpoint implements IChatEndpoint {
 			requestOptions,
 			userInitiatedRequest,
 			telemetryProperties,
-			intentParams
 		}, token);
 	}
 
