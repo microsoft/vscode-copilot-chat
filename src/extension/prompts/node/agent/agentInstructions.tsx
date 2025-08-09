@@ -400,12 +400,15 @@ export class ApplyPatchFormatInstructions extends PromptElement {
 	render() {
 		return <>
 			*** Update File: [file_path]<br />
-			[context_before] -&gt; See below for further instructions on context.<br />
+			&nbsp;[context_before] -&gt; See below for further instructions on context.<br />
 			-[old_code] -&gt; Precede each line in the old code with a minus sign.<br />
 			+[new_code] -&gt; Precede each line in the new, replacement code with a plus sign.<br />
-			[context_after] -&gt; See below for further instructions on context.<br />
+			&nbsp;[context_after] -&gt; See below for further instructions on context.<br />
 			<br />
+			Prefix each line of old code with exactly one minus (-) before its original first character; keep the original indentation after it.<br />
+			Prefix each line of new code with exactly one plus (+), the remainder of the line after the plus is the full new line content.<br />
 			For instructions on [context_before] and [context_after]:<br />
+			- Prefix each unchanged context line with exactly one ASCII space (U+0020) before its original first character; keep the original indentation after it.<br />
 			- By default, show 3 lines of code immediately above and 3 lines immediately below each change. If a change is within 3 lines of a previous change, do NOT duplicate the first change's [context_after] lines in the second change's [context_before] lines.<br />
 			- If 3 lines of context is insufficient to uniquely identify the snippet of code within the file, use the @@ operator to indicate the class or function to which the snippet belongs.<br />
 			- If a code block is repeated so many times in a class or function such that even a single @@ statement and 3 lines of context cannot uniquely identify the snippet of code, you can use multiple `@@` statements to jump to the right context.
@@ -413,17 +416,18 @@ export class ApplyPatchFormatInstructions extends PromptElement {
 			You must use the same indentation style as the original code. If the original code uses tabs, you must use tabs. If the original code uses spaces, you must use spaces. Be sure to use a proper UNESCAPED tab character.<br />
 			<br />
 			See below for an example of the patch format. If you propose changes to multiple regions in the same file, you should repeat the *** Update File header for each snippet of code to change:<br />
-			<br />
-			*** Begin Patch<br />
-			*** Update File: /Users/someone/pygorithm/searching/binary_search.py<br />
-			@@ class BaseClass<br />
-			@@   def method():<br />
-			[3 lines of pre-context]<br />
-			-[old_code]<br />
-			+[new_code]<br />
-			+[new_code]<br />
-			[3 lines of post-context]<br />
-			*** End Patch<br />
+			<Tag name='applyPatchExample'>
+				*** Begin Patch<br />
+				*** Update File: /Users/someone/pygorithm/searching/binary_search.py<br />
+				@@ class BaseClass<br />
+				@@   def method():<br />
+				&nbsp;[3 lines of pre-context]<br />
+				-[old_code]<br />
+				+[new_code]<br />
+				+[new_code]<br />
+				&nbsp;[3 lines of post-context]<br />
+				*** End Patch<br />
+			</Tag>
 		</>;
 	}
 }
@@ -433,7 +437,9 @@ class ApplyPatchInstructions extends PromptElement<DefaultAgentPromptProps> {
 		const isGpt5 = this.props.modelFamily === 'gpt-5';
 		return <Tag name='applyPatchInstructions'>
 			To edit files in the workspace, use the {ToolName.ApplyPatch} tool. If you have issues with it, you should first try to fix your patch and continue using {ToolName.ApplyPatch}. If you are stuck, you can fall back on the {ToolName.EditFile} tool. But {ToolName.ApplyPatch} is much faster and is the preferred tool.<br />
-			{isGpt5 && <>Prefer the smallest set of changes needed to satisfy the task. Avoid reformatting unrelated code; preserve existing style and public APIs unless the task requires changes. When practical, complete all edits for a file within a single message.<br /></>}
+			{isGpt5 && <>
+				Never use {ToolName.ApplyPatch} for creating files.<br />
+				Prefer the smallest set of changes needed to satisfy the task. Avoid reformatting unrelated code; preserve existing style and public APIs unless the task requires changes. When practical, complete all edits for a file within a single message.<br /></>}
 			The input for this tool is a string representing the patch to apply, following a special format. For each snippet of code that needs to be changed, repeat the following:<br />
 			<ApplyPatchFormatInstructions /><br />
 			NEVER print this out to the user, instead call the tool and the edits will be applied and shown to the user.<br />
