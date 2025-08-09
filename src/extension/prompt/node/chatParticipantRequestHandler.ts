@@ -256,7 +256,14 @@ export class ChatParticipantRequestHandler {
 
 				result = await chatResult;
 				const endpoint = await this._endpointProvider.getChatEndpoint(this.request);
-				result.details = `${endpoint.name} • ${endpoint.multiplier ?? 0}x`;
+
+				// Build details string with model info and token usage if available
+				let details = `${endpoint.name} • ${endpoint.multiplier ?? 0}x`;
+				if (result.metadata?.tokenUsage) {
+					const { totalTokens, contextWindow } = result.metadata.tokenUsage;
+					details += ` • ${totalTokens}/${contextWindow} tokens`;
+				}
+				result.details = details;
 			}
 
 			this._conversationStore.addConversation(this.turn.id, this.conversation);
@@ -264,13 +271,16 @@ export class ChatParticipantRequestHandler {
 			// mixin fixed metadata shape into result. Modified in place because the object is already
 			// cached in the conversation store and we want the full information when looking this up
 			// later
+			// Merge in required metadata fields. Preserve any existing metadata (e.g. tokenCount/contextWindow injected downstream).
+			const existingMeta: any = (result as ICopilotChatResult).metadata ?? {};
 			mixin(result, {
 				metadata: {
+					...existingMeta,
 					modelMessageId: this.turn.responseId ?? '',
 					responseId: this.turn.id,
 					sessionId: this.conversation.sessionId,
 					agentId: this.chatAgentArgs.agentId,
-					command: this.request.command
+					command: this.request.command,
 				}
 			} satisfies ICopilotChatResult, true);
 

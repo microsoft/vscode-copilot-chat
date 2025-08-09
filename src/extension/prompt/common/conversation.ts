@@ -328,6 +328,16 @@ export interface IResultMetadata {
 	toolCallResults?: Record<string, LanguageModelToolResult>;
 	maxToolCallsExceeded?: boolean;
 	summary?: { toolCallRoundId: string; text: string };
+
+	/**
+	 * Token usage information for the response
+	 */
+	tokenUsage?: {
+		promptTokens: number;
+		completionTokens?: number;
+		totalTokens: number;
+		contextWindow: number;
+	};
 }
 
 /** There may be no metadata for results coming from old persisted messages, or from messages that are currently in progress (TODO, try to handle this case) */
