@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { TextLengthOfSubstr, TextLengthSum } from '../../../../../util/common/textLength';
 import { Lazy } from '../../../../../util/vs/base/common/lazy';
 import { StringEdit, StringReplacement } from '../../../../../util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../../../../../util/vs/editor/common/core/ranges/offsetRange';
@@ -99,7 +100,7 @@ export class OriginalStringFragment extends StringFragment {
 		return null;
 	}
 
-	private readonly _textLength = new Lazy(() => TextLength.ofSubstr(this.originalText, this.range));
+	private readonly _textLength = new Lazy(() => TextLengthOfSubstr(this.originalText, this.range));
 
 	get textLength() { return this._textLength.value; }
 }
@@ -127,7 +128,7 @@ export class ConcatenatedStringFragment extends StringFragment {
 		return this.fragments.map(f => f.text).join('');
 	}
 
-	private readonly _textLength = new Lazy(() => TextLength.sum(this.fragments, f => f.textLength));
+	private readonly _textLength = new Lazy(() => TextLengthSum(this.fragments, f => f.textLength));
 
 	get textLength() { return this._textLength.value; }
 }

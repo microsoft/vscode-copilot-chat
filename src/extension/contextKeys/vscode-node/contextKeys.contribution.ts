@@ -40,7 +40,7 @@ const debugContextKey = 'github.copilot.chat.debug';
 export class ContextKeysContribution extends Disposable {
 
 	private _needsOfflineCheck = false;
-	private _scheduledOfflineCheck: NodeJS.Timeout | undefined;
+	private _scheduledOfflineCheck: TimeoutHandle | undefined;
 	private _showLogView = false;
 
 	constructor(

@@ -86,8 +86,8 @@ export class WorkingCopyDerivedDocument {
 		const s0 = this._derivedDocument;
 		const e_sum = s0.edits;
 		const e_ai = toOffsetEdits(s0.positionOffsetTransformer, value.edits);
-		const e_ai_r = e_ai.tryRebase(e_sum.inverse(d0.text), false);
-		const e_sum_r = e_sum.tryRebase(e_ai_r, false);
+		const e_ai_r = e_ai.rebaseSkipConflicting(e_sum.inverse(d0.text));
+		const e_sum_r = e_sum.rebaseSkipConflicting(e_ai_r);
 
 		const transformedProgressItem = new ChatResponseTextEditPart(value.uri, fromOffsetEdits(d0.transformer, e_ai_r));
 
@@ -103,7 +103,7 @@ export class WorkingCopyDerivedDocument {
 		const s0 = this._derivedDocument;
 		const e_sum = s0.edits;
 		const e_ai = toOffsetEdits(s0.positionOffsetTransformer, edits);
-		const e_ai_r = e_ai.tryRebase(e_sum.inverse(d0.text), false);
+		const e_ai_r = e_ai.rebaseSkipConflicting(e_sum.inverse(d0.text));
 		return fromOffsetEdits(d0.transformer, e_ai_r);
 	}
 

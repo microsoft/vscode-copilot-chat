@@ -262,7 +262,7 @@ function generateDocDiff(entry: IXtabHistoryEditEntry, workspacePath: string | u
 
 	const lineEdit = RootedEdit.toLineEdit(entry.edit);
 
-	for (const singleLineEdit of lineEdit.edits) {
+	for (const singleLineEdit of lineEdit.replacements) {
 		const oldLines = entry.edit.base.getLines().slice(singleLineEdit.lineRange.startLineNumber - 1, singleLineEdit.lineRange.endLineNumberExclusive - 1);
 		const newLines = singleLineEdit.newLines;
 

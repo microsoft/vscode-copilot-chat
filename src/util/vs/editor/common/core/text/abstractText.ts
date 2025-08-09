@@ -8,10 +8,11 @@
 import { assert } from '../../../../base/common/assert';
 import { splitLines } from '../../../../base/common/strings';
 import { Position } from '../position';
+import { PositionOffsetTransformer } from './positionToOffsetImpl';
 import { Range } from '../range';
 import { LineRange } from '../ranges/lineRange';
-import { PositionOffsetTransformer } from './positionToOffset';
 import { TextLength } from './textLength';
+import { OffsetRange } from '../ranges/offsetRange';
 
 export abstract class AbstractText {
 	abstract getValueOfRange(range: Range): string;
@@ -27,6 +28,10 @@ export abstract class AbstractText {
 
 	getValue(): string {
 		return this.getValueOfRange(this.length.toRange());
+	}
+
+	getValueOfOffsetRange(range: OffsetRange): string {
+		return this.getValueOfRange(this.getTransformer().getRange(range));
 	}
 
 	getLineLength(lineNumber: number): number {
@@ -49,6 +54,10 @@ export abstract class AbstractText {
 	getLines(): string[] {
 		const value = this.getValue();
 		return splitLines(value);
+	}
+
+	getLinesOfRange(range: LineRange): string[] {
+		return range.mapToLineArray(lineNumber => this.getLineAt(lineNumber));
 	}
 
 	equals(other: AbstractText): boolean {

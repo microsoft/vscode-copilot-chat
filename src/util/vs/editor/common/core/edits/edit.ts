@@ -185,7 +185,6 @@ export abstract class BaseEdit<T extends BaseReplacement<T> = BaseReplacement<an
 		return this._createNew(result).normalize();
 	}
 
-
 	public decomposeSplit(shouldBeInE1: (repl: T) => boolean): { e1: TEdit; e2: TEdit } {
 		const e1: T[] = [];
 		const e2: T[] = [];

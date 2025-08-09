@@ -10,6 +10,7 @@ import { OffsetRange } from '../ranges/offsetRange';
 import { StringText } from '../text/abstractText';
 import { BaseEdit, BaseReplacement } from './edit';
 
+
 export abstract class BaseStringEdit<T extends BaseStringReplacement<T> = BaseStringReplacement<any>, TEdit extends BaseStringEdit<T, TEdit> = BaseStringEdit<any, any>> extends BaseEdit<T, TEdit> {
 	get TReplacement(): T {
 		throw new Error('TReplacement is not defined for BaseStringEdit');
@@ -30,9 +31,9 @@ export abstract class BaseStringEdit<T extends BaseStringReplacement<T> = BaseSt
 	 * r := trySwap(e1, e2);
 	 * e1.compose(e2) === r.e1.compose(r.e2)
 	*/
-	public static trySwap(e1: BaseStringEdit, e2: BaseStringEdit): { e1: StringEdit; e2: StringEdit; } | undefined {
+	public static trySwap(e1: BaseStringEdit, e2: BaseStringEdit): { e1: StringEdit; e2: StringEdit } | undefined {
 		// TODO make this more efficient
-		const e1Inv = e1.inverseOnSlice((start, endEx) => " ".repeat(endEx - start));
+		const e1Inv = e1.inverseOnSlice((start, endEx) => ' '.repeat(endEx - start));
 
 		const e1_ = e2.tryRebase(e1Inv);
 		if (!e1_) {
@@ -82,16 +83,15 @@ export abstract class BaseStringEdit<T extends BaseStringReplacement<T> = BaseSt
 		return this.inverseOnSlice((start, endEx) => original.substring(start, endEx));
 	}
 
-	/**
-	 * Consider `t1 := text o base` and `t2 := text o this`.
-	 * We are interested in `tm := tryMerge(t1, t2, base: text)`.
-	 * For that, we compute `tm' := t1 o base o this.rebase(base)`
-	 * such that `tm' === tm`.
-	 */
-	public tryRebase(base: StringEdit): StringEdit | undefined;
-	/** @deprecated avoid */
-	public tryRebase(base: StringEdit, noOverlap: false): StringEdit;
-	public tryRebase(base: StringEdit, noOverlap: boolean = true): StringEdit | undefined {
+	public rebaseSkipConflicting(base: StringEdit): StringEdit {
+		return this._tryRebase(base, false)!;
+	}
+
+	public tryRebase(base: StringEdit): StringEdit | undefined {
+		return this._tryRebase(base, true);
+	}
+
+	private _tryRebase(base: StringEdit, noOverlap: boolean): StringEdit | undefined {
 		const newEdits: StringReplacement[] = [];
 
 		let baseIdx = 0;
@@ -135,11 +135,7 @@ export abstract class BaseStringEdit<T extends BaseStringReplacement<T> = BaseSt
 	}
 
 	public toJson(): ISerializedStringEdit {
-		return this.replacements.map(e => ({
-			txt: e.newText,
-			pos: e.replaceRange.start,
-			len: e.replaceRange.length,
-		}));
+		return this.replacements.map(e => e.toJson());
 	}
 
 	public isNeutralOn(text: string): boolean {
@@ -205,7 +201,7 @@ export abstract class BaseStringReplacement<T extends BaseStringReplacement<T> =
 	getNewLength(): number { return this.newText.length; }
 
 	override toString(): string {
-		return `${this.replaceRange} -> ${JSON.stringify(this.newText)}`;
+		return `${this.replaceRange} -> "${this.newText}"`;
 	}
 
 	replace(str: string): string {
@@ -231,7 +227,7 @@ export abstract class BaseStringReplacement<T extends BaseStringReplacement<T> =
 
 		const replaceRange = new OffsetRange(
 			this.replaceRange.start + prefixLen,
-			this.replaceRange.endExclusive - suffixLen
+			this.replaceRange.endExclusive - suffixLen,
 		);
 		const newText = this.newText.substring(prefixLen, this.newText.length - suffixLen);
 
@@ -270,6 +266,14 @@ export abstract class BaseStringReplacement<T extends BaseStringReplacement<T> =
 
 	public toEdit(): StringEdit {
 		return new StringEdit([this]);
+	}
+
+	public toJson(): ISerializedStringReplacement {
+		return ({
+			txt: this.newText,
+			pos: this.replaceRange.start,
+			len: this.replaceRange.length,
+		});
 	}
 }
 
@@ -458,11 +462,11 @@ export function applyEditsToRanges(sortedRanges: OffsetRange[], edit: StringEdit
 	}
 
 	return result;
-}/**
+}
+
+/**
  * Represents data associated to a single edit, which survives certain edit operations.
 */
-
-
 export interface IEditData<T> {
 	join(other: T): T | undefined;
 }
@@ -472,11 +476,11 @@ export class VoidEditData implements IEditData<VoidEditData> {
 		return this;
 	}
 }
+
 /**
  * Represents a set of replacements to a string.
  * All these replacements are applied at once.
 */
-
 export class AnnotatedStringEdit<T extends IEditData<T>> extends BaseStringEdit<AnnotatedStringReplacement<T>, AnnotatedStringEdit<T>> {
 	public static readonly empty = new AnnotatedStringEdit<never>([]);
 

@@ -5,13 +5,13 @@
 import { AbstractDocument } from '../../../../../platform/editing/common/abstractText';
 import { OverlayNode } from '../../../../../platform/parser/node/nodes';
 import { min } from '../../../../../util/common/arrays';
+import { TextLengthSum } from '../../../../../util/common/textLength';
 import { compareBy, groupAdjacentBy, numberComparator, sumBy } from '../../../../../util/vs/base/common/arrays';
 import { CachedFunction } from '../../../../../util/vs/base/common/cache';
 import { StringEdit, StringReplacement } from '../../../../../util/vs/editor/common/core/edits/stringEdit';
 import { Position } from '../../../../../util/vs/editor/common/core/position';
 import { OffsetRange } from '../../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { PositionOffsetTransformer } from '../../../../../util/vs/editor/common/core/text/positionToOffset';
-import { TextLength } from '../../../../../util/vs/editor/common/core/text/textLength';
 import { Range } from '../../../../../vscodeTypes';
 import { IAstVisualization, subtractRange, toAstNode } from '../visualization';
 import { ConcatenatedStringFragment, LiteralStringFragment, OriginalStringFragment, pushFragment, StringFragment } from './fragments';
@@ -213,7 +213,7 @@ export function summarizeDocumentsSyncImpl<TDocument extends AbstractDocument>(
 		// total length of all nodes
 		let totalLength = sumBy(rootMarkedNodes, c => c.getTextFragment().length);
 		if (settings.lineNumberStyle === SummarizedDocumentLineNumberStyle.Full) {
-			const textLen = TextLength.sum(rootMarkedNodes, c => c.getTextFragment().textLength);
+			const textLen = TextLengthSum(rootMarkedNodes, c => c.getTextFragment().textLength);
 			const maxLineNumber = docs[docIdx].document.getLineCount();
 			const totalLineNumberChars = textLen.lineCount * getLineNumberText(maxLineNumber).length; // This is an upper bound approximation.
 			totalLength += totalLineNumberChars;

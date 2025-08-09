@@ -4,8 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { IDisposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
+import { ensureDependenciesAreSet } from '../../../util/vs/editor/common/core/text/positionToOffset';
 
 export function createTimeout(ms: number, cb: () => void): IDisposable {
 	const t = setTimeout(cb, ms);
 	return toDisposable(() => clearTimeout(t));
 }
+
+ensureDependenciesAreSet();
