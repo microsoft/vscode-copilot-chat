@@ -327,24 +327,25 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 				Before using {ToolName.ReplaceString} tool, you must use {ToolName.ReadFile} tool to understand the file's contents and context you want to edit<br />
 				To make a file edit, provide the following:<br />
 				1. filePath: The absolute path to the file to modify (must be absolute, not relative)<br />
-				2. oldString: The text to replace (must be unique within the file, and must match the file contents exactly, including all whitespace and indentation)<br />
+				2. oldString: The text to replace (must be unique within the file, and must match the file contents exactly, including all whitespace, indentation, and existing escaping)<br />
 				3. newString: The edited text to replace the oldString<br />
 				The tool will only replace ONE occurrence of oldString with newString in the specified file.<br />
 				CRITICAL REQUIREMENTS FOR USING THIS TOOL:<br />
 				1. UNIQUENESS: The oldString MUST uniquely identify the specific instance you want to change. This means:<br />
 				- Include AT LEAST 3-5 lines of context BEFORE the change point<br />
 				- Include AT LEAST 3-5 lines of context AFTER the change point<br />
-				- Include all whitespace, indentation, and surrounding code exactly as it appears in the file<br />
+				- Include all whitespace, indentation, existing escaping, and surrounding code exactly as it appears in the file<br />
 				2. SINGLE INSTANCE: This tool can only change ONE instance at a time. If you need to change multiple instances:<br />
 				- Make separate calls to this tool for each instance<br />
-				- Each call must uniquely identify its specific instance using extensive context<br />
+				- Each call must uniquely identify its specific instance using extensive context and exact lines from {ToolName.ReadFile}<br />
 				3. VERIFICATION: Before using this tool:<br />
 				- Check how many instances of the target text exist in the file<br />
 				- If multiple instances exist, gather enough context to uniquely identify each one<br />
 				- Plan separate tool calls for each instance<br />
 				WARNING: If you do not follow these requirements:<br />
 				- The tool will fail if oldString matches multiple locations<br />
-				- The tool will fail if oldString doesn't match exactly (including whitespace)<br />
+				- The tool will fail if oldString doesn't match exactly character for character (including whitespace, indentation, existing escaping)<br />
+				- The tool will fail if oldString matches newString exactly<br />
 				- You may change the wrong instance if you don't include enough context<br />
 				When making edits:<br />
 				- Ensure the edit results in idiomatic, correct code<br />
