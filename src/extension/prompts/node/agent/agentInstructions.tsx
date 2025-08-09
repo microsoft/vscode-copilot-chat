@@ -78,7 +78,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 					Preamble and progress: Start with a brief, friendly preamble that explicitly acknowledges the user's task and states what you're about to do next. Make it engaging and tailored to the repo/task; keep it to a single sentence. If the user has not asked for anything actionable and it's only a greeting or small talk, respond warmly and invite them to share what they'd like to do—do not create a checklist or run tools yet. Use the preamble only once per task; if the previous assistant message already included a preamble for this task, skip it this turn. Do not re-introduce your plan after tool calls or after creating files—give a concise status and continue with the next concrete action. For multi-step tasks, keep a lightweight checklist and weave progress updates into your narration. Batch independent, read-only operations together; after a batch, share a concise progress note and what's next. If you say you will do something, execute it in the same turn using tools.<br />
 					<Tag name='requirementsUnderstanding'>
 						Always read the user's request in full before acting. Extract the explicit requirements and any reasonable implicit requirements.<br />
-						{hasTodoListTool && <>Turn these into a structured todo list and keep it updated throughout your work. Do not omit a requirement.</>}
+						{tools.hasTodoListTool && <>Turn these into a structured todo list and keep it updated throughout your work. Do not omit a requirement.</>}
 						If a requirement cannot be completed with available tools, state why briefly and propose a viable alternative or follow-up.<br />
 					</Tag>
 				</>}
@@ -122,7 +122,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{isGpt5 && <>
 					Before notable tool batches, briefly tell the user what you're about to do and why. After the results return, briefly interpret them and state what you'll do next. Don't narrate every trivial call.<br />
 					You MUST preface each tool call batch with a one-sentence “why/what/outcome” preamble (why you're doing it, what you'll run, expected outcome). If you make many tool calls in a row, you MUST checkpoint progress after roughly every 3-5 calls: what you ran, key results, and what you'll do next. If you create or edit more than ~3 files in a burst, checkpoint immediately with a compact bullet summary.<br />
-					If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible{hasCodebaseTool && <>, but do not call {ToolName.Codebase} in parallel.</>} Parallelize read-only, independent operations only; do not parallelize edits or dependent steps.<br />
+					If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible{tools.hasCodebaseTool && <>, but do not call {ToolName.Codebase} in parallel.</>} Parallelize read-only, independent operations only; do not parallelize edits or dependent steps.<br />
 					Context acquisition: Trace key symbols to their definitions and usages. Read sufficiently large, meaningful chunks to avoid missing context. Prefer semantic or codebase search when you don't know the exact string; prefer exact search or direct reads when you do. Avoid redundant reads when the content is already attached and sufficient.<br />
 					Verification preference: For service or API checks, prefer a tiny code-based test (unit/integration or a short script) over shell probes. Use shell probes (e.g., curl) only as optional documentation or quick one-off sanity checks, and mark them as optional.<br />
 				</>}
@@ -180,11 +180,13 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				].join('\n')}
 			</Tag>}
 			{tools.hasApplyPatchTool && <ApplyPatchInstructions {...this.props} />}
+			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
+			{isGpt5 && tools.hasTodoListTool && <TodoListToolInstructions {...this.props} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
 				{isGpt5 && <>
-					{hasTerminalTool ? <>
+					{tools.hasTerminalTool ? <>
 						When commands are required, run them yourself in a terminal and summarize the results. Do not print runnable commands unless the user asks. If you must show them for documentation, make them clearly optional and keep one command per line.<br />
 					</> : <>
 						When sharing setup or run steps for the user to execute, render commands in fenced code blocks with an appropriate language tag (`bash`, `sh`, `powershell`, `python`, etc.). Keep one command per line; avoid prose-only representations of commands.<br />
@@ -205,12 +207,13 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 }
 
 /**
- * GPT 4.1-specific agent prompt that incorporates structured workflow and autonomous behavior patterns
+ * GPT-specific agent prompt that incorporates structured workflow and autonomous behavior patterns
  * for improved multi-step task execution and more systematic problem-solving approach.
  */
-export class GPT41AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
+export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
+		const isGpt5 = this.props.modelFamily === 'gpt-5';
 
 		return <InstructionMessage>
 			<Tag name='gpt41AgentInstructions'>
@@ -341,12 +344,14 @@ export class GPT41AgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 					`}`
 				].join('\n')}
 			</Tag>}
-			{hasApplyPatchTool && <ApplyPatchInstructions {...this.props} />}
+			{tools.hasApplyPatchTool && <ApplyPatchInstructions {...this.props} />}
+			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
+			{isGpt5 && tools.hasTodoListTool && <TodoListToolInstructions {...this.props} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
 				{isGpt5 && <>
-					{hasTerminalTool ? <>
+					{tools.hasTerminalTool ? <>
 						When commands are required, run them yourself in a terminal and summarize the results. Do not print runnable commands unless the user asks. If you must show them for documentation, make them clearly optional and keep one command per line.<br />
 					</> : <>
 						When sharing setup or run steps for the user to execute, render commands in fenced code blocks with an appropriate language tag (`bash`, `sh`, `powershell`, `python`, etc.). Keep one command per line; avoid prose-only representations of commands.<br />

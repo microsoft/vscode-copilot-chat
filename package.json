@@ -2763,13 +2763,13 @@
 						],
 						"description": "%github.copilot.config.retryAfterFilteredResponse.enabled%"
 					},
-					"github.copilot.chat.alternateGpt41Prompt.enabled": {
+					"github.copilot.chat.alternateGptPrompt.enabled": {
 						"type": "boolean",
 						"default": false,
 						"tags": [
 							"experimental"
 						],
-						"description": "%github.copilot.config.alternateGpt41Prompt.enabled%"
+						"description": "%github.copilot.config.alternateGptPrompt.enabled%"
 					}
 				}
 			}
