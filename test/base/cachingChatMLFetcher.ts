@@ -8,7 +8,7 @@ import { tmpdir } from 'os';
 import * as path from 'path';
 import type { CancellationToken } from 'vscode';
 import { AbstractChatMLFetcher } from '../../src/extension/prompt/node/chatMLFetcher';
-import { IChatMLFetcher, IFetchMLOptions, IntentParams } from '../../src/platform/chat/common/chatMLFetcher';
+import { IChatMLFetcher, IFetchMLOptions } from '../../src/platform/chat/common/chatMLFetcher';
 import { ChatFetchResponseType, ChatResponses } from '../../src/platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../src/platform/chat/common/conversationOptions';
 import { getTextPart } from '../../src/platform/chat/common/globalStringUtils';
@@ -40,10 +40,9 @@ export class CacheableChatRequest {
 		messages: Raw.ChatMessage[],
 		model: string,
 		requestOptions: OptionalChatRequestParams,
-		intentParams: IntentParams | undefined,
 		extraCacheProperties: any | undefined
 	) {
-		this.obj = { messages: rawMessageToCAPI(messages), model, requestOptions, intentParams, extraCacheProperties };
+		this.obj = { messages: rawMessageToCAPI(messages), model, requestOptions, extraCacheProperties };
 		this.hash = computeSHA256(CHAT_ML_CACHE_SALT + JSON.stringify(this.obj));
 
 		// To aid in reading cache entries, we will write objects to disk splitting each message by new lines
@@ -154,7 +153,7 @@ export class CachingChatMLFetcher extends AbstractChatMLFetcher implements IDisp
 		}
 
 		const finalReqOptions = this.preparePostOptions(opts.requestOptions);
-		const req = new CacheableChatRequest(opts.messages, opts.endpoint.model, finalReqOptions, opts.intentParams, this.extraCacheProperties);
+		const req = new CacheableChatRequest(opts.messages, opts.endpoint.model, finalReqOptions, this.extraCacheProperties);
 		// console.log(`request with hash: ${req.hash}`);
 
 		return CachingChatMLFetcher.Locks.withLock(req.hash, async () => {

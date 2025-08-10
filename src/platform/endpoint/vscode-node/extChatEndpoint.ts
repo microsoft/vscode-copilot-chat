@@ -11,7 +11,6 @@ import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { IntentParams } from '../../chat/common/chatMLFetcher';
 import { ChatFetchResponseType, ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../networking/common/fetch';
@@ -196,7 +195,6 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		requestOptions?: Omit<OptionalChatRequestParams, 'n'>,
 		userInitiatedRequest?: boolean,
 		telemetryProperties?: Record<string, string>,
-		intentParams?: IntentParams
 	): Promise<ChatResponse> {
 		return this.makeChatRequest2({
 			debugName,
@@ -207,7 +205,6 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			requestOptions,
 			userInitiatedRequest,
 			telemetryProperties,
-			intentParams
 		}, token);
 	}
 

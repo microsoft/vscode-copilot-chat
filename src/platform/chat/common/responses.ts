@@ -5,7 +5,7 @@
 
 import { Raw } from '@vscode/prompt-tsx';
 import { OptionalChatRequestParams } from '../../networking/common/fetch';
-import { IntentParams, Source } from './chatMLFetcher';
+import { Source } from './chatMLFetcher';
 import { ChatLocation } from './commonTypes';
 
 export interface IRichChatRequestOptions {
@@ -17,6 +17,4 @@ export interface IRichChatRequestOptions {
 	requestOptions?: Omit<OptionalChatRequestParams, 'n'>;
 	/** Whether the request was user-initiated (applicable to CAPI requests) */
 	userInitiatedRequest?: boolean;
-	/** Intent parameters (applicable to CAPI requests) */
-	intentParams?: IntentParams;
 }
