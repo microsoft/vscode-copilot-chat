@@ -605,19 +605,7 @@ class LogTreeFilters extends Disposable {
 
 	private isNesRequest(item: ChatRequestItem): boolean {
 		const debugName = item.info.entry.debugName.toLowerCase();
-		// Check for NES patterns - must be a word boundary or specific pattern
-		const hasNes = debugName.startsWith('nes') || 
-					   debugName.includes('-nes') || 
-					   debugName.includes('_nes') || 
-					   debugName.includes(' nes') ||
-					   debugName.includes('nes-') ||
-					   debugName.includes('nes_') ||
-					   debugName.includes('nes ');
-		
-		// Check for Xtab patterns
-		const hasXtab = debugName.includes('xtab') || debugName.includes('xtabprovider');
-		
-		return hasNes || hasXtab;
+		return debugName.startsWith('nes |') || debugName === 'xtabprovider';
 	}
 
 	private setShown(name: string, value: boolean): void {
