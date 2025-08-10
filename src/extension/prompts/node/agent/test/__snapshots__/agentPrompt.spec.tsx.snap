@@ -42,10 +42,10 @@ Tools can be disabled by the user. You may see tools used previously in the conv
 To edit files in the workspace, use the apply_patch tool. If you have issues with it, you should first try to fix your patch and continue using apply_patch. If you are stuck, you can fall back on the insert_edit_into_file tool. But apply_patch is much faster and is the preferred tool.
 The input for this tool is a string representing the patch to apply, following a special format. For each snippet of code that needs to be changed, repeat the following:
 *** Update File: [file_path]
- [context_before] -> See below for further instructions on context.
+ [context_before] -> See below for further instructions on context.
 -[old_code] -> Precede each line in the old code with a minus sign.
 +[new_code] -> Precede each line in the new, replacement code with a plus sign.
- [context_after] -> See below for further instructions on context.
+ [context_after] -> See below for further instructions on context.
 
 Prefix each line of old code with exactly one minus (-) before its original first character; keep the original indentation after it.
 Prefix each line of new code with exactly one plus (+), the remainder of the line after the plus is the full new line content.
@@ -62,13 +62,12 @@ See below for an example of the patch format. If you propose changes to multiple
 *** Update File: /Users/someone/pygorithm/searching/binary_search.py
 @@ class BaseClass
 @@   def method():
- [3 lines of pre-context]
+ [3 lines of pre-context]
 -[old_code]
 +[new_code]
 +[new_code]
- [3 lines of post-context]
+ [3 lines of post-context]
 *** End Patch
-
 </applyPatchExample>
 
 NEVER print this out to the user, instead call the tool and the edits will be applied and shown to the user.

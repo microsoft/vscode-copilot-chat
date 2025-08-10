@@ -399,11 +399,13 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 export class ApplyPatchFormatInstructions extends PromptElement {
 	render() {
 		return <>
-			*** Update File: [file_path]<br />
-			&nbsp;[context_before] -&gt; See below for further instructions on context.<br />
-			-[old_code] -&gt; Precede each line in the old code with a minus sign.<br />
-			+[new_code] -&gt; Precede each line in the new, replacement code with a plus sign.<br />
-			&nbsp;[context_after] -&gt; See below for further instructions on context.<br />
+			{[
+				`*** Update File: [file_path]`,
+				` [context_before] -> See below for further instructions on context.`,
+				`-[old_code] -> Precede each line in the old code with a minus sign.`,
+				`+[new_code] -> Precede each line in the new, replacement code with a plus sign.`,
+				` [context_after] -> See below for further instructions on context.`
+			].join('\n')}<br />
 			<br />
 			Prefix each line of old code with exactly one minus (-) before its original first character; keep the original indentation after it.<br />
 			Prefix each line of new code with exactly one plus (+), the remainder of the line after the plus is the full new line content.<br />
@@ -417,16 +419,18 @@ export class ApplyPatchFormatInstructions extends PromptElement {
 			<br />
 			See below for an example of the patch format. If you propose changes to multiple regions in the same file, you should repeat the *** Update File header for each snippet of code to change:<br />
 			<Tag name='applyPatchExample'>
-				*** Begin Patch<br />
-				*** Update File: /Users/someone/pygorithm/searching/binary_search.py<br />
-				@@ class BaseClass<br />
-				@@   def method():<br />
-				&nbsp;[3 lines of pre-context]<br />
-				-[old_code]<br />
-				+[new_code]<br />
-				+[new_code]<br />
-				&nbsp;[3 lines of post-context]<br />
-				*** End Patch<br />
+				{[
+					`*** Begin Patch`,
+					`*** Update File: /Users/someone/pygorithm/searching/binary_search.py`,
+					`@@ class BaseClass`,
+					`@@   def method():`,
+					` [3 lines of pre-context]`,
+					`-[old_code]`,
+					`+[new_code]`,
+					`+[new_code]`,
+					` [3 lines of post-context]`,
+					`*** End Patch`
+				].join('\n')}
 			</Tag>
 		</>;
 	}
