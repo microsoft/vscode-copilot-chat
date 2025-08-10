@@ -256,7 +256,18 @@ copilot_cache_control: { type: 'ephemeral' }
 </context>
 <reminderInstructions>
 When using the insert_edit_into_file tool, avoid repeating existing code, instead use a line comment with /\`...existing code.../\` to represent regions of unchanged code.
-When using the replace_string_in_file tool, include 3-5 lines of unchanged code before and after the string you want to replace, to make it unambiguous which part of the file should be edited.
+<replaceStringInFileToolInstructions>
+When using the replace_string_in_file tool:
+- Include 3-5 lines of the exact current content from the file, character-for-character (including indentation, whitespace, existing escaping, exact same unicode characters), before and after the string you want to replace, to make it unambiguous which part of the file should be edited.
+- Never construct or assume existing content, it must come from the file. You must use the read_file tool to understand the file's existing content and content you want to edit.
+WARNING: replace_string_in_file calls will update the current content of the file.
+- Any subsequent overlapping replace_string_in_file calls require read_file tool call, otherwise the tool will fail
+WARNING: If you do not follow these requirements:
+- The tool will fail if oldString matches multiple locations
+- The tool will fail if oldString doesn't match exactly the current content from the file character-for-character (including indentation, whitespace, existing escaping, exact same unicode characters)
+- The tool will fail if oldString matches newString exactly
+- You may change the wrong instance if you don't include enough context
+</replaceStringInFileToolInstructions>
 It is much faster to edit using the replace_string_in_file tool. Prefer replace_string_in_file for making edits and only fall back to insert_edit_into_file if it fails.
 </reminderInstructions>
 <userRequest>

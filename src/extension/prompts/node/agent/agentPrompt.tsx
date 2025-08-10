@@ -44,7 +44,7 @@ import { UserPreferences } from '../panel/preferences';
 import { ChatToolCalls } from '../panel/toolCalling';
 import { MultirootWorkspaceStructure } from '../panel/workspace/workspaceStructure';
 import { AgentConversationHistory } from './agentConversationHistory';
-import { DefaultAgentPrompt, SweBenchAgentPrompt } from './agentInstructions';
+import { DefaultAgentPrompt, ReplaceStringInFileToolInstructions, SweBenchAgentPrompt } from './agentInstructions';
 import { SummarizedConversationHistory } from './summarizedConversationHistory';
 
 export interface AgentPromptProps extends GenericBasePromptElementProps {
@@ -626,7 +626,7 @@ export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringToo
 		lines.push(<>When using the {ToolName.EditFile} tool, avoid repeating existing code, instead use a line comment with \`{EXISTING_CODE_MARKER}\` to represent regions of unchanged code.<br /></>);
 	}
 	if (hasReplaceStringTool) {
-		lines.push(<>When using the {ToolName.ReplaceString} tool, include 3-5 lines of unchanged exact content from the file (including indentation, whitespace, existing escaping), before and after the string you want to replace, to make it unambiguous which part of the file should be edited.<br /></>);
+		lines.push(<ReplaceStringInFileToolInstructions />);
 	}
 	if (hasEditFileTool && hasReplaceStringTool) {
 		if (useStrongReplaceStringHint) {

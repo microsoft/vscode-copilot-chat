@@ -327,14 +327,14 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 				Before using {ToolName.ReplaceString} tool, you must use {ToolName.ReadFile} tool to understand the file's contents and context you want to edit<br />
 				To make a file edit, provide the following:<br />
 				1. filePath: The absolute path to the file to modify (must be absolute, not relative)<br />
-				2. oldString: The text to replace (must be unique within the file, and must match the file contents exactly, including all whitespace, indentation, and existing escaping)<br />
+				2. oldString: The text to replace (must be unique within the file, and must match the file contents exactly, including all whitespace, indentation, existing escaping, and unicode characters)<br />
 				3. newString: The edited text to replace the oldString<br />
 				The tool will only replace ONE occurrence of oldString with newString in the specified file.<br />
 				CRITICAL REQUIREMENTS FOR USING THIS TOOL:<br />
 				1. UNIQUENESS: The oldString MUST uniquely identify the specific instance you want to change. This means:<br />
-				- Include AT LEAST 3-5 lines of context BEFORE the change point<br />
-				- Include AT LEAST 3-5 lines of context AFTER the change point<br />
-				- Include all whitespace, indentation, existing escaping, and surrounding code exactly as it appears in the file<br />
+				- Include AT LEAST 3-5 lines of exact current context BEFORE the change point<br />
+				- Include AT LEAST 3-5 lines of exact current context AFTER the change point<br />
+				- Include all whitespace, indentation, existing escaping, unicode characters, and surrounding code exactly as it appears in the file<br />
 				2. SINGLE INSTANCE: This tool can only change ONE instance at a time. If you need to change multiple instances:<br />
 				- Make separate calls to this tool for each instance<br />
 				- Each call must uniquely identify its specific instance using extensive context and exact lines from {ToolName.ReadFile}<br />
@@ -342,9 +342,11 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 				- Check how many instances of the target text exist in the file<br />
 				- If multiple instances exist, gather enough context to uniquely identify each one<br />
 				- Plan separate tool calls for each instance<br />
+				WARNING: {ToolName.ReplaceString} calls will update the current content of the file.<br />
+				- Any subsequent overlapping {ToolName.ReplaceString} calls require {ToolName.ReadFile} tool call, otherwise the tool will fail<br />
 				WARNING: If you do not follow these requirements:<br />
 				- The tool will fail if oldString matches multiple locations<br />
-				- The tool will fail if oldString doesn't match exactly character for character (including whitespace, indentation, existing escaping)<br />
+				- The tool will fail if oldString doesn't match exactly the current content from the file character-for-character (including indentation, whitespace, existing escaping, exact same unicode characters)<br />
 				- The tool will fail if oldString matches newString exactly<br />
 				- You may change the wrong instance if you don't include enough context<br />
 				When making edits:<br />
@@ -491,6 +493,23 @@ class TodoListToolInstructions extends PromptElement<DefaultAgentPromptProps> {
 			4. Mark completed IMMEDIATELY<br />
 			5. Update the user with a very short evidence note<br />
 			6. Move to next todo<br />
+		</Tag>;
+	}
+}
+
+export class ReplaceStringInFileToolInstructions extends PromptElement {
+	render() {
+		return <Tag name='replaceStringInFileToolInstructions'>
+			When using the {ToolName.ReplaceString} tool:<br />
+			- Include 3-5 lines of the exact current content from the file, character-for-character (including indentation, whitespace, existing escaping, exact same unicode characters), before and after the string you want to replace, to make it unambiguous which part of the file should be edited.<br />
+			- Never construct or assume existing content, it must come from the file. You must use the {ToolName.ReadFile} tool to understand the file's existing content and content you want to edit.<br />
+			WARNING: {ToolName.ReplaceString} calls will update the current content of the file.<br />
+			- Any subsequent overlapping {ToolName.ReplaceString} calls require {ToolName.ReadFile} tool call, otherwise the tool will fail<br />
+			WARNING: If you do not follow these requirements:<br />
+			- The tool will fail if oldString matches multiple locations<br />
+			- The tool will fail if oldString doesn't match exactly the current content from the file character-for-character (including indentation, whitespace, existing escaping, exact same unicode characters)<br />
+			- The tool will fail if oldString matches newString exactly<br />
+			- You may change the wrong instance if you don't include enough context
 		</Tag>;
 	}
 }
