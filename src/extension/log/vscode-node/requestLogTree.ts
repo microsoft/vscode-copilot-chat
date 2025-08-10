@@ -552,6 +552,7 @@ class ChatRequestItem extends vscode.TreeItem {
 class LogTreeFilters extends Disposable {
 	private _elementsShown = true;
 	private _toolsShown = true;
+	private _nesRequestsShown = true;
 
 	private readonly _onDidChangeFilters = new vscode.EventEmitter<void>();
 	readonly onDidChangeFilters = this._onDidChangeFilters.event;
@@ -563,6 +564,7 @@ class LogTreeFilters extends Disposable {
 
 		this.setElementsShown(!vscodeExtensionContext.workspaceState.get(this.getStorageKey('elements')));
 		this.setToolsShown(!vscodeExtensionContext.workspaceState.get(this.getStorageKey('tools')));
+		this.setNesRequestsShown(!vscodeExtensionContext.workspaceState.get(this.getStorageKey('nesRequests')));
 	}
 
 	private getStorageKey(name: string): string {
@@ -579,6 +581,11 @@ class LogTreeFilters extends Disposable {
 		this.setShown('tools', this._toolsShown);
 	}
 
+	setNesRequestsShown(value: boolean) {
+		this._nesRequestsShown = value;
+		this.setShown('nesRequests', this._nesRequestsShown);
+	}
+
 	itemIncluded(item: TreeItem): boolean {
 		if (item instanceof ChatPromptItem) {
 			return true; // Always show chat prompt items
@@ -586,9 +593,19 @@ class LogTreeFilters extends Disposable {
 			return this._elementsShown;
 		} else if (item instanceof ToolCallItem) {
 			return this._toolsShown;
+		} else if (item instanceof ChatRequestItem) {
+			// Check if this is a NES request
+			if (this.isNesRequest(item)) {
+				return this._nesRequestsShown;
+			}
 		}
 
 		return true;
+	}
+
+	private isNesRequest(item: ChatRequestItem): boolean {
+		const debugName = item.info.entry.debugName.toLowerCase();
+		return debugName.startsWith('nes |') || debugName === 'xtabprovider';
 	}
 
 	private setShown(name: string, value: boolean): void {
@@ -606,5 +623,7 @@ class LogTreeFilterCommands extends Disposable {
 		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.hideElements', () => filters.setElementsShown(false)));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.showTools', () => filters.setToolsShown(true)));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.hideTools', () => filters.setToolsShown(false)));
+		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.showNesRequests', () => filters.setNesRequestsShown(true)));
+		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.hideNesRequests', () => filters.setNesRequestsShown(false)));
 	}
 }
