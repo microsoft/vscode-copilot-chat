@@ -1983,6 +1983,14 @@
 				"title": "Hide Tools"
 			},
 			{
+				"command": "github.copilot.chat.debug.showNesRequests",
+				"title": "Show NES Requests"
+			},
+			{
+				"command": "github.copilot.chat.debug.hideNesRequests",
+				"title": "Hide NES Requests"
+			},
+			{
 				"command": "github.copilot.chat.debug.exportLogItem",
 				"title": "Export as...",
 				"icon": "$(export)"
@@ -2995,6 +3003,14 @@
 					"when": "false"
 				},
 				{
+					"command": "github.copilot.chat.debug.showNesRequests",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.debug.hideNesRequests",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.chat.debug.exportLogItem",
 					"when": "false"
 				},
@@ -3239,6 +3255,16 @@
 					"command": "github.copilot.chat.debug.hideTools",
 					"when": "!github.copilot.chat.debug.toolsHidden",
 					"group": "commands@1"
+				},
+				{
+					"command": "github.copilot.chat.debug.showNesRequests",
+					"when": "github.copilot.chat.debug.nesRequestsHidden",
+					"group": "commands@2"
+				},
+				{
+					"command": "github.copilot.chat.debug.hideNesRequests",
+					"when": "!github.copilot.chat.debug.nesRequestsHidden",
+					"group": "commands@2"
 				}
 			],
 			"notebook/toolbar": [
