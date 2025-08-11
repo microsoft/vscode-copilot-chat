@@ -102,6 +102,7 @@ import { IToolsService, NullToolsService } from '../../tools/common/toolsService
 import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
 import { ToolGroupingCache } from '../../tools/common/virtualTools/virtualToolGroupCache';
 import { IToolGroupingCache, IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
+import { IImageService, nullImageService } from '../../../platform/image/common/imageService';
 
 /**
  * A default context for VSCode extension testing, building on general one in `lib`.
@@ -127,6 +128,7 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(IWorkspaceService, new SyncDescriptor(ExtensionTextDocumentManager));
 	testingServiceCollection.define(IExtensionsService, new SyncDescriptor(VSCodeExtensionsService));
 	testingServiceCollection.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
+	testingServiceCollection.define(IImageService, nullImageService);
 	testingServiceCollection.define(ITabsAndEditorsService, new SyncDescriptor(TabsAndEditorsServiceImpl));
 	testingServiceCollection.define(IEmbeddingsComputer, new SyncDescriptor(RemoteEmbeddingsComputer));
 	testingServiceCollection.define(ITelemetryService, new SyncDescriptor(NullTelemetryService));
