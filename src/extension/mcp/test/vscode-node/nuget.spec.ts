@@ -36,7 +36,7 @@ describe('get nuget MCP server info', { timeout: 30_000 }, () => {
 		expect(result.state).toBe('error');
 		if (result.state === 'error') {
 			expect(result.errorType).toBe('BadCommandVersion');
-			expect(result.helpUriLabel).toBe('Install .NET SDK');
+			expect(result.helpUriLabel).toBe('Update .NET SDK');
 			expect(result.helpUri).toBe('https://aka.ms/vscode-mcp-install/dotnet');
 		} else {
 			expect.fail();
