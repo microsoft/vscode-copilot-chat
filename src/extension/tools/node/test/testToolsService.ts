@@ -209,6 +209,7 @@ export function getPackagejsonToolsForTest() {
 	tools.add(ToolName.CoreGetTaskOutput);
 	tools.add(ToolName.CoreRunTask);
 	tools.add(ToolName.CoreRunTest);
+	tools.add(ToolName.CoreManageTodoList);
 
 	return tools;
 }
