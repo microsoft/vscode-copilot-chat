@@ -21,3 +21,10 @@ export interface IImageService {
 	 */
 	uploadChatImageAttachment(binaryData: Uint8Array, name: string, mimeType: string | undefined, token: string | undefined): Promise<URI>;
 }
+
+export const nullImageService: IImageService = {
+	_serviceBrand: undefined,
+	async uploadChatImageAttachment(): Promise<URI> {
+		throw new Error('Image service not implemented');
+	}
+};
