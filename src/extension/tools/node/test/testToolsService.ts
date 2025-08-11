@@ -205,6 +205,8 @@ export function getPackagejsonToolsForTest() {
 	// Since it can't get info like `canBeReferencedInPrompt` from the extension API, we have to hardcode tool names here.
 	tools.add(ToolName.CoreRunInTerminal);
 	tools.add(ToolName.CoreGetTerminalOutput);
+	tools.add(ToolName.CoreTerminalLastCommand);
+	tools.add(ToolName.CoreTerminalSelection);
 	tools.add(ToolName.CoreCreateAndRunTask);
 	tools.add(ToolName.CoreGetTaskOutput);
 	tools.add(ToolName.CoreRunTask);

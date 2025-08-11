@@ -22,7 +22,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.104.0",
+		"vscode": "^1.104.0-20250811",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -494,24 +494,6 @@
 					]
 				},
 				"when": "config.github.copilot.chat.enableUserPreferences"
-			},
-			{
-				"name": "copilot_getTerminalSelection",
-				"toolReferenceName": "terminalSelection",
-				"displayName": "%github.copilot.tools.terminalSelection.name%",
-				"modelDescription": "Get the user's current selection in the active terminal.",
-				"userDescription": "%github.copilot.tools.terminalSelection.description%",
-				"canBeReferencedInPrompt": true,
-				"icon": "$(terminal)"
-			},
-			{
-				"name": "copilot_getTerminalLastCommand",
-				"toolReferenceName": "terminalLastCommand",
-				"displayName": "%github.copilot.tools.terminalLastCommand.name%",
-				"modelDescription": "Get the active terminal's last run command.",
-				"userDescription": "%github.copilot.tools.terminalLastCommand.description%",
-				"canBeReferencedInPrompt": true,
-				"icon": "$(terminal)"
 			},
 			{
 				"name": "copilot_createNewWorkspace",
@@ -1835,23 +1817,8 @@
 				"category": "Developer"
 			},
 			{
-				"command": "github.copilot.terminal.explainTerminalSelection",
-				"title": "%github.copilot.command.explainTerminalSelection%",
-				"category": "GitHub Copilot"
-			},
-			{
-				"command": "github.copilot.terminal.explainTerminalSelectionContextMenu",
-				"title": "%github.copilot.command.explainTerminalSelectionContextMenu%",
-				"category": "GitHub Copilot"
-			},
-			{
 				"command": "github.copilot.terminal.explainTerminalLastCommand",
 				"title": "%github.copilot.command.explainTerminalLastCommand%",
-				"category": "GitHub Copilot"
-			},
-			{
-				"command": "github.copilot.terminal.attachTerminalSelection",
-				"title": "%github.copilot.command.attachTerminalSelection%",
 				"category": "GitHub Copilot"
 			},
 			{
@@ -2847,16 +2814,6 @@
 					"group": "copilotAction@5"
 				}
 			],
-			"terminal/context/chat": [
-				{
-					"command": "github.copilot.terminal.explainTerminalSelectionContextMenu",
-					"group": "copilotAction@1"
-				},
-				{
-					"command": "github.copilot.terminal.attachTerminalSelection",
-					"group": "zEditContext@1"
-				}
-			],
 			"testing/item/result": [
 				{
 					"command": "github.copilot.tests.fixTestFailure.fromInline",
@@ -2886,10 +2843,6 @@
 				},
 				{
 					"command": "github.copilot.chat.startCopilotDebugCommand",
-					"when": "false"
-				},
-				{
-					"command": "github.copilot.terminal.explainTerminalSelectionContextMenu",
 					"when": "false"
 				},
 				{
