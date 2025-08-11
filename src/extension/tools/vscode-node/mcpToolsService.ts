@@ -7,7 +7,6 @@ import * as vscode from 'vscode';
 /* eslint-disable import/no-restricted-paths */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol';
 import { CancellationError, LanguageModelTextPart, LanguageModelToolInformation, LanguageModelToolResult } from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Lazy } from '../../../util/vs/base/common/lazy';
@@ -106,7 +105,7 @@ export class McpToolsService extends BaseToolsService {
 
 	async invokeTool(name: string | ToolName, options: vscode.LanguageModelToolInvocationOptions<Object>, token: vscode.CancellationToken): Promise<LanguageModelToolResult | vscode.LanguageModelToolResult2> {
 		this._onWillInvokeTool.fire({ toolName: name });
-		const invokeToolTimeout = process.env.SIMULATION_INVOKE_TOOL_TIMEOUT ? parseInt(process.env.SIMULATION_INVOKE_TOOL_TIMEOUT) : DEFAULT_REQUEST_TIMEOUT_MSEC;
+		const invokeToolTimeout = process.env.SIMULATION_INVOKE_TOOL_TIMEOUT ? parseInt(process.env.SIMULATION_INVOKE_TOOL_TIMEOUT) : 60_000;
 		const result = await this.mcp?.callTool({
 			name: name,
 			arguments: options.input as Record<string, unknown>,
