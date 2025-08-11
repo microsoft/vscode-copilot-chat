@@ -58,17 +58,7 @@ export class LmStudioLMProvider extends BaseOpenAICompatibleLMProvider {
 			restModels = Array.isArray(json?.data) ? json.data : [];
 			modelIds = restModels.map(m => m.id);
 		} catch {
-			// ignore and try OpenAI-compatible endpoint next
-		}
-
-		if (!modelIds || modelIds.length === 0) {
-			try {
-				const response = await this._fetcherService.fetch(`${this._LmStudioBaseUrl}/v1/models`, { method: 'GET' });
-				const json = await response.json() as { data?: Array<{ id: string }> };
-				modelIds = (json.data ?? []).map(m => m.id);
-			} catch (e) {
-				throw new Error('Failed to fetch models from LmStudio. Please ensure LmStudio is running. If LmStudio is on another host, please configure the `"github.copilot.chat.byok.LmStudioEndpoint"` setting.');
-			}
+			throw new Error('Failed to fetch models from LmStudio. Please ensure LmStudio is running. If LmStudio is on another host, please configure the `"github.copilot.chat.byok.LmStudioEndpoint"` setting.');
 		}
 
 		for (const id of modelIds) {
