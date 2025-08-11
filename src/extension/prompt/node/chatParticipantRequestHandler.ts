@@ -258,10 +258,20 @@ export class ChatParticipantRequestHandler {
 				const endpoint = await this._endpointProvider.getChatEndpoint(this.request);
 
 				// Build details string with model info and token usage if available
-				let details = `${endpoint.name} • ${endpoint.multiplier ?? 0}x`;
+				const multiplier = endpoint.multiplier ?? 1;
+				let details = `${endpoint.name} (${multiplier}x)`;
 				if (result.metadata?.tokenUsage) {
 					const { totalTokens, contextWindow } = result.metadata.tokenUsage;
-					details += ` • ${totalTokens}/${contextWindow} tokens`;
+					const used = totalTokens ?? 0;
+					const max = contextWindow ?? 0;
+					const usedStr = used.toLocaleString('en-US');
+					if (max > 0) {
+						const maxStr = max.toLocaleString('en-US');
+						const pct = Math.max(0, Math.min(100, Math.round((used / max) * 100)));
+						details += ` • ${usedStr}/${maxStr} tokens (${pct}%)`;
+					} else {
+						details += ` • ${usedStr} tokens`;
+					}
 				}
 				result.details = details;
 			}
