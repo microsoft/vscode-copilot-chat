@@ -292,7 +292,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 			' (See <attachments> above for file contents. You may not need to search or read the file again.)'
 			: '';
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;
-		const hasTodoTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreTodoListTool);
+		const hasTodoTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreManageTodoList);
 
 		return (
 			<>

@@ -670,7 +670,7 @@ class NotebookInstructions extends PromptElement<DefaultAgentPromptProps> {
 class TodoListToolInstructions extends PromptElement<DefaultAgentPromptProps> {
 	render() {
 		return <Tag name='todoListToolInstructions'>
-			Use the {ToolName.CoreTodoListTool} frequently to plan tasks throughout your coding session for task visibility and proper planning.<br />
+			Use the {ToolName.CoreManageTodoList} frequently to plan tasks throughout your coding session for task visibility and proper planning.<br />
 			When to use: complex multi-step work requiring planning and tracking, when user provides multiple tasks or requests (numbered/comma-separated), after receiving new instructions that require multiple steps, BEFORE starting work on any todo (mark as in-progress), IMMEDIATELY after completing each todo (mark completed individually), when breaking down larger tasks into smaller actionable steps, to give users visibility into your progress and planning.<br />
 			When NOT to use: single, trivial tasks that can be completed in one step, purely conversational/informational requests, when just reading files or performing simple searches.<br />
 			CRITICAL workflow to follow:<br />
