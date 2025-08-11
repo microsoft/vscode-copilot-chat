@@ -9,7 +9,6 @@ import { IAuthenticationService } from '../../../../platform/authentication/comm
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { toTextPart } from '../../../../platform/chat/common/globalStringUtils';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
-import { IImageService } from '../../../../platform/image/common/imageService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IRequestLogger } from '../../../../platform/requestLogger/node/requestLogger';
@@ -67,7 +66,7 @@ export class PromptRenderer<P extends BasePromptElementProps> extends BasePrompt
 		const hydratedInstaService = instantiationService.createChild(new ServiceCollection([IPromptEndpoint, endpoint]));
 		return hydratedInstaService.invokeFunction((accessor) => {
 			const tokenizerProvider = accessor.get(ITokenizerProvider);
-			let renderer = new PromptRenderer(hydratedInstaService, endpoint, ctor, props, tokenizerProvider, accessor.get(IRequestLogger), accessor.get(IAuthenticationService), accessor.get(ILogService), accessor.get(IImageService));
+			let renderer = new PromptRenderer(hydratedInstaService, endpoint, ctor, props, tokenizerProvider, accessor.get(IRequestLogger), accessor.get(IAuthenticationService), accessor.get(ILogService));
 
 			const visualizations = RendererVisualizations.getIfVisualizationTestIsRunning();
 			if (visualizations) {
@@ -86,8 +85,7 @@ export class PromptRenderer<P extends BasePromptElementProps> extends BasePrompt
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IAuthenticationService authenticationService: IAuthenticationService,
-		@ILogService private readonly _logService: ILogService,
-		@IImageService private readonly _imageService: IImageService
+		@ILogService private readonly _logService: ILogService
 	) {
 		const tokenizer = tokenizerProvider.acquireTokenizer(endpoint);
 		super(endpoint, ctor, props, tokenizer);
@@ -101,7 +99,7 @@ export class PromptRenderer<P extends BasePromptElementProps> extends BasePrompt
 	}
 
 	override createElement(element: QueueItem<PromptElementCtor<P, any>, P>, ...args: any[]) {
-		return this._instantiationService.createInstance(element.ctor, element.props, ...args, this._imageService);
+		return this._instantiationService.createInstance(element.ctor, element.props, ...args);
 	}
 
 	override async render(progress?: Progress<ChatResponsePart> | undefined, token?: CancellationToken | undefined, opts?: Partial<{ trace: boolean }>): Promise<RenderPromptResult> {
