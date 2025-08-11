@@ -22,8 +22,13 @@ export class ImageServiceImpl implements IImageService {
 
 		const sanitizedName = name.replace(/[^a-zA-Z0-9._-]/g, '');
 		let uploadName = sanitizedName;
-		const subtype = mimeType.split('/')[1].split('+')[0].toLowerCase();
-		if (!uploadName.toLowerCase().endsWith(`.${subtype}`)) {
+
+		// can catch unexpected types like "IMAGE/JPEG", "image/svg+xml", or "image/png; charset=UTF-8"
+		const subtypeMatch = mimeType.toLowerCase().match(/^[^\/]+\/([^+;]+)/);
+		const subtype = subtypeMatch?.[1];
+
+		// add the extension if it is missing.
+		if (subtype && !uploadName.toLowerCase().endsWith(`.${subtype}`)) {
 			uploadName = `${uploadName}.${subtype}`;
 		}
 
