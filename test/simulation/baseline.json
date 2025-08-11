@@ -3972,6 +3972,20 @@
     }
   },
   {
+    "name": "InlineEdit GoldenScenario ([xtab]) [external] [python] - Notebook 10-update-name-in-same-cell-of-notebook",
+    "contentFilterCount": 0,
+    "passCount": 10,
+    "failCount": 0,
+    "score": 0.1
+  },
+  {
+    "name": "InlineEdit GoldenScenario ([xtab]) [external] [python] - Notebook 11-update-name-in-next-cell-of-notebook",
+    "contentFilterCount": 0,
+    "passCount": 10,
+    "failCount": 0,
+    "score": 0.1
+  },
+  {
     "name": "InlineEdit GoldenScenario ([xtab]) [external] [typescript] - [MustHave] 1-point.ts",
     "contentFilterCount": 0,
     "passCount": 10,
