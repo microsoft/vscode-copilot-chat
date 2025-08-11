@@ -45,13 +45,13 @@ export interface IPendingSetupArgs {
 	getServerManifest?(installConsent: Promise<void>): Promise<any>;
 }
 
-type ValidatePackageErrorType = 'NotFound' | 'Other';
+type ValidatePackageErrorType = 'NotFound' | 'UnknownPackageType' | 'UnhandledError' | 'MissingCommand' | 'BadCommandVersion';
 type FlowFinalState = 'Done' | 'Failed' | 'NameMismatch';
 
 // contract with https://github.com/microsoft/vscode/blob/main/src/vs/workbench/contrib/mcp/browser/mcpCommandsAddConfiguration.ts
 export type ValidatePackageResult =
 	{ state: 'ok'; publisher: string; name?: string; version?: string } & IPendingSetupArgs
-	| { state: 'error'; error: string; helpUri?: string; helpUriLabel?: string; errorType?: ValidatePackageErrorType };
+	| { state: 'error'; error: string; helpUri?: string; helpUriLabel?: string; errorType: ValidatePackageErrorType };
 
 type AssistedServerConfiguration = {
 	type: 'vscode';
@@ -147,7 +147,7 @@ export class McpSetupCommands extends Disposable {
 		}));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.validatePackage', async (args: IValidatePackageArgs): Promise<ValidatePackageResult> => {
 			const sw = new StopWatch();
-			const result = await this.validatePackageRegistry(args);
+			const result = await McpSetupCommands.validatePackageRegistry(args, this.logService);
 			if (result.state === 'ok') {
 				this.enqueuePendingSetup(args, result, sw);
 			}
@@ -286,7 +286,7 @@ Error: ${error}`);
 		this.pendingSetup = { cts, canPrompt, done, validateArgs, pendingArgs, stopwatch: sw };
 	}
 
-	private async validatePackageRegistry(args: IValidatePackageArgs): Promise<ValidatePackageResult> {
+	public static async validatePackageRegistry(args: { type: PackageType; name: string }, logService: ILogService): Promise<ValidatePackageResult> {
 		try {
 			if (args.type === 'npm') {
 				const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(args.name)}`);
@@ -319,7 +319,7 @@ Error: ${error}`);
 					readme: data.info?.description
 				};
 			} else if (args.type === 'nuget') {
-				return await getNuGetPackageMetadata(args, this.logService);
+				return await getNuGetPackageMetadata(args.name, logService);
 			} else if (args.type === 'docker') {
 				// Docker Hub API uses namespace/repository format
 				// Handle both formats: 'namespace/repository' or just 'repository' (assumes 'library/' namespace)
@@ -339,9 +339,9 @@ Error: ${error}`);
 					readme: data.full_description || data.description,
 				};
 			}
-			return { state: 'error', error: `Unsupported package type: ${args.type}` };
+			return { state: 'error', error: `Unsupported package type: ${args.type}`, errorType: 'UnknownPackageType' };
 		} catch (error) {
-			return { state: 'error', error: `Error querying package: ${(error as Error).message}` };
+			return { state: 'error', error: `Error querying package: ${(error as Error).message}`, errorType: 'UnhandledError' };
 		}
 	}
 }

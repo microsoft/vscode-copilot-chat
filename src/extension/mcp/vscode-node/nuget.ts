@@ -9,14 +9,13 @@ import path from 'path';
 import { ILogService } from '../../../platform/log/common/logService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { randomPath } from '../../../util/vs/base/common/extpath';
-import { IValidatePackageArgs, ValidatePackageResult } from './commands';
+import { ValidatePackageResult } from './commands';
 
 interface NuGetServiceIndexResponse {
 	resources?: Array<{ "@id": string; "@type": string }>;
 }
 
 const NUGET_V3_API_URL = 'https://api.nuget.org/v3/index.json';
-const DOTNET_CLI = 'dotnet';
 
 interface DotnetPackageSearchOutput {
 	searchResult?: Array<SourceResult>;
@@ -33,7 +32,12 @@ interface LatestPackageResult {
 	owners?: string;
 }
 
-export async function getNuGetPackageMetadata(args: IValidatePackageArgs, logService: ILogService): Promise<ValidatePackageResult> {
+interface DotnetCli {
+	command: string;
+	args: Array<string>;
+}
+
+export async function getNuGetPackageMetadata(id: string, logService: ILogService, dotnet: DotnetCli = { command: 'dotnet', args: [] }): Promise<ValidatePackageResult> {
 	// use the home directory, which is the default for MCP servers
 	// see https://github.com/microsoft/vscode/issues/259901 for future options
 	const cwd = os.homedir();
@@ -41,13 +45,14 @@ export async function getNuGetPackageMetadata(args: IValidatePackageArgs, logSer
 	// check for .NET CLI version for a quick "is dotnet installed?" check
 	let dotnetVersion;
 	try {
-		dotnetVersion = await getDotnetVersion(cwd, logService);
+		dotnetVersion = await getDotnetVersion(cwd, logService, dotnet);
 	} catch (error) {
 		const errorCode = error.hasOwnProperty('code') ? String((error as any).code) : undefined;
 		if (errorCode === 'ENOENT') {
 			return {
 				state: 'error',
-				error: `The '${DOTNET_CLI}' command was not found. .NET SDK 10 or newer must be installed and available in PATH.`,
+				error: `The '${dotnet.command}' command was not found. .NET SDK 10 or newer must be installed and available in PATH.`,
+				errorType: 'MissingCommand',
 				helpUri: 'https://aka.ms/vscode-mcp-install/dotnet',
 				helpUriLabel: 'Install .NET SDK'
 			};
@@ -62,18 +67,19 @@ export async function getNuGetPackageMetadata(args: IValidatePackageArgs, logSer
 		return {
 			state: 'error',
 			error: `The installed .NET SDK must be version 10 or newer. Found ${dotnetVersion}.`,
+			errorType: 'BadCommandVersion',
 			helpUri: 'https://aka.ms/vscode-mcp-install/dotnet',
 			helpUriLabel: 'Install .NET SDK'
 		};
 	}
 
 	// check if the package exists, using .NET CLI
-	const latest = await getLatestPackageVersion(cwd, args.name);
+	const latest = await getLatestPackageVersion(cwd, id, dotnet);
 	if (!latest) {
 		return {
 			state: 'error',
 			errorType: 'NotFound',
-			error: `Package ${args.name} does not exist on NuGet.org.`
+			error: `Package ${id} does not exist on NuGet.org.`
 		};
 	}
 
@@ -89,12 +95,12 @@ export async function getNuGetPackageMetadata(args: IValidatePackageArgs, logSer
 		getServerManifest: async (installConsent) => {
 			// getting the server.json downloads the package, so wait for consent
 			await installConsent;
-			return await getServerManifest(latest.id, latest.version, logService);
+			return await getServerManifest(latest.id, latest.version, logService, dotnet);
 		},
 	};
 }
 
-async function getServerManifest(id: string, version: string, logService: ILogService): Promise<string | undefined> {
+async function getServerManifest(id: string, version: string, logService: ILogService, dotnet: DotnetCli): Promise<string | undefined> {
 	logService.info(`Reading .mcp/server.json from NuGet package ${id}@${version}.`);
 	const installDir = randomPath(os.tmpdir(), "vscode-nuget-mcp");
 	try {
@@ -106,14 +112,14 @@ async function getServerManifest(id: string, version: string, logService: ILogSe
 		// the cwd must be the install directory or a child directory for local tool install to work
 		const cwd = installDir;
 
-		const packagesDir = await getGlobalPackagesPath(id, version, cwd, logService);
+		const packagesDir = await getGlobalPackagesPath(id, version, cwd, logService, dotnet);
 		if (!packagesDir) { return undefined; }
 
 		// explicitly create a tool manifest in the off chance one already exists in a parent directory
-		const createManifestSuccess = await createToolManifest(id, version, cwd, logService);
+		const createManifestSuccess = await createToolManifest(id, version, cwd, logService, dotnet);
 		if (!createManifestSuccess) { return undefined; }
 
-		const localInstallSuccess = await installLocalTool(id, version, cwd, logService);
+		const localInstallSuccess = await installLocalTool(id, version, cwd, logService, dotnet);
 		if (!localInstallSuccess) { return undefined; }
 
 		return await readServerManifest(packagesDir, id, version, logService);
@@ -215,24 +221,24 @@ stderr: ${stderr.join('')}`));
 	});
 }
 
-async function getDotnetVersion(cwd: string, logService: ILogService): Promise<string> {
-	const args = ['--version'];
-	const result = await executeWithTimeout(DOTNET_CLI, args, cwd);
+async function getDotnetVersion(cwd: string, logService: ILogService, dotnet: DotnetCli): Promise<string> {
+	const args = dotnet.args.concat(['--version']);
+	const result = await executeWithTimeout(dotnet.command, args, cwd);
 	const version = result.stdout.trim();
 	if (result.exitCode !== 0 || !version) {
 		logService.warn(`Failed to check for .NET version while checking if a NuGet MCP server exists.
 stdout: ${result.stdout}
 stderr: ${result.stderr}`);
-		throw new Error(`Failed to check for .NET version using '${DOTNET_CLI} --version'.`);
+		throw new Error(`Failed to check for .NET version using '${dotnet.command} --version'.`);
 	}
 
 	return version;
 }
 
-async function getLatestPackageVersion(cwd: string, id: string): Promise<{ id: string; version: string; owners?: string } | undefined> {
+async function getLatestPackageVersion(cwd: string, id: string, dotnet: DotnetCli): Promise<{ id: string; version: string; owners?: string } | undefined> {
 	// we use the NuGet.org "packageid:" syntax instead of --exact-match because it returns owner information
-	const args = ['package', 'search', `packageid:${id}`, '--source', NUGET_V3_API_URL, '--prerelease', '--format', 'json'];
-	const searchResult = await executeWithTimeout(DOTNET_CLI, args, cwd);
+	const args = dotnet.args.concat(['package', 'search', `packageid:${id}`, '--source', NUGET_V3_API_URL, '--prerelease', '--format', 'json']);
+	const searchResult = await executeWithTimeout(dotnet.command, args, cwd);
 	const searchData: DotnetPackageSearchOutput = JSON.parse(searchResult.stdout.trim());
 	for (const result of searchData.searchResult ?? []) {
 		for (const pkg of result.packages ?? []) {
@@ -282,9 +288,9 @@ Error: ${error}`);
 	}
 }
 
-async function getGlobalPackagesPath(id: string, version: string, cwd: string, logService: ILogService): Promise<string | undefined> {
-	const args = ['nuget', 'locals', 'global-packages', '--list', '--force-english-output'];
-	const globalPackagesResult = await executeWithTimeout(DOTNET_CLI, args, cwd);
+async function getGlobalPackagesPath(id: string, version: string, cwd: string, logService: ILogService, dotnet: DotnetCli): Promise<string | undefined> {
+	const args = dotnet.args.concat(['nuget', 'locals', 'global-packages', '--list', '--force-english-output']);
+	const globalPackagesResult = await executeWithTimeout(dotnet.command, args, cwd);
 
 	if (globalPackagesResult.exitCode !== 0) {
 		logService.warn(`Failed to discover the NuGet global packages folder. Proceeding without server.json for ${id}@${version}.
@@ -298,9 +304,9 @@ stderr: ${globalPackagesResult.stderr}`);
 	return globalPackagesResult.stdout.trim().split(' ', 2).at(-1)?.trim();
 }
 
-async function createToolManifest(id: string, version: string, cwd: string, logService: ILogService): Promise<boolean> {
-	const args = ['new', 'tool-manifest'];
-	const result = await executeWithTimeout(DOTNET_CLI, args, cwd);
+async function createToolManifest(id: string, version: string, cwd: string, logService: ILogService, dotnet: DotnetCli): Promise<boolean> {
+	const args = dotnet.args.concat(['new', 'tool-manifest']);
+	const result = await executeWithTimeout(dotnet.command, args, cwd);
 
 	if (result.exitCode !== 0) {
 		logService.warn(`Failed to create tool manifest.Proceeding without server.json for ${id}@${version}.
@@ -312,9 +318,9 @@ stderr: ${result.stderr}`);
 	return true;
 }
 
-async function installLocalTool(id: string, version: string, cwd: string, logService: ILogService): Promise<boolean> {
-	const args = ["tool", "install", `${id}@${version}`, "--source", NUGET_V3_API_URL, "--local", "--create-manifest-if-needed"];
-	const installResult = await executeWithTimeout(DOTNET_CLI, args, cwd);
+async function installLocalTool(id: string, version: string, cwd: string, logService: ILogService, dotnet: DotnetCli): Promise<boolean> {
+	const args = dotnet.args.concat(["tool", "install", `${id}@${version}`, "--source", NUGET_V3_API_URL, "--local", "--create-manifest-if-needed"]);
+	const installResult = await executeWithTimeout(dotnet.command, args, cwd);
 
 	if (installResult.exitCode !== 0) {
 		logService.warn(`Failed to install local tool ${id} @${version}. Proceeding without server.json for ${id}@${version}.
@@ -336,7 +342,7 @@ async function readServerManifest(packagesDir: string, id: string, version: stri
 	}
 
 	const json = await fs.readFile(serverJsonPath, 'utf8');
-	const manifest = JSON.parse("dddd" + json + "ddddddd");
+	const manifest = JSON.parse(json);
 
 	// Force the ID and version of matching NuGet package in the server.json to the one we installed.
 	// This handles cases where the server.json in the package is stale.
