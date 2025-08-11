@@ -34,7 +34,6 @@ import { InlineCodeSymbolLinkifier } from '../../linkify/vscode-node/inlineCodeS
 import { NotebookCellLinkifier } from '../../linkify/vscode-node/notebookCellLinkifier';
 import { SymbolLinkifier } from '../../linkify/vscode-node/symbolLinkifier';
 import { IntentDetector } from '../../prompt/node/intentDetector';
-import { ContributedToolName } from '../../tools/common/toolNames';
 import { SemanticSearchTextSearchProvider } from '../../workspaceSemanticSearch/node/semanticSearchTextSearchProvider';
 import { GitHubPullRequestProviders } from '../node/githubPullRequestProviders';
 import { startFeedbackCollection } from './feedbackCollection';
@@ -210,9 +209,6 @@ export class ConversationFeature implements IExtensionContribution {
 			vscode.commands.registerCommand('github.copilot.interactiveSession.feedback', async () => {
 				return vscode.env.openExternal(vscode.Uri.parse(FEEDBACK_URL));
 			}),
-			vscode.commands.registerCommand('github.copilot.terminal.explainTerminalSelection', async () => this.triggerTerminalChat({ query: `/${TerminalExplainIntent.intentName} #terminalSelection` })),
-			// This command is an alias to use a different title in the context menu
-			vscode.commands.registerCommand('github.copilot.terminal.explainTerminalSelectionContextMenu', () => vscode.commands.executeCommand('github.copilot.terminal.explainTerminalSelection')),
 			vscode.commands.registerCommand('github.copilot.terminal.explainTerminalLastCommand', async () => this.triggerTerminalChat({ query: `/${TerminalExplainIntent.intentName} #terminalLastCommand` })),
 			vscode.commands.registerCommand('github.copilot.terminal.fixTerminalLastCommand', async () => generateTerminalFixes(this.instantiationService)),
 			vscode.commands.registerCommand('github.copilot.terminal.generateCommitMessage', async () => {
@@ -238,12 +234,6 @@ export class ConversationFeature implements IExtensionContribution {
 					const message = `git commit -m "${sanitizedMessage}"`;
 					vscode.window.activeTerminal?.sendText(message, false);
 				}
-			}),
-			vscode.commands.registerCommand('github.copilot.terminal.attachTerminalSelection', async () => {
-				await vscode.commands.executeCommand('workbench.action.chat.open', {
-					toolIds: [ContributedToolName.TerminalSelection],
-					isPartialQuery: true
-				});
 			}),
 			vscode.commands.registerCommand('github.copilot.git.generateCommitMessage', async (rootUri: vscode.Uri | undefined, _: vscode.SourceControlInputBoxValueProviderContext[], cancellationToken: vscode.CancellationToken | undefined) => {
 				const repository = this.gitCommitMessageService.getRepository(rootUri);
