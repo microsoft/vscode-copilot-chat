@@ -12,7 +12,7 @@ import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/do
 import { LanguageId } from '../../../../platform/inlineEdits/common/dataTypes/languageId';
 import { EditReason } from '../../../../platform/inlineEdits/common/editReason';
 import { IObservableDocument, ObservableWorkspace, StringEditWithReason } from '../../../../platform/inlineEdits/common/observableWorkspace';
-import { createAlternativeNotebookDocument, IAlternativeNotebookDocument, toAltDiagnostics, toAltNotebookCellChangeEdit, toAltNotebookChangeEdit } from '../../../../platform/notebook/common/alternativeNotebookTextDocument';
+import { createAlternativeNotebookDocument, IAlternativeNotebookDocument, toAltNotebookCellChangeEdit, toAltNotebookChangeEdit } from '../../../../platform/notebook/common/alternativeNotebookTextDocument';
 import { getDefaultLanguage } from '../../../../platform/notebook/common/helpers';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
@@ -366,7 +366,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 }
 
 
-export interface IBaseVSCodeObservableDocument extends IObservableDocument {
+export interface IVSCodeObservableDocument extends IObservableDocument {
 	/**
 	 * Converts the OffsetRange of the Observable document to a range within the provided Text document.
 	 * If this is a Text Document, performs a simple OffsetRange to Range translation.
@@ -410,7 +410,7 @@ export interface IBaseVSCodeObservableDocument extends IObservableDocument {
 	getCodeActions(range: OffsetRange, itemResolveCount: number, token: CancellationToken): Promise<CodeActionData[] | undefined>;
 }
 
-export interface IVSCodeObservableTextDocument extends IObservableDocument, IBaseVSCodeObservableDocument {
+export interface IVSCodeObservableTextDocument extends IObservableDocument, IVSCodeObservableDocument {
 	kind: 'textDocument';
 	readonly textDocument: TextDocument;
 }
@@ -518,14 +518,7 @@ class VSCodeObservableTextDocument extends AbstractVSCodeObservableDocument impl
 	}
 }
 
-export interface IVSCodeObservableNotebookDocument extends IObservableDocument, IBaseVSCodeObservableDocument {
-	kind: 'notebookDocument';
-	readonly notebook: NotebookDocument;
-	/** @deprecated Do not use this. Use diagnostics property instead. */
-	projectDiagnostics(cell: TextDocument, diagnostics: readonly Diagnostic[]): Diagnostic[];
-}
-
-class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument implements IVSCodeObservableNotebookDocument {
+class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument implements IVSCodeObservableDocument {
 	/** @deprecated Do not use this */
 	public kind: 'notebookDocument' = 'notebookDocument';
 
@@ -582,13 +575,6 @@ class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument 
 		const offsetRanges = this.altNotebook.toAltOffsetRange(cell, [range]);
 		return offsetRanges.length ? offsetRanges[0] : undefined;
 	}
-	projectDiagnostics(textDocument: TextDocument, diagnostics: readonly Diagnostic[]): Diagnostic[] {
-		const cell = this.altNotebook.getCell(textDocument);
-		if (!cell) {
-			return [];
-		}
-		return toAltDiagnostics(this.altNotebook, cell, diagnostics);
-	}
 	toRange(textDocument: TextDocument, range: Range): Range | undefined {
 		const cell = this.altNotebook.getCell(textDocument);
 		if (!cell) {
@@ -622,8 +608,6 @@ class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument 
 		})).then(results => coalesce(results.flat()));
 	}
 }
-
-export type IVSCodeObservableDocument = IVSCodeObservableTextDocument | IVSCodeObservableNotebookDocument;
 
 function getTextDocuments(excludeNotebookCells: boolean): IObservable<readonly TextDocument[]> {
 	return observableFromEvent(undefined, e => {
