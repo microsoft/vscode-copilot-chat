@@ -226,7 +226,6 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 									requestOptions,
 									userInitiatedRequest: false, // do not mark the retry as user initiated
 									telemetryProperties: { ...telemetryProperties, retryAfterFilterCategory: result.category ?? 'uncategorized' },
-									intentParams: opts.intentParams,
 									isFilterRetry: true,
 								}, token);
 
@@ -654,14 +653,14 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		// this.logger.exception(err, `Error on conversation request`);
 		if (fetcher.isInternetDisconnectedError(err)) {
 			return {
-				type: ChatFetchResponseType.Failed,
+				type: ChatFetchResponseType.NetworkError,
 				reason: `It appears you're not connected to the internet, please check your network connection and try again.`,
 				requestId: requestId,
 				serverRequestId: undefined,
 			};
 		} else if (fetcher.isFetcherError(err)) {
 			return {
-				type: ChatFetchResponseType.Failed,
+				type: ChatFetchResponseType.NetworkError,
 				reason: fetcher.getUserMessageForFetcherError(err),
 				requestId: requestId,
 				serverRequestId: undefined,

@@ -81,6 +81,7 @@ class ChatAgents implements IDisposable {
 		this._disposables.add(this.registerEditingAgentEditor());
 		this._disposables.add(this.registerEditsAgent());
 		this._disposables.add(this.registerEditorDefaultAgent());
+		this._disposables.add(this.registerNotebookEditorDefaultAgent());
 		this._disposables.add(this.registerNotebookDefaultAgent());
 		this._disposables.add(this.registerWorkspaceAgent());
 		this._disposables.add(this.registerVSCodeAgent());
@@ -219,7 +220,6 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 		const markdownString = new vscode.MarkdownString(helpPostfix);
 		markdownString.isTrusted = { enabledCommands: ['inlineChat.start', 'github.copilot.open.walkthrough'] };
 		defaultAgent.helpTextPostfix = markdownString;
-		defaultAgent.helpTextVariablesPrefix = vscode.l10n.t('You can also help me understand your question by using the following variables to give me extra context:');
 
 		defaultAgent.additionalWelcomeMessage = this.additionalWelcomeMessage;
 		defaultAgent.titleProvider = this.instantiationService.createInstance(ChatTitleProvider);
@@ -230,6 +230,13 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 
 	private registerEditorDefaultAgent(): IDisposable {
 		const defaultAgent = this.createAgent(editorAgentName, Intent.Editor);
+		defaultAgent.iconPath = new vscode.ThemeIcon('copilot');
+
+		return defaultAgent;
+	}
+
+	private registerNotebookEditorDefaultAgent(): IDisposable {
+		const defaultAgent = this.createAgent('notebook', Intent.Editor);
 		defaultAgent.iconPath = new vscode.ThemeIcon('copilot');
 
 		return defaultAgent;

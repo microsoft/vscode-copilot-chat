@@ -88,7 +88,6 @@ export class CodebaseToolCallingLoop extends ToolCallingLoop<ICodebaseToolCallin
 				messageId: randomUUID(), // @TODO@joyceerhl
 				messageSource: CodebaseToolCallingLoop.ID
 			},
-			{ intent: true }
 		);
 	}
 }

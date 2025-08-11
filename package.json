@@ -22,7 +22,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.103.0-20250728",
+		"vscode": "^1.104.0",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -131,7 +131,8 @@
 		"textDocumentChangeReason",
 		"resolvers",
 		"taskExecutionTerminal",
-		"dataChannels"
+		"dataChannels",
+		"languageModelThinkingPart"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -399,22 +400,19 @@
 				"canBeReferencedInPrompt": true,
 				"icon": "$(error)",
 				"userDescription": "%copilot.tools.errors.description%",
-				"modelDescription": "Get any compile or lint errors in a code file. If the user mentions errors or problems in a file, they may be referring to these. Use the tool to see the same errors that the user is seeing. Also use this tool after editing a file to validate the change.",
+				"modelDescription": "Get any compile or lint errors in a specific file or across all files. If the user mentions errors or problems in a file, they may be referring to these. Use the tool to see the same errors that the user is seeing. If the user asks you to analyze all errors, or does not specify a file, use this tool to gather errors for all files. Also use this tool after editing a file to validate the change.",
 				"tags": [],
 				"inputSchema": {
 					"type": "object",
 					"properties": {
 						"filePaths": {
-							"description": "The absolute paths to the files to check for errors.",
+							"description": "The absolute paths to the files to check for errors. Omit 'filePaths' when retrieving all errors.",
 							"type": "array",
 							"items": {
 								"type": "string"
 							}
 						}
-					},
-					"required": [
-						"filePaths"
-					]
+					}
 				}
 			},
 			{
@@ -735,7 +733,7 @@
 				"name": "copilot_replaceString",
 				"toolReferenceName": "replaceString",
 				"displayName": "%copilot.tools.replaceString.name%",
-				"modelDescription": "This is a tool for making edits in an existing file in the workspace. For moving or renaming files, use run in terminal tool with the 'mv' command instead. For larger edits, split them into smaller edits and call the edit tool multiple times to ensure accuracy. Before editing, always ensure you have the context to understand the file's contents and context. To edit a file, provide: 1) filePath (absolute path), 2) oldString (MUST be the exact literal text to replace including all whitespace, indentation, newlines, and surrounding code etc), and 3) newString (MUST be the exact literal text to replace \\`oldString\\` with (also including all whitespace, indentation, newlines, and surrounding code etc.). Ensure the resulting code is correct and idiomatic.). Each use of this tool replaces exactly ONE occurrence of oldString.\n\nCRITICAL for \\`oldString\\`: Must uniquely identify the single instance to change. Include at least 3 lines of context BEFORE and AFTER the target text, matching whitespace and indentation precisely. If this string matches multiple locations, or does not match exactly, the tool will fail. Never use ...existing code... comments in the oldString or newString.",
+				"modelDescription": "This is a tool for making edits in an existing file in the workspace. For moving or renaming files, use run in terminal tool with the 'mv' command instead. For larger edits, split them into smaller edits and call the edit tool multiple times to ensure accuracy. Before editing, always ensure you have the context to understand the file's contents and context. To edit a file, provide: 1) filePath (absolute path), 2) oldString (MUST be the exact literal text to replace including all whitespace, indentation, newlines, and surrounding code etc), and 3) newString (MUST be the exact literal text to replace \\`oldString\\` with (also including all whitespace, indentation, newlines, and surrounding code etc.). Ensure the resulting code is correct and idiomatic.). Each use of this tool replaces exactly ONE occurrence of oldString.\n\nCRITICAL for \\`oldString\\`: Must uniquely identify the single instance to change. Include at least 3 lines of context BEFORE and AFTER the target text, matching whitespace and indentation precisely. If this string matches multiple locations, or does not match exactly, the tool will fail. Never use 'Lines 123-456 omitted' from summarized documents or ...existing code... comments in the oldString or newString.",
 				"when": "!config.github.copilot.chat.disableReplaceTool",
 				"inputSchema": {
 					"type": "object",
@@ -765,7 +763,9 @@
 				"toolReferenceName": "editNotebook",
 				"displayName": "%copilot.tools.editNotebook.name%",
 				"modelDescription": "This is a tool for editing an existing Notebook file in the workspace. Generate the \"explanation\" property first.\nThe system is very smart and can understand how to apply your edits to the notebooks.\nWhen updating the content of an existing cell, ensure newCode includes at least 3-5 lines of context both before and after the new changes, preserving whitespace and indentation exactly.",
-				"tags": [],
+				"tags": [
+					"enable_other_tool_copilot_getNotebookSummary"
+				],
 				"inputSchema": {
 					"type": "object",
 					"properties": {
@@ -1313,6 +1313,27 @@
 								]
 							}
 						]
+					}
+				]
+			},
+{
+				"id": "github.copilot.notebook",
+				"name": "GitHubCopilot",
+				"fullName": "GitHub Copilot",
+				"description": "%copilot.description%",
+				"isDefault": true,
+				"locations": [
+					"notebook"
+				],
+				"when": "!config.inlineChat.enableV2 && !config.github.copilot.chat.advanced.inlineChat2",
+				"commands": [
+					{
+						"name": "fix",
+						"description": "%copilot.workspace.fix.description%"
+					},
+					{
+						"name": "explain",
+						"description": "%copilot.workspace.explain.description%"
 					}
 				]
 			},
@@ -1964,6 +1985,14 @@
 				"title": "Hide Tools"
 			},
 			{
+				"command": "github.copilot.chat.debug.showNesRequests",
+				"title": "Show NES Requests"
+			},
+			{
+				"command": "github.copilot.chat.debug.hideNesRequests",
+				"title": "Hide NES Requests"
+			},
+			{
 				"command": "github.copilot.chat.debug.exportLogItem",
 				"title": "Export as...",
 				"icon": "$(export)"
@@ -2238,14 +2267,6 @@
 							"preview"
 						],
 						"markdownDescription": "%github.copilot.config.codesearch.enabled%"
-					},
-					"github.copilot.chat.edits.codesearch.enabled": {
-						"type": "boolean",
-						"default": false,
-						"tags": [
-							"preview"
-						],
-						"markdownDeprecationMessage": "%github.copilot.config.edits.codesearch.enabled%"
 					},
 					"github.copilot.chat.byok.ollamaEndpoint": {
 						"type": "string",
@@ -2739,17 +2760,26 @@
 						"type": "boolean",
 						"default": false,
 						"tags": [
-							"experimental"
+							"experimental",
+							"onExP"
 						],
 						"markdownDescription": "%github.copilot.config.byok.responsesApi%"
 					},
 					"github.copilot.chat.enableRetryAfterFilteredResponse": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"tags": [
 							"experimental"
 						],
 						"description": "%github.copilot.config.retryAfterFilteredResponse.enabled%"
+					},
+					"github.copilot.chat.alternateGptPrompt.enabled": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental"
+						],
+						"description": "%github.copilot.config.alternateGptPrompt.enabled%"
 					}
 				}
 			}
@@ -2972,6 +3002,14 @@
 				},
 				{
 					"command": "github.copilot.chat.debug.hideTools",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.debug.showNesRequests",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.debug.hideNesRequests",
 					"when": "false"
 				},
 				{
@@ -3219,6 +3257,16 @@
 					"command": "github.copilot.chat.debug.hideTools",
 					"when": "!github.copilot.chat.debug.toolsHidden",
 					"group": "commands@1"
+				},
+				{
+					"command": "github.copilot.chat.debug.showNesRequests",
+					"when": "github.copilot.chat.debug.nesRequestsHidden",
+					"group": "commands@2"
+				},
+				{
+					"command": "github.copilot.chat.debug.hideNesRequests",
+					"when": "!github.copilot.chat.debug.nesRequestsHidden",
+					"group": "commands@2"
 				}
 			],
 			"notebook/toolbar": [

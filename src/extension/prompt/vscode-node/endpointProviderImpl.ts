@@ -20,6 +20,7 @@ import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IChatEndpoint, IEmbeddingEndpoint } from '../../../platform/networking/common/networking';
+import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { TokenizerType } from '../../../util/common/tokenizer';
@@ -46,13 +47,15 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IEnvService _envService: IEnvService,
-		@IAuthenticationService _authService: IAuthenticationService
+		@IAuthenticationService _authService: IAuthenticationService,
+		@IRequestLogger _requestLogger: IRequestLogger
 	) {
 
 		this._modelFetcher = new ModelMetadataFetcher(
 			collectFetcherTelemetry,
 			false,
 			fetcher,
+			_requestLogger,
 			domainService,
 			capiClientService,
 			this._configService,

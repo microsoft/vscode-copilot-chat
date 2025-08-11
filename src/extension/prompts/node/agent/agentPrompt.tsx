@@ -18,6 +18,7 @@ import { IAlternativeNotebookContentService } from '../../../../platform/noteboo
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { ITabsAndEditorsService } from '../../../../platform/tabs/common/tabsAndEditorsService';
 import { ITasksService } from '../../../../platform/tasks/common/tasksService';
+import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { basename } from '../../../../util/vs/base/common/path';
@@ -44,7 +45,7 @@ import { UserPreferences } from '../panel/preferences';
 import { ChatToolCalls } from '../panel/toolCalling';
 import { MultirootWorkspaceStructure } from '../panel/workspace/workspaceStructure';
 import { AgentConversationHistory } from './agentConversationHistory';
-import { DefaultAgentPrompt, SweBenchAgentPrompt } from './agentInstructions';
+import { AlternateGPTPrompt, DefaultAgentPrompt, SweBenchAgentPrompt } from './agentInstructions';
 import { SummarizedConversationHistory } from './summarizedConversationHistory';
 
 export interface AgentPromptProps extends GenericBasePromptElementProps {
@@ -75,6 +76,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		props: AgentPromptProps,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint,
 	) {
 		super(props);
@@ -83,11 +85,17 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const instructions = this.configurationService.getConfig(ConfigKey.Internal.SweBenchAgentPrompt) ?
 			<SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} /> :
-			<DefaultAgentPrompt
-				availableTools={this.props.promptContext.tools?.availableTools}
-				modelFamily={this.props.endpoint.family}
-				codesearchMode={this.props.codesearchMode}
-			/>;
+			this.props.endpoint.family.startsWith('gpt-') && this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService) ?
+				<AlternateGPTPrompt
+					availableTools={this.props.promptContext.tools?.availableTools}
+					modelFamily={this.props.endpoint.family}
+					codesearchMode={this.props.codesearchMode}
+				/> :
+				<DefaultAgentPrompt
+					availableTools={this.props.promptContext.tools?.availableTools}
+					modelFamily={this.props.endpoint.family}
+					codesearchMode={this.props.codesearchMode}
+				/>;
 
 		const omitBaseAgentInstructions = this.configurationService.getConfig(ConfigKey.Internal.OmitBaseAgentInstructions);
 		const baseAgentInstructions = <>
@@ -280,10 +288,12 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		const hasEditFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
 		const hasEditNotebookTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditNotebook);
 		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreRunInTerminal);
-		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1') && this.props.chatVariables.hasVariables() ?
+		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1' || this.props.endpoint.family === 'gpt-5') && this.props.chatVariables.hasVariables() ?
 			' (See <attachments> above for file contents. You may not need to search or read the file again.)'
 			: '';
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;
+		const hasTodoTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreManageTodoList);
+
 		return (
 			<>
 				<UserMessage>
@@ -291,7 +301,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 					<TokenLimit max={sizing.tokenBudget / 6} flexGrow={3} priority={898}>
 						<ChatVariables chatVariables={this.props.chatVariables} isAgent={true} omitReferences />
 					</TokenLimit>
-					<ToolReferencesHint toolReferences={this.props.toolReferences} />
+					<ToolReferencesHint toolReferences={this.props.toolReferences} modelFamily={this.props.endpoint.family} />
 					<Tag name='context'>
 						<CurrentDatePrompt />
 						<EditedFileEvents editedFileEvents={this.props.editedFileEvents} />
@@ -302,9 +312,10 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 					<RepoContext />
 					<Tag name='reminderInstructions'>
 						{/* Critical reminders that are effective when repeated right next to the user message */}
-						{getKeepGoingReminder(this.props.endpoint.family)}
+						<KeepGoingReminder modelFamily={this.props.endpoint.family} />
 						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint))}
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
+						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
 					</Tag>
 					{query && <Tag name='userRequest' priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
@@ -314,12 +325,12 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 	}
 }
 
-export interface FrozenMessageContentProps extends BasePromptElementProps {
+interface FrozenMessageContentProps extends BasePromptElementProps {
 	readonly frozenContent: Raw.ChatCompletionContentPart[];
 	readonly enableCacheBreakpoints?: boolean;
 }
 
-export class FrozenContentUserMessage extends PromptElement<FrozenMessageContentProps> {
+class FrozenContentUserMessage extends PromptElement<FrozenMessageContentProps> {
 	async render(state: void, sizing: PromptSizing) {
 		return <UserMessage priority={this.props.priority}>
 			<Chunk>
@@ -333,6 +344,7 @@ export class FrozenContentUserMessage extends PromptElement<FrozenMessageContent
 
 interface ToolReferencesHintProps extends BasePromptElementProps {
 	readonly toolReferences: readonly InternalToolReference[];
+	readonly modelFamily?: string;
 }
 
 /**
@@ -347,7 +359,10 @@ class ToolReferencesHint extends PromptElement<ToolReferencesHintProps> {
 		return <>
 			<Tag name='toolReferences'>
 				The user attached the following tools to this message. The userRequest may refer to them using the tool name with "#". These tools are likely relevant to the user's query:<br />
-				{this.props.toolReferences.map(tool => `- ${tool.name}`).join('\n')}
+				{this.props.toolReferences.map(tool => `- ${tool.name}`).join('\n')} <br />
+				{this.props.modelFamily === 'gpt-5' && <>
+					Start by using the most relevant tool attached to this message—the user expects you to act with it first.<br />
+				</>}
 			</Tag>
 		</>;
 	}
@@ -632,14 +647,70 @@ export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringToo
 	return lines;
 }
 
-/**
- * Remind gpt-4.1 to keep going and not stop to ask questions...
- */
-export function getKeepGoingReminder(modelFamily: string | undefined) {
-	return modelFamily === 'gpt-4.1' ?
+export interface IKeepGoingReminderProps extends BasePromptElementProps {
+	modelFamily: string | undefined;
+}
+
+export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
+	constructor(
+		props: IKeepGoingReminderProps,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+	) {
+		super(props);
+	}
+
+	async render(state: void, sizing: PromptSizing) {
+		if (this.props.modelFamily === 'gpt-4.1' || this.props.modelFamily === 'gpt-5') {
+			if (this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService)) {
+				// Extended reminder
+				return <>
+					You are an agent - you must keep going until the user's query is completely resolved, before ending your turn and yielding back to the user.<br />
+					Your thinking should be thorough and so it's fine if it's very long. However, avoid unnecessary repetition and verbosity. You should be concise, but thorough.<br />
+					You MUST iterate and keep going until the problem is solved.<br />
+					You have everything you need to resolve this problem. I want you to fully solve this autonomously before coming back to me. <br />
+					Only terminate your turn when you are sure that the problem is solved and all items have been checked off. Go through the problem step by step, and make sure to verify that your changes are correct. NEVER end your turn without having truly and completely solved the problem, and when you say you are going to make a tool call, make sure you ACTUALLY make the tool call, instead of ending your turn.<br />
+					Take your time and think through every step - remember to check your solution rigorously and watch out for boundary cases, especially with the changes you made. Your solution must be perfect. If not, continue working on it. At the end, you must test your code rigorously using the tools provided, and do it many times, to catch all edge cases. If it is not robust, iterate more and make it perfect. Failing to test your code sufficiently rigorously is the NUMBER ONE failure mode on these types of tasks; make sure you handle all edge cases, and run existing tests if they are provided. <br />
+					You MUST plan extensively before each function call, and reflect extensively on the outcomes of the previous function calls. DO NOT do this entire process by making function calls only, as this can impair your ability to solve the problem and think insightfully.<br />
+					You are a highly capable and autonomous agent, and you can definitely solve this problem without needing to ask the user for further input.<br />
+				</>;
+			} else if (this.props.modelFamily === 'gpt-5') {
+				return <>
+					You are an agent—keep going until the user's query is completely resolved before ending your turn. ONLY stop if solved or genuinely blocked.<br />
+					Take action when possible; the user expects you to do useful work without unnecessary questions.<br />
+					After any parallel, read-only context gathering, give a concise progress update and what's next.<br />
+					Avoid repetition across turns: don't restate unchanged plans or sections (like the todo list) verbatim; provide delta updates or only the parts that changed.<br />
+					Tool batches: You MUST preface each batch with a one-sentence why/what/outcome preamble.<br />
+					Progress cadence: After 3 to 5 tool calls, or when you create/edit &gt; ~3 files in a burst, pause and post a compact checkpoint.<br />
+					Requirements coverage: Read the user's ask in full, extract each requirement into checklist items, and keep them visible. Do not omit a requirement. If something cannot be done with available tools, note why briefly and propose a viable alternative.<br />
+				</>;
+			} else {
+				// Original reminder
+				return <>
+					You are an agent - you must keep going until the user's query is completely resolved, before ending your turn and yielding back to the user. ONLY terminate your turn when you are sure that the problem is solved, or you absolutely cannot continue.<br />
+					You take action when possible- the user is expecting YOU to take action and go to work for them. Don't ask unnecessary questions about the details if you can simply DO something useful instead.<br />
+				</>;
+			}
+		}
+	}
+}
+
+function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {
+	return modelFamily === 'gpt-5' ?
 		<>
-			You are an agent - you must keep going until the user's query is completely resolved, before ending your turn and yielding back to the user. ONLY terminate your turn when you are sure that the problem is solved, or you absolutely cannot continue.<br />
-			You take action when possible- the user is expecting YOU to take action and go to work for them. Don't ask unnecessary questions about the details if you can simply DO something useful instead.<br />
+			Skip filler acknowledgements like “Sounds good” or “Okay, I will…”. Open with a purposeful one-liner about what you're doing next.<br />
+			When sharing setup or run steps, present terminal commands in fenced code blocks with the correct language tag. Keep commands copyable and on separate lines.<br />
+			Avoid definitive claims about the build or runtime setup unless verified from the provided context (or quick tool checks). If uncertain, state what's known from attachments and proceed with minimal steps you can adapt later.<br />
+			When you create or edit runnable code, run a test yourself to confirm it works; then share optional fenced commands for more advanced runs.<br />
+			Do not state your identity or model name unless the user explicitly asks you to. <br />
+			For non-trivial code generation, produce a complete, runnable solution: necessary source files, a tiny runner or test/benchmark harness, a minimal `README.md`, and updated dependency manifests (e.g., `package.json`, `requirements.txt`, `pyproject.toml`). Offer quick "try it" commands and optional platform-specific speed-ups when relevant.<br />
+			Your goal is to act like a pair programmer: be friendly and helpful. If you can do more, do more. Be proactive with your solutions, think about what the user needs and what they want, and implement it proactively.<br />
+			<Tag name='importantReminders'>
+				ALWAYS start your response with a brief task receipt and a concise high-level plan for how you will proceed.<br />
+				{hasTodoTool && <>You MUST use the todo list tool to plan and track your progress. NEVER skip this step, and START with this step whenever the task is multi-step. This is essential for maintaining visibility and proper execution of large tasks. Follow the todoListToolInstructions strictly.<br /></>}
+				{!hasTodoTool && <>Break down the request into clear, actionable steps and present them as a checklist at the beginning of your response before proceeding with implementation. This helps maintain visibility and ensures all requirements are addressed systematically.<br /></>}
+				Every so often, explain the notable action you are about to take next, especially before multi-step or impactful tool calls.<br />
+			</Tag>
 		</>
 		: undefined;
 }

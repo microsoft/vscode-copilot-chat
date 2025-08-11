@@ -102,11 +102,27 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		};
 	}
 
-	private formatQueryString(input: IFindTextInFilesToolParams): string {
-		return input.includePattern && input.includePattern !== '**/*' ?
-			`\`${input.query}\` (\`${input.includePattern}\`)` :
-			`\`${input.query}\``;
+	/**
+	 * Formats text as a Markdown inline code span that is resilient to backticks within the text.
+	 * It chooses a backtick fence one longer than the longest run of backticks in the content,
+	 * and pads with a space when the content begins or ends with a backtick as per CommonMark.
+	 */
+	private formatCodeSpan(text: string): string {
+		const matches = text.match(/`+/g);
+		const maxRun = matches ? matches.reduce((m, s) => Math.max(m, s.length), 0) : 0;
+		const fence = '`'.repeat(maxRun + 1);
+		const needsPadding = text.startsWith('`') || text.endsWith('`');
+		const inner = needsPadding ? ` ${text} ` : text;
+		return `${fence}${inner}${fence}`;
+	}
 
+	private formatQueryString(input: IFindTextInFilesToolParams): string {
+		const querySpan = this.formatCodeSpan(input.query);
+		if (input.includePattern && input.includePattern !== '**/*') {
+			const patternSpan = this.formatCodeSpan(input.includePattern);
+			return `${querySpan} (${patternSpan})`;
+		}
+		return querySpan;
 	}
 
 	async resolveInput(input: IFindTextInFilesToolParams, _promptContext: IBuildPromptContext, mode: CopilotToolMode): Promise<IFindTextInFilesToolParams> {
