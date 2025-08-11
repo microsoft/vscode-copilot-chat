@@ -24,6 +24,7 @@ class AsyncDiagnosticCompletionItem extends DiagnosticCompletionItem {
 	) {
 		super(AsyncDiagnosticCompletionItem.type, diagnostic, edit, workspaceDocument);
 	}
+	// test
 }
 export class AsyncDiagnosticCompletionProvider implements IDiagnosticCompletionProvider<AsyncDiagnosticCompletionItem> {
 
