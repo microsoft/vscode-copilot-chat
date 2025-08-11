@@ -11,9 +11,9 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { CopilotLanguageModelWrapper } from '../../conversation/vscode-node/languageModelAccess';
 import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, resolveModelInfo } from '../common/byokProvider';
 import { OpenAIEndpoint } from '../node/openAIEndpoint';
+import { OpenAIResponsesEndpoint } from '../node/openAIResponsesEndpoint';
 import { IBYOKStorageService } from './byokStorageService';
 import { promptForAPIKey } from './byokUIService';
-import { OpenAIResponsesEndpoint } from '../node/openAIResponsesEndpoint';
 
 export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvider<LanguageModelChatInformation> {
 
@@ -107,9 +107,14 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 			return;
 		}
 		const newAPIKey = await promptForAPIKey(this._name, await this._byokStorageService.getAPIKey(this._name) !== undefined);
-		if (newAPIKey) {
+		if (newAPIKey === undefined) {
+			return;
+		} else if (newAPIKey === '') {
+			this._apiKey = undefined;
+			await this._byokStorageService.deleteAPIKey(this._name, this.authType);
+		} else if (newAPIKey !== undefined) {
 			this._apiKey = newAPIKey;
-			this._byokStorageService.storeAPIKey(this._name, this._apiKey, BYOKAuthType.GlobalApiKey);
+			await this._byokStorageService.storeAPIKey(this._name, this._apiKey, BYOKAuthType.GlobalApiKey);
 		}
 	}
 }
