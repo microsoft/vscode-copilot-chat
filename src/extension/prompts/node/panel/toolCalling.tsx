@@ -307,7 +307,7 @@ export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToke
 		const isChatCompletions = typeof urlOrRequestMetadata !== 'string' && urlOrRequestMetadata?.type === RequestType.ChatCompletions;
 		if (githubToken && isChatCompletions && imageService) {
 			try {
-				const uri = await imageService.uploadChatImageAttachment(part.data, 'mcp-image', part.mimeType ?? 'image/png', githubToken);
+				const uri = await imageService.uploadChatImageAttachment(part.data, 'tool-result-image', part.mimeType ?? 'image/png', githubToken);
 				if (uri) {
 					imageSource = uri.toString();
 				}

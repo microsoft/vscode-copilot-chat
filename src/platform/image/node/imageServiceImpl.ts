@@ -20,7 +20,7 @@ export class ImageServiceImpl implements IImageService {
 			throw new Error('Missing required mimeType or token for image upload');
 		}
 
-		const sanitizedName = name.replace(/\s+/g, '').replace(/%20/g, '');
+		const sanitizedName = name.replace(/[^a-zA-Z0-9._-]/g, '');
 		let uploadName = sanitizedName;
 		const subtype = mimeType.split('/')[1].split('+')[0].toLowerCase();
 		if (!uploadName.toLowerCase().endsWith(`.${subtype}`)) {
@@ -37,7 +37,7 @@ export class ImageServiceImpl implements IImageService {
 				}
 			}, { type: RequestType.ChatAttachmentUpload, uploadName, mimeType });
 			if (!response.ok) {
-				throw new Error(`Invalid GitHub URL provided: ${response.status} ${response.statusText}`);
+				throw new Error(`Image upload failed: ${response.status} ${response.statusText}`);
 			}
 			const result = await response.json() as { url: string };
 			return URI.parse(result.url);
