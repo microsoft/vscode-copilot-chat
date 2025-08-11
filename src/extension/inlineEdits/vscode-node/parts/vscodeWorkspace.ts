@@ -826,7 +826,7 @@ function toCodeActionData(codeAction: CodeAction, workspaceDocument: IVSCodeObse
 	const codeActionData = new CodeActionData(
 		codeAction.title,
 		diagnostics,
-		getDocumentEdits(codeAction, workspaceDocument),
+		documentEdits,
 	);
 	return codeActionData;
 }
