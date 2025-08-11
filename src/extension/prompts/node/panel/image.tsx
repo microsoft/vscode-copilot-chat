@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { RequestType } from '@vscode/copilot-api';
 import * as l10n from '@vscode/l10n';
 import { Image as BaseImage, BasePromptElementProps, ChatResponseReferencePartStatusKind, PromptElement, PromptReference, PromptSizing, UserMessage } from '@vscode/prompt-tsx';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
@@ -49,7 +50,8 @@ export class Image extends PromptElement<ImageProps, unknown> {
 			}
 			const variable = await this.props.variableValue;
 			let imageSource = Buffer.from(variable).toString('base64');
-			if (this.promptEndpoint.vendor === 'copilot') {
+			const isChatCompletions = typeof this.promptEndpoint.urlOrRequestMetadata !== 'string' && this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatCompletions;
+			if (isChatCompletions) {
 				try {
 					const githubToken = (await this.authService.getAnyGitHubSession())?.accessToken;
 					const uri = await this.imageService.uploadChatImageAttachment(variable, this.props.variableName, getMimeType(imageSource) ?? 'image/png', githubToken);

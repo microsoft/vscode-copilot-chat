@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { AssistantMessage, BasePromptElementProps, PromptRenderer as BasePromptRenderer, Chunk, IfEmpty, Image, JSONTree, PromptElement, PromptElementProps, PromptMetadata, PromptPiece, PromptSizing, TokenLimit, ToolCall, ToolMessage, useKeepWith, UserMessage } from '@vscode/prompt-tsx';
 import type { ChatParticipantToolToken, LanguageModelToolResult2, LanguageModelToolTokenizationOptions } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
@@ -299,12 +300,12 @@ enum ToolInvocationOutcome {
 	Cancelled = 'cancelled',
 }
 
-export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToken?: string, vendor?: string, logService?: ILogService, imageService?: IImageService) {
+export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToken?: string, urlOrRequestMetadata?: string | RequestMetadata, logService?: ILogService, imageService?: IImageService) {
 	if (isImageDataPart(part)) {
 		const base64 = Buffer.from(part.data).toString('base64');
 		let imageSource = `data:${part.mimeType};base64,${base64}`;
-
-		if (githubToken && vendor === 'copilot' && imageService) {
+		const isChatCompletions = typeof urlOrRequestMetadata !== 'string' && urlOrRequestMetadata?.type === RequestType.ChatCompletions;
+		if (githubToken && isChatCompletions && imageService) {
 			try {
 				const uri = await imageService.uploadChatImageAttachment(part.data, 'mcp-image', part.mimeType ?? 'image/png', githubToken);
 				if (uri) {
@@ -398,7 +399,7 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 
 	protected async onData(part: LanguageModelDataPart) {
 		const githubToken = (await this.authService.getAnyGitHubSession())?.accessToken;
-		return Promise.resolve(imageDataPartToTSX(part, githubToken, this.endpoint.vendor, this.logService, this.imageService));
+		return Promise.resolve(imageDataPartToTSX(part, githubToken, this.endpoint.urlOrRequestMetadata, this.logService, this.imageService));
 	}
 
 	protected onTSX(part: JSONTree.PromptElementJSON) {
