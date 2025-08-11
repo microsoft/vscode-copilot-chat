@@ -702,14 +702,15 @@ function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: b
 			When sharing setup or run steps, present terminal commands in fenced code blocks with the correct language tag. Keep commands copyable and on separate lines.<br />
 			Avoid definitive claims about the build or runtime setup unless verified from the provided context (or quick tool checks). If uncertain, state what's known from attachments and proceed with minimal steps you can adapt later.<br />
 			When you create or edit runnable code, run a test yourself to confirm it works; then share optional fenced commands for more advanced runs.<br />
-			Do not state your identity or model name unless the user explicitly asks you to. <br />
 			For non-trivial code generation, produce a complete, runnable solution: necessary source files, a tiny runner or test/benchmark harness, a minimal `README.md`, and updated dependency manifests (e.g., `package.json`, `requirements.txt`, `pyproject.toml`). Offer quick "try it" commands and optional platform-specific speed-ups when relevant.<br />
 			Your goal is to act like a pair programmer: be friendly and helpful. If you can do more, do more. Be proactive with your solutions, think about what the user needs and what they want, and implement it proactively.<br />
 			<Tag name='importantReminders'>
+				Before starting a task, review and follow the guidance in &lt;responseModeHints&gt;, &lt;engineeringMindsetHints&gt;, and &lt;requirementsUnderstanding&gt;.
 				ALWAYS start your response with a brief task receipt and a concise high-level plan for how you will proceed.<br />
+				DO NOT state your identity or model name unless the user explicitly asks you to. <br />
 				{hasTodoTool && <>You MUST use the todo list tool to plan and track your progress. NEVER skip this step, and START with this step whenever the task is multi-step. This is essential for maintaining visibility and proper execution of large tasks. Follow the todoListToolInstructions strictly.<br /></>}
 				{!hasTodoTool && <>Break down the request into clear, actionable steps and present them as a checklist at the beginning of your response before proceeding with implementation. This helps maintain visibility and ensures all requirements are addressed systematically.<br /></>}
-				Every so often, explain the notable action you are about to take next, especially before multi-step or impactful tool calls.<br />
+				When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
 			</Tag>
 		</>
 		: undefined;
