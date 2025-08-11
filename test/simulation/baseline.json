@@ -1594,9 +1594,9 @@
   {
     "name": "explain (expanded context) [panel] [cpp] - includes and interprets variables",
     "contentFilterCount": 0,
-    "passCount": 4,
-    "failCount": 6,
-    "score": 0.4
+    "passCount": 6,
+    "failCount": 4,
+    "score": 0.6
   },
   {
     "name": "explain (expanded context) [panel] [cpp] - includes function definitions from same file",
@@ -11876,9 +11876,9 @@
   {
     "name": "variables [panel] [typescript] - Summarize #terminalSelection",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "vscode (metaprompt) [panel] - enable word wrap in editer",
