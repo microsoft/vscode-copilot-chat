@@ -427,9 +427,10 @@ export class ToolResult extends PrimitiveToolResult<IToolResultProps> {
 		props: PromptElementProps<IToolResultProps>,
 		@IPromptEndpoint endpoint: IPromptEndpoint,
 		@IAuthenticationService authService: IAuthenticationService,
-		@ILogService logService: ILogService
+		@ILogService logService: ILogService,
+		@IImageService imageService: IImageService
 	) {
-		super(props, endpoint, authService, logService);
+		super(props, endpoint, authService, logService, imageService);
 	}
 
 	protected override async onTSX(part: JSONTree.PromptElementJSON): Promise<any> {
