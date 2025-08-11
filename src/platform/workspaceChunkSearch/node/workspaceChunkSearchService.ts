@@ -118,17 +118,13 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 
 	constructor(
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
 
 		this._availableEmbeddingTypes = _instantiationService.createInstance(GithubAvailableEmbeddingTypesManager);
 
 		this.tryInit(true);
-	}
-
-	public override dispose(): void {
-		super.dispose();
-		this._impl?.dispose();
 	}
 
 	private async tryInit(silent: boolean): Promise<WorkspaceChunkSearchServiceImpl | undefined> {
@@ -138,14 +134,15 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 
 		try {
 			const best = await this._availableEmbeddingTypes.getPreferredType(silent);
+			// Double check that we haven't initialized in the meantime
 			if (this._impl) {
 				return this._impl;
 			}
 
 			if (best) {
-				this._impl = this._instantiationService.createInstance(WorkspaceChunkSearchServiceImpl, best);
-				this._impl.onDidChangeIndexState(() => this._onDidChangeIndexState.fire());
-
+				this._logService.info(`WorkspaceChunkSearchService: using embedding type ${best}`);
+				this._impl = this._register(this._instantiationService.createInstance(WorkspaceChunkSearchServiceImpl, best));
+				this._register(this._impl.onDidChangeIndexState(() => this._onDidChangeIndexState.fire()));
 				return this._impl;
 			}
 		} catch {

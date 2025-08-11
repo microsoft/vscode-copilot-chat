@@ -151,8 +151,11 @@ export class GithubAvailableEmbeddingTypesManager {
 	async getPreferredType(silent: boolean): Promise<EmbeddingType | undefined> {
 		const all = await this.getAllAvailableTypes(silent);
 		if (!all) {
+			this._logService.info(`GithubAvailableEmbeddingTypesManager: Could not find any available embedding types`);
 			return undefined;
 		}
+
+		this._logService.info(`GithubAvailableEmbeddingTypesManager: Got embeddings. Primary: ${all.primary.join(',')}. Deprecated: ${all.deprecated.join(',')}`);
 
 		const preference = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.WorkspacePreferredEmbeddingsModel, this._experimentationService);
 		if (preference) {
