@@ -504,7 +504,14 @@ class ChatElementItem extends vscode.TreeItem {
 		// todo@connor4312: we should have flags from the renderer whether it dropped any messages and indicate that here
 		super(`<${info.name}/>`, vscode.TreeItemCollapsibleState.None);
 		this.id = info.id;
-		this.description = `${info.tokens} tokens`;
+		const used = info.tokens ?? 0;
+		const max = info.maxTokens ?? 0;
+		const usedStr = used.toLocaleString('en-US');
+		const maxStr = max ? max.toLocaleString('en-US') : '';
+		const pct = max > 0 ? Math.round((used / max) * 100) : undefined;
+		this.description = max > 0
+			? `${usedStr}/${maxStr} tokens${pct !== undefined ? ` (${pct}%)` : ''}`
+			: `${usedStr} tokens`;
 		this.command = { command: showHtmlCommand, title: '', arguments: [info.id] };
 		this.iconPath = new vscode.ThemeIcon('code');
 	}
@@ -527,7 +534,19 @@ class ChatRequestItem extends vscode.TreeItem {
 			const durationMs = info.entry.endTime.getTime() - info.entry.startTime.getTime();
 			const timeStr = `${durationMs.toLocaleString('en-US')}ms`;
 			const startTimeStr = info.entry.startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-			const tokensStr = info.entry.type === LoggedRequestKind.ChatMLSuccess && info.entry.usage ? `${info.entry.usage.prompt_tokens.toLocaleString('en-US')}tks` : '';
+			let tokensStr = '';
+			if (info.entry.type === LoggedRequestKind.ChatMLSuccess && info.entry.usage) {
+				const used = info.entry.usage.prompt_tokens ?? 0;
+				const max = info.entry.chatEndpoint.modelMaxPromptTokens ?? 0;
+				const usedStr = used.toLocaleString('en-US');
+				if (max > 0) {
+					const maxStr = max.toLocaleString('en-US');
+					const pct = Math.round((used / max) * 100);
+					tokensStr = `${usedStr}/${maxStr} tokens (${pct}%)`;
+				} else {
+					tokensStr = `${usedStr} tokens`;
+				}
+			}
 			const tokensStrPart = tokensStr ? `[${tokensStr}] ` : '';
 			this.description = `${tokensStrPart}[${timeStr}] [${startTimeStr}]`;
 
