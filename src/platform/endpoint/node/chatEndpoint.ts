@@ -155,7 +155,6 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly supportsStatefulResponses: boolean;
 	public readonly isPremium?: boolean | undefined;
 	public readonly multiplier?: number | undefined;
-	public readonly vendor?: string;
 	public readonly restrictedToSkus?: string[] | undefined;
 	private readonly _supportsStreaming: boolean;
 	private _policyDetails: ModelPolicy | undefined;
@@ -194,7 +193,6 @@ export class ChatEndpoint implements IChatEndpoint {
 		this._supportsStreaming = !!_modelMetadata.capabilities.supports.streaming;
 		this.supportsStatefulResponses = !!_modelMetadata.capabilities.supports.statefulResponses;
 		this._policyDetails = _modelMetadata.policy;
-		this.vendor = _modelMetadata.vendor;
 	}
 
 	public get modelMaxPromptTokens(): number {

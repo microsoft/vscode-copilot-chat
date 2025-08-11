@@ -99,10 +99,6 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		return 'enabled';
 	}
 
-	get vendor(): string | undefined {
-		return this.languageModel.vendor;
-	}
-
 	async processResponseFromChatEndpoint(
 		telemetryService: ITelemetryService,
 		logService: ILogService,

@@ -35,13 +35,8 @@ export class CopilotChatEndpoint extends ChatEndpoint {
 		@IThinkingDataService readonly thinkingDataService: IThinkingDataService,
 	) {
 
-		const copilotMetadata = {
-			...modelMetadata,
-			vendor: 'copilot'
-		};
-
 		super(
-			copilotMetadata,
+			modelMetadata,
 			domainService,
 			capiClientService,
 			fetcherService,
