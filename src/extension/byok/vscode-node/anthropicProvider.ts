@@ -53,7 +53,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 	async updateAPIKey(): Promise<void> {
 		this._apiKey = await promptForAPIKey(AnthropicLMProvider.providerName, await this._byokStorageService.getAPIKey(AnthropicLMProvider.providerName) !== undefined);
 		if (this._apiKey) {
-			this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, this._apiKey, BYOKAuthType.GlobalApiKey);
+			await this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, this._apiKey, BYOKAuthType.GlobalApiKey);
 		}
 	}
 
