@@ -4,9 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { HTMLTracer, IChatEndpointInfo, RenderPromptResult } from '@vscode/prompt-tsx';
-import { CancellationToken, DocumentLink, DocumentLinkProvider, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult2, languages, Range, TextDocument, Uri, workspace } from 'vscode';
+import { CancellationToken, DocumentLink, DocumentLinkProvider, FileType, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult2, languages, Range, TextDocument, Uri, workspace } from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
 import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
 import { IResponseDelta } from '../../../platform/networking/common/fetch';
@@ -17,18 +18,33 @@ import { assertNever } from '../../../util/vs/base/common/assert';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { safeStringify } from '../../../util/vs/base/common/objects';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { ChatRequest } from '../../../vscodeTypes';
 import { renderToolResultToStringNoBudget } from './requestLoggerToolResult';
+
+// Persistence record types written to disk
+type PersistedLogEntry =
+	| { kind: 'request'; id: string; time: number; data: any & { prompt?: string } }
+	| { kind: 'tool'; id: string; time: number; data: { name: string; args: unknown; response: LanguageModelToolResult2; thinking?: ThinkingData; requestId?: string } }
+	| { kind: 'element'; id: string; time: number; data: { name: string; tokens: number; maxTokens: number; requestId?: string } };
 
 export class RequestLogger extends AbstractRequestLogger {
 
 	private _didRegisterLinkProvider = false;
 	private readonly _entries: LoggedInfo[] = [];
+	private readonly _requestIdByChatRequest = new WeakMap<ChatRequest, string>();
+	private readonly _knownIds = new Set<string>();
+	private readonly _persistDir: Uri;
+	private readonly _retentionMs = 7 * 24 * 60 * 60 * 1000; // 7 days
+	private _hasLoadedPersisted = false;
 
 	constructor(
 		@ILogService private readonly _logService: ILogService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
+		@IVSCodeExtensionContext private readonly _vscodeExtensionContext: IVSCodeExtensionContext,
 	) {
 		super();
+
+		this._persistDir = Uri.joinPath(this._vscodeExtensionContext.globalStorageUri, 'chat-logs');
 
 		this._register(workspace.registerTextDocumentContentProvider(ChatRequestScheme.chatRequestScheme, {
 			onDidChange: Event.map(this.onDidChangeRequests, () => Uri.parse(ChatRequestScheme.buildUri({ kind: 'latest' }))),
@@ -49,6 +65,18 @@ export class RequestLogger extends AbstractRequestLogger {
 					default:
 						assertNever(entry);
 				}
+			}
+		}));
+
+		// Initialize persistence (create dir, cleanup old, load recent)
+		void this._initPersistence();
+		// And schedule a best-effort deferred init to avoid early-race issues
+		this._scheduleDeferredInit();
+
+		// Also react to config changes to avoid startup race: load when toggled on
+		this._register(this._configService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(ConfigKey.PersistDebugLogs.fullyQualifiedId) && this._isPersistenceEnabled()) {
+				void this._initPersistence();
 			}
 		}));
 	}
@@ -113,19 +141,360 @@ export class RequestLogger extends AbstractRequestLogger {
 	private _isFirst = true;
 
 	private async _addEntry(entry: LoggedInfo): Promise<boolean> {
+		const key = this._entryKey(entry);
+		if (this._knownIds.has(key)) {
+			return false; // duplicate; skip
+		}
+		this._knownIds.add(key);
 		if (this._isFirst) {
 			this._isFirst = false;
 			this._logService.info(`Latest entry: ${ChatRequestScheme.buildUri({ kind: 'latest' })}`);
 		}
-
 
 		this._entries.push(entry);
 		// keep at most 100 entries
 		if (this._entries.length > 100) {
 			this._entries.shift();
 		}
+
+		// Track mapping from ChatRequest -> last request id for grouping
+		if (entry.kind === LoggedInfoKind.Request && entry.chatRequest) {
+			this._requestIdByChatRequest.set(entry.chatRequest, entry.id);
+		}
 		this._onDidChangeRequests.fire();
+
+		// Persist to disk if enabled and entry type is supported
+		if (this._isPersistenceEnabled() && (entry.kind === LoggedInfoKind.Request || entry.kind === LoggedInfoKind.ToolCall)) {
+			try {
+				await this._ensurePersistDir();
+				const raw = this._serializeEntry(entry);
+				const safe = this._toSerializableRecord(raw ?? { kind: 'request', id: entry.id, time: Date.now(), data: {} });
+				const timestamp = Date.now();
+				const fileName = `${timestamp}_${entry.kind}_${entry.id}.json`;
+				const fileUri = Uri.joinPath(this._persistDir, fileName);
+				// Use safeStringify to break any unexpected cycles
+				const payload = safeStringify(safe);
+				await workspace.fs.writeFile(fileUri, Buffer.from(payload, 'utf8'));
+				this._logService.info(`[requestLogger] persisted ${entry.kind === LoggedInfoKind.Request ? 'request' : 'tool'} -> ${fileUri.fsPath}`);
+				// ensure listeners refresh promptly
+				this._onDidChangeRequests.fire();
+				// Cleanup in background
+				void this._cleanupOldFiles();
+			} catch (e) {
+				this._logService.warn(`[requestLogger] Failed to persist entry: ${e}`);
+			}
+		}
 		return true;
+	}
+
+	private _entryKey(entry: LoggedInfo): string {
+		if (entry.kind === LoggedInfoKind.ToolCall) {
+			return `tool:${entry.id}:${entry.time}`;
+		}
+		return `${entry.kind}:${entry.id}`;
+	}
+
+	private _toSerializableRecord(record: PersistedLogEntry): PersistedLogEntry {
+		if (record.kind === 'tool') {
+			// Strip complex content to simple text values
+			const content = Array.isArray((record as any).data?.response?.content)
+				? (record as any).data.response.content.map((p: any) => {
+					if (p && typeof p === 'object' && 'value' in p && typeof p.value === 'string') {
+						return { value: p.value };
+					}
+					return { value: String(p) };
+				})
+				: [];
+
+			// Sanitize args and thinking which may carry circular graphs
+			const rawArgs = (record as any).data?.args;
+			const args = typeof rawArgs === 'string' ? rawArgs : safeStringify(rawArgs);
+			const rawThinking = (record as any).data?.thinking;
+			const thinking = rawThinking && typeof rawThinking === 'object' ? safeStringify(rawThinking) : rawThinking;
+			return {
+				kind: 'tool',
+				id: (record as any).id,
+				time: (record as any).time,
+				data: {
+					name: (record as any).data?.name,
+					args,
+					response: { content },
+					thinking,
+					requestId: (record as any).data?.requestId
+				}
+			} as any;
+		} else if (record.kind === 'element') {
+			// Persist element metadata and link to its request if known
+			return {
+				kind: 'element',
+				id: (record as any).id,
+				time: (record as any).time,
+				data: {
+					name: (record as any).data?.name,
+					tokens: (record as any).data?.tokens,
+					maxTokens: (record as any).data?.maxTokens,
+					requestId: (record as any).data?.requestId
+				}
+			} as any;
+		}
+
+		// For requests, create a compact, cycle-free projection
+		const data = (record as any).data ?? {};
+		const chatEndpoint = data.chatEndpoint ? {
+			model: data.chatEndpoint.model,
+			modelMaxPromptTokens: data.chatEndpoint.modelMaxPromptTokens,
+			urlOrRequestMetadata: typeof data.chatEndpoint.urlOrRequestMetadata === 'string'
+				? data.chatEndpoint.urlOrRequestMetadata
+				: data.chatEndpoint.urlOrRequestMetadata?.type
+		} : undefined;
+
+		const po = data.chatParams?.postOptions;
+		const safePostOptions = po ? {
+			max_tokens: po.max_tokens,
+			temperature: po.temperature,
+			top_p: po.top_p
+		} : undefined;
+
+		let safeResult: any = undefined;
+		try {
+			if (data?.result && typeof data.result === 'object') {
+				const type = (data.result as any).type;
+				const requestId = (data.result as any).requestId;
+				const serverRequestId = (data.result as any).serverRequestId;
+				if ('value' in data.result) {
+					safeResult = { type, value: (data.result as any).value, requestId, serverRequestId };
+				} else if ('message' in data.result) {
+					safeResult = { type, message: String((data.result as any).message), requestId, serverRequestId };
+				} else {
+					safeResult = { type, requestId, serverRequestId };
+				}
+			}
+		} catch {
+			// ignore, keep undefined
+		}
+
+		const safe: any = {
+			type: data?.type,
+			debugName: data?.debugName,
+			chatEndpoint,
+			chatParams: data?.chatParams && {
+				model: data.chatParams.model,
+				postOptions: safePostOptions,
+				location: data.chatParams.location,
+				intent: data.chatParams.intent,
+				ourRequestId: data.chatParams.ourRequestId
+			},
+			startTime: data?.startTime,
+			endTime: data?.endTime,
+			timeToFirstToken: data?.timeToFirstToken,
+			usage: data?.usage,
+			result: safeResult,
+			// Drop deltas entirely to avoid large cyclic structures
+			deltas: undefined
+		};
+
+		// Preserve prompt if present so we can label conversations after reload
+		const prompt: unknown = (record as any).data?.prompt;
+		const dataOut: any = { ...safe };
+		if (typeof prompt === 'string' && prompt.length > 0) {
+			dataOut.prompt = prompt;
+		}
+
+		return { kind: 'request', id: (record as any).id, time: (record as any).time, data: dataOut } as any;
+	}
+
+	private _isPersistenceEnabled(): boolean {
+		try {
+			return !!this._configService.getConfig(ConfigKey.PersistDebugLogs);
+		} catch {
+			return false;
+		}
+	}
+
+	private async _initPersistence(): Promise<void> {
+		if (!this._isPersistenceEnabled()) {
+			return;
+		}
+		try {
+			this._logService.info(`[requestLogger] init persistence at ${this._persistDir.fsPath}`);
+			await this._ensurePersistDir();
+			await this._cleanupOldFiles();
+			if (!this._hasLoadedPersisted) {
+				await this._loadPersistedEntries();
+				this._hasLoadedPersisted = true;
+			}
+		} catch (e) {
+			this._logService.warn(`[requestLogger] Failed initializing persistence: ${e}`);
+		}
+	}
+
+	// As a fallback, attempt a best-effort load shortly after activation as VS Code settles.
+	private _scheduleDeferredInit(): void {
+		setTimeout(() => {
+			if (this._isPersistenceEnabled()) {
+				void this._initPersistence();
+			}
+		}, 2500);
+	}
+
+	private async _ensurePersistDir(): Promise<void> {
+		// Create directory if it doesn't exist
+		try {
+			await workspace.fs.createDirectory(this._persistDir);
+		} catch {
+			// ignore
+		}
+	}
+
+	private _serializeEntry(entry: LoggedInfo): PersistedLogEntry | undefined {
+		if (entry.kind === LoggedInfoKind.Request) {
+			// Convert Dates to ISO strings for serialization where present
+			const req: any = entry.entry as any;
+			const data: any = { ...req };
+			if ('startTime' in req && req.startTime instanceof Date) {
+				data.startTime = req.startTime.toJSON();
+			}
+			if ('endTime' in req && req.endTime instanceof Date) {
+				data.endTime = req.endTime.toJSON();
+			}
+			// Include prompt text when available for grouping on reload
+			const prompt = entry.chatRequest && typeof (entry.chatRequest as any).prompt === 'string' ? (entry.chatRequest as any).prompt : undefined;
+			return { kind: 'request', id: entry.id, time: Date.now(), data: { ...data, prompt } };
+		} else if (entry.kind === LoggedInfoKind.ToolCall) {
+			const requestId = entry.chatRequest ? this._requestIdByChatRequest.get(entry.chatRequest) : undefined;
+			return { kind: 'tool', id: entry.id, time: entry.time, data: { name: entry.name, args: entry.args, response: entry.response, thinking: entry.thinking, requestId } };
+		} else if (entry.kind === LoggedInfoKind.Element) {
+			const requestId = entry.chatRequest ? this._requestIdByChatRequest.get(entry.chatRequest) : undefined;
+			return { kind: 'element', id: entry.id, time: Date.now(), data: { name: entry.name, tokens: entry.tokens, maxTokens: entry.maxTokens, requestId } } as any;
+		}
+		// Skip Element entries (non-serializable HTML tracer)
+		return undefined;
+	}
+
+	private _reviveLoggedRequest(obj: any): LoggedRequest | undefined {
+		// Revive Dates
+		if (!obj || typeof obj !== 'object' || !obj.type) {
+			return undefined;
+		}
+		if ('startTime' in obj) {
+			obj.startTime = new Date(obj.startTime);
+		}
+		if ('endTime' in obj) {
+			obj.endTime = new Date(obj.endTime);
+		}
+		return obj as LoggedRequest;
+	}
+
+	private async _loadPersistedEntries(): Promise<void> {
+		try {
+			const dirItems = await workspace.fs.readDirectory(this._persistDir);
+			const files = dirItems
+				.filter(([, type]) => type === FileType.File)
+				.map(([name]) => name)
+				.filter(name => name.endsWith('.json'));
+
+			this._logService.info(`[requestLogger] found ${files.length} persisted files`);
+
+			// Sort by timestamp parsed from filename descending
+			const sorted = files.sort((a, b) => {
+				const ta = Number(a.split('_')[0]);
+				const tb = Number(b.split('_')[0]);
+				return tb - ta;
+			});
+
+			const now = Date.now();
+			const entriesToLoad: LoggedInfo[] = [];
+			// First pass: create synthetic ChatRequest handles for requests
+			const syntheticRequests = new Map<string, any>();
+			for (const name of sorted) {
+				const timestamp = Number(name.split('_')[0]);
+				if (isNaN(timestamp) || (now - timestamp) > this._retentionMs) {
+					continue; // older than retention or invalid
+				}
+				const fileUri = Uri.joinPath(this._persistDir, name);
+				try {
+					const buf = await workspace.fs.readFile(fileUri);
+					const rec = JSON.parse(Buffer.from(buf).toString('utf8')) as PersistedLogEntry;
+					if (rec.kind === 'request') {
+						const revived = this._reviveLoggedRequest(rec.data);
+						const prompt = (rec.data as any).prompt as (string | undefined);
+						const fakeChatRequest = { prompt } as any; // minimal shape for grouping/label
+						syntheticRequests.set(rec.id, fakeChatRequest);
+						if (revived) {
+							entriesToLoad.push({ kind: LoggedInfoKind.Request, id: rec.id, entry: revived, chatRequest: fakeChatRequest });
+						}
+					} else if (rec.kind === 'tool') {
+						const chatRequest = rec.data.requestId ? syntheticRequests.get(rec.data.requestId) : undefined;
+						entriesToLoad.push({ kind: LoggedInfoKind.ToolCall, id: rec.id, name: rec.data.name, args: rec.data.args, response: rec.data.response, time: rec.time, thinking: rec.data.thinking, chatRequest });
+					} else if (rec.kind === 'element') {
+						const chatRequest = rec.data.requestId ? syntheticRequests.get(rec.data.requestId) : undefined;
+						entriesToLoad.push({ kind: LoggedInfoKind.Element, id: rec.id, name: rec.data.name, tokens: rec.data.tokens, maxTokens: rec.data.maxTokens, trace: new HTMLTracer(), chatRequest });
+					}
+				} catch (e) {
+					this._logService.warn(`[requestLogger] Failed to load persisted log ${name}: ${e}`);
+				}
+				if (entriesToLoad.length >= 100) {
+					break; // respect in-memory cap
+				}
+			}
+
+			// Load in reverse (oldest first) so UI order is consistent
+			for (const e of entriesToLoad.reverse()) {
+				const key = this._entryKey(e);
+				if (this._knownIds.has(key)) { continue; }
+				this._knownIds.add(key);
+				this._entries.push(e);
+			}
+			if (entriesToLoad.length) {
+				this._logService.info(`[requestLogger] loaded ${entriesToLoad.length} persisted entries`);
+				this._onDidChangeRequests.fire();
+			}
+		} catch (e) {
+			// ignore if directory missing
+		}
+	}
+
+	private async _cleanupOldFiles(): Promise<void> {
+		const now = Date.now();
+		try {
+			const dirItems = await workspace.fs.readDirectory(this._persistDir);
+			const deletions: Promise<void>[] = [];
+			for (const [name, type] of dirItems) {
+				if (type !== FileType.File || !name.endsWith('.json')) { continue; }
+				const ts = Number(name.split('_')[0]);
+				if (!isNaN(ts) && (now - ts) > this._retentionMs) {
+					const fileUri = Uri.joinPath(this._persistDir, name);
+					deletions.push(Promise.resolve(workspace.fs.delete(fileUri)).then(() => { }, () => { }));
+				}
+			}
+			await Promise.allSettled(deletions);
+		} catch {
+			// ignore
+		}
+	}
+
+	public override async clearLogs(): Promise<void> {
+		// Clear in-memory
+		this._entries.length = 0;
+		this._knownIds.clear();
+		this._onDidChangeRequests.fire();
+
+		// Clear persisted files
+		try {
+			await this._ensurePersistDir();
+			const dirItems = await workspace.fs.readDirectory(this._persistDir);
+			const deletions: Promise<void>[] = [];
+			for (const [name, type] of dirItems) {
+				if (type === FileType.File && name.endsWith('.json')) {
+					const fileUri = Uri.joinPath(this._persistDir, name);
+					deletions.push(Promise.resolve(workspace.fs.delete(fileUri)).then(() => { }, () => { }));
+				}
+			}
+			await Promise.allSettled(deletions);
+			this._logService.info('[requestLogger] cleared persisted logs');
+		} catch (e) {
+			this._logService.warn(`[requestLogger] failed to clear persisted logs: ${e}`);
+		}
 	}
 
 	private _ensureLinkProvider(): void {

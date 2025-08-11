@@ -1790,6 +1790,12 @@
 				"category": "GitHub Copilot"
 			},
 			{
+				"command": "github.copilot.chat.debug.clearLogs",
+				"title": "Clear Logs",
+				"icon": "$(trash)",
+				"category": "Developer"
+			},
+			{
 				"command": "github.copilot.debug.workbenchState",
 				"title": "%github.copilot.command.logWorkbenchState%",
 				"category": "Developer"
@@ -2986,6 +2992,11 @@
 				}
 			],
 			"view/title": [
+				{
+					"command": "github.copilot.chat.debug.clearLogs",
+					"when": "view == copilot-chat",
+					"group": "navigation@-1"
+				},
 				{
 					"submenu": "github.copilot.chat.debug.filter",
 					"when": "view == copilot-chat",

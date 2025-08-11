@@ -112,7 +112,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 
 	registerCommonServices(builder, extensionContext);
 
-	builder.define(IConversationStore, new ConversationStore());
+	builder.define(IConversationStore, new SyncDescriptor(ConversationStore));
 	builder.define(IDiffService, new DiffServiceImpl());
 	builder.define(ITokenizerProvider, new SyncDescriptor(TokenizerProvider, [true]));
 	builder.define(IToolsService, new SyncDescriptor(ToolsService));

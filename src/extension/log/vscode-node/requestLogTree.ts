@@ -22,6 +22,7 @@ import { IExtensionContribution } from '../../common/contributions';
 const showHtmlCommand = 'vscode.copilot.chat.showRequestHtmlItem';
 const exportLogItemCommand = 'github.copilot.chat.debug.exportLogItem';
 const exportPromptArchiveCommand = 'github.copilot.chat.debug.exportPromptArchive';
+const clearLogsCommand = 'github.copilot.chat.debug.clearLogs';
 
 export class RequestLogTree extends Disposable implements IExtensionContribution {
 	readonly id = 'requestLogTree';
@@ -240,6 +241,10 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				vscode.window.showErrorMessage(`Failed to export prompt archive: ${error}`);
 			}
 		}));
+
+		this._register(vscode.commands.registerCommand(clearLogsCommand, async () => {
+			await requestLogger.clearLogs();
+		}));
 	}
 }
 
@@ -305,6 +310,8 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 		this._register(new LogTreeFilterCommands(this.filters));
 		this._register(this.requestLogger.onDidChangeRequests(() => this._onDidChangeTreeData.fire()));
 		this._register(this.filters.onDidChangeFilters(() => this._onDidChangeTreeData.fire()));
+		// Kick an initial refresh so any entries loaded during activation are shown immediately
+		queueMicrotask(() => this._onDidChangeTreeData.fire());
 	}
 
 	private readonly _onDidChangeTreeData = new vscode.EventEmitter<TreeItem | undefined | void>();
@@ -320,44 +327,63 @@ class ChatRequestProvider extends Disposable implements vscode.TreeDataProvider<
 		} else if (element) {
 			return [];
 		} else {
-			let lastPrompt: ChatPromptItem | undefined;
-			const result: (ChatPromptItem | TreeChildItem)[] = [];
-			const seen = new Set<ChatRequest | undefined>();
+			// Build a map of parent prompt/request to children
+			const requests = this.requestLogger.getRequests();
+			const promptMap = new Map<string, ChatPromptItem>();
+			const childMap = new Map<string, TreeChildItem[]>();
 
-			for (const r of this.requestLogger.getRequests()) {
-				const item = this.logToTreeItem(r);
-				if (r.chatRequest !== lastPrompt?.request) {
-					if (lastPrompt) {
-						result.push(lastPrompt);
-					}
-					lastPrompt = r.chatRequest ? ChatPromptItem.create(r, r.chatRequest, seen.has(r.chatRequest)) : undefined;
-					seen.add(r.chatRequest);
+			// Helper to get a unique key for a prompt/request
+			const getKey = (r: LoggedInfo) => {
+				if (r.kind === LoggedInfoKind.Request) {
+					const prompt = (r.chatRequest as any)?.prompt || (r.entry as any)?.prompt || r.entry.debugName;
+					return prompt || r.id;
 				}
+				return r.id;
+			};
 
-				if (lastPrompt) {
-					if (!lastPrompt.children.find(c => c.id === item.id)) {
-						lastPrompt.children.push(item);
+			// First pass: create ChatPromptItems and collect children
+			for (const r of requests) {
+				if (r.kind === LoggedInfoKind.Request) {
+					const key = getKey(r);
+					if (r.chatRequest && !promptMap.has(key)) {
+						promptMap.set(key, ChatPromptItem.create(r, r.chatRequest, false));
 					}
-					if (!lastPrompt.children.find(c => c.id === item.id)) {
-						lastPrompt.children.push(item);
+					if (!childMap.has(key)) {
+						childMap.set(key, []);
 					}
+					childMap.get(key)!.push(this.logToTreeItem(r));
 				} else {
-					result.push(item);
+					// Non-request items are attached to their parent prompt/request if possible
+					const parentKey = r.chatRequest ? getKey({ kind: LoggedInfoKind.Request, id: '', entry: { debugName: '', prompt: (r.chatRequest as any)?.prompt }, chatRequest: r.chatRequest } as any) : undefined;
+					if (parentKey && childMap.has(parentKey)) {
+						childMap.get(parentKey)!.push(this.logToTreeItem(r));
+					}
 				}
 			}
 
-			if (lastPrompt) {
-				result.push(lastPrompt);
+			// Second pass: nest children recursively
+			for (const promptItem of promptMap.values()) {
+				const key = getKey(promptItem.request ? { kind: LoggedInfoKind.Request, id: '', entry: { debugName: '', prompt: (promptItem.request as any)?.prompt }, chatRequest: promptItem.request } as any : { kind: LoggedInfoKind.Request, id: '', entry: { debugName: '', prompt: undefined }, chatRequest: undefined } as any);
+				promptItem.children = childMap.get(key) || [];
 			}
 
-			return result.map(r => {
-				if (r instanceof ChatPromptItem) {
-					return r.withFilteredChildren(child => this.filters.itemIncluded(child));
+			// Only return top-level prompts (those not nested under another prompt)
+			const topLevel: ChatPromptItem[] = [];
+			const nestedKeys = new Set<string>();
+			for (const [key, promptItem] of promptMap.entries()) {
+				for (const child of promptItem.children) {
+					if (child instanceof ChatPromptItem) {
+						nestedKeys.add(getKey(child.info));
+					}
 				}
+			}
+			for (const [key, promptItem] of promptMap.entries()) {
+				if (!nestedKeys.has(key)) {
+					topLevel.push(promptItem.withFilteredChildren(child => this.filters.itemIncluded(child)));
+				}
+			}
 
-				return r;
-			})
-				.filter(r => this.filters.itemIncluded(r));
+			return topLevel.filter(r => this.filters.itemIncluded(r));
 		}
 	}
 
@@ -389,14 +415,26 @@ class ChatPromptItem extends vscode.TreeItem {
 			return existing;
 		}
 
-		const item = new ChatPromptItem(request, hasSeen);
-		item.id = info.id + '-prompt';
+		const item = new ChatPromptItem(request, hasSeen, info);
+		item.id = `prompt:${info.id}`;
 		ChatPromptItem.ids.set(info, item);
 		return item;
 	}
 
-	protected constructor(public readonly request: ChatRequest, public readonly hasSeen: boolean) {
-		super(request.prompt, vscode.TreeItemCollapsibleState.Expanded);
+	protected constructor(public readonly request: ChatRequest, public readonly hasSeen: boolean, info?: LoggedInfo) {
+		// Prefer the user's prompt as the title; fall back to debugName/tool name
+		let label: string | undefined = (request as any)?.prompt;
+		if (!label && info && info.kind === LoggedInfoKind.Request) {
+			// Try to use persisted prompt if present on the entry data (loaded via requestLoggerImpl)
+			label = (info.entry as any)?.prompt;
+		}
+		if (!label) {
+			label = info && info.kind === LoggedInfoKind.Request ? info.entry.debugName
+				: info && info.kind === LoggedInfoKind.ToolCall ? info.name
+					: 'conversation';
+		}
+
+		super(label, vscode.TreeItemCollapsibleState.Expanded);
 		this.iconPath = new vscode.ThemeIcon('comment');
 		if (hasSeen) {
 			this.description = '(Continued...)';
@@ -406,6 +444,10 @@ class ChatPromptItem extends vscode.TreeItem {
 	public withFilteredChildren(filter: (child: TreeChildItem) => boolean): ChatPromptItem {
 		const item = new ChatPromptItem(this.request, this.hasSeen);
 		item.children = this.children.filter(filter);
+		// Preserve stable identity and visuals across refreshes
+		item.id = this.id;
+		item.iconPath = this.iconPath;
+		item.description = this.description;
 		return item;
 	}
 }
@@ -418,7 +460,7 @@ class ToolCallItem extends vscode.TreeItem {
 	) {
 		// todo@connor4312: we should have flags from the renderer whether it dropped any messages and indicate that here
 		super(info.name, vscode.TreeItemCollapsibleState.None);
-		this.id = `${info.id}_${info.time}`;
+		this.id = `tool:${info.id}_${info.time}`;
 		this.description = info.args === undefined ? '' : typeof info.args === 'string' ? info.args : JSON.stringify(info.args);
 		this.command = {
 			command: 'vscode.open',
@@ -437,7 +479,7 @@ class ChatElementItem extends vscode.TreeItem {
 	) {
 		// todo@connor4312: we should have flags from the renderer whether it dropped any messages and indicate that here
 		super(`<${info.name}/>`, vscode.TreeItemCollapsibleState.None);
-		this.id = info.id;
+		this.id = `element:${info.id}`;
 		this.description = `${info.tokens} tokens`;
 		this.command = { command: showHtmlCommand, title: '', arguments: [info.id] };
 		this.iconPath = new vscode.ThemeIcon('code');
@@ -451,7 +493,7 @@ class ChatRequestItem extends vscode.TreeItem {
 		readonly info: ILoggedRequestInfo
 	) {
 		super(info.entry.debugName, vscode.TreeItemCollapsibleState.None);
-		this.id = info.id;
+		this.id = `request:${info.id}`;
 
 		if (info.entry.type === LoggedRequestKind.MarkdownContentRequest) {
 			this.iconPath = info.entry.icon === undefined ? undefined : new vscode.ThemeIcon(info.entry.icon.id);

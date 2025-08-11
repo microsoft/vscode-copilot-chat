@@ -118,6 +118,9 @@ export interface IRequestLogger {
 
 	onDidChangeRequests: Event<void>;
 	getRequests(): LoggedInfo[];
+
+	/** Clears in-memory logs and any persisted log files. */
+	clearLogs(): Promise<void>;
 }
 
 export const enum LoggedRequestKind {
@@ -221,6 +224,7 @@ export abstract class AbstractRequestLogger extends Disposable implements IReque
 	public abstract addEntry(entry: LoggedRequest): void;
 	public abstract getRequests(): LoggedInfo[];
 	abstract onDidChangeRequests: Event<void>;
+	public abstract clearLogs(): Promise<void>;
 
 	/** Current request being made to the LM. */
 	protected get currentRequest() {
@@ -231,6 +235,7 @@ export abstract class AbstractRequestLogger extends Disposable implements IReque
 class AbstractPendingLoggedRequest {
 	protected _time: Date;
 	protected _timeToFirstToken: number | undefined = undefined;
+	private readonly _capturedChatRequest: ChatRequest | undefined;
 
 	constructor(
 		protected _logbook: IRequestLogger,
@@ -239,6 +244,9 @@ class AbstractPendingLoggedRequest {
 		protected _chatParams: ChatParams | ICompletionFetchRequestLogParams
 	) {
 		this._time = new Date();
+		// Capture current request (with prompt) at construction time for persistence
+		// @ts-ignore accessing protected getter through cast
+		this._capturedChatRequest = (this._logbook as any).currentRequest;
 	}
 
 	markTimeToFirstToken(timeToFirstToken: number): void {
@@ -252,8 +260,10 @@ class AbstractPendingLoggedRequest {
 			chatEndpoint: this._chatEndpoint,
 			chatParams: this._chatParams,
 			startTime: this._time,
-			endTime: new Date()
-		});
+			endTime: new Date(),
+			// @ts-ignore propagate captured chat request
+			chatRequest: this._capturedChatRequest
+		} as any);
 	}
 }
 
@@ -283,7 +293,9 @@ export class PendingLoggedCompletionRequest extends AbstractPendingLoggedRequest
 				endTime: new Date(),
 				timeToFirstToken: this._timeToFirstToken,
 				result: { type: ChatFetchResponseType.Success, value: completionText, requestId: this.requestId },
-			});
+				// @ts-ignore capture chat request
+				chatRequest: (this as any)._capturedChatRequest
+			} as any);
 		} else {
 			this._logbook.addEntry({
 				type: LoggedRequestKind.CompletionFailure,
@@ -294,7 +306,9 @@ export class PendingLoggedCompletionRequest extends AbstractPendingLoggedRequest
 				endTime: new Date(),
 				timeToFirstToken: this._timeToFirstToken,
 				result: { type: result.err, requestId: this.requestId },
-			});
+				// @ts-ignore capture chat request
+				chatRequest: (this as any)._capturedChatRequest
+			} as any);
 		}
 	}
 }
@@ -321,8 +335,10 @@ export class PendingLoggedChatRequest extends AbstractPendingLoggedRequest {
 				endTime: new Date(),
 				timeToFirstToken: this._timeToFirstToken,
 				result,
-				deltas
-			});
+				deltas,
+				// @ts-ignore capture chat request
+				chatRequest: (this as any)._capturedChatRequest
+			} as any);
 		} else {
 			this._logbook.addEntry({
 				type: result.type === ChatFetchResponseType.Canceled ? LoggedRequestKind.ChatMLCancelation : LoggedRequestKind.ChatMLFailure,
@@ -333,7 +349,9 @@ export class PendingLoggedChatRequest extends AbstractPendingLoggedRequest {
 				endTime: new Date(),
 				timeToFirstToken: this._timeToFirstToken,
 				result,
-			});
+				// @ts-ignore capture chat request
+				chatRequest: (this as any)._capturedChatRequest
+			} as any);
 		}
 	}
 }

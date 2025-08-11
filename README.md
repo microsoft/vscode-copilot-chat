@@ -81,3 +81,7 @@ This project may contain trademarks or logos for projects, products, or services
 Copyright (c) Microsoft Corporation. All rights reserved.
 
 Licensed under the [MIT](LICENSE.txt) license.
+
+---
+
+Hi from Pierce 👋

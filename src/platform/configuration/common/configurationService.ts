@@ -759,6 +759,8 @@ export namespace ConfigKey {
 	export const GitHistoryRelatedFilesProvider = defineSetting('chat.edits.suggestRelatedFilesFromGitHistory', true);
 	export const Test2SrcRelatedFilesProvider = defineSetting('chat.edits.suggestRelatedFilesForTests', true);
 	export const TerminalToDebuggerEnabled = defineSetting('chat.copilotDebugCommand.enabled', true);
+	/** Persist Copilot Chat debug logs across sessions (max 7 days retention) */
+	export const PersistDebugLogs = defineSetting<boolean>('chat.debug.persistLogs', false);
 	export const EditsCodeSearchAgentEnabled = defineSetting<boolean>('chat.edits.codesearch.enabled', false);
 	export const CodeSearchAgentEnabled = defineSetting<boolean>('chat.codesearch.enabled', false);
 	export const InlineEditsEnabled = defineExpSetting<boolean>('nextEditSuggestions.enabled', { defaultValue: false, teamDefaultValue: true });

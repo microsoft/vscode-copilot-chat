@@ -31,6 +31,7 @@ import { CopilotDebugCommandContribution } from '../../onboardDebug/vscode-node/
 import { OnboardTerminalTestsContribution } from '../../onboardDebug/vscode-node/onboardTerminalTestsContribution';
 import { DebugCommandsContribution } from '../../prompt/vscode-node/debugCommands';
 import { RenameSuggestionsContrib } from '../../prompt/vscode-node/renameSuggestions';
+import { RequestLoggerWarmupContribution } from '../../prompt/vscode-node/requestLoggerWarmup.contribution';
 import { PromptFileContextContribution } from '../../promptFileContext/vscode-node/promptFileContextService';
 import { RelatedFilesProviderContribution } from '../../relatedFiles/vscode-node/relatedFiles.contribution';
 import { SearchPanelCommands } from '../../search/vscode-node/commands';
@@ -54,6 +55,7 @@ import vscodeContributions from '../vscode/contributions';
 
 export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	...vscodeContributions,
+	asContributionFactory(RequestLoggerWarmupContribution),
 	asContributionFactory(ConversationFeature),
 	workspaceChunkSearchContribution,
 	asContributionFactory(AuthenticationContrib),
