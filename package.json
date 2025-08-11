@@ -1316,7 +1316,7 @@
 					}
 				]
 			},
-{
+			{
 				"id": "github.copilot.notebook",
 				"name": "GitHubCopilot",
 				"fullName": "GitHub Copilot",
@@ -1573,6 +1573,10 @@
 				"vendor": "anthropic",
 				"displayName": "Anthropic",
 				"managementCommand": "github.copilot.chat.manageBYOK"
+			},
+			{
+				"vendor": "lmstudio",
+				"displayName": "LM Studio"
 			},
 			{
 				"vendor": "ollama",
