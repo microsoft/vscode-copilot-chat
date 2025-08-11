@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+
 export function getImageDimensions(base64: string) {
 	if (!base64.startsWith('data:image/')) {
 		throw new Error("Could not read image: invalid base64 image string");

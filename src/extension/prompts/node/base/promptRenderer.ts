@@ -85,7 +85,7 @@ export class PromptRenderer<P extends BasePromptElementProps> extends BasePrompt
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IAuthenticationService authenticationService: IAuthenticationService,
-		@ILogService private readonly _logService: ILogService
+		@ILogService private readonly _logService: ILogService,
 	) {
 		const tokenizer = tokenizerProvider.acquireTokenizer(endpoint);
 		super(endpoint, ctor, props, tokenizer);
