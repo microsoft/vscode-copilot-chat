@@ -31,7 +31,7 @@ import { GlobalContextMessageMetadata, RenderedUserMessageMetadata, Turn } from 
 import { InternalToolReference } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { ToolName } from '../../../tools/common/toolNames';
-import { CopilotIdentityRules } from '../base/copilotIdentity';
+import { CopilotIdentityRules, GPT5CopilotIdentityRule } from '../base/copilotIdentity';
 import { IPromptEndpoint, renderPromptElement } from '../base/promptRenderer';
 import { SafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
@@ -101,7 +101,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		const baseAgentInstructions = <>
 			<SystemMessage>
 				You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
-				<CopilotIdentityRules />
+				{this.props.endpoint.family.startsWith('gpt-5') ? <GPT5CopilotIdentityRule /> : <CopilotIdentityRules />}
 				<SafetyRules />
 			</SystemMessage>
 			{instructions}
