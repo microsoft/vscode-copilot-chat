@@ -2,97 +2,97 @@
 	{
 		"name": "Rename suggestions [external] - non-tree-sitter language",
 		"requests": [
-			"74f85963dd03d73ecdada9e51fe84ed4728054d7d22094f70c0385ec24f732b9"
+			"54c780708fffae96e6d0940b98b770b5bd8d8220817e4edcc0bf9c9dba4f227c"
 		]
 	},
 	{
 		"name": "Rename suggestions [external] - rename a function at its definition",
 		"requests": [
-			"178ce20d5ce4788155394a9878b625359eae6218d8c9335d3d65290cb6f73d93"
+			"98e84c4c1a49bdab727f425a656c15aba1b90e46af483a8b701eadb4bc52f2a3"
 		]
 	},
 	{
 		"name": "Rename suggestions [external] - rename a function call - definition in different file",
 		"requests": [
-			"6fadf023b2af00ce709b61a4efcba6f9561103775cb0dc7e2949fd93af8a080f"
+			"ede3f775d4df18cf8111c74a09945042d9662e96f118a58b821d759fae297948"
 		]
 	},
 	{
 		"name": "Rename suggestions [external] - rename a function call - definition in same file",
 		"requests": [
-			"217bc6b36308d6ac5705eed77c1319df84dc6572dc95e51f598f81727d888e24"
+			"8b00c4b1f62a01cd112bcf2c87f5420d70440e92750ba9824690eb7b60f7ece0"
 		]
 	},
 	{
 		"name": "Rename suggestions [external] - rename a SCREAMING_SNAKE_CASE enum member",
 		"requests": [
-			"1dac7ddf1857ed88c0a517dae8c3075280ea351266f0cefcb7acacc60277e554"
+			"597c2931b3ea22f4bb8ac84fed8261ca52300f7122896ba638d91124ae58ff8f"
 		]
 	},
 	{
 		"name": "Rename suggestions [external] - rename a variable reference within a function",
 		"requests": [
-			"0e5d2e4a7fbb121056253b6c73b740eb7a048dbdd3f4327c830ec3922ffb1ae6"
+			"c41a754b773878d77a31ba801e352a03047255a636a250310c205aaa54679873"
 		]
 	},
 	{
 		"name": "Rename suggestions [external] - rename class - same file",
 		"requests": [
-			"7521df2bad42a48abff9c0357d6e1c996d4bd934048000239941b9d521e62544"
+			"94b837de1130c559e31873771a2ec7965fdb24f493b49eaacc5ddc7293580c56"
 		]
 	},
 	{
 		"name": "Rename suggestions [external] - rename class name - CSS",
 		"requests": [
-			"7adbdf99c0ea2fc0f3943018dfa49fcd900c07879a84d78496a8d5819382c879"
+			"ef0b55b700fcaafa23e9ed5dcc9b0954c7bcd54753b53a325eae5107afbe7d28"
 		]
 	},
 	{
 		"name": "Rename suggestions [external] - rename class reference - same file",
 		"requests": [
-			"6382f45e427b3a01ee3ee9e8ca125c6aff171b1f47e398fd1c04476b22cefc43"
+			"51cc94562e7a75cb923165de2d182398578a7f4056df60bc620c8bdf94bcde71"
 		]
 	},
 	{
 		"name": "Rename suggestions [external] - rename follows naming convention _ - rename a function (with underscore) at its definition",
 		"requests": [
-			"607a6a9678339d38541d5c56fa2067f42f6a9af74be5801abb3007615fae751e"
+			"67f761491cd1115a116ee3baca1a73ff46ff40d11d760c00dc217613196bfc8e"
 		]
 	},
 	{
 		"name": "Rename suggestions [external] - rename method with field-awareness",
 		"requests": [
-			"a2d83512a8be310a8f8dfebe4e2a7aa3c92c8b2594ebecd8bec1f3dc4be06cb6"
+			"a55c3d1d97ec8c4648b06cbef0d3bab98efd5875060a5f3284c8ce4ee5c79d47"
 		]
 	},
 	{
 		"name": "Rename suggestions [external] - rename type definition",
 		"requests": [
-			"3603a3874449aaac44252162d055956ec0c51b55bf93a483fdd41b9f463ebc0a"
+			"dc408b9c10fcca18aa6505acafeb185b84738c4f98f4057c2ad43d4287cf2d63"
 		]
 	},
 	{
 		"name": "Rename suggestions [external] - rename type definition when it is used in the same file",
 		"requests": [
-			"3603a3874449aaac44252162d055956ec0c51b55bf93a483fdd41b9f463ebc0a"
+			"dc408b9c10fcca18aa6505acafeb185b84738c4f98f4057c2ad43d4287cf2d63"
 		]
 	},
 	{
 		"name": "Rename suggestions [external] - rename type reference - same file",
 		"requests": [
-			"f3cae4558bfd6e10d61a13b2c816141ae0a7ae4b45ad3a518e77dac1ed28d8ee"
+			"d152ae1c681b498c4cf7d057724c19ab8e4d37fc6dffdf7dc25059e8d7ee171b"
 		]
 	},
 	{
 		"name": "Rename suggestions [external] - rename type reference - same file with 2 possible defs",
 		"requests": [
-			"bb05ff9173e55b7a537c17f99db7513487a94369f23befa0723f6d77e5f05a21"
+			"d620ce664f20c4e1f9864821a46c4ab291ed73852b2ca51524fd61a5946a1a40"
 		]
 	},
 	{
 		"name": "Rename suggestions [external] - respect context: infer name based on existing code - enum member",
 		"requests": [
-			"186dfd800add469e8b9810c02030db28acb0e677574210c9ffe4b2ab5ba406b1"
+			"240c0150ac44bd81b89bf62604faed4bb8a71f9c02ec6fde7239815063b46968"
 		]
 	}
 ]

@@ -2,7 +2,7 @@
 	{
 		"name": "notebook (edit) [inline] [python] - /fix notebook exection ImportError",
 		"requests": [
-			"ab4a78f48523d1f7757d31a76eab00f3af3e0ad61efe21107cae4181ddabd58b"
+			"cf04d3594cca63899c2267f7b140f2100228b8ee9e8d0e61b563a15060549bff"
 		]
 	},
 	{
@@ -22,15 +22,15 @@
 	{
 		"name": "notebook (edit) [inline] [python] - edit notebook code should not duplicate the content",
 		"requests": [
-			"4261199378538f819fc4846c4e658aa8922ef869f8df2200b614caafbd652ecb",
+			"a0e66396bcbe865b9589633d08021d921e53e4391741bb5e4fec888c232a546f",
 			"aa0a45348850804a0439f398237621c7ab306bf64551b1f863f76071e2e9e612"
 		]
 	},
 	{
 		"name": "notebook (edit) [inline] [python] - group by",
 		"requests": [
-			"21ca64a62131f9cbff11d6318e1f1bb0c9bb6d175777dcd2d3435db7be3e79a7",
-			"25958373c651286d78639f33f3170ee0e3d628e4379ee40f940f06eacd33c03a"
+			"244c8c68c48d095e4a8448302ab35fd461b8073677bb05bb0f81315f34006a73",
+			"5b0caee86da4b042f1a57dd77db1510ecc55d7f33d8af05b3ae54cbb61632269"
 		]
 	},
 	{
@@ -43,15 +43,15 @@
 	{
 		"name": "notebook (edit) [inline] [python] - set index",
 		"requests": [
-			"277fc55bcd193079adae787d921988927ddc946113905a61c27adb809a52ada3",
-			"80e4548aada6fc98ca739f618ebbf946a30f40347adf7cd24450e55a2c254a34"
+			"3d8fd39cc9f8215bd3e0ce89b6c96bc3be513356355ffbb5015f2e6015bbb51e",
+			"af65c853f2a410ac3697e0a7d3d6d3dae8957d427dae75164e53c250f2b6c135"
 		]
 	},
 	{
 		"name": "notebook (edit) [inline] [python] - variables",
 		"requests": [
-			"23a6e014ca707f8f2360a02fd79fa6d8630c4121819736f0129c1c5c4bfe79dc",
-			"ffd3d66063d37357608143ee22775d3c2b3d4b46cd9612cfaed5e7b59c554707"
+			"4c73e4f514ed78cadec67f792e96e280ea6e6bda3378c87fef4f7543d0b2b16c",
+			"5a8988fa094a10b9936df3ac6bf2c665fe13c2cf04c7e2b48fbd2de9bb23267c"
 		]
 	}
 ]
