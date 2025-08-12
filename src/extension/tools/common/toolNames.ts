@@ -42,6 +42,7 @@ export enum ToolName {
 	CreateDirectory = 'create_directory',
 	RunVscodeCmd = 'run_vscode_command',
 	GetTaskOutput = 'get_task_output',
+	CoreManageTodoList = 'manage_todo_list',
 	CoreRunInTerminal = 'run_in_terminal',
 	CoreGetTerminalOutput = 'get_terminal_output',
 	CoreTerminalSelection = 'terminal_selection',
@@ -50,7 +51,6 @@ export enum ToolName {
 	CoreRunTask = 'run_task',
 	CoreGetTaskOutput = 'get_task_output',
 	CoreRunTest = 'runTests',
-	CoreManageTodoList = 'manage_todo_list',
 }
 
 export enum ContributedToolName {
