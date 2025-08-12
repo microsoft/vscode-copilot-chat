@@ -119,6 +119,7 @@ type EventMsg =
 	| McpToolCallEndEvent
 	| ExecCommandBeginEvent
 	| ExecCommandEndEvent
+	| ExecCommandOutputDeltaEvent
 	| ExecApprovalRequestEvent
 	| ApplyPatchApprovalRequestEvent
 	| BackgroundEventEvent
@@ -194,6 +195,13 @@ interface ExecCommandEndEvent {
 	stdout: string;
 	stderr: string;
 	exit_code: number;
+}
+
+interface ExecCommandOutputDeltaEvent {
+	type: 'exec_command_output_delta';
+	call_id: string;
+	stream: 'stdout' | 'stderr';
+	chunk: number[];
 }
 
 interface ExecApprovalRequestEvent {

@@ -121,6 +121,9 @@ export class CodexAgentManager extends Disposable {
 							// progress.markdown(`❌ **Command failed** (exit code: ${eventMsg.exit_code})`);
 						}
 						break;
+					case 'exec_command_output_delta':
+						// progress.markdown(`📜 **Command output:** ${Buffer.from(eventMsg.chunk).toString('utf-8')}`);
+						break;
 					case 'patch_apply_begin': {
 						const changeCount = Object.keys(eventMsg.changes).length;
 						progress.markdown(`🔄 **Applying patch** to ${changeCount} file(s)...`);
