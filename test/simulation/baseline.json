@@ -1594,9 +1594,9 @@
   {
     "name": "explain (expanded context) [panel] [cpp] - includes and interprets variables",
     "contentFilterCount": 0,
-    "passCount": 4,
-    "failCount": 6,
-    "score": 0.4
+    "passCount": 6,
+    "failCount": 4,
+    "score": 0.6
   },
   {
     "name": "explain (expanded context) [panel] [cpp] - includes function definitions from same file",
@@ -3970,6 +3970,20 @@
       "CompScore2": 1,
       "CompScore3": 0.75
     }
+  },
+  {
+    "name": "InlineEdit GoldenScenario ([xtab]) [external] [python] - Notebook 10-update-name-in-same-cell-of-notebook",
+    "contentFilterCount": 0,
+    "passCount": 10,
+    "failCount": 0,
+    "score": 0.1
+  },
+  {
+    "name": "InlineEdit GoldenScenario ([xtab]) [external] [python] - Notebook 11-update-name-in-next-cell-of-notebook",
+    "contentFilterCount": 0,
+    "passCount": 10,
+    "failCount": 0,
+    "score": 0.1
   },
   {
     "name": "InlineEdit GoldenScenario ([xtab]) [external] [typescript] - [MustHave] 1-point.ts",
@@ -11862,9 +11876,9 @@
   {
     "name": "variables [panel] [typescript] - Summarize #terminalSelection",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "vscode (metaprompt) [panel] - enable word wrap in editer",

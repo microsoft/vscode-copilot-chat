@@ -47,7 +47,7 @@ interface DefaultAgentPromptProps extends BasePromptElementProps {
 export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
-		const isGpt5 = this.props.modelFamily === 'gpt-5';
+		const isGpt5 = this.props.modelFamily?.startsWith('gpt-5') === true;
 
 		return <InstructionMessage>
 			<Tag name='instructions'>
@@ -135,14 +135,14 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 						{isGpt5 && <>Make the smallest set of edits needed and avoid reformatting or moving unrelated code. Preserve existing style and conventions, and keep imports, exports, and public APIs stable unless the task requires changes. Prefer completing all edits for a file within a single message when practical.<br /></>}
 						NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
 						NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString} or {ToolName.EditFile} instead.<br />
-						For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString} or {ToolName.EditFile} tools. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br /></> :
-					<>
+						For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString} or {ToolName.EditFile} tools. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br /></>
+					: <>
 						Don't try to edit an existing file without reading it first, so you can make changes properly.<br />
-						Use the {ToolName.ReplaceString} tool to edit files. When editing files, group your changes by file.<br />
+						Use the {ToolName.EditFile} tool to edit files. When editing files, group your changes by file.<br />
 						{isGpt5 && <>Make the smallest set of edits needed and avoid reformatting or moving unrelated code. Preserve existing style and conventions, and keep imports, exports, and public APIs stable unless the task requires changes. Prefer completing all edits for a file within a single message when practical.<br /></>}
 						NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
-						NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString} instead.<br />
-						For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString} tool. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br />
+						NEVER print a codeblock that represents a change to a file, use {ToolName.EditFile} instead.<br />
+						For each file, give a short description of what needs to be changed, then use the {ToolName.EditFile} tool. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br />
 					</>}
 				<GenericEditingTips {...this.props} />
 				The {ToolName.EditFile} tool is very smart and can understand how to apply your edits to the user's files, you just need to provide minimal hints.<br />
@@ -199,7 +199,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
-		const isGpt5 = this.props.modelFamily === 'gpt-5';
+		const isGpt5 = this.props.modelFamily?.startsWith('gpt-5') === true;
 
 		return <InstructionMessage>
 			<Tag name='gptAgentInstructions'>
@@ -602,7 +602,7 @@ export class ApplyPatchFormatInstructions extends PromptElement {
 
 class ApplyPatchInstructions extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
-		const isGpt5 = this.props.modelFamily === 'gpt-5';
+		const isGpt5 = this.props.modelFamily?.startsWith('gpt-5') === true;
 		return <Tag name='applyPatchInstructions'>
 			To edit files in the workspace, use the {ToolName.ApplyPatch} tool. If you have issues with it, you should first try to fix your patch and continue using {ToolName.ApplyPatch}. If you are stuck, you can fall back on the {ToolName.EditFile} tool. But {ToolName.ApplyPatch} is much faster and is the preferred tool.<br />
 			{isGpt5 && <>Prefer the smallest set of changes needed to satisfy the task. Avoid reformatting unrelated code; preserve existing style and public APIs unless the task requires changes. When practical, complete all edits for a file within a single message.<br /></>}
@@ -652,7 +652,7 @@ class NotebookInstructions extends PromptElement<DefaultAgentPromptProps> {
 class TodoListToolInstructions extends PromptElement<DefaultAgentPromptProps> {
 	render() {
 		return <Tag name='todoListToolInstructions'>
-			Use the {ToolName.CoreTodoList} frequently to plan tasks throughout your coding session for task visibility and proper planning.<br />
+			Use the {ToolName.CoreManageTodoList} frequently to plan tasks throughout your coding session for task visibility and proper planning.<br />
 			When to use: complex multi-step work requiring planning and tracking, when user provides multiple tasks or requests (numbered/comma-separated), after receiving new instructions that require multiple steps, BEFORE starting work on any todo (mark as in-progress), IMMEDIATELY after completing each todo (mark completed individually), when breaking down larger tasks into smaller actionable steps, to give users visibility into your progress and planning.<br />
 			When NOT to use: single, trivial tasks that can be completed in one step, purely conversational/informational requests, when just reading files or performing simple searches.<br />
 			CRITICAL workflow to follow:<br />

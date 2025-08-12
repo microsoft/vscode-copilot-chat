@@ -219,16 +219,14 @@ export class RequestLogger extends AbstractRequestLogger {
 			result.push(`~~~`);
 		}
 
-		if (entry.thinking) {
+		if (entry.thinking?.text) {
 			result.push(`## Thinking`);
 			if (entry.thinking.id) {
 				result.push(`thinkingId: ${entry.thinking.id}`);
 			}
-			if (entry.thinking.text) {
-				result.push(`~~~`);
-				result.push(entry.thinking.text);
-				result.push(`~~~`);
-			}
+			result.push(`~~~`);
+			result.push(entry.thinking.text);
+			result.push(`~~~`);
 		}
 
 		return result.join('\n');

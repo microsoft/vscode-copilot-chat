@@ -164,6 +164,14 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 			delete body.tools;
 		}
 
+		if (body?.messages) {
+			body.messages.forEach((message: any) => {
+				if (message.copilot_cache_control) {
+					delete message.copilot_cache_control;
+				}
+			});
+		}
+
 		if (body) {
 			if (this.modelConfig.overrides.snippy === null) {
 				delete body.snippy;

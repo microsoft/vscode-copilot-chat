@@ -36,6 +36,18 @@
 		]
 	},
 	{
+		"name": "InlineEdit GoldenScenario ([xtab]) [external] [python] - Notebook 10-update-name-in-same-cell-of-notebook",
+		"requests": [
+			"c6eadfad537deafedc3a0996374b219829a2332d6a5d03ec584c42cb7a464540"
+		]
+	},
+	{
+		"name": "InlineEdit GoldenScenario ([xtab]) [external] [python] - Notebook 11-update-name-in-next-cell-of-notebook",
+		"requests": [
+			"87025b6ed3d719e019ec1889aac8d9f23c0c80eb707935c374d42a58bbe72000"
+		]
+	},
+	{
 		"name": "InlineEdit GoldenScenario ([xtab]) [external] [typescript] - [MustHave] 1-point.ts",
 		"requests": [
 			"e616f37dad7d37f952fb75a984cd829198dab974b07d0667e435a652ef8b45b8"

@@ -22,7 +22,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.104.0",
+		"vscode": "^1.104.0-20250811",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -496,24 +496,6 @@
 				"when": "config.github.copilot.chat.enableUserPreferences"
 			},
 			{
-				"name": "copilot_getTerminalSelection",
-				"toolReferenceName": "terminalSelection",
-				"displayName": "%github.copilot.tools.terminalSelection.name%",
-				"modelDescription": "Get the user's current selection in the active terminal.",
-				"userDescription": "%github.copilot.tools.terminalSelection.description%",
-				"canBeReferencedInPrompt": true,
-				"icon": "$(terminal)"
-			},
-			{
-				"name": "copilot_getTerminalLastCommand",
-				"toolReferenceName": "terminalLastCommand",
-				"displayName": "%github.copilot.tools.terminalLastCommand.name%",
-				"modelDescription": "Get the active terminal's last run command.",
-				"userDescription": "%github.copilot.tools.terminalLastCommand.description%",
-				"canBeReferencedInPrompt": true,
-				"icon": "$(terminal)"
-			},
-			{
 				"name": "copilot_createNewWorkspace",
 				"displayName": "%github.copilot.tools.createNewWorkspace.name%",
 				"toolReferenceName": "newWorkspace",
@@ -763,7 +745,9 @@
 				"toolReferenceName": "editNotebook",
 				"displayName": "%copilot.tools.editNotebook.name%",
 				"modelDescription": "This is a tool for editing an existing Notebook file in the workspace. Generate the \"explanation\" property first.\nThe system is very smart and can understand how to apply your edits to the notebooks.\nWhen updating the content of an existing cell, ensure newCode includes at least 3-5 lines of context both before and after the new changes, preserving whitespace and indentation exactly.",
-				"tags": [],
+				"tags": [
+					"enable_other_tool_copilot_getNotebookSummary"
+				],
 				"inputSchema": {
 					"type": "object",
 					"properties": {
@@ -1833,23 +1817,8 @@
 				"category": "Developer"
 			},
 			{
-				"command": "github.copilot.terminal.explainTerminalSelection",
-				"title": "%github.copilot.command.explainTerminalSelection%",
-				"category": "GitHub Copilot"
-			},
-			{
-				"command": "github.copilot.terminal.explainTerminalSelectionContextMenu",
-				"title": "%github.copilot.command.explainTerminalSelectionContextMenu%",
-				"category": "GitHub Copilot"
-			},
-			{
 				"command": "github.copilot.terminal.explainTerminalLastCommand",
 				"title": "%github.copilot.command.explainTerminalLastCommand%",
-				"category": "GitHub Copilot"
-			},
-			{
-				"command": "github.copilot.terminal.attachTerminalSelection",
-				"title": "%github.copilot.command.attachTerminalSelection%",
 				"category": "GitHub Copilot"
 			},
 			{
@@ -1981,6 +1950,14 @@
 			{
 				"command": "github.copilot.chat.debug.hideTools",
 				"title": "Hide Tools"
+			},
+			{
+				"command": "github.copilot.chat.debug.showNesRequests",
+				"title": "Show NES Requests"
+			},
+			{
+				"command": "github.copilot.chat.debug.hideNesRequests",
+				"title": "Hide NES Requests"
 			},
 			{
 				"command": "github.copilot.chat.debug.exportLogItem",
@@ -2837,16 +2814,6 @@
 					"group": "copilotAction@5"
 				}
 			],
-			"terminal/context/chat": [
-				{
-					"command": "github.copilot.terminal.explainTerminalSelectionContextMenu",
-					"group": "copilotAction@1"
-				},
-				{
-					"command": "github.copilot.terminal.attachTerminalSelection",
-					"group": "zEditContext@1"
-				}
-			],
 			"testing/item/result": [
 				{
 					"command": "github.copilot.tests.fixTestFailure.fromInline",
@@ -2876,10 +2843,6 @@
 				},
 				{
 					"command": "github.copilot.chat.startCopilotDebugCommand",
-					"when": "false"
-				},
-				{
-					"command": "github.copilot.terminal.explainTerminalSelectionContextMenu",
 					"when": "false"
 				},
 				{
@@ -2992,6 +2955,14 @@
 				},
 				{
 					"command": "github.copilot.chat.debug.hideTools",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.debug.showNesRequests",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.debug.hideNesRequests",
 					"when": "false"
 				},
 				{
@@ -3239,6 +3210,16 @@
 					"command": "github.copilot.chat.debug.hideTools",
 					"when": "!github.copilot.chat.debug.toolsHidden",
 					"group": "commands@1"
+				},
+				{
+					"command": "github.copilot.chat.debug.showNesRequests",
+					"when": "github.copilot.chat.debug.nesRequestsHidden",
+					"group": "commands@2"
+				},
+				{
+					"command": "github.copilot.chat.debug.hideNesRequests",
+					"when": "!github.copilot.chat.debug.nesRequestsHidden",
+					"group": "commands@2"
 				}
 			],
 			"notebook/toolbar": [
