@@ -110,6 +110,164 @@ async function exportAllChats(
 }
 
 /**
+ * Helper function to render a user request section
+ */
+function renderRequest(request: any): string[] {
+	const lines: string[] = [];
+
+	if (request) {
+		lines.push('### User Request');
+		lines.push('');
+		lines.push('```');
+		lines.push(request.message || 'No message');
+		lines.push('```');
+		lines.push('');
+
+		// Add any variables or context
+		if (request.variables) {
+			lines.push('**Context Variables:**');
+			for (const variable of request.variables) {
+				lines.push(`- **${variable.name}:** ${variable.value || 'N/A'}`);
+			}
+			lines.push('');
+		}
+	}
+
+	return lines;
+}
+
+/**
+ * Helper function to render an assistant response section
+ */
+function renderResponse(responseMessage: any, response: any): string[] {
+	const lines: string[] = [];
+
+	if (responseMessage || response) {
+		lines.push('### Assistant Response');
+		lines.push('');
+
+		// Handle different response formats
+		let responseContent = '';
+
+		if (responseMessage?.message) {
+			responseContent = responseMessage.message;
+		} else if (response) {
+			// Handle response parts (like ChatResponseMarkdownPart)
+			if (Array.isArray(response)) {
+				responseContent = response.map((part: any) => {
+					if (part instanceof ChatResponseMarkdownPart) {
+						return part.value.value;
+					} else if (typeof part === 'string') {
+						return part;
+					} else if (part && typeof part === 'object' && 'content' in part) {
+						return part.content;
+					}
+					return String(part);
+				}).join('\n');
+			} else {
+				responseContent = String(response);
+			}
+		}
+
+		lines.push(responseContent || 'No response content');
+		lines.push('');
+	}
+
+	return lines;
+}
+
+/**
+ * Helper function to render tool calls section
+ */
+function renderToolCalls(toolCallRounds: any[]): string[] {
+	const lines: string[] = [];
+
+	if (toolCallRounds && toolCallRounds.length > 0) {
+		lines.push('### Tool Calls');
+		lines.push('');
+
+		for (const toolRound of toolCallRounds) {
+			if (toolRound.toolCalls) {
+				for (const toolCall of toolRound.toolCalls) {
+					lines.push(`**Tool:** ${toolCall.name || 'Unknown'}`);
+					if (toolCall.input) {
+						lines.push('```json');
+						lines.push(JSON.stringify(toolCall.input, null, 2));
+						lines.push('```');
+					}
+					lines.push('');
+				}
+			}
+		}
+	}
+
+	return lines;
+}
+
+/**
+ * Helper function to render a complete turn with all its components
+ */
+function renderTurn(turn: any, turnIndex: number): string[] {
+	const lines: string[] = [];
+
+	// Add turn separator
+	lines.push(`## Turn ${turnIndex + 1}`);
+	lines.push('');
+
+	// Add turn timestamp if available
+	if (turn.startTime) {
+		lines.push(`*${new Date(turn.startTime).toLocaleString()}*`);
+		lines.push('');
+	}
+
+	// Add user request
+	lines.push(...renderRequest(turn.request));
+
+	// Add assistant response
+	lines.push(...renderResponse(turn.responseMessage, turn.response));
+
+	// Add tool call information if available
+	lines.push(...renderToolCalls(turn.resultMetadata?.toolCallRounds));
+
+	return lines;
+}
+
+/**
+ * Helper function to render conversation metadata
+ */
+function renderConversationHeader(conversation: any, responseId: string, conversationIndex: number): string[] {
+	const lines: string[] = [];
+
+	// Add conversation header
+	lines.push(`# Conversation ${conversationIndex + 1}`);
+	lines.push('');
+	lines.push(`**Conversation ID:** ${conversation.id || conversation.sessionId || responseId}`);
+	lines.push(`**Response ID:** ${responseId}`);
+	lines.push(`**Turns:** ${conversation.turns?.length || 0}`);
+
+	// Add session start time if available
+	if (conversation.turns && conversation.turns.length > 0) {
+		const firstTurn = conversation.turns[0];
+		const startTime = firstTurn.startTime;
+		if (startTime) {
+			lines.push(`**Started:** ${new Date(startTime).toLocaleString()}`);
+		}
+
+		const lastTurn = conversation.turns[conversation.turns.length - 1];
+		const endTime = lastTurn.startTime;
+		if (endTime && endTime !== startTime) {
+			lines.push(`**Last Activity:** ${new Date(endTime).toLocaleString()}`);
+		}
+	}
+
+	lines.push('');
+	lines.push('---');
+	lines.push('');
+
+	return lines;
+}
+
+/**
  * Builds the markdown content for all chat conversations export.
  * Creates a single document with all conversations separated by clear dividers.
  */
@@ -143,117 +301,16 @@ function buildAllChatsExportContent(allConversations: Array<{ responseId: string
 		const conversation = item.conversation;
 		const responseId = item.responseId;
 
-		// Add conversation header
-		lines.push(`# Conversation ${conversationIndex + 1}`);
-		lines.push('');
-		lines.push(`**Conversation ID:** ${conversation.id || conversation.sessionId || responseId}`);
-		lines.push(`**Response ID:** ${responseId}`);
-		lines.push(`**Turns:** ${conversation.turns?.length || 0}`);
+		// Add conversation header using helper function
+		lines.push(...renderConversationHeader(conversation, responseId, conversationIndex));
 
-		// Add session start time if available
-		if (conversation.turns && conversation.turns.length > 0) {
-			const firstTurn = conversation.turns[0];
-			const startTime = firstTurn.startTime;
-			if (startTime) {
-				lines.push(`**Started:** ${new Date(startTime).toLocaleString()}`);
-			}
-
-			const lastTurn = conversation.turns[conversation.turns.length - 1];
-			const endTime = lastTurn.startTime;
-			if (endTime && endTime !== startTime) {
-				lines.push(`**Last Activity:** ${new Date(endTime).toLocaleString()}`);
-			}
-		}
-
-		lines.push('');
-		lines.push('---');
-		lines.push('');
-
-		// Process each turn in the conversation
+		// Process each turn in the conversation using helper function
 		if (conversation.turns) {
 			for (let i = 0; i < conversation.turns.length; i++) {
 				const turn = conversation.turns[i];
 
-				// Add turn separator
-				lines.push(`## Turn ${i + 1}`);
-				lines.push('');
-
-				// Add turn timestamp if available
-				if (turn.startTime) {
-					lines.push(`*${new Date(turn.startTime).toLocaleString()}*`);
-					lines.push('');
-				}
-
-				// Add user request
-				if (turn.request) {
-					lines.push('### User Request');
-					lines.push('');
-					lines.push('```');
-					lines.push(turn.request.message || 'No message');
-					lines.push('```');
-					lines.push('');
-
-					// Add any variables or context
-					if (turn.request.variables) {
-						lines.push('**Context Variables:**');
-						for (const variable of turn.request.variables) {
-							lines.push(`- **${variable.name}:** ${variable.value || 'N/A'}`);
-						}
-						lines.push('');
-					}
-				}
-
-				// Add assistant response
-				if (turn.responseMessage || turn.response) {
-					lines.push('### Assistant Response');
-					lines.push('');
-
-					// Handle different response formats
-					let responseContent = '';
-
-					if (turn.responseMessage?.message) {
-						responseContent = turn.responseMessage.message;
-					} else if (turn.response) {
-						// Handle response parts (like ChatResponseMarkdownPart)
-						if (Array.isArray(turn.response)) {
-							responseContent = turn.response.map((part: any) => {
-								if (part instanceof ChatResponseMarkdownPart) {
-									return part.value.value;
-								} else if (typeof part === 'string') {
-									return part;
-								} else if (part && typeof part === 'object' && 'content' in part) {
-									return part.content;
-								}
-								return String(part);
-							}).join('\n');
-						} else {
-							responseContent = String(turn.response);
-						}
-					}
-
-					lines.push(responseContent || 'No response content');
-					lines.push('');
-				}
-
-				// Add tool call information if available
-				if (turn.resultMetadata?.toolCallRounds && turn.resultMetadata.toolCallRounds.length > 0) {
-					lines.push('### Tool Calls');
-					lines.push('');
-
-					for (const toolRound of turn.resultMetadata.toolCallRounds) {
-						if (toolRound.toolCalls) {
-							for (const toolCall of toolRound.toolCalls) {
-								lines.push(`**Tool:** ${toolCall.name || 'Unknown'}`);
-								if (toolCall.input) {
-									lines.push('```json');
-									lines.push(JSON.stringify(toolCall.input, null, 2));
-									lines.push('```');
-								}
-								lines.push('');
-							}
-						}
-					}
-				}
+				// Render the complete turn
+				lines.push(...renderTurn(turn, i));
 
 				// Add separator between turns (except for the last turn)
 				if (i < conversation.turns.length - 1) {
@@ -287,111 +344,21 @@ function buildAllChatsExportContent(allConversations: Array<{ responseId: string
 export function buildChatExportContent(conversation: any): string {
 	const lines: string[] = [];
 
-	// Add header
+	// Add main header
 	lines.push('# GitHub Copilot Chat Export');
 	lines.push('');
-	lines.push(`**Exported:** ${new Date().toLocaleString()}`);
-	lines.push(`**Conversation ID:** ${conversation.id || conversation.sessionId || 'N/A'}`);
-	lines.push(`**Total Turns:** ${conversation.turns?.length || 0}`);
 
-	// Add session start time if available
-	if (conversation.turns && conversation.turns.length > 0) {
-		const firstTurn = conversation.turns[0];
-		const startTime = firstTurn.startTime;
-		if (startTime) {
-			lines.push(`**Session Started:** ${new Date(startTime).toLocaleString()}`);
-		}
-	}
+	// Use helper function for conversation metadata (passing dummy responseId and conversationIndex)
+	const responseId = conversation.id || conversation.sessionId || 'N/A';
+	lines.push(...renderConversationHeader(conversation, responseId, 0));
 
-	lines.push('');
-	lines.push('---');
-	lines.push('');
-
-	// Process each turn in the conversation
+	// Process each turn in the conversation using helper function
 	if (conversation.turns) {
 		for (let i = 0; i < conversation.turns.length; i++) {
 			const turn = conversation.turns[i];
 
-			// Add turn separator
-			lines.push(`## Turn ${i + 1}`);
-			lines.push('');
-
-			// Add turn timestamp if available
-			if (turn.startTime) {
-				lines.push(`*${new Date(turn.startTime).toLocaleString()}*`);
-				lines.push('');
-			}
-
-			// Add user request
-			if (turn.request) {
-				lines.push('### User Request');
-				lines.push('');
-				lines.push('```');
-				lines.push(turn.request.message || 'No message');
-				lines.push('```');
-				lines.push('');
-
-				// Add any variables or context
-				if (turn.request.variables) {
-					lines.push('**Context Variables:**');
-					for (const variable of turn.request.variables) {
-						lines.push(`- **${variable.name}:** ${variable.value || 'N/A'}`);
-					}
-					lines.push('');
-				}
-			}
-
-			// Add assistant response
-			if (turn.responseMessage || turn.response) {
-				lines.push('### Assistant Response');
-				lines.push('');
-
-				// Handle different response formats
-				let responseContent = '';
-
-				if (turn.responseMessage?.message) {
-					responseContent = turn.responseMessage.message;
-				} else if (turn.response) {
-					// Handle response parts (like ChatResponseMarkdownPart)
-					if (Array.isArray(turn.response)) {
-						responseContent = turn.response.map((part: any) => {
-							if (part instanceof ChatResponseMarkdownPart) {
-								return part.value.value;
-							} else if (typeof part === 'string') {
-								return part;
-							} else if (part && typeof part === 'object' && 'content' in part) {
-								return part.content;
-							}
-							return String(part);
-						}).join('\n');
-					} else {
-						responseContent = String(turn.response);
-					}
-				}
-
-				lines.push(responseContent || 'No response content');
-				lines.push('');
-			}
-
-			// Add tool call information if available
-			if (turn.resultMetadata?.toolCallRounds && turn.resultMetadata.toolCallRounds.length > 0) {
-				lines.push('### Tool Calls');
-				lines.push('');
-
-				for (const toolRound of turn.resultMetadata.toolCallRounds) {
-					if (toolRound.toolCalls) {
-						for (const toolCall of toolRound.toolCalls) {
-							lines.push(`**Tool:** ${toolCall.name || 'Unknown'}`);
-							if (toolCall.input) {
-								lines.push('```json');
-								lines.push(JSON.stringify(toolCall.input, null, 2));
-								lines.push('```');
-							}
-							lines.push('');
-						}
-					}
-				}
-			}
+			// Render the complete turn using helper function
+			lines.push(...renderTurn(turn, i));
 
 			// Add separator between turns (except for the last turn)
 			if (i < conversation.turns.length - 1) {
@@ -399,6 +366,9 @@ export function buildChatExportContent(conversation: any): string {
 				lines.push('');
 			}
 		}
+	} else {
+		lines.push('*This conversation contains no turns.*');
+		lines.push('');
 	}
 
 	// Add footer
