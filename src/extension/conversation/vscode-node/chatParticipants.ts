@@ -25,6 +25,7 @@ import { ChatTitleProvider } from '../../prompt/node/title';
 import { IUserFeedbackService } from './userActions';
 import { getAdditionalWelcomeMessage } from './welcomeMessageProvider';
 import { CodexAgentManager } from '../../agents/vscode-node/codexAgent';
+import { ClaudeAgentManager } from '../../agents/claude/vscode-node/claudeCodeAgent';
 
 export class ChatAgentService implements IChatAgentService {
 	declare readonly _serviceBrand: undefined;
@@ -89,6 +90,7 @@ class ChatAgents implements IDisposable {
 		this._disposables.add(this.registerTerminalAgent());
 		this._disposables.add(this.registerTerminalPanelAgent());
 		this._disposables.add(this.registerCodexAgent());
+		this._disposables.add(this.registerClaudeAgent());
 	}
 
 	private createAgent(name: string, defaultIntentIdOrGetter: IntentOrGetter, options?: { id?: string }): vscode.ChatParticipant {
@@ -146,6 +148,14 @@ class ChatAgents implements IDisposable {
 		const codexAgentManager = this.instantiationService.createInstance(CodexAgentManager);
 		const agent = vscode.chat.createChatParticipant(id, codexAgentManager.handleRequest.bind(codexAgentManager));
 		// agent.iconPath = new vscode.ThemeIcon('');
+
+		return agent;
+	}
+
+	private registerClaudeAgent(): IDisposable {
+		const id = 'github.copilot.claude';
+		const claudeAgentManager = this.instantiationService.createInstance(ClaudeAgentManager);
+		const agent = vscode.chat.createChatParticipant(id, claudeAgentManager.handleRequest.bind(claudeAgentManager));
 
 		return agent;
 	}

@@ -1571,6 +1571,19 @@
 				],
 				"isEngine": true,
 				"isSticky": true
+			},
+			{
+				"id": "github.copilot.claude",
+				"name": "claude",
+				"fullName": "Claude",
+				"locations": [
+					"panel"
+				],
+				"modes": [
+					"agent"
+				],
+				"isEngine": true,
+				"isSticky": true
 			}
 		],
 		"languageModels": [
