@@ -134,10 +134,10 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			return <SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} />;
 		}
 
-		const promptType = this.configurationService.getConfig(ConfigKey.Internal.Gpt5AlternatePromptsConfig);
+		const promptType = this.configurationService.getConfig(ConfigKey.Internal.Gpt5AlternatePromptConfig);
 		const modelFamily = this.props.endpoint.family;
 
-		if (modelFamily === 'gpt-5' && promptType) {
+		if (modelFamily.startsWith('gpt-5') && promptType) {
 			switch (promptType) {
 				case 'codex':
 					return <CodexStyleGPTPrompt
@@ -328,7 +328,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 			: '';
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;
 		const hasTodoTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreManageTodoList);
-		const skipReminderInstructions = this.configurationService.getConfig(ConfigKey.Internal.Gpt5AlternatePromptsConfig);
+		const skipReminderInstructions = this.props.endpoint.family.startsWith('gpt-5') && this.configurationService.getConfig(ConfigKey.Internal.Gpt5AlternatePromptConfig);
 
 		return (
 			<>
