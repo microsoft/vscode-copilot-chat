@@ -523,8 +523,11 @@ export class GPT5PromptV2 extends PromptElement<DefaultAgentPromptProps> {
 				{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			</Tag>
 			<NotebookInstructions {...this.props} />
-			<Tag name='output_formatting'>
+			<Tag name='answer_formatting'>
 				Use proper Markdown formatting in your answers.<br />
+				- Wrap all commands, file paths, env vars, and code identifiers in backticks (`` `...` ``).<br />
+				- Apply to inline examples and to bullet keywords if the keyword itself is a literal file/command.<br />
+				- Never mix monospace and bold markers; choose one based on whether it's a keyword (`**`) or inline code/path (`` ` ``).<br />
 				- Section headers with `##` for primary topics and `###` for subtopics; keep headings brief and relevant.<br />
 				- When referring to filenames or symbols, wrap with backticks.<br />
 				- For math, use KaTeX ($ ... $ for inline, $$ ... $$ for blocks).<br />
