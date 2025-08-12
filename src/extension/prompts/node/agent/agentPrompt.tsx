@@ -561,7 +561,7 @@ class AgentTasksInstructions extends PromptElement {
 			return null;
 		}
 
-		const taskGroups = taskGroupsRaw.map(([wf, tasks]) => [wf, tasks.filter(task => (!!task.type || task.dependencies) && !task.hide)] as const).filter(([, tasks]) => tasks.length > 0);
+		const taskGroups = taskGroupsRaw.map(([wf, tasks]) => [wf, tasks.filter(task => (!!task.type || task.dependsOn) && !task.hide)] as const).filter(([, tasks]) => tasks.length > 0);
 		if (taskGroups.length === 0) {
 			return 0;
 		}
