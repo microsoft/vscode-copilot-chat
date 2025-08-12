@@ -44,6 +44,8 @@ export enum ToolName {
 	GetTaskOutput = 'get_task_output',
 	CoreRunInTerminal = 'run_in_terminal',
 	CoreGetTerminalOutput = 'get_terminal_output',
+	CoreTerminalSelection = 'terminal_selection',
+	CoreTerminalLastCommand = 'terminal_last_command',
 	CoreCreateAndRunTask = 'create_and_run_task',
 	CoreRunTask = 'run_task',
 	CoreGetTaskOutput = 'get_task_output',
