@@ -712,6 +712,7 @@ export namespace ConfigKey {
 
 		export const PromptFileContext = defineExpSetting<boolean>('chat.advanced.promptFileContextProvider.enabled', true);
 		export const GeminiReplaceString = defineExpSetting<boolean>('chat.advanced.geminiReplaceString.enabled', false, INTERNAL, { experimentName: 'copilotchat.geminiReplaceString' });
+		export const Gpt5AlternatePromptsConfig = defineSetting<string | undefined>('chat.gpt5AlternatePrompts', undefined, INTERNAL_RESTRICTED);
 	}
 
 	export const AgentThinkingTool = defineSetting<boolean>('chat.agent.thinkingTool', false);
@@ -768,7 +769,6 @@ export namespace ConfigKey {
 
 	export const EnableRetryAfterFilteredResponse = defineExpSetting<boolean>('chat.enableRetryAfterFilteredResponse', true);
 	export const EnableAlternateGptPrompt = defineExpSetting<boolean>('chat.alternateGptPrompt.enabled', false);
-	export const Gpt5AlternatePromptsConfig = defineSetting<{ [modelFamily: string]: string }>('chat.gpt5AlternatePrompts', {});
 }
 
 export function getAllConfigKeys(): string[] {

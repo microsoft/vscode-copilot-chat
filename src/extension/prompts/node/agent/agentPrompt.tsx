@@ -134,11 +134,10 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			return <SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} />;
 		}
 
-		const gpt5PromptsConfig = this.configurationService.getConfig(ConfigKey.Gpt5AlternatePromptsConfig);
+		const promptType = this.configurationService.getConfig(ConfigKey.Internal.Gpt5AlternatePromptsConfig);
 		const modelFamily = this.props.endpoint.family;
 
-		if (modelFamily === 'gpt-5' && gpt5PromptsConfig[modelFamily]) {
-			const promptType = gpt5PromptsConfig[modelFamily];
+		if (modelFamily === 'gpt-5' && promptType) {
 			switch (promptType) {
 				case 'codex':
 					return <CodexStyleGPTPrompt
