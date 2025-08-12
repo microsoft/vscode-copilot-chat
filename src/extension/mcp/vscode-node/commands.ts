@@ -306,7 +306,7 @@ Error: ${error}`);
 			} else if (args.type === 'pip') {
 				const response = await fetch(`https://pypi.org/pypi/${encodeURIComponent(args.name)}/json`);
 				if (!response.ok) {
-					return { state: 'error', errorType: 'NotFound', error: localize("mcp.setup.pypiNotFound", "Package {0} not found in PyPI registry", args.name) };
+					return { state: 'error', errorType: 'NotFound', error: localize("mcp.setup.pipNotFound", "Package {0} not found in PyPI registry", args.name) };
 				}
 				const data = await response.json() as PyPiPackageResponse;
 				const publisher = data.info?.author || data.info?.author_email || 'unknown';
