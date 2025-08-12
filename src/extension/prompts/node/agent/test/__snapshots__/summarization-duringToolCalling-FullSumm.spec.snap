@@ -2,13 +2,11 @@
 ~~~md
 <attachments>
 <attachment id="file" filePath="/workspace/file.ts">
-```ts
 line 1
 line 2
 
 line 4
 line 5
-```
 </attachment>
 
 </attachments>

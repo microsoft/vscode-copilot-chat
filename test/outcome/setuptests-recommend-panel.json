@@ -2,55 +2,55 @@
 	{
 		"name": "setupTests - recommend [panel] - dotnetCoreApp",
 		"requests": [
-			"f57e22d038d013e54701aa7b80b731ded7bef0cdbe67901a73bd7c90938f704d"
+			"de2d31c4e9cb9d33293991d78a460afbbfbe5fb53b543eb1da69fb19c0e3feff"
 		]
 	},
 	{
 		"name": "setupTests - recommend [panel] - goWebApp",
 		"requests": [
-			"75b3c2157a780c88b1afe80cce0a8b2736525adb93cdb2b3acacbfcf5a894467"
+			"6deb10f3efa65375a3d464c99731699717c79395b0deff6eee2dcab0dc7aa657"
 		]
 	},
 	{
 		"name": "setupTests - recommend [panel] - javaSpringApp",
 		"requests": [
-			"7f170bd3a3b2c00ee7e54ce5339dd4d5ebdc82410bdf40ea920b0f5b67995a76"
+			"7d773994c6eb88439df40778113ac2a59212fd4b0cf9a28df1870dd53d0cbf87"
 		]
 	},
 	{
 		"name": "setupTests - recommend [panel] - nodeApp",
 		"requests": [
-			"7d13a9e7e291ffcf9395c844d43ecd9cb4ba05b17d22e337d1e2cde21f5fe8c8"
+			"e85b793053a5eaea65221f4b531a4e20e061de945f8394feff6fc7a6d3eb86ef"
 		]
 	},
 	{
 		"name": "setupTests - recommend [panel] - nodeExpressApp",
 		"requests": [
-			"ec93eecc2ada495c7e718f315aa373c5217639e9ecc7e90f7827a2c0494cb592"
+			"a2b30fba387ef4235313f9eea45128bf6a9fea2b66054344b7ea4aca7d45b787"
 		]
 	},
 	{
 		"name": "setupTests - recommend [panel] - phpLaravelApp",
 		"requests": [
-			"524e28a26b43607fd4040246b145daf177e4ae830302eef622068c4edc53ec51"
+			"9edfd3201b6404b9c7223f9448e246ce3f112d8601c3c0b75bcd590e3334e342"
 		]
 	},
 	{
 		"name": "setupTests - recommend [panel] - pythonFlaskApp",
 		"requests": [
-			"535c01475f054d932d8bfae003db952cd513a8b98cfec10b012ca44cbaa93399"
+			"231f192ac3e91818ef2c31823238754bf7440a57de74bd97ecb02d1e7e8556da"
 		]
 	},
 	{
 		"name": "setupTests - recommend [panel] - rubyOnRailsApp",
 		"requests": [
-			"deb341057451cd33eff782173c2eccef5b674b2c162b89a3b1b14734d172a0e4"
+			"7055a828df78c6f5b33d498db35e4b8efce23957fe7933516ed337065c929a00"
 		]
 	},
 	{
 		"name": "setupTests - recommend [panel] - webAppWithWebpack",
 		"requests": [
-			"7c24c82b3166cd1e37bf941b8afd18624b859bd186e0b48e386e2e7924fb9d43"
+			"d73a1a83aa535cb4781bdda41d5d2205a585f390ee85231d2e1aa00a92143505"
 		]
 	}
 ]

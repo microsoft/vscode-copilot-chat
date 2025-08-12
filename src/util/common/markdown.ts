@@ -54,7 +54,7 @@ export function createFencedCodeBlock(languageId: string, code: string, shouldTr
 		filepathComment = getFilepathComment(languageId, filePath);
 	}
 
-	return `${fence}${fence && (languageIdToMDCodeBlockLang(languageId) + '\n')}${filepathComment}${shouldTrim ? code.trim() : code}${fence && (fence + '\n')}`;
+	return `${fence}${fence && (languageIdToMDCodeBlockLang(languageId) + '\n')}${filepathComment}${shouldTrim ? code.trim() : code}${fence && ('\n' + fence)}`;
 }
 
 export function getFilepathComment(languageId: string, filePath: string): string {

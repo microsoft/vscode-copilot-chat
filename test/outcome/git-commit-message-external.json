@@ -2,19 +2,19 @@
 	{
 		"name": "git commit message [external] [python] - Generated commit messages do not bias to conventional commit style",
 		"requests": [
-			"29c440e2ab2d531bcc488acf5bed6c05b3872a8111ca2c814114b96408771655"
+			"c6adf4dd2a9c98ef740322034bc4d9350ba3a9e5c93fb229e9406647da29bcbd"
 		]
 	},
 	{
 		"name": "git commit message [external] [python] - Generates a conventional commit message for a bug fix",
 		"requests": [
-			"162c4f1c8031870b28f2777c0cba2da09357114f635089ce127168e9088ca01d"
+			"6acab5b22afbce9ed62b59ddc0abe8c929961e85dffdc185fd3f86e9531121a1"
 		]
 	},
 	{
 		"name": "git commit message [external] [python] - Generates a simple commit message",
 		"requests": [
-			"af801b94154a418877cb53094c2046e68f3f30d1e9eeeac53099d305d8e7fb0b"
+			"163e8669564ba6cd9b16415252ce1ea6286df60d340b645c35de50844a95c030"
 		]
 	}
 ]

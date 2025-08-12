@@ -2,36 +2,36 @@
 	{
 		"name": "/tests (real world) [inline] [python] - creates new test file with test method and includes method name and test method name",
 		"requests": [
-			"5fc5bce9cb425b0eb4e5891062202463b4c53eaf99abe8ca2e7945c6a4efa9f0"
+			"34fba70786257cd2a50f509a7003cd191eece1bd61fcff249a052ecd24dd6b41"
 		]
 	},
 	{
 		"name": "/tests (real world) [inline] [typescript] - add another test for containsUppercaseCharacter with other non latin chars",
 		"requests": [
-			"01df32b02a29787eb4670f468ae28d114929fc57bb7ccfbaba9333bc2c703e7b",
-			"260a0b1fc8f087da608a283e2510b1bc0e185c46a689aebe9ba9df7d5ea9293a",
-			"a0fe8cd353ba3c86fc8ef404536ea677d3e363979cc2b3bb6fb63d14978c9507"
+			"31032a78e3858810de4f26625f84210ee84c9a9dc5e30d0d2b7b5d314074fe7c",
+			"8d8e58bd80c8a6db41c9c222ac09d266625729c83a96cd40b8cd5931998f3ff0",
+			"f33d3ca1fb81529e880764e3dd6f46ba2df828945251afebebf1789e7dc7cdae"
 		]
 	},
 	{
 		"name": "/tests (real world) [inline] [typescript] - generate a unit test",
 		"requests": [
-			"4dd21fc7989b0e13757845e7aa1297eb1bc90311a2169690b2988233e1d835fc",
-			"8c39ebcc4df37df2677c969d2a3cc4c1ff1bcd939987b7c7eb1bb29c90adc42d"
+			"5a4446d4b5b780097f90807565e30f68f0899c19389ad1cf1af019249a881ffb",
+			"baf3132d44b539d268cb3090a22ff2d1b443482f9d1394392a5b95eeb1a489f4"
 		]
 	},
 	{
 		"name": "/tests (real world) [inline] [typescript] - issue #3699: add test for function",
 		"requests": [
-			"05bd5ce1a0053d539d386039e9c5bed705264b09870367cca8aa6bf0675d5438",
-			"c908eceb7433382e2a9bc063fbc3f7990c7b395df798a6aa0726e8119de806c4"
+			"1385a014190ec345b2788c4f27772d6bc25cd9ac2da13a522a8bdc158ea7a6e0",
+			"da704f25ed7c3bd0a71a2d2cea8d522680bb0f48aa68e74f6daf1ff3c832d658"
 		]
 	},
 	{
 		"name": "/tests (real world) [inline] [typescript] - issue #3701: add some more tests for folding",
 		"requests": [
-			"a2e77d0eba61387c7605091a4d03f0cef48255dd0d44007c98388b96d1b2fe92",
-			"df7ac54432b64e7fc1a267570d9cd66edd81d87a72edada5543441609b0d3ded"
+			"4b274aca66a096c5e00eb952767319374d6bd3daeb4688f65e76710619a05399",
+			"59fcb1cd4e8b0f8104d092b10780354c830f1befe4eed3eb9aef2ebe75dbadb8"
 		]
 	}
 ]
