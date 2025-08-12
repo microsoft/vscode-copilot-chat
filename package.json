@@ -703,7 +703,7 @@
 					"properties": {
 						"url": {
 							"type": "string",
-							"description": "The website URL to preview or open in the Simple Browser inside the editor."
+							"description": "The website URL to preview or open in the Simple Browser inside the editor. Must be either an http or https URL"
 						}
 					},
 					"required": [
