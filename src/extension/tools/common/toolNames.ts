@@ -131,7 +131,6 @@ const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>([
 	[ContributedToolName.SimpleBrowser, ToolName.SimpleBrowser],
 	[ContributedToolName.CreateDirectory, ToolName.CreateDirectory],
 	[ContributedToolName.RunVscodeCmd, ToolName.RunVscodeCmd],
-	[ContributedToolName.GetTaskOutput, ToolName.GetTaskOutput],
 	[ContributedToolName.CodexTool, ToolName.CodexTool]
 ]);
 

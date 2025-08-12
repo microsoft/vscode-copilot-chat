@@ -309,7 +309,7 @@ http_headers = { "X-Nonce" = "vscode-nonce" }
 wire_api = "chat"`.trim();
 		await this.fileSystemService.writeFile(URI.file(`${codexHome}/config.toml`), Buffer.from(config));
 
-		this.logService.logger.info(`Spawning Codex: ${target}`);
+		this.logService.info(`Spawning Codex: ${target}`);
 
 		// Verify codex version is >= 0.6.0
 		await this.assertCodexGoodVersion();
@@ -327,7 +327,7 @@ wire_api = "chat"`.trim();
 		this._proc.stdout?.setEncoding('utf8');
 		this._proc.stdout?.on('data', (data: string) => this._handleProcessOutput(data));
 		this._proc.stderr?.on('data', (data: Buffer) => {
-			this.logService.logger.info(`Codex stderr: ${removeAnsiEscapeCodes(data.toString())}`);
+			this.logService.info(`Codex stderr: ${removeAnsiEscapeCodes(data.toString())}`);
 		});
 
 		this._proc.on('exit', (code: any) => {
@@ -378,12 +378,12 @@ wire_api = "chat"`.trim();
 			const version = { major, minor, patch };
 
 			if (version.major > 0 || (version.major === 0 && version.minor >= 6)) {
-				this.logService.logger.info(`Codex version check passed: ${output}`);
+				this.logService.info(`Codex version check passed: ${output}`);
 			} else {
 				throw new Error(`Codex version ${major}.${minor}.${patch} is too old. Required: >= 0.6.0`);
 			}
 		} catch (error) {
-			this.logService.logger.error(`Codex version check failed: ${error}`);
+			this.logService.error(`Codex version check failed: ${error}`);
 			throw new Error(`Failed to verify codex version: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
@@ -466,7 +466,7 @@ wire_api = "chat"`.trim();
 			return;
 		}
 		const str = JSON.stringify(obj);
-		this.logService.logger.info(`Sending to Codex: ${str}`);
+		this.logService.info(`Sending to Codex: ${str}`);
 		this._proc.stdin.write(str + '\n');
 	}
 
@@ -486,7 +486,7 @@ wire_api = "chat"`.trim();
 	}
 
 	private _handleEvent(event: CodexEvent): void {
-		this.logService.logger.info(`Got Codex event: ${JSON.stringify(event)}`);
+		this.logService.info(`Got Codex event: ${JSON.stringify(event)}`);
 
 		// Fire the single event with the message
 		this._onEvent.fire(event);

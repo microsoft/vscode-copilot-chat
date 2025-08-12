@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
-import { LanguageModelToolResult, PreparedTerminalToolInvocation } from '../../../vscodeTypes';
+import { LanguageModelToolResult } from '../../../vscodeTypes';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { ReadFileParams } from './readFileTool';
@@ -18,14 +18,20 @@ export class CodexTool implements ICopilotTool<ReadFileParams> {
 		return new LanguageModelToolResult([]);
 	}
 
-	prepareInvocation2(options: vscode.LanguageModelToolInvocationPrepareOptions<any>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedTerminalToolInvocation> {
-		return new PreparedTerminalToolInvocation(options.input.detail,
-			'sh',
-			{
+	prepareInvocation2(options: vscode.LanguageModelToolInvocationPrepareOptions<any>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
+		// return new PreparedTerminalToolInvocation(options.input.detail,
+		// 	'sh',
+		// 	{
+		// 		title: options.input.message,
+		// 		message: ''
+		// 	}
+		// );
+		return {
+			confirmationMessages: {
 				title: options.input.message,
-				message: ''
+				message: options.input.detail,
 			}
-		);
+		};
 	}
 }
 

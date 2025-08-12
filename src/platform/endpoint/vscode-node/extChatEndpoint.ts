@@ -15,7 +15,7 @@ import { ChatFetchResponseType, ChatLocation, ChatResponse } from '../../chat/co
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { Response } from '../../networking/common/fetcherService';
-import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
+import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';

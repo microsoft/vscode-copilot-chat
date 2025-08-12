@@ -36,13 +36,13 @@ export class CodexAgentManager extends Disposable {
 		if (historySessionId) {
 			codexClient = this._codexClients.get(historySessionId);
 			if (!codexClient) {
-				this.logService.logger.warn(`No Codex client found for session ID: ${historySessionId}`);
+				this.logService.warn(`No Codex client found for session ID: ${historySessionId}`);
 			}
 		}
 
 		const sessionId = historySessionId || generateUuid();
 		if (!codexClient) {
-			this.logService.logger.info(`Starting new Codex client for session ID: ${sessionId}`);
+			this.logService.info(`Starting new Codex client for session ID: ${sessionId}`);
 			codexClient = this.instantiationService.createInstance(CodexClient);
 			this._codexClients.set(sessionId, codexClient);
 
@@ -95,7 +95,7 @@ export class CodexAgentManager extends Disposable {
 							await this.toolsService.invokeTool(ToolName.CodexTool, { input: { message: 'Run command?', detail: commandStr }, toolInvocationToken: request.toolInvocationToken }, token);
 							gotApproval = true;
 						} catch (error) {
-							this.logService.logger.error(error, 'Codex command approval failed');
+							this.logService.error(error, 'Codex command approval failed');
 							gotApproval = false;
 						}
 						codexClient.sendExecApproval(gotApproval ? 'approved' : 'denied', event.id);
