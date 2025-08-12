@@ -303,7 +303,7 @@ Error: ${error}`);
 			if (args.type === 'npm') {
 				const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(args.name)}`);
 				if (!response.ok) {
-					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.npmNotFound", "Package {0} not found in npm registry", args.name) };
+					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.npmPackageNotFound", "Package {0} not found in npm registry", args.name) };
 				}
 				const data = await response.json() as NpmPackageResponse;
 				const version = data['dist-tags']?.latest;
@@ -317,7 +317,7 @@ Error: ${error}`);
 			} else if (args.type === 'pip') {
 				const response = await fetch(`https://pypi.org/pypi/${encodeURIComponent(args.name)}/json`);
 				if (!response.ok) {
-					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.pypiNotFound", "Package {0} not found in PyPI registry", args.name) };
+					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.pythonPackageNotFound", "Package {0} not found in PyPI registry", args.name) };
 				}
 				const data = await response.json() as PyPiPackageResponse;
 				const publisher = data.info?.author || data.info?.author_email || 'unknown';
@@ -341,7 +341,7 @@ Error: ${error}`);
 
 				const response = await fetch(`https://hub.docker.com/v2/repositories/${encodeURIComponent(namespace)}/${encodeURIComponent(repository)}`);
 				if (!response.ok) {
-					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.dockerNotFound", "Docker image {0} not found in Docker Hub registry", args.name) };
+					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.dockerRepositoryNotFound", "Docker image {0} not found in Docker Hub registry", args.name) };
 				}
 				const data = await response.json() as DockerHubResponse;
 				return {

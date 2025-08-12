@@ -67,7 +67,7 @@ export async function getNuGetPackageMetadata(id: string, logService: ILogServic
 	if (dotnetMajorVersion < 10) {
 		return {
 			state: 'error',
-			error: localize("mcp.setup.badCommandVersion", "The installed .NET SDK must be version 10 or newer. Found {0}.", dotnetVersion),
+			error: localize("mcp.setup.badDotnetSdkVersion", "The installed .NET SDK must be version 10 or newer. Found {0}.", dotnetVersion),
 			errorType: ValidatePackageErrorType.BadCommandVersion,
 			helpUri: 'https://aka.ms/vscode-mcp-install/dotnet',
 			helpUriLabel: localize("mcp.setup.installDotNetSdk", "Update .NET SDK"),
@@ -80,7 +80,7 @@ export async function getNuGetPackageMetadata(id: string, logService: ILogServic
 		return {
 			state: 'error',
 			errorType: ValidatePackageErrorType.NotFound,
-			error: localize("mcp.setup.nugetNotFound", "Package {0} does not exist on NuGet.org.", id)
+			error: localize("mcp.setup.nugetPackageNotFound", "Package {0} does not exist on NuGet.org.", id)
 		};
 	}
 
