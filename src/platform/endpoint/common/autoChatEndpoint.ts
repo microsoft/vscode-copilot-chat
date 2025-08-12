@@ -8,13 +8,13 @@ import { ChatMessage } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
 import type { CancellationToken } from 'vscode';
 import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
-import { IntentParams, Source } from '../../chat/common/chatMLFetcher';
+import { Source } from '../../chat/common/chatMLFetcher';
 import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { Response } from '../../networking/common/fetcherService';
-import { IChatEndpoint } from '../../networking/common/networking';
+import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
@@ -32,6 +32,7 @@ export class AutoChatEndpoint implements IChatEndpoint {
 	supportsVision: boolean = this._wrappedEndpoint.supportsVision;
 	supportsPrediction: boolean = this._wrappedEndpoint.supportsPrediction;
 	showInModelPicker: boolean = true;
+	supportsStatefulResponses: boolean = this._wrappedEndpoint.supportsStatefulResponses;
 	isPremium?: boolean | undefined = this._wrappedEndpoint.isPremium;
 	multiplier?: number | undefined = this._wrappedEndpoint.multiplier;
 	restrictedToSkus?: string[] | undefined = this._wrappedEndpoint.restrictedToSkus;
@@ -57,6 +58,10 @@ export class AutoChatEndpoint implements IChatEndpoint {
 		};
 	}
 
+	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		return this._wrappedEndpoint.createRequestBody(options);
+	}
+
 	processResponseFromChatEndpoint(telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData, cancellationToken?: CancellationToken): Promise<AsyncIterableObject<ChatCompletion>> {
 		return this._wrappedEndpoint.processResponseFromChatEndpoint(telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData, cancellationToken);
 	}
@@ -70,8 +75,21 @@ export class AutoChatEndpoint implements IChatEndpoint {
 		return this._wrappedEndpoint.acquireTokenizer();
 	}
 
-	async makeChatRequest(debugName: string, messages: ChatMessage[], finishedCb: FinishedCallback | undefined, token: CancellationToken, location: ChatLocation, source?: Source, requestOptions?: Omit<OptionalChatRequestParams, 'n'>, userInitiatedRequest?: boolean, telemetryProperties?: TelemetryProperties, intentParams?: IntentParams): Promise<ChatResponse> {
-		return this._wrappedEndpoint.makeChatRequest(debugName, messages, finishedCb, token, location, source, requestOptions, userInitiatedRequest, telemetryProperties, intentParams);
+	async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
+		return this._wrappedEndpoint.makeChatRequest2(options, token);
+	}
+
+	async makeChatRequest(debugName: string, messages: ChatMessage[], finishedCb: FinishedCallback | undefined, token: CancellationToken, location: ChatLocation, source?: Source, requestOptions?: Omit<OptionalChatRequestParams, 'n'>, userInitiatedRequest?: boolean, telemetryProperties?: TelemetryProperties): Promise<ChatResponse> {
+		return this.makeChatRequest2({
+			debugName,
+			messages,
+			finishedCb,
+			location,
+			source,
+			requestOptions,
+			userInitiatedRequest,
+			telemetryProperties,
+		}, token);
 	}
 }
 

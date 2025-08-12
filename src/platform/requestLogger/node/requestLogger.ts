@@ -3,11 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { HTMLTracer, IChatEndpointInfo, RenderPromptResult } from '@vscode/prompt-tsx';
+import type { RequestMetadata } from '@vscode/copilot-api';
+import { HTMLTracer, IChatEndpointInfo, Raw, RenderPromptResult } from '@vscode/prompt-tsx';
 import { AsyncLocalStorage } from 'async_hooks';
 import type { Event } from 'vscode';
 import { ChatFetchError, ChatFetchResponseType, ChatLocation, ChatResponses, FetchSuccess } from '../../../platform/chat/common/commonTypes';
-import { IResponseDelta } from '../../../platform/networking/common/fetch';
+import { IResponseDelta, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { Result } from '../../../util/common/result';
 import { createServiceIdentifier } from '../../../util/common/services';
@@ -16,11 +17,11 @@ import { ThemeIcon } from '../../../util/vs/base/common/themables';
 import { assertType } from '../../../util/vs/base/common/types';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { ChatRequest, LanguageModelToolResult2 } from '../../../vscodeTypes';
+import type { IModelAPIResponse } from '../../endpoint/common/endpointProvider';
 import { Completion } from '../../nesFetch/common/completionsAPI';
 import { CompletionsFetchFailure, ModelParams } from '../../nesFetch/common/completionsFetchService';
 import { IFetchRequestParams } from '../../nesFetch/node/completionsFetchServiceImpl';
 import { APIUsage } from '../../networking/common/openai';
-import { ChatParams } from '../../openai/node/fetch';
 import { ThinkingData } from '../../thinking/common/thinking';
 
 export type UriData = { kind: 'request'; id: string } | { kind: 'latest' };
@@ -96,6 +97,16 @@ export interface ILoggedToolCall {
 	thinking?: ThinkingData;
 }
 
+export interface ILoggedPendingRequest {
+	messages: Raw.ChatMessage[];
+	tools: (OpenAiFunctionTool | OpenAiResponsesFunctionTool)[] | undefined;
+	ourRequestId: string;
+	model: string;
+	location: ChatLocation;
+	intent?: string;
+	postOptions?: OptionalChatRequestParams;
+}
+
 export type LoggedInfo = ILoggedElementInfo | ILoggedRequestInfo | ILoggedToolCall;
 
 export const IRequestLogger = createServiceIdentifier<IRequestLogger>('IRequestLogger');
@@ -109,7 +120,9 @@ export interface IRequestLogger {
 
 	logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void;
 
-	logChatRequest(debugName: string, chatEndpoint: IChatEndpointLogInfo, chatParams: ChatParams): PendingLoggedChatRequest;
+	logModelListCall(requestId: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void;
+
+	logChatRequest(debugName: string, chatEndpoint: IChatEndpointLogInfo, chatParams: ILoggedPendingRequest): PendingLoggedChatRequest;
 
 	logCompletionRequest(debugName: string, chatEndpoint: IChatEndpointLogInfo, chatParams: ICompletionFetchRequestLogParams, requestId: string): PendingLoggedCompletionRequest;
 
@@ -141,7 +154,7 @@ export interface ICompletionFetchRequestLogParams extends IFetchRequestParams {
 export interface ILoggedChatMLRequest {
 	debugName: string;
 	chatEndpoint: IChatEndpointLogInfo;
-	chatParams: ChatParams | ICompletionFetchRequestLogParams;
+	chatParams: ILoggedPendingRequest | ICompletionFetchRequestLogParams;
 	startTime: Date;
 	endTime: Date;
 }
@@ -207,9 +220,10 @@ export abstract class AbstractRequestLogger extends Disposable implements IReque
 		return requestLogStorage.run(request, () => fn());
 	}
 
+	public abstract logModelListCall(id: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void;
 	public abstract logToolCall(id: string, name: string | undefined, args: unknown, response: LanguageModelToolResult2): void;
 
-	public logChatRequest(debugName: string, chatEndpoint: IChatEndpoint, chatParams: ChatParams): PendingLoggedChatRequest {
+	public logChatRequest(debugName: string, chatEndpoint: IChatEndpoint, chatParams: ILoggedPendingRequest): PendingLoggedChatRequest {
 		return new PendingLoggedChatRequest(this, debugName, chatEndpoint, chatParams);
 	}
 
@@ -236,7 +250,7 @@ class AbstractPendingLoggedRequest {
 		protected _logbook: IRequestLogger,
 		protected _debugName: string,
 		protected _chatEndpoint: IChatEndpointLogInfo,
-		protected _chatParams: ChatParams | ICompletionFetchRequestLogParams
+		protected _chatParams: ILoggedPendingRequest | ICompletionFetchRequestLogParams
 	) {
 		this._time = new Date();
 	}
@@ -304,7 +318,7 @@ export class PendingLoggedChatRequest extends AbstractPendingLoggedRequest {
 		logbook: IRequestLogger,
 		debugName: string,
 		chatEndpoint: IChatEndpoint,
-		chatParams: ChatParams
+		chatParams: ILoggedPendingRequest
 	) {
 		super(logbook, debugName, chatEndpoint, chatParams);
 	}

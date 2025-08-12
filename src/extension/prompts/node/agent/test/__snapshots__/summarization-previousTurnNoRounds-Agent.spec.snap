@@ -13,7 +13,9 @@ I am working in a workspace that has the following structure:
 ```
 This is the state of the context at this point in the conversation. The view of the workspace structure may be truncated. You can use tools to collect more context if needed.
 </workspace_info>
-copilot_cache_control: {"type":"ephemeral"}
+
+
+copilot_cache_control: { type: 'ephemeral' }
 ~~~
 
 
@@ -28,6 +30,7 @@ copilot_cache_control: {"type":"ephemeral"}
 <userRequest>
 previous turn 1
 </userRequest>
+
 ~~~
 
 
@@ -48,14 +51,17 @@ response
 <userRequest>
 previous turn 2
 </userRequest>
-copilot_cache_control: {"type":"ephemeral"}
+
+
+copilot_cache_control: { type: 'ephemeral' }
 ~~~
 
 
 ### Assistant
 ~~~md
 response
-copilot_cache_control: {"type":"ephemeral"}
+
+copilot_cache_control: { type: 'ephemeral' }
 ~~~
 
 
@@ -63,13 +69,11 @@ copilot_cache_control: {"type":"ephemeral"}
 ~~~md
 <attachments>
 <attachment id="file" filePath="/workspace/file.ts">
-```ts
 line 1
 line 2
 
 line 4
 line 5
-```
 </attachment>
 
 </attachments>
@@ -82,5 +86,7 @@ line 5
 <userRequest>
 hello
 </userRequest>
-copilot_cache_control: {"type":"ephemeral"}
+
+
+copilot_cache_control: { type: 'ephemeral' }
 ~~~

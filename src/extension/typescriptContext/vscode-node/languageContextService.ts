@@ -292,14 +292,15 @@ class TelemetrySender {
 		);
 	}
 
-	public sendRequestCancelledTelemetry(context: RequestContext): void {
+	public sendRequestCancelledTelemetry(context: RequestContext, timeTaken: number): void {
 		/* __GDPR__
 			"typescript-context-plugin.completion-context.cancelled" : {
 				"owner": "dirkb",
 				"comment": "Telemetry for copilot inline completion context in cancellation case",
 				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
 				"opportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The opportunity id" },
-				"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The source of the request" }
+				"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The source of the request" },
+				"timeTaken": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Time taken to provide the completion", "isMeasurement": true }
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent(
@@ -308,6 +309,9 @@ class TelemetrySender {
 				requestId: context.requestId,
 				opportunityId: context.opportunityId ?? 'unknown',
 				source: context.source ?? KnownSources.unknown
+			},
+			{
+				timeTaken: timeTaken
 			}
 		);
 		this.logService.debug(`TypeScript Copilot context request ${context.requestId} got cancelled.`);
@@ -1240,7 +1244,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 			}
 			const timeTaken = Date.now() - startTime;
 			if (protocol.ComputeContextResponse.isCancelled(response)) {
-				this.telemetrySender.sendRequestCancelledTelemetry(context);
+				this.telemetrySender.sendRequestCancelledTelemetry(context, timeTaken);
 			} else if (protocol.ComputeContextResponse.isOk(response)) {
 				const body: protocol.ComputeContextResponse.OK = response.body;
 				const contextItemResult = new ContextItemResultBuilder(timeTaken);
@@ -1259,7 +1263,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				contextItemResult.updateResponse(body, token);
 				this.telemetrySender.sendRequestTelemetry(document, position, context, contextItemResult, timeTaken, { before: cacheState, after: this.runnableResultManager.getCacheState() }, undefined);
 				isDebugging && forDebugging?.length;
-				this._onCachePopulated.fire({ document, position, results: resolved, summary: contextItemResult });
+				this._onCachePopulated.fire({ document, position, source: context.source, results: resolved, summary: contextItemResult });
 			} else if (protocol.ComputeContextResponse.isError(response)) {
 				this.telemetrySender.sendRequestFailureTelemetry(context, response.body);
 				console.error('Error populating cache:', response.body.message, response.body.stack);
@@ -1301,13 +1305,14 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				cacheRequest = 'awaited';
 			}
 		}
+		const afterInflightJoin = Date.now() - startTime;
 		if (token.isCancellationRequested) {
-			this.telemetrySender.sendRequestCancelledTelemetry(context);
+			this.telemetrySender.sendRequestCancelledTelemetry(context, afterInflightJoin);
 			return;
 		}
 		const isDebugging = this.isDebugging;
 		const forDebugging: ContextItem[] | undefined = isDebugging ? [] : undefined;
-		const contextItemResult = new ContextItemResultBuilder(0);
+		const contextItemResult = new ContextItemResultBuilder(afterInflightJoin);
 		const runnableResults = this.runnableResultManager.getCachedRunnableResults(document, position);
 		for (const runnableResult of runnableResults) {
 			for (const item of contextItemResult.update(runnableResult, true)) {
@@ -1315,8 +1320,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				yield item;
 			}
 			if (token.isCancellationRequested) {
-				this.telemetrySender.sendRequestCancelledTelemetry(context);
-				return;
+				break;
 			}
 		}
 		const isSpeculativeRequest = context.proposedEdits !== undefined;
@@ -1325,6 +1329,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 		} else {
 			const cacheState = this.runnableResultManager.getCacheState();
 			contextItemResult.path = this.runnableResultManager.getNodePath();
+			contextItemResult.cancelled = token.isCancellationRequested;
 			contextItemResult.serverTime = 0;
 			contextItemResult.contextComputeTime = 0;
 			contextItemResult.fromCache = true;
@@ -1333,7 +1338,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				{ before: cacheState, after: cacheState }, cacheRequest
 			);
 			isDebugging && forDebugging?.length;
-			this._onContextComputed.fire({ document, position, results: runnableResults, summary: contextItemResult });
+			this._onContextComputed.fire({ document, position, source: context.source, results: runnableResults, summary: contextItemResult });
 		}
 		return;
 	}
@@ -1638,7 +1643,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 						opportunityId: request.opportunityId,
 						timeBudget: request.timeBudget,
 						tokenBudget: tokenBudget,
-						source: KnownSources.completion,
+						source: request.source === 'nes' ? KnownSources.nes : KnownSources.completion,
 						trigger: TriggerKind.completion,
 						proposedEdits: isSpeculativeRequest ? [] : undefined,
 						sampleTelemetry: self.getSampleTelemetry(request.activeExperiments)

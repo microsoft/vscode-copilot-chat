@@ -87,9 +87,7 @@ export class EditCode2Intent extends EditCodeIntent {
 export class EditCode2IntentInvocation extends AgentIntentInvocation {
 
 	public override get linkification(): IntentLinkificationOptions {
-		// on by default:
-		const enabled = this.configurationService.getConfig(ConfigKey.Internal.EditLinkification) !== false;
-		return { disable: !enabled };
+		return { disable: false };
 	}
 
 	protected override prompt = EditCodePrompt2;

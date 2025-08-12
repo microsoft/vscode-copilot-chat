@@ -40,6 +40,10 @@ export class PromptPathRepresentationService implements IPromptPathRepresentatio
 
 	_serviceBrand: undefined;
 
+	protected isWindows() {
+		return isWindows;
+	}
+
 	getFilePath(uri: Uri): string {
 		if (uri.scheme === Schemas.file || uri.scheme === Schemas.vscodeRemote) {
 			return uri.fsPath;
@@ -58,7 +62,17 @@ export class PromptPathRepresentationService implements IPromptPathRepresentatio
 	resolveFilePath(filepath: string, predominantScheme = Schemas.file): Uri | undefined {
 		// Always check for posix-like absolute paths, and also for platform-like
 		// (i.e. Windows) absolute paths in case the model generates them.
-		if (filepath.startsWith('/') || (isWindows && (hasDriveLetter(filepath) || filepath.startsWith('\\')))) {
+		const isPosixPath = filepath.startsWith('/');
+		const isWindowsPath = this.isWindows() && (hasDriveLetter(filepath) || filepath.startsWith('\\'));
+		if (isPosixPath || isWindowsPath) {
+			// Some models double-escape backslashes, which causes problems down the line.
+			// Remove repeated backslashes from windows path (but preserve UNC paths)
+			if (isWindowsPath) {
+				const isUncPath = filepath.startsWith('\\\\');
+				filepath = filepath.replace(/\\+/g, '\\');
+				if (isUncPath) { filepath = '\\' + filepath; }
+			}
+
 			const fileUri = URI.file(filepath);
 			return predominantScheme === Schemas.file ? fileUri : URI.from({ scheme: predominantScheme, path: fileUri.path });
 		}
@@ -73,7 +87,7 @@ export class PromptPathRepresentationService implements IPromptPathRepresentatio
 	}
 
 	getExampleFilePath(absolutePosixFilePath: string): string {
-		if (isWindows) {
+		if (this.isWindows()) {
 			return this.getFilePath(URI.parse(`file:///C:${absolutePosixFilePath}`));
 		} else {
 			return this.getFilePath(URI.parse(`file://${absolutePosixFilePath}`));

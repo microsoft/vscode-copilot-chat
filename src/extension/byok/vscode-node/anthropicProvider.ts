@@ -8,7 +8,7 @@ import { CancellationToken, ChatResponseFragment2, LanguageModelChatInformation,
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
-import { APIUsage, rawMessageToCAPI } from '../../../platform/networking/common/openai';
+import { APIUsage } from '../../../platform/networking/common/openai';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { RecordedProgress } from '../../../util/common/progressRecorder';
 import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
@@ -53,7 +53,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 	async updateAPIKey(): Promise<void> {
 		this._apiKey = await promptForAPIKey(AnthropicLMProvider.providerName, await this._byokStorageService.getAPIKey(AnthropicLMProvider.providerName) !== undefined);
 		if (this._apiKey) {
-			this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, this._apiKey, BYOKAuthType.GlobalApiKey);
+			await this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, this._apiKey, BYOKAuthType.GlobalApiKey);
 		}
 	}
 
@@ -96,19 +96,17 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			},
 			{
 				model: model.id,
-				location: ChatLocation.Other,
-				messages: rawMessageToCAPI(anthropicMessagesToRawMessagesForLogging(convertedMessages, system)),
+				messages: anthropicMessagesToRawMessagesForLogging(convertedMessages, system),
 				ourRequestId: requestId,
-				postOptions: {
-					tools: options.tools?.map((tool): OpenAiFunctionTool => ({
-						type: 'function',
-						function: {
-							name: tool.name,
-							description: tool.description,
-							parameters: tool.inputSchema
-						}
-					}))
-				}
+				location: ChatLocation.Other,
+				tools: options.tools?.map((tool): OpenAiFunctionTool => ({
+					type: 'function',
+					function: {
+						name: tool.name,
+						description: tool.description,
+						parameters: tool.inputSchema
+					}
+				})),
 			});
 
 		const tools: Anthropic.Messages.Tool[] = (options.tools ?? []).map(tool => {

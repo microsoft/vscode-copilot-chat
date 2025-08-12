@@ -136,6 +136,17 @@ for (const testConfig of testConfigs) {
 			loadFile({ filePath: inlineEditsFixture("9-cppProject-add-implementation-expect-header/recording.w.json") }),
 		));
 
+		stest({ description: 'Notebook 10-update-name-in-same-cell-of-notebook', language: 'python' }, collection => tester.runAndScoreTestFromRecording(collection,
+			loadFile({
+				filePath: inlineEditsFixture("10-update-name-in-same-cell-of-notebook/recording.w.json"),
+			})
+		));
+
+		stest({ description: 'Notebook 11-update-name-in-next-cell-of-notebook', language: 'python' }, collection => tester.runAndScoreTestFromRecording(collection,
+			loadFile({
+				filePath: inlineEditsFixture("11-update-name-in-next-cell-of-notebook/recording.w.json"),
+			})
+		));
 
 	});
 

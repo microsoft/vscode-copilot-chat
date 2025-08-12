@@ -8,12 +8,12 @@ import { ChatMessage } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
 import type { CancellationToken } from 'vscode';
 import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
-import { IntentParams, Source } from '../../chat/common/chatMLFetcher';
+import { Source } from '../../chat/common/chatMLFetcher';
 import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { Response } from '../../networking/common/fetcherService';
-import { IChatEndpoint, IEndpointBody } from '../../networking/common/networking';
+import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
@@ -106,6 +106,10 @@ export class ProxyExperimentEndpoint implements IChatEndpoint {
 		return this.selectedEndpoint.tokenizer;
 	}
 
+	get supportsStatefulResponses() {
+		return this.selectedEndpoint.supportsStatefulResponses;
+	}
+
 	processResponseFromChatEndpoint(telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData, cancellationToken?: CancellationToken): Promise<AsyncIterableObject<ChatCompletion>> {
 		return this.selectedEndpoint.processResponseFromChatEndpoint(telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData, cancellationToken);
 	}
@@ -114,8 +118,12 @@ export class ProxyExperimentEndpoint implements IChatEndpoint {
 		return this.selectedEndpoint.acceptChatPolicy();
 	}
 
-	makeChatRequest(debugName: string, messages: ChatMessage[], finishedCb: FinishedCallback | undefined, token: CancellationToken, location: ChatLocation, source?: Source, requestOptions?: Omit<OptionalChatRequestParams, 'n'>, userInitiatedRequest?: boolean, telemetryProperties?: TelemetryProperties, intentParams?: IntentParams): Promise<ChatResponse> {
-		return this.selectedEndpoint.makeChatRequest(debugName, messages, finishedCb, token, location, source, requestOptions, userInitiatedRequest, telemetryProperties, intentParams);
+	makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
+		return this.selectedEndpoint.makeChatRequest2(options, token);
+	}
+
+	makeChatRequest(debugName: string, messages: ChatMessage[], finishedCb: FinishedCallback | undefined, token: CancellationToken, location: ChatLocation, source?: Source, requestOptions?: Omit<OptionalChatRequestParams, 'n'>, userInitiatedRequest?: boolean, telemetryProperties?: TelemetryProperties): Promise<ChatResponse> {
+		return this.selectedEndpoint.makeChatRequest(debugName, messages, finishedCb, token, location, source, requestOptions, userInitiatedRequest, telemetryProperties);
 	}
 
 	cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {
@@ -124,6 +132,10 @@ export class ProxyExperimentEndpoint implements IChatEndpoint {
 
 	acquireTokenizer(): ITokenizer {
 		return this.selectedEndpoint.acquireTokenizer();
+	}
+
+	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		return this.selectedEndpoint.createRequestBody(options);
 	}
 }
 

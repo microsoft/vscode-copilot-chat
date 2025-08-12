@@ -30,7 +30,6 @@ import './runNotebookCellTool';
 import './scmChangesTool';
 import './searchWorkspaceSymbolsTool';
 import './simpleBrowserTool';
-import './terminalStateTools';
 import './testFailureTool';
 import './thinkTool';
 import './usagesTool';

@@ -67,6 +67,11 @@ export type CodeBlockProps = PromptElementProps<{
 	 * @default true
 	 */
 	readonly shouldTrim?: boolean;
+
+	/**
+	 * Fence style, defaults to '```'. An empty string omits the fence.
+	 */
+	readonly fence?: string;
 }>;
 
 export class CodeBlock extends SafePromptElement<CodeBlockProps> {
@@ -87,7 +92,7 @@ export class CodeBlock extends SafePromptElement<CodeBlockProps> {
 			return this._handleFoulPrompt();
 		}
 		const filePath = this.props.includeFilepath ? this._promptPathRepresentationService.getFilePath(this.props.uri) : undefined;
-		const code = createFencedCodeBlock(this.props.languageId ?? '', this.props.code, this.props.shouldTrim ?? true, filePath);
+		const code = createFencedCodeBlock(this.props.languageId ?? '', this.props.code, this.props.shouldTrim ?? true, filePath, this.props.fence);
 		const reference = this.props.references && <references value={this.props.references} />;
 
 		if (this.props.lineBasedPriority) {

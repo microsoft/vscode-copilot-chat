@@ -75,6 +75,11 @@ export class CodeBlockTrackingChatResponseStream implements ChatResponseStream {
 		this._codeBlockProcessor.processMarkdown(value, vulnerabilities);
 	}
 
+	thinkingProgress(value: string, id?: string, metadata?: string): void {
+		this._codeBlockProcessor.flush();
+		this._wrapped.thinkingProgress(value, id, metadata);
+	}
+
 	codeblockUri(uri: Uri): void {
 		this._codeBlockProcessor.processCodeblockUri(uri);
 	}

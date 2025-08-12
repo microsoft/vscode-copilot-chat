@@ -32,6 +32,7 @@ export class ToolGrouping implements IToolGrouping {
 	private _didToolsChange = true;
 	private _turnNo = 0;
 	private _trimOnNextCompute = false;
+	private _expandOnNext?: Set<string>;
 
 	public get tools(): readonly LanguageModelToolInformation[] {
 		return this._tools;
@@ -83,7 +84,6 @@ export class ToolGrouping implements IToolGrouping {
 				}
 			*/
 			this._telemetryService.sendMSFTTelemetryEvent('virtualTools.called', {
-				owner: 'connor4312',
 				callName: tool.name,
 			}, {
 				turnNo: localTurnNumber,
@@ -117,6 +117,11 @@ export class ToolGrouping implements IToolGrouping {
 		this._trimOnNextCompute = true;
 	}
 
+	ensureExpanded(toolName: string): void {
+		this._expandOnNext ??= new Set();
+		this._expandOnNext.add(toolName);
+	}
+
 	async compute(token: CancellationToken): Promise<LanguageModelToolInformation[]> {
 		await this._doCompute(token);
 		return [...this._root.tools()];
@@ -131,6 +136,16 @@ export class ToolGrouping implements IToolGrouping {
 		if (this._didToolsChange) {
 			await this._grouper.addGroups(this._root, this._tools.slice(), token);
 			this._didToolsChange = false;
+		}
+
+		if (this._expandOnNext) {
+			for (const toolName of this._expandOnNext) {
+				this._root.find(toolName)?.path.forEach(p => {
+					p.isExpanded = true;
+					p.lastUsedOnTurn = this._turnNo;
+				});
+			}
+			this._expandOnNext = undefined;
 		}
 
 		let trimDownTo = HARD_TOOL_LIMIT;

@@ -35,7 +35,7 @@ import { NotebookSummary } from '../../../tools/node/notebookSummaryTool';
 import { renderPromptElement } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
 import { ChatToolCalls } from '../panel/toolCalling';
-import { AgentPrompt, AgentPromptProps, AgentUserMessage, getKeepGoingReminder, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn } from './agentPrompt';
+import { AgentPrompt, AgentPromptProps, AgentUserMessage, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn, KeepGoingReminder } from './agentPrompt';
 import { SimpleSummarizedHistory } from './simpleSummarizedHistoryPrompt';
 
 export interface ConversationHistorySummarizationPromptProps extends SummarizedAgentHistoryProps {
@@ -614,7 +614,7 @@ class ConversationHistorySummarizer {
 	}
 }
 
-export class AgentPromptWithSummaryPrompt extends PromptElement<AgentPromptProps> {
+class AgentPromptWithSummaryPrompt extends PromptElement<AgentPromptProps> {
 	override async render(state: void, sizing: PromptSizing) {
 		return <>
 			<AgentPrompt {...this.props} />
@@ -713,13 +713,12 @@ interface SummaryMessageProps extends BasePromptElementProps {
 
 class SummaryMessageElement extends PromptElement<SummaryMessageProps> {
 	override async render(state: void, sizing: PromptSizing) {
-		const keepGoingReminder = getKeepGoingReminder(this.props.endpoint.family);
 		return <UserMessage>
 			<Tag name='conversation-summary'>
 				{this.props.summaryText}
 			</Tag>
-			{keepGoingReminder && <Tag name='reminderInstructions'>
-				{keepGoingReminder}
+			{this.props.endpoint.family === 'gpt-4.1' && <Tag name='reminderInstructions'>
+				<KeepGoingReminder modelFamily={this.props.endpoint.family} />
 			</Tag>}
 		</UserMessage>;
 	}

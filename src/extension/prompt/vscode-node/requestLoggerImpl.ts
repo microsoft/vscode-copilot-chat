@@ -3,10 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { HTMLTracer, IChatEndpointInfo, RenderPromptResult } from '@vscode/prompt-tsx';
 import { CancellationToken, DocumentLink, DocumentLinkProvider, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult2, languages, Range, TextDocument, Uri, workspace } from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
+import { IModelAPIResponse } from '../../../platform/endpoint/common/endpointProvider';
+import { getAllStatefulMarkersAndIndicies } from '../../../platform/endpoint/common/statefulMarkerContainer';
 import { ILogService } from '../../../platform/log/common/logService';
 import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
 import { IResponseDelta } from '../../../platform/networking/common/fetch';
@@ -14,7 +17,9 @@ import { AbstractRequestLogger, ChatRequestScheme, ILoggedToolCall, LoggedInfo, 
 import { ThinkingData } from '../../../platform/thinking/common/thinking';
 import { createFencedCodeBlock } from '../../../util/common/markdown';
 import { assertNever } from '../../../util/vs/base/common/assert';
+import { Codicon } from '../../../util/vs/base/common/codicons';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
+import { Iterable } from '../../../util/vs/base/common/iterator';
 import { safeStringify } from '../../../util/vs/base/common/objects';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { renderToolResultToStringNoBudget } from './requestLoggerToolResult';
@@ -59,6 +64,16 @@ export class RequestLogger extends AbstractRequestLogger {
 
 	private _onDidChangeRequests = new Emitter<void>();
 	public readonly onDidChangeRequests = this._onDidChangeRequests.event;
+
+	public override logModelListCall(id: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void {
+		this.addEntry({
+			type: LoggedRequestKind.MarkdownContentRequest,
+			debugName: 'modelList',
+			startTimeMs: Date.now(),
+			icon: Codicon.fileCode,
+			markdownContent: this._renderModelListToMarkdown(id, requestMetadata, models)
+		});
+	}
 
 	public override logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void {
 		this._addEntry({
@@ -204,16 +219,14 @@ export class RequestLogger extends AbstractRequestLogger {
 			result.push(`~~~`);
 		}
 
-		if (entry.thinking) {
+		if (entry.thinking?.text) {
 			result.push(`## Thinking`);
 			if (entry.thinking.id) {
 				result.push(`thinkingId: ${entry.thinking.id}`);
 			}
-			if (entry.thinking.text) {
-				result.push(`~~~`);
-				result.push(entry.thinking.text);
-				result.push(`~~~`);
-			}
+			result.push(`~~~`);
+			result.push(entry.thinking.text);
+			result.push(`~~~`);
 		}
 
 		return result.join('\n');
@@ -259,6 +272,15 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(`endTime          : ${entry.endTime.toJSON()}`);
 		result.push(`duration         : ${entry.endTime.getTime() - entry.startTime.getTime()}ms`);
 		result.push(`ourRequestId     : ${entry.chatParams.ourRequestId}`);
+
+		let statefulMarker: { statefulMarker: { modelId: string; marker: string }; index: number } | undefined;
+		if ('messages' in entry.chatParams) {
+			statefulMarker = Iterable.first(getAllStatefulMarkersAndIndicies(entry.chatParams.messages));
+		}
+		if (statefulMarker) {
+			result.push(`lastResponseId   : ${statefulMarker.statefulMarker.marker} using ${statefulMarker.statefulMarker.modelId}`);
+		}
+
 		if (entry.type === LoggedRequestKind.ChatMLSuccess) {
 			result.push(`requestId        : ${entry.result.requestId}`);
 			result.push(`serverRequestId  : ${entry.result.serverRequestId}`);
@@ -364,5 +386,48 @@ export class RequestLogger extends AbstractRequestLogger {
 		}).join('');
 
 		return `### ${capitalizedRole}\n~~~md\n${message}\n~~~\n`;
+	}
+
+	private _renderModelListToMarkdown(requestId: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): string {
+		const result: string[] = [];
+		result.push(`# Model List Request`);
+		result.push(``);
+
+		result.push(`## Metadata`);
+		result.push(`~~~`);
+		result.push(`requestId       : ${requestId}`);
+		result.push(`requestType      : ${requestMetadata?.type || 'unknown'}`);
+		result.push(`isModelLab      : ${(requestMetadata as { type: string; isModelLab?: boolean }) ? 'yes' : 'no'}`);
+		if (requestMetadata.type === RequestType.ListModel) {
+			result.push(`requestedModel   : ${(requestMetadata as { type: string; modelId: string })?.modelId || 'unknown'}`);
+		}
+		result.push(`modelsCount      : ${models.length}`);
+		result.push(`~~~`);
+
+		if (models.length > 0) {
+			result.push(`## Available Models (Raw API Response)`);
+			result.push(``);
+			result.push(`\`\`\`json`);
+			result.push(JSON.stringify(models, null, 2));
+			result.push(`\`\`\``);
+			result.push(``);
+
+			// Keep a brief summary for quick reference
+			result.push(`## Summary`);
+			result.push(`~~~`);
+			result.push(`Total models     : ${models.length}`);
+			result.push(`Chat models      : ${models.filter(m => m.capabilities.type === 'chat').length}`);
+			result.push(`Embedding models : ${models.filter(m => m.capabilities.type === 'embeddings').length}`);
+			result.push(`Completion models: ${models.filter(m => m.capabilities.type === 'completion').length}`);
+			result.push(`Premium models   : ${models.filter(m => m.billing?.is_premium).length}`);
+			result.push(`Preview models   : ${models.filter(m => m.preview).length}`);
+			result.push(`Default chat     : ${models.find(m => m.is_chat_default)?.id || 'none'}`);
+			result.push(`Fallback chat    : ${models.find(m => m.is_chat_fallback)?.id || 'none'}`);
+			result.push(`~~~`);
+		}
+
+		result.push(this._renderMarkdownStyles());
+
+		return result.join('\n');
 	}
 }

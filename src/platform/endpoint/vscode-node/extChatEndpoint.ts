@@ -11,17 +11,17 @@ import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { IntentParams } from '../../chat/common/chatMLFetcher';
 import { ChatFetchResponseType, ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { ILogService } from '../../log/common/logService';
-import { FinishedCallback, OptionalChatRequestParams } from '../../networking/common/fetch';
+import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { Response } from '../../networking/common/fetcherService';
-import { IChatEndpoint } from '../../networking/common/networking';
+import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatCompletion } from '../../networking/common/openai';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { CustomDataPartMimeTypes } from '../common/endpointTypes';
+import { decodeStatefulMarker, encodeStatefulMarker, rawPartAsStatefulMarker } from '../common/statefulMarkerContainer';
 
 export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	private readonly _maxTokens: number;
@@ -91,6 +91,10 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		return false;
 	}
 
+	get supportsStatefulResponses() {
+		return false; // todo@connor4312 ?
+	}
+
 	get policy(): 'enabled' | { terms: string } {
 		return 'enabled';
 	}
@@ -140,6 +144,11 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 					}
 				} else if (contentPart.type === Raw.ChatCompletionContentPartKind.CacheBreakpoint) {
 					apiContent.push(new vscode.LanguageModelDataPart(new TextEncoder().encode('ephemeral'), CustomDataPartMimeTypes.CacheControl));
+				} else if (contentPart.type === Raw.ChatCompletionContentPartKind.Opaque) {
+					const statefulMarker = rawPartAsStatefulMarker(contentPart);
+					if (statefulMarker) {
+						apiContent.push(new vscode.LanguageModelDataPart(encodeStatefulMarker(statefulMarker.modelId, statefulMarker.marker), CustomDataPartMimeTypes.StatefulMarker));
+					}
 				}
 			}
 
@@ -175,6 +184,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		return apiMessages;
 	}
 
+
 	async makeChatRequest(
 		debugName: string,
 		messages: Raw.ChatMessage[],
@@ -184,13 +194,29 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		source?: { extensionId?: string | undefined },
 		requestOptions?: Omit<OptionalChatRequestParams, 'n'>,
 		userInitiatedRequest?: boolean,
-		telemetryProperties?: Record<string, string | number | boolean | undefined>,
-		intentParams?: IntentParams
+		telemetryProperties?: Record<string, string>,
 	): Promise<ChatResponse> {
+		return this.makeChatRequest2({
+			debugName,
+			messages,
+			finishedCb,
+			location,
+			source,
+			requestOptions,
+			userInitiatedRequest,
+			telemetryProperties,
+		}, token);
+	}
+
+	async makeChatRequest2({
+		messages,
+		requestOptions,
+		finishedCb,
+	}: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
 		const vscodeMessages = this.convertToApiChatMessage(messages);
 
 		const vscodeOptions: vscode.LanguageModelChatRequestOptions = {
-			tools: (requestOptions?.tools ?? []).map(tool => ({
+			tools: ((requestOptions?.tools ?? []) as OpenAiFunctionTool[]).map(tool => ({
 				name: tool.function.name,
 				description: tool.function.description,
 				inputSchema: tool.function.parameters,
@@ -222,6 +248,24 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 						numToolsCalled++;
 						await finishedCb(text, 0, { text: '', copilotToolCalls: functionCalls });
 					}
+				} else if (chunk instanceof vscode.LanguageModelDataPart) {
+					if (chunk.mimeType === CustomDataPartMimeTypes.StatefulMarker) {
+						const decoded = decodeStatefulMarker(chunk.data);
+						await finishedCb?.(text, 0, { text: '', statefulMarker: decoded.marker });
+					}
+				} else if (chunk instanceof vscode.LanguageModelThinkingPart) {
+					text += chunk.value;
+					// Call finishedCb with the current chunk of thinking text with a specific thinking field
+					if (finishedCb) {
+						await finishedCb(text, 0, {
+							text: '',  // Use empty text to avoid creating markdown part
+							thinking: {
+								text: chunk.value,
+								id: chunk.id || '',
+								metadata: chunk.metadata
+							}
+						});
+					}
 				}
 			}
 
@@ -250,6 +294,10 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 				serverRequestId: undefined
 			};
 		}
+	}
+
+	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		throw new Error('unreachable'); // this endpoint does not call into fetchers
 	}
 
 	cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {

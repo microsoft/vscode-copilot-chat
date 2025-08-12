@@ -5,7 +5,7 @@
 
 import { cloneAndChange } from '../../../util/vs/base/common/objects';
 
-export const enum ToolName {
+export enum ToolName {
 	ApplyPatch = 'apply_patch',
 	Codebase = 'semantic_search',
 	VSCodeAPI = 'get_vscode_api',
@@ -19,8 +19,6 @@ export const enum ToolName {
 	GetScmChanges = 'get_changed_files',
 	UpdateUserPreferences = 'update_user_preferences',
 	ReadProjectStructure = 'read_project_structure',
-	TerminalSelection = 'get_terminal_selection',
-	TerminalLastCommand = 'get_terminal_last_command',
 	CreateNewWorkspace = 'create_new_workspace',
 	CreateNewJupyterNotebook = 'create_new_jupyter_notebook',
 	SearchWorkspaceSymbols = 'search_workspace_symbols',
@@ -44,17 +42,18 @@ export const enum ToolName {
 	CreateDirectory = 'create_directory',
 	RunVscodeCmd = 'run_vscode_command',
 	GetTaskOutput = 'get_task_output',
-
+	CoreManageTodoList = 'manage_todo_list',
 	CoreRunInTerminal = 'run_in_terminal',
 	CoreGetTerminalOutput = 'get_terminal_output',
+	CoreTerminalSelection = 'terminal_selection',
+	CoreTerminalLastCommand = 'terminal_last_command',
 	CoreCreateAndRunTask = 'create_and_run_task',
 	CoreRunTask = 'run_task',
 	CoreGetTaskOutput = 'get_task_output',
 	CoreRunTest = 'runTests',
 }
 
-// When updating this, also update contributedToolNameToToolNames
-export const enum ContributedToolName {
+export enum ContributedToolName {
 	ApplyPatch = 'copilot_applyPatch',
 	Codebase = 'copilot_searchCodebase',
 	SearchWorkspaceSymbols = 'copilot_searchWorkspaceSymbols',
@@ -72,8 +71,6 @@ export const enum ContributedToolName {
 	DocInfo = 'copilot_getDocInfo',
 	GetScmChanges = 'copilot_getChangedFiles',
 	ReadProjectStructure = 'copilot_readProjectStructure',
-	TerminalSelection = 'copilot_getTerminalSelection',
-	TerminalLastCommand = 'copilot_getTerminalLastCommand',
 	CreateNewWorkspace = 'copilot_createNewWorkspace',
 	CreateNewJupyterNotebook = 'copilot_createNewJupyterNotebook',
 	EditFile = 'copilot_insertEdit',
@@ -96,48 +93,14 @@ export const enum ContributedToolName {
 	RunVscodeCmd = 'copilot_runVscodeCommand',
 }
 
-const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>([
-	[ContributedToolName.ApplyPatch, ToolName.ApplyPatch],
-	[ContributedToolName.Codebase, ToolName.Codebase],
-	[ContributedToolName.SearchWorkspaceSymbols, ToolName.SearchWorkspaceSymbols],
-	[ContributedToolName.Usages, ToolName.Usages],
-	[ContributedToolName.VSCodeAPI, ToolName.VSCodeAPI],
-	[ContributedToolName.TestFailure, ToolName.TestFailure],
-	[ContributedToolName.FindFiles, ToolName.FindFiles],
-	[ContributedToolName.FindTextInFiles, ToolName.FindTextInFiles],
-	[ContributedToolName.ReadFile, ToolName.ReadFile],
-	[ContributedToolName.ListDirectory, ToolName.ListDirectory],
-	[ContributedToolName.GetErrors, ToolName.GetErrors],
-	[ContributedToolName.DocInfo, ToolName.DocInfo],
-	[ContributedToolName.GetScmChanges, ToolName.GetScmChanges],
-	[ContributedToolName.ReadProjectStructure, ToolName.ReadProjectStructure],
-	[ContributedToolName.EditFile, ToolName.EditFile],
-	[ContributedToolName.UpdateUserPreferences, ToolName.UpdateUserPreferences],
-	[ContributedToolName.TerminalSelection, ToolName.TerminalSelection],
-	[ContributedToolName.TerminalLastCommand, ToolName.TerminalLastCommand],
-	[ContributedToolName.CreateNewWorkspace, ToolName.CreateNewWorkspace],
-	[ContributedToolName.CreateNewJupyterNotebook, ToolName.CreateNewJupyterNotebook],
-	[ContributedToolName.InstallExtension, ToolName.InstallExtension],
-	[ContributedToolName.Think, ToolName.Think],
-	[ContributedToolName.FetchWebPage, ToolName.FetchWebPage],
-	[ContributedToolName.FindTestFiles, ToolName.FindTestFiles],
-	[ContributedToolName.CreateFile, ToolName.CreateFile],
-	[ContributedToolName.ReplaceString, ToolName.ReplaceString],
-	[ContributedToolName.EditNotebook, ToolName.EditNotebook],
-	[ContributedToolName.RunNotebookCell, ToolName.RunNotebookCell],
-	[ContributedToolName.GetNotebookSummary, ToolName.GetNotebookSummary],
-	[ContributedToolName.ReadCellOutput, ToolName.ReadCellOutput],
-	[ContributedToolName.GetProjectSetupInfo, ToolName.GetProjectSetupInfo],
-	[ContributedToolName.SearchViewResults, ToolName.SearchViewResults],
-	[ContributedToolName.GithubRepo, ToolName.GithubRepo],
-	[ContributedToolName.SimpleBrowser, ToolName.SimpleBrowser],
-	[ContributedToolName.CreateDirectory, ToolName.CreateDirectory],
-	[ContributedToolName.RunVscodeCmd, ToolName.RunVscodeCmd],
-]);
-
 const toolNameToContributedToolNames = new Map<ToolName, ContributedToolName>();
-for (const [contributedName, name] of contributedToolNameToToolNames) {
-	toolNameToContributedToolNames.set(name, contributedName);
+const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>();
+for (const [contributedNameKey, contributedName] of Object.entries(ContributedToolName)) {
+	const toolName = ToolName[contributedNameKey as keyof typeof ToolName];
+	if (toolName) {
+		toolNameToContributedToolNames.set(toolName, contributedName);
+		contributedToolNameToToolNames.set(contributedName, toolName);
+	}
 }
 
 export function getContributedToolName(name: string | ToolName): string | ContributedToolName {
@@ -159,12 +122,3 @@ export function mapContributedToolNamesInString(str: string): string {
 export function mapContributedToolNamesInSchema(inputSchema: object): object {
 	return cloneAndChange(inputSchema, value => typeof value === 'string' ? mapContributedToolNamesInString(value) : undefined);
 }
-
-/**
- * Tools that can mutate code in the working set and that should be run prior
- * to forming an additional request with the model, to avoid that request
- * having outdated contents.
- */
-export const prerunTools: ReadonlySet<ToolName> = new Set([
-	ToolName.EditFile
-]);

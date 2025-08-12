@@ -80,6 +80,83 @@ describe('Virtual Tools - Grouper', () => {
 		root.isExpanded = true;
 	});
 
+	describe('_deduplicateGroups', () => {
+		function vt(name: string, possiblePrefix?: string): VirtualTool {
+			return new VirtualTool(
+				name,
+				`VT ${name}`,
+				0,
+				{ toolsetKey: 'k', groups: [], possiblePrefix },
+				[]
+			);
+		}
+
+		it('deduplicates VirtualTool against LM tool by prefixing existing VT', () => {
+			const dupName = `${VIRTUAL_TOOL_NAME_PREFIX}foo`;
+			const items = [
+				vt(dupName, 'ext_'),
+				makeTool(dupName),
+			];
+
+			const result = VirtualToolGrouper.deduplicateGroups(items) as Array<VirtualTool | LanguageModelToolInformation>;
+
+			// Expect both the LM tool and the prefixed VT to exist, and no unprefixed VT
+			const names = result.map(i => i.name);
+			expect(names).toContain(dupName);
+			expect(names).toContain(`activate_ext_${dupName.slice(VIRTUAL_TOOL_NAME_PREFIX.length)}`);
+			expect(result.find(i => i instanceof VirtualTool && i.name === dupName)).toBeUndefined();
+		});
+
+		it('deduplicates LM tool against VirtualTool by prefixing new VT', () => {
+			const dupName = `${VIRTUAL_TOOL_NAME_PREFIX}bar`;
+			const items = [
+				makeTool(dupName),
+				vt(dupName, 'mcp_'),
+			];
+
+			const result = VirtualToolGrouper.deduplicateGroups(items) as Array<VirtualTool | LanguageModelToolInformation>;
+			const names = result.map(i => i.name);
+			expect(names).toContain(dupName); // LM tool remains under original name
+			expect(names).toContain(`activate_mcp_${dupName.slice(VIRTUAL_TOOL_NAME_PREFIX.length)}`); // VT is cloned with prefix
+		});
+
+		it('handles VT vs VT duplicate by prefixing the first and keeping the second', () => {
+			const dupName = `${VIRTUAL_TOOL_NAME_PREFIX}baz`;
+			const first = vt(dupName, 'ext_');
+			const second = vt(dupName, 'mcp_');
+			const result = VirtualToolGrouper.deduplicateGroups([first, second]) as Array<VirtualTool | LanguageModelToolInformation>;
+
+			const vtPrefixed = result.find(i => i instanceof VirtualTool && i.name === `activate_ext_${dupName.slice(VIRTUAL_TOOL_NAME_PREFIX.length)}`) as VirtualTool | undefined;
+			const vtUnprefixed = result.find(i => i.name === dupName) as VirtualTool | undefined;
+
+			expect(vtPrefixed).toBeDefined();
+			// Second VT should remain at the original (unprefixed) name
+			expect(vtUnprefixed).toBeInstanceOf(VirtualTool);
+		});
+
+		it('drops duplicate when no possiblePrefix is available on VT', () => {
+			const dupName = `${VIRTUAL_TOOL_NAME_PREFIX}qux`;
+			const items = [
+				vt(dupName), // no possiblePrefix
+				makeTool(dupName),
+			];
+
+			const result = VirtualToolGrouper.deduplicateGroups(items) as Array<VirtualTool | LanguageModelToolInformation>;
+			// Only the first VT remains
+			expect(result).toHaveLength(1);
+			expect(result[0]).toBeInstanceOf(VirtualTool);
+			expect(result[0].name).toBe(dupName);
+		});
+
+		it('keeps only the first LM tool on LM vs LM duplicate', () => {
+			const dupName = `${VIRTUAL_TOOL_NAME_PREFIX}dup`;
+			const items = [makeTool(dupName), makeTool(dupName)];
+			const result = VirtualToolGrouper.deduplicateGroups(items) as Array<VirtualTool | LanguageModelToolInformation>;
+			expect(result).toHaveLength(1);
+			expect(result[0].name).toBe(dupName);
+		});
+	});
+
 	afterEach(() => {
 		accessor.dispose();
 	});
@@ -465,6 +542,65 @@ describe('Virtual Tools - Grouper', () => {
 			await grouper.addGroups(root, tools, CancellationToken.None);
 
 			expect(root.contents).toEqual(tools);
+		});
+	});
+
+	/**
+	 * Tests for the deduplication logic that ensures unique names by prefixing
+	 * virtual tools when necessary.
+	 */
+	describe('deduplicateGroups', () => {
+		it('keeps unique items unchanged', () => {
+			const items = [
+				makeTool('a'),
+				new VirtualTool(`${VIRTUAL_TOOL_NAME_PREFIX}groupA`, 'desc', 0, { toolsetKey: 'k', groups: [], possiblePrefix: 'ext_' }),
+				makeTool('b'),
+			];
+			const out = VirtualToolGrouper.deduplicateGroups(items);
+			expect(out.map(i => i.name)).toEqual(['a', `${VIRTUAL_TOOL_NAME_PREFIX}groupA`, 'b']);
+		});
+
+		it('prefixes first seen virtual tool if a later collision occurs with a real tool', () => {
+			const v = new VirtualTool(`${VIRTUAL_TOOL_NAME_PREFIX}conflict`, 'desc', 0, { toolsetKey: 'k', groups: [], possiblePrefix: 'ext_' });
+			const real: LanguageModelToolInformation = makeTool(`${VIRTUAL_TOOL_NAME_PREFIX}conflict`);
+			const out = VirtualToolGrouper.deduplicateGroups([v, real]);
+			expect(out.map(i => i.name).sort()).toEqual(['activate_conflict', 'activate_ext_conflict'].sort());
+		});
+
+		it('prefixes newly seen virtual tool when collision occurs with an existing real tool', () => {
+			const real: LanguageModelToolInformation = makeTool(`${VIRTUAL_TOOL_NAME_PREFIX}c`);
+			const v = new VirtualTool(`${VIRTUAL_TOOL_NAME_PREFIX}c`, 'desc', 0, { toolsetKey: 'k', groups: [], possiblePrefix: 'mcp_' });
+			const out = VirtualToolGrouper.deduplicateGroups([real, v]);
+			expect(out.map(i => i.name).sort()).toEqual(['activate_c', 'activate_mcp_c'].sort());
+		});
+
+		it('replaces earlier virtual tool with prefixed clone when colliding with later virtual tool', () => {
+			const v1 = new VirtualTool(`${VIRTUAL_TOOL_NAME_PREFIX}x`, 'd1', 0, { toolsetKey: 'k', groups: [], possiblePrefix: 'ext_' });
+			const v2 = new VirtualTool(`${VIRTUAL_TOOL_NAME_PREFIX}x`, 'd2', 0, { toolsetKey: 'k', groups: [], possiblePrefix: 'mcp_' });
+			const out = VirtualToolGrouper.deduplicateGroups([v1, v2]);
+			// first is replaced with ext_ prefix, second remains as-is (still original name)
+			expect(out.map(i => i.name).sort()).toEqual(['activate_ext_x', 'activate_x'].sort());
+		});
+
+		it('no prefixing when virtual has no possiblePrefix', () => {
+			const v1 = new VirtualTool(`${VIRTUAL_TOOL_NAME_PREFIX}dup`, 'd1', 0, { toolsetKey: 'k', groups: [] });
+			const v2 = new VirtualTool(`${VIRTUAL_TOOL_NAME_PREFIX}dup`, 'd2', 0, { toolsetKey: 'k', groups: [], possiblePrefix: 'ext_' });
+			const out = VirtualToolGrouper.deduplicateGroups([v1, v2]);
+			// Since first has no prefix, second with prefix should be applied
+			expect(out.map(i => i.name).sort()).toEqual(['activate_dup', 'activate_ext_dup'].sort());
+		});
+
+		it('handles multiple collisions consistently', () => {
+			const items: (VirtualTool | LanguageModelToolInformation)[] = [
+				new VirtualTool(`${VIRTUAL_TOOL_NAME_PREFIX}n`, 'd', 0, { toolsetKey: 'k', groups: [], possiblePrefix: 'e_' }),
+				makeTool(`${VIRTUAL_TOOL_NAME_PREFIX}n`),
+				new VirtualTool(`${VIRTUAL_TOOL_NAME_PREFIX}n`, 'd2', 0, { toolsetKey: 'k', groups: [], possiblePrefix: 'm_' }),
+				makeTool(`${VIRTUAL_TOOL_NAME_PREFIX}p`),
+				new VirtualTool(`${VIRTUAL_TOOL_NAME_PREFIX}p`, 'd3', 0, { toolsetKey: 'k', groups: [], possiblePrefix: 'x_' }),
+			];
+			const out = VirtualToolGrouper.deduplicateGroups(items);
+			const names = out.map(i => i.name).sort();
+			expect(names).toEqual(['activate_n', 'activate_e_n', 'activate_m_n', 'activate_p', 'activate_x_p'].sort());
 		});
 	});
 });

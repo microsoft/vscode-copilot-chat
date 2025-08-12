@@ -7,13 +7,14 @@ import { AssistantMessage, BasePromptElementProps, PromptRenderer as BasePromptR
 import type { ChatParticipantToolToken, LanguageModelToolResult2, LanguageModelToolTokenizationOptions } from 'vscode';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
+import { StatefulMarkerContainer } from '../../../../platform/endpoint/common/statefulMarkerContainer';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { ITokenizer } from '../../../../util/common/tokenizer';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { toErrorMessage } from '../../../../util/vs/base/common/errorMessage';
 import { isCancellationError } from '../../../../util/vs/base/common/errors';
-import { LanguageModelDataPart, LanguageModelPromptTsxPart, ToolResultAudience, LanguageModelTextPart, LanguageModelToolResult, LanguageModelTextPart2, LanguageModelDataPart2 } from '../../../../vscodeTypes';
+import { LanguageModelDataPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelTextPart2, LanguageModelToolResult } from '../../../../vscodeTypes';
 import { isImageDataPart } from '../../../conversation/common/languageModelChatMessageHelpers';
 import { IResultMetadata } from '../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCall, IToolCallRound } from '../../../prompt/common/intents';
@@ -42,6 +43,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 	constructor(
 		props: PromptElementProps<ChatToolCallsProps>,
 		@IToolsService private readonly toolsService: IToolsService,
+		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint
 	) {
 		super(props);
 	}
@@ -86,7 +88,10 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 			keepWith: useKeepWith(),
 		}));
 		const children: PromptElement[] = [];
-		children.push(<AssistantMessage toolCalls={assistantToolCalls}>{round.response}</AssistantMessage>);
+
+		// Don't include this when rendering and triggering summarization
+		const statefulMarker = round.statefulMarker && <StatefulMarkerContainer statefulMarker={{ modelId: this.promptEndpoint.model, marker: round.statefulMarker }} />;
+		children.push(<AssistantMessage toolCalls={assistantToolCalls}>{statefulMarker}{round.response}</AssistantMessage>);
 
 		// Tool call elements should be rendered with the later elements first, allowed to grow to fill the available space
 		// Each tool 'reserves' 1/(N*4) of the available space just so that newer tool calls don't completely elimate
@@ -360,7 +365,7 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 		if (!(part instanceof LanguageModelDataPart2 || part instanceof LanguageModelTextPart2) || !part.audience) {
 			return true;
 		}
-		return part.audience.includes(ToolResultAudience.Assistant);
+		return part.audience.includes(LanguageModelPartAudience.Assistant);
 	}
 
 	protected onData(part: LanguageModelDataPart) {
