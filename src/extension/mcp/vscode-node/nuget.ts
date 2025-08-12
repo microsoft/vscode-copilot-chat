@@ -67,7 +67,7 @@ export async function getNuGetPackageMetadata(id: string, logService: ILogServic
 	if (dotnetMajorVersion < 10) {
 		return {
 			state: 'error',
-			error: localize("mcp.setup.badCommandVersion", "The installed .NET SDK must be version 10 or newer. Found {0}.", dotnetVersion),
+			error: localize("mcp.setup.badDotnetSdkVersion", "The installed .NET SDK must be version 10 or newer. Found {0}.", dotnetVersion),
 			errorType: 'BadCommandVersion',
 			helpUri: 'https://aka.ms/vscode-mcp-install/dotnet',
 			helpUriLabel: localize("mcp.setup.installDotNetSdk", "Update .NET SDK"),
