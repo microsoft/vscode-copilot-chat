@@ -33,7 +33,7 @@ import { IPromptVariablesService } from '../../../prompt/node/promptVariablesSer
 import { ToolName } from '../../../tools/common/toolNames';
 import { CopilotIdentityRules, GPT5CopilotIdentityRule } from '../base/copilotIdentity';
 import { IPromptEndpoint, renderPromptElement } from '../base/promptRenderer';
-import { SafetyRules } from '../base/safetyRules';
+import { Gpt5SafetyRule, SafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
 import { TerminalAndTaskStatePromptElement } from '../base/terminalAndTaskState';
 import { ChatVariables } from '../panel/chatVariables';
@@ -89,8 +89,17 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		const baseAgentInstructions = <>
 			<SystemMessage>
 				You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
-				{this.props.endpoint.family.startsWith('gpt-5') ? <GPT5CopilotIdentityRule /> : <CopilotIdentityRules />}
-				<SafetyRules />
+				{this.props.endpoint.family.startsWith('gpt-5') ? (
+					<>
+						<GPT5CopilotIdentityRule />
+						<Gpt5SafetyRule />
+					</>
+				) : (
+					<>
+						<CopilotIdentityRules />
+						<SafetyRules />
+					</>
+				)}
 			</SystemMessage>
 			{instructions}
 		</>;
