@@ -301,6 +301,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		props: AgentUserMessageProps,
 		@IPromptVariablesService private readonly promptVariablesService: IPromptVariablesService,
 		@ILogService private readonly logService: ILogService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super(props);
 	}
@@ -327,6 +328,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 			: '';
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;
 		const hasTodoTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreManageTodoList);
+		const skipReminderInstructions = this.configurationService.getConfig(ConfigKey.Internal.Gpt5AlternatePromptsConfig);
 
 		return (
 			<>
@@ -344,13 +346,16 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 					</Tag>
 					<CurrentEditorContext endpoint={this.props.endpoint} />
 					<RepoContext />
-					<Tag name='reminderInstructions'>
-						{/* Critical reminders that are effective when repeated right next to the user message */}
-						<KeepGoingReminder modelFamily={this.props.endpoint.family} />
-						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint))}
-						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
-						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
-					</Tag>
+
+					{!skipReminderInstructions && (
+						<Tag name='reminderInstructions'>
+							{/* Critical reminders that are effective when repeated right next to the user message */}
+							<KeepGoingReminder modelFamily={this.props.endpoint.family} />
+							{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint))}
+							<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
+							{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
+						</Tag>
+					)}
 					{query && <Tag name='userRequest' priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 				</UserMessage>
