@@ -704,6 +704,8 @@ export namespace ConfigKey {
 		export const AgentHistorySummarizationForceGpt41 = defineExpSetting<boolean | undefined>('chat.advanced.agentHistorySummarizationForceGpt41', false, INTERNAL_RESTRICTED);
 		export const UseResponsesApiTruncation = defineSetting<boolean | undefined>('chat.advanced.useResponsesApiTruncation', false, INTERNAL_RESTRICTED);
 
+		export const EnableChatImageUpload = defineExpSetting<boolean>('chat.advanced.imageUpload', false, INTERNAL);
+
 		export const EnableReadFileV2 = defineExpSetting<boolean>('chat.advanced.enableReadFileV2', isPreRelease, INTERNAL_RESTRICTED);
 		export const AskAgent = defineExpSetting<boolean>('chat.advanced.enableAskAgent', { defaultValue: false, teamDefaultValue: true, internalDefaultValue: true }, INTERNAL_RESTRICTED);
 		export const VerifyTextDocumentChanges = defineExpSetting<boolean>('chat.advanced.inlineEdits.verifyTextDocumentChanges', true, INTERNAL_RESTRICTED);
