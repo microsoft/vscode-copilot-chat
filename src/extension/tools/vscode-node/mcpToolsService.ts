@@ -2,9 +2,8 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import * as vscode from 'vscode';
-// eslint-disable-next-line no-restricted-imports
 import * as fs from 'fs';
+import * as vscode from 'vscode';
 /* eslint-disable import/no-restricted-paths */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -15,9 +14,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { getContributedToolName, getToolName, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolName } from '../common/toolNames';
 import { ICopilotTool } from '../common/toolsRegistry';
 import { BaseToolsService } from '../common/toolsService';
-// eslint-disable-next-line no-duplicate-imports
-import { LanguageModelToolResult2 } from 'vscode';
-// eslint-disable-next-line local/no-test-imports
+/* eslint-disable local/no-test-imports */
 import { logger } from '../../../../test/simulationLogger';
 
 type McpServers = {
@@ -106,12 +103,13 @@ export class McpToolsService extends BaseToolsService {
 		}
 	}
 
-	async invokeTool(name: string | ToolName, options: vscode.LanguageModelToolInvocationOptions<Object>, token: vscode.CancellationToken): Promise<LanguageModelToolResult | LanguageModelToolResult2> {
+	async invokeTool(name: string | ToolName, options: vscode.LanguageModelToolInvocationOptions<Object>, token: vscode.CancellationToken): Promise<LanguageModelToolResult | vscode.LanguageModelToolResult2> {
 		this._onWillInvokeTool.fire({ toolName: name });
+		const invokeToolTimeout = process.env.SIMULATION_INVOKE_TOOL_TIMEOUT ? parseInt(process.env.SIMULATION_INVOKE_TOOL_TIMEOUT, 10) : 60_000;
 		const result = await this.mcp?.callTool({
 			name: name,
 			arguments: options.input as Record<string, unknown>,
-		});
+		}, undefined, { timeout: invokeToolTimeout, maxTotalTimeout: invokeToolTimeout });
 		if (!result) {
 			throw new CancellationError();
 		}
