@@ -95,6 +95,10 @@ type RunResult = void | { errors: unknown[] };
 async function run(opts: SimulationOptions): Promise<RunResult> {
 	const jsonOutputPrinter: IJSONOutputPrinter = opts.jsonOutput ? new ConsoleJSONOutputPrinter() : new CollectingJSONOutputPrinter();
 
+	if (opts.externalCacheLayersPath) {
+		process.env['EXTERNAL_CACHE_LAYERS_PATH'] = opts.externalCacheLayersPath;
+	}
+
 	switch (true) {
 		case opts.help:
 			return opts.printHelp();
@@ -297,6 +301,9 @@ async function runTests(opts: SimulationOptions, jsonOutputPrinter: IJSONOutputP
 	const { simulationEndpointHealth, simulationOutcome, simulationTestContext, testsToRun, baseline, canUseBaseline, outputPath, runningAllTests, hasFilteredTests } = await prepareTestEnvironment(opts, jsonOutputPrinter);
 
 	if (opts.gc) {
+		if (opts.gc && opts.externalCacheLayersPath) {
+			throw new Error('--gc is currently not compatible with --external-cache-layers-path');
+		}
 		Cache.Instance.gcStart();
 	}
 
