@@ -1,14 +1,5 @@
 ### User
 ~~~md
-When generating code, please follow these user provided coding instructions. You can ignore an instruction if it contradicts a system message.
-<instructions>
-This is a test custom instruction file
-</instructions>
-~~~
-
-
-### User
-~~~md
 <environment_info>
 The user's current OS is: Linux
 The user's default shell is: "zsh". When you generate terminal commands, please generate them correctly for this shell.
@@ -22,7 +13,9 @@ I am working in a workspace that has the following structure:
 ```
 This is the state of the context at this point in the conversation. The view of the workspace structure may be truncated. You can use tools to collect more context if needed.
 </workspace_info>
-copilot_cache_control: {"type":"ephemeral"}
+
+
+copilot_cache_control: { type: 'ephemeral' }
 ~~~
 
 
@@ -31,6 +24,7 @@ copilot_cache_control: {"type":"ephemeral"}
 <conversation-summary>
 summarized 2!
 </conversation-summary>
+
 ~~~
 
 
@@ -49,7 +43,8 @@ console.log('hi')"
 ~~~md
 🛠️ tooluse_4
 success
-copilot_cache_control: {"type":"ephemeral"}
+
+copilot_cache_control: { type: 'ephemeral' }
 ~~~
 
 
@@ -76,7 +71,9 @@ line 5
 <userRequest>
 edit this file
 </userRequest>
-copilot_cache_control: {"type":"ephemeral"}
+
+
+copilot_cache_control: { type: 'ephemeral' }
 ~~~
 
 
@@ -95,5 +92,6 @@ console.log('hi')"
 ~~~md
 🛠️ tooluse_5
 success
-copilot_cache_control: {"type":"ephemeral"}
+
+copilot_cache_control: { type: 'ephemeral' }
 ~~~

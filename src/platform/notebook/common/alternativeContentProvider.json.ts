@@ -25,8 +25,7 @@ export function isJsonContent(text: string): boolean {
 }
 
 class AlternativeJsonDocument extends AlternativeNotebookDocument {
-	override fromCellPosition(cellIndex: number, position: Position): Position {
-		const cell = this.notebook.cellAt(cellIndex);
+	override fromCellPosition(cell: NotebookCell, position: Position): Position {
 		const cellId = getCellId(cell);
 
 		const alternativeContentText = this.getText();
@@ -47,6 +46,9 @@ class AlternativeJsonDocument extends AlternativeNotebookDocument {
 		// -1 to exclude to trailing `"`
 		return new Position(linePositionInAltContent, characterPositionInAltContent.length);
 	}
+	override toCellPosition(position: Position): { cell: NotebookCell; position: Position } | undefined {
+		throw new Error('Method not implemented.');
+	}
 }
 
 export class AlternativeJsonNotebookContentProvider extends BaseAlternativeNotebookContentProvider {
@@ -62,8 +64,24 @@ export class AlternativeJsonNotebookContentProvider extends BaseAlternativeNoteb
 		return this.parseAlternateContentImpl(notebookOrUri, inputStream, token);
 	}
 
-	public override getAlternativeDocument(notebook: NotebookDocument): AlternativeNotebookDocument {
-		const text = this.getAlternativeContent(notebook);
+	public override getAlternativeDocument(notebook: NotebookDocument, excludeMarkdownCells?: boolean): AlternativeNotebookDocument {
+		const cells = notebook.getCells().filter(cell => excludeMarkdownCells ? cell.kind !== NotebookCellKind.Markup : true).map(cell => {
+			const summary = summarize(cell);
+			const source = getCellCode(cell.document);
+
+			return {
+				cell_type: summary.cell_type,
+				id: summary.id,
+				metadata: {
+					language: summary.language
+				},
+				source,
+			} satisfies SummaryCell;
+		});
+
+		const json: Notebook = { cells };
+		const text = JSON.stringify(json, undefined, IndentSize);
+
 		return new AlternativeJsonDocument(text, notebook);
 	}
 
@@ -213,25 +231,6 @@ export class AlternativeJsonNotebookContentProvider extends BaseAlternativeNoteb
 				emitCell(finalOffset);
 			}
 		});
-	}
-
-	protected getAlternativeContent(notebook: NotebookDocument): string {
-		const cells = notebook.getCells().map(cell => {
-			const summary = summarize(cell);
-			const source = getCellCode(cell.document);
-
-			return {
-				cell_type: summary.cell_type,
-				id: summary.id,
-				metadata: {
-					language: summary.language
-				},
-				source,
-			} satisfies SummaryCell;
-		});
-
-		const json: Notebook = { cells };
-		return JSON.stringify(json, undefined, IndentSize);
 	}
 }
 

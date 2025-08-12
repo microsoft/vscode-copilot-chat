@@ -3,11 +3,17 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { CancellationToken, ChatResponseFragment2, Event, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatRequestHandleOptions, Progress, QuickPickItem, window } from 'vscode';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { BYOKAuthType } from '../common/byokProvider';
-import { BaseOpenAICompatibleBYOKRegistry } from './baseOpenAICompatibleProvider';
+import { CopilotLanguageModelWrapper } from '../../conversation/vscode-node/languageModelAccess';
+import { BYOKAuthType, BYOKKnownModels, BYOKModelProvider, resolveModelInfo } from '../common/byokProvider';
+import { OpenAIEndpoint } from '../node/openAIEndpoint';
+import { IBYOKStorageService } from './byokStorageService';
+import { promptForAPIKey } from './byokUIService';
+
 
 export function resolveAzureUrl(modelId: string, url: string): string {
 	// The fully resolved url was already passed in
@@ -33,33 +39,185 @@ export function resolveAzureUrl(modelId: string, url: string): string {
 	}
 }
 
-/**
- * BYOK registry for Azure OpenAI deployments
- *
- * Azure is different from other providers because each model has its own deployment URL and key,
- * and there's no central listing API. The user needs to manually register each model they want to use.
- */
+interface AzureModelInfo extends LanguageModelChatInformation {
+	url: string;
+	thinking: boolean;
+}
 
-export class AzureBYOKModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
-
+export class AzureBYOKModelProvider implements BYOKModelProvider<AzureModelInfo> {
+	private readonly _lmWrapper: CopilotLanguageModelWrapper;
+	static readonly providerName = 'Azure';
+	public readonly authType: BYOKAuthType = BYOKAuthType.PerModelDeployment;
 	constructor(
-		@IFetcherService _fetcherService: IFetcherService,
-		@ILogService _logService: ILogService,
-		@IInstantiationService _instantiationService: IInstantiationService,
+		private readonly _byokStorageService: IBYOKStorageService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@ILogService private readonly _logService: ILogService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService
 	) {
-		super(
-			BYOKAuthType.PerModelDeployment,
-			'Azure',
-			'',
-			_fetcherService,
-			_logService,
-			_instantiationService
-		);
+		this._lmWrapper = this._instantiationService.createInstance(CopilotLanguageModelWrapper);
 	}
 
-	override async getAllModels(_apiKey: string): Promise<{ id: string; name: string }[]> {
-		// Azure doesn't have a central API for listing models
-		// Each model has a unique deployment URL
-		return [];
+	onDidChange?: Event<void> | undefined;
+
+	private async getAllModels(): Promise<BYOKKnownModels> {
+		const azureModelConfig = this._configurationService.getConfig(ConfigKey.AzureModels);
+		const models: BYOKKnownModels = {};
+		for (const [modelId, modelInfo] of Object.entries(azureModelConfig)) {
+			models[modelId] = {
+				name: modelInfo.name,
+				url: resolveAzureUrl(modelId, modelInfo.url),
+				toolCalling: modelInfo.toolCalling,
+				vision: modelInfo.vision,
+				maxInputTokens: modelInfo.maxInputTokens,
+				maxOutputTokens: modelInfo.maxOutputTokens,
+				thinking: modelInfo.thinking,
+			};
+		}
+		return models;
 	}
+
+	private async getModelsWithAPIKeys(silent: boolean): Promise<BYOKKnownModels> {
+		const models = await this.getAllModels();
+		const modelsWithApiKeys: BYOKKnownModels = {};
+		for (const [modelId, modelInfo] of Object.entries(models)) {
+			let apiKey = await this._byokStorageService.getAPIKey(AzureBYOKModelProvider.providerName, modelId);
+			if (!silent && !apiKey) {
+				apiKey = await promptForAPIKey(`Azure - ${modelId}`, false);
+				if (apiKey) {
+					await this._byokStorageService.storeAPIKey(AzureBYOKModelProvider.providerName, apiKey, BYOKAuthType.PerModelDeployment, modelId);
+				}
+			}
+			if (apiKey) {
+				modelsWithApiKeys[modelId] = modelInfo;
+			}
+		}
+		return modelsWithApiKeys;
+	}
+
+	async prepareLanguageModelChat(options: { silent: boolean }, token: CancellationToken): Promise<AzureModelInfo[]> {
+		try {
+			const knownModels = await this.getModelsWithAPIKeys(options.silent);
+			return Object.entries(knownModels).map(([id, capabilities]) => {
+				return {
+					id,
+					url: capabilities.url || '',
+					name: capabilities.name,
+					cost: AzureBYOKModelProvider.providerName,
+					version: '1.0.0',
+					maxOutputTokens: capabilities.maxOutputTokens,
+					maxInputTokens: capabilities.maxInputTokens,
+					family: AzureBYOKModelProvider.providerName,
+					description: `${capabilities.name} is contributed via the ${AzureBYOKModelProvider.providerName} provider.`,
+					capabilities: {
+						toolCalling: capabilities.toolCalling,
+						vision: capabilities.vision
+					},
+					thinking: capabilities.thinking || false,
+				};
+			});
+		} catch {
+			return [];
+		}
+	}
+	async provideLanguageModelChatResponse(model: AzureModelInfo, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: LanguageModelChatRequestHandleOptions, progress: Progress<ChatResponseFragment2>, token: CancellationToken): Promise<any> {
+		const apiKey = await this._byokStorageService.getAPIKey(AzureBYOKModelProvider.providerName, model.id);
+		if (!apiKey) {
+			this._logService.error(`No API key found for model ${model.id}`);
+			throw new Error(`No API key found for model ${model.id}`);
+		}
+		const modelInfo = resolveModelInfo(model.id, AzureBYOKModelProvider.providerName, undefined, {
+			maxInputTokens: model.maxInputTokens,
+			maxOutputTokens: model.maxOutputTokens,
+			toolCalling: !!model.capabilities?.toolCalling || false,
+			vision: !!model.capabilities?.vision || false,
+			name: model.name,
+			url: model.url,
+			thinking: model.thinking
+		});
+		modelInfo.capabilities.supports.statefulResponses = this._configurationService.getExperimentBasedConfig(ConfigKey.ByokResponsesApi, this._experimentationService);
+		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey, model.url);
+		return this._lmWrapper.provideLanguageModelResponse(openAIChatEndpoint, messages, options, options.extensionId, progress, token);
+	}
+	async provideTokenCount(model: AzureModelInfo, text: string | LanguageModelChatMessage | LanguageModelChatMessage2, token: CancellationToken): Promise<number> {
+		const apiKey = await this._byokStorageService.getAPIKey(AzureBYOKModelProvider.providerName, model.id);
+		if (!apiKey) {
+			this._logService.error(`No API key found for model ${model.id}`);
+			throw new Error(`No API key found for model ${model.id}`);
+		}
+		const modelInfo = resolveModelInfo(model.id, AzureBYOKModelProvider.providerName, undefined, {
+			maxInputTokens: model.maxInputTokens,
+			maxOutputTokens: model.maxOutputTokens,
+			toolCalling: !!model.capabilities?.toolCalling || false,
+			vision: !!model.capabilities?.vision || false,
+			name: model.name,
+			url: model.url,
+			thinking: model.thinking
+		});
+		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey, model.url);
+		return this._lmWrapper.provideTokenCount(openAIChatEndpoint, text);
+	}
+
+	public async updateAPIKey(): Promise<void> {
+		// Get all available models
+		const allModels = await this.getAllModels();
+
+		if (Object.keys(allModels).length === 0) {
+			await window.showInformationMessage('No Azure models are configured. Please configure models first.');
+			return;
+		}
+
+		// Create quick pick items for all models
+		interface ModelQuickPickItem extends QuickPickItem {
+			modelId: string;
+		}
+
+		const modelItems: ModelQuickPickItem[] = Object.entries(allModels).map(([modelId, modelInfo]) => ({
+			label: modelInfo.name || modelId,
+			description: modelId,
+			detail: `URL: ${modelInfo.url}`,
+			modelId: modelId
+		}));
+
+		// Show quick pick to select which model's API key to update
+		const quickPick = window.createQuickPick<ModelQuickPickItem>();
+		quickPick.title = 'Update Azure Model API Key';
+		quickPick.placeholder = 'Select a model to update its API key';
+		quickPick.items = modelItems;
+		quickPick.ignoreFocusOut = true;
+
+		const selectedModel = await new Promise<ModelQuickPickItem | undefined>((resolve) => {
+			quickPick.onDidAccept(() => {
+				const selected = quickPick.selectedItems[0];
+				quickPick.hide();
+				resolve(selected);
+			});
+
+			quickPick.onDidHide(() => {
+				resolve(undefined);
+			});
+
+			quickPick.show();
+		});
+
+		if (!selectedModel) {
+			return; // User cancelled
+		}
+
+		// Prompt for new API key
+		const newApiKey = await promptForAPIKey(`Azure - ${selectedModel.modelId}`, true);
+
+		if (newApiKey !== undefined) {
+			if (newApiKey.trim() === '') {
+				// Empty string means delete the API key
+				await this._byokStorageService.deleteAPIKey(AzureBYOKModelProvider.providerName, BYOKAuthType.PerModelDeployment, selectedModel.modelId);
+				await window.showInformationMessage(`API key for ${selectedModel.label} has been deleted.`);
+			} else {
+				// Store the new API key
+				await this._byokStorageService.storeAPIKey(AzureBYOKModelProvider.providerName, newApiKey, BYOKAuthType.PerModelDeployment, selectedModel.modelId);
+				await window.showInformationMessage(`API key for ${selectedModel.label} has been updated.`);
+			}
+		}
+	}
+
 }

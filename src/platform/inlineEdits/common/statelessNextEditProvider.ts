@@ -63,8 +63,9 @@ export class StatelessNextEditRequest<TFirstEdit = any> {
 		public readonly xtabEditHistory: IXtabHistoryEntry[],
 		public readonly firstEdit: DeferredPromise<Result<TFirstEdit, NoNextEditReason>>,
 		public readonly logContext: InlineEditRequestLogContext,
-		public readonly recordingBookmark?: DebugRecorderBookmark,
-		public readonly recording?: LogEntry[],
+		public readonly recordingBookmark: DebugRecorderBookmark | undefined,
+		public readonly recording: LogEntry[] | undefined,
+		public readonly providerRequestStartDateTime: number | undefined,
 	) {
 		assert(documents.length > 0);
 		assert(activeDocumentIdx >= 0 && activeDocumentIdx < documents.length);
@@ -287,7 +288,6 @@ export interface IStatelessNextEditTelemetry {
 	readonly lineDistanceToMostRecentEdit: number | undefined;
 
 	/* result info */
-	readonly hasNextEdit: boolean;
 	readonly nextEditLogprob: number | undefined;
 	readonly noNextEditReasonKind: string | undefined;
 	readonly noNextEditReasonMessage: string | undefined;
@@ -323,7 +323,6 @@ export class StatelessNextEditTelemetryBuilder {
 		const promptLineCount = promptText?.split('\n').length;
 		const promptCharCount = promptText?.length;
 
-		const hasNextEdit = result.isOk();
 		const noNextEditReasonKind = result.isOk() ? undefined : result.err.kind;
 
 		let noNextEditReasonMessage: string | undefined;
@@ -342,7 +341,6 @@ export class StatelessNextEditTelemetryBuilder {
 		return {
 			hadStatelessNextEditProviderCall: true,
 
-			hasNextEdit,
 			noNextEditReasonKind,
 			noNextEditReasonMessage,
 

@@ -14,9 +14,7 @@ import { IEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IReleaseNotesService } from '../../../../platform/releaseNotes/common/releaseNotesService';
-import { ICodeOrDocsSearchItem, IDocsSearchClient } from '../../../../platform/remoteSearch/common/codeOrDocsSearchClient';
 import { reportProgressOnSlowPromise } from '../../../../util/common/progress';
-import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart } from '../../../../vscodeTypes';
 import { Turn } from '../../../prompt/common/conversation';
@@ -39,7 +37,6 @@ export interface VscodePromptProps extends BasePromptElementProps {
 }
 
 export interface VscodePromptState {
-	docSearchResults: ICodeOrDocsSearchItem[];
 	settings: SettingListItem[];
 	commands: CommandListItem[];
 	query: string;
@@ -53,7 +50,6 @@ export class VscodePrompt extends PromptElement<VscodePromptProps, VscodePromptS
 		@IEmbeddingsComputer private readonly embeddingsComputer: IEmbeddingsComputer,
 		@IEndpointProvider private readonly endPointProvider: IEndpointProvider,
 		@ICombinedEmbeddingIndex private readonly combinedEmbeddingIndex: ICombinedEmbeddingIndex,
-		@IDocsSearchClient private readonly docSearchClient: IDocsSearchClient,
 		@IEnvService private readonly envService: IEnvService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IReleaseNotesService private readonly releaseNotesService: IReleaseNotesService,
@@ -63,7 +59,7 @@ export class VscodePrompt extends PromptElement<VscodePromptProps, VscodePromptS
 
 	override async prepare(sizing: PromptSizing, progress: vscode.Progress<vscode.ChatResponseProgressPart> | undefined, token: vscode.CancellationToken): Promise<VscodePromptState> {
 		if (!this.props.promptContext.query) {
-			return { docSearchResults: [], settings: [], commands: [], query: '' };
+			return { settings: [], commands: [], query: '' };
 		}
 
 		progress?.report(new ChatResponseProgressPart(l10n.t('Refining question to improve search accuracy.')));
@@ -73,10 +69,10 @@ export class VscodePrompt extends PromptElement<VscodePromptProps, VscodePromptS
 		const renderer = PromptRenderer.create(this.instantiationService, endpoint, VscodeMetaPrompt, this.props.promptContext);
 		const { messages } = await renderer.render();
 		if (token.isCancellationRequested) {
-			return { docSearchResults: [], settings: [], commands: [], query: userQuery };
+			return { settings: [], commands: [], query: userQuery };
 		}
 
-		this.logService.logger.debug('[VSCode Prompt] Asking the model to update the user question.');
+		this.logService.debug('[VSCode Prompt] Asking the model to update the user question.');
 
 		const fetchResult = await endpoint.makeChatRequest(
 			'vscodePrompt',
@@ -91,7 +87,7 @@ export class VscodePrompt extends PromptElement<VscodePromptProps, VscodePromptS
 		);
 
 		if (token.isCancellationRequested) {
-			return { docSearchResults: [], settings: [], commands: [], query: userQuery };
+			return { settings: [], commands: [], query: userQuery };
 		}
 
 		let fetchReleaseNotes = false;
@@ -105,33 +101,29 @@ export class VscodePrompt extends PromptElement<VscodePromptProps, VscodePromptS
 			extensionSearch = fetchResult.value.includes('vscode_extensions');
 			vscodeApiSearch = fetchResult.value.includes('vscode_api');
 		} else {
-			this.logService.logger.error(`[VSCode Prompt] Failed to refine the question: ${fetchResult.requestId}`);
+			this.logService.error(`[VSCode Prompt] Failed to refine the question: ${fetchResult.requestId}`);
 		}
 
 		if (fetchReleaseNotes) {
 			const releaseNotes = await this.releaseNotesService.fetchLatestReleaseNotes();
-			return { docSearchResults: [], settings: [], commands: [], releaseNotes: releaseNotes, query: this.props.promptContext.query };
+			return { settings: [], commands: [], releaseNotes: releaseNotes, query: this.props.promptContext.query };
 		}
 
 		if (extensionSearch || vscodeApiSearch) {
-			return { docSearchResults: [], settings: [], commands: [], query: this.props.promptContext.query };
+			return { settings: [], commands: [], query: this.props.promptContext.query };
 		}
 
-		const docSearchPromise = shouldIncludeDocsSearch ? progress
-			? reportProgressOnSlowPromise(progress, new ChatResponseProgressPart(l10n.t("Searching doc index...")), this.searchDocsSearchForContext(userQuery, 10, token, this.logService), 1000)
-			: this.searchDocsSearchForContext(userQuery, 10, token, this.logService) : undefined;
-
 		if (token.isCancellationRequested) {
-			return { docSearchResults: [], settings: [], commands: [], query: userQuery };
+			return { settings: [], commands: [], query: userQuery };
 		}
 
 		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [userQuery], {}, undefined);
 		if (token.isCancellationRequested) {
-			return { docSearchResults: [], settings: [], commands: [], releaseNotes: '', query: userQuery };
+			return { settings: [], commands: [], releaseNotes: '', query: userQuery };
 		}
 
 		if (!embeddingResult) {
-			return { docSearchResults: docSearchPromise ? await docSearchPromise : [], settings: [], commands: [], query: userQuery };
+			return { settings: [], commands: [], query: userQuery };
 		}
 
 		const nClosestValuesPromise = progress
@@ -140,23 +132,11 @@ export class VscodePrompt extends PromptElement<VscodePromptProps, VscodePromptS
 
 		const results = await Promise.allSettled([
 			nClosestValuesPromise,
-			docSearchPromise,
 		]);
 
 		const embeddingResults = results[0].status === 'fulfilled' ? results[0].value : { commands: [], settings: [] };
-		const docSearchResults = (results[1].status === 'fulfilled' ? results[1].value : []) || [];
 
-		return { docSearchResults, settings: embeddingResults.settings, commands: embeddingResults.commands, query: userQuery };
-	}
-
-	private async searchDocsSearchForContext(message: string, numResults: number, token: CancellationToken, logService: ILogService) {
-		try {
-			return await this.docSearchClient.search(message, { repo: 'microsoft/vscode-docs' }, { limit: numResults, similarity: 0.75 }, token);
-		} catch (e) {
-			this.logService.logger.error(e, `Failed to search docs search for query`);
-			// fallback to using commands and settings embeddings if search fails
-			return [];
-		}
+		return { settings: embeddingResults.settings, commands: embeddingResults.commands, query: userQuery };
 	}
 
 	override render(state: VscodePromptState) {
@@ -370,15 +350,6 @@ ms-python.python,ms-python.vscode-pylance
 					{state.settings.length > 0 && <><Tag name='settings'>
 						Here are some possible settings:<br />
 						{state.settings.map(c => <TextChunk>{settingItemToContext(c)}</TextChunk>)}
-					</Tag>
-					</>}
-					{state.docSearchResults.length > 0 && <><Tag name='documentSnippets'>
-						Here are some documentation snippets from the Visual Studio Code website.<br />
-						{state.docSearchResults.map((result) =>
-							<TextChunk>
-								##{result?.title?.trim()} - {result.path}<br />
-								{result.contents}
-							</TextChunk>)}
 					</Tag>
 					</>}
 					{state.releaseNotes && <><Tag name='releaseNotes'>

@@ -253,11 +253,11 @@ export class CodeSearchRepoTracker extends Disposable {
 		super();
 
 		this._initializedGitReposP = createCancelablePromise(async (token) => {
-			this._logService.logger.trace(`CodeSearchRepoTracker.tryInitGitRepos(): started`);
+			this._logService.trace(`CodeSearchRepoTracker.tryInitGitRepos(): started`);
 
 			try {
 				if (!this._gitService.isInitialized) {
-					this._logService.logger.trace(`CodeSearchRepoTracker.tryInitGitRepos(): Git service not initialized. Waiting for init signal.`);
+					this._logService.trace(`CodeSearchRepoTracker.tryInitGitRepos(): Git service not initialized. Waiting for init signal.`);
 					const finishInitTimeout = 30_000;
 					await raceCancellationError(raceTimeout(new Promise<void>(resolve => this._gitService.onDidFinishInitialization(() => resolve())), finishInitTimeout), token);
 					if (this._isDisposed) {
@@ -265,7 +265,7 @@ export class CodeSearchRepoTracker extends Disposable {
 					}
 				}
 
-				this._logService.logger.trace(`CodeSearchRepoTracker.tryInitGitRepos(): Found initial repos: [${this._gitService.repositories.map(repo => repo.rootUri.toString())}].`);
+				this._logService.trace(`CodeSearchRepoTracker.tryInitGitRepos(): Found initial repos: [${this._gitService.repositories.map(repo => repo.rootUri.toString())}].`);
 
 				const openPromises = this._gitService.repositories.map(repo => this.openGitRepo(repo));
 
@@ -273,9 +273,9 @@ export class CodeSearchRepoTracker extends Disposable {
 				this._register(this._gitService.onDidCloseRepository(repo => this.closeRepo(repo)));
 
 				await raceCancellationError(Promise.allSettled(openPromises), token);
-				this._logService.logger.trace(`CodeSearchRepoTracker.tryInitGitRepos(): Complete`);
+				this._logService.trace(`CodeSearchRepoTracker.tryInitGitRepos(): Complete`);
 			} catch (e) {
-				this._logService.logger.error(`CodeSearchRepoTracker.tryInitGitRepos(): Error occurred during initialization: ${e}`);
+				this._logService.error(`CodeSearchRepoTracker.tryInitGitRepos(): Error occurred during initialization: ${e}`);
 			}
 		});
 
@@ -286,7 +286,7 @@ export class CodeSearchRepoTracker extends Disposable {
 					return;
 				}
 
-				this._logService.logger.trace(`CodeSearchRepoTracker.initGithubRemoteRepos(): started`);
+				this._logService.trace(`CodeSearchRepoTracker.initGithubRemoteRepos(): started`);
 
 				await raceCancellationError(
 					Promise.all(githubRemoteRepos.map(workspaceRoot => {
@@ -294,9 +294,9 @@ export class CodeSearchRepoTracker extends Disposable {
 						return this.openGithubRemoteRepo(workspaceRoot, new GithubRepoId(githubRepoIdParts[0], githubRepoIdParts[1]));
 					})),
 					token);
-				this._logService.logger.trace(`CodeSearchRepoTracker.initGithubRemoteRepos(): complete`);
+				this._logService.trace(`CodeSearchRepoTracker.initGithubRemoteRepos(): complete`);
 			} catch (e) {
-				this._logService.logger.error(`CodeSearchRepoTracker.initGithubRemoteRepos(): Error occurred during initialization: ${e}`);
+				this._logService.error(`CodeSearchRepoTracker.initGithubRemoteRepos(): Error occurred during initialization: ${e}`);
 			}
 		});
 
@@ -338,7 +338,7 @@ export class CodeSearchRepoTracker extends Disposable {
 						try {
 							await repo.initTask.p;
 						} catch (error) {
-							this._logService.logger.error(`Error during repo initialization: ${error}`);
+							this._logService.error(`Error during repo initialization: ${error}`);
 						}
 					}
 				}));
@@ -388,7 +388,7 @@ export class CodeSearchRepoTracker extends Disposable {
 
 	@LogExecTime(self => self._logService)
 	private async openGitRepo(repo: RepoContext): Promise<void> {
-		this._logService.logger.trace(`CodeSearchRepoTracker.openGitRepo(${repo.rootUri})`);
+		this._logService.trace(`CodeSearchRepoTracker.openGitRepo(${repo.rootUri})`);
 
 		const existing = this._repos.get(repo.rootUri);
 		if (existing) {
@@ -418,7 +418,7 @@ export class CodeSearchRepoTracker extends Disposable {
 				// See #12954
 				await this._gitExtensionService.getExtensionApi()?.getRepository(repo.rootUri)?.status();
 			} catch {
-				this._logService.logger.trace(`CodeSearchRepoTracker.openRepo(${repo.rootUri}). git status check failed.`);
+				this._logService.trace(`CodeSearchRepoTracker.openRepo(${repo.rootUri}). git status check failed.`);
 				// Noop, may still be ok even if the status check failed
 			}
 
@@ -428,7 +428,7 @@ export class CodeSearchRepoTracker extends Disposable {
 
 			const updatedRepo = await this._gitService.getRepository(repo.rootUri);
 			if (!updatedRepo && !this._simulationTestContext.isInSimulationTests) {
-				this._logService.logger.trace(`CodeSearchRepoTracker.openRepo(${repo.rootUri}). No current repo found after status check.`);
+				this._logService.trace(`CodeSearchRepoTracker.openRepo(${repo.rootUri}). No current repo found after status check.`);
 
 				/* __GDPR__
 					"codeSearchRepoTracker.openGitRepo.error.noCurrentRepo" : {
@@ -489,7 +489,7 @@ export class CodeSearchRepoTracker extends Disposable {
 			});
 
 			if (!remoteInfos.length) {
-				this._logService.logger.trace(`CodeSearchRepoTracker.openRepo(${repo.rootUri}). No valid github remote found. Remote urls: ${JSON.stringify(Array.from(getOrderedRemoteUrlsFromContext(repo)))}.`);
+				this._logService.trace(`CodeSearchRepoTracker.openRepo(${repo.rootUri}). No valid github remote found. Remote urls: ${JSON.stringify(Array.from(getOrderedRemoteUrlsFromContext(repo)))}.`);
 
 				this._telemetryService.sendInternalMSFTTelemetryEvent('codeSearchRepoTracker.error.couldNotResolveRemote.internal', {
 					remoteUrls: JSON.stringify(coalesce(repo.remoteFetchUrls ?? [])),
@@ -534,7 +534,7 @@ export class CodeSearchRepoTracker extends Disposable {
 	}
 
 	private openGithubRemoteRepo(rootUri: URI, githubId: GithubRepoId): Promise<void> {
-		this._logService.logger.trace(`CodeSearchRepoTracker.openGithubRemoteRepo(${rootUri})`);
+		this._logService.trace(`CodeSearchRepoTracker.openGithubRemoteRepo(${rootUri})`);
 
 		const existing = this._repos.get(rootUri);
 		if (existing) {
@@ -625,10 +625,10 @@ export class CodeSearchRepoTracker extends Disposable {
 			return existing;
 		}
 
-		this._logService.logger.trace(`CodeSearchRepoTracker.updateRepoStateFromEndpoint(${repo.rootUri}). Checking status from endpoint.`);
+		this._logService.trace(`CodeSearchRepoTracker.updateRepoStateFromEndpoint(${repo.rootUri}). Checking status from endpoint.`);
 
 		const newState = await raceCancellationError(this.getRepoIndexStatusFromEndpoint(repo, remoteInfo, token), token);
-		this._logService.logger.trace(`CodeSearchRepoTracker.updateRepoStateFromEndpoint(${repo.rootUri}). Updating state to ${newState.status}.`);
+		this._logService.trace(`CodeSearchRepoTracker.updateRepoStateFromEndpoint(${repo.rootUri}). Updating state to ${newState.status}.`);
 
 		this.updateRepoEntry(repo, newState);
 
@@ -651,7 +651,7 @@ export class CodeSearchRepoTracker extends Disposable {
 		if (remoteInfo.repoId.type === 'github') {
 			const authToken = await this.getGithubAccessToken(true);
 			if (!authToken) {
-				this._logService.logger.error(`CodeSearchRepoTracker.getIndexedStatus(${remoteInfo.repoId}). Failed to fetch indexing status. No valid github auth token.`);
+				this._logService.error(`CodeSearchRepoTracker.getIndexedStatus(${remoteInfo.repoId}). Failed to fetch indexing status. No valid github auth token.`);
 				return {
 					status: RepoStatus.NotAuthorized,
 					repo,
@@ -663,7 +663,7 @@ export class CodeSearchRepoTracker extends Disposable {
 		} else if (remoteInfo.repoId.type === 'ado') {
 			const authToken = (await this._authenticationService.getAdoAccessTokenBase64({ silent: true }));
 			if (!authToken) {
-				this._logService.logger.error(`CodeSearchRepoTracker.getIndexedStatus(${remoteInfo.repoId}). Failed to fetch indexing status. No valid ado auth token.`);
+				this._logService.error(`CodeSearchRepoTracker.getIndexedStatus(${remoteInfo.repoId}). Failed to fetch indexing status. No valid ado auth token.`);
 				return {
 					status: RepoStatus.NotAuthorized,
 					repo,
@@ -706,7 +706,7 @@ export class CodeSearchRepoTracker extends Disposable {
 	}
 
 	private closeRepo(repo: RepoContext) {
-		this._logService.logger.trace(`CodeSearchRepoTracker.closeRepo(${repo.rootUri})`);
+		this._logService.trace(`CodeSearchRepoTracker.closeRepo(${repo.rootUri})`);
 
 		const repoEntry = this._repos.get(repo.rootUri);
 		if (!repoEntry) {
@@ -722,11 +722,11 @@ export class CodeSearchRepoTracker extends Disposable {
 	}
 
 	public async triggerRemoteIndexing(triggerReason: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
-		this._logService.logger.trace(`RepoTracker.TriggerRemoteIndexing(${triggerReason}). started`);
+		this._logService.trace(`RepoTracker.TriggerRemoteIndexing(${triggerReason}). started`);
 
 		await this.initialize();
 
-		this._logService.logger.trace(`RepoTracker.TriggerRemoteIndexing(${triggerReason}). Repos: ${JSON.stringify(Array.from(this._repos.values(), r => ({
+		this._logService.trace(`RepoTracker.TriggerRemoteIndexing(${triggerReason}). Repos: ${JSON.stringify(Array.from(this._repos.values(), r => ({
 			rootUri: r.repo.rootUri.toString(),
 			status: r.status,
 		})), null, 4)}`);
@@ -803,7 +803,7 @@ export class CodeSearchRepoTracker extends Disposable {
 	}
 
 	public async triggerRemoteIndexingOfRepo(repoEntry: ResolvedRepoEntry, triggerReason: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
-		this._logService.logger.trace(`Triggering indexing for repo: ${repoEntry.remoteInfo.repoId}`);
+		this._logService.trace(`Triggering indexing for repo: ${repoEntry.remoteInfo.repoId}`);
 
 		const authToken = await this.getGithubAuthToken();
 		if (this._isDisposed) {
@@ -831,7 +831,7 @@ export class CodeSearchRepoTracker extends Disposable {
 		}
 
 		if (!triggerSuccess) {
-			this._logService.logger.error(`RepoTracker.TriggerRemoteIndexing(${triggerReason}). Failed to request indexing for '${repoEntry.remoteInfo.repoId}'.`);
+			this._logService.error(`RepoTracker.TriggerRemoteIndexing(${triggerReason}). Failed to request indexing for '${repoEntry.remoteInfo.repoId}'.`);
 
 			this.updateRepoEntry(repoEntry.repo, {
 				...repoEntry,
@@ -882,7 +882,7 @@ export class CodeSearchRepoTracker extends Disposable {
 	}
 
 	private pollForRepoIndexingToComplete(repo: RepoInfo): Promise<void> {
-		this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri})`);
+		this._logService.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri})`);
 
 		const repoKey = repo.rootUri;
 
@@ -908,31 +908,51 @@ export class CodeSearchRepoTracker extends Disposable {
 			const currentRepoEntry = this._repos.get(repoKey);
 			if (!currentRepoEntry || this._isDisposed) {
 				// It's possible the repo has been closed since
-				this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Repo no longer tracked.`);
+				this._logService.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Repo no longer tracked.`);
 				return onComplete();
 			}
 
 			if (currentRepoEntry.status === RepoStatus.BuildingIndex) {
-				this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Checking endpoint for status.`);
-				const polledState = await this.getRepoIndexStatusFromEndpoint(currentRepoEntry.repo, currentRepoEntry.remoteInfo, CancellationToken.None);
-				this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Got back new status from endpoint: ${polledState.status}.`);
-
-				if (polledState.status === RepoStatus.Ready) {
-					this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Repo indexed successfully.`);
+				const attemptNumber = pollEntry.attemptNumber++;
+				if (attemptNumber > this.maxPollingAttempts) {
+					this._logService.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Max attempts reached. Stopping polling.`);
 					if (!this._isDisposed) {
-						this.updateRepoEntry(repo, polledState);
+						this.updateRepoEntry(repo, { status: RepoStatus.CouldNotCheckIndexStatus, repo: currentRepoEntry.repo, remoteInfo: currentRepoEntry.remoteInfo });
 					}
 					return onComplete();
 				}
 
-				if (pollEntry.attemptNumber++ > this.maxPollingAttempts) {
-					this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Max attempts reached. Stopping polling.`);
-					onComplete();
-					this.updateRepoEntry(repo, polledState);
-					return;
+				this._logService.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Checking endpoint for status.`);
+				let polledState: RepoEntry | undefined;
+				try {
+					polledState = await this.getRepoIndexStatusFromEndpoint(currentRepoEntry.repo, currentRepoEntry.remoteInfo, CancellationToken.None);
+				} catch {
+					// noop
+				}
+				this._logService.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Got back new status from endpoint: ${polledState?.status}.`);
+
+				switch (polledState?.status) {
+					case RepoStatus.Ready: {
+						this._logService.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Repo indexed successfully.`);
+						if (!this._isDisposed) {
+							this.updateRepoEntry(repo, polledState);
+						}
+						return onComplete();
+					}
+					case RepoStatus.BuildingIndex: {
+						// Poll again
+						return;
+					}
+					default: {
+						// We got some other state, so stop polling
+						if (!this._isDisposed) {
+							this.updateRepoEntry(repo, polledState ?? { status: RepoStatus.CouldNotCheckIndexStatus, repo: currentRepoEntry.repo, remoteInfo: currentRepoEntry.remoteInfo });
+						}
+						return onComplete();
+					}
 				}
 			} else {
-				this._logService.logger.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Found unknown repo state: ${currentRepoEntry.status}. Stopping polling`);
+				this._logService.trace(`CodeSearchRepoTracker.startPollingForRepoIndexingComplete(${repo.rootUri}). Found unknown repo state: ${currentRepoEntry.status}. Stopping polling`);
 				return onComplete();
 			}
 		}, this._repoIndexPollingInterval);
@@ -950,7 +970,7 @@ export class CodeSearchRepoTracker extends Disposable {
 			try {
 				return await this._gitService.diffWith(repoInfo.repo.rootUri, ref);
 			} catch (e) {
-				this._logService.logger.trace(`CodeSearchRepoTracker.diffWithIndexedCommit(${repoInfo.repo.rootUri}). Could not compute diff against: ${ref}. Error: ${e}`);
+				this._logService.trace(`CodeSearchRepoTracker.diffWithIndexedCommit(${repoInfo.repo.rootUri}). Could not compute diff against: ${ref}. Error: ${e}`);
 			}
 		};
 
@@ -965,14 +985,14 @@ export class CodeSearchRepoTracker extends Disposable {
 				return { changes: changesAgainstIndexedCommit, mayBeOutdated: false };
 			}
 
-			this._logService.logger.trace(`CodeSearchRepoTracker.diffWithIndexedCommit(${repoInfo.repo.rootUri}). Falling back to diff against upstream.`);
+			this._logService.trace(`CodeSearchRepoTracker.diffWithIndexedCommit(${repoInfo.repo.rootUri}). Falling back to diff against upstream.`);
 
 			const changesAgainstUpstream = await doDiffWith('@{upstream}');
 			if (changesAgainstUpstream) {
 				return { changes: changesAgainstUpstream, mayBeOutdated: true };
 			}
 
-			this._logService.logger.trace(`CodeSearchRepoTracker.diffWithIndexedCommit(${repoInfo.repo.rootUri}). Could not compute any diff.`);
+			this._logService.trace(`CodeSearchRepoTracker.diffWithIndexedCommit(${repoInfo.repo.rootUri}). Could not compute any diff.`);
 		}
 
 		return undefined;

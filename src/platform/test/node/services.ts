@@ -35,6 +35,7 @@ import { IDialogService } from '../../dialog/common/dialogService';
 import { IDiffService } from '../../diff/common/diffService';
 import { DiffServiceImpl } from '../../diff/node/diffServiceImpl';
 import { IEditSurvivalTrackerService, NullEditSurvivalTrackerService } from '../../editSurvivalTracking/common/editSurvivalTrackerService';
+import { AutomodeService, IAutomodeService } from '../../endpoint/common/automodeService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IDomainService } from '../../endpoint/common/domainService';
 import { CAPIClientImpl } from '../../endpoint/node/capiClientImpl';
@@ -53,6 +54,8 @@ import { GithubRepositoryService } from '../../github/node/githubRepositoryServi
 import { IHeatmapService, nullHeatmapService } from '../../heatmap/common/heatmapService';
 import { IIgnoreService, NullIgnoreService } from '../../ignore/common/ignoreService';
 import { IInteractiveSessionService } from '../../interactive/common/interactiveSessionService';
+import { ILanguageContextProviderService } from '../../languageContextProvider/common/languageContextProviderService';
+import { NullLanguageContextProviderService } from '../../languageContextProvider/common/nullLanguageContextProviderService';
 import { ILanguageDiagnosticsService } from '../../languages/common/languageDiagnosticsService';
 import { ILanguageFeaturesService, NoopLanguageFeaturesService } from '../../languages/common/languageFeaturesService';
 import { TestLanguageDiagnosticsService } from '../../languages/common/testLanguageDiagnosticsService';
@@ -209,6 +212,7 @@ export function _createBaselineServices(): TestingServiceCollection {
 	testingServiceCollection.define(IAuthenticationChatUpgradeService, new SyncDescriptor(AuthenticationChatUpgradeService));
 	testingServiceCollection.define(IOctoKitService, new SyncDescriptor(OctoKitService));
 	testingServiceCollection.define(IInteractionService, new SyncDescriptor(InteractionService));
+	testingServiceCollection.define(IAutomodeService, new SyncDescriptor(AutomodeService));
 	testingServiceCollection.define(IWorkbenchService, new SyncDescriptor(TestWorkbenchService));
 	testingServiceCollection.define(ICustomInstructionsService, new SyncDescriptor(CustomInstructionsService));
 	testingServiceCollection.define(ISurveyService, new SyncDescriptor(NullSurveyService));
@@ -252,6 +256,7 @@ export function createPlatformServices(): TestingServiceCollection {
 	testingServiceCollection.define(INaiveChunkingService, new SyncDescriptor(NaiveChunkingService));
 	testingServiceCollection.define(IHeatmapService, nullHeatmapService);
 	testingServiceCollection.define(ILanguageContextService, NullLanguageContextService);
+	testingServiceCollection.define(ILanguageContextProviderService, new SyncDescriptor(NullLanguageContextProviderService));
 	testingServiceCollection.define(ILanguageDiagnosticsService, new SyncDescriptor(TestLanguageDiagnosticsService));
 	testingServiceCollection.define(IPromptPathRepresentationService, new SyncDescriptor(TestPromptPathRepresentationService));
 	testingServiceCollection.define(IRequestLogger, new SyncDescriptor(NullRequestLogger));

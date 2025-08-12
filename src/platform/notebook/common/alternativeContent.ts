@@ -8,13 +8,13 @@ import { findCell } from '../../../util/common/notebooks';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { Range } from '../../../vscodeTypes';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { modelPrefersJsonNotebookRepresentation } from '../../endpoint/common/chatModelCapabilities';
+import { IChatEndpoint } from '../../networking/common/networking';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { BaseAlternativeNotebookContentProvider } from './alternativeContentProvider';
 import { AlternativeJsonNotebookContentProvider, isJsonContent } from './alternativeContentProvider.json';
 import { AlternativeTextNotebookContentProvider } from './alternativeContentProvider.text';
 import { AlternativeXmlNotebookContentProvider, isXmlContent } from './alternativeContentProvider.xml';
-import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { IChatEndpoint } from '../../networking/common/networking';
-import { modelSupportsApplyPatch } from '../../endpoint/common/chatModelCapabilities';
 
 export type AlternativeContentFormat = 'xml' | 'text' | 'json';
 
@@ -63,7 +63,7 @@ export class AlternativeNotebookContentService implements IAlternativeNotebookCo
 	}
 	getFormat(options: LanguageModelChat | IChatEndpoint | undefined): AlternativeContentFormat {
 		// GPT 4.1 supports apply_patch, such models work best with JSON format (doesn't have great support for XML yet, thats being worked on).
-		if (options && modelSupportsApplyPatch(options)) {
+		if (options && modelPrefersJsonNotebookRepresentation(options)) {
 			return 'json';
 		}
 
@@ -77,13 +77,13 @@ export class AlternativeNotebookContentService implements IAlternativeNotebookCo
 
 export function getAltNotebookRange(range: Range, cellUri: Uri, notebook: NotebookDocument, format: AlternativeContentFormat) {
 	// If we have a range for cell, then translate that from notebook cell range to alternative range.
-	const cellIndex = findCell(cellUri, notebook)?.index;
-	if (cellIndex === undefined || cellIndex === -1) {
+	const cell = findCell(cellUri, notebook);
+	if (!cell) {
 		return undefined;
 	}
 	const doc = getAlternativeNotebookDocumentProvider(format).getAlternativeDocument(notebook);
 	return new Range(
-		doc.fromCellPosition(cellIndex, range.start),
-		doc.fromCellPosition(cellIndex, range.end),
+		doc.fromCellPosition(cell, range.start),
+		doc.fromCellPosition(cell, range.end),
 	);
 }

@@ -86,10 +86,10 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI):
 	const ignoreService = accessor.get(IIgnoreService);
 	const promptPathRepresentationService = accessor.get(IPromptPathRepresentationService);
 
-	if (workspaceService.getWorkspaceFolders().length > 0 && !workspaceService.getWorkspaceFolder(normalizePath(uri))) {
+	if (!workspaceService.getWorkspaceFolder(normalizePath(uri))) {
 		const fileOpenInSomeTab = tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri));
 		if (!fileOpenInSomeTab) {
-			throw new Error(`File ${promptPathRepresentationService.getFilePath(uri)} is outside of the workspace and can't be read`);
+			throw new Error(`File ${promptPathRepresentationService.getFilePath(uri)} is outside of the workspace, and not open in an editor, and can't be read`);
 		}
 	}
 

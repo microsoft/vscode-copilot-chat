@@ -825,6 +825,9 @@ export class TestingTerminalService extends Disposable implements ITerminalServi
 	getBufferForTerminal(terminal: vscode.Terminal, maxChars?: number): string {
 		return '';
 	}
+	getBufferWithPid(pid: number, maxChars?: number): Promise<string> {
+		throw new Error('Method not implemented.');
+	}
 }
 
 class SimulationTerminal extends Disposable implements vscode.Terminal {
@@ -844,7 +847,7 @@ class SimulationTerminal extends Disposable implements vscode.Terminal {
 	) {
 		super();
 		this.name = creationOptions.name ?? '';
-		this.state = { isInteractedWith: false };
+		this.state = { isInteractedWith: false, shell: undefined };
 		const cwd = creationOptions.cwd ?? workspace.workspaceFolders[0];
 		if (typeof cwd === 'string') {
 			throw new Error('String cwd not implemented');
@@ -911,26 +914,26 @@ class SimulationTerminalShellExecution extends Disposable implements vscode.Term
 		const realWorkspacePath = this.workspace.mapLocation(this.workspace.workspaceFolders[0]).fsPath.replace(/\/$/, '');
 		try {
 			let command = this.commandLine.value;
-			this.logService.logger.trace(`Original command: ${command}`);
+			this.logService.trace(`Original command: ${command}`);
 			command = command.replaceAll(fakeWorkspacePath, realWorkspacePath);
-			this.logService.logger.trace(`Command with replaced workspace path: ${command}`);
+			this.logService.trace(`Command with replaced workspace path: ${command}`);
 
 			const execPromise = promisify(exec);
 			const execP = execPromise(command, { cwd: this.cwd?.fsPath });
 			const result = await raceTimeout(execP, 600_000);
 			let output = result ? result.stdout + result.stderr : undefined;
-			this.logService.logger.trace(`Done executing command: ${command}`);
+			this.logService.trace(`Done executing command: ${command}`);
 			let resultStr;
 			try {
 				resultStr = !result ? String(result) : JSON.stringify(result);
 			} catch (e) {
 				resultStr = `cannot stringify result: ${e}. Result: ${result}`;
 			}
-			this.logService.logger.trace(`Result: ${resultStr}`);
+			this.logService.trace(`Result: ${resultStr}`);
 			if (output) {
-				this.logService.logger.trace(`Original output: ${output}`);
+				this.logService.trace(`Original output: ${output}`);
 				output = output.replaceAll(realWorkspacePath, fakeWorkspacePath);
-				this.logService.logger.trace(`Output with replaced workspace path: ${output}`);
+				this.logService.trace(`Output with replaced workspace path: ${output}`);
 			}
 			return output;
 		} catch (e) {
@@ -945,21 +948,21 @@ class SimulationTerminalShellExecution extends Disposable implements vscode.Term
 				msg = e instanceof Error ? e.message : String(e);
 			}
 
-			this.logService.logger.trace(`Original error message: ${msg}`);
+			this.logService.trace(`Original error message: ${msg}`);
 			msg = msg.replaceAll(realWorkspacePath, fakeWorkspacePath);
-			this.logService.logger.trace(`Error message with replaced workspace path: ${msg}`);
+			this.logService.trace(`Error message with replaced workspace path: ${msg}`);
 			return msg;
 		}
 	}
 
 	async *read(): AsyncIterable<string> {
-		this.logService.logger.trace(`SimulationTerminalShellExecution: read()`);
+		this.logService.trace(`SimulationTerminalShellExecution: read()`);
 		const result = await this.run();
-		this.logService.logger.trace(`SimulationTerminalShellExecution: result: ${result}`);
+		this.logService.trace(`SimulationTerminalShellExecution: result: ${result}`);
 		if (result) {
 			yield result;
 		}
-		this.logService.logger.trace(`SimulationTerminalShellExecution: firing end event`);
+		this.logService.trace(`SimulationTerminalShellExecution: firing end event`);
 		this._onDidEndTerminalShellExecution.fire();
 	}
 }

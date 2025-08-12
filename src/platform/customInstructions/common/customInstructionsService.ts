@@ -115,7 +115,7 @@ export class CustomInstructionsService implements ICustomInstructionsService {
 	}
 
 	private async _collectInstructionsFromFile(customInstructionsFile: string, language: string | undefined, result: ICustomInstructions[]): Promise<void> {
-		this.logService.logger.debug(`Collect instructions from file: ${customInstructionsFile}`);
+		this.logService.debug(`Collect instructions from file: ${customInstructionsFile}`);
 		const promises = this.workspaceService.getWorkspaceFolders().map(async folderUri => {
 			const fileUri = Uri.joinPath(folderUri, customInstructionsFile);
 			const instruction = await this.readInstructionsFromFile(fileUri);
@@ -132,7 +132,7 @@ export class CustomInstructionsService implements ICustomInstructionsService {
 			const content = new TextDecoder().decode(fileContents);
 			const instruction = content.trim();
 			if (!instruction) {
-				this.logService.logger.debug(`Instructions file is empty: ${fileUri.toString()}`);
+				this.logService.debug(`Instructions file is empty: ${fileUri.toString()}`);
 				return;
 			}
 			return {
@@ -141,7 +141,7 @@ export class CustomInstructionsService implements ICustomInstructionsService {
 				reference: fileUri
 			};
 		} catch (e) {
-			this.logService.logger.debug(`Instructions file not found: ${fileUri.toString()}`);
+			this.logService.debug(`Instructions file not found: ${fileUri.toString()}`);
 			return undefined;
 		}
 	}

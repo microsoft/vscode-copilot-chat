@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Raw } from '@vscode/prompt-tsx';
 import { afterAll, beforeAll, beforeEach, expect, suite, test } from 'vitest';
 import { IChatMLFetcher } from '../../../../../platform/chat/common/chatMLFetcher';
 import { ChatLocation } from '../../../../../platform/chat/common/commonTypes';
@@ -11,7 +12,6 @@ import { CodeGenerationTextInstruction, ConfigKey, IConfigurationService } from 
 import { MockEndpoint } from '../../../../../platform/endpoint/test/node/mockEndpoint';
 import { messageToMarkdown } from '../../../../../platform/log/common/messageStringify';
 import { IResponseDelta } from '../../../../../platform/networking/common/fetch';
-import { ChatRole, rawMessageToCAPI } from '../../../../../platform/networking/common/openai';
 import { ITestingServicesAccessor } from '../../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
@@ -20,6 +20,7 @@ import { URI } from '../../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../../../vscodeTypes';
+import { addCacheBreakpoints } from '../../../../intents/node/cacheBreakpoints';
 import { ChatVariablesCollection } from '../../../../prompt/common/chatVariablesCollection';
 import { Conversation, ICopilotChatResultIn, normalizeSummariesOnRounds, Turn, TurnStatus } from '../../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCall } from '../../../../prompt/common/intents';
@@ -29,7 +30,6 @@ import { ToolName } from '../../../../tools/common/toolNames';
 import { PromptRenderer } from '../../base/promptRenderer';
 import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 import { ConversationHistorySummarizationPrompt, SummarizedConversationHistoryMetadata, SummarizedConversationHistoryPropsBuilder } from '../summarizedConversationHistory';
-import { addCacheBreakpoints } from '../../../../intents/node/cacheBreakpoints';
 
 suite('Agent Summarization', () => {
 	let accessor: ITestingServicesAccessor;
@@ -109,8 +109,8 @@ suite('Agent Summarization', () => {
 			}
 		}
 		addCacheBreakpoints(r.messages);
-		return rawMessageToCAPI(r.messages)
-			.filter(message => message.role !== ChatRole.System)
+		return r.messages
+			.filter(message => message.role !== Raw.ChatRole.System)
 			.map(messageToMarkdown)
 			.join('\n\n')
 			.replace(/\\+/g, '/')

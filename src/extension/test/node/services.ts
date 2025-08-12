@@ -3,12 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ToolGroupingCache } from '../../../extension/tools/common/virtualTools/virtualToolGroupCache';
+import { IToolGroupingCache, IToolGroupingService } from '../../../extension/tools/common/virtualTools/virtualToolTypes';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { MockChatMLFetcher } from '../../../platform/chat/test/common/mockChatMLFetcher';
 import { EMBEDDING_MODEL } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { DiffServiceImpl } from '../../../platform/diff/node/diffServiceImpl';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { IModelConfig } from '../../../platform/endpoint/test/node/openaiCompatibleEndpoint';
 import { TestEndpointProvider } from '../../../platform/endpoint/test/node/testEndpointProvider';
 import { EditLogService, IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IMultiFileEditInternalTelemetryService, MultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
@@ -33,6 +36,7 @@ import { IPromptVariablesService, NullPromptVariablesService } from '../../promp
 import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inline/fixCookbookService';
 import { IToolsService } from '../../tools/common/toolsService';
+import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
 import '../../tools/node/allTools';
 import { TestToolsService } from '../../tools/node/test/testToolsService';
 
@@ -42,6 +46,8 @@ export interface ISimulationModelConfig {
 	fastChatModel?: string;
 	embeddingModel?: EMBEDDING_MODEL;
 	fastRewriteModel?: string;
+	skipModelMetadataCache?: boolean;
+	customModelConfigs?: Map<string, IModelConfig>;
 }
 
 export function createExtensionUnitTestingServices(currentTestRunInfo?: any, modelConfig?: ISimulationModelConfig): TestingServiceCollection {
@@ -54,6 +60,8 @@ export function createExtensionUnitTestingServices(currentTestRunInfo?: any, mod
 			modelConfig?.embeddingModel,
 			modelConfig?.fastRewriteModel,
 			currentTestRunInfo,
+			!!modelConfig?.skipModelMetadataCache,
+			modelConfig?.customModelConfigs,
 		])
 	);
 	testingServiceCollection.define(IGithubCodeSearchService, new SyncDescriptor(GithubCodeSearchService));
@@ -77,5 +85,7 @@ export function createExtensionUnitTestingServices(currentTestRunInfo?: any, mod
 	testingServiceCollection.define(INotebookService, new SyncDescriptor(SimulationNotebookService));
 	testingServiceCollection.define(INotebookSummaryTracker, new SyncDescriptor(SimulationNotebookSummaryTracker));
 	testingServiceCollection.define(ITerminalService, new SyncDescriptor(NullTerminalService));
+	testingServiceCollection.define(IToolGroupingCache, new SyncDescriptor(ToolGroupingCache));
+	testingServiceCollection.define(IToolGroupingService, new SyncDescriptor(ToolGroupingService));
 	return testingServiceCollection;
 }

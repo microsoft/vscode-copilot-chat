@@ -4,106 +4,63 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { createServiceIdentifier } from '../../../util/common/services';
-import { ThinkingData } from '../common/thinking';
+import { ThinkingData, ThinkingDelta } from '../common/thinking';
 
 
 export interface IThinkingDataService {
 	readonly _serviceBrand: undefined;
-	update(choice: {
-		message?: ThinkingData;
-		delta?: ThinkingData;
-		index: number;
-	}, toolCallId?: string): void;
-	consume(id: string): ThinkingData | undefined;
+	set(ref: string, data: ThinkingData): void;
+	get(id: string): ThinkingData | undefined;
 	clear(): void;
+	update(index: number, delta: ThinkingDelta): void;
 }
 export const IThinkingDataService = createServiceIdentifier<IThinkingDataService>('IThinkingDataService');
 
 
-interface ThinkingDataInternal extends ThinkingData {
-	tool_call_id?: string;
-	choice_index?: number;
-}
-
 export class ThinkingDataImpl implements IThinkingDataService {
 	readonly _serviceBrand: undefined;
-	private data: ThinkingDataInternal[] = [];
+	private data: Map<string, ThinkingData> = new Map();
 
 	constructor() { }
 
-	public update(choice: {
-		message?: ThinkingData;
-		delta?: ThinkingData;
-		index: number;
-	}, toolCallId?: string): void {
-		const thinkingData = this.extractThinkingData(choice);
-		const data = this.data.find(d => d.choice_index === choice.index);
-		if (thinkingData) {
-			if (data === undefined) {
-				this.data.push({ ...thinkingData, choice_index: choice.index, tool_call_id: toolCallId });
-			} else {
-				if (data.tool_call_id === undefined && toolCallId && toolCallId.length > 0) {
-					data.tool_call_id = toolCallId;
-				}
-				if (thinkingData.cot_summary !== undefined) {
-					if (data.cot_summary === undefined) {
-						data.cot_summary = thinkingData.cot_summary;
-					} else {
-						data.cot_summary += thinkingData.cot_summary ?? '';
-					}
-				} else if (thinkingData.reasoning_text !== undefined) {
-					if (data.reasoning_text === undefined) {
-						data.reasoning_text = thinkingData.reasoning_text;
-					} else {
-						data.reasoning_text += thinkingData.reasoning_text ?? '';
-					}
-				}
-				if (data.cot_id === undefined && thinkingData.cot_id) {
-					data.cot_id = thinkingData.cot_id;
-				}
-				if (data.reasoning_opaque === undefined && thinkingData.reasoning_opaque) {
-					data.reasoning_opaque = thinkingData.reasoning_opaque;
-				}
-			}
-		}
+	public set(ref: string, data: ThinkingData): void {
+		this.data.set(ref, data);
 	}
 
-	private extractThinkingData(choice: {
-		message?: ThinkingData;
-		delta?: ThinkingData;
-		index: number;
-	}): ThinkingData | undefined {
-		if (choice.message?.cot_id || choice.message?.cot_summary !== undefined) {
-			return { cot_id: choice.message.cot_id, cot_summary: choice.message.cot_summary };
-		} else if (choice.delta?.cot_id || choice.delta?.cot_summary !== undefined) {
-			return { cot_id: choice.delta.cot_id, cot_summary: choice.delta.cot_summary };
-		} else if (choice.message?.reasoning_opaque || choice.message?.reasoning_text !== undefined) {
-			return { reasoning_opaque: choice.message.reasoning_opaque, reasoning_text: choice.message.reasoning_text };
-		} else if (choice.delta?.reasoning_opaque || choice.delta?.reasoning_text !== undefined) {
-			return { reasoning_opaque: choice.delta.reasoning_opaque, reasoning_text: choice.delta.reasoning_text };
-		}
-		return undefined;
-	}
-
-	public consume(id: string): ThinkingData | undefined {
-		const data = this.data.find(d => d.tool_call_id === id);
-		if (data) {
-			delete data.choice_index;
-			if (data.cot_id) {
-				return {
-					cot_id: data.cot_id,
-				};
-			}
-			if (data.reasoning_opaque) {
-				return {
-					reasoning_opaque: data.reasoning_opaque,
-				};
-			}
-		}
-		return undefined;
+	public get(id: string): ThinkingData | undefined {
+		return Array.from(this.data.values()).find(d => d.id === id || d.metadata === id || (d.metadata && id.startsWith(d.metadata)));
 	}
 
 	public clear(): void {
-		this.data = [];
+		this.data.clear();
+	}
+
+	public update(index: number, delta: ThinkingDelta): void {
+		// @karthiknadig: should not need this update function once we have this supported via LM thinking API
+		const idx = index.toString();
+		const data = this.data.get(idx);
+		if (data) {
+			if (delta.text) {
+				data.text += delta.text;
+			}
+			if (delta.metadata) {
+				data.metadata = delta.metadata;
+			}
+			if (delta.id) {
+				data.id = delta.id;
+			}
+			if (data.metadata && data.id) {
+				this.data.set(data.metadata, data);
+				this.data.delete(idx);
+			} else {
+				this.data.set(idx, data);
+			}
+		} else {
+			this.data.set(delta.id ?? idx, {
+				id: delta.id ?? '',
+				text: delta.text || '',
+				metadata: delta.metadata
+			});
+		}
 	}
 }

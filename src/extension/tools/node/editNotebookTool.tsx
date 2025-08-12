@@ -14,7 +14,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { BaseAlternativeNotebookContentProvider } from '../../../platform/notebook/common/alternativeContentProvider';
-import { getCellId, getDefaultLanguage } from '../../../platform/notebook/common/helpers';
+import { getCellId, getCellIdMap, getDefaultLanguage, normalizeCellId } from '../../../platform/notebook/common/helpers';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -22,6 +22,7 @@ import { createSha256Hash } from '../../../util/common/crypto';
 import { findCell, findNotebook } from '../../../util/common/notebooks';
 import { findLast } from '../../../util/vs/base/common/arraysFind';
 import { raceCancellation, StatefulPromise } from '../../../util/vs/base/common/async';
+import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { createSingleCallFunction } from '../../../util/vs/base/common/functional';
 import { DisposableStore, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { isEqual } from '../../../util/vs/base/common/resources';
@@ -35,7 +36,6 @@ import { EXISTING_CODE_MARKER } from '../../prompts/node/panel/codeBlockFormatti
 import { CodeBlock } from '../../prompts/node/panel/safeElements';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { isCancellationError } from '../../../util/vs/base/common/errors';
 
 export interface IEditNotebookToolParams {
 	filePath: string;
@@ -133,14 +133,14 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 		try {
 			// First validate all of the args begore applying any changes.
 			this.fixInput(options.input, notebook, provider);
-			this.validateInput(options.input, notebook, provider);
+			this.validateInput(options.input, notebook);
 			stream.notebookEdit(notebookUri, []);
 			let previousCellIdUsedForInsertion = '';
 			const explanation = options.input.explanation;
 			const { editType, language, newCode } = options.input;
 			const cellCode = Array.isArray(newCode) ? newCode.join(EOL) : newCode;
 			let cellId = options.input.cellId || '';
-
+			const cellMap = getCellIdMap(notebook);
 			if (editType === 'insert') {
 				counters.insert++;
 				// Model can send two subsequent inserts, and only first insert might contain the cellid.
@@ -168,7 +168,7 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 					cellsCellIndex = cells.length;
 					notebookCellIndex = cells.filter(item => item.type !== 'delete').length;
 				} else {
-					const cell = cellId ? provider.getCell(notebook, cellId) : undefined;
+					const cell = cellId ? cellMap.get(cellId) : undefined;
 					if (cellId && !cell) {
 						throw new ErrorWithTelemetrySafeReason(`Invalid cell id: ${cellId}, notebook may have been modified, try reading the file again`, 'invalid_cell_id_insert_after');
 					}
@@ -198,7 +198,7 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 				stream.notebookEdit(notebookUri, NotebookEdit.insertCells(notebookCellIndex, [cell]));
 			} else {
 				previousCellIdUsedForInsertion = '';
-				const cell = cellId ? provider.getCell(notebook, cellId) : undefined;
+				const cell = cellId ? cellMap.get(cellId) : undefined;
 				if (!cell) {
 					throw new ErrorWithTelemetrySafeReason(`Invalid cell id: ${cellId}, notebook may have been modified, try reading the file again`, 'invalid_cell_id_empty');
 				}
@@ -252,7 +252,7 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 			sendEndEdit();
 
 			const summaryOfExpectedEdits = summarizeOriginalEdits(notebook, options.input, expectedCellEdits);
-			this.logger.logger.trace(`[Notebook] ${summaryOfExpectedEdits}`);
+			this.logger.trace(`[Notebook] ${summaryOfExpectedEdits}`);
 			await raceCancellation(Promise.all(codeMapperCompleted), token);
 			if (token.isCancellationRequested) {
 				return;
@@ -267,11 +267,11 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 				const timeout = setTimeout(() => {
 					if (expectedCellEdits.length) {
 						const summaryOfPendingEdits = summarizeEdits(expectedCellEdits);
-						this.logger.logger.error(`[Notebook] Timed out waiting for cell operations to complete.`, `${summaryOfExpectedEdits}. Pending Cell Edits ${summaryOfPendingEdits}`);
+						this.logger.error(`[Notebook] Timed out waiting for cell operations to complete.`, `${summaryOfExpectedEdits}. Pending Cell Edits ${summaryOfPendingEdits}`);
 					}
 					if (expectedCellEdits.length) {
 						const summaryOfPendingEdits = summarizeTextEdits(notebook, expectedCellTextEdits);
-						this.logger.logger.error(`[Notebook] Timed out waiting for cell text edit operations to complete.`, `${summaryOfExpectedEdits}. Pending Text Edits ${summaryOfPendingEdits}`);
+						this.logger.error(`[Notebook] Timed out waiting for cell text edit operations to complete.`, `${summaryOfExpectedEdits}. Pending Text Edits ${summaryOfPendingEdits}`);
 					}
 					resolve();
 				}, 10_000);
@@ -338,11 +338,12 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 		};
 	}
 
-	private validateInput(input: IEditNotebookToolParams, notebook: vscode.NotebookDocument, provider: BaseAlternativeNotebookContentProvider) {
+	private validateInput(input: IEditNotebookToolParams, notebook: vscode.NotebookDocument) {
 		const { editType, cellId, newCode } = input;
 		// Possible we'll get cellId as a number such as -1 when inserting a cell at the top.
 		const id = ((typeof (cellId as any) === 'number' ? `${cellId}` : cellId) || '').trim();
-		const cell = (id && id !== 'top' && id !== 'bottom') ? provider.getCell(notebook, id) : undefined;
+		const cellMap = getCellIdMap(notebook);
+		const cell = (id && id !== 'top' && id !== 'bottom') ? cellMap.get(id) : undefined;
 		if (id && id !== 'top' && id !== 'bottom' && !cell) {
 			throw new ErrorWithTelemetrySafeReason(`None of the edits were applied as cell id: ${id} is invalid. Notebook may have been modified, try reading the file again`, 'invalidCellId');
 		}
@@ -386,6 +387,9 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 		// If the insertion has no cell id, then treat it as bottom.
 		if (input.editType === 'insert' && !input.cellId) {
 			input.cellId = 'bottom';
+		}
+		if (input.cellId && input.cellId !== 'top' && input.cellId !== 'bottom') {
+			input.cellId = normalizeCellId(input.cellId);
 		}
 	}
 

@@ -186,7 +186,7 @@ function tryRebaseEdits<T extends IEditData<T>>(content: string, ours: Annotated
 					let baseE = baseEdit;
 					let previousBaseE: StringReplacement | undefined;
 					while (baseE && ourE.replaceRange.containsRange(baseE.replaceRange)) {
-						ourNewTextOffset = agreementIndexOf(content, ourE, baseE, previousBaseE, ourNewTextOffset, nesConfigs);
+						ourNewTextOffset = agreementIndexOf(content, ourE, baseE, previousBaseE, ourNewTextOffset, resolution, nesConfigs);
 						if (ourNewTextOffset === -1) {
 							// Conflicting
 							return undefined;
@@ -228,7 +228,10 @@ function tryRebaseEdits<T extends IEditData<T>>(content: string, ours: Annotated
 	return AnnotatedStringEdit.create(newEdits);
 }
 
-function agreementIndexOf<T extends IEditData<T>>(content: string, ourE: AnnotatedStringReplacement<T>, baseE: StringReplacement, previousBaseE: StringReplacement | undefined, ourNewTextOffset: number, nesConfigs: NesRebaseConfigs) {
+export const maxAgreementOffset = 10; // If the user's typing is more than this into the suggestion we consider it a miss.
+export const maxImperfectAgreementLength = 5; // If the user's typing is longer than this and the suggestion is not a perfect match we consider it a miss.
+
+function agreementIndexOf<T extends IEditData<T>>(content: string, ourE: AnnotatedStringReplacement<T>, baseE: StringReplacement, previousBaseE: StringReplacement | undefined, ourNewTextOffset: number, resolution: 'strict' | 'lenient', nesConfigs: NesRebaseConfigs) {
 	const minStart = previousBaseE ? previousBaseE.replaceRange.endExclusive : ourE.replaceRange.start;
 	if (minStart < baseE.replaceRange.start) {
 		baseE = new StringReplacement(
@@ -237,6 +240,12 @@ function agreementIndexOf<T extends IEditData<T>>(content: string, ourE: Annotat
 		);
 	}
 	const j = ourE.newText.indexOf(baseE.newText, ourNewTextOffset);
+	if (resolution === 'strict' && j > maxAgreementOffset) {
+		return -1;
+	}
+	if (resolution === 'strict' && j > 0 && baseE.newText.length > maxImperfectAgreementLength) {
+		return -1;
+	}
 	return j !== -1 ? j + baseE.newText.length : -1;
 }
 

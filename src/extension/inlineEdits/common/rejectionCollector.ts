@@ -67,6 +67,10 @@ export class RejectionCollector extends Disposable {
 		this._tracer.trace(`Checking rejection, ${isRejected ? 'rejected' : 'not rejected'}: ${e}`);
 		return isRejected;
 	}
+
+	public clear() {
+		this._garbageCollector.clear();
+	}
 }
 
 class DocumentRejectionTracker {
@@ -147,10 +151,14 @@ class LRUGarbageCollector implements IDisposable {
 		}
 	}
 
-	dispose(): void {
+	public clear(): void {
 		for (const d of this._disposables) {
 			d.dispose();
 		}
 		this._disposables = [];
+	}
+
+	public dispose(): void {
+		this.clear();
 	}
 }

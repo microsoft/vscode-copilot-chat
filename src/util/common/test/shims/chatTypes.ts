@@ -46,6 +46,17 @@ export class ChatResponseProgressPart {
 	}
 }
 
+export class ChatResponseThinkingProgressPart {
+	value: string;
+	id?: string;
+	metadata?: string;
+	constructor(value: string, id?: string, metadata?: string) {
+		this.value = value;
+		this.id = id;
+		this.metadata = metadata;
+	}
+}
+
 export class ChatResponseProgressPart2 {
 	value: string;
 	task?: (progress: vscode.Progress<vscode.ChatResponseWarningPart>) => Thenable<string | void>;
@@ -99,6 +110,22 @@ export class ChatResponseExtensionsPart {
 		this.extensions = extensions;
 	}
 }
+
+export class ChatResponsePullRequestPart {
+	readonly uri: vscode.Uri;
+	readonly linkTag: string;
+	readonly title: string;
+	readonly description: string;
+	readonly author: string;
+	constructor(uri: vscode.Uri, title: string, description: string, author: string, linkTag: string) {
+		this.uri = uri;
+		this.title = title;
+		this.description = description;
+		this.author = author;
+		this.linkTag = linkTag;
+	}
+}
+
 
 export class ChatResponseCodeCitationPart {
 	value: vscode.Uri;
@@ -247,6 +274,19 @@ export class LanguageModelTextPart implements vscode.LanguageModelTextPart {
 	}
 }
 
+export enum LanguageModelPartAudience {
+	Assistant = 0,
+	User = 1,
+	Extension = 2,
+}
+
+export class LanguageModelTextPart2 extends LanguageModelTextPart {
+	audience: LanguageModelPartAudience[] | undefined;
+	constructor(value: string, audience?: LanguageModelPartAudience[]) {
+		super(value);
+		this.audience = audience;
+	}
+}
 export class LanguageModelDataPart implements vscode.LanguageModelDataPart {
 	mimeType: string;
 	data: Uint8Array<ArrayBufferLike>;
@@ -268,7 +308,14 @@ export class LanguageModelDataPart implements vscode.LanguageModelDataPart {
 	static text(value: string): vscode.LanguageModelDataPart {
 		return new LanguageModelDataPart(VSBuffer.fromString(value).buffer, 'text/plain');
 	}
+}
 
+export class LanguageModelDataPart2 extends LanguageModelDataPart {
+	audience: LanguageModelPartAudience[] | undefined;
+	constructor(data: Uint8Array, mimeType: string, audience?: LanguageModelPartAudience[]) {
+		super(data, mimeType);
+		this.audience = audience;
+	}
 }
 
 export enum ChatImageMimeType {
@@ -301,14 +348,6 @@ export class AISearchKeyword {
 	constructor(public keyword: string) { }
 }
 
-export class PreparedTerminalToolInvocation {
-	constructor(
-		public readonly command: string,
-		public readonly language: string,
-		public readonly confirmationMessages?: vscode.LanguageModelToolConfirmationMessages,
-	) { }
-}
-
 export enum ChatErrorLevel {
 	Info = 0,
 	Warning = 1,
@@ -319,4 +358,18 @@ export enum ChatRequestEditedFileEventKind {
 	Keep = 1,
 	Undo = 2,
 	UserModification = 3,
+}
+
+export enum ChatResponseClearToPreviousToolInvocationReason {
+	NoReason = 0,
+	FilteredContentRetry = 1,
+	CopyrightContentRetry = 2,
+}
+
+export class LanguageModelToolExtensionSource implements vscode.LanguageModelToolExtensionSource {
+	constructor(public readonly id: string, public readonly label: string) { }
+}
+
+export class LanguageModelToolMCPSource implements vscode.LanguageModelToolMCPSource {
+	constructor(public readonly label: string, public readonly name: string, public readonly instructions: string | undefined) { }
 }

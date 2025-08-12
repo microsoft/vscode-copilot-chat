@@ -48,6 +48,31 @@
 			}
 		},
 		{
+			"type": "node",
+			"request": "launch",
+			"name": "Launch Copilot Extension - Watch Mode - Code OSS",
+			"runtimeExecutable": "../../vscode/scripts/code.bat",
+
+			"attachSimplePort": 5870,
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+			],
+			"smartStep": true,
+			"sourceMaps": true,
+			"preLaunchTask": "watch",
+			"env": {
+				"COPILOT_LOG_TELEMETRY": "true",
+				"VSCODE_DEV_DEBUG": "1",
+			},
+			"outFiles": [
+				"${workspaceFolder}/dist/**/*.js",
+				"!**/node_modules/**"
+			],
+			"presentation": {
+				"group": "0_launch",
+			}
+		},
+		{
 			// See `launchConfigName` in file://./extensions/visualization-runner/extension.ts
 			"name": "Test Visualization Runner",
 			"type": "node",

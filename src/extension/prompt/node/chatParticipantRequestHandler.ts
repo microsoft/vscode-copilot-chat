@@ -8,8 +8,10 @@ import type { ChatRequest, ChatRequestTurn2, ChatResponseStream, ChatResult, Loc
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { getChatParticipantIdFromName, getChatParticipantNameFromId, workspaceAgentName } from '../../../platform/chat/common/chatAgents';
 import { CanceledMessage, ChatLocation } from '../../../platform/chat/common/commonTypes';
+import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { FilterReason } from '../../../platform/networking/common/openai';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
 import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
@@ -72,15 +74,16 @@ export class ChatParticipantRequestHandler {
 		private readonly chatAgentArgs: IChatAgentArgs,
 		private readonly onPaused: Event<boolean>,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@ICommandService private readonly _commandService: ICommandService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@IIntentService private readonly _intentService: IIntentService,
 		@IConversationStore private readonly _conversationStore: IConversationStore,
 		@ITabsAndEditorsService tabsAndEditorsService: ITabsAndEditorsService,
 		@ILogService private readonly _logService: ILogService,
-		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService
+		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService,
 	) {
-		this.location = getLocation(request);
+		this.location = this.getLocation(request);
 
 		this.intentDetector = this._instantiationService.createInstance(IntentDetector);
 
@@ -127,6 +130,24 @@ export class ChatParticipantRequestHandler {
 		this.conversation = new Conversation(actualSessionId, turns.concat(latestTurn));
 
 		this.turn = latestTurn;
+	}
+
+	private getLocation(request: ChatRequest) {
+		if (request.location2 instanceof ChatRequestEditorData) {
+			return ChatLocation.Editor;
+		} else if (request.location2 instanceof ChatRequestNotebookData) {
+			return ChatLocation.Notebook;
+		}
+		switch (request.location) { // deprecated, but location2 does not yet allow to distinguish between panel, editing session and others
+			case VSChatLocation.Editor:
+				return ChatLocation.Editor;
+			case VSChatLocation.Panel:
+				return ChatLocation.Panel;
+			case VSChatLocation.Terminal:
+				return ChatLocation.Terminal;
+			default:
+				return ChatLocation.Other;
+		}
 	}
 
 	private async sanitizeVariables(): Promise<ChatRequest> {
@@ -194,7 +215,7 @@ export class ChatParticipantRequestHandler {
 				}
 			};
 		}
-		this._logService.logger.trace(`[${ChatLocation.toStringShorter(this.location)}] chat request received from extension host`);
+		this._logService.trace(`[${ChatLocation.toStringShorter(this.location)}] chat request received from extension host`);
 		try {
 
 			// sanitize the variables of all requests
@@ -234,6 +255,8 @@ export class ChatParticipantRequestHandler {
 				}
 
 				result = await chatResult;
+				const endpoint = await this._endpointProvider.getChatEndpoint(this.request);
+				result.details = `${endpoint.name} • ${endpoint.multiplier ?? 0}x`;
 			}
 
 			this._conversationStore.addConversation(this.turn.id, this.conversation);
@@ -263,15 +286,15 @@ export class ChatParticipantRequestHandler {
 		if (!command?.intent && this.location === ChatLocation.Editor) { // TODO@jrieken do away with location specific code
 
 			let preferredIntent: Intent | undefined;
-			if (this.location === ChatLocation.Editor && this.documentContext && this.request.attempt === 0 && history.length === 0) { // TODO@jrieken do away with location specific code
+			if (this.documentContext && this.request.attempt === 0 && history.length === 0) {
 				if (this.documentContext.selection.isEmpty && this.documentContext.document.lineAt(this.documentContext.selection.start.line).text.trim() === '') {
 					preferredIntent = Intent.Generate;
 				} else if (!this.documentContext.selection.isEmpty && this.documentContext.selection.start.line !== this.documentContext.selection.end.line) {
 					preferredIntent = Intent.Edit;
 				}
-				if (preferredIntent) {
-					return this._intentService.getIntent(preferredIntent, this.location) ?? this._intentService.unknownIntent;
-				}
+			}
+			if (preferredIntent) {
+				return this._intentService.getIntent(preferredIntent, this.location) ?? this._intentService.unknownIntent;
 			}
 		}
 
@@ -391,7 +414,11 @@ function createTurnFromVSCodeChatHistoryTurns(
 	if (!chatResponseTurn.result.errorDetails) {
 		status = TurnStatus.Success;
 	} else if (chatResponseTurn.result.errorDetails?.responseIsFiltered) {
-		status = TurnStatus.Filtered;
+		if (chatResponseTurn.result.metadata?.category === FilterReason.Prompt) {
+			status = TurnStatus.PromptFiltered;
+		} else {
+			status = TurnStatus.Filtered;
+		}
 	} else if (chatResponseTurn.result.errorDetails.message === 'Cancelled' || chatResponseTurn.result.errorDetails.message === CanceledMessage.message) {
 		status = TurnStatus.Cancelled;
 	} else {
@@ -408,24 +435,6 @@ function createTurnFromVSCodeChatHistoryTurns(
 	}
 
 	return currentTurn;
-}
-
-function getLocation(request: ChatRequest) {
-	if (request.location2 instanceof ChatRequestEditorData) {
-		return ChatLocation.Editor;
-	} else if (request.location2 instanceof ChatRequestNotebookData) {
-		return ChatLocation.Other; // TODO should this be ChatLocation.Notebook
-	}
-	switch (request.location) { // deprecated, but location2 does not yet allow to distinguish between panel, editing session and others
-		case VSChatLocation.Editor:
-			return ChatLocation.Editor;
-		case VSChatLocation.Panel:
-			return ChatLocation.Panel;
-		case VSChatLocation.Terminal:
-			return ChatLocation.Terminal;
-		default:
-			return ChatLocation.Other;
-	}
 }
 
 function anchorPartToMarkdown(workspaceService: IWorkspaceService, anchor: ChatResponseAnchorPart): string {

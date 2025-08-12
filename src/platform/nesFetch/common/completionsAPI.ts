@@ -28,7 +28,7 @@ export namespace Completion {
 		/** The reason the model stopped generating tokens. */
 		finish_reason: FinishReason | null;
 		/** The log probabilities of the tokens. */
-		logprobs: LogProbs | null;
+		logprobs?: LogProbs | null;
 		/** The generated text. */
 		text: string | undefined;
 	}

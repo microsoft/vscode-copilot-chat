@@ -41,8 +41,6 @@ import { CachedOrRebasedEdit, NextEditCache } from './nextEditCache';
 import { LlmNESTelemetryBuilder } from './nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from './nextEditResult';
 
-const ARTIFICIAL_CACHE_HIT_DELAY = 300; // delay cache hits by 300ms to make it more like a regular request and to reduce flicker ;)
-
 export interface INextEditProvider<T extends INextEditResult, TTelemetry, TData = void> extends IDisposable {
 	readonly ID: string;
 	getNextEdit(docId: DocumentId, context: vscode.InlineCompletionContext, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, telemetryBuilder: TTelemetry, data?: TData): Promise<T>;
@@ -64,7 +62,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	public readonly ID = this._statelessNextEditProvider.ID;
 
-	private readonly _rejectionCollector = new RejectionCollector(this._workspace, s => this._logService.logger.trace(s));
+	private readonly _rejectionCollector = new RejectionCollector(this._workspace, s => this._logService.trace(s));
 	private readonly _nextEditCache: NextEditCache;
 	private readonly _recentlyShownCache = new RecentlyShownCache();
 
@@ -97,7 +95,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	) {
 		super();
 
-		this._tracer = createTracer(['NES', 'NextEditProvider'], (s) => this._logService.logger.trace(s));
+		this._tracer = createTracer(['NES', 'NextEditProvider'], (s) => this._logService.trace(s));
 		this._nextEditCache = new NextEditCache(this._workspace, this._logService);
 
 		mapObservableArrayCached(this, this._workspace.openDocuments, (doc, store) => {
@@ -138,6 +136,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			isRevisedCacheStrategy: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRevisedCacheStrategy, this._expService),
 			isCacheTracksRejections: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheTracksRejections, this._expService),
 			isRecentlyShownCacheEnabled: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRecentlyShownCacheEnabled, this._expService),
+			debounceUseCoreRequestTime: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounceUseCoreRequestTime, this._expService),
 		};
 
 		telemetryBuilder.setNESConfigs({ ...nesConfigs });
@@ -160,6 +159,9 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		let req: NextEditFetchRequest;
 		let targetDocumentId = docId;
 
+		const cacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheDelay, this._expService);
+		const minimumResponseDelay = cacheDelay;
+
 		if (recentlyShownCachedEdit) {
 			tracer.trace('using recently shown cached edit');
 			edit = recentlyShownCachedEdit[0];
@@ -173,8 +175,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			// back-date the recording bookmark of the cached edit to the bookmark of the original request.
 			logContext.recordingBookmark = req.log.recordingBookmark;
 
-			await timeout(ARTIFICIAL_CACHE_HIT_DELAY);
-
 		} else if (cachedEdit) {
 			tracer.trace('using cached edit');
 			edit = cachedEdit.rebasedEdit || cachedEdit.edit;
@@ -187,11 +187,9 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			// back-date the recording bookmark of the cached edit to the bookmark of the original request.
 			logContext.recordingBookmark = req.log.recordingBookmark;
 
-			await timeout(ARTIFICIAL_CACHE_HIT_DELAY);
-
 		} else {
 			tracer.trace('fetching next edit');
-			req = new NextEditFetchRequest(logContext, Date.now());
+			req = new NextEditFetchRequest(logContext, nesConfigs.debounceUseCoreRequestTime ? (context.requestIssuedDateTime ?? undefined) : undefined);
 			telemetryBuilder.setHeaderRequestId(req.headerRequestId);
 
 			const startVersion = doc.value.get();
@@ -232,6 +230,9 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			}
 		}
 
+		const fetchLatency = Date.now() - this._lastTriggerTime;
+		await timeout(minimumResponseDelay - fetchLatency);
+
 		telemetryBuilder.markEndTime();
 
 		if (throwingError) {
@@ -246,7 +247,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			return nextEditResult;
 		}
 
-		if (this._rejectionCollector.isRejected(docId, edit) || currentDocument && this._nextEditCache.isRejectedNextEdit(docId, currentDocument, edit, nesConfigs)) {
+		if (this._rejectionCollector.isRejected(targetDocumentId, edit) || currentDocument && this._nextEditCache.isRejectedNextEdit(targetDocumentId, currentDocument, edit, nesConfigs)) {
 			tracer.trace('edit was previously rejected');
 			telemetryBuilder.setStatus('previouslyRejected');
 			telemetryBuilder.setWasPreviouslyRejected();
@@ -262,10 +263,12 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		if (nesConfigs.isRecentlyShownCacheEnabled && !edit.isEmpty) {
 			tracer.trace('edit is not neutral');
-			this._recentlyShownCache.add(docId, currentDocument, [edit, req]);
+			this._recentlyShownCache.add(targetDocumentId, currentDocument, [edit, req]);
 		}
 
 		tracer.trace('returning next edit result');
+		telemetryBuilder.setHasNextEdit(true);
+
 		return nextEditResult;
 	}
 
@@ -423,7 +426,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			firstEdit,
 			logContext,
 			req.log.recordingBookmark,
-			recording
+			recording,
+			req.providerRequestStartDateTime,
 		);
 		let nextEditResult: StatelessNextEditResult | undefined;
 
@@ -662,6 +666,12 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		}
 		this._snippyService.handlePostInsertion(docId.toUri(), suggestion.result.documentBeforeEdits, suggestion.result.edit);
 	}
+
+	public clearCache() {
+		this._nextEditCache.clear();
+		this._recentlyShownCache.clear();
+		this._rejectionCollector.clear();
+	}
 }
 
 function assertDefined<T>(value: T | undefined): T {
@@ -675,7 +685,7 @@ export class NextEditFetchRequest {
 	public readonly headerRequestId = generateUuid();
 	constructor(
 		public readonly log: InlineEditRequestLogContext,
-		public readonly startTime: number,
+		public readonly providerRequestStartDateTime: number | undefined,
 	) {
 	}
 }
@@ -700,6 +710,10 @@ class RecentlyShownCache {
 				break;
 			}
 		}
+	}
+
+	clear() {
+		this._cache.clear();
 	}
 
 	private _key(docId: DocumentId, documentContent: StringText) {

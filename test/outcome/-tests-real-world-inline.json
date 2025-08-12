@@ -2,21 +2,21 @@
 	{
 		"name": "/tests (real world) [inline] [python] - creates new test file with test method and includes method name and test method name",
 		"requests": [
-			"3a6c5460e67abb611fc4eb9e977050d728592383bc32d28d458a3e1078f3de13"
+			"34fba70786257cd2a50f509a7003cd191eece1bd61fcff249a052ecd24dd6b41"
 		]
 	},
 	{
 		"name": "/tests (real world) [inline] [typescript] - add another test for containsUppercaseCharacter with other non latin chars",
 		"requests": [
-			"3d61a1174987bfef0bcf9b4ff69c16517ba390b599b2c887c92a045963d7cb77",
-			"9e279c72d6e6a6334ade8bd18ac00ce0c5f4e19ed37a3b1f87088a3639da889f",
+			"31032a78e3858810de4f26625f84210ee84c9a9dc5e30d0d2b7b5d314074fe7c",
+			"8d8e58bd80c8a6db41c9c222ac09d266625729c83a96cd40b8cd5931998f3ff0",
 			"f33d3ca1fb81529e880764e3dd6f46ba2df828945251afebebf1789e7dc7cdae"
 		]
 	},
 	{
 		"name": "/tests (real world) [inline] [typescript] - generate a unit test",
 		"requests": [
-			"3f9e1e6543ae9c163742234b5b7cdf7473a4448b416e1cb5a706a67c55392d7a",
+			"5a4446d4b5b780097f90807565e30f68f0899c19389ad1cf1af019249a881ffb",
 			"baf3132d44b539d268cb3090a22ff2d1b443482f9d1394392a5b95eeb1a489f4"
 		]
 	},
@@ -24,14 +24,14 @@
 		"name": "/tests (real world) [inline] [typescript] - issue #3699: add test for function",
 		"requests": [
 			"1385a014190ec345b2788c4f27772d6bc25cd9ac2da13a522a8bdc158ea7a6e0",
-			"cad68ac9a4112e0d34c2938ecd2e9df85424e6e40311815327a53e490218a867"
+			"da704f25ed7c3bd0a71a2d2cea8d522680bb0f48aa68e74f6daf1ff3c832d658"
 		]
 	},
 	{
 		"name": "/tests (real world) [inline] [typescript] - issue #3701: add some more tests for folding",
 		"requests": [
-			"59fcb1cd4e8b0f8104d092b10780354c830f1befe4eed3eb9aef2ebe75dbadb8",
-			"c3e0267c3648af35a5c92bd560ef420687026fb9111d8aca84016cbd94c13de0"
+			"4b274aca66a096c5e00eb952767319374d6bd3daeb4688f65e76710619a05399",
+			"59fcb1cd4e8b0f8104d092b10780354c830f1befe4eed3eb9aef2ebe75dbadb8"
 		]
 	}
 ]

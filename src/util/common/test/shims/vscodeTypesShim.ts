@@ -7,7 +7,7 @@ import * as vscodeTypes from '../../../../vscodeTypes';
 import { CancellationTokenSource } from '../../../vs/base/common/cancellation';
 import { Emitter as EventEmitter } from '../../../vs/base/common/event';
 import { URI as Uri } from '../../../vs/base/common/uri';
-import { AISearchKeyword, ChatErrorLevel, ChatImageMimeType, ChatReferenceBinaryData, ChatReferenceDiagnostic, ChatRequestEditedFileEventKind, ChatRequestEditorData, ChatRequestNotebookData, ChatRequestTurn, ChatResponseAnchorPart, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseExtensionsPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseMovePart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseTurn, ChatResponseWarningPart, ExcludeSettingOptions, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, LanguageModelToolResult2, PreparedTerminalToolInvocation, TextSearchMatch2, ChatPrepareToolInvocationPart } from './chatTypes';
+import { AISearchKeyword, ChatErrorLevel, ChatImageMimeType, ChatPrepareToolInvocationPart, ChatReferenceBinaryData, ChatReferenceDiagnostic, ChatRequestEditedFileEventKind, ChatRequestEditorData, ChatRequestNotebookData, ChatRequestTurn, ChatResponseAnchorPart, ChatResponseClearToPreviousToolInvocationReason, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseExtensionsPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseMovePart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponsePullRequestPart, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn, ChatResponseWarningPart, ExcludeSettingOptions, LanguageModelDataPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelTextPart2, LanguageModelToolExtensionSource, LanguageModelToolMCPSource, LanguageModelToolResult, LanguageModelToolResult2, TextSearchMatch2 } from './chatTypes';
 import { Diagnostic, DiagnosticRelatedInformation, Location } from './diagnostics';
 import { TextEdit, WorkspaceEdit } from './editing';
 import { ChatLocation, ChatVariableLevel, DiagnosticSeverity, EndOfLine, ExtensionMode, TextEditorCursorStyle, TextEditorLineNumbersStyle, TextEditorRevealType } from './enums';
@@ -44,6 +44,7 @@ const shim: typeof vscodeTypes = {
 	},
 	ExtensionMode,
 	ChatVariableLevel,
+	ChatResponseClearToPreviousToolInvocationReason,
 	ChatResponseMarkdownPart,
 	ChatResponseFileTreePart,
 	ChatResponseAnchorPart,
@@ -77,6 +78,8 @@ const shim: typeof vscodeTypes = {
 	LanguageModelPromptTsxPart,
 	LanguageModelTextPart,
 	LanguageModelDataPart,
+	LanguageModelToolExtensionSource,
+	LanguageModelToolMCPSource,
 	ChatImageMimeType,
 	ChatReferenceBinaryData,
 	ChatReferenceDiagnostic,
@@ -88,10 +91,14 @@ const shim: typeof vscodeTypes = {
 	NotebookEdit,
 	NotebookCellData,
 	NotebookData,
-	PreparedTerminalToolInvocation,
 	ChatErrorLevel,
 	TerminalShellExecutionCommandLineConfidence,
-	ChatRequestEditedFileEventKind
+	ChatRequestEditedFileEventKind,
+	ChatResponsePullRequestPart,
+	LanguageModelTextPart2,
+	LanguageModelDataPart2,
+	LanguageModelPartAudience,
+	ChatResponseThinkingProgressPart,
 };
 
 export = shim;

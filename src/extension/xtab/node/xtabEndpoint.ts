@@ -49,6 +49,7 @@ export class XtabEndpoint extends ChatEndpoint {
 	constructor(
 		private readonly _url: string,
 		private readonly _apiKey: string,
+		_configuredModelName: string | undefined,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IDomainService _domainService: IDomainService,
 		@IFetcherService _fetcherService: IFetcherService,
@@ -61,8 +62,9 @@ export class XtabEndpoint extends ChatEndpoint {
 		@IInstantiationService _instantiationService: IInstantiationService,
 		@IThinkingDataService _thinkingDataService: IThinkingDataService
 	) {
+		const chatModelInfo = _configuredModelName ? { ...XtabEndpoint.chatModelInfo, id: _configuredModelName } : XtabEndpoint.chatModelInfo;
 		super(
-			XtabEndpoint.chatModelInfo,
+			chatModelInfo,
 			_domainService,
 			_capiClientService,
 			_fetcherService,
@@ -71,8 +73,7 @@ export class XtabEndpoint extends ChatEndpoint {
 			_authService,
 			_chatMLFetcher,
 			_tokenizerProvider,
-			_instantiationService,
-			_thinkingDataService
+			_instantiationService
 		);
 	}
 
@@ -89,6 +90,7 @@ export class XtabEndpoint extends ChatEndpoint {
 			throw new Error(message);
 		}
 		return {
+			'Authorization': `Bearer ${apiKey}`,
 			'api-key': apiKey,
 		};
 	}

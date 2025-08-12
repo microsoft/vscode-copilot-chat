@@ -11,6 +11,7 @@ import { IObservableDocument } from '../../../platform/inlineEdits/common/observ
 import { IStatelessNextEditTelemetry, StatelessNextEditRequest } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { autorunWithChanges } from '../../../platform/inlineEdits/common/utils/observable';
 import { APIUsage } from '../../../platform/networking/common/openai';
+import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { ITelemetryService, multiplexProperties, TelemetryEventMeasurements, TelemetryEventProperties } from '../../../platform/telemetry/common/telemetry';
 import { LogEntry } from '../../../platform/workspaceRecorder/common/workspaceLog';
 import { Disposable, IDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -70,6 +71,7 @@ export interface ILlmNESTelemetry extends Partial<IStatelessNextEditTelemetry> {
 	readonly activeDocumentEditsCount: number | undefined;
 	readonly activeDocumentLanguageId: string | undefined;
 	readonly activeDocumentRepository: string | undefined;
+	readonly hasNextEdit: boolean;
 	readonly wasPreviouslyRejected: boolean;
 	readonly status: NextEditTelemetryStatus;
 	readonly nesConfigs: INesConfigs | undefined;
@@ -132,7 +134,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			activeDocumentEditsCount = activeDoc.recentEdits.edits.length;
 			activeDocumentLanguageId = activeDoc.languageId;
 			activeDocumentOriginalLineCount = activeDoc.documentAfterEditsLines.length;
-			isNotebook = activeDoc.id.toUri().scheme === Schemas.vscodeNotebookCell;
+			isNotebook = activeDoc.id.toUri().scheme === Schemas.vscodeNotebookCell || this._notebookService.hasSupportedNotebooks(activeDoc.id.toUri());
 			const git = this._gitExtensionService.getExtensionApi();
 			if (git) {
 				const activeDocRepository = git.getRepository(Uri.parse(activeDoc.id.uri));
@@ -236,6 +238,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			activeDocumentLanguageId,
 			activeDocumentOriginalLineCount,
 			fetchStartedAfterMs,
+			hasNextEdit: this._hasNextEdit,
 			wasPreviouslyRejected: this._wasPreviouslyRejected,
 			isNotebook: isNotebook,
 			status: this._status,
@@ -257,6 +260,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 
 	constructor(
 		private readonly _gitExtensionService: IGitExtensionService,
+		private readonly _notebookService: INotebookService,
 		private readonly _providerId: string,
 		private readonly _doc: IObservableDocument,
 		private readonly _debugRecorder?: DebugRecorder,
@@ -314,6 +318,12 @@ export class LlmNESTelemetryBuilder extends Disposable {
 	private _statelessNextEditTelemetry: IStatelessNextEditTelemetry | undefined;
 	public setStatelessNextEditTelemetry(statelessNextEditTelemetry: IStatelessNextEditTelemetry): this {
 		this._statelessNextEditTelemetry = statelessNextEditTelemetry;
+		return this;
+	}
+
+	private _hasNextEdit: boolean = false;
+	public setHasNextEdit(hasNextEdit: boolean): this {
+		this._hasNextEdit = hasNextEdit;
 		return this;
 	}
 
@@ -442,6 +452,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 
 	constructor(
 		gitExtensionService: IGitExtensionService,
+		notebookService: INotebookService,
 		providerId: string,
 		doc: IObservableDocument,
 		debugRecorder?: DebugRecorder,
@@ -450,7 +461,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 		super();
 		this._requestN = ++NextEditProviderTelemetryBuilder.requestN;
 
-		this._nesBuilder = this._register(new LlmNESTelemetryBuilder(gitExtensionService, providerId, doc, debugRecorder, requestBookmark));
+		this._nesBuilder = this._register(new LlmNESTelemetryBuilder(gitExtensionService, notebookService, providerId, doc, debugRecorder, requestBookmark));
 		this._diagnosticsBuilder = new DiagnosticsTelemetryBuilder();
 	}
 
@@ -701,7 +712,7 @@ export class TelemetrySender implements IDisposable {
 		"promptCharCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of characters in the prompt", "isMeasurement": true },
 		"hadLowLogProbSuggestion": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the suggestion had low log probability", "isMeasurement": true },
 		"nEditsSuggested": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of edits suggested", "isMeasurement": true },
-		"hasNextEdit": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether there is a next edit", "isMeasurement": true },
+		"hasNextEdit": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether next edit provider returned an edit (if an edit was previously rejected, this field is false)", "isMeasurement": true },
 		"nextEditLogprob": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Log probability of the next edit", "isMeasurement": true },
 		"lineDistanceToMostRecentEdit": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Line distance to most recent edit", "isMeasurement": true },
 		"isCursorAtEndOfLine": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the cursor is at the end of the line", "isMeasurement": true },

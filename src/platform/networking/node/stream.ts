@@ -8,8 +8,8 @@ import type { CancellationToken } from 'vscode';
 import { ILogService, LogLevel } from '../../log/common/logService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { ThinkingData } from '../../thinking/common/thinking';
-import { IThinkingDataService } from '../../thinking/node/thinkingDataService';
+import { RawThinkingDelta, ThinkingDelta } from '../../thinking/common/thinking';
+import { extractThinkingDeltaFromChoice, } from '../../thinking/common/thinkingUtils';
 import { FinishedCallback, getRequestId, ICodeVulnerabilityAnnotation, ICopilotBeginToolCall, ICopilotConfirmation, ICopilotError, ICopilotFunctionCall, ICopilotReference, ICopilotToolCall, IIPCodeCitation, isCodeCitationAnnotation, isCopilotAnnotation, RequestId } from '../common/fetch';
 import { Response } from '../common/fetcherService';
 import { APIErrorResponse, APIJsonData, APIUsage, ChoiceLogProbs, FilterReason, FinishedCompletionReason, isApiUsage, IToolCall } from '../common/openai';
@@ -114,11 +114,6 @@ class StreamingToolCalls {
 	}
 }
 
-function isChainOfThoughtChoice(choice: ExtendedChoiceJSON): boolean {
-	return (choice.delta?.cot_id !== undefined || choice.delta?.cot_summary !== undefined || choice.delta?.reasoning_opaque !== undefined || choice.delta?.reasoning_text !== undefined);
-}
-
-
 // Given a string of lines separated by one or more newlines, returns complete
 // lines and any remaining partial line data. Exported for test only.
 export function splitChunk(chunk: string): [string[], string] {
@@ -168,7 +163,7 @@ interface ChoiceJSON {
  */
 interface ExtendedChoiceJSON extends ChoiceJSON {
 	content_filter_results?: Record<Exclude<FilterReason, FilterReason.Copyright>, { filtered: boolean; severity: string }>;
-	message?: ThinkingData;
+	message?: RawThinkingDelta;
 	delta?: {
 		content: string | null;
 		copilot_annotations?: {
@@ -187,7 +182,7 @@ interface ExtendedChoiceJSON extends ChoiceJSON {
 		tool_calls?: IToolCall[];
 		role?: string;
 		name?: string;
-	} & ThinkingData;
+	} & RawThinkingDelta;
 }
 
 /**
@@ -215,7 +210,6 @@ export class SSEProcessor {
 		private readonly expectedNumChoices: number,
 		private readonly response: Response,
 		private readonly body: NodeJS.ReadableStream,
-		private readonly thinkingData: IThinkingDataService,
 		private readonly cancellationToken?: CancellationToken
 	) { }
 
@@ -224,7 +218,6 @@ export class SSEProcessor {
 		telemetryService: ITelemetryService,
 		expectedNumChoices: number,
 		response: Response,
-		thinkingData: IThinkingDataService,
 		cancellationToken?: CancellationToken
 	) {
 		const body = (await response.body()) as NodeJS.ReadableStream;
@@ -235,7 +228,6 @@ export class SSEProcessor {
 			expectedNumChoices,
 			response,
 			body,
-			thinkingData,
 			cancellationToken
 		);
 	}
@@ -289,7 +281,7 @@ export class SSEProcessor {
 			}
 		} finally {
 			this.cancel();
-			this.logService.logger.info(
+			this.logService.info(
 				`request done: requestId: [${this.requestId.headerRequestId}] model deployment ID: [${this.requestId.deploymentId}]`
 			);
 		}
@@ -340,7 +332,7 @@ export class SSEProcessor {
 				try {
 					json = JSON.parse(lineWithoutData);
 				} catch (e) {
-					this.logService.logger.error(`Error parsing JSON stream data for request id ${this.requestId.headerRequestId}:${dataLine}`);
+					this.logService.error(`Error parsing JSON stream data for request id ${this.requestId.headerRequestId}:${dataLine}`);
 					sendCommunicationErrorTelemetry(this.telemetryService, `Error parsing JSON stream data for request id ${this.requestId.headerRequestId}:`, dataLine);
 					continue;
 				}
@@ -359,7 +351,7 @@ export class SSEProcessor {
 					// Currently there are messages with a null 'choices' that include copilot_references- ignore these
 					if (!json.copilot_references && !json.copilot_confirmation) {
 						if (json.error !== undefined) {
-							this.logService.logger.error(`Error in response for request id ${this.requestId.headerRequestId}:${json.error.message}`);
+							this.logService.error(`Error in response for request id ${this.requestId.headerRequestId}:${json.error.message}`);
 							sendCommunicationErrorTelemetry(this.telemetryService, `Error in response for request id ${this.requestId.headerRequestId}:`, json.error.message);
 							// Encountered an error mid stream we immediately yield as the response is not usable.
 							yield {
@@ -371,7 +363,7 @@ export class SSEProcessor {
 								requestId: this.requestId,
 							};
 						} else {
-							this.logService.logger.error(`Unexpected response with no choices or error for request id ${this.requestId.headerRequestId}`);
+							this.logService.error(`Unexpected response with no choices or error for request id ${this.requestId.headerRequestId}`);
 							sendCommunicationErrorTelemetry(this.telemetryService, `Unexpected response with no choices or error for request id ${this.requestId.headerRequestId}`);
 						}
 					}
@@ -392,7 +384,7 @@ export class SSEProcessor {
 					// Would only be 0 if we're the first actual response chunk
 					this.requestId = getRequestId(this.response, json);
 					if (this.requestId.created === 0 && json.choices?.length) { // An initial chunk is sent with an empty choices array and no id, to hold `prompt_filter_results`
-						this.logService.logger.error(`Request id invalid, should have "completionId" and "created": ${JSON.stringify(this.requestId)} ${this.requestId}`);
+						this.logService.error(`Request id invalid, should have "completionId" and "created": ${JSON.stringify(this.requestId)} ${this.requestId}`);
 						sendCommunicationErrorTelemetry(this.telemetryService, `Request id invalid, should have "completionId" and "created": ${JSON.stringify(this.requestId)}`, this.requestId);
 					}
 				}
@@ -402,15 +394,8 @@ export class SSEProcessor {
 
 					this.logChoice(choice);
 
-					if (isChainOfThoughtChoice(choice)) {
-						const toolCalls = this.toolCalls.getToolCalls();
-						if (toolCalls.length > 0) {
-							this.thinkingData.update(choice, toolCalls[0].id);
-						} else {
-							this.thinkingData.update(choice);
-						}
-						continue;
-					}
+
+					const thinkingDelta = extractThinkingDeltaFromChoice(choice);
 
 					if (!(choice.index in this.solutions)) {
 						this.solutions[choice.index] = new APIJsonDataStreaming();
@@ -418,12 +403,15 @@ export class SSEProcessor {
 
 					const solution = this.solutions[choice.index];
 					if (solution === null) {
+						if (thinkingDelta) {
+							await finishedCb('', choice.index, { text: '', thinking: thinkingDelta });
+						}
 						continue; // already finished
 					}
 
 					let finishOffset: number | undefined;
 
-					const emitSolution = async (delta?: { vulnAnnotations?: ICodeVulnerabilityAnnotation[]; ipCodeCitations?: IIPCodeCitation[]; references?: ICopilotReference[]; toolCalls?: ICopilotToolCall[]; functionCalls?: ICopilotFunctionCall[]; errors?: ICopilotError[]; beginToolCalls?: ICopilotBeginToolCall[] }) => {
+					const emitSolution = async (delta?: { vulnAnnotations?: ICodeVulnerabilityAnnotation[]; ipCodeCitations?: IIPCodeCitation[]; references?: ICopilotReference[]; toolCalls?: ICopilotToolCall[]; functionCalls?: ICopilotFunctionCall[]; errors?: ICopilotError[]; beginToolCalls?: ICopilotBeginToolCall[]; thinking?: ThinkingDelta }) => {
 						if (delta?.vulnAnnotations && (!Array.isArray(delta.vulnAnnotations) || !delta.vulnAnnotations.every(a => isCopilotAnnotation(a)))) {
 							delta.vulnAnnotations = undefined;
 						}
@@ -442,7 +430,8 @@ export class SSEProcessor {
 							copilotToolCalls: delta?.toolCalls,
 							_deprecatedCopilotFunctionCalls: delta?.functionCalls,
 							beginToolCalls: delta?.beginToolCalls,
-							copilotErrors: delta?.errors
+							copilotErrors: delta?.errors,
+							thinking: thinkingDelta ?? delta?.thinking,
 						});
 						if (finishOffset !== undefined) {
 							hadEarlyFinishedSolution = true;
@@ -482,7 +471,7 @@ export class SSEProcessor {
 									}
 								}
 							} catch (ex) {
-								this.logService.logger.error(`Error parsing function references: ${JSON.stringify(ex)}`);
+								this.logService.error(`Error parsing function references: ${JSON.stringify(ex)}`);
 							}
 						}
 					} else if (choice.delta?.function_call && (choice.delta.function_call.name || choice.delta.function_call.arguments)) {
@@ -501,7 +490,7 @@ export class SSEProcessor {
 								continue;
 							}
 						} catch (error) {
-							this.logService.logger.error(error);
+							this.logService.error(error);
 						}
 
 						this.functionCalls[this.functionCallName] = null;
@@ -518,12 +507,13 @@ export class SSEProcessor {
 						handled = true;
 						const toolCalls = this.toolCalls.getToolCalls();
 						this.completedFunctionCallIdxs.set(choice.index, 'tool');
+						const toolId = toolCalls.length > 0 ? toolCalls[0].id : undefined;
 						try {
-							if (await emitSolution({ toolCalls: toolCalls })) {
+							if (await emitSolution({ toolCalls: toolCalls, thinking: { text: '', metadata: toolId } })) {
 								continue;
 							}
 						} catch (error) {
-							this.logService.logger.error(error);
+							this.logService.error(error);
 						}
 					}
 
@@ -597,11 +587,11 @@ export class SSEProcessor {
 			try {
 				const extraDataJson = JSON.parse(extraData);
 				if (extraDataJson.error !== undefined) {
-					this.logService.logger.error(extraDataJson.error, `Error in response: ${extraDataJson.error.message}`);
+					this.logService.error(extraDataJson.error, `Error in response: ${extraDataJson.error.message}`);
 					sendCommunicationErrorTelemetry(this.telemetryService, `Error in response: ${extraDataJson.error.message}`, extraDataJson.error);
 				}
 			} catch (e) {
-				this.logService.logger.error(`Error parsing extraData for request id ${this.requestId.headerRequestId}: ${extraData}`);
+				this.logService.error(`Error parsing extraData for request id ${this.requestId.headerRequestId}: ${extraData}`);
 				sendCommunicationErrorTelemetry(this.telemetryService, `Error parsing extraData for request id ${this.requestId.headerRequestId}: ${extraData}`);
 			}
 		}
@@ -644,7 +634,7 @@ export class SSEProcessor {
 	 */
 	private maybeCancel(description: string) {
 		if (this.cancellationToken?.isCancellationRequested) {
-			this.logService.logger.debug('Cancelled: ' + description);
+			this.logService.debug('Cancelled: ' + description);
 			this.cancel();
 			return true;
 		}
@@ -660,7 +650,7 @@ export class SSEProcessor {
 		delete choiceCopy.index;
 		delete choiceCopy.content_filter_results;
 		delete choiceCopy.content_filter_offsets;
-		this.logService.logger.trace(`choice ${JSON.stringify(choiceCopy)}`);
+		this.logService.trace(`choice ${JSON.stringify(choiceCopy)}`);
 	}
 }
 
