@@ -105,11 +105,11 @@ export class McpToolsService extends BaseToolsService {
 
 	async invokeTool(name: string | ToolName, options: vscode.LanguageModelToolInvocationOptions<Object>, token: vscode.CancellationToken): Promise<LanguageModelToolResult | vscode.LanguageModelToolResult2> {
 		this._onWillInvokeTool.fire({ toolName: name });
-		const invokeToolTimeout = process.env.SIMULATION_INVOKE_TOOL_TIMEOUT ? parseInt(process.env.SIMULATION_INVOKE_TOOL_TIMEOUT) : 60_000;
+		const invokeToolTimeout = process.env.SIMULATION_INVOKE_TOOL_TIMEOUT ? parseInt(process.env.SIMULATION_INVOKE_TOOL_TIMEOUT, 10) : 60_000;
 		const result = await this.mcp?.callTool({
 			name: name,
 			arguments: options.input as Record<string, unknown>,
-		}, undefined, { timeout: invokeToolTimeout });
+		}, undefined, { timeout: invokeToolTimeout, maxTotalTimeout: invokeToolTimeout });
 		if (!result) {
 			throw new CancellationError();
 		}
