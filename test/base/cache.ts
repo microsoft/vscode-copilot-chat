@@ -230,36 +230,15 @@ export class Cache extends EventEmitter {
 			this.activeLayer = (async () => {
 				const execAsync = promisify(exec);
 
-				if (this.externalLayersPath) {
-					// Check git for an uncommitted layer database file in external layers path
-					try {
-						const { stdout: revParseStdout } = await execAsync('git rev-parse --show-toplevel', { cwd: this.externalLayersPath });
-						const gitRoot = revParseStdout.trim();
-						const relativePath = path.relative(gitRoot, this.externalLayersPath);
-						const { stdout: statusStdout } = await execAsync(`git status -z ${relativePath}/*`, { cwd: gitRoot });
-						if (statusStdout !== '') {
-							const layerDatabaseEntries = statusStdout.split('\0').filter(entry => entry.endsWith('.sqlite'));
-							if (layerDatabaseEntries.length > 0) {
-								const regex = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.sqlite$/;
-								const match = layerDatabaseEntries[0].match(regex);
-								if (match && this.layers.has(match[1])) {
-									return this.layers.get(match[1])!;
-								}
-							}
-						}
-					} catch (error) {
-						// If git operations fail for external path, continue to create new layer
-					}
+				const targetPath = this.externalLayersPath || this.layersPath;
+				const gitStatusPath = this.externalLayersPath
+					? `${path.relative(await this._getGitRoot(targetPath), targetPath)}/*`
+					: 'test/simulation/cache/layers/*';
 
-					// Create a new layer database in external path
-					const uuid = generateUuid();
-					const activeLayer = new Keyv(new KeyvSqlite(path.join(this.externalLayersPath, `${uuid}.sqlite`)));
-					this.layers.set(uuid, activeLayer);
-					return activeLayer;
-				} else {
-					// Check git for an uncommitted layer database file in default path
-					const { stdout: revParseStdout } = await execAsync('git rev-parse --show-toplevel');
-					const { stdout: statusStdout } = await execAsync('git status -z test/simulation/cache/layers/*', { cwd: revParseStdout.trim() });
+				// Check git for an uncommitted layer database file
+				try {
+					const gitRoot = await this._getGitRoot(targetPath);
+					const { stdout: statusStdout } = await execAsync(`git status -z ${gitStatusPath}`, { cwd: gitRoot });
 					if (statusStdout !== '') {
 						const layerDatabaseEntries = statusStdout.split('\0').filter(entry => entry.endsWith('.sqlite'));
 						if (layerDatabaseEntries.length > 0) {
@@ -270,17 +249,25 @@ export class Cache extends EventEmitter {
 							}
 						}
 					}
-
-					// Create a new layer database in default path
-					const uuid = generateUuid();
-					const activeLayer = new Keyv(new KeyvSqlite(path.join(this.layersPath, `${uuid}.sqlite`)));
-					this.layers.set(uuid, activeLayer);
-					return activeLayer;
+				} catch (error) {
+					// If git operations fail, continue to create new layer
 				}
+
+				// Create a new layer database
+				const uuid = generateUuid();
+				const activeLayer = new Keyv(new KeyvSqlite(path.join(targetPath, `${uuid}.sqlite`)));
+				this.layers.set(uuid, activeLayer);
+				return activeLayer;
 			})();
 		}
 
 		return this.activeLayer;
+	}
+
+	private async _getGitRoot(cwd: string): Promise<string> {
+		const execAsync = promisify(exec);
+		const { stdout } = await execAsync('git rev-parse --show-toplevel', { cwd });
+		return stdout.trim();
 	}
 
 	private async _compress(value: string): Promise<string> {
