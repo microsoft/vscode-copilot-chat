@@ -10,7 +10,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { randomPath } from '../../../util/vs/base/common/extpath';
 import { localize } from '../../../util/vs/nls';
-import { ValidatePackageResult } from './commands';
+import { ValidatePackageErrorType, ValidatePackageResult } from './commands';
 
 interface NuGetServiceIndexResponse {
 	resources?: Array<{ "@id": string; "@type": string }>;
@@ -53,7 +53,7 @@ export async function getNuGetPackageMetadata(id: string, logService: ILogServic
 			return {
 				state: 'error',
 				error: localize("mcp.setup.dotnetNotFound", "The '{0}' command was not found. .NET SDK 10 or newer must be installed and available in PATH.", dotnet.command),
-				errorType: 'MissingCommand',
+				errorType: ValidatePackageErrorType.MissingCommand,
 				helpUri: 'https://aka.ms/vscode-mcp-install/dotnet',
 				helpUriLabel: localize("mcp.setup.installDotNetSdk", "Install .NET SDK"),
 			};
@@ -68,7 +68,7 @@ export async function getNuGetPackageMetadata(id: string, logService: ILogServic
 		return {
 			state: 'error',
 			error: localize("mcp.setup.badCommandVersion", "The installed .NET SDK must be version 10 or newer. Found {0}.", dotnetVersion),
-			errorType: 'BadCommandVersion',
+			errorType: ValidatePackageErrorType.BadCommandVersion,
 			helpUri: 'https://aka.ms/vscode-mcp-install/dotnet',
 			helpUriLabel: localize("mcp.setup.installDotNetSdk", "Update .NET SDK"),
 		};
@@ -79,7 +79,7 @@ export async function getNuGetPackageMetadata(id: string, logService: ILogServic
 	if (!latest) {
 		return {
 			state: 'error',
-			errorType: 'NotFound',
+			errorType: ValidatePackageErrorType.NotFound,
 			error: localize("mcp.setup.nugetNotFound", "Package {0} does not exist on NuGet.org.", id)
 		};
 	}

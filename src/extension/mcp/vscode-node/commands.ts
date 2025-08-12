@@ -46,8 +46,19 @@ export interface IPendingSetupArgs {
 	getServerManifest?(installConsent: Promise<void>): Promise<any>;
 }
 
-type ValidatePackageErrorType = 'NotFound' | 'UnknownPackageType' | 'UnhandledError' | 'MissingCommand' | 'BadCommandVersion';
-type FlowFinalState = 'Done' | 'Failed' | 'NameMismatch';
+export const enum ValidatePackageErrorType {
+	NotFound = 'NotFound',
+	UnknownPackageType = 'UnknownPackageType',
+	UnhandledError = 'UnhandledError',
+	MissingCommand = 'MissingCommand',
+	BadCommandVersion = 'BadCommandVersion',
+}
+
+const enum FlowFinalState {
+	Done = 'Done',
+	Failed = 'Failed',
+	NameMismatch = 'NameMismatch',
+}
 
 // contract with https://github.com/microsoft/vscode/blob/main/src/vs/workbench/contrib/mcp/browser/mcpCommandsAddConfiguration.ts
 export type ValidatePackageResult =
@@ -108,19 +119,19 @@ export class McpSetupCommands extends Disposable {
 		super();
 		this._register(toDisposable(() => this.pendingSetup?.cts.dispose(true)));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.flow', async (args: { name: string }) => {
-			let finalState: FlowFinalState = 'Failed';
+			let finalState = FlowFinalState.Failed;
 			let result;
 			try {
 				// allow case-insensitive comparison
 				if (this.pendingSetup?.pendingArgs.name.toUpperCase() !== args.name.toUpperCase()) {
-					finalState = 'NameMismatch';
+					finalState = FlowFinalState.NameMismatch;
 					vscode.window.showErrorMessage(localize("mcp.setup.nameMismatch", "Failed to generate MCP server configuration with a matching package name. Expected '{0}' but got '{1}' from generated configuration.", args.name, this.pendingSetup?.pendingArgs.name));
 					return undefined;
 				}
 
 				this.pendingSetup.canPrompt.complete(undefined);
 				result = await this.pendingSetup.done;
-				finalState = 'Done';
+				finalState = FlowFinalState.Done;
 				return result;
 			} finally {
 				/* __GDPR__
@@ -292,7 +303,7 @@ Error: ${error}`);
 			if (args.type === 'npm') {
 				const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(args.name)}`);
 				if (!response.ok) {
-					return { state: 'error', errorType: 'NotFound', error: localize("mcp.setup.npmNotFound", "Package {0} not found in npm registry", args.name) };
+					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.npmNotFound", "Package {0} not found in npm registry", args.name) };
 				}
 				const data = await response.json() as NpmPackageResponse;
 				const version = data['dist-tags']?.latest;
@@ -306,7 +317,7 @@ Error: ${error}`);
 			} else if (args.type === 'pip') {
 				const response = await fetch(`https://pypi.org/pypi/${encodeURIComponent(args.name)}/json`);
 				if (!response.ok) {
-					return { state: 'error', errorType: 'NotFound', error: localize("mcp.setup.pypiNotFound", "Package {0} not found in PyPI registry", args.name) };
+					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.pypiNotFound", "Package {0} not found in PyPI registry", args.name) };
 				}
 				const data = await response.json() as PyPiPackageResponse;
 				const publisher = data.info?.author || data.info?.author_email || 'unknown';
@@ -330,7 +341,7 @@ Error: ${error}`);
 
 				const response = await fetch(`https://hub.docker.com/v2/repositories/${encodeURIComponent(namespace)}/${encodeURIComponent(repository)}`);
 				if (!response.ok) {
-					return { state: 'error', errorType: 'NotFound', error: localize("mcp.setup.dockerNotFound", "Docker image {0} not found in Docker Hub registry", args.name) };
+					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.dockerNotFound", "Docker image {0} not found in Docker Hub registry", args.name) };
 				}
 				const data = await response.json() as DockerHubResponse;
 				return {
@@ -340,9 +351,9 @@ Error: ${error}`);
 					readme: data.full_description || data.description,
 				};
 			}
-			return { state: 'error', error: localize("mcp.setup.unknownPackageType", "Unsupported package type: {0}", args.type), errorType: 'UnknownPackageType' };
+			return { state: 'error', error: localize("mcp.setup.unknownPackageType", "Unsupported package type: {0}", args.type), errorType: ValidatePackageErrorType.UnknownPackageType };
 		} catch (error) {
-			return { state: 'error', error: localize("mcp.setup.errorQueryingPackage", "Error querying package: {0}", (error as Error).message), errorType: 'UnhandledError' };
+			return { state: 'error', error: localize("mcp.setup.errorQueryingPackage", "Error querying package: {0}", (error as Error).message), errorType: ValidatePackageErrorType.UnhandledError };
 		}
 	}
 }
