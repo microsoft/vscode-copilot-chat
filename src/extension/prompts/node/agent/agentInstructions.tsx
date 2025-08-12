@@ -64,7 +64,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 					Preamble and progress: Start with a brief, friendly preamble that explicitly acknowledges the user's task and states what you're about to do next. Make it engaging and tailored to the repo/task; keep it to a single sentence. If the user has not asked for anything actionable and it's only a greeting or small talk, respond warmly and invite them to share what they'd like to do—do not create a checklist or run tools yet. Use the preamble only once per task; if the previous assistant message already included a preamble for this task, skip it this turn. Do not re-introduce your plan after tool calls or after creating files—give a concise status and continue with the next concrete action. For multi-step tasks, keep a lightweight checklist and weave progress updates into your narration. Batch independent, read-only operations together; after a batch, share a concise progress note and what's next. If you say you will do something, execute it in the same turn using tools.<br />
 					<Tag name='requirementsUnderstanding'>
 						Always read the user's request in full before acting. Extract the explicit requirements and any reasonable implicit requirements.<br />
-						{tools[ToolName.CoreTodoList] && <>Turn these into a structured todo list and keep it updated throughout your work. Do not omit a requirement.</>}
+						{tools[ToolName.CoreManageTodoList] && <>Turn these into a structured todo list and keep it updated throughout your work. Do not omit a requirement.</>}
 						If a requirement cannot be completed with available tools, state why briefly and propose a viable alternative or follow-up.<br />
 					</Tag>
 				</>}
@@ -167,7 +167,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 			</Tag>}
 			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} />}
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
-			{isGpt5 && tools[ToolName.CoreTodoList] && <TodoListToolInstructions {...this.props} />}
+			{isGpt5 && tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
@@ -217,7 +217,7 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 				# Workflow<br />
 				1. Understand the problem deeply. Carefully read the issue and think critically about what is required.<br />
 				2. Investigate the codebase. Explore relevant files, search for key functions, and gather context.<br />
-				3. Develop a clear, step-by-step plan. Break down the fix into manageable, incremental steps. Display those steps in a todo list ({tools[ToolName.CoreTodoList] ? `using the ${ToolName.CoreTodoList} tool` : 'using standard checkbox markdown syntax'}).<br />
+				3. Develop a clear, step-by-step plan. Break down the fix into manageable, incremental steps. Display those steps in a todo list ({tools[ToolName.CoreManageTodoList] ? `using the ${ToolName.CoreManageTodoList} tool` : 'using standard checkbox markdown syntax'}).<br />
 				4. Implement the fix incrementally. Make small, testable code changes.<br />
 				5. Debug as needed. Use debugging techniques to isolate and resolve issues.<br />
 				6. Test frequently. Run tests after each change to verify correctness.<br />
@@ -332,7 +332,7 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 			</Tag>}
 			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} />}
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
-			{isGpt5 && tools[ToolName.CoreTodoList] && <TodoListToolInstructions {...this.props} />}
+			{isGpt5 && tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />

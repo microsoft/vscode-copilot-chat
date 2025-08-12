@@ -48,7 +48,7 @@ export enum ToolName {
 	CoreRunTask = 'run_task',
 	CoreGetTaskOutput = 'get_task_output',
 	CoreRunTest = 'runTests',
-	CoreTodoList = 'manage_todo_list',
+	CoreManageTodoList = 'manage_todo_list',
 }
 
 export enum ContributedToolName {
