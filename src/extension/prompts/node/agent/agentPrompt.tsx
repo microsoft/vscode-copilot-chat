@@ -45,7 +45,7 @@ import { UserPreferences } from '../panel/preferences';
 import { ChatToolCalls } from '../panel/toolCalling';
 import { MultirootWorkspaceStructure } from '../panel/workspace/workspaceStructure';
 import { AgentConversationHistory } from './agentConversationHistory';
-import { AlternateGPTPrompt, DefaultAgentPrompt, SweBenchAgentPrompt } from './agentInstructions';
+import { AlternateGPTPrompt, CodexStyleGPTPrompt, DefaultAgentPrompt, GPT5PromptV2, SweBenchAgentPrompt } from './agentInstructions';
 import { SummarizedConversationHistory } from './summarizedConversationHistory';
 
 export interface AgentPromptProps extends GenericBasePromptElementProps {
@@ -83,19 +83,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const instructions = this.configurationService.getConfig(ConfigKey.Internal.SweBenchAgentPrompt) ?
-			<SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} /> :
-			this.props.endpoint.family.startsWith('gpt-') && this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService) ?
-				<AlternateGPTPrompt
-					availableTools={this.props.promptContext.tools?.availableTools}
-					modelFamily={this.props.endpoint.family}
-					codesearchMode={this.props.codesearchMode}
-				/> :
-				<DefaultAgentPrompt
-					availableTools={this.props.promptContext.tools?.availableTools}
-					modelFamily={this.props.endpoint.family}
-					codesearchMode={this.props.codesearchMode}
-				/>;
+		const instructions = this.getInstructions();
 
 		const omitBaseAgentInstructions = this.configurationService.getConfig(ConfigKey.Internal.OmitBaseAgentInstructions);
 		const baseAgentInstructions = <>
@@ -139,6 +127,53 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 				<ChatToolCalls priority={899} flexGrow={2} promptContext={this.props.promptContext} toolCallRounds={this.props.promptContext.toolCallRounds} toolCallResults={this.props.promptContext.toolCallResults} truncateAt={maxToolResultLength} enableCacheBreakpoints={false} />
 			</>;
 		}
+	}
+
+	private getInstructions() {
+		if (this.configurationService.getConfig(ConfigKey.Internal.SweBenchAgentPrompt)) {
+			return <SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} />;
+		}
+
+		const gpt5PromptsConfig = this.configurationService.getConfig(ConfigKey.Gpt5AlternatePromptsConfig);
+		const modelFamily = this.props.endpoint.family;
+
+		if (modelFamily === 'gpt-5' && gpt5PromptsConfig[modelFamily]) {
+			const promptType = gpt5PromptsConfig[modelFamily];
+			switch (promptType) {
+				case 'codex':
+					return <CodexStyleGPTPrompt
+						availableTools={this.props.promptContext.tools?.availableTools}
+						modelFamily={this.props.endpoint.family}
+						codesearchMode={this.props.codesearchMode}
+					/>;
+				case 'v2':
+					return <GPT5PromptV2
+						availableTools={this.props.promptContext.tools?.availableTools}
+						modelFamily={this.props.endpoint.family}
+						codesearchMode={this.props.codesearchMode}
+					/>;
+				case 'alternate':
+					return <AlternateGPTPrompt
+						availableTools={this.props.promptContext.tools?.availableTools}
+						modelFamily={this.props.endpoint.family}
+						codesearchMode={this.props.codesearchMode}
+					/>;
+			}
+		}
+
+		if (this.props.endpoint.family.startsWith('gpt-') && this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService)) {
+			return <AlternateGPTPrompt
+				availableTools={this.props.promptContext.tools?.availableTools}
+				modelFamily={this.props.endpoint.family}
+				codesearchMode={this.props.codesearchMode}
+			/>;
+		}
+
+		return <DefaultAgentPrompt
+			availableTools={this.props.promptContext.tools?.availableTools}
+			modelFamily={this.props.endpoint.family}
+			codesearchMode={this.props.codesearchMode}
+		/>;
 	}
 
 	private getAgentCustomInstructions() {
