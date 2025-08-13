@@ -31,6 +31,7 @@ export const enum Intent {
 	SearchPanel = 'searchPanel',
 	SearchKeywords = 'searchKeywords',
 	AskAgent = 'askAgent',
+	Replay = 'replay'
 }
 
 export const GITHUB_PLATFORM_AGENT = 'github.copilot-dynamic.platform';

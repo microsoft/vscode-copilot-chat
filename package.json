@@ -1586,6 +1586,31 @@
 						]
 					}
 				]
+			},
+			{
+				"id": "github.copilot.replayAgent",
+				"name": "replay",
+				"fullName": "Replay",
+				"when": "github.copilot.chat.replay",
+				"locations": [
+					"panel"
+				],
+				"commands": [
+					{
+						"name": "explain",
+						"description": "%copilot.terminal.explain.description%",
+						"sampleRequest": "%copilot.terminal.explain.sampleRequest%",
+						"disambiguation": [
+							{
+								"category": "terminal_state_questions",
+								"description": "The user wants to learn about specific state such as the selection, command, or failed command in the integrated terminal in Visual Studio Code.",
+								"examples": [
+									"Why did the latest terminal command fail?"
+								]
+							}
+						]
+					}
+				]
 			}
 		],
 		"languageModels": [
@@ -1693,6 +1718,11 @@
 			}
 		],
 		"commands": [
+			{
+				"command": "github.copilot.chat.replay",
+				"title": "enable replay mode",
+				"category": "GitHub Copilot"
+			},
 			{
 				"command": "github.copilot.chat.explain",
 				"title": "%github.copilot.command.explainThis%",
