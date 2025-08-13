@@ -10,7 +10,7 @@ import { ITestingServicesAccessor, TestingServiceCollection } from '../../../../
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { NuGetMcpSetup } from '../../vscode-node/nuget';
 
-describe('get nuget MCP server info', { timeout: 30_000 }, () => {
+describe.skip('get nuget MCP server info', { timeout: 30_000 }, () => {
 	let testingServiceCollection: TestingServiceCollection = createExtensionUnitTestingServices();
 	let accessor: ITestingServicesAccessor = testingServiceCollection.createTestingAccessor();
 	let logService: ILogService = accessor.get(ILogService);

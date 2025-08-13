@@ -139,6 +139,20 @@ suite('AgentPrompt', () => {
 			history: [],
 			query: 'hello',
 			tools: {
+				availableTools: toolsService.tools.filter(tool => tool.name !== ToolName.ApplyPatch && tool.name !== ToolName.MultiReplaceString),
+				toolInvocationToken: null as never,
+				toolReferences: [],
+			}
+		}, undefined)).toMatchSnapshot();
+	});
+
+	test('all tools, replace_string/multi_replace_string/insert_edit', async () => {
+		const toolsService = accessor.get(IToolsService);
+		expect(await agentPromptToString(accessor, {
+			chatVariables: new ChatVariablesCollection(),
+			history: [],
+			query: 'hello',
+			tools: {
 				availableTools: toolsService.tools.filter(tool => tool.name !== ToolName.ApplyPatch),
 				toolInvocationToken: null as never,
 				toolReferences: [],
