@@ -11,7 +11,7 @@ import { INotebookService } from '../../../platform/notebook/common/notebookServ
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
-import { EndOfLine, Position, Range, WorkspaceEdit } from '../../../vscodeTypes';
+import { EndOfLine, Position, Range, TextEdit } from '../../../vscodeTypes';
 
 // Simplified Hunk type for the patch
 interface Hunk {
@@ -392,15 +392,15 @@ export async function applyEdit(
 	uri: URI,
 	old_string: string,
 	new_string: string,
-	workspaceEdit: WorkspaceEdit,
 	workspaceService: IWorkspaceService,
 	notebookService: INotebookService,
 	alternativeNotebookContent: IAlternativeNotebookContentService,
 	languageModel: LanguageModelChat | undefined
 
-): Promise<{ patch: Hunk[]; updatedFile: string }> {
+): Promise<{ patch: Hunk[]; updatedFile: string; edits: TextEdit[] }> {
 	let originalFile: string;
 	let updatedFile: string;
+	const edits: TextEdit[] = [];
 	const filePath = uri.toString();
 
 	try {
@@ -421,7 +421,7 @@ export async function applyEdit(
 			}
 			// Create new file case
 			updatedFile = new_string;
-			workspaceEdit.insert(uri, new Position(0, 0), new_string);
+			edits.push(TextEdit.insert(new Position(0, 0), new_string));
 		} else {
 			// Edit existing file case
 			if (new_string === '') {
@@ -435,7 +435,7 @@ export async function applyEdit(
 						if (result.editPosition.length) {
 							const [start, end] = result.editPosition[0];
 							const range = new Range(document.positionAt(start), document.positionAt(end));
-							workspaceEdit.delete(uri, range);
+							edits.push(TextEdit.delete(range));
 						}
 					} else {
 						const suggestion = result?.suggestion || 'The string to replace must match exactly.';
@@ -456,7 +456,7 @@ export async function applyEdit(
 					if (result.editPosition.length) {
 						const [start, end] = result.editPosition[0];
 						const range = new Range(document.positionAt(start), document.positionAt(end));
-						workspaceEdit.delete(uri, range);
+						edits.push(TextEdit.delete(range));
 					}
 				}
 			} else {
@@ -481,7 +481,7 @@ export async function applyEdit(
 					if (result.editPosition.length) {
 						const [start, end] = result.editPosition[0];
 						const range = new Range(document.positionAt(start), document.positionAt(end));
-						workspaceEdit.replace(uri, range, new_string);
+						edits.push(TextEdit.replace(range, new_string));
 					}
 
 					// If we used similarity matching, add a warning
@@ -506,7 +506,7 @@ export async function applyEdit(
 			newStr: updatedFile,
 		});
 
-		return { patch, updatedFile };
+		return { patch, updatedFile, edits };
 	} catch (error) {
 		// If the file doesn't exist and we're creating a new file with empty oldString
 		if (old_string === '' && error.code === 'ENOENT') {
@@ -519,7 +519,8 @@ export async function applyEdit(
 				newStr: updatedFile,
 			});
 
-			return { patch, updatedFile };
+			edits.push(TextEdit.insert(new Position(0, 0), new_string));
+			return { patch, updatedFile, edits };
 		}
 
 		if (error instanceof EditError) {

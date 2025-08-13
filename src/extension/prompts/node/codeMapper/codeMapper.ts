@@ -43,7 +43,7 @@ import { isEqual } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { Position, Range, TextEdit } from '../../../../vscodeTypes';
+import { NotebookEdit, Position, Range, TextEdit } from '../../../../vscodeTypes';
 import { OutcomeAnnotation, OutcomeAnnotationLabel } from '../../../inlineChat/node/promptCraftingTypes';
 import { Lines, LinesEdit } from '../../../prompt/node/editGeneration';
 import { LineOfText, PartialAsyncTextReader } from '../../../prompt/node/streamingEdits';
@@ -57,6 +57,20 @@ import { findEdit, getCodeBlock, iterateSectionsForResponse, Marker, Patch, Sect
 export type ICodeMapperDocument = TextDocumentSnapshot | NotebookDocumentSnapshot;
 
 export async function processFullRewriteNotebook(document: NotebookDocument, inputStream: string | AsyncIterable<LineOfText>, outputStream: MappedEditsResponseStream, alternativeNotebookEditGenerator: IAlternativeNotebookContentEditGenerator, telemetryOptions: NotebookEditGenerationTelemtryOptions, token: CancellationToken): Promise<void> {
+	for await (const edit of processFullRewriteNotebookEdits(document, inputStream, alternativeNotebookEditGenerator, telemetryOptions, token)) {
+		if (Array.isArray(edit)) {
+			outputStream.textEdit(edit[0], edit[1]);
+		} else {
+			outputStream.notebookEdit(document.uri, edit); // changed this.outputStream to outputStream
+		}
+	}
+
+	return undefined;
+}
+
+export type CellOrNotebookEdit = NotebookEdit | [Uri, TextEdit[]];
+
+export async function* processFullRewriteNotebookEdits(document: NotebookDocument, inputStream: string | AsyncIterable<LineOfText>, alternativeNotebookEditGenerator: IAlternativeNotebookContentEditGenerator, telemetryOptions: NotebookEditGenerationTelemtryOptions, token: CancellationToken): AsyncIterable<CellOrNotebookEdit> {
 	// emit start of notebook
 	const cellMap = new ResourceMap<NotebookCell>();
 	for await (const edit of alternativeNotebookEditGenerator.generateNotebookEdits(document, inputStream, telemetryOptions, token)) {
@@ -70,10 +84,10 @@ export async function processFullRewriteNotebook(document: NotebookDocument, inp
 						continue;
 					}
 				}
-				outputStream.textEdit(cellUri, edit[1]);
+				yield [cellUri, edit[1]];
 			}
 		} else {
-			outputStream.notebookEdit(document.uri, edit); // changed this.outputStream to outputStream
+			yield edit;
 		}
 	}
 

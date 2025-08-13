@@ -4,145 +4,99 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
-import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
-import { IBuildPromptContext } from '../../prompt/common/intents';
+import { ResourceMap } from '../../../util/vs/base/common/map';
+import { URI } from '../../../util/vs/base/common/uri';
+import { CellOrNotebookEdit } from '../../prompts/node/codeMapper/codeMapper';
 import { ToolName } from '../common/toolNames';
-import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { IToolsService } from '../common/toolsService';
-import { IReplaceStringToolParams, ReplaceStringTool } from './replaceStringTool';
+import { ToolRegistry } from '../common/toolsRegistry';
+import { AbstractReplaceStringTool } from './abstractReplaceStringTool';
+import { IReplaceStringToolParams } from './replaceStringTool';
 
 export interface IMultiReplaceStringToolParams {
 	explanation: string;
 	replacements: IReplaceStringToolParams[];
 }
 
-export interface IMultiReplaceResult {
-	totalReplacements: number;
-	successfulReplacements: number;
-	failedReplacements: number;
-	results: Array<{
-		operation: IReplaceStringToolParams;
-		success: boolean;
-		error?: string;
-	}>;
-}
-
-export class MultiReplaceStringTool implements ICopilotTool<IMultiReplaceStringToolParams> {
+export class MultiReplaceStringTool extends AbstractReplaceStringTool<IMultiReplaceStringToolParams> {
 	public static toolName = ToolName.MultiReplaceString;
 
-	private _promptContext: IBuildPromptContext | undefined;
-
-	constructor(
-		@IInstantiationService protected readonly instantiationService: IInstantiationService,
-		@IToolsService protected readonly toolsService: IToolsService
-	) { }
-
-	// Simplified version that uses a more direct approach
-	async invoke(options: any, token: any) {
-		// Cast the options to the correct type to work around TypeScript issues
-		const typedOptions = options as vscode.LanguageModelToolInvocationOptions<IMultiReplaceStringToolParams> & { input: IMultiReplaceStringToolParams };
-
-		// Validate input
-		if (!typedOptions.input.replacements || !Array.isArray(typedOptions.input.replacements) || typedOptions.input.replacements.length === 0) {
-			throw new Error('Invalid input: replacements array is required and must contain at least one replacement operation');
+	async invoke(options: vscode.LanguageModelToolInvocationOptions<IMultiReplaceStringToolParams>, token: vscode.CancellationToken) {
+		if (!options.input.replacements || !Array.isArray(options.input.replacements)) {
+			throw new Error('Invalid input, no replacements array');
 		}
 
-		if (!this._promptContext?.stream) {
-			throw new Error('Invalid context: stream is required');
-		}
+		const prepared = await Promise.all(options.input.replacements.map(r => this.prepareEditsForFile(options, r, token)));
 
-		const results: IMultiReplaceResult = {
-			totalReplacements: typedOptions.input.replacements.length,
-			successfulReplacements: 0,
-			failedReplacements: 0,
-			results: []
-		};
+		for (let i = 0; i < prepared.length; i++) {
+			const e1 = prepared[i];
+			if (!e1.generatedEdit.success) {
+				continue;
+			}
 
-		// Get the ReplaceStringTool instance
-		const replaceStringTool = this.instantiationService.createInstance(ReplaceStringTool);
-
-		// Apply replacements sequentially
-		for (let i = 0; i < typedOptions.input.replacements.length; i++) {
-			const replacement = typedOptions.input.replacements[i];
-
-			try {
-				// Validate individual replacement
-				if (!replacement.filePath || replacement.oldString === undefined || replacement.newString === undefined) {
-					throw new Error(`Invalid replacement at index ${i}: filePath, oldString, and newString are required`);
+			for (let k = i + 1; k < prepared.length; k++) {
+				const e2 = prepared[k];
+				// Merge successful edits of the same type and URI so that edits come in
+				// a single correct batch and positions aren't later clobbered.
+				if (!e2.generatedEdit.success || e2.uri.toString() !== e1.uri.toString() || (!!e2.generatedEdit.notebookEdits !== !!e1.generatedEdit.notebookEdits)) {
+					continue;
 				}
 
-				// Create a new tool invocation options for this replacement
-				const replaceOptions = {
-					...typedOptions,
-					input: replacement
-				};
+				prepared.splice(k, 1);
+				k--;
 
-				// Set the prompt context for the replace tool
-				await replaceStringTool.resolveInput(replacement, this._promptContext);
-
-				// Invoke the replace string tool
-				await replaceStringTool.invoke(replaceOptions as any, token);
-
-				// Record success
-				results.results.push({
-					operation: replacement,
-					success: true
-				});
-				results.successfulReplacements++;
-
-			} catch (error) {
-				// Record failure
-				const errorMessage = error instanceof Error ? error.message : String(error);
-				results.results.push({
-					operation: replacement,
-					success: false,
-					error: errorMessage
-				});
-				results.failedReplacements++;
-
-				// Add error information to the stream using the correct method
-				(this._promptContext.stream as any).markdown(`\n⚠️ **Failed replacement ${i + 1}:**\n`);
-				(this._promptContext.stream as any).markdown(`- File: \`${replacement.filePath}\`\n`);
-				(this._promptContext.stream as any).markdown(`- Error: ${errorMessage}\n\n`);
+				if (e2.generatedEdit.notebookEdits) {
+					e1.generatedEdit.notebookEdits = mergeNotebookAndTextEdits(e1.generatedEdit.notebookEdits!, e2.generatedEdit.notebookEdits);
+				} else {
+					e1.generatedEdit.textEdits = e1.generatedEdit.textEdits.concat(e2.generatedEdit.textEdits);
+					e1.generatedEdit.textEdits.sort(textEditSorter);
+				}
 			}
 		}
 
-		// Provide summary using the correct method
-		(this._promptContext.stream as any).markdown(`\n## Multi-Replace Summary\n\n`);
-		(this._promptContext.stream as any).markdown(`- **Total operations:** ${results.totalReplacements}\n`);
-		(this._promptContext.stream as any).markdown(`- **Successful:** ${results.successfulReplacements}\n`);
-		(this._promptContext.stream as any).markdown(`- **Failed:** ${results.failedReplacements}\n\n`);
-
-		if (results.failedReplacements > 0) {
-			(this._promptContext.stream as any).markdown(`### Failed Operations:\n\n`);
-			results.results.filter(r => !r.success).forEach((result, index) => {
-				if (this._promptContext?.stream) {
-					(this._promptContext.stream as any).markdown(`${index + 1}. **${result.operation.filePath}**\n`);
-					(this._promptContext.stream as any).markdown(`   - Error: ${result.error || 'Unknown error'}\n`);
-					(this._promptContext.stream as any).markdown(`   - Old string: \`${result.operation.oldString.substring(0, 100)}${result.operation.oldString.length > 100 ? '...' : ''}\`\n\n`);
-				}
-			});
-		}
-
-		// Return a simple result
-		return new LanguageModelToolResult([
-			new LanguageModelTextPart(
-				`Multi-replace operation completed: ${results.successfulReplacements}/${results.totalReplacements} operations successful.`
-			)
-		]);
+		return this.applyAllEdits(options, prepared, token);
 	}
 
-	async resolveInput(input: IMultiReplaceStringToolParams, promptContext: IBuildPromptContext): Promise<IMultiReplaceStringToolParams> {
-		this._promptContext = promptContext;
-		return input;
-	}
-
-	prepareInvocation(options: any, token: any): any {
-		return {
-			presentation: 'hidden'
-		};
+	protected override toolName(): ToolName {
+		return MultiReplaceStringTool.toolName;
 	}
 }
 
 ToolRegistry.registerTool(MultiReplaceStringTool);
+
+function textEditSorter(a: vscode.TextEdit, b: vscode.TextEdit) {
+	return b.range.end.compareTo(a.range.end) || b.range.start.compareTo(a.range.start);
+}
+
+/**
+ * Merge two arrays of notebook edits or text edits grouped by URI.
+ * Text edits for the same URI are concatenated and sorted in reverse file order (descending by start position).
+ */
+function mergeNotebookAndTextEdits(left: CellOrNotebookEdit[], right: CellOrNotebookEdit[]): CellOrNotebookEdit[] {
+	const notebookEdits: vscode.NotebookEdit[] = [];
+	const textEditsByUri = new ResourceMap<vscode.TextEdit[]>();
+
+	const add = (item: vscode.NotebookEdit | [URI, vscode.TextEdit[]]) => {
+		if (Array.isArray(item)) {
+			const [uri, edits] = item;
+			let bucket = textEditsByUri.get(uri);
+			if (!bucket) {
+				bucket = [];
+				textEditsByUri.set(uri, bucket);
+			}
+			bucket.push(...edits);
+		} else {
+			notebookEdits.push(item);
+		}
+	};
+
+	left.forEach(add);
+	right.forEach(add);
+
+	const mergedTextEditTuples: [URI, vscode.TextEdit[]][] = [];
+	for (const [uri, edits] of textEditsByUri.entries()) {
+		edits.sort(textEditSorter);
+		mergedTextEditTuples.push([uri, edits]);
+	}
+
+	return [...notebookEdits, ...mergedTextEditTuples];
+}
