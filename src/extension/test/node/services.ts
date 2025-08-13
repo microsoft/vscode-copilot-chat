@@ -13,6 +13,7 @@ import { DiffServiceImpl } from '../../../platform/diff/node/diffServiceImpl';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IModelConfig } from '../../../platform/endpoint/test/node/openaiCompatibleEndpoint';
 import { TestEndpointProvider } from '../../../platform/endpoint/test/node/testEndpointProvider';
+import { ILogService } from '../../../platform/log/common/logService';
 import { EditLogService, IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IMultiFileEditInternalTelemetryService, MultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
@@ -26,6 +27,7 @@ import { ITerminalService, NullTerminalService } from '../../../platform/termina
 import { TestingServiceCollection, createPlatformServices } from '../../../platform/test/node/services';
 import { SimulationAlternativeNotebookContentService, SimulationNotebookService, SimulationNotebookSummaryTracker } from '../../../platform/test/node/simulationWorkspaceServices';
 import { NullTestProvider } from '../../../platform/testing/common/nullTestProvider';
+import { TestLogService } from '../../../platform/testing/common/testLogService';
 import { ITestProvider } from '../../../platform/testing/common/testProvider';
 import { IWorkspaceChunkSearchService, NullWorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
@@ -66,6 +68,7 @@ export function createExtensionUnitTestingServices(currentTestRunInfo?: any, mod
 	);
 	testingServiceCollection.define(IGithubCodeSearchService, new SyncDescriptor(GithubCodeSearchService));
 	testingServiceCollection.define(ITestProvider, new NullTestProvider());
+	testingServiceCollection.define(ILogService, new SyncDescriptor(TestLogService));
 	testingServiceCollection.define(IAdoCodeSearchService, new SyncDescriptor(AdoCodeSearchService));
 	testingServiceCollection.define(IWorkspaceChunkSearchService, new SyncDescriptor(NullWorkspaceChunkSearchService));
 	testingServiceCollection.define(IPromptVariablesService, new SyncDescriptor(NullPromptVariablesService));

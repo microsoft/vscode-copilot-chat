@@ -57,10 +57,13 @@ export class EditFileResult extends PromptElement<IEditFileResultProps> {
 		const editsWithDiagnostics: { file: string; diagnostics: PromptElement }[] = [];
 		let totalNewDiagnostics = 0;
 		let filesWithNewDiagnostics = 0;
-
+		let notebookEditFailures = 0;
 		for (const file of this.props.files) {
 			if (file.error) {
 				editingErrors.push(file.error);
+				if (file.isNotebook) {
+					notebookEditFailures++;
+				}
 				continue;
 			}
 
@@ -93,6 +96,18 @@ export class EditFileResult extends PromptElement<IEditFileResultProps> {
 			await this.sendEditFileResultTelemetry(totalNewDiagnostics, filesWithNewDiagnostics);
 		}
 
+		let retryMessage = <>You may use the {ToolName.EditFile} tool to retry these edits.</>;
+		if (!notebookEditFailures) {
+			// No notebook files failed to edit
+		} else if (notebookEditFailures === editingErrors.length) {
+			// All notebook files failed to edit
+			retryMessage = <>You may use the {ToolName.EditNotebook} tool to retry editing the Notebook files.</>;
+		} else if (notebookEditFailures && notebookEditFailures !== editingErrors.length) {
+			retryMessage = <>
+				You may use the {ToolName.EditFile} tool to retry these edits except for Notebooks.<br />
+				You may use the {ToolName.EditNotebook} tool to retry editing the Notebook files.
+			</>;
+		}
 		return (
 			<>
 				{this.props.healed && <>There was an error applying your original patch, and it was modified to the following:<br />{this.props.healed}<br /></>}
@@ -101,7 +116,7 @@ export class EditFileResult extends PromptElement<IEditFileResultProps> {
 						{successfullyEditedFiles.join('\n')}<br /></>}
 				{editingErrors.length > 0 && <>
 					{editingErrors.join('\n')}
-					{this.props.model && modelNeedsStrongReplaceStringHint(this.props.model) && <><br /><br />You may use the {ToolName.EditFile} tool to retry these edits.</>}
+					{this.props.model && modelNeedsStrongReplaceStringHint(this.props.model) && <><br /><br />{retryMessage}</>}
 				</>}
 				{editsWithDiagnostics.length > 0 &&
 					editsWithDiagnostics.map(edit => {
