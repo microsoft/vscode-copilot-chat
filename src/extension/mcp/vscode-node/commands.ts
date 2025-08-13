@@ -2,10 +2,12 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+
 import * as vscode from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { JsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { extractCodeBlocks } from '../../../util/common/markdown';
 import { mapFindFirst } from '../../../util/vs/base/common/arraysFind';
@@ -21,7 +23,7 @@ import { ChatLocation as VsCodeChatLocation } from '../../../vscodeTypes';
 import { Conversation, Turn } from '../../prompt/common/conversation';
 import { McpToolCallingLoop } from './mcpToolCallingLoop';
 import { McpPickRef } from './mcpToolCallingTools';
-import { getNuGetPackageMetadata } from './nuget';
+import { NuGetMcpSetup } from './nuget';
 
 type PackageType = 'npm' | 'pip' | 'docker' | 'nuget';
 
@@ -114,6 +116,7 @@ export class McpSetupCommands extends Disposable {
 	constructor(
 		@ITelemetryService readonly telemetryService: ITelemetryService,
 		@ILogService readonly logService: ILogService,
+		@IFetcherService readonly fetcherService: IFetcherService,
 		@IInstantiationService readonly instantiationService: IInstantiationService,
 	) {
 		super();
@@ -159,7 +162,7 @@ export class McpSetupCommands extends Disposable {
 		}));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.validatePackage', async (args: IValidatePackageArgs): Promise<ValidatePackageResult> => {
 			const sw = new StopWatch();
-			const result = await McpSetupCommands.validatePackageRegistry(args, this.logService);
+			const result = await McpSetupCommands.validatePackageRegistry(args, this.logService, this.fetcherService);
 			if (result.state === 'ok') {
 				this.enqueuePendingSetup(args, result, sw);
 			}
@@ -298,10 +301,10 @@ Error: ${error}`);
 		this.pendingSetup = { cts, canPrompt, done, validateArgs, pendingArgs, stopwatch: sw };
 	}
 
-	public static async validatePackageRegistry(args: { type: PackageType; name: string }, logService: ILogService): Promise<ValidatePackageResult> {
+	public static async validatePackageRegistry(args: { type: PackageType; name: string }, logService: ILogService, fetcherServer: IFetcherService): Promise<ValidatePackageResult> {
 		try {
 			if (args.type === 'npm') {
-				const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(args.name)}`);
+				const response = await fetcherServer.fetch(`https://registry.npmjs.org/${encodeURIComponent(args.name)}`, { method: 'GET' });
 				if (!response.ok) {
 					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.npmPackageNotFound", "Package {0} not found in npm registry", args.name) };
 				}
@@ -315,7 +318,7 @@ Error: ${error}`);
 					readme: data.readme,
 				};
 			} else if (args.type === 'pip') {
-				const response = await fetch(`https://pypi.org/pypi/${encodeURIComponent(args.name)}/json`);
+				const response = await fetcherServer.fetch(`https://pypi.org/pypi/${encodeURIComponent(args.name)}/json`, { method: 'GET' });
 				if (!response.ok) {
 					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.pythonPackageNotFound", "Package {0} not found in PyPI registry", args.name) };
 				}
@@ -331,7 +334,8 @@ Error: ${error}`);
 					readme: data.info?.description
 				};
 			} else if (args.type === 'nuget') {
-				return await getNuGetPackageMetadata(args.name, logService);
+				const nuGetMcpSetup = new NuGetMcpSetup(logService);
+				return await nuGetMcpSetup.getNuGetPackageMetadata(args.name);
 			} else if (args.type === 'docker') {
 				// Docker Hub API uses namespace/repository format
 				// Handle both formats: 'namespace/repository' or just 'repository' (assumes 'library/' namespace)
@@ -339,7 +343,7 @@ Error: ${error}`);
 					? args.name.split('/', 2)
 					: ['library', args.name];
 
-				const response = await fetch(`https://hub.docker.com/v2/repositories/${encodeURIComponent(namespace)}/${encodeURIComponent(repository)}`);
+				const response = await fetcherServer.fetch(`https://hub.docker.com/v2/repositories/${encodeURIComponent(namespace)}/${encodeURIComponent(repository)}`, { method: 'GET' });
 				if (!response.ok) {
 					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.dockerRepositoryNotFound", "Docker image {0} not found in Docker Hub registry", args.name) };
 				}

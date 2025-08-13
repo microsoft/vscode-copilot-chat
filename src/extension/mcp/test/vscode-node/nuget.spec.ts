@@ -3,21 +3,74 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { describe, expect, it } from 'vitest';
+import path from 'path';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { ITestingServicesAccessor, TestingServiceCollection } from '../../../../platform/test/node/services';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
-import { getNuGetPackageMetadata } from '../../vscode-node/nuget';
+import { NuGetMcpSetup } from '../../vscode-node/nuget';
 
 describe('get nuget MCP server info', { timeout: 30_000 }, () => {
-	const testingServiceCollection = createExtensionUnitTestingServices();
-	const accessor = testingServiceCollection.createTestingAccessor();
-	const logService = accessor.get(ILogService);
+	let testingServiceCollection: TestingServiceCollection = createExtensionUnitTestingServices();
+	let accessor: ITestingServicesAccessor = testingServiceCollection.createTestingAccessor();
+	let logService: ILogService = accessor.get(ILogService);
+	let nuget: NuGetMcpSetup;
+
+	beforeEach(() => {
+		testingServiceCollection = createExtensionUnitTestingServices();
+		accessor = testingServiceCollection.createTestingAccessor();
+		logService = accessor.get(ILogService);
+		nuget = new NuGetMcpSetup(
+			logService,
+			{ command: 'dotnet', args: [] }, // allow dotnet command to be overridden for testing
+			path.join(__dirname, 'fixtures', 'nuget') // file based package source for testing
+		);
+	});
+
+	it('returns server.json', async () => {
+		const result = await nuget.getNuGetPackageMetadata('Knapcode.SampleMcpServer');
+		expect(result.state).toBe('ok');
+		if (result.state === 'ok') {
+			expect(result.getServerManifest).toBeDefined();
+			if (result.getServerManifest) {
+				const serverManifest = await result.getServerManifest(Promise.resolve());
+				expect(serverManifest).toBeDefined();
+				expect(serverManifest.packages[0].name).toBe('Knapcode.SampleMcpServer');
+				expect(serverManifest.packages[0].version).toBe('0.6.0-beta');
+				expect(serverManifest.packages[0].package_arguments.length).toBe(2);
+			} else {
+				expect.fail();
+			}
+		} else {
+			expect.fail();
+		}
+	});
+
+	it('returns package metadata', async () => {
+		const result = await nuget.getNuGetPackageMetadata('basetestpackage.dotnettool');
+		expect(result.state).toBe('ok');
+		if (result.state === 'ok') {
+			expect(result.name).toBe('BaseTestPackage.DotnetTool');
+			expect(result.version).toBe('1.0.0');
+		} else {
+			expect.fail();
+		}
+	});
+
+	it('handles missing package', async () => {
+		const result = await nuget.getNuGetPackageMetadata('BaseTestPackage.DoesNotExist');
+		expect(result.state).toBe('error');
+		if (result.state === 'error') {
+			expect(result.error).toBeDefined();
+			expect(result.errorType).toBe('NotFound');
+		} else {
+			expect.fail();
+		}
+	});
 
 	it('handles missing dotnet', async () => {
-		const result = await getNuGetPackageMetadata(
-			'NuGet.Mcp.Server',
-			logService,
-			{ command: 'dotnet-missing', args: [] });
+		nuget.dotnet.command = 'dotnet-missing';
+		const result = await nuget.getNuGetPackageMetadata('Knapcode.SampleMcpServer');
 		expect(result.state).toBe('error');
 		if (result.state === 'error') {
 			expect(result.errorType).toBe('MissingCommand');
@@ -29,10 +82,9 @@ describe('get nuget MCP server info', { timeout: 30_000 }, () => {
 	});
 
 	it('handles old dotnet version', async () => {
-		const result = await getNuGetPackageMetadata(
-			'NuGet.Mcp.Server',
-			logService,
-			{ command: 'node', args: ['-e', 'console.log("9.0.0")', '--'] });
+		nuget.dotnet.command = 'node';
+		nuget.dotnet.args = ['-e', 'console.log("9.0.0")', '--'];
+		const result = await nuget.getNuGetPackageMetadata('Knapcode.SampleMcpServer');
 		expect(result.state).toBe('error');
 		if (result.state === 'error') {
 			expect(result.errorType).toBe('BadCommandVersion');
