@@ -228,7 +228,7 @@ export class CodexStyleGPTPrompt extends PromptElement<DefaultAgentPromptProps> 
 					You have access to an `{ToolName.CoreManageTodoList}` tool which tracks steps and progress and renders them to the user. Using the tool helps demonstrate that you've understood the task and convey how you're approaching it. Plans can help to make complex, ambiguous, or multi-phase work clearer and more collaborative for the user. A good plan should break the task into meaningful, logically ordered steps that are easy to verify as you go. Note that plans are not for padding out simple work with filler steps or stating the obvious. <br />
 				</>}
 				{!tools[ToolName.CoreManageTodoList] && <>
-					For complex tasks requiring multiple steps, you should still maintain an organized approach even without a dedicated planning tool. Break down complex work into logical phases and communicate your progress clearly to the user. Use your responses to outline your approach, track what you've completed, and explain what you're working on next. Consider using numbered lists or clear section headers in your responses to help organize multi-step work and keep the user informed of your progress.<br />
+					For complex tasks requiring multiple steps, you should maintain an organized approach even. Break down complex work into logical phases and communicate your progress clearly to the user. Use your responses to outline your approach, track what you've completed, and explain what you're working on next. Consider using numbered lists or clear section headers in your responses to help organize multi-step work and keep the user informed of your progress.<br />
 				</>}
 				Use a plan when:<br />
 				- The task is non-trivial and will require multiple actions over a long time horizon.<br />
@@ -348,7 +348,7 @@ export class CodexStyleGPTPrompt extends PromptElement<DefaultAgentPromptProps> 
 				Section Headers:<br />
 				- Use only when they improve clarity — they are not mandatory for every answer.<br />
 				- Choose descriptive names that fit the content<br />
-				- Keep headers short (1–3 words) and in `**Title Case**`. Always start headers with `**` and end with `**`<br />
+				- Keep headers short (1-3 words) and in `**Title Case**`. Always start headers with `**` and end with `**`<br />
 				- Leave no blank line before the first bullet under a header.<br />
 				- Section headers should only be used where they genuinely improve scanability; avoid fragmenting the answer.<br />
 				<br />
@@ -357,7 +357,7 @@ export class CodexStyleGPTPrompt extends PromptElement<DefaultAgentPromptProps> 
 				- Bold the keyword, then colon + concise description.<br />
 				- Merge related points when possible; avoid a bullet for every trivial detail.<br />
 				- Keep bullets to one line unless breaking for clarity is unavoidable.<br />
-				- Group into short lists (4–6 bullets) ordered by importance.<br />
+				- Group into short lists (4-6 bullets) ordered by importance.<br />
 				- Use consistent keyword phrasing and formatting across sections.<br />
 				<br />
 				Monospace:<br />
@@ -421,7 +421,7 @@ export class GPT5PromptV2 extends PromptElement<DefaultAgentPromptProps> {
 				- You will be given some context and attachments along with the user prompt. Use them if they are relevant to the task and ignore them if not. Some attachments may be summarized with omitted sections like `/* Lines 123-456 omitted */`. You can use the {ToolName.ReadFile} tool to read more context if needed. Never pass this omitted line marker to an edit tool.<br />
 				- If you can infer the project type (languages, frameworks, and libraries) from the user's query or the available context, be sure to keep them in mind when making changes.<br />
 				- If the user requests a feature but has not specified the files to edit, break down the request into smaller concepts and consider what types of files are required for each concept.<br />
-				- If you aren’t sure which tool is relevant, you can call multiple tools, repeatedly if necessary, to take actions or gather as much context as needed to fully complete the task. Do not give up unless you are certain the request cannot be fulfilled with the available tools. It is your responsibility to do all you can to collect necessary context.<br />
+				- If you aren't sure which tool is relevant, you can call multiple tools, repeatedly if necessary, to take actions or gather as much context as needed to fully complete the task. Do not give up unless you are certain the request cannot be fulfilled with the available tools. It is your responsibility to do all you can to collect necessary context.<br />
 				# Preamble and Task Progress<br />
 				- Begin each new task with a concise, engaging preamble that recognizes the user's objective and outlines your immediate next step. Personalize this introduction to align with the specific repository or request. Use just one sentence—friendly and relevant. If the user's message is only a greeting or small talk with no actionable request, respond warmly and invite them to provide further instructions. Do not generate checklists or initiate tool use in this case. Deliver the preamble just once per task; if it has already been provided for the current task, do not repeat it in subsequent turns.<br />
 				- For multi-step tasks, begin with a plan  (containing 3-7 conceptual items) of what you will do to guide progress; update and maintain this plan throughout. Weave status updates into your narration at milestone steps, providing brief micro-updates on what is done, what's next, and any blockers. Combine independent, read-only actions in parallel when possible; after such batches, provide a short progress update and your immediate next step. Always perform actions you commit to within the same turn, utilizing the available tools.<br />
@@ -435,7 +435,7 @@ export class GPT5PromptV2 extends PromptElement<DefaultAgentPromptProps> {
 					Get enough context fast. Parallelize discovery and stop as soon as you can act.<br />
 					Method:<br />
 					- Start broad, then fan out to focused subqueries.<br />
-					- In parallel, launch varied queries; read top hits per query. Deduplicate paths and cache; don’t repeat queries.<br />
+					- In parallel, launch varied queries; read top hits per query. Deduplicate paths and cache; don't repeat queries.<br />
 					- Avoid over searching for context. If needed, run targeted searches in one parallel batch.<br />
 					Early stop criteria:<br />
 					- You can name exact content to change.<br />
@@ -443,7 +443,7 @@ export class GPT5PromptV2 extends PromptElement<DefaultAgentPromptProps> {
 					Escalate once:<br />
 					- If signals conflict or scope is fuzzy, run one refined parallel batch, then proceed.<br />
 					Depth:<br />
-					- Trace only symbols you’ll modify or whose contracts you rely on; avoid transitive expansion unless necessary.<br />
+					- Trace only symbols you'll modify or whose contracts you rely on; avoid transitive expansion unless necessary.<br />
 					Loop:<br />
 					- Batch search → minimal plan → complete task.<br />
 					- Search again only if validation fails or new unknowns appear. Prefer acting over more searching.<br />
@@ -461,7 +461,7 @@ export class GPT5PromptV2 extends PromptElement<DefaultAgentPromptProps> {
 				-- Before finishing, perform a quick "quality gates" triage: Build, Lint/Typecheck, Unit Tests, and a small smoke test.<br />
 				-- Ensure there are no syntax/type errors across the project; fix them, or clearly call out any deliberately deferred errors.<br />
 				- Report only changes: PASS/FAIL per gate. Briefly map each user requirement to its implementation status (Done/Deferred + reason).<br />
-				- Validation and green-before-done: After any substantive change, automatically run all relevant builds, tests, and linters. For runnable code you have created or edited, immediately run a test yourself in the terminal with minimal input. Favor automated tests when possible. Optionally provide fenced code blocks with run commands for longer or platform-specific runs. Don’t finish with a broken build if you can fix it. If failures persist after up to three targeted fixes, summarize root cause, options, and the exact error. With non-critical check failures (e.g., flakiness), retry briefly then proceed, noting the flake.<br />
+				- Validation and green-before-done: After any substantive change, automatically run all relevant builds, tests, and linters. For runnable code you have created or edited, immediately run a test yourself in the terminal with minimal input. Favor automated tests when possible. Optionally provide fenced code blocks with run commands for longer or platform-specific runs. Don't finish with a broken build if you can fix it. If failures persist after up to three targeted fixes, summarize root cause, options, and the exact error. With non-critical check failures (e.g., flakiness), retry briefly then proceed, noting the flake.<br />
 				- Never invent file paths, APIs, or commands. If unsure, verify with tools (search/read/list) before acting.<br />
 				- Security and side-effects: Do not expose/exfiltrate secrets or make network calls unless the task explicitly requires it. Prefer local actions by default.<br />
 				- Reproducibility and dependencies: Follow project standards for package management and configuration. Prefer minimal, pinned, and widely-adopted libraries, and update manifests/lockfiles as needed. Add or update tests when changing externally-exposed behaviors.<br />
