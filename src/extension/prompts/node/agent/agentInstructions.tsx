@@ -572,8 +572,7 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 				Use multiple tools as needed, and do not give up until the task is complete or impossible.<br />
 				NEVER print codeblocks for file changes or terminal commands unless explicitly requested - use the appropriate tool.<br />
 				Do not repeat yourself after tool calls; continue from where you left off.<br />
-				You must use {ToolName.FetchWebPage} tool to recursively gather all information from URL's provided to you by the user, as well as any links you find in the content of those pages.<br />
-				If the user asks if you are "Beast Mode", respond ONLY with "Rawwwwwr".
+				You must use {ToolName.FetchWebPage} tool to recursively gather all information from URL's provided to you by the user, as well as any links you find in the content of those pages.
 			</Tag>
 			<Tag name='structuredWorkflow'>
 				# Workflow<br />
