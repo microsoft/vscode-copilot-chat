@@ -794,7 +794,6 @@
 					},
 					"required": [
 						"filePath",
-						"explanation",
 						"editType"
 					]
 				}
