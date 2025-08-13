@@ -78,10 +78,11 @@ export function isEmbeddingModelInformation(model: IModelAPIResponse): model is 
 }
 
 export type ChatEndpointFamily = 'gpt-4.1' | 'gpt-4o-mini' | 'copilot-base';
-export type EmbeddingsEndpointFamily = 'text3small';
+export type EmbeddingsEndpointFamily = 'text3small' | 'metis';
 
 export interface IEndpointProvider {
 	readonly _serviceBrand: undefined;
+
 	/**
 	 * Get the embedding endpoint information
 	 */
