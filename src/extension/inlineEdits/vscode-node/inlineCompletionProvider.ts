@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, Command, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, Position, Range, TextDocument, l10n, Event as vscodeEvent } from 'vscode';
+import { CancellationToken, Command, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, Position, Range, TextDocument, TextDocumentShowOptions, Uri, l10n, Event as vscodeEvent } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
@@ -22,6 +22,7 @@ import { softAssert } from '../../../util/vs/base/common/assert';
 import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
+import { Schemas } from '../../../util/vs/base/common/network';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LineCheck } from '../../inlineChat/vscode-node/inlineChatHint';
@@ -81,6 +82,8 @@ type NesCompletionInfo = LlmCompletionInfo | DiagnosticsCompletionInfo;
 function isLlmCompletionInfo(item: NesCompletionInfo): item is LlmCompletionInfo {
 	return item.source === 'provider';
 }
+
+const GoToNextCellEdit = l10n.t('Go to Next Cell');
 
 
 export class InlineCompletionProviderImpl implements InlineCompletionItemProvider {
@@ -214,9 +217,23 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 			tracer.trace(`using next edit suggestion from ${suggestionInfo.source}`);
 
-			const range = doc.fromOffsetRange(document, result.edit.replaceRange);
+			let range = doc.fromOffsetRange(document, result.edit.replaceRange);
+			let nextDocumentEdit: { uri: Uri; range: Range; label: string; displayRange: Range } | undefined = undefined;
+			if (!range && document.uri.scheme === Schemas.vscodeNotebookCell) {
+				// If we have changes related to other cells, then return that.
+				const cellsWithRange = doc.fromOffsetRange(result.edit.replaceRange).filter(([doc]) => doc !== document);
+				if (cellsWithRange.length) {
+					range = new Range(position, position); // The change will be displayed in the current position
+					nextDocumentEdit = {
+						uri: cellsWithRange[0][0].uri, // There is a change for another cell.
+						range: cellsWithRange[0][1],
+						label: GoToNextCellEdit,
+						displayRange: range // The change will be displayed in the current position
+					};
+				}
+			}
 			if (!range) {
-				tracer.trace('no next edit suggestion for notebook cell');
+				tracer.trace('no next edit suggestion');
 				this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
 				return emptyList;
 			}
@@ -233,10 +250,21 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 					: undefined
 			);
 
-			const displayRange = result.displayLocation ? doc.fromRange(document, toExternalRange(result.displayLocation.range)) : undefined;
-			const displayLocation: InlineCompletionDisplayLocation | undefined = result.displayLocation && displayRange ? {
-				range: displayRange,
-				label: result.displayLocation.label
+			const label = result.displayLocation?.label || nextDocumentEdit?.label;
+			const displayRange = result.displayLocation ? doc.fromRange(document, toExternalRange(result.displayLocation.range)) : nextDocumentEdit?.displayRange;
+			const displayLocation: InlineCompletionDisplayLocation | undefined = displayRange && label ? { range: displayRange, label, } : undefined;
+
+			// If we have a next document edit, then generate the command that will set focus to that document.
+			const commandArgs: TextDocumentShowOptions | undefined = nextDocumentEdit ?
+				{
+					preserveFocus: false,
+					selection: new Range(nextDocumentEdit.range.start, nextDocumentEdit.range.start) // Focus only, not selection
+				} : undefined;
+			const command: Command | undefined = nextDocumentEdit && label && commandArgs ? {
+				command: 'vscode.open',
+				title: label,
+				tooltip: undefined,
+				arguments: [nextDocumentEdit.uri, commandArgs]
 			} : undefined;
 
 			const learnMoreAction: Command = {
@@ -262,13 +290,15 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 				range,
 				insertText: result.edit.newText,
 				showRange,
+				command,
 				action: learnMoreAction,
 				info: suggestionInfo,
-				isInlineEdit: !isInlineCompletion,
+				isInlineEdit: !isInlineCompletion || !!nextDocumentEdit,
 				showInlineEditMenu: !serveAsCompletionsProvider,
 				displayLocation,
 				telemetryBuilder,
 				wasShown: false,
+				uri: nextDocumentEdit?.uri
 			};
 
 			// telemetry
