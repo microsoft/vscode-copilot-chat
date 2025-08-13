@@ -55,7 +55,7 @@ export interface IPrepareEdit {
 
 
 export abstract class AbstractReplaceStringTool<T extends { explanation: string }> implements ICopilotTool<T> {
-	private _promptContext: IBuildPromptContext | undefined;
+	protected _promptContext: IBuildPromptContext | undefined;
 
 	constructor(
 		@IPromptPathRepresentationService protected readonly promptPathRepresentationService: IPromptPathRepresentationService,
@@ -68,7 +68,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		@IAlternativeNotebookContentEditGenerator private readonly alternativeNotebookEditGenerator: IAlternativeNotebookContentEditGenerator,
 		@IEditSurvivalTrackerService private readonly _editSurvivalTrackerService: IEditSurvivalTrackerService,
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
-		@ITelemetryService private readonly telemetryService: ITelemetryService,
+		@ITelemetryService protected readonly telemetryService: ITelemetryService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IExperimentationService private readonly experimentationService: IExperimentationService
 	) { }
@@ -382,7 +382,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		);
 	}
 
-	private async modelForTelemetry(options: vscode.LanguageModelToolInvocationOptions<T>) {
+	protected async modelForTelemetry(options: vscode.LanguageModelToolInvocationOptions<T>) {
 		return options.model && (await this.endpointProvider.getChatEndpoint(options.model)).model;
 	}
 

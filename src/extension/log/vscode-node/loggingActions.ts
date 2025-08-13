@@ -34,6 +34,7 @@ import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/d
 import { FetcherService } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
 import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
 import { shuffle } from '../../../util/vs/base/common/arrays';
+import { EXTENSION_ID } from '../../common/constants';
 
 export interface ProxyAgentLog {
 	trace(message: string, ...args: any[]): void;
@@ -342,7 +343,7 @@ function getProxyEnvVariables() {
 	return res.length ? `\n\nEnvironment Variables:${res.join('')}` : '';
 }
 
-export function collectFetcherTelemetry(accessor: ServicesAccessor): void {
+export function collectFetcherTelemetry(accessor: ServicesAccessor, error: any): void {
 	const extensionContext = accessor.get(IVSCodeExtensionContext);
 	const fetcherService = accessor.get(IFetcherService);
 	const envService = accessor.get(IEnvService);
@@ -357,7 +358,6 @@ export function collectFetcherTelemetry(accessor: ServicesAccessor): void {
 		return;
 	}
 
-	const currentUserAgentLibrary = fetcherService.getUserAgentLibrary();
 	if (!configurationService.getExperimentBasedConfig(ConfigKey.Internal.DebugCollectFetcherTelemetry, expService)) {
 		return;
 	}
@@ -383,7 +383,13 @@ export function collectFetcherTelemetry(accessor: ServicesAccessor): void {
 		}
 		logService.debug(`Refetch model metadata: This window won.`);
 
-		const userAgentLibraryUpdate = (original: string) => `${vscode.env.remoteName || 'local'}-on-${process.platform}-after-${currentUserAgentLibrary}-using-${original}`;
+		const ext = vscode.extensions.getExtension(EXTENSION_ID);
+		const extKind = (ext ? ext.extensionKind === vscode.ExtensionKind.UI : !vscode.env.remoteName) ? 'local' : 'remote';
+		const remoteName = vscode.env.remoteName || 'none';
+		const platform = process.platform;
+		const originalLibrary = fetcherService.getUserAgentLibrary();
+		const originalError = error ? (error.message || 'unknown') : 'none';
+		const userAgentLibraryUpdate = (library: string) => JSON.stringify({ extKind, remoteName, platform, library, originalLibrary, originalError });
 		const fetchers = [
 			ElectronFetcher.create(envService, userAgentLibraryUpdate),
 			new NodeFetchFetcher(envService, userAgentLibraryUpdate),

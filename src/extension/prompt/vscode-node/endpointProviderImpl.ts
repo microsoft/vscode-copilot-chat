@@ -36,7 +36,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 	private readonly _modelFetcher: IModelMetadataFetcher;
 
 	constructor(
-		collectFetcherTelemetry: (accessor: ServicesAccessor) => void,
+		collectFetcherTelemetry: (accessor: ServicesAccessor, error: any) => void,
 		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IFetcherService fetcher: IFetcherService,

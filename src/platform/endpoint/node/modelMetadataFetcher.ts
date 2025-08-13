@@ -76,7 +76,7 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 	public onDidModelsRefresh = this._onDidModelRefresh.event;
 
 	constructor(
-		private readonly collectFetcherTelemetry: ((accessor: ServicesAccessor) => void) | undefined,
+		private readonly collectFetcherTelemetry: ((accessor: ServicesAccessor, error: any) => void) | undefined,
 		protected readonly _isModelLab: boolean,
 		@IFetcherService private readonly _fetcher: IFetcherService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
@@ -262,13 +262,16 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 			this._onDidModelRefresh.fire();
 
 			if (this.collectFetcherTelemetry) {
-				this._instantiationService.invokeFunction(this.collectFetcherTelemetry);
+				this._instantiationService.invokeFunction(this.collectFetcherTelemetry, undefined);
 			}
 		} catch (e) {
 			this._logService.error(e, `Failed to fetch models (${requestId})`);
 			this._lastFetchError = e;
 			this._lastFetchTime = 0;
 			// If we fail to fetch models, we should try again next time
+			if (this.collectFetcherTelemetry) {
+				this._instantiationService.invokeFunction(this.collectFetcherTelemetry, e);
+			}
 		}
 	}
 

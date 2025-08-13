@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
-import { ResourceMap } from '../../../util/vs/base/common/map';
+import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
 import { URI } from '../../../util/vs/base/common/uri';
 import { CellOrNotebookEdit } from '../../prompts/node/codeMapper/codeMapper';
 import { ToolName } from '../common/toolNames';
@@ -27,11 +27,52 @@ export class MultiReplaceStringTool extends AbstractReplaceStringTool<IMultiRepl
 
 		const prepared = await Promise.all(options.input.replacements.map(r => this.prepareEditsForFile(options, r, token)));
 
+		let successes = 0;
+		let failures = 0;
+		let individualEdits = 0;
+		const uniqueUris = new ResourceSet();
+		for (const edit of prepared) {
+			uniqueUris.add(edit.uri);
+			if (edit.generatedEdit.success) {
+				successes++;
+				individualEdits += edit.generatedEdit.textEdits.length;
+			} else {
+				failures++;
+			}
+		}
+
+		/* __GDPR__
+			"multiStringReplaceCall" : {
+				"owner": "connor4312",
+				"comment": "Tracks how much percent of the AI edits survived after 5 minutes of accepting",
+				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current request turn." },
+				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model used for the request." },
+				"successes": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The number of successful edits.", "isMeasurement": true },
+				"failures": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The number of failed edits.", "isMeasurement": true },
+				"uniqueUris": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The number of unique URIs edited.", "isMeasurement": true },
+				"individualEdits": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The number of individual text edits made.", "isMeasurement": true }
+			}
+		*/
+		this.telemetryService.sendMSFTTelemetryEvent('multiStringReplaceCall', {
+			requestId: this._promptContext?.requestId,
+			model: await this.modelForTelemetry(options),
+		}, {
+			successes,
+			failures,
+			individualEdits,
+			uniqueUris: uniqueUris.size,
+		});
+
+
 		for (let i = 0; i < prepared.length; i++) {
 			const e1 = prepared[i];
+			uniqueUris.add(e1.uri);
+
 			if (!e1.generatedEdit.success) {
+				failures++;
 				continue;
 			}
+			successes++;
 
 			for (let k = i + 1; k < prepared.length; k++) {
 				const e2 = prepared[k];
