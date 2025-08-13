@@ -399,7 +399,8 @@ export class SSEProcessor {
 
 					const thinkingDelta = extractThinkingDeltaFromChoice(choice);
 
-					thinkingFound = !!(thinkingDelta?.text || thinkingDelta?.id);
+					// Once we observe any thinking text or an id in this batch, keep the flag true
+					thinkingFound ||= !!(thinkingDelta?.text || thinkingDelta?.id);
 
 					if (!(choice.index in this.solutions)) {
 						this.solutions[choice.index] = new APIJsonDataStreaming();
