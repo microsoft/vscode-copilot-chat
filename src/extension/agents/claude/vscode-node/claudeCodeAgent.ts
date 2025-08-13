@@ -3,18 +3,26 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Props, query } from '@anthropic-ai/claude-code';
 import * as vscode from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ClaudeCodeInvoker } from './claudeCodeInvoker';
+import { LanguageModelServer } from '../../vscode-node/langModelServer';
 
 export class ClaudeAgentManager extends Disposable {
-	// private _codexClients = this._register(new DisposableMap<string, CodexClient>());
+	private _langModelServer: LanguageModelServer | undefined;
+	private async getLangModelServer(): Promise<LanguageModelServer> {
+		if (!this._langModelServer) {
+			this._langModelServer = this.instantiationService.createInstance(LanguageModelServer);
+			await this._langModelServer.start();
+		}
+		return this._langModelServer;
+	}
 
 	constructor(
-		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ILogService private readonly logService: ILogService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService
 	) {
 		super();
 	}
@@ -23,26 +31,17 @@ export class ClaudeAgentManager extends Disposable {
 		const lastMessage = context.history[context.history.length - 1] as any;
 		const sessionId = lastMessage?.result?.metadata?.sessionId;
 		try {
-			// Default behavior - send prompt to Claude CLI
-			stream.progress('Sending request to Claude...');
+			// Parse the query for special commands like /allowedTools
+			const result = await this.invokeClaudeWithSDK(request.prompt, sessionId, token, undefined, stream);
 
-			try {
-				// Parse the query for special commands like /allowedTools
-				const result = await this.invokeClaudeWithSDK(request.prompt, sessionId, token, undefined, stream);
+			return { metadata: { command: request.command || 'default', sessionId: result.sessionId } };
+		} catch (invokeError) {
+			// Handle specific invocation errors
+			const errorMessage = (invokeError as Error).message;
+			stream.markdown(`❌ **Claude CLI Error**: ${errorMessage}`);
 
-				return { metadata: { command: request.command || 'default', sessionId: result.sessionId } };
-			} catch (invokeError) {
-				// Handle specific invocation errors
-				const errorMessage = (invokeError as Error).message;
-				stream.markdown(`❌ **Claude CLI Error**: ${errorMessage}`);
-
-				// Log for debugging
-				this.logService.error(invokeError as Error);
-				return { metadata: { command: request.command || 'default' } };
-			}
-
-		} catch (err) {
-			handleError(err, stream);
+			// Log for debugging
+			this.logService.error(invokeError as Error);
 			return { metadata: { command: request.command || 'default' } };
 		}
 	}
@@ -54,11 +53,11 @@ export class ClaudeAgentManager extends Disposable {
 		// Dynamic import of the Claude Code SDK
 		// const { query } = await import("@anthropic-ai/claude-code");
 
-		const defaultTools = ['Edit', 'Write', 'MultiEdit']; // Always allow these tools
-		const allTools = allowedTools ? [...defaultTools, ...allowedTools] : defaultTools;
+		// const defaultTools = ['Edit', 'Write', 'MultiEdit']; // Always allow these tools
+		// const allTools = allowedTools ? [...defaultTools, ...allowedTools] : defaultTools;
 
 		// Remove duplicates while preserving order
-		const uniqueTools = [...new Set(allTools)];
+		const uniqueTools = undefined; // [...new Set(allTools)];
 
 		// Create abort controller from VS Code cancellation token
 		const abortController = new AbortController();
@@ -67,17 +66,21 @@ export class ClaudeAgentManager extends Disposable {
 		});
 
 		// Build options for the Claude Code SDK
-		const options: {
-			// pathToClaudeCodeExecutable: string;
-			maxTurns?: number;
-			allowedTools?: string[];
-			cwd?: string;
-			resume?: string;
-		} = {
-			// pathToClaudeCodeExecutable: join(__dirname, "../src/claude-bootstrap.js"), // Path to the bootstrap script
-			// maxTurns: 3,
+		const serverConfig = (await this.getLangModelServer()).getConfig();
+		const options: Props['options'] & { env: typeof process.env } = {
 			allowedTools: uniqueTools,
 			cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd(),
+			abortController,
+			// executable: process.execPath as 'node',
+			executable: 'node',
+			// pathToClaudeCodeExecutable: path.join(__dirname, '../node_modules/@anthropic-ai/claude-code/cli.js'),
+			pathToClaudeCodeExecutable: '/Users/roblou/code/claude-code/cli.js',
+			env: {
+				...process.env,
+				DEBUG: '1',
+				ANTHROPIC_BASE_URL: `http://localhost:${serverConfig.port}`,
+				ANTHROPIC_API_KEY: serverConfig.nonce
+			}
 		};
 
 		// Add resume session if provided
@@ -91,12 +94,10 @@ export class ClaudeAgentManager extends Disposable {
 		try {
 			this.logService.trace(`Claude CLI SDK: Starting query with options: ${JSON.stringify(options)}`);
 
-			const invoker = this.instantiationService.createInstance(ClaudeCodeInvoker);
-
 			// Process messages from the Claude Code SDK
-			for await (const message of invoker.query({
+
+			for await (const message of query({
 				prompt,
-				abortController,
 				options
 			})) {
 				this.logService.trace(`Claude CLI SDK Message: ${JSON.stringify(message, null, 2)}`);
@@ -108,12 +109,7 @@ export class ClaudeAgentManager extends Disposable {
 
 				// Handle different SDK message types
 				if (stream) {
-					if (message.type === 'system' && message.subtype === 'init') {
-						// System initialization
-						const toolCount = message.tools?.length || 0;
-						const model = message.model || 'unknown';
-						stream.progress(`🚀 Claude CLI initialized with ${model} (${toolCount} tools available)`);
-					} else if (message.type === 'assistant' && message.message) {
+					if (message.type === 'assistant' && message.message) {
 						// Assistant message with content
 						const content = message.message.content;
 						if (Array.isArray(content)) {
@@ -132,14 +128,14 @@ export class ClaudeAgentManager extends Disposable {
 						// Show token usage if available
 						const usage = message.message.usage;
 						if (usage) {
-							const inputTokens = usage.input_tokens || 0;
-							const outputTokens = usage.output_tokens || 0;
-							const cacheTokens = usage.cache_read_input_tokens || 0;
-							if (cacheTokens > 0) {
-								stream.progress(`📊 Tokens: ${inputTokens} input, ${outputTokens} output, ${cacheTokens} cached`);
-							} else {
-								stream.progress(`📊 Tokens: ${inputTokens} input, ${outputTokens} output`);
-							}
+							// const inputTokens = usage.input_tokens || 0;
+							// const outputTokens = usage.output_tokens || 0;
+							// const cacheTokens = usage.cache_read_input_tokens || 0;
+							// if (cacheTokens > 0) {
+							// 	stream.progress(`📊 Tokens: ${inputTokens} input, ${outputTokens} output, ${cacheTokens} cached`);
+							// } else {
+							// 	stream.progress(`📊 Tokens: ${inputTokens} input, ${outputTokens} output`);
+							// }
 						}
 					} else if (message.type === 'user' && message.message) {
 						// Tool result from user (system response to tool use)
@@ -164,7 +160,7 @@ export class ClaudeAgentManager extends Disposable {
 							if (!hasStartedResponse) {
 								stream.markdown(message.result);
 							}
-							stream.progress(`✅ Response completed (${message.num_turns} turns, $${message.total_cost_usd.toFixed(4)})`);
+							// stream.progress(`✅ Response completed (${message.num_turns} turns, $${message.total_cost_usd.toFixed(4)})`);
 						} else if (message.subtype === 'error_max_turns') {
 							stream.progress(`⚠️ Maximum turns reached (${message.num_turns})`);
 						} else if (message.subtype === 'error_during_execution') {
@@ -184,18 +180,5 @@ export class ClaudeAgentManager extends Disposable {
 			}
 			throw error;
 		}
-	}
-}
-
-/**
- * Handle errors that occur during Claude CLI invocation
- */
-function handleError(err: Error, stream: vscode.ChatResponseStream): void {
-	if (err.message?.includes('Failed to start Claude CLI')) {
-		stream.markdown(`❌ **Claude CLI Error**: ${err.message}\n\nPlease ensure that:\n1. Claude CLI is installed\n2. The 'claude' command is available in your PATH\n3. You have proper authentication set up for Claude CLI`);
-	} else if (err.message?.includes('cancelled')) {
-		stream.markdown('🚫 Claude CLI invocation was cancelled.');
-	} else {
-		stream.markdown(`❌ **Error**: ${err.message || 'An unexpected error occurred while invoking Claude CLI.'}`);
 	}
 }
