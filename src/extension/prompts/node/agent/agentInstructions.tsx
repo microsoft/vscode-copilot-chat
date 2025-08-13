@@ -1000,11 +1000,13 @@ class NotebookInstructions extends PromptElement<DefaultAgentPromptProps> {
 		if (!hasEditNotebookTool) {
 			return;
 		}
+		const hasRunCellTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.RunNotebookCell);
+		const hasGetNotebookSummaryTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.GetNotebookSummary);
 		return <Tag name='notebookInstructions'>
 			To edit notebook files in the workspace, you can use the {ToolName.EditNotebook} tool.<br />
 			{hasEditFileTool && <><br />Never use the {ToolName.EditFile} tool and never execute Jupyter related commands in the Terminal to edit notebook files, such as `jupyter notebook`, `jupyter lab`, `install jupyter` or the like. Use the {ToolName.EditNotebook} tool instead.<br /></>}
-			Use the {ToolName.RunNotebookCell} tool instead of executing Jupyter related commands in the Terminal, such as `jupyter notebook`, `jupyter lab`, `install jupyter` or the like.<br />
-			Use the {ToolName.GetNotebookSummary} tool to get the summary of the notebook (this includes the list or all cells along with the Cell Id, Cell type and Cell Language, execution details and mime types of the outputs, if any).<br />
+			{hasRunCellTool && <>Use the {ToolName.RunNotebookCell} tool instead of executing Jupyter related commands in the Terminal, such as `jupyter notebook`, `jupyter lab`, `install jupyter` or the like.<br /></>}
+			{hasGetNotebookSummaryTool && <>Use the {ToolName.GetNotebookSummary} tool to get the summary of the notebook (this includes the list or all cells along with the Cell Id, Cell type and Cell Language, execution details and mime types of the outputs, if any).<br /></>}
 			Important Reminder: Avoid referencing Notebook Cell Ids in user messages. Use cell number instead.<br />
 			Important Reminder: Markdown cells cannot be executed
 		</Tag>;
