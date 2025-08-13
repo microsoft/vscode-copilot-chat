@@ -7,7 +7,6 @@ import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptSizing } from '@vscode/prompt-tsx';
 import { EOL } from 'os';
 import type * as vscode from 'vscode';
-import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -31,7 +30,6 @@ import { EventEmitter, LanguageModelPromptTsxPart, LanguageModelTextPart, Langua
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { Tag } from '../../prompts/node/base/tag';
-import { CodeMapper, ICodeMapperRequestInput } from '../../prompts/node/codeMapper/codeMapper';
 import { EXISTING_CODE_MARKER } from '../../prompts/node/panel/codeBlockFormattingRules';
 import { CodeBlock } from '../../prompts/node/panel/safeElements';
 import { ToolName } from '../common/toolNames';
@@ -39,7 +37,7 @@ import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 
 export interface IEditNotebookToolParams {
 	filePath: string;
-	explanation: string;
+	explanation?: string;
 	cellId?: string;
 	newCode?: string | string[];
 	language?: string;
@@ -113,7 +111,6 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 		}
 
 
-		const codeMapperCompleted: Promise<any>[] = [];
 		const cells: ChangedCell[] = notebook.getCells().map((cell, index) => ({ cell, index, type: 'existing' }));
 		const expectedCellEdits: ChangedCell[] = [];
 		const expectedCellTextEdits: [vscode.Uri, TextEdit][] = [];
@@ -136,7 +133,6 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 			this.validateInput(options.input, notebook);
 			stream.notebookEdit(notebookUri, []);
 			let previousCellIdUsedForInsertion = '';
-			const explanation = options.input.explanation;
 			const { editType, language, newCode } = options.input;
 			const cellCode = Array.isArray(newCode) ? newCode.join(EOL) : newCode;
 			let cellId = options.input.cellId || '';
@@ -225,27 +221,10 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 					counters.edit++;
 					const existingCell = notebook.cellAt(cellIndex);
 					expectedCellEdits.push({ type: 'existing', cell: existingCell, index: cellIndex });
-					if (existingCell.document.getText().length && cellCode.includes(EXISTING_CODE_MARKER)) {
-						sendEditNotebookCellTelemetry(this.telemetryService, true, existingCell.document.uri, options, this.endpointProvider);
-						const codeMapper = this.instantiationService.createInstance(CodeMapper);
-						const requestInput = createCodeMapperRequest(existingCell, notebookUri, cellCode, explanation ?? '');
-						const cellEditOperation = codeMapper.mapCode(requestInput, {
-							notebookEdit(target, edits) { stream.notebookEdit(target, edits); },
-							textEdit(_target, edits) {
-								stream.textEdit(existingCell.document.uri, edits);
-								if (typeof edits !== 'boolean') {
-									edits = Array.isArray(edits) ? edits : [edits];
-									edits.forEach(e => expectedCellTextEdits.push([existingCell.document.uri, e]));
-								}
-							},
-						}, undefined, token);
-						codeMapperCompleted.push(cellEditOperation);
-					} else {
-						sendEditNotebookCellTelemetry(this.telemetryService, false, existingCell.document.uri, options, this.endpointProvider);
-						const edit = new TextEdit(new Range(new Position(0, 0), existingCell.document.lineAt(existingCell.document.lineCount - 1).range.end), cellCode);
-						stream.textEdit(existingCell.document.uri, edit);
-						expectedCellTextEdits.push([existingCell.document.uri, edit]);
-					}
+					sendEditNotebookCellTelemetry(this.telemetryService, false, existingCell.document.uri, options, this.endpointProvider);
+					const edit = new TextEdit(new Range(new Position(0, 0), existingCell.document.lineAt(existingCell.document.lineCount - 1).range.end), cellCode);
+					stream.textEdit(existingCell.document.uri, edit);
+					expectedCellTextEdits.push([existingCell.document.uri, edit]);
 				}
 			}
 
@@ -253,7 +232,6 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 
 			const summaryOfExpectedEdits = summarizeOriginalEdits(notebook, options.input, expectedCellEdits);
 			this.logger.trace(`[Notebook] ${summaryOfExpectedEdits}`);
-			await raceCancellation(Promise.all(codeMapperCompleted), token);
 			if (token.isCancellationRequested) {
 				return;
 			}
@@ -334,7 +312,7 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IEditNotebookToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
 		return {
 			invocationMessage: options.input.explanation || l10n.t('Editing notebook'),
-			presentation: options.input.explanation && typeof options.input.explanation ? undefined : 'hidden'
+			presentation: options.input.explanation ? undefined : 'hidden'
 		};
 	}
 
@@ -364,6 +342,9 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 				}
 				if (newCode === undefined) {
 					throw new ErrorWithTelemetrySafeReason('None of the edits were applied as newCode is required for edit operation', 'missingNewCode');
+				}
+				if (newCode.includes(EXISTING_CODE_MARKER)) {
+					throw new ErrorWithTelemetrySafeReason(`When editing a cell do NOT use the marker ${EXISTING_CODE_MARKER} to identify existing code. Provide the full code instead.`, 'gotExistingCodeMarker');
 				}
 				break;
 		}
@@ -533,28 +514,6 @@ function summarizeTextEdits(notebook: vscode.NotebookDocument, edits: [vscode.Ur
 
 	}
 	return summary.join('\n');
-}
-
-function createCodeMapperRequest(existingCell: vscode.NotebookCell, notebookUri: vscode.Uri, newCode: string, explanation: string) {
-	// Create a TextDocumentSnapshot from the existing cell but with Notebook Uri.
-	// This is because Cell Uris contain schemes and query strings/fragments that
-	// do not work well with CodeMapper (i.e. Model doesn't handle such Uris well).
-	const documentSnapshot = TextDocumentSnapshot.fromJSON(existingCell.document, {
-		_text: existingCell.document.getText(),
-		eol: existingCell.document.eol,
-		languageId: existingCell.document.languageId,
-		version: existingCell.document.version,
-		uri: notebookUri
-	});
-	const requestInput: ICodeMapperRequestInput = {
-		createNew: false,
-		codeBlock: newCode,
-		uri: notebookUri,
-		markdownBeforeBlock: explanation || undefined,
-		existingDocument: documentSnapshot
-	};
-
-	return requestInput;
 }
 
 export interface IEditFileResultProps extends BasePromptElementProps {

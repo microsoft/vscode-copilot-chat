@@ -208,7 +208,7 @@ declare module 'vscode' {
 		*/
 		progress(value: string, task?: (progress: Progress<ChatResponseWarningPart | ChatResponseReferencePart>) => Thenable<string | void>): void;
 
-		thinkingProgress(value: string, id?: string, metadata?: string): void;
+		thinkingProgress(thinkingDelta: ThinkingDelta): void;
 
 		textEdit(target: Uri, edits: TextEdit | TextEdit[]): void;
 
@@ -267,6 +267,21 @@ declare module 'vscode' {
 		FilteredContentRetry = 1,
 		CopyrightContentRetry = 2,
 	}
+
+	export type ThinkingDelta = {
+		text?: string;
+		id: string;
+		metadata?: string;
+	} | {
+		text?: string;
+		id?: string;
+		metadata: string;
+	} |
+	{
+		text: string;
+		id?: string;
+		metadata?: string;
+	};
 
 	/**
 	 * Does this piggy-back on the existing ChatRequest, or is it a different type of request entirely?

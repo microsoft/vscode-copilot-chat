@@ -3,12 +3,17 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { AssistantMessage, BasePromptElementProps, PromptRenderer as BasePromptRenderer, Chunk, IfEmpty, Image, JSONTree, PromptElement, PromptElementProps, PromptMetadata, PromptPiece, PromptSizing, TokenLimit, ToolCall, ToolMessage, useKeepWith, UserMessage } from '@vscode/prompt-tsx';
 import type { ChatParticipantToolToken, LanguageModelToolResult2, LanguageModelToolTokenizationOptions } from 'vscode';
+import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { StatefulMarkerContainer } from '../../../../platform/endpoint/common/statefulMarkerContainer';
+import { IImageService } from '../../../../platform/image/common/imageService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { ITokenizer } from '../../../../util/common/tokenizer';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
@@ -297,10 +302,25 @@ enum ToolInvocationOutcome {
 	Cancelled = 'cancelled',
 }
 
-export function imageDataPartToTSX(part: LanguageModelDataPart) {
+export async function imageDataPartToTSX(part: LanguageModelDataPart, githubToken?: string, urlOrRequestMetadata?: string | RequestMetadata, logService?: ILogService, imageService?: IImageService) {
 	if (isImageDataPart(part)) {
 		const base64 = Buffer.from(part.data).toString('base64');
-		return <Image src={`data:${part.mimeType};base64,${base64}`} />;
+		let imageSource = `data:${part.mimeType};base64,${base64}`;
+		const isChatCompletions = typeof urlOrRequestMetadata !== 'string' && urlOrRequestMetadata?.type === RequestType.ChatCompletions;
+		if (githubToken && isChatCompletions && imageService) {
+			try {
+				const uri = await imageService.uploadChatImageAttachment(part.data, 'tool-result-image', part.mimeType ?? 'image/png', githubToken);
+				if (uri) {
+					imageSource = uri.toString();
+				}
+			} catch (error) {
+				if (logService) {
+					logService.warn(`Image upload failed, using base64 fallback: ${error}`);
+				}
+			}
+		}
+
+		return <Image src={imageSource} />;
 	}
 }
 
@@ -340,6 +360,19 @@ interface IPrimitiveToolResultProps extends BasePromptElementProps {
 }
 
 class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptElement<T> {
+
+	constructor(
+		props: T,
+		@IPromptEndpoint protected readonly endpoint: IPromptEndpoint,
+		@IAuthenticationService private readonly authService: IAuthenticationService,
+		@ILogService private readonly logService?: ILogService,
+		@IImageService private readonly imageService?: IImageService,
+		@IConfigurationService private readonly configurationService?: IConfigurationService,
+		@IExperimentationService private readonly experimentationService?: IExperimentationService
+	) {
+		super(props);
+	}
+
 	async render(): Promise<PromptPiece | undefined> {
 		return (
 			<>
@@ -368,8 +401,13 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 		return part.audience.includes(LanguageModelPartAudience.Assistant);
 	}
 
-	protected onData(part: LanguageModelDataPart) {
-		return Promise.resolve(imageDataPartToTSX(part));
+	protected async onData(part: LanguageModelDataPart) {
+		const githubToken = (await this.authService.getAnyGitHubSession())?.accessToken;
+		const uploadsEnabled = this.configurationService && this.experimentationService
+			? this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.EnableChatImageUpload, this.experimentationService)
+			: false;
+		const effectiveToken = uploadsEnabled ? githubToken : undefined;
+		return Promise.resolve(imageDataPartToTSX(part, effectiveToken, this.endpoint.urlOrRequestMetadata, this.logService, this.imageService));
 	}
 
 	protected onTSX(part: JSONTree.PromptElementJSON) {
@@ -396,9 +434,14 @@ export interface IToolResultProps extends IPrimitiveToolResultProps {
 export class ToolResult extends PrimitiveToolResult<IToolResultProps> {
 	constructor(
 		props: PromptElementProps<IToolResultProps>,
-		@IPromptEndpoint private readonly endpoint: IPromptEndpoint,
+		@IPromptEndpoint endpoint: IPromptEndpoint,
+		@IAuthenticationService authService: IAuthenticationService,
+		@ILogService logService: ILogService,
+		@IImageService imageService: IImageService,
+		@IConfigurationService configurationService: IConfigurationService,
+		@IExperimentationService experimentationService: IExperimentationService
 	) {
-		super(props);
+		super(props, endpoint, authService, logService, imageService, configurationService, experimentationService);
 	}
 
 	protected override async onTSX(part: JSONTree.PromptElementJSON): Promise<any> {

@@ -143,10 +143,8 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			return <SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} />;
 		}
 
-		const promptType = this.configurationService.getConfig(ConfigKey.Internal.Gpt5AlternatePromptConfig);
-		const modelFamily = this.props.endpoint.family;
-
-		if (modelFamily.startsWith('gpt-5') && promptType) {
+		if (this.props.endpoint.family.startsWith('gpt-5')) {
+			const promptType = this.configurationService.getExperimentBasedConfig(ConfigKey.Gpt5AlternatePrompt, this.experimentationService);
 			switch (promptType) {
 				case 'codex':
 					return <CodexStyleGPTPrompt
@@ -160,8 +158,8 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 						modelFamily={this.props.endpoint.family}
 						codesearchMode={this.props.codesearchMode}
 					/>;
-				case 'alternate':
-					return <AlternateGPTPrompt
+				default:
+					return <DefaultAgentPrompt
 						availableTools={this.props.promptContext.tools?.availableTools}
 						modelFamily={this.props.endpoint.family}
 						codesearchMode={this.props.codesearchMode}
@@ -310,7 +308,6 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		props: AgentUserMessageProps,
 		@IPromptVariablesService private readonly promptVariablesService: IPromptVariablesService,
 		@ILogService private readonly logService: ILogService,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super(props);
 	}
@@ -338,7 +335,6 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 			: '';
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;
 		const hasTodoTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreManageTodoList);
-		const skipReminderInstructions = this.props.endpoint.family.startsWith('gpt-5') && this.configurationService.getConfig(ConfigKey.Internal.Gpt5AlternatePromptConfig);
 
 		return (
 			<>
@@ -356,17 +352,14 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 					</Tag>
 					<CurrentEditorContext endpoint={this.props.endpoint} />
 					<RepoContext />
-
-					{!skipReminderInstructions && (
-						<Tag name='reminderInstructions'>
-							{/* Critical reminders that are effective when repeated right next to the user message */}
-							<KeepGoingReminder modelFamily={this.props.endpoint.family} />
-							{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint))}
-							<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
-							{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
-							{hasMultiReplaceStringTool && <>For maximum efficiency, whenever you plan to perform multiple independent edit operations, invoke them simultaneously using {ToolName.MultiReplaceString} tool rather than sequentially. This will greatly improve user's cost and time efficiency leading to a better user experience.<br /></>}
-						</Tag>
-					)}
+					<Tag name='reminderInstructions'>
+						{/* Critical reminders that are effective when repeated right next to the user message */}
+						<KeepGoingReminder modelFamily={this.props.endpoint.family} />
+						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint))}
+						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
+						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
+						{hasMultiReplaceStringTool && <>For maximum efficiency, whenever you plan to perform multiple independent edit operations, invoke them simultaneously using {ToolName.MultiReplaceString} tool rather than sequentially. This will greatly improve user's cost and time efficiency leading to a better user experience.<br /></>}
+					</Tag>
 					{query && <Tag name='userRequest' priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 				</UserMessage>
@@ -581,7 +574,7 @@ class RepoContext extends PromptElement<{}> {
 			Owner: {repoContext.id.org}<br />
 			Current branch: {activeRepository.headBranchName}<br />
 			{repoDescription ? <>Default branch: {repoDescription?.defaultBranch}<br /></> : ''}
-			{repoDescription?.pullRequest ? <>Active pull request: {repoDescription.pullRequest.title} ({repoDescription.pullRequest.url})<br /></> : ''}
+			{repoDescription?.pullRequest ? <>Active pull request (may not be the same as open pull request): {repoDescription.pullRequest.title} ({repoDescription.pullRequest.url})<br /></> : ''}
 		</Tag>;
 	}
 }
@@ -626,7 +619,7 @@ class AgentTasksInstructions extends PromptElement {
 			return null;
 		}
 
-		const taskGroups = taskGroupsRaw.map(([wf, tasks]) => [wf, tasks.filter(task => !!task.type && !task.hide)] as const).filter(([, tasks]) => tasks.length > 0);
+		const taskGroups = taskGroupsRaw.map(([wf, tasks]) => [wf, tasks.filter(task => (!!task.type || task.dependsOn) && !task.hide)] as const).filter(([, tasks]) => tasks.length > 0);
 		if (taskGroups.length === 0) {
 			return 0;
 		}

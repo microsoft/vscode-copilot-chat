@@ -96,6 +96,7 @@ import { TestAuthenticationService } from './testAuthenticationService';
 import { TestChatAgentService } from './testChatAgentService';
 import { TestWorkbenchService } from './testWorkbenchService';
 import { TestWorkspaceService } from './testWorkspaceService';
+import { IImageService, nullImageService } from '../../image/common/imageService';
 
 /**
  * Collects descriptors for services to use in testing.
@@ -255,6 +256,7 @@ export function createPlatformServices(): TestingServiceCollection {
 	testingServiceCollection.define(IRunCommandExecutionService, new SyncDescriptor(MockRunCommandExecutionService));
 	testingServiceCollection.define(INaiveChunkingService, new SyncDescriptor(NaiveChunkingService));
 	testingServiceCollection.define(IHeatmapService, nullHeatmapService);
+	testingServiceCollection.define(IImageService, nullImageService);
 	testingServiceCollection.define(ILanguageContextService, NullLanguageContextService);
 	testingServiceCollection.define(ILanguageContextProviderService, new SyncDescriptor(NullLanguageContextProviderService));
 	testingServiceCollection.define(ILanguageDiagnosticsService, new SyncDescriptor(TestLanguageDiagnosticsService));

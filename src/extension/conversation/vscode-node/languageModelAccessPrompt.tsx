@@ -20,7 +20,7 @@ export type Props = PromptElementProps<{
 }>;
 
 export class LanguageModelAccessPrompt extends PromptElement<Props> {
-	render() {
+	async render() {
 
 		const systemMessages: string[] = [];
 		const chatMessages: (UserMessage | AssistantMessage)[] = [];
@@ -44,7 +44,7 @@ export class LanguageModelAccessPrompt extends PromptElement<Props> {
 				const statefulMarkerElement = statefulMarker && <StatefulMarkerContainer statefulMarker={statefulMarker} />;
 				chatMessages.push(<AssistantMessage name={message.name} toolCalls={toolCalls.map(tc => ({ id: tc.callId, type: 'function', function: { name: tc.name, arguments: JSON.stringify(tc.input) } }))}>{statefulMarkerElement}{content?.value}</AssistantMessage>);
 			} else if (message.role === vscode.LanguageModelChatMessageRole.User) {
-				message.content.forEach(part => {
+				for (const part of message.content) {
 					if (part instanceof vscode.LanguageModelToolResultPart2 || part instanceof vscode.LanguageModelToolResultPart) {
 						chatMessages.push(
 							<ToolMessage toolCallId={part.callId}>
@@ -52,11 +52,12 @@ export class LanguageModelAccessPrompt extends PromptElement<Props> {
 							</ToolMessage>
 						);
 					} else if (isImageDataPart(part)) {
-						chatMessages.push(<UserMessage priority={0}>{imageDataPartToTSX(part)}</UserMessage>);
+						const imageElement = await imageDataPartToTSX(part);
+						chatMessages.push(<UserMessage priority={0}>{imageElement}</UserMessage>);
 					} else if (part instanceof vscode.LanguageModelTextPart) {
 						chatMessages.push(<UserMessage name={message.name}>{part.value}</UserMessage>);
 					}
-				});
+				}
 			}
 		}
 
