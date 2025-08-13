@@ -365,6 +365,9 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 				if (newCode === undefined) {
 					throw new ErrorWithTelemetrySafeReason('None of the edits were applied as newCode is required for edit operation', 'missingNewCode');
 				}
+				if (newCode.includes(EXISTING_CODE_MARKER)) {
+					throw new ErrorWithTelemetrySafeReason(`When editing a cell do NOT use the marker ${EXISTING_CODE_MARKER} to identify existing code. Provide the full code instead.`, 'gotExistingCodeMarker');
+				}
 				break;
 		}
 	}

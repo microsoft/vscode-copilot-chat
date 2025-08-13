@@ -767,7 +767,7 @@
 							"anyOf": [
 								{
 									"type": "string",
-									"description": "The code for the new or existing cell to be edited. Code should not be wrapped within <VSCode.Cell> tags"
+									"description": "The code for the new or existing cell to be edited. Code should not be wrapped within <VSCode.Cell> tags. Do NOT include code markers such as (...existing code...) to indicate existing code."
 								},
 								{
 									"type": "array",
