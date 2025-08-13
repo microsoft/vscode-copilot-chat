@@ -12,7 +12,7 @@ import { INaiveChunkingService, NaiveChunkingService } from '../../../platform/c
 import { MockRunCommandExecutionService } from '../../../platform/commands/common/mockRunCommandExecutionService';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { DefaultsOnlyConfigurationService } from '../../../platform/configuration/test/common/defaultsOnlyConfigurationService';
+import { DefaultsOnlyConfigurationService } from '../../../platform/configuration/common/defaultsOnlyConfigurationService';
 import { IDebugOutputService } from '../../../platform/debug/common/debugOutputService';
 import { DebugOutputServiceImpl } from '../../../platform/debug/vscode/debugOutputServiceImpl';
 import { IDialogService } from '../../../platform/dialog/common/dialogService';

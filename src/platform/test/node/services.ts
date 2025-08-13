@@ -28,7 +28,7 @@ import { INaiveChunkingService, NaiveChunkingService } from '../../chunking/node
 import { MockRunCommandExecutionService } from '../../commands/common/mockRunCommandExecutionService';
 import { IRunCommandExecutionService } from '../../commands/common/runCommandExecutionService';
 import { IConfigurationService } from '../../configuration/common/configurationService';
-import { DefaultsOnlyConfigurationService } from '../../configuration/test/common/defaultsOnlyConfigurationService';
+import { DefaultsOnlyConfigurationService } from '../../configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../configuration/test/common/inMemoryConfigurationService';
 import { CustomInstructionsService, ICustomInstructionsService } from '../../customInstructions/common/customInstructionsService';
 import { IDialogService } from '../../dialog/common/dialogService';
