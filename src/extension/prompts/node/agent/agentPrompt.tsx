@@ -579,7 +579,7 @@ class RepoContext extends PromptElement<{}> {
 			Owner: {repoContext.id.org}<br />
 			Current branch: {activeRepository.headBranchName}<br />
 			{repoDescription ? <>Default branch: {repoDescription?.defaultBranch}<br /></> : ''}
-			{repoDescription?.pullRequest ? <>Active pull request: {repoDescription.pullRequest.title} ({repoDescription.pullRequest.url})<br /></> : ''}
+			{repoDescription?.pullRequest ? <>Active pull request (may not be the same as open pull request): {repoDescription.pullRequest.title} ({repoDescription.pullRequest.url})<br /></> : ''}
 		</Tag>;
 	}
 }
