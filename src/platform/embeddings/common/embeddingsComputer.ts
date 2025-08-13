@@ -15,6 +15,7 @@ import { EmbeddingsEndpointFamily } from '../../endpoint/common/endpointProvider
  */
 export class EmbeddingType {
 	public static readonly text3small_512 = new EmbeddingType('text-embedding-3-small-512');
+	public static readonly metis_1024_I16_Binary = new EmbeddingType('metis-1024-I16-Binary');
 
 	constructor(
 		public readonly id: string
@@ -29,19 +30,38 @@ export class EmbeddingType {
 	}
 }
 
+type EmbeddingQuantization = 'float32' | 'float16' | 'binary';
+
 export interface EmbeddingTypeInfo {
 	readonly model: EMBEDDING_MODEL;
 	readonly family: EmbeddingsEndpointFamily;
 	readonly dimensions: number;
+	readonly quantization: {
+		readonly query: EmbeddingQuantization;
+		readonly document: EmbeddingQuantization;
+	};
 }
 
-const wellKnownEmbeddingMetadata = {
+const wellKnownEmbeddingMetadata = Object.freeze<Record<string, EmbeddingTypeInfo>>({
 	[EmbeddingType.text3small_512.id]: {
 		model: EMBEDDING_MODEL.TEXT3SMALL,
 		family: 'text3small',
 		dimensions: 512,
-	}
-} as const satisfies Record<string, EmbeddingTypeInfo>;
+		quantization: {
+			query: 'float32',
+			document: 'float32'
+		},
+	},
+	[EmbeddingType.metis_1024_I16_Binary.id]: {
+		model: EMBEDDING_MODEL.Metis_1024_I16_Binary,
+		family: 'metis',
+		dimensions: 1024,
+		quantization: {
+			query: 'float16',
+			document: 'binary'
+		},
+	},
+});
 
 export function getWellKnownEmbeddingTypeInfo(type: EmbeddingType): EmbeddingTypeInfo | undefined {
 	return wellKnownEmbeddingMetadata[type.id];
@@ -86,7 +106,7 @@ export interface IEmbeddingsComputer {
 		type: EmbeddingType,
 		inputs: readonly string[],
 		options?: ComputeEmbeddingsOptions,
-		cancellationToken?: CancellationToken,
+		token?: CancellationToken,
 	): Promise<Embeddings | undefined>;
 }
 

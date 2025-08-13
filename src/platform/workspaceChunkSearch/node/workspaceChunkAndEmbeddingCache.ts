@@ -16,7 +16,7 @@ import { IRange, Range } from '../../../util/vs/editor/common/core/range';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { FileChunk, FileChunkWithEmbedding } from '../../chunking/common/chunk';
 import { stripChunkTextMetadata } from '../../chunking/common/chunkingStringUtils';
-import { EmbeddingType, EmbeddingVector } from '../../embeddings/common/embeddingsComputer';
+import { Embedding, EmbeddingType, EmbeddingVector } from '../../embeddings/common/embeddingsComputer';
 import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { ILogService } from '../../log/common/logService';
 import { FileRepresentation, IWorkspaceFileIndex } from './workspaceFileIndex';
@@ -430,7 +430,6 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 		db.exec('DELETE FROM CacheMeta;');
 		db.prepare('INSERT INTO CacheMeta (version, embeddingModel) VALUES (?, ?)').run(this.version, embeddingType.id);
 
-
 		// Load existing disk db if it exists
 		const diskCache = await instantiationService.invokeFunction(accessor => DiskCache.readDiskCache(
 			accessor,
@@ -456,7 +455,10 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 							chunk.range.startColumn,
 							chunk.range.endLineNumber,
 							chunk.range.endColumn,
-							Float32Array.from(typeof chunk.embedding === 'string' ? DiskCache.decodeEmbedding(chunk.embedding) : chunk.embedding),
+							packEmbedding({
+								type: embeddingType,
+								value: typeof chunk.embedding === 'string' ? DiskCache.decodeEmbedding(chunk.embedding) : chunk.embedding,
+							}),
 							chunk.chunkHash ?? ''
 						);
 					}
@@ -532,8 +534,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 		if (all.length > 0) {
 			const out = new Map<string, FileChunkWithEmbedding>();
 			for (const row of all) {
-				const embeddingData = row.embedding as Uint8Array;
-				const embedding = Array.from(new Float32Array(embeddingData.buffer, embeddingData.byteOffset, embeddingData.byteLength / Float32Array.BYTES_PER_ELEMENT));
+				const embedding = unpackEmbedding(this.embeddingType, row.embedding as Uint8Array);
 
 				const chunk: FileChunkWithEmbedding = {
 					chunk: {
@@ -542,10 +543,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 						rawText: undefined,
 						range: new Range(row.range_startLineNumber as number, row.range_startColumn as number, row.range_endLineNumber as number, row.range_endColumn as number),
 					},
-					embedding: {
-						type: this.embeddingType,
-						value: embedding,
-					},
+					embedding,
 					chunkHash: row.chunkHash as string,
 				};
 				if (chunk.chunkHash) {
@@ -576,7 +574,6 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 			contentVersionId: fileIdResult.contentVersionId as string | undefined,
 			fileHash: undefined,
 			value: chunks.map((row): FileChunkWithEmbedding => {
-				const embeddingData = row.embedding as Uint8Array;
 				return {
 					chunk: {
 						file: file.uri,
@@ -584,10 +581,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 						rawText: undefined,
 						range: new Range(row.range_startLineNumber as number, row.range_startColumn as number, row.range_endLineNumber as number, row.range_endColumn as number),
 					},
-					embedding: {
-						type: this.embeddingType,
-						value: Array.from(new Float32Array(embeddingData.buffer, embeddingData.byteOffset, embeddingData.byteLength / Float32Array.BYTES_PER_ELEMENT)),
-					},
+					embedding: unpackEmbedding(this.embeddingType, row.embedding as Uint8Array),
 					chunkHash: row.chunkHash as string | undefined,
 				};
 			}),
@@ -643,8 +637,6 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 
 							this.db.exec('BEGIN TRANSACTION');
 							for (const chunk of newEntry.value ?? []) {
-								const float32Array = Float32Array.from(chunk.embedding.value);
-								const embeddingData = new Uint8Array(float32Array.buffer, float32Array.byteOffset, float32Array.byteLength);
 								insertStatement.run(
 									fileResult.lastInsertRowid as number,
 									chunk.chunk.text,
@@ -652,7 +644,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 									chunk.chunk.range.startColumn,
 									chunk.chunk.range.endLineNumber,
 									chunk.chunk.range.endColumn,
-									embeddingData,
+									packEmbedding(chunk.embedding),
 									chunk.chunkHash ?? '',
 								);
 							}
@@ -665,4 +657,52 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 
 		return chunks;
 	}
+}
+
+/**
+ * Packs the embedding into a binary value for efficient storage.
+ */
+export function packEmbedding(embedding: Embedding): Uint8Array {
+	if (embedding.type.equals(EmbeddingType.metis_1024_I16_Binary)) {
+		// Generate packed binary
+		if (embedding.value.length % 8 !== 0) {
+			throw new Error(`Embedding value length must be a multiple of 8 for ${embedding.type.id}, got ${embedding.value.length}`);
+		}
+
+		const data = new Uint8Array(embedding.value.length / 8);
+		for (let i = 0; i < embedding.value.length; i += 8) {
+			let value = 0;
+			for (let j = 0; j < 8; j++) {
+				value |= (embedding.value[i + j] >= 0 ? 1 : 0) << j;
+			}
+			data[i / 8] = value;
+		}
+		return data;
+	}
+
+	// All other formats default to float32 for now
+	const data = Float32Array.from(embedding.value);
+	return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+}
+
+/**
+ * Unpacks an embedding from a binary value packed with {@link packEmbedding}.
+ */
+export function unpackEmbedding(type: EmbeddingType, data: Uint8Array): Embedding {
+	if (type.equals(EmbeddingType.metis_1024_I16_Binary)) {
+		// Old versions may have stored the values as a float32
+		if (data.length <= 1024) {
+			const values = new Array(data.length * 8);
+			for (let i = 0; i < data.length; i++) {
+				const byte = data[i];
+				for (let j = 0; j < 8; j++) {
+					values[i * 8 + j] = (byte & (1 << j)) > 0 ? 0.03125 : -0.03125;
+				}
+			}
+			return { type, value: values };
+		}
+	}
+
+	const float32Array = new Float32Array(data.buffer, data.byteOffset, data.byteLength / 4);
+	return { type, value: Array.from(float32Array) };
 }

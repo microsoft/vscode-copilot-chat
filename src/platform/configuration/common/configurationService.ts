@@ -530,7 +530,8 @@ export const enum CHAT_MODEL {
 // WARNING
 // These values are used in the request and are case sensitive. Do not change them unless advised by CAPI.
 export const enum EMBEDDING_MODEL {
-	TEXT3SMALL = "text-embedding-3-small"
+	TEXT3SMALL = 'text-embedding-3-small',
+	Metis_1024_I16_Binary = 'metis-1024-I16-Binary',
 }
 
 export enum AuthProviderId {
