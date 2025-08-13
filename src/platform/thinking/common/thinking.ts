@@ -22,6 +22,11 @@ export type ThinkingDelta = {
 	id: string;
 	metadata?: string;
 } | {
+	text?: string;
+	id?: string;
+	metadata: string;
+} |
+{
 	text: string;
 	id?: string;
 	metadata?: string;
