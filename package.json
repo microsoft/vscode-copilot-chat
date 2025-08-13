@@ -741,6 +741,58 @@
 				}
 			},
 			{
+				"name": "copilot_multiReplaceString",
+				"toolReferenceName": "multiReplaceString",
+				"displayName": "%copilot.tools.multiReplaceString.name%",
+				"modelDescription": "This tool allows you to apply multiple replace_string_in_file operations in a single call, which is more efficient than calling replace_string_in_file multiple times. It takes an array of replacement operations and applies them sequentially. Each replacement operation has the same parameters as replace_string_in_file: filePath, oldString, newString, and explanation. This tool is ideal when you need to make multiple edits across different files or multiple edits in the same file. The tool will provide a summary of successful and failed operations.",
+				"when": "!config.github.copilot.chat.disableReplaceTool",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"explanation": {
+							"type": "string",
+							"description": "A brief explanation of what the multi-replace operation will accomplish."
+						},
+						"replacements": {
+							"type": "array",
+							"description": "An array of replacement operations to apply sequentially.",
+							"items": {
+								"type": "object",
+								"properties": {
+									"explanation": {
+										"type": "string",
+										"description": "A brief explanation of this specific replacement operation."
+									},
+									"filePath": {
+										"type": "string",
+										"description": "An absolute path to the file to edit."
+									},
+									"oldString": {
+										"type": "string",
+										"description": "The exact literal text to replace, preferably unescaped. Include at least 3 lines of context BEFORE and AFTER the target text, matching whitespace and indentation precisely. If this string is not the exact literal text or does not match exactly, this replacement will fail."
+									},
+									"newString": {
+										"type": "string",
+										"description": "The exact literal text to replace `oldString` with, preferably unescaped. Provide the EXACT text. Ensure the resulting code is correct and idiomatic."
+									}
+								},
+								"required": [
+									"explanation",
+									"filePath",
+									"oldString",
+									"newString"
+								]
+							},
+							"minItems": 1
+						}
+					},
+					"required": [
+						"explanation",
+						"replacements"
+					]
+				}
+			},
+			{
 				"name": "copilot_editNotebook",
 				"toolReferenceName": "editNotebook",
 				"displayName": "%copilot.tools.editNotebook.name%",

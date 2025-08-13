@@ -66,6 +66,7 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 
 		if (modelCanUseReplaceStringExclusively(model)) {
 			allowTools[ToolName.ReplaceString] = true;
+			allowTools[ToolName.MultiReplaceString] = true;
 			allowTools[ToolName.EditFile] = false;
 		}
 

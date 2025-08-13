@@ -48,6 +48,7 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 
 		if (model.family.startsWith('claude')) {
 			lookForTools.add(ToolName.ReplaceString);
+			lookForTools.add(ToolName.MultiReplaceString);
 		}
 		lookForTools.add(ToolName.EditNotebook);
 		if (requestHasNotebookRefs(request, notebookService, { checkPromptAsWell: true })) {

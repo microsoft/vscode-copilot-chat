@@ -270,6 +270,7 @@
 	"copilot.tools.createFile.name": "Create File",
 	"copilot.tools.insertEdit.name": "Edit File",
 	"copilot.tools.replaceString.name": "Replace String in File",
+	"copilot.tools.multiReplaceString.name": "Multi-Replace String in Files",
 	"copilot.tools.editNotebook.name": "Edit Notebook",
 	"copilot.tools.runNotebookCell.name": "Run Notebook Cell",
 	"copilot.tools.getNotebookCellOutput.name": "Get Notebook Cell Output",

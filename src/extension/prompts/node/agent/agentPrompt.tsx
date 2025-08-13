@@ -327,6 +327,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 
 		const query = await this.promptVariablesService.resolveToolReferencesInPrompt(this.props.request, this.props.toolReferences ?? []);
 		const hasReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ReplaceString);
+		const hasMultiReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.MultiReplaceString);
 		const hasApplyPatchTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ApplyPatch);
 		const hasCreateFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CreateFile);
 		const hasEditFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
@@ -363,6 +364,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 							{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint))}
 							<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
 							{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
+							{hasMultiReplaceStringTool && <>For maximum efficiency, whenever you plan to perform multiple independent edit operations, invoke them simultaneously using {ToolName.MultiReplaceString} tool rather than sequentially. This will greatly improve user's cost and time efficiency leading to a better user experience.<br /></>}
 						</Tag>
 					)}
 					{query && <Tag name='userRequest' priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
@@ -686,7 +688,7 @@ export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringToo
 	}
 	if (hasEditFileTool && hasReplaceStringTool) {
 		if (useStrongReplaceStringHint) {
-			lines.push(<>You must always try making file edits using {ToolName.ReplaceString} tool. NEVER use {ToolName.EditFile} unless told to by the user or by a tool.</>);
+			lines.push(<>You must always try making file edits using {ToolName.ReplaceString} or {ToolName.MultiReplaceString} tools. NEVER use {ToolName.EditFile} unless told to by the user or by a tool.</>);
 		} else {
 			lines.push(<>It is much faster to edit using the {ToolName.ReplaceString} tool. Prefer {ToolName.ReplaceString} for making edits and only fall back to {ToolName.EditFile} if it fails.</>);
 		}

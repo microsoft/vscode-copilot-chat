@@ -129,7 +129,8 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{tools[ToolName.ReplaceString] ?
 					<>
 						Before you edit an existing file, make sure you either already have it in the provided context, or read it with the {ToolName.ReadFile} tool, so that you can make proper changes.<br />
-						Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file.<br />
+						{tools[ToolName.MultiReplaceString] && <>Prefer the {ToolName.MultiReplaceString} tool when you need to make multiple string replacements across one or more files in a single operation. This is significantly more efficient than calling {ToolName.ReplaceString} multiple times and should be your first choice for: fixing similar patterns across files, applying consistent formatting changes, bulk refactoring operations, or any scenario where you need to make the same type of change in multiple places.<br /></>}
+						Use the {ToolName.ReplaceString} tool for single string replacements, paying attention to context to ensure your replacement is unique.<br />
 						Use the {ToolName.EditFile} tool to insert code into a file ONLY if {ToolName.ReplaceString} has failed.<br />
 						When editing files, group your changes by file.<br />
 						{isGpt5 && <>Make the smallest set of edits needed and avoid reformatting or moving unrelated code. Preserve existing style and conventions, and keep imports, exports, and public APIs stable unless the task requires changes. Prefer completing all edits for a file within a single message when practical.<br /></>}
@@ -657,19 +658,21 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 					<>
 						Before you edit an existing file, make sure you either already have it in the provided context, or read it with the {ToolName.ReadFile} tool, so that you can make proper changes.<br />
 						Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file.<br />
+						Use the {ToolName.MultiReplaceString} tool to make edits simultaneously.<br />
 						Use the {ToolName.EditFile} tool to insert code into a file ONLY if {ToolName.ReplaceString} has failed.<br />
 						When editing files, group your changes by file.<br />
 						{isGpt5 && <>Make the smallest set of edits needed and avoid reformatting or moving unrelated code. Preserve existing style and conventions, and keep imports, exports, and public APIs stable unless the task requires changes. Prefer completing all edits for a file within a single message when practical.<br /></>}
 						NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
-						NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString} or {ToolName.EditFile} instead.<br />
-						For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString} or {ToolName.EditFile} tools. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br /></> :
+						NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString}, {ToolName.MultiReplaceString}, or {ToolName.EditFile} instead.<br />
+						For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString}, {ToolName.MultiReplaceString}, or {ToolName.EditFile} tools. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br /></> :
 					<>
 						Don't try to edit an existing file without reading it first, so you can make changes properly.<br />
+						{tools[ToolName.MultiReplaceString] && <>Prefer the {ToolName.MultiReplaceString} tool when you need to make multiple string replacements across one or more files in a single operation. This should be your first choice for bulk edits.<br /></>}
 						Use the {ToolName.ReplaceString} tool to edit files. When editing files, group your changes by file.<br />
 						{isGpt5 && <>Make the smallest set of edits needed and avoid reformatting or moving unrelated code. Preserve existing style and conventions, and keep imports, exports, and public APIs stable unless the task requires changes. Prefer completing all edits for a file within a single message when practical.<br /></>}
 						NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
-						NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString} instead.<br />
-						For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString} tool. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br />
+						NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString} or {ToolName.MultiReplaceString} instead.<br />
+						For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString} or {ToolName.MultiReplaceString} tool. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br />
 					</>}
 				<GenericEditingTips {...this.props} />
 				The {ToolName.EditFile} tool is very smart and can understand how to apply your edits to the user's files, you just need to provide minimal hints.<br />
@@ -891,7 +894,8 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 			</Tag>}
 			{!!tools[ToolName.EditFile] && <Tag name='editFileInstructions'>
 				Before you edit an existing file, make sure you either already have it in the provided context, or read it with the {ToolName.ReadFile} tool, so that you can make proper changes.<br />
-				Use the {ToolName.ReplaceString} tool to make edits in the file in string replacement way, but only if you are sure that the string is unique enough to not cause any issues. You can use this tool multiple times per file.<br />
+				Use the {ToolName.ReplaceString} tool to make single edits in the file in string replacement way, but only if you are sure that the string is unique enough to not cause any issues. You can use this tool multiple times per file.<br />
+				Use {ToolName.MultiReplaceString} tool when you need to make multiple string replacements across one or more files in a single operation.<br />
 				Use the {ToolName.EditFile} tool to insert code into a file.<br />
 				When editing files, group your changes by file.<br />
 				NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
