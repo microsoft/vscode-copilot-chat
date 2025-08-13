@@ -770,7 +770,7 @@ export namespace ConfigKey {
 
 	export const EnableRetryAfterFilteredResponse = defineExpSetting<boolean>('chat.enableRetryAfterFilteredResponse', true);
 	export const EnableAlternateGptPrompt = defineExpSetting<boolean>('chat.alternateGptPrompt.enabled', false);
-	export const Gpt5AlternatePrompt = defineExpSetting<string | undefined>('chat.gpt5AlternatePrompt', undefined);
+	export const Gpt5AlternatePrompt = defineExpSetting<string>('chat.gpt5AlternatePrompt', 'default');
 }
 
 export function getAllConfigKeys(): string[] {

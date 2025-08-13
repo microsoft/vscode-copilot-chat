@@ -2746,6 +2746,14 @@
 							"experimental"
 						],
 						"description": "%github.copilot.config.alternateGptPrompt.enabled%"
+					},
+					"github.copilot.chat.gpt5AlternatePrompt": {
+						"type": "string",
+						"default": "default",
+						"tags": [
+							"experimental"
+						],
+						"description": "%github.copilot.config.gpt5AlternatePrompt%"
 					}
 				}
 			}
