@@ -4,11 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { RequestType } from '@vscode/copilot-api';
-import { TokenizerType } from '../../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
-import { CHAT_MODEL, EMBEDDING_MODEL } from '../../../configuration/common/configurationService';
 import { IEnvService } from '../../../env/common/envService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
@@ -52,23 +50,5 @@ export class CAPITestEndpoint extends ChatEndpoint {
 		} else {
 			return super.urlOrRequestMetadata;
 		}
-	}
-}
-
-/**
- * Since tests don't have the full fledged model metadata output from `/models` we need to manually map the model to the correct tokenizer
- * @param model The model to find the tokenizer for
- * @returns The tokenizer
- */
-export function modelIdToTokenizer(model: string | EMBEDDING_MODEL): TokenizerType {
-	switch (model) {
-		case CHAT_MODEL.GPT41:
-		case CHAT_MODEL.GPT4OMINI:
-		case CHAT_MODEL.GPT4OPROXY:
-		case CHAT_MODEL.EXPERIMENTAL:
-		case CHAT_MODEL.O1:
-		case CHAT_MODEL.O1MINI:
-		default:
-			return TokenizerType.O200K;
 	}
 }

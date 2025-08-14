@@ -5,8 +5,6 @@
 
 import type { CancellationToken } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { EMBEDDING_MODEL } from '../../configuration/common/configurationService';
-import { EmbeddingsEndpointFamily } from '../../endpoint/common/endpointProvider';
 
 /**
  * Fully qualified type of the embedding.
@@ -30,11 +28,17 @@ export class EmbeddingType {
 	}
 }
 
+// WARNING
+// These values are used in the request and are case sensitive. Do not change them unless advised by CAPI.
+export const enum LEGACY_EMBEDDING_MODEL_ID {
+	TEXT3SMALL = 'text-embedding-3-small',
+	Metis_I16_Binary = 'metis-I16-Binary'
+}
+
 type EmbeddingQuantization = 'float32' | 'float16' | 'binary';
 
 export interface EmbeddingTypeInfo {
-	readonly model: EMBEDDING_MODEL;
-	readonly family: EmbeddingsEndpointFamily;
+	readonly model: LEGACY_EMBEDDING_MODEL_ID;
 	readonly dimensions: number;
 	readonly quantization: {
 		readonly query: EmbeddingQuantization;
@@ -44,8 +48,7 @@ export interface EmbeddingTypeInfo {
 
 const wellKnownEmbeddingMetadata = Object.freeze<Record<string, EmbeddingTypeInfo>>({
 	[EmbeddingType.text3small_512.id]: {
-		model: EMBEDDING_MODEL.TEXT3SMALL,
-		family: 'text3small',
+		model: LEGACY_EMBEDDING_MODEL_ID.TEXT3SMALL,
 		dimensions: 512,
 		quantization: {
 			query: 'float32',
@@ -53,8 +56,7 @@ const wellKnownEmbeddingMetadata = Object.freeze<Record<string, EmbeddingTypeInf
 		},
 	},
 	[EmbeddingType.metis_1024_I16_Binary.id]: {
-		model: EMBEDDING_MODEL.Metis_1024_I16_Binary,
-		family: 'metis',
+		model: LEGACY_EMBEDDING_MODEL_ID.Metis_I16_Binary,
 		dimensions: 1024,
 		quantization: {
 			query: 'float16',

@@ -527,13 +527,6 @@ export const enum CHAT_MODEL {
 	EXPERIMENTAL = 'experimental-01'
 }
 
-// WARNING
-// These values are used in the request and are case sensitive. Do not change them unless advised by CAPI.
-export const enum EMBEDDING_MODEL {
-	TEXT3SMALL = 'text-embedding-3-small',
-	Metis_1024_I16_Binary = 'metis-1024-I16-Binary',
-}
-
 export enum AuthProviderId {
 	GitHub = 'github',
 	GitHubEnterprise = 'github-enterprise',
@@ -589,9 +582,6 @@ export namespace ConfigKey {
 		 * a fundamental different experience compared to our end-users.
 		 */
 		export const DebugOverrideChatEngine = defineSetting<string | undefined>('chat.advanced.debug.overrideChatEngine', undefined, INTERNAL_RESTRICTED);
-		/** Allows forcing a particular embeddings model.
-		 */
-		export const DebugOverrideEmbeddingsModel = defineSetting<EMBEDDING_MODEL | undefined>('chat.advanced.debug.overrideEmbeddingsModel', undefined, INTERNAL_RESTRICTED);
 		/** Allows forcing a particular context window size.
 		 * This setting doesn't validate values so large windows may not be supported by the model.
 		 * Note: this should not be used while self-hosting because it might lead to
