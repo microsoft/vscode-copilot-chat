@@ -20,6 +20,12 @@ const decompress = promisify(zlib.brotliDecompress);
 
 const DefaultCachePath = process.env.VITEST ? path.resolve(__dirname, '..', 'simulation', 'cache') : path.resolve(__dirname, '..', 'test', 'simulation', 'cache');
 
+async function getGitRoot(cwd: string): Promise<string> {
+	const execAsync = promisify(exec);
+	const { stdout } = await execAsync('git rev-parse --show-toplevel', { cwd });
+	return stdout.trim();
+}
+
 export class Cache extends EventEmitter {
 	private static _Instance: Cache | undefined;
 	static get Instance() {
@@ -230,14 +236,14 @@ export class Cache extends EventEmitter {
 			this.activeLayer = (async () => {
 				const execAsync = promisify(exec);
 
-				const targetPath = this.externalLayersPath || this.layersPath;
+				const activeLayerPath = this.externalLayersPath ?? this.layersPath;
 				const gitStatusPath = this.externalLayersPath
-					? `${path.relative(await this._getGitRoot(targetPath), targetPath)}/*`
+					? `${path.relative(await getGitRoot(activeLayerPath), activeLayerPath)}/*`
 					: 'test/simulation/cache/layers/*';
 
 				// Check git for an uncommitted layer database file
 				try {
-					const gitRoot = await this._getGitRoot(targetPath);
+					const gitRoot = await getGitRoot(activeLayerPath);
 					const { stdout: statusStdout } = await execAsync(`git status -z ${gitStatusPath}`, { cwd: gitRoot });
 					if (statusStdout !== '') {
 						const layerDatabaseEntries = statusStdout.split('\0').filter(entry => entry.endsWith('.sqlite'));
@@ -255,19 +261,13 @@ export class Cache extends EventEmitter {
 
 				// Create a new layer database
 				const uuid = generateUuid();
-				const activeLayer = new Keyv(new KeyvSqlite(path.join(targetPath, `${uuid}.sqlite`)));
+				const activeLayer = new Keyv(new KeyvSqlite(path.join(activeLayerPath, `${uuid}.sqlite`)));
 				this.layers.set(uuid, activeLayer);
 				return activeLayer;
 			})();
 		}
 
 		return this.activeLayer;
-	}
-
-	private async _getGitRoot(cwd: string): Promise<string> {
-		const execAsync = promisify(exec);
-		const { stdout } = await execAsync('git rev-parse --show-toplevel', { cwd });
-		return stdout.trim();
 	}
 
 	private async _compress(value: string): Promise<string> {
