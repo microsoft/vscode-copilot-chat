@@ -9,7 +9,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { hasDriveLetter } from '../../../util/vs/base/common/extpath';
 import { Schemas } from '../../../util/vs/base/common/network';
-import { basename } from '../../../util/vs/base/common/path';
+import { basename, normalize } from '../../../util/vs/base/common/path';
 import { isWindows } from '../../../util/vs/base/common/platform';
 import * as resources from '../../../util/vs/base/common/resources';
 import { isUriComponents } from '../../../util/vs/base/common/uri';
@@ -101,9 +101,14 @@ export class FilePathLinkifier implements IContributedLinkifier {
 		}
 
 		if (pathText.startsWith('/') || (isWindows && hasDriveLetter(pathText))) {
+
 			try {
-				const uri = await this.statAndNormalizeUri(Uri.file(pathText));
+				const uri = await this.statAndNormalizeUri(Uri.file(normalize(pathText)));
 				if (uri) {
+					if (uri.path === '/') {
+						return undefined;
+					}
+
 					return uri;
 				}
 			} catch {
