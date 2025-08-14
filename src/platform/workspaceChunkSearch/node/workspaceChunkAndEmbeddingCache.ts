@@ -149,6 +149,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 		workspaceIndex: IWorkspaceFileIndex,
 	): Promise<DbCache> {
 		const instantiationService = accessor.get(IInstantiationService);
+		const logService = accessor.get(ILogService);
 
 		const syncOptions: sql.DatabaseSyncOptions = {
 			open: true,
@@ -162,6 +163,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 			try {
 				await fs.promises.mkdir(path.dirname(dbPath.fsPath), { recursive: true });
 				db = new sql.DatabaseSync(dbPath.fsPath, syncOptions);
+				logService.trace(`DbWorkspaceChunkAndEmbeddingCache: Opened SQLite database on disk at ${dbPath.fsPath}`);
 			} catch (e) {
 				console.error('Failed to open SQLite database on disk', e);
 			}
@@ -169,6 +171,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 
 		if (!db) {
 			db = new sql.DatabaseSync(':memory:', syncOptions);
+			logService.trace(`DbWorkspaceChunkAndEmbeddingCache: Using in memory database`);
 		}
 
 		db.exec(`

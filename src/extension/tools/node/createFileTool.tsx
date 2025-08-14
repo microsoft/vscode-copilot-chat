@@ -5,7 +5,9 @@
 
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
+import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
+import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { IAlternativeNotebookContentEditGenerator, NotebookEditGenrationSource } from '../../../platform/notebook/common/alternativeContentEditGenerator';
@@ -13,6 +15,7 @@ import { INotebookService } from '../../../platform/notebook/common/notebookServ
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { getLanguageForResource } from '../../../util/common/languages';
 import { removeLeadingFilepathComment } from '../../../util/common/markdown';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -28,7 +31,6 @@ import { ActionType } from './applyPatch/parser';
 import { EditFileResult } from './editFileToolResult';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileOkForTool, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
-import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 
 export interface ICreateFileParams {
 	filePath: string;
@@ -73,7 +75,7 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 
 		const fileExists = await this.fileExists(uri);
 		const hasSupportedNotebooks = this.notebookService.hasSupportedNotebooks(uri);
-		let doc = undefined;
+		let doc: undefined | NotebookDocumentSnapshot | TextDocumentSnapshot = undefined;
 		if (fileExists && hasSupportedNotebooks) {
 			doc = await this.workspaceService.openNotebookDocumentAndSnapshot(uri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model));
 		} else if (fileExists && !hasSupportedNotebooks) {
@@ -86,13 +88,9 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 			} else {
 				throw new Error(`File already exists. You must use an edit tool to modify it.`);
 			}
-		} else if (!fileExists) {
-			await this.fileSystemService.writeFile(uri, Buffer.from(''));
-			doc = hasSupportedNotebooks
-				? await this.workspaceService.openNotebookDocumentAndSnapshot(uri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model))
-				: await this.workspaceService.openTextDocumentAndSnapshot(uri);
 		}
 
+		const languageId = doc?.languageId ?? getLanguageForResource(uri).languageId;
 		if (hasSupportedNotebooks) {
 			// Its possible we have a code block with a language id
 			// Also possible we have file paths in the content.
@@ -100,13 +98,13 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 			const processor = new CodeBlockProcessor(() => undefined, () => undefined, (codeBlock) => content = codeBlock.code);
 			processor.processMarkdown(options.input.content);
 			processor.flush();
-			content = removeLeadingFilepathComment(options.input.content, doc!.languageId, options.input.filePath);
+			content = removeLeadingFilepathComment(options.input.content, languageId, options.input.filePath);
 			await processFullRewriteNewNotebook(uri, content, this._promptContext.stream, this.alternativeNotebookEditGenerator, { source: NotebookEditGenrationSource.createFile, requestId: options.chatRequestId, model: options.model ? this.endpointProvider.getChatEndpoint(options.model).then(m => m.model) : undefined }, token);
 			this._promptContext.stream.notebookEdit(uri, true);
 			sendEditNotebookTelemetry(this.telemetryService, this.endpointProvider, 'createFile', uri, this._promptContext.requestId, options.model ?? this._promptContext.request?.model);
 		} else {
-			const content = removeLeadingFilepathComment(options.input.content, doc!.languageId, options.input.filePath);
-			await processFullRewrite(uri, doc as TextDocumentSnapshot, content, this._promptContext.stream, token, []);
+			const content = removeLeadingFilepathComment(options.input.content, languageId, options.input.filePath);
+			await processFullRewrite(uri, doc as TextDocumentSnapshot | undefined, content, this._promptContext.stream, token, []);
 			this._promptContext.stream.textEdit(uri, true);
 			return new LanguageModelToolResult([
 				new LanguageModelPromptTsxPart(

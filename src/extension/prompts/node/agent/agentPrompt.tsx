@@ -630,7 +630,7 @@ class AgentTasksInstructions extends PromptElement {
 					{tasks.map((t, i) => {
 						const isActive = this._tasksService.isTaskActive(t);
 						return (
-							<Tag name='task' attrs={{ id: `${t.type}: ${t.label || i}` }}>
+							<Tag name='task' attrs={{ id: t.type ? `${t.type}: ${t.label || i}` : `${t.label || i}` }}>
 								{this.makeTaskPresentation(t)}
 								{isActive && <> (This task is currently running. You can use the {ToolName.CoreGetTaskOutput} or {ToolName.GetTaskOutput} tool to view its output.)</>}
 							</Tag>
