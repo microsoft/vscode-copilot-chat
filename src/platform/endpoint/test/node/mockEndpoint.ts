@@ -21,9 +21,15 @@ import { ITokenizerProvider } from '../../../tokenizer/node/tokenizer';
 
 export class MockEndpoint implements IChatEndpoint {
 	constructor(
+		family: string | undefined,
 		@IChatMLFetcher private readonly _chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider private readonly _tokenizerProvider: ITokenizerProvider,
-	) { }
+	) {
+		if (family !== undefined) {
+			this.family = family;
+		}
+	}
+
 	isPremium: boolean = false;
 	multiplier: number = 0;
 	restrictedToSkus?: string[] | undefined;
@@ -41,8 +47,8 @@ export class MockEndpoint implements IChatEndpoint {
 	urlOrRequestMetadata: string = 'https://microsoft.com';
 	modelMaxPromptTokens: number = 50000;
 	name: string = 'test';
-	version: string = '1.0';
 	family: string = 'test';
+	version: string = '1.0';
 	tokenizer: TokenizerType = TokenizerType.O200K;
 
 	processResponseFromChatEndpoint(telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData, cancellationToken?: CancellationToken): Promise<AsyncIterableObject<ChatCompletion>> {
