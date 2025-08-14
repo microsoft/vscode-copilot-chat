@@ -9,7 +9,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { hasDriveLetter } from '../../../util/vs/base/common/extpath';
 import { Schemas } from '../../../util/vs/base/common/network';
-import { basename, normalize } from '../../../util/vs/base/common/path';
+import * as path from '../../../util/vs/base/common/path';
 import { isWindows } from '../../../util/vs/base/common/platform';
 import * as resources from '../../../util/vs/base/common/resources';
 import { isUriComponents } from '../../../util/vs/base/common/uri';
@@ -101,11 +101,10 @@ export class FilePathLinkifier implements IContributedLinkifier {
 		}
 
 		if (pathText.startsWith('/') || (isWindows && hasDriveLetter(pathText))) {
-
 			try {
-				const uri = await this.statAndNormalizeUri(Uri.file(normalize(pathText)));
+				const uri = await this.statAndNormalizeUri(Uri.file(path.normalize(pathText)));
 				if (uri) {
-					if (uri.path === '/') {
+					if (path.posix.normalize(uri.path) === '/') {
 						return undefined;
 					}
 
@@ -141,7 +140,7 @@ export class FilePathLinkifier implements IContributedLinkifier {
 		}
 
 		// Then fallback to checking references based on filename
-		const name = basename(pathText);
+		const name = path.basename(pathText);
 		const refUri = context.references
 			.map(ref => {
 				if ('variableName' in ref.anchor) {
