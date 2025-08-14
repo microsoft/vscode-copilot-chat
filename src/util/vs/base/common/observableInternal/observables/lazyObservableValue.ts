@@ -11,6 +11,7 @@ import { TransactionImpl } from '../transaction';
 import { DebugNameData } from '../debugName';
 import { getLogger } from '../logging/logging';
 import { BaseObservable } from './baseObservable';
+import { DebugLocation } from '../debugLocation';
 
 /**
  * Holds off updating observers until the value is actually read.
@@ -30,8 +31,9 @@ export class LazyObservableValue<T, TChange = void>
 		private readonly _debugNameData: DebugNameData,
 		initialValue: T,
 		private readonly _equalityComparator: EqualityComparer<T>,
+		debugLocation: DebugLocation
 	) {
-		super();
+		super(debugLocation);
 		this._value = initialValue;
 	}
 

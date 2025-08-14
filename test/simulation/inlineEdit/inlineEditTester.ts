@@ -143,7 +143,10 @@ export class InlineEditTester {
 			}));
 		}
 
-		const stestRuntime = accessor.getIfExists(ISimulationTestRuntime);
+		let stestRuntime: ISimulationTestRuntime | undefined;
+		try {
+			stestRuntime = accessor.get(ISimulationTestRuntime);
+		} catch { }
 
 		if (stestRuntime) {
 			const nesUserEditHistory: ISerializedNesUserEditsHistory = {

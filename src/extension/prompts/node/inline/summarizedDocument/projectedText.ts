@@ -43,7 +43,7 @@ export class ProjectedText {
 	}
 
 	public projectOffsetEdit(edit: StringEdit): StringEdit {
-		return edit.tryRebase(this.edits, false);
+		return edit.rebaseSkipConflicting(this.edits);
 	}
 
 	public tryRebase(originalEdit: StringEdit): { edit: StringEdit; text: ProjectedText } | undefined {
@@ -66,7 +66,7 @@ export class ProjectedText {
 	}
 
 	public projectBackOffsetEdit(edit: StringEdit): StringEdit {
-		return edit.tryRebase(this.edits.inverse(this.originalText), false);
+		return edit.rebaseSkipConflicting(this.edits.inverse(this.originalText));
 	}
 
 	public projectBackTextEdit(edits: readonly vscode.TextEdit[]): vscode.TextEdit[] {

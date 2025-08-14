@@ -11,6 +11,7 @@ import { CancellationError, CancellationToken, CancellationTokenSource } from '.
 import { strictEquals } from '../commonFacade/deps';
 import { autorun } from '../reactions/autorun';
 import { Derived } from '../observables/derivedImpl';
+import { DebugLocation } from '../debugLocation';
 
 /**
  * Resolves the promise when the observables state matches the predicate.
@@ -94,6 +95,7 @@ export function derivedWithCancellationToken<T>(computeFnOrOwner: ((reader: IRea
 			return computeFn(r, cancellationTokenSource.token);
 		}, undefined,
 		() => cancellationTokenSource?.dispose(),
-		strictEquals
+		strictEquals,
+		DebugLocation.ofCaller()
 	);
 }

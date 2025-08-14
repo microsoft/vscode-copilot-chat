@@ -30,7 +30,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import * as errors from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { createTracer, ITracer } from '../../../util/common/tracing';
-import { AsyncIterableObject, DeferredPromise, raceFilter, raceTimeout, timeout } from '../../../util/vs/base/common/async';
+import { AsyncIterableObject, DeferredPromise, raceTimeout, timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { LineEdit, LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
@@ -48,6 +48,7 @@ import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFilterin
 import { AREA_AROUND_END_TAG, AREA_AROUND_START_TAG, CODE_TO_EDIT_END_TAG, CODE_TO_EDIT_START_TAG, createTaggedCurrentFileContentUsingPagedClipping, CURSOR_TAG, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/promptCrafting';
 import { XtabEndpoint } from './xtabEndpoint';
 import { linesWithBackticksRemoved, toLines } from './xtabUtils';
+import { raceFilter } from '../../../util/common/async';
 
 export const IGNORE_TEXT_BEFORE = /```[^\n]*\n/;
 

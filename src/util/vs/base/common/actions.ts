@@ -57,7 +57,7 @@ export interface IActionChangeEvent {
 export class Action extends Disposable implements IAction {
 
 	protected _onDidChange = this._register(new Emitter<IActionChangeEvent>());
-	readonly onDidChange = this._onDidChange.event;
+	get onDidChange() { return this._onDidChange.event; }
 
 	protected readonly _id: string;
 	protected _label: string;
@@ -170,10 +170,10 @@ export interface IRunEvent {
 export class ActionRunner extends Disposable implements IActionRunner {
 
 	private readonly _onWillRun = this._register(new Emitter<IRunEvent>());
-	readonly onWillRun = this._onWillRun.event;
+	get onWillRun() { return this._onWillRun.event; }
 
 	private readonly _onDidRun = this._register(new Emitter<IRunEvent>());
-	readonly onDidRun = this._onDidRun.event;
+	get onDidRun() { return this._onDidRun.event; }
 
 	async run(action: IAction, context?: unknown): Promise<void> {
 		if (!action.enabled) {

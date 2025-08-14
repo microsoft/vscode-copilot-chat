@@ -93,7 +93,7 @@ export class ServerPoweredInlineEditProvider implements IStatelessNextEditProvid
 			const edits = response.edits.map(e => LineReplacement.deserialize(e));
 			const sortingPermutation = Permutation.createSortPermutation(edits, (a, b) => a.lineRange.startLineNumber - b.lineRange.startLineNumber);
 			const lineEdit = new LineEdit(sortingPermutation.apply(edits));
-			lineEdit.edits.forEach(edit => pushEdit(Result.ok({ edit })));
+			lineEdit.replacements.forEach(edit => pushEdit(Result.ok({ edit })));
 			pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, undefined)));
 			return StatelessNextEditResult.streaming(telemetryBuilder);
 		} else {
