@@ -403,8 +403,7 @@ export const executeTestOnce = async (
 		const smartChatModel = (opts.smartChatModel ?? opts.chatModel) ?? test.model;
 		const fastChatModel = (opts.fastChatModel ?? opts.chatModel) ?? test.model;
 		const fastRewriteModel = (opts.fastRewriteModel ?? opts.chatModel) ?? test.model;
-		const embeddingsModel = opts.embeddingModel ?? test.embeddingsModel;
-		testingServiceCollection.define(IEndpointProvider, new SyncDescriptor(TestEndpointProvider, [smartChatModel, fastChatModel, embeddingsModel, fastRewriteModel, currentTestRunInfo, opts.modelCacheMode === CacheMode.Disable, undefined]));
+		testingServiceCollection.define(IEndpointProvider, new SyncDescriptor(TestEndpointProvider, [smartChatModel, fastChatModel, fastRewriteModel, currentTestRunInfo, opts.modelCacheMode === CacheMode.Disable, undefined]));
 	}
 
 	const simulationTestRuntime = (ctx.externalScenariosPath !== undefined)

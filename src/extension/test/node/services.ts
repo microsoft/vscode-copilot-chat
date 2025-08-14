@@ -59,7 +59,6 @@ export function createExtensionUnitTestingServices(currentTestRunInfo?: any, mod
 		new SyncDescriptor(TestEndpointProvider, [
 			modelConfig?.smartChatModel ?? modelConfig?.chatModel,
 			modelConfig?.fastChatModel ?? modelConfig?.chatModel,
-			modelConfig?.embeddingModel,
 			modelConfig?.fastRewriteModel,
 			currentTestRunInfo,
 			!!modelConfig?.skipModelMetadataCache,
