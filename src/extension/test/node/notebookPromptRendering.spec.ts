@@ -269,7 +269,6 @@ describe('Notebook Prompt Rendering', function () {
 			supportsToolCalls: false,
 			supportsVision: false,
 			supportsPrediction: false,
-			supportsStatefulResponses: false,
 			isPremium: false,
 			multiplier: 0,
 			maxOutputTokens: 4096,

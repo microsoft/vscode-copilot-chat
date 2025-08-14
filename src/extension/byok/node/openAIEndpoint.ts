@@ -18,6 +18,8 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 
 function hydrateBYOKErrorMessages(response: ChatResponse): ChatResponse {
 	if (response.type === ChatFetchResponseType.Failed && response.streamError) {
@@ -55,7 +57,9 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService protected instantiationService: IInstantiationService,
-		@IThinkingDataService private thinkingDataService: IThinkingDataService
+		@IThinkingDataService private thinkingDataService: IThinkingDataService,
+		@IConfigurationService configurationService: IConfigurationService,
+		@IExperimentationService expService: IExperimentationService
 	) {
 		super(
 			_modelInfo,
@@ -67,7 +71,9 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
-			instantiationService
+			instantiationService,
+			configurationService,
+			expService
 		);
 	}
 

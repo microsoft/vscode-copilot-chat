@@ -50,6 +50,11 @@ type ICompletionsModelCapabilities = {
 	tokenizer: TokenizerType;
 }
 
+export enum ModelSupportedEndpoint {
+	ChatCompletions = '/chat/completions',
+	Responses = '/responses'
+}
+
 export interface IModelAPIResponse {
 	id: string;
 	name: string;
@@ -61,6 +66,7 @@ export interface IModelAPIResponse {
 	version: string;
 	billing?: { is_premium: boolean; multiplier: number; restricted_to?: string[] };
 	capabilities: IChatModelCapabilities | IEmbeddingModelCapabilities | ICompletionsModelCapabilities;
+	supported_endpoints?: ModelSupportedEndpoint[];
 }
 
 export type IChatModelInformation = IModelAPIResponse & {

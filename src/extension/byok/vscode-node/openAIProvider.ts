@@ -38,7 +38,7 @@ export class OAIBYOKLMProvider extends BaseOpenAICompatibleLMProvider {
 
 	protected override async getModelInfo(modelId: string, apiKey: string | undefined, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
 		const info = await super.getModelInfo(modelId, apiKey, modelCapabilities);
-		info.capabilities.supports.statefulResponses = this._configurationService.getExperimentBasedConfig(ConfigKey.ByokResponsesApi, this._experimentationService);
+		info.capabilities.supports.statefulResponses = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseResponsesApi, this._experimentationService);
 		return info;
 	}
 }

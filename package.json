@@ -1297,7 +1297,7 @@
 					}
 				]
 			},
-{
+			{
 				"id": "github.copilot.notebook",
 				"name": "GitHubCopilot",
 				"fullName": "GitHub Copilot",
@@ -2722,15 +2722,6 @@
 						},
 						"markdownDescription": "Configure custom Azure OpenAI models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
 					},
-					"github.copilot.chat.byok.responsesApi": {
-						"type": "boolean",
-						"default": false,
-						"tags": [
-							"experimental",
-							"onExP"
-						],
-						"markdownDescription": "%github.copilot.config.byok.responsesApi%"
-					},
 					"github.copilot.chat.enableRetryAfterFilteredResponse": {
 						"type": "boolean",
 						"default": true,
@@ -3692,7 +3683,7 @@
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@roamhq/mac-ca": "^1.0.7",
-		"@vscode/copilot-api": "^0.1.4",
+		"@vscode/copilot-api": "^0.1.5",
 		"@vscode/extension-telemetry": "^1.0.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",
