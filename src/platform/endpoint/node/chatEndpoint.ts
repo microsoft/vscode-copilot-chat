@@ -249,14 +249,15 @@ export class ChatEndpoint implements IChatEndpoint {
 			body['messages'] = newMessages;
 		}
 
-		if (this.useResponsesApi) {
-			delete body?.temperature;
-			// delete body?.top_p;
-			// delete body?.max_output_tokens;
-			body!.reasoning = {
+		if (body && this.useResponsesApi) {
+			delete body.temperature;
+			body.reasoning = {
 				'effort': 'high',
 				'summary': 'detailed'
 			};
+			body.truncation = this._configurationService.getConfig(ConfigKey.Internal.UseResponsesApiTruncation) ?
+				'auto' :
+				'disabled';
 		}
 	}
 

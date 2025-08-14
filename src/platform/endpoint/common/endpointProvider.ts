@@ -33,7 +33,6 @@ export type IChatModelCapabilities = {
 		vision?: boolean;
 		prediction?: boolean;
 		thinking?: boolean;
-		statefulResponses?: boolean;
 	};
 };
 
