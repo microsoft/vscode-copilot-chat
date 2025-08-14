@@ -285,6 +285,6 @@
 	"copilot.toolSet.runCommand.description": "Run commands in the terminal",
 	"copilot.toolSet.runNotebook.description": "Run notebook cells",
 	"copilot.toolSet.search.description": "Search and read files in your workspace",
-	"copilot.toolSet.new.description": "Scaffold a new workspace in VS Code",
+	"copilot.toolSet.new.description": "Scaffold a new workspace with VS Code specific configurations to compile, debug and run new projects.",
 	"copilot.toolSet.runTasks.description": "Run tasks in your workspace"
 }
