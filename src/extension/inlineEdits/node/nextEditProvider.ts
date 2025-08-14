@@ -189,7 +189,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		} else {
 			tracer.trace('fetching next edit');
-			req = new NextEditFetchRequest(logContext, nesConfigs.debounceUseCoreRequestTime ? (context.requestIssuedDateTime ?? undefined) : undefined);
+			req = new NextEditFetchRequest(context.requestUuid, logContext, nesConfigs.debounceUseCoreRequestTime ? (context.requestIssuedDateTime ?? undefined) : undefined);
 			telemetryBuilder.setHeaderRequestId(req.headerRequestId);
 
 			const startVersion = doc.value.get();
@@ -419,6 +419,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		const nextEditRequest = new StatelessNextEditRequest(
 			req.headerRequestId,
+			req.opportunityId,
 			doc.value.get(),
 			projectedDocuments.map(d => d.nextEditDoc),
 			activeDocAndIdx.idx,
@@ -684,6 +685,7 @@ function assertDefined<T>(value: T | undefined): T {
 export class NextEditFetchRequest {
 	public readonly headerRequestId = generateUuid();
 	constructor(
+		public readonly opportunityId: string,
 		public readonly log: InlineEditRequestLogContext,
 		public readonly providerRequestStartDateTime: number | undefined,
 	) {
