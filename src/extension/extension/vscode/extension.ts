@@ -5,7 +5,7 @@
 
 import * as l10n from '@vscode/l10n';
 import { commands, env, ExtensionContext, ExtensionMode, l10n as vscodeL10n } from 'vscode';
-import { IEnvService } from '../../../platform/env/common/envService';
+import { isProduction } from '../../../platform/env/common/packagejson';
 import { IHeatmapService } from '../../../platform/heatmap/common/heatmapService';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -53,15 +53,15 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 		l10n.config({ contents: vscodeL10n.bundle });
 	}
 
+	if (!isProduction) {
+		// Must do this before creating all the services which may rely on keys from .env
+		configuration.configureDevPackages?.();
+	}
+
 	const instantiationService = createInstantiationService(configuration);
 
 	await instantiationService.invokeFunction(async accessor => {
-		const envService = accessor.get(IEnvService);
 		const expService = accessor.get(IExperimentationService);
-
-		if (!envService.isProduction()) {
-			configuration.configureDevPackages?.();
-		}
 
 		// Await intialization of exp service. This ensure cache is fresh.
 		// It will then auto refresh every 30 minutes after that.
