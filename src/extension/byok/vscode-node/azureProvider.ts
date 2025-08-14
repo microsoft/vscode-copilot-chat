@@ -3,13 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, ChatResponseFragment2, Event, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatRequestHandleOptions, Progress, QuickPickItem, window } from 'vscode';
+import { CancellationToken, Event, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatRequestHandleOptions, Progress, QuickPickItem, window } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotLanguageModelWrapper } from '../../conversation/vscode-node/languageModelAccess';
-import { BYOKAuthType, BYOKKnownModels, BYOKModelProvider, resolveModelInfo } from '../common/byokProvider';
+import { BYOKAuthType, BYOKKnownModels, BYOKModelProvider, LMResponsePart, resolveModelInfo } from '../common/byokProvider';
 import { OpenAIEndpoint } from '../node/openAIEndpoint';
 import { IBYOKStorageService } from './byokStorageService';
 import { promptForAPIKey } from './byokUIService';
@@ -95,7 +95,7 @@ export class AzureBYOKModelProvider implements BYOKModelProvider<AzureModelInfo>
 		return modelsWithApiKeys;
 	}
 
-	async prepareLanguageModelChat(options: { silent: boolean }, token: CancellationToken): Promise<AzureModelInfo[]> {
+	async prepareLanguageModelChatInformation(options: { silent: boolean }, token: CancellationToken): Promise<AzureModelInfo[]> {
 		try {
 			const knownModels = await this.getModelsWithAPIKeys(options.silent);
 			return Object.entries(knownModels).map(([id, capabilities]) => {
@@ -120,7 +120,7 @@ export class AzureBYOKModelProvider implements BYOKModelProvider<AzureModelInfo>
 			return [];
 		}
 	}
-	async provideLanguageModelChatResponse(model: AzureModelInfo, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: LanguageModelChatRequestHandleOptions, progress: Progress<ChatResponseFragment2>, token: CancellationToken): Promise<any> {
+	async provideLanguageModelChatResponse(model: AzureModelInfo, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: LanguageModelChatRequestHandleOptions, progress: Progress<LMResponsePart>, token: CancellationToken): Promise<any> {
 		const apiKey = await this._byokStorageService.getAPIKey(AzureBYOKModelProvider.providerName, model.id);
 		if (!apiKey) {
 			this._logService.error(`No API key found for model ${model.id}`);

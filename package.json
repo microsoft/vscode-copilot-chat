@@ -22,7 +22,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.104.0-20250811",
+		"vscode": "^1.104.0-20250815",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -1349,7 +1349,7 @@
 					}
 				]
 			},
-{
+			{
 				"id": "github.copilot.notebook",
 				"name": "GitHubCopilot",
 				"fullName": "GitHub Copilot",
