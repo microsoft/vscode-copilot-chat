@@ -39,6 +39,7 @@ import { GitServiceImpl } from '../../../platform/git/vscode/gitServiceImpl';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { OctoKitService } from '../../../platform/github/common/octoKitServiceImpl';
 import { IIgnoreService, NullIgnoreService } from '../../../platform/ignore/common/ignoreService';
+import { IImageService, nullImageService } from '../../../platform/image/common/imageService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ILanguageFeaturesService, NoopLanguageFeaturesService } from '../../../platform/languages/common/languageFeaturesService';
 import { LanguageDiagnosticsServiceImpl } from '../../../platform/languages/vscode/languageDiagnosticsServiceImpl';
@@ -102,7 +103,6 @@ import { IToolsService, NullToolsService } from '../../tools/common/toolsService
 import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
 import { ToolGroupingCache } from '../../tools/common/virtualTools/virtualToolGroupCache';
 import { IToolGroupingCache, IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
-import { IImageService, nullImageService } from '../../../platform/image/common/imageService';
 
 /**
  * A default context for VSCode extension testing, building on general one in `lib`.
@@ -115,7 +115,7 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(ISimulationTestContext, new SyncDescriptor(NulSimulationTestContext));
 	testingServiceCollection.define(IRequestLogger, new SyncDescriptor(NullRequestLogger));
 	testingServiceCollection.define(IFeedbackReporter, new SyncDescriptor(NullFeedbackReporterImpl));
-	testingServiceCollection.define(IEndpointProvider, new SyncDescriptor(TestEndpointProvider, [undefined, undefined, undefined, undefined, undefined, false, undefined]));
+	testingServiceCollection.define(IEndpointProvider, new SyncDescriptor(TestEndpointProvider, [undefined, undefined, undefined, undefined, false, undefined]));
 	testingServiceCollection.define(ICopilotTokenStore, new SyncDescriptor(CopilotTokenStore));
 	testingServiceCollection.define(IDomainService, new SyncDescriptor(DomainService));
 	testingServiceCollection.define(ICAPIClientService, new SyncDescriptor(CAPIClientImpl));

@@ -21,7 +21,7 @@ import { IExperimentationService } from '../../telemetry/common/nullExperimentat
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
-import { ChatEndpointFamily, IChatModelInformation, IEmbeddingModelInformation, IModelAPIResponse, isChatModelInformation, isEmbeddingModelInformation } from '../common/endpointProvider';
+import { ChatEndpointFamily, IChatModelInformation, IModelAPIResponse, isChatModelInformation } from '../common/endpointProvider';
 import { getMaxPromptTokens } from './chatEndpoint';
 
 export interface IModelMetadataFetcher {
@@ -49,12 +49,6 @@ export interface IModelMetadataFetcher {
 	 * @returns The chat model information if found, otherwise undefined
 	 */
 	getChatModelFromApiModel(model: LanguageModelChat): Promise<IChatModelInformation | undefined>;
-
-	/**
-	 * Retrieves an embeddings model by its family name
-	 * @param family The family of the model to fetch
-	 */
-	getEmbeddingsModel(family: 'text-embedding-3-small'): Promise<IEmbeddingModelInformation>;
 }
 
 /**
@@ -168,16 +162,6 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 		resolvedModel = await this._hydrateResolvedModel(resolvedModel);
 		if (!isChatModelInformation(resolvedModel)) {
 			throw new Error(`Unable to resolve chat model: ${apiModel.id},${apiModel.name},${apiModel.version},${apiModel.family}`);
-		}
-		return resolvedModel;
-	}
-
-	public async getEmbeddingsModel(family: 'text-embedding-3-small'): Promise<IEmbeddingModelInformation> {
-		await this._taskSingler.getOrCreate(ModelMetadataFetcher.ALL_MODEL_KEY, this._fetchModels.bind(this));
-		let resolvedModel = this._familyMap.get(family)?.[0];
-		resolvedModel = await this._hydrateResolvedModel(resolvedModel);
-		if (!isEmbeddingModelInformation(resolvedModel)) {
-			throw new Error(`Unable to resolve embeddings model with family selection: ${family}`);
 		}
 		return resolvedModel;
 	}

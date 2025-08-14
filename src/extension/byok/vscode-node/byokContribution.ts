@@ -66,7 +66,7 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			this._providers.set(AzureBYOKModelProvider.providerName.toLowerCase(), instantiationService.createInstance(AzureBYOKModelProvider, this._byokStorageService));
 
 			for (const [providerName, provider] of this._providers) {
-				this._store.add(lm.registerChatModelProvider(providerName, provider));
+				this._store.add(lm.registerLanguageModelChatProvider(providerName, provider));
 			}
 		}
 	}

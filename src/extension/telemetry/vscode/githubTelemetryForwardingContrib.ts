@@ -53,11 +53,6 @@ function translateToGithubProperty(eventName: string, key: string, value: unknow
 	if (eventName === 'inlineCompletion.endOfLife') {
 		switch (key as keyof InlineCompletionEndOfLifeEvent) {
 			case 'id': return { key: 'opportunityId', value };
-			case 'shown': return { key: 'isShown', value: boolToNum(value) };
-			case 'languageId': return { key: 'activeDocumentLanguageId', value };
-			case 'superseded': return { key: 'supersededByOpportunityId', value: value ? 'unknown' : undefined };
-			case 'reason': return { key: 'acceptance', value: value === 'accepted' ? 'accepted' : value === 'rejected' ? 'rejected' : 'notAccepted' };
-			case 'editorType': return { key: 'isNotebook', value: boolToNum(value === 'notebook') };
 		}
 	}
 
@@ -75,10 +70,6 @@ function dataToPropsAndMeasurements(data: Record<string, unknown>): { properties
 		}
 	}
 	return { properties, measurements };
-}
-
-function boolToNum(value: unknown): number | undefined {
-	return typeof value === 'boolean' ? (value ? 1 : 0) : undefined;
 }
 
 interface IEditTelemetryData {

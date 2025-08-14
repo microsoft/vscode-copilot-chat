@@ -53,7 +53,7 @@ export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat 
  * Model supports replace_string_in_file as an edit tool.
  */
 export function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic');
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || model.family.includes('gemini');
 }
 
 /**

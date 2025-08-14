@@ -324,6 +324,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 
 		const query = await this.promptVariablesService.resolveToolReferencesInPrompt(this.props.request, this.props.toolReferences ?? []);
 		const hasReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ReplaceString);
+		const hasMultiReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.MultiReplaceString);
 		const hasApplyPatchTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ApplyPatch);
 		const hasCreateFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CreateFile);
 		const hasEditFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
@@ -354,7 +355,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 					<Tag name='reminderInstructions'>
 						{/* Critical reminders that are effective when repeated right next to the user message */}
 						<KeepGoingReminder modelFamily={this.props.endpoint.family} />
-						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint))}
+						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint), hasMultiReplaceStringTool)}
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
 						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
 					</Tag>
@@ -629,7 +630,7 @@ class AgentTasksInstructions extends PromptElement {
 					{tasks.map((t, i) => {
 						const isActive = this._tasksService.isTaskActive(t);
 						return (
-							<Tag name='task' attrs={{ id: `${t.type}: ${t.label || i}` }}>
+							<Tag name='task' attrs={{ id: t.type ? `${t.type}: ${t.label || i}` : `${t.label || i}` }}>
 								{this.makeTaskPresentation(t)}
 								{isActive && <> (This task is currently running. You can use the {ToolName.CoreGetTaskOutput} or {ToolName.GetTaskOutput} tool to view its output.)</>}
 							</Tag>
@@ -669,19 +670,23 @@ class AgentTasksInstructions extends PromptElement {
 	}
 }
 
-export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringTool: boolean, useStrongReplaceStringHint: boolean) {
+export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringTool: boolean, useStrongReplaceStringHint: boolean, hasMultiStringReplace: boolean) {
 	const lines = [];
 	if (hasEditFileTool) {
 		lines.push(<>When using the {ToolName.EditFile} tool, avoid repeating existing code, instead use a line comment with \`{EXISTING_CODE_MARKER}\` to represent regions of unchanged code.<br /></>);
 	}
 	if (hasReplaceStringTool) {
-		lines.push(<>When using the {ToolName.ReplaceString} tool, include 3-5 lines of unchanged code before and after the string you want to replace, to make it unambiguous which part of the file should be edited.<br /></>);
+		lines.push(<>
+			When using the {ToolName.ReplaceString} tool, include 3-5 lines of unchanged code before and after the string you want to replace, to make it unambiguous which part of the file should be edited.<br />
+			{hasMultiStringReplace && <>For maximum efficiency, whenever you plan to perform multiple independent edit operations, invoke them simultaneously using {ToolName.MultiReplaceString} tool rather than sequentially. This will greatly improve user's cost and time efficiency leading to a better user experience.<br /></>}
+		</>);
 	}
 	if (hasEditFileTool && hasReplaceStringTool) {
+		const eitherOr = hasMultiStringReplace ? `${ToolName.ReplaceString} or ${ToolName.MultiReplaceString} tools` : `${ToolName.ReplaceString} tool`;
 		if (useStrongReplaceStringHint) {
-			lines.push(<>You must always try making file edits using {ToolName.ReplaceString} tool. NEVER use {ToolName.EditFile} unless told to by the user or by a tool.</>);
+			lines.push(<>You must always try making file edits using the {eitherOr}. NEVER use {ToolName.EditFile} unless told to by the user or by a tool.</>);
 		} else {
-			lines.push(<>It is much faster to edit using the {ToolName.ReplaceString} tool. Prefer {ToolName.ReplaceString} for making edits and only fall back to {ToolName.EditFile} if it fails.</>);
+			lines.push(<>It is much faster to edit using the {eitherOr}. Prefer the {eitherOr} for making edits and only fall back to {ToolName.EditFile} if it fails.</>);
 		}
 	}
 

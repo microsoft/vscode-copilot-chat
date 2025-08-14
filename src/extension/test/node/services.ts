@@ -7,9 +7,9 @@ import { ToolGroupingCache } from '../../../extension/tools/common/virtualTools/
 import { IToolGroupingCache, IToolGroupingService } from '../../../extension/tools/common/virtualTools/virtualToolTypes';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { MockChatMLFetcher } from '../../../platform/chat/test/common/mockChatMLFetcher';
-import { EMBEDDING_MODEL } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { DiffServiceImpl } from '../../../platform/diff/node/diffServiceImpl';
+import { LEGACY_EMBEDDING_MODEL_ID } from '../../../platform/embeddings/common/embeddingsComputer';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IModelConfig } from '../../../platform/endpoint/test/node/openaiCompatibleEndpoint';
 import { TestEndpointProvider } from '../../../platform/endpoint/test/node/testEndpointProvider';
@@ -46,7 +46,7 @@ export interface ISimulationModelConfig {
 	chatModel?: string;
 	smartChatModel?: string;
 	fastChatModel?: string;
-	embeddingModel?: EMBEDDING_MODEL;
+	embeddingModel?: LEGACY_EMBEDDING_MODEL_ID;
 	fastRewriteModel?: string;
 	skipModelMetadataCache?: boolean;
 	customModelConfigs?: Map<string, IModelConfig>;
@@ -59,7 +59,6 @@ export function createExtensionUnitTestingServices(currentTestRunInfo?: any, mod
 		new SyncDescriptor(TestEndpointProvider, [
 			modelConfig?.smartChatModel ?? modelConfig?.chatModel,
 			modelConfig?.fastChatModel ?? modelConfig?.chatModel,
-			modelConfig?.embeddingModel,
 			modelConfig?.fastRewriteModel,
 			currentTestRunInfo,
 			!!modelConfig?.skipModelMetadataCache,

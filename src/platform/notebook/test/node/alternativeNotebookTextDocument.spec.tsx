@@ -19,57 +19,59 @@ describe('Alternative Notebook (text) Content', () => {
 		disposables.clear();
 	});
 
-	function createNotebook(cells: NotebookCellData[]) {
+	function createNotebook(cells: NotebookCellData[], withMarkdownCells: boolean = false) {
 		const notebook = ExtHostNotebookDocumentData.fromNotebookData(URI.file('notebook.ipynb'), new NotebookData(cells), 'jupyter-notebook');
-		const altDocSnapshot = createAlternativeNotebookDocumentSnapshot(notebook.document, true);
-		const altDoc = createAlternativeNotebookDocument(notebook.document, true);
+		const altDocSnapshot = createAlternativeNotebookDocumentSnapshot(notebook.document, !withMarkdownCells);
+		const altDoc = createAlternativeNotebookDocument(notebook.document, !withMarkdownCells);
 
 		expect(altDocSnapshot.getText()).toBe(altDoc.getText());
 		return { notebookData: notebook, notebook: notebook.document, altDocSnapshot, altDoc };
 	}
-	describe('Alt Content', () => {
-		test(`Generate Alt Content`, async () => {
-			const cells = [
-				new NotebookCellData(NotebookCellKind.Code, 'print("Hello World")', 'python'),
-			];
-			const { altDocSnapshot } = createNotebook(cells);
-			expect(altDocSnapshot.getText()).toMatchSnapshot();
-		});
-		test(`No Content`, async () => {
-			const { altDocSnapshot } = createNotebook([]);
-			expect(altDocSnapshot.getText()).toMatchSnapshot();
-		});
-		test(`No Content without code cells`, async () => {
-			const cells = [
-				new NotebookCellData(NotebookCellKind.Markup, '# This is a sample notebook', 'markdown'),
-			];
-			const { altDocSnapshot } = createNotebook(cells);
-			expect(altDocSnapshot.getText()).toMatchSnapshot();
-		});
-		test(`Exclude Markdown Cells`, async () => {
-			const cells = [
-				new NotebookCellData(NotebookCellKind.Markup, '# This is a sample notebook', 'markdown'),
-				new NotebookCellData(NotebookCellKind.Markup, '## Header', 'markdown'),
-				new NotebookCellData(NotebookCellKind.Code, 'print("Hello World")', 'python'),
-				new NotebookCellData(NotebookCellKind.Markup, 'Comments', 'markdown'),
-				new NotebookCellData(NotebookCellKind.Code, 'print("Foo Bar")', 'python'),
-			];
-			const { altDocSnapshot } = createNotebook(cells);
-			expect(altDocSnapshot.getText()).toMatchSnapshot();
-		});
-		test(`EOLs`, async () => {
-			const cells = [
-				new NotebookCellData(NotebookCellKind.Code, 'import sys\nimport os', 'python'),
-				new NotebookCellData(NotebookCellKind.Code, 'import pandas\r\nimport requests', 'python'),
-				new NotebookCellData(NotebookCellKind.Code, 'print("Hello World")\r\nprint("Foo Bar")\r\nprint("Bar Baz")', 'python'),
-				new NotebookCellData(NotebookCellKind.Code, 'print(sys.executable)\nprint(sys.version)', 'python'),
-			];
-			const { altDocSnapshot } = createNotebook(cells);
+	[true, false].forEach(withMarkdownCells => {
+		describe(`Alt Content ${withMarkdownCells ? 'with' : 'without'} Markdown Cells`, () => {
+			test(`Generate Alt Content`, async () => {
+				const cells = [
+					new NotebookCellData(NotebookCellKind.Code, 'print("Hello World")', 'python'),
+				];
+				const { altDocSnapshot } = createNotebook(cells, withMarkdownCells);
+				expect(altDocSnapshot.getText()).toMatchSnapshot();
+			});
+			test(`No Content`, async () => {
+				const { altDocSnapshot } = createNotebook([], withMarkdownCells);
+				expect(altDocSnapshot.getText()).toMatchSnapshot();
+			});
+			test(`No Content without code cells`, async () => {
+				const cells = [
+					new NotebookCellData(NotebookCellKind.Markup, '# This is a sample notebook', 'markdown'),
+				];
+				const { altDocSnapshot } = createNotebook(cells, withMarkdownCells);
+				expect(altDocSnapshot.getText()).toMatchSnapshot();
+			});
+			test(`With Markdown Cells`, async () => {
+				const cells = [
+					new NotebookCellData(NotebookCellKind.Markup, '# This is a sample notebook', 'markdown'),
+					new NotebookCellData(NotebookCellKind.Markup, '## Header', 'markdown'),
+					new NotebookCellData(NotebookCellKind.Code, 'print("Hello World")', 'python'),
+					new NotebookCellData(NotebookCellKind.Markup, 'Comments', 'markdown'),
+					new NotebookCellData(NotebookCellKind.Code, 'print("Foo Bar")', 'python'),
+				];
+				const { altDocSnapshot } = createNotebook(cells, withMarkdownCells);
+				expect(altDocSnapshot.getText()).toMatchSnapshot();
+			});
+			test(`EOLs`, async () => {
+				const cells = [
+					new NotebookCellData(NotebookCellKind.Code, 'import sys\nimport os', 'python'),
+					new NotebookCellData(NotebookCellKind.Code, 'import pandas\r\nimport requests', 'python'),
+					new NotebookCellData(NotebookCellKind.Code, 'print("Hello World")\r\nprint("Foo Bar")\r\nprint("Bar Baz")', 'python'),
+					new NotebookCellData(NotebookCellKind.Code, 'print(sys.executable)\nprint(sys.version)', 'python'),
+				];
+				const { altDocSnapshot } = createNotebook(cells, withMarkdownCells);
 
-			expect(altDocSnapshot.getText()).toMatchSnapshot();
+				expect(altDocSnapshot.getText()).toMatchSnapshot();
 
-			expect(altDocSnapshot.getText()).not.toContain('\r\n'); // Ensure no CRLF, only LF
-			expect(altDocSnapshot.getText()).toContain('\n'); // Ensure no CRLF, only LF
+				expect(altDocSnapshot.getText()).not.toContain('\r\n'); // Ensure no CRLF, only LF
+				expect(altDocSnapshot.getText()).toContain('\n'); // Ensure no CRLF, only LF
+			});
 		});
 	});
 	describe('Position Mapping', () => {
@@ -167,6 +169,159 @@ describe('Alternative Notebook (text) Content', () => {
 				[notebook.cellAt(2), new Range(0, 0, 2, 16)],
 				[notebook.cellAt(3), new Range(0, 0, 1, 9)]
 			]);
+		});
+		test(`All cells have same EOL (with MD cells excluded)`, async () => {
+			const cells = [
+				new NotebookCellData(NotebookCellKind.Markup, '# This is a sample notebook', 'markdown'),
+				new NotebookCellData(NotebookCellKind.Markup, '## Header', 'markdown'),
+				new NotebookCellData(NotebookCellKind.Code, 'import sys\nimport os', 'python'),
+				new NotebookCellData(NotebookCellKind.Markup, 'Comments', 'markdown'),
+				new NotebookCellData(NotebookCellKind.Code, 'import pandas\nimport requests', 'python'),
+				new NotebookCellData(NotebookCellKind.Code, 'print("Hello World")\nprint("Foo Bar")\nprint("Bar Baz")', 'python'),
+				new NotebookCellData(NotebookCellKind.Code, 'print(sys.executable)\nprint(sys.version)', 'python'),
+			];
+			const { notebook, altDocSnapshot } = createNotebook(cells);
+
+			expect(altDocSnapshot.getText(new OffsetRange(53, 53))).toBe('');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(53, 53))).toEqual([[notebook.cellAt(2), new Range(0, 0, 0, 0)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(1, 0, 1, 0))).toEqual([[notebook.cellAt(2), new Range(0, 0, 0, 0)]]);
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(2), [new Range(0, 0, 0, 0)])).toEqual([new OffsetRange(53, 53)]);
+
+			expect(altDocSnapshot.getText(new OffsetRange(53, 59))).toBe('import');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(53, 59))).toEqual([[notebook.cellAt(2), new Range(0, 0, 0, 6)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(1, 0, 1, 6))).toEqual([[notebook.cellAt(2), new Range(0, 0, 0, 6)]]);
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(2), [new Range(0, 0, 0, 6)])).toEqual([new OffsetRange(53, 59)]);
+
+			expect(altDocSnapshot.getText(new OffsetRange(53, 64))).toBe('import sys\n');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(53, 64))).toEqual([[notebook.cellAt(2), new Range(0, 0, 1, 0)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(1, 0, 2, 0))).toEqual([[notebook.cellAt(2), new Range(0, 0, 1, 0)]]);
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(2), [new Range(0, 0, 1, 0)])).toEqual([new OffsetRange(53, 64)]);
+
+			expect(altDocSnapshot.getText(new OffsetRange(53, 73))).toBe('import sys\nimport os');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(53, 73))).toEqual([[notebook.cellAt(2), new Range(0, 0, 1, 9)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(1, 0, 2, 9))).toEqual([[notebook.cellAt(2), new Range(0, 0, 1, 9)]]);
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(2), [new Range(0, 0, 1, 9)])).toEqual([new OffsetRange(53, 73)]);
+
+			expect(altDocSnapshot.getText(new OffsetRange(53, 74))).toBe('import sys\nimport os\n');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(53, 74))).toEqual([[notebook.cellAt(2), new Range(0, 0, 1, 9)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(1, 0, 3, 0))).toEqual([[notebook.cellAt(2), new Range(0, 0, 1, 9)]]);
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(2), [new Range(0, 0, 1, 9)])).toEqual([new OffsetRange(53, 73)]);
+
+			// Translating alt text range across cells will only return contents of one cell.
+			expect(altDocSnapshot.getText(new OffsetRange(53, 140))).toBe('import sys\nimport os\n#%% vscode.cell [id=#VSC-53ab90bb] [language=python]\nimport pandas');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(53, 140))).toEqual([[notebook.cellAt(2), new Range(0, 0, 1, 9)], [notebook.cellAt(4), new Range(0, 0, 0, 13)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(1, 0, 4, 13))).toEqual([[notebook.cellAt(2), new Range(0, 0, 1, 9)], [notebook.cellAt(4), new Range(0, 0, 0, 13)]]);
+
+			expect(altDocSnapshot.getText(new OffsetRange(71, 73))).toBe('os');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(71, 73))).toEqual([[notebook.cellAt(2), new Range(1, 7, 1, 9)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(2, 7, 2, 9))).toEqual([[notebook.cellAt(2), new Range(1, 7, 1, 9)]]);
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(2), [new Range(1, 7, 1, 9)])).toEqual([new OffsetRange(71, 73)]);
+
+			expect(altDocSnapshot.getText(new OffsetRange(127, 127))).toBe('');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(127, 127))).toEqual([[notebook.cellAt(4), new Range(0, 0, 0, 0)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(4, 0, 4, 0))).toEqual([[notebook.cellAt(4), new Range(0, 0, 0, 0)]]);
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(4), [new Range(0, 0, 0, 0)])).toEqual([new OffsetRange(127, 127)]);
+
+			expect(altDocSnapshot.getText(new OffsetRange(127, 133))).toBe('import');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(127, 133))).toEqual([[notebook.cellAt(4), new Range(0, 0, 0, 6)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(4, 0, 4, 6))).toEqual([[notebook.cellAt(4), new Range(0, 0, 0, 6)]]);
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(4), [new Range(0, 0, 0, 6)])).toEqual([new OffsetRange(127, 133)]);
+
+			expect(altDocSnapshot.getText(new OffsetRange(134, 258))).toBe('pandas\nimport requests\n#%% vscode.cell [id=#VSC-749a8f95] [language=python]\nprint("Hello World")\nprint("Foo Bar")\nprint("Bar');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(134, 258))).toEqual([
+				[notebook.cellAt(4), new Range(0, 7, 1, 15)],
+				[notebook.cellAt(5), new Range(0, 0, 2, 10)],
+			]);
+			expect(altDocSnapshot.fromAltRange(new Range(4, 7, 9, 10))).toEqual([
+				[notebook.cellAt(4), new Range(0, 7, 1, 15)],
+				[notebook.cellAt(5), new Range(0, 0, 2, 10)],
+			]);
+
+			expect(altDocSnapshot.getText(new OffsetRange(134, 156))).toBe('pandas\nimport requests');
+			expect(notebook.cellAt(4).document.getText(new Range(0, 7, 1, 15))).toBe('pandas\nimport requests');
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(4), [new Range(0, 7, 1, 15)])).toEqual([new OffsetRange(134, 156)]);
+			expect(altDocSnapshot.getText(new OffsetRange(210, 258))).toBe('print("Hello World")\nprint("Foo Bar")\nprint("Bar');
+			expect(notebook.cellAt(5).document.getText(new Range(0, 0, 2, 10))).toBe('print("Hello World")\nprint("Foo Bar")\nprint("Bar');
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(5), [new Range(0, 0, 2, 10)])).toEqual([new OffsetRange(210, 258)]);
+
+			expect(altDocSnapshot.getText(new OffsetRange(210, 265))).toBe('print("Hello World")\nprint("Foo Bar")\nprint("Bar Baz")\n');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(210, 265))).toEqual([[notebook.cellAt(5), new Range(0, 0, 2, 16)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(7, 0, 10, 0))).toEqual([[notebook.cellAt(5), new Range(0, 0, 2, 16)]]);
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(5), [new Range(0, 0, 2, 16)])).toEqual([new OffsetRange(210, 264)]);
+
+			expect(altDocSnapshot.getText(new OffsetRange(318, 358))).toBe('print(sys.executable)\nprint(sys.version)');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(318, 358))).toEqual([[notebook.cellAt(6), new Range(0, 0, 1, 18)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(11, 0, 12, 18))).toEqual([[notebook.cellAt(6), new Range(0, 0, 1, 18)]]);
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(6), [new Range(0, 0, 1, 18)])).toEqual([new OffsetRange(318, 358)]);
+
+			expect(altDocSnapshot.getText(new OffsetRange(60, 349))).toBe('sys\nimport os\n#%% vscode.cell [id=#VSC-53ab90bb] [language=python]\nimport pandas\nimport requests\n#%% vscode.cell [id=#VSC-749a8f95] [language=python]\nprint("Hello World")\nprint("Foo Bar")\nprint("Bar Baz")\n#%% vscode.cell [id=#VSC-d2139a72] [language=python]\nprint(sys.executable)\nprint(sys');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(60, 349))).toEqual([
+				[notebook.cellAt(2), new Range(0, 7, 1, 9)],
+				[notebook.cellAt(4), new Range(0, 0, 1, 15)],
+				[notebook.cellAt(5), new Range(0, 0, 2, 16)],
+				[notebook.cellAt(6), new Range(0, 0, 1, 9)]
+			]);
+			expect(altDocSnapshot.fromAltRange(new Range(1, 7, 12, 9))).toEqual([
+				[notebook.cellAt(2), new Range(0, 7, 1, 9)],
+				[notebook.cellAt(4), new Range(0, 0, 1, 15)],
+				[notebook.cellAt(5), new Range(0, 0, 2, 16)],
+				[notebook.cellAt(6), new Range(0, 0, 1, 9)]
+			]);
+		});
+		test(`All cells have same EOL (with MD cells included)`, async () => {
+			const cells = [
+				new NotebookCellData(NotebookCellKind.Markup, '# This is a sample notebook', 'markdown'),
+				new NotebookCellData(NotebookCellKind.Markup, '## Header\n### Sub Heading', 'markdown'),
+				new NotebookCellData(NotebookCellKind.Code, 'import sys\nimport os', 'python'),
+				new NotebookCellData(NotebookCellKind.Markup, 'Comments', 'markdown'),
+				new NotebookCellData(NotebookCellKind.Code, 'import pandas\nimport requests', 'python'),
+				new NotebookCellData(NotebookCellKind.Code, 'print("Hello World")\nprint("Foo Bar")\nprint("Bar Baz")', 'python'),
+				new NotebookCellData(NotebookCellKind.Code, 'print(sys.executable)\nprint(sys.version)', 'python'),
+			];
+			const { notebook, altDocSnapshot } = createNotebook(cells, true);
+
+			expect(altDocSnapshot.getText(new OffsetRange(59, 59))).toBe('');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(59, 59))).toEqual([[notebook.cellAt(0), new Range(0, 0, 0, 0)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(2, 0, 2, 0))).toEqual([[notebook.cellAt(0), new Range(0, 0, 0, 0)]]);
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(0), [new Range(0, 0, 0, 0)])).toEqual([new OffsetRange(59, 59)]);
+
+			expect(altDocSnapshot.getText(new OffsetRange(59, 65))).toBe('# This');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(59, 65))).toEqual([[notebook.cellAt(0), new Range(0, 0, 0, 6)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(2, 0, 2, 6))).toEqual([[notebook.cellAt(0), new Range(0, 0, 0, 6)]]);
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(0), [new Range(0, 0, 0, 6)])).toEqual([new OffsetRange(59, 65)]);
+
+			expect(altDocSnapshot.getText(new OffsetRange(233, 244))).toBe('import sys\n');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(233, 244))).toEqual([[notebook.cellAt(2), new Range(0, 0, 1, 0)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(10, 0, 11, 0))).toEqual([[notebook.cellAt(2), new Range(0, 0, 1, 0)]]);
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(2), [new Range(0, 0, 1, 0)])).toEqual([new OffsetRange(233, 244)]);
+
+			expect(altDocSnapshot.getText(new OffsetRange(233, 253))).toBe('import sys\nimport os');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(233, 253))).toEqual([[notebook.cellAt(2), new Range(0, 0, 1, 9)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(10, 0, 11, 9))).toEqual([[notebook.cellAt(2), new Range(0, 0, 1, 9)]]);
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(2), [new Range(0, 0, 1, 9)])).toEqual([new OffsetRange(233, 253)]);
+
+			expect(altDocSnapshot.getText(new OffsetRange(233, 254))).toBe('import sys\nimport os\n');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(233, 254))).toEqual([[notebook.cellAt(2), new Range(0, 0, 1, 9)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(10, 0, 12, 0))).toEqual([[notebook.cellAt(2), new Range(0, 0, 1, 9)]]);
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(2), [new Range(0, 0, 1, 9)])).toEqual([new OffsetRange(233, 253)]);
+
+			// Translating alt text range across cells will only return contents of one cell.
+			expect(altDocSnapshot.getText(new OffsetRange(53, 254))).toBe(']\n"""\n# This is a sample notebook\n"""\n#%% vscode.cell [id=#VSC-bdb3864a] [language=markdown]\n"""\n## Header\n### Sub Heading\n"""\n#%% vscode.cell [id=#VSC-8862d4f3] [language=python]\nimport sys\nimport os\n');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(53, 254))).toEqual([
+				[notebook.cellAt(0), new Range(0, 0, 0, 27)],
+				[notebook.cellAt(1), new Range(0, 0, 1, 15)],
+				[notebook.cellAt(2), new Range(0, 0, 1, 9)]
+			]);
+			expect(altDocSnapshot.fromAltRange(new Range(1, 0, 11, 13))).toEqual([
+				[notebook.cellAt(0), new Range(0, 0, 0, 27)],
+				[notebook.cellAt(1), new Range(0, 0, 1, 15)],
+				[notebook.cellAt(2), new Range(0, 0, 1, 9)]
+			]);
+
+			expect(altDocSnapshot.getText(new OffsetRange(251, 253))).toBe('os');
+			expect(altDocSnapshot.fromAltOffsetRange(new OffsetRange(251, 253))).toEqual([[notebook.cellAt(2), new Range(1, 7, 1, 9)]]);
+			expect(altDocSnapshot.fromAltRange(new Range(11, 7, 11, 9))).toEqual([[notebook.cellAt(2), new Range(1, 7, 1, 9)]]);
+			expect(altDocSnapshot.toAltOffsetRange(notebook.cellAt(2), [new Range(1, 7, 1, 9)])).toEqual([new OffsetRange(251, 253)]);
 		});
 		test(`All Cells have different EOLs`, async () => {
 			const cells = [
