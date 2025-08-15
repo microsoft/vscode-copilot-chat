@@ -6,22 +6,33 @@
 import path from 'path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IFetcherService } from '../../../../platform/networking/common/fetcherService';
 import { ITestingServicesAccessor, TestingServiceCollection } from '../../../../platform/test/node/services';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { NuGetMcpSetup } from '../../vscode-node/nuget';
+import { CommandExecutor, ICommandExecutor } from '../../vscode-node/util';
+import { FixtureFetcherService } from './util';
 
-describe.skip('get nuget MCP server info', { timeout: 30_000 }, () => {
-	let testingServiceCollection: TestingServiceCollection = createExtensionUnitTestingServices();
-	let accessor: ITestingServicesAccessor = testingServiceCollection.createTestingAccessor();
-	let logService: ILogService = accessor.get(ILogService);
+const RUN_DOTNET_CLI_TESTS = !!process.env['CI'] || !!process.env['BUILD_ARTIFACTSTAGINGDIRECTORY'];
+
+describe.runIf(RUN_DOTNET_CLI_TESTS)('get nuget MCP server info using dotnet CLI', { timeout: 30_000 }, () => {
+	let testingServiceCollection: TestingServiceCollection;
+	let accessor: ITestingServicesAccessor;
+	let logService: ILogService;
+	let fetcherService: IFetcherService;
+	let commandExecutor: ICommandExecutor;
 	let nuget: NuGetMcpSetup;
 
 	beforeEach(() => {
 		testingServiceCollection = createExtensionUnitTestingServices();
 		accessor = testingServiceCollection.createTestingAccessor();
 		logService = accessor.get(ILogService);
+		fetcherService = new FixtureFetcherService();
+		commandExecutor = new CommandExecutor();
 		nuget = new NuGetMcpSetup(
 			logService,
+			fetcherService,
+			commandExecutor,
 			{ command: 'dotnet', args: [] }, // allow dotnet command to be overridden for testing
 			path.join(__dirname, 'fixtures', 'nuget') // file based package source for testing
 		);
