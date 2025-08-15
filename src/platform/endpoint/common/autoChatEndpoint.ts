@@ -32,7 +32,6 @@ export class AutoChatEndpoint implements IChatEndpoint {
 	supportsVision: boolean = this._wrappedEndpoint.supportsVision;
 	supportsPrediction: boolean = this._wrappedEndpoint.supportsPrediction;
 	showInModelPicker: boolean = true;
-	supportsStatefulResponses: boolean = this._wrappedEndpoint.supportsStatefulResponses;
 	isPremium?: boolean | undefined = this._wrappedEndpoint.isPremium;
 	multiplier?: number | undefined = this._wrappedEndpoint.multiplier;
 	restrictedToSkus?: string[] | undefined = this._wrappedEndpoint.restrictedToSkus;

@@ -145,6 +145,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			location: opts.location,
 			postOptions,
 			tools: requestBody.tools,
+			ignoreStatefulMarker: opts.ignoreStatefulMarker
 		});
 		let tokenCount = -1;
 		try {
