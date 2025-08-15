@@ -223,10 +223,11 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			}
 
 			tracer.trace(`using next edit suggestion from ${suggestionInfo.source}`);
-			const documents = doc.fromOffsetRange(result.edit.replaceRange);
 			let range: Range | undefined;
-			let completionItem: Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown'> | undefined;
 			let isInlineCompletion: boolean = false;
+			let completionItem: Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown'> | undefined;
+
+			const documents = doc.fromOffsetRange(result.edit.replaceRange);
 			if (!documents.length) {
 				tracer.trace('no next edit suggestion');
 			} else if (documents[0][0] === document) {
@@ -272,7 +273,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 			this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
 
-			const nesCompletionItem = {
+			const nesCompletionItem: NesCompletionItem = {
 				...completionItem,
 				info: suggestionInfo,
 				telemetryBuilder,
