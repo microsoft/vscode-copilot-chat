@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { createServiceIdentifier } from '../../../util/common/services';
+import { Emitter, Event } from '../../../util/vs/base/common/event';
+
 
 /**
  * Experimentation service provides A/B experimentation functionality.
@@ -10,45 +12,22 @@ import { createServiceIdentifier } from '../../../util/common/services';
  * This is in order for us to control events and telemetry whenever these methods are called.
  */
 export interface IExperimentationService {
-
 	readonly _serviceBrand: undefined;
 
 	/**
-	 * Promise indicating that the experimentation service has been
-	 * initialized, so it's safe to make a call to isFlightEnabled.
+	 * Emitted whenever a treatment values have changes based on user account information or refresh.
 	 */
-	readonly initializePromise: Promise<void>;
+	onDidTreatmentsChange: Event<void>;
+
+
 	/**
 	 * Promise that resolves when the experimentation service has completed
 	 * its first request to the Treatment Assignment Service. If this request
-	 * is successful, flights are up-to-date.
+	 * is successful, flights are up-to-date. Flights can change when the user
+	 * changes their account.
 	 */
-	readonly initialFetch: Promise<void>;
-	/**
-	 * @deprecated Use `getTreatmentVariable` instead.
-	 *
-	 * Returns a value indicating whether the given flight is enabled.
-	 * It uses the values currently in memory, so the experimentation service
-	 * must be initialized before calling.
-	 * @param flight The flight to check.
-	 */
-	isFlightEnabled(flight: string): boolean;
-	/**
-	 * @deprecated Use `getTreatmentVariable` instead.
-	 *
-	 * Returns a value indicating whether the given flight is enabled.
-	 * It uses the values currently on cache.
-	 * @param flight The flight to check.
-	 */
-	isCachedFlightEnabled(flight: string): Promise<boolean>;
-	/**
-	 * @deprecated Use `getTreatmentVariableAsync` instead.
-	 *
-	 * Returns a value indicating whether the given flight is enabled.
-	 * It re-fetches values from the server.
-	 * @param flight the flight to check.
-	 */
-	isFlightEnabledAsync(flight: string): Promise<boolean>;
+	hasTreatments(): Promise<void>;
+
 	/**
 	 * Returns the value of the treatment variable, or undefined if not found.
 	 * It uses the values currently in memory, so the experimentation service
@@ -57,15 +36,6 @@ export interface IExperimentationService {
 	 * @param name name of the treatment variable.
 	 */
 	getTreatmentVariable<T extends boolean | number | string>(configId: string, name: string): T | undefined;
-	/**
-	 * Returns the value of the treatment variable, or undefined if not found.
-	 * It re-fetches values from the server. If checkCache is true and the value exists
-	 * in the cache, the Treatment Assignment Service is not called.
-	 * @param config name of the config to check.
-	 * @param name name of the treatment variable.
-	 * @param checkCache check the cache for the variable before calling the TAS.
-	 */
-	getTreatmentVariableAsync<T extends boolean | number | string>(configId: string, name: string, checkCache?: boolean): Promise<T | undefined>;
 }
 
 export const IExperimentationService = createServiceIdentifier<IExperimentationService>('IExperimentationService');
@@ -73,29 +43,13 @@ export const IExperimentationService = createServiceIdentifier<IExperimentationS
 
 export class NullExperimentationService implements IExperimentationService {
 	declare readonly _serviceBrand: undefined;
-	readonly initializePromise: Promise<void> = Promise.resolve();
-	readonly initialFetch: Promise<void> = Promise.resolve();
+	private readonly _onDidTreatmentsChange = new Emitter<void>();
+	readonly onDidTreatmentsChange = this._onDidTreatmentsChange.event;
 
-	isFlightEnabled(_flight: string): boolean {
-		return false;
-	}
-
-	isCachedFlightEnabled(_flight: string): Promise<boolean> {
-		return Promise.resolve(false);
-	}
-
-	isFlightEnabledAsync(_flight: string): Promise<boolean> {
-		return Promise.resolve(false);
-	}
-
+	async hasTreatments(): Promise<void> { return Promise.resolve(); }
+	async hasAccountBasedTreatments(): Promise<void> { return Promise.resolve(); }
 	getTreatmentVariable<T extends boolean | number | string>(_configId: string, _name: string): T | undefined {
+		console.log('[ALERT!ExP] NullExperimentationService: getTreatment', _configId, _name);
 		return undefined;
-	}
-
-	getTreatmentVariableAsync<T extends boolean | number | string>(
-		_configId: string,
-		_name: string,
-	): Promise<T | undefined> {
-		return Promise.resolve(undefined);
 	}
 }

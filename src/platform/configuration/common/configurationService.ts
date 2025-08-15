@@ -218,6 +218,8 @@ export abstract class AbstractConfigurationService extends Disposable implements
 			// no change
 			return;
 		}
+
+		console.log('[ALERT!User] ConfigurationService: User info changed:', userInfo);
 		this._isInternal = userInfo.isInternal;
 		this._isTeamMember = userInfo.isTeamMember;
 		this._teamMemberUsername = userInfo.teamMemberUsername;
