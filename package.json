@@ -2812,6 +2812,11 @@
 									"type": "number",
 									"description": "Maximum number of output tokens supported by the model"
 								},
+								"requiresAPIKey": {
+									"type": "boolean",
+									"description": "Whether the model requires an API key for authentication",
+									"default": true
+								},
 								"thinking": {
 									"type": "boolean",
 									"default": false,
@@ -2824,7 +2829,8 @@
 								"toolCalling",
 								"vision",
 								"maxInputTokens",
-								"maxOutputTokens"
+								"maxOutputTokens",
+								"requiresAPIKey"
 							],
 							"additionalProperties": false
 						},

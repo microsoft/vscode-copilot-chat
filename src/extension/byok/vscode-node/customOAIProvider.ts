@@ -63,8 +63,18 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 		return resolveCustomOAIUrl(modelId, url);
 	}
 
+	private getUserModelConfig(): Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean }> {
+		const modelConfig = this._configurationService.getConfig(this.getConfigKey()) as Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean }>;
+		return modelConfig;
+	}
+
+	private requiresAPIKey(modelId: string): boolean {
+		const userModelConfig = this.getUserModelConfig();
+		return userModelConfig[modelId]?.requiresAPIKey !== false;
+	}
+
 	private async getAllModels(): Promise<BYOKKnownModels> {
-		const modelConfig = this._configurationService.getConfig(this.getConfigKey()) as Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; thinking?: boolean }>;
+		const modelConfig = this.getUserModelConfig();
 		const models: BYOKKnownModels = {};
 		for (const [modelId, modelInfo] of Object.entries(modelConfig)) {
 			models[modelId] = {
@@ -84,6 +94,11 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 		const models = await this.getAllModels();
 		const modelsWithApiKeys: BYOKKnownModels = {};
 		for (const [modelId, modelInfo] of Object.entries(models)) {
+			const requireAPIKey = this.requiresAPIKey(modelId);
+			if (!requireAPIKey) {
+				modelsWithApiKeys[modelId] = modelInfo;
+				continue;
+			}
 			let apiKey = await this._byokStorageService.getAPIKey(this.providerName, modelId);
 			if (!silent && !apiKey) {
 				apiKey = await promptForAPIKey(`${this.providerName} - ${modelId}`, false);
@@ -130,10 +145,14 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 	}
 
 	async provideLanguageModelChatResponse(model: CustomOAIModelInfo, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: LanguageModelChatRequestHandleOptions, progress: Progress<LMResponsePart>, token: CancellationToken): Promise<any> {
-		const apiKey = await this._byokStorageService.getAPIKey(this.providerName, model.id);
-		if (!apiKey) {
-			this._logService.error(`No API key found for model ${model.id}`);
-			throw new Error(`No API key found for model ${model.id}`);
+		const requireAPIKey = this.requiresAPIKey(model.id);
+		let apiKey: string | undefined;
+		if (requireAPIKey) {
+			apiKey = await this._byokStorageService.getAPIKey(this.providerName, model.id);
+			if (!apiKey) {
+				this._logService.error(`No API key found for model ${model.id}`);
+				throw new Error(`No API key found for model ${model.id}`);
+			}
 		}
 		const modelInfo = resolveModelInfo(model.id, this.providerName, undefined, {
 			maxInputTokens: model.maxInputTokens,
@@ -145,16 +164,21 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 			thinking: model.thinking
 		});
 		modelInfo.capabilities.supports.statefulResponses = this._configurationService.getExperimentBasedConfig(ConfigKey.ByokResponsesApi, this._experimentationService);
-		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey, model.url);
+		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey ?? '', model.url);
 		return this._lmWrapper.provideLanguageModelResponse(openAIChatEndpoint, messages, options, options.extensionId, progress, token);
 	}
 
 	async provideTokenCount(model: CustomOAIModelInfo, text: string | LanguageModelChatMessage | LanguageModelChatMessage2, token: CancellationToken): Promise<number> {
-		const apiKey = await this._byokStorageService.getAPIKey(this.providerName, model.id);
-		if (!apiKey) {
-			this._logService.error(`No API key found for model ${model.id}`);
-			throw new Error(`No API key found for model ${model.id}`);
+		const requireAPIKey = this.requiresAPIKey(model.id);
+		let apiKey: string | undefined;
+		if (requireAPIKey) {
+			apiKey = await this._byokStorageService.getAPIKey(this.providerName, model.id);
+			if (!apiKey) {
+				this._logService.error(`No API key found for model ${model.id}`);
+				throw new Error(`No API key found for model ${model.id}`);
+			}
 		}
+
 		const modelInfo = resolveModelInfo(model.id, this.providerName, undefined, {
 			maxInputTokens: model.maxInputTokens,
 			maxOutputTokens: model.maxOutputTokens,
@@ -164,7 +188,7 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 			url: model.url,
 			thinking: model.thinking
 		});
-		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey, model.url);
+		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey ?? '', model.url);
 		return this._lmWrapper.provideTokenCount(openAIChatEndpoint, text);
 	}
 
@@ -182,7 +206,7 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 			modelId: string;
 		}
 
-		const modelItems: ModelQuickPickItem[] = Object.entries(allModels).map(([modelId, modelInfo]) => ({
+		const modelItems: ModelQuickPickItem[] = Object.entries(allModels).filter(m => this.requiresAPIKey(m[0])).map(([modelId, modelInfo]) => ({
 			label: modelInfo.name || modelId,
 			description: modelId,
 			detail: `URL: ${modelInfo.url}`,
