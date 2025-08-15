@@ -304,8 +304,8 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 	private async switchToBaseModel(request: vscode.ChatRequest, stream: vscode.ChatResponseStream): Promise<ChatRequest> {
 		const endpoint = await this.endpointProvider.getChatEndpoint(request);
 		const baseEndpoint = await this.endpointProvider.getChatEndpoint('copilot-base');
-		// IF base model or BYOK model, we just continue
-		if (endpoint.model === baseEndpoint.model || request.model.vendor !== 'copilot') {
+		// If it has a 0x multipler, it's free so don't switch them. If it's BYOK, it's free so don't switch them.
+		if (endpoint.multiplier === 0 || request.model.vendor !== 'copilot' || endpoint.multiplier === undefined) {
 			return request;
 		}
 		if (this._chatQuotaService.overagesEnabled || !this._chatQuotaService.quotaExhausted) {
@@ -328,7 +328,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 			}));
 			messageString.isTrusted = { enabledCommands: ['chat.enablePremiumOverages'] };
 		} else {
-			messageString = new vscode.MarkdownString(vscode.l10n.t('You have exceeded your free request allowance. We have automatically switched you to {0} which is included with your plan. To enable additional paid premium requests, contact your organization admin.', baseEndpoint.name));
+			messageString = new vscode.MarkdownString(vscode.l10n.t('You have exceeded your premium request allowance. We have automatically switched you to {0} which is included with your plan. To enable additional paid premium requests, contact your organization admin.', baseEndpoint.name));
 		}
 		stream.warning(messageString);
 		return request;
