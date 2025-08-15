@@ -48,9 +48,15 @@ declare module 'vscode' {
 		displayLocation?: InlineCompletionDisplayLocation;
 	}
 
+	export enum InlineCompletionDisplayLocationKind {
+		Code = 1,
+		Label = 2
+	}
+
 	export interface InlineCompletionDisplayLocation {
 		range: Range;
 		label: string;
+		kind: InlineCompletionDisplayLocationKind;
 	}
 
 	export interface InlineCompletionWarning {
