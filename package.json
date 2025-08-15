@@ -1608,6 +1608,10 @@
 				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
+				"vendor": "lmstudio",
+				"displayName": "LM Studio"
+			},
+			{
 				"vendor": "ollama",
 				"displayName": "Ollama"
 			},
