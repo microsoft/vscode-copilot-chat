@@ -48,6 +48,7 @@ export class SimulationOptions {
 	public readonly stageCacheEntries: boolean;
 	public readonly ci: boolean;
 	public readonly gc: boolean;
+	public readonly externalCacheLayersPath: string | undefined;
 	public readonly verbose: number | boolean | undefined;
 	public readonly grep: string[] | string | undefined;
 	public readonly omitGrep: string | undefined;
@@ -130,6 +131,7 @@ export class SimulationOptions {
 		this.stageCacheEntries = boolean(this.argv['stage-cache-entries'], false);
 		this.ci = boolean(this.argv['ci'], false);
 		this.gc = boolean(this.argv['gc'], false);
+		this.externalCacheLayersPath = argv['external-cache-layers-path'];
 		this.verbose = this.argv['verbose'];
 		this.grep = argv['grep'];
 		this.omitGrep = argv['omit-grep'];
@@ -180,6 +182,7 @@ export class SimulationOptions {
 			`  --n                                Run each scenario N times`,
 			`  --ci                               Equivalent to --n=${BASELINE_RUN_COUNT} but throws if the baseline is not up-to-date`,
 			`  --gc                               Used with --require-cache to compact cache layers into the baseline cache`,
+			`  --external-cache-layers-path       Used to specify the path to the external cache layers`,
 			`  --grep                             Run a test which contains the passed-in string`,
 			`  --omit-grep                        Run a test which does not contain the passed-in string`,
 			`  --embedding-model                  Specify the model to use for the embedding endpoint (default: ada)`,
