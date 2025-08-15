@@ -1,0 +1,14 @@
+name: 'worst case, gigantic current file, no additional context'
+performance:
+    samples: 2
+    mean-max-ms: 3500
+
+state:
+    current-file:
+        uri: file://assets/035/111k_loc.h
+        language: C
+        text: ${file:assets/035/111k_loc.h}
+
+expected-prompt:
+    prefix: ${file:assets/035/expected-prefix.txt}
+    suffix: ${file:assets/035/expected-suffix.txt}

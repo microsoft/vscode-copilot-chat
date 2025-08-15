@@ -1,0 +1,24 @@
+name: 'small current file, trailing whitespace'
+
+state:
+    current-file:
+        uri: file:///src/testclass_short.py
+        language: python
+        text: >
+            class Test:
+                def __init__(self, value1, value2, value3):
+                    self.value1 = value1
+                    self.value2 = value2
+                    self.value3 = value3
+                ⮑
+
+expected-prompt:
+    prefix: |+
+        # Path: testclass_short.py
+        class Test:
+            def __init__(self, value1, value2, value3):
+                self.value1 = value1
+                self.value2 = value2
+                self.value3 = value3
+    trailingWs: '    '
+    suffix: ''
