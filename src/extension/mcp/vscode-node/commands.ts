@@ -144,7 +144,7 @@ export class McpSetupCommands extends Disposable {
 						"finalState": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The final state of the installation (e.g., 'Done', 'Failed')" },
 						"configurationType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Generic configuration typed produced by the installation" },
 						"packageType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Package type (e.g., npm)" },
-						"packageName": { "classification": "PublicNonPersonalData", "purpose": "FeatureInsight", "comment": "Package name used for installation" },
+						"packageName": { "classification": "EndUserPseudonymizedInformation", "purpose": "FeatureInsight", "comment": "Package name used for installation" },
 						"packageVersion": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Package version" },
 						"durationMs": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Duration of the installation process in milliseconds" }
 					}
@@ -173,7 +173,7 @@ export class McpSetupCommands extends Disposable {
 					"comment": "Reports success or failure of agent-assisted MCP server validation step",
 					"state": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Validation state of the package" },
 					"packageType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Package type (e.g., npm)" },
-					"packageName": { "classification": "PublicNonPersonalData", "purpose": "FeatureInsight", "comment": "Package name used for installation" },
+					"packageName": { "classification": "EndUserPseudonymizedInformation", "purpose": "FeatureInsight", "comment": "Package name used for installation" },
 					"packageVersion": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Package version" },
 					"errorType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Generic type of error encountered during validation" },
 					"durationMs": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Duration of the validation process in milliseconds" }
