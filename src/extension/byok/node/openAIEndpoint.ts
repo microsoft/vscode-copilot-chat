@@ -12,6 +12,7 @@ import { IDomainService } from '../../../platform/endpoint/common/domainService'
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { IEnvService } from '../../../platform/env/common/envService';
+import { isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IChatEndpoint, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -94,6 +95,15 @@ export class OpenAIEndpoint extends ChatEndpoint {
 				return message;
 			});
 			body.messages = newMessages;
+		}
+
+		if (body?.tools) {
+			body.tools = body.tools.map(tool => {
+				if (isOpenAiFunctionTool(tool) && tool.function.parameters === undefined) {
+					tool.function.parameters = {};
+				}
+				return tool;
+			});
 		}
 
 		if (body) {
