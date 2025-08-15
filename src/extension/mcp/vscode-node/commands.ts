@@ -153,7 +153,7 @@ export class McpSetupCommands extends Disposable {
 					finalState: finalState,
 					configurationType: result?.type,
 					packageType: this.pendingSetup?.validateArgs.type,
-					packageName: new vscode.TelemetryTrustedValue<string>(this.pendingSetup?.pendingArgs.name || args.name),
+					packageName: new vscode.TelemetryTrustedValue<string>((this.pendingSetup?.pendingArgs.name || args.name).toLowerCase()),
 					packageVersion: this.pendingSetup?.pendingArgs.version,
 				}, {
 					durationMs: this.pendingSetup?.stopwatch.elapsed() ?? -1
@@ -185,13 +185,13 @@ export class McpSetupCommands extends Disposable {
 					{
 						state: result.state,
 						packageType: args.type,
-						packageName: new vscode.TelemetryTrustedValue<string>(result.name || args.name),
+						packageName: new vscode.TelemetryTrustedValue<string>(result.name.toLowerCase()),
 						packageVersion: result.version
 					} :
 					{
 						state: result.state,
 						packageType: args.type,
-						packageName: new vscode.TelemetryTrustedValue<string>(args.name),
+						packageName: new vscode.TelemetryTrustedValue<string>(args.name.toLowerCase()),
 						errorType: result.errorType
 					},
 				{ durationMs: sw.elapsed() });
