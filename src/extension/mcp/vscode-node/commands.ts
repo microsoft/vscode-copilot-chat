@@ -153,7 +153,7 @@ export class McpSetupCommands extends Disposable {
 					finalState: finalState,
 					configurationType: result?.type,
 					packageType: this.pendingSetup?.validateArgs.type,
-					packageName: this.pendingSetup?.pendingArgs.name,
+					packageName: new vscode.TelemetryTrustedValue<string>(this.pendingSetup?.pendingArgs.name || args.name),
 					packageVersion: this.pendingSetup?.pendingArgs.version,
 				}, {
 					durationMs: this.pendingSetup?.stopwatch.elapsed() ?? -1
@@ -182,8 +182,18 @@ export class McpSetupCommands extends Disposable {
 			this.telemetryService.sendMSFTTelemetryEvent(
 				'mcp.setup.validatePackage',
 				result.state === 'ok' ?
-					{ state: result.state, packageType: args.type, packageName: result.name ?? args.name, packageVersion: result.version } :
-					{ state: result.state, packageType: args.type, packageName: args.name, errorType: result.errorType },
+					{
+						state: result.state,
+						packageType: args.type,
+						packageName: new vscode.TelemetryTrustedValue<string>(result.name || args.name),
+						packageVersion: result.version
+					} :
+					{
+						state: result.state,
+						packageType: args.type,
+						packageName: new vscode.TelemetryTrustedValue<string>(args.name),
+						errorType: result.errorType
+					},
 				{ durationMs: sw.elapsed() });
 
 			// return the minimal result to avoid leaking implementation details
