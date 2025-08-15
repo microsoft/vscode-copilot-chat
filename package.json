@@ -3737,7 +3737,9 @@
 		"vite-plugin-wasm": "^3.5.0",
 		"vitest": "^3.0.5",
 		"yaml": "^2.8.0",
-		"zeromq": "github:rebornix/zeromq.js#a19e8e373b3abc677f91b936d3f00d49b1b61792"
+		"zeromq": "github:rebornix/zeromq.js#a19e8e373b3abc677f91b936d3f00d49b1b61792",
+        "js-yaml": "^4.1.0",
+		"@types/js-yaml": "^4.0.9"
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "^0.56.0",

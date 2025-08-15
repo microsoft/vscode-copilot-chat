@@ -69,7 +69,7 @@ async function main() {
 		await compressTikToken(tokens, `dist/${path.basename(tokens)}`);
 	}
 
-	const vendoredTiktokenFilesNoIndex = ['src/extension/inlineCompletion/node/tokenization/resources/cl100k_base.tiktoken.noindex', 'src/extension/inlineCompletion/node/tokenization/resources/o200k_base.tiktoken.noindex'];
+	const vendoredTiktokenFilesNoIndex = ['src/extension/inlineCompletionPrompt/node/tokenization/resources/cl100k_base.tiktoken.noindex', 'src/extension/inlineCompletionPrompt/node/tokenization/resources/o200k_base.tiktoken.noindex'];
 	for (const tokens of vendoredTiktokenFilesNoIndex) {
 		await copyFile(tokens, `dist/${path.basename(tokens)}`);
 	}
