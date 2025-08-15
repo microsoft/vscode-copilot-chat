@@ -5,7 +5,7 @@
 import * as l10n from '@vscode/l10n';
 import { BasePromptElementProps, PromptElement, PromptElementProps, PromptSizing, TextChunk } from '@vscode/prompt-tsx';
 import type { CancellationToken, LanguageModelToolInvocationOptions, LanguageModelToolInvocationPrepareOptions, PreparedToolInvocation } from 'vscode';
-import { IFetcherService } from '../../../../platform/networking/common/fetcherService';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { CancellationError } from '../../../../util/vs/base/common/errors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelToolResult } from '../../../../vscodeTypes';
@@ -24,11 +24,9 @@ interface ExecutionCommand {
 	arguments?: Argument[];
 }
 
-type SupportedLanguage = "python" | "typescript" | "javascript";
 
 interface ProjectSetupInfo {
 	projectType: string;
-	language: SupportedLanguage[];
 	description: string;
 	executionCommands?: ExecutionCommand[];
 	requiredExtensions?: string[];
@@ -38,7 +36,6 @@ interface ProjectSetupInfo {
 const setupInfo: ProjectSetupInfo[] = [
 	{
 		projectType: 'vscode-extension',
-		language: ['typescript', 'javascript'],
 		description: 'A template for creating a VS Code extension using Yeoman and Generator-Code.',
 		executionCommands: [{
 			command: 'npx --package yo --package generator-code -- yo code . --skipOpen',
@@ -65,7 +62,6 @@ const setupInfo: ProjectSetupInfo[] = [
 	},
 	{
 		projectType: 'next-js',
-		language: ['typescript', 'javascript'],
 		description: 'A React based framework for building server-rendered web applications.',
 		executionCommands: [{
 			command: 'npx create-next-app@latest .',
@@ -89,7 +85,6 @@ const setupInfo: ProjectSetupInfo[] = [
 	},
 	{
 		projectType: 'vite',
-		language: ['typescript', 'javascript'],
 		description: 'A front end build tool for web applications that focuses on speed and performance. Can be used with React, Vue, Preact, Lit, Svelte, Solid, and Qwik.',
 		executionCommands: [{
 			command: 'npx create-vite@latest .',
@@ -100,69 +95,22 @@ const setupInfo: ProjectSetupInfo[] = [
 	},
 	{
 		projectType: 'mcp-server',
-		language: ['typescript'],
-		description: 'A Model Context Protocol (MCP) server project in Typescript. This project is based on the MCP server template.',
-		executionCommands: [
-			{ command: 'npm init -y' },
-			{ command: 'npm install typescript --save-dev' },
-			{ command: 'npx tsc --init' },
-			{ command: 'npm install @modelcontextprotocol/sdk zod' }
-		],
+		description: 'A Model Context Protocol (MCP) server project. This project supports multiple programming languages including TypeScript, JavaScript, Python, C#, Java, and Kotlin.',
 		rules: [
 			'Follow these rules strictly and do not deviate from them.',
-			'1. Set up a TypeScript project environment using the commands provided.',
-			'2. Apply the modifications to the project to implement the MCP server using the documentation and examples provided.',
-			'3. Always install the latest version of the packages and ensure that the installed versions are not changed or downgraded.',
-			'4. Update the `copilot-instructions.md` to include a reference to the SDK link: https://github.com/modelcontextprotocol/create-python-server.',
-			'5. Update the `README.md` file with the latest state of the project.',
-			'6. Create an `mcp.json` file in the `.vscode` folder in the project root with the following content: `{ "servers": { "mcp-server-name": { "type": "stdio", "command": "command-to-run", "args": [list-of-args] } } }`.',
+			'1. First, visit https://github.com/modelcontextprotocol to find the correct SDK and setup instructions for the requested language. Default to TypeScript if no language is specified.',
+			`2. Use the ${ToolName.FetchWebPage} to find the correct implementation instructions from https://modelcontextprotocol.io/llms-full.txt`,
+			'3. Update the copilot-instructions.md file in the .github directory to include references to the SDK documentation',
+			'4. Create an `mcp.json` file in the `.vscode` folder in the project root with the following content: `{ "servers": { "mcp-server-name": { "type": "stdio", "command": "command-to-run", "args": [list-of-args] } } }`.',
 			'- mcp-server-name: The name of the MCP server. Create a unique name that reflects what this MCP server does.',
 			'- command-to-run: The command to run to start the MCP server. This is the command you would use to run the project you just created.',
 			'- list-of-args: The arguments to pass to the command. This is the list of arguments you would use to run the project you just created.',
-			'7. Inform the user that they can now debug this MCP server using VS Code.',
+			'5. Install any required VS Code extensions based on the chosen language (e.g., Python extension for Python projects).',
+			'6. Inform the user that they can now debug this MCP server using VS Code.',
 		]
 	},
 	{
-		projectType: 'mcp-server',
-		language: ['python'],
-		description: 'A Model Context Protocol (MCP) server project in Python. This project is based on the MCP server template.',
-		requiredExtensions: ['ms-python.python', 'ms-python.vscode-python-envs'],
-		executionCommands: [
-			{
-				command: 'pip install create-mcp-server && create-mcp-server --path . --no-claudeapp',
-				arguments: [
-					{ argName: '--name', description: 'Project name' },
-					{ argName: '--version', description: 'Server version' },
-					{ argName: '--description', description: 'Project description' }
-				]
-			},
-			{
-				command: 'uvx create-mcp-server --path .',
-				arguments: [
-					{ argName: '--name', description: 'Project name' },
-					{ argName: '--version', description: 'Server version' },
-					{ argName: '--description', description: 'Project description' }
-				]
-			},
-		],
-		rules: [
-			'Follow these rules strictly and do not deviate from them.',
-			'Use the exact command provided above. Do not modify the command.',
-			'1. Ensure that Python is installed and available in your PATH.',
-			'2. Run the execution commands to create the MCP server project using the templating tool.',
-			'3. Activate the virtual environment.',
-			'4. Install any other dependencies requested by the user or required by the project, and then modify the project to implement the MCP server.',
-			'5. Update the `copilot-instructions.md` to include a reference to the SDK link: https://github.com/modelcontextprotocol/create-python-server.',
-			'6. Update the `README.md` file with the latest state of the project.',
-			'7. Create an `mcp.json` file in the `.vscode` folder in the project root with the following content: `{ "servers": { "mcp-server-name": { "type": "stdio", "command": "command-to-run", "args": [list-of-args] } } }`.',
-			'- mcp-server-name: The name of the MCP server. Create a unique name that reflects what this MCP server does.',
-			'- command-to-run: The command to run to start the MCP server. This is the command you would use to run the project you just created.',
-			'- list-of-args: The arguments to pass to the command. This is the list of arguments you would use to run the project you just created.',
-			'8. Inform the user that they can now debug this MCP server using VS Code.',
-		]
-	}, {
 		projectType: 'python-script',
-		language: ['python'],
 		description: 'A simple Python script project which should be chosen when just a single script wants to be created.',
 		requiredExtensions: ['ms-python.python', 'ms-python.vscode-python-envs'],
 		rules: [
@@ -178,7 +126,6 @@ const setupInfo: ProjectSetupInfo[] = [
 	},
 	{
 		projectType: 'python-package',
-		language: ['python'],
 		description: 'A Python package project which can be used to create a distributable package.',
 		requiredExtensions: ['ms-python.python', 'ms-python.vscode-python-envs'],
 		rules: [
@@ -194,27 +141,8 @@ const setupInfo: ProjectSetupInfo[] = [
 	}
 ];
 
-// Utility function to extract content under a specific header in markdown
-function extractContentUnderHeader(markdown: string, header: string): string {
-	const headerRegex = new RegExp(`^#\\s*${header}\\s*$`, 'm');
-	const startMatch = markdown.match(headerRegex);
-	if (!startMatch) {
-		return '';
-	}
-
-	const startIndex = startMatch.index! + startMatch[0].length;
-	const remainingContent = markdown.slice(startIndex);
-
-	// Search for the next header that starts with #
-	const nextHeaderIndex = remainingContent.search(/^#\s+/m);
-	return nextHeaderIndex === -1
-		? remainingContent.trim()
-		: remainingContent.slice(0, nextHeaderIndex).trim();
-}
-
 export interface IWorkspaceSetupInfoToolParams {
 	projectType: string;
-	language?: SupportedLanguage;
 }
 
 export class GetWorkspaceSetupInfoTool implements ICopilotTool<IWorkspaceSetupInfoToolParams> {
@@ -232,9 +160,8 @@ export class GetWorkspaceSetupInfoTool implements ICopilotTool<IWorkspaceSetupIn
 
 	async invoke(options: LanguageModelToolInvocationOptions<IWorkspaceSetupInfoToolParams>, token: CancellationToken): Promise<LanguageModelToolResult> {
 
-		const { projectType, language } = options.input;
-		const resolvedLanguage = language ?? "typescript";
-		const selectedSetupInfo = setupInfo.find((info) => info.projectType === projectType && info.language.includes(resolvedLanguage));
+		const { projectType } = options.input;
+		const selectedSetupInfo = setupInfo.find((info) => info.projectType === projectType);
 
 		const json = await renderPromptElementJSON(this.instantiationService, WorkspaceSetupResult, { projectSetupInfo: selectedSetupInfo },);
 
@@ -253,12 +180,22 @@ ToolRegistry.registerTool(GetWorkspaceSetupInfoTool);
 export class WorkspaceSetupResult extends PromptElement<WorkspaceSetupProps> {
 	constructor(
 		props: PromptElementProps<WorkspaceSetupProps>,
-		@IFetcherService private readonly fetcherService: IFetcherService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super(props);
 	}
 
 	override async render(state: void, sizing: PromptSizing) {
+		const useContext7 = this.configurationService.getConfig(ConfigKey.NewWorkspaceUseContext7);
+		if (useContext7) {
+			return <> <TextChunk>
+				Use context7 tools to find the latest libraries, APIs, and documentation to help the user create and customize their project.<br />
+				1. Call mcp_context7_resolve-library-id with your project requirements.<br />
+				2. Call mcp_context7_get-library-docs to get scaffolding instructions.<br />
+				You must call these tools before proceeding and confirm that you did NOT skip this step.<br />
+				<br />
+			</TextChunk></>;
+		}
 
 		const { projectSetupInfo } = this.props;
 		if (!projectSetupInfo) {
@@ -267,35 +204,13 @@ export class WorkspaceSetupResult extends PromptElement<WorkspaceSetupProps> {
 			</TextChunk></>;
 		}
 
-
 		const setupInfo = JSON.stringify(projectSetupInfo, null, 2);
-
-		if (projectSetupInfo.projectType === 'mcp-server') {
-			const exampleContent = await this.fetcherService.fetch('https://modelcontextprotocol.io/llms-full.txt', { method: 'GET' });
-			const examples = exampleContent ? await exampleContent.text() : '';
-			// python setup info is outdated. use our custom instructions instead
-			const referenceContent = projectSetupInfo.language[0] === 'python' ? '' : extractContentUnderHeader(examples, 'For Server Developers');
-			return <>
-				<TextChunk>
-					Use the Project Setup Information:<br />
-					${setupInfo}<br />
-					<br />
-					Use the following documentation to set up the MCP server:<br />
-					${referenceContent}<br />
-					<br />
-					Don't forget to call the tool {ToolName.CreateNewWorkspace} to create the project in a VS Code workspace.<br />
-				</TextChunk>
-			</>;
-		}
-		else {
-			return <>
-				<TextChunk>
-					Use the Project Setup Information:<br />
-					${setupInfo}<br />
-					Don't forget to call the tool {ToolName.CreateNewWorkspace} to create the project in a VS Code workspace.<br />
-				</TextChunk>
-			</>;
-		}
+		return <>
+			<TextChunk>
+				Use the Project Setup Information:<br />
+				${setupInfo}<br />
+			</TextChunk>
+		</>;
 	}
 }
 

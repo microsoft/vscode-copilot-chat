@@ -28,6 +28,7 @@ export interface IToolCallRound {
 	toolInputRetry: number;
 	toolCalls: IToolCall[];
 	thinking?: ThinkingData;
+	statefulMarker?: string;
 }
 
 export interface InternalToolReference extends vscode.ChatLanguageModelToolReference {

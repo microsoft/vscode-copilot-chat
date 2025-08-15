@@ -56,7 +56,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 		const conversation = result.metadata?.responseId && this.conversationStore.getConversation(result.metadata.responseId);
 
 		if (typeof conversation === 'object' && conversation.getLatestTurn().getMetadata(IntentInvocationMetadata)?.value?.location === ChatLocation.Editor) {
-			this._handleInlineChatUserAction(result.metadata?.sessionId, agentId, conversation, e, undefined);
+			this._handleChatUserAction(result.metadata?.sessionId, agentId, conversation, e, undefined);
 			return;
 		}
 
@@ -150,12 +150,6 @@ export class UserFeedbackService implements IUserFeedbackService {
 						});
 					}
 
-					const outcomes = new Map([
-						[vscode.ChatEditingSessionActionOutcome.Accepted, 'accepted'],
-						[vscode.ChatEditingSessionActionOutcome.Rejected, 'rejected'],
-						[vscode.ChatEditingSessionActionOutcome.Saved, 'saved']
-					]);
-
 					/* __GDPR__
 						"panel.edit.feedback" : {
 							"owner": "joyceerhl",
@@ -191,6 +185,34 @@ export class UserFeedbackService implements IUserFeedbackService {
 					}
 				}
 				break;
+			case 'chatEditingHunkAction': {
+				const outcome = outcomes.get(e.action.outcome);
+				if (outcome) {
+
+					const properties = {
+						requestId: result.metadata?.responseId ?? '',
+						languageId: document?.languageId ?? '',
+						outcome,
+					};
+					const measurements = {
+						hasRemainingEdits: e.action.hasRemainingEdits ? 1 : 0,
+						isNotebook: this.notebookService.hasSupportedNotebooks(e.action.uri) ? 1 : 0,
+						isNotebookCell: e.action.uri.scheme === Schemas.vscodeNotebookCell ? 1 : 0,
+						lineCount: e.action.lineCount,
+						linesAdded: e.action.linesAdded,
+						linesRemoved: e.action.linesRemoved,
+					};
+
+					sendUserActionTelemetry(
+						this.telemetryService,
+						document ?? vscode.window.activeTextEditor?.document,
+						properties,
+						measurements,
+						'edit.hunk.action'
+					);
+				}
+				break;
+			}
 		}
 
 		if (e.action.kind === 'copy' || e.action.kind === 'insert') {
@@ -275,7 +297,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 		const conversation = result.metadata?.responseId && this.conversationStore.getConversation(result.metadata.responseId);
 
 		if (typeof conversation === 'object' && conversation.getLatestTurn().getMetadata(CopilotInteractiveEditorResponse)) {
-			this._handleInlineChatUserAction(result.metadata?.sessionId, agentId, conversation, undefined, e);
+			this._handleChatUserAction(result.metadata?.sessionId, agentId, conversation, undefined, e);
 			return;
 		}
 
@@ -319,7 +341,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 	// --- inline
 
 
-	private _handleInlineChatUserAction(sessionId: string | undefined, _agentId: string, conversation: Conversation, event: vscode.ChatUserActionEvent | undefined, feedback: vscode.ChatResultFeedback | undefined) {
+	private _handleChatUserAction(sessionId: string | undefined, _agentId: string, conversation: Conversation, event: vscode.ChatUserActionEvent | undefined, feedback: vscode.ChatResultFeedback | undefined) {
 
 		enum InteractiveEditorResponseFeedbackKind {
 			Unhelpful = 0,
@@ -370,6 +392,9 @@ export class UserFeedbackService implements IUserFeedbackService {
 		let telemetryEventName: string;
 
 		const { selection, wholeRange, intent, query } = response.promptQuery;
+
+		// For panel requests, conversation.getLatestTurn() refers to the turn that was voted on
+		// (i.e. last message in the conversation _up to this point_), not the last message shown in the panel.
 		const requestId = conversation?.getLatestTurn().id;
 		const intentId = intent?.id;
 		const languageId = response.promptQuery.document.languageId;
@@ -382,6 +407,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 		);
 		const isNotebookDocument = isNotebookCellOrNotebookChatInput(response.promptQuery.document.uri) ? 1 : 0;
 
+		// TODO: Fix the telemetry event name. This is hit by both inline and panel requests.
 		this.surveyService.signalUsage(`inline.${intentId ?? 'default'}`, languageId);
 
 		const sharedProps = {
@@ -449,6 +475,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 					"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the document is a notebook" }
 				}
 			*/
+			// TODO: Fix the telemetry event name. This is hit by both inline and panel requests.
 			this.telemetryService.sendMSFTTelemetryEvent('inline.action.vote', {
 				...sharedProps,
 				reason: feedback?.unhelpfulReason,
@@ -479,12 +506,14 @@ export class UserFeedbackService implements IUserFeedbackService {
 					"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the document is a notebook." }
 				}
 			*/
+			// TODO: Fix the telemetry event name. This may be hit by both inline and panel requests.
 			this.telemetryService.sendMSFTTelemetryEvent('inline.done', sharedProps, {
 				...sharedMeasures, accepted
 			});
 			sendInternalTelemetryEvent('interactiveSessionDone', { accepted });
 		}
 
+		// TODO: Fix the telemetry event name. This is hit by both inline and panel requests.
 		switch (kind) {
 			case InteractiveEditorResponseFeedbackKind.Helpful:
 				userActionProperties['rating'] = 'positive';
@@ -547,3 +576,9 @@ function reportInlineEditSurvivalEvent(res: EditSurvivalResult, sharedProps: Tel
 		didBranchChange: res.didBranchChange ? 1 : 0,
 	});
 }
+
+const outcomes = new Map([
+	[vscode.ChatEditingSessionActionOutcome.Accepted, 'accepted'],
+	[vscode.ChatEditingSessionActionOutcome.Rejected, 'rejected'],
+	[vscode.ChatEditingSessionActionOutcome.Saved, 'saved']
+]);

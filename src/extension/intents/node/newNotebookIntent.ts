@@ -200,10 +200,10 @@ export class NewNotebookResponseProcessor {
 				}
 				await created;
 			} else {
-				this.logService.logger.error('No Notebook outline found: ', this.messageText);
+				this.logService.error('No Notebook outline found: ', this.messageText);
 			}
 		} catch (ex) {
-			this.logService.logger.error('Error creating new notebook: ', ex);
+			this.logService.error('Error creating new notebook: ', ex);
 		}
 
 		return [];

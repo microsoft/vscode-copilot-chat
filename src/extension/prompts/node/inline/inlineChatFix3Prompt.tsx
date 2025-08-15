@@ -301,7 +301,7 @@ export class PatchEditFixReplyInterpreter implements ReplyInterpreter {
 			outputStream.warning(l10n.t('The edit generation was not successful. Please try again.'));
 		}
 		if (res.annotations.length) {
-			this.logService.logger.info(`[inline fix] Problems generating edits: ${res.annotations.map(a => `${a.message} [${a.label}]`).join(', ')}, invalid patches: ${res.invalidPatches.length}`);
+			this.logService.info(`[inline fix] Problems generating edits: ${res.annotations.map(a => `${a.message} [${a.label}]`).join(', ')}, invalid patches: ${res.invalidPatches.length}`);
 		}
 	}
 

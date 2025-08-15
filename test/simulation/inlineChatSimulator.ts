@@ -466,7 +466,7 @@ export async function simulateEditingScenario(
 				} else if (value instanceof ChatResponseMarkdownPart) {
 					markdownChunks.push(value.value.value);
 				}
-			});
+			}, () => { });
 			const interactionOutcomeComputer = new InteractionOutcomeComputer(activeEditor?.document.uri);
 			stream = interactionOutcomeComputer.spyOnStream(stream);
 

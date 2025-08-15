@@ -34,7 +34,6 @@ import { IExperimentationService } from '../../telemetry/common/nullExperimentat
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../workspace/common/workspaceService';
 import { GithubAvailableEmbeddingTypesManager } from '../common/githubAvailableEmbeddingTypes';
-import { GithubEmbeddingsComputer } from '../common/githubEmbeddingsComputer';
 import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQuery, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId, WorkspaceSearchAlert } from '../common/workspaceChunkSearch';
 import { CodeSearchChunkSearch, CodeSearchRemoteIndexState } from './codeSearchChunkSearch';
 import { EmbeddingsChunkSearch, LocalEmbeddingsIndexState, LocalEmbeddingsIndexStatus } from './embeddingsChunkSearch';
@@ -118,17 +117,13 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 
 	constructor(
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
 
 		this._availableEmbeddingTypes = _instantiationService.createInstance(GithubAvailableEmbeddingTypesManager);
 
 		this.tryInit(true);
-	}
-
-	public override dispose(): void {
-		super.dispose();
-		this._impl?.dispose();
 	}
 
 	private async tryInit(silent: boolean): Promise<WorkspaceChunkSearchServiceImpl | undefined> {
@@ -138,14 +133,15 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 
 		try {
 			const best = await this._availableEmbeddingTypes.getPreferredType(silent);
+			// Double check that we haven't initialized in the meantime
 			if (this._impl) {
 				return this._impl;
 			}
 
 			if (best) {
-				this._impl = this._instantiationService.createInstance(WorkspaceChunkSearchServiceImpl, best);
-				this._impl.onDidChangeIndexState(() => this._onDidChangeIndexState.fire());
-
+				this._logService.info(`WorkspaceChunkSearchService: using embedding type ${best}`);
+				this._impl = this._register(this._instantiationService.createInstance(WorkspaceChunkSearchServiceImpl, best));
+				this._register(this._impl.onDidChangeIndexState(() => this._onDidChangeIndexState.fire()));
 				return this._impl;
 			}
 		} catch {
@@ -210,7 +206,6 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 
 	private readonly shouldEagerlyIndexKey = 'workspaceChunkSearch.shouldEagerlyIndex';
 
-	private readonly _embeddingsComputer: IEmbeddingsComputer;
 	private readonly _embeddingsIndex: WorkspaceChunkEmbeddingsIndex;
 
 	private readonly _embeddingsChunkSearch: EmbeddingsChunkSearch;
@@ -228,6 +223,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		private readonly _embeddingType: EmbeddingType,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IAuthenticationChatUpgradeService private readonly _authUpgradeService: IAuthenticationChatUpgradeService,
+		@IEmbeddingsComputer private readonly _embeddingsComputer: IEmbeddingsComputer,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@ILogService private readonly _logService: ILogService,
@@ -239,7 +235,6 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 	) {
 		super();
 
-		this._embeddingsComputer = instantiationService.createInstance(GithubEmbeddingsComputer);
 		this._embeddingsIndex = instantiationService.createInstance(WorkspaceChunkEmbeddingsIndex, this._embeddingType);
 
 		this._embeddingsChunkSearch = this._register(instantiationService.createInstance(EmbeddingsChunkSearch, this._embeddingsIndex));
@@ -373,7 +368,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 			});
 
 			if (searchResult.isError()) {
-				this._logService.logger.error(`WorkspaceChunkSearch.searchFileChunks: no strategies succeeded`);
+				this._logService.error(`WorkspaceChunkSearch.searchFileChunks: no strategies succeeded`);
 				if (this._simulationTestContext.isInSimulationTests) {
 					throw new Error('All workspace search strategies failed');
 				}
@@ -385,7 +380,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 				};
 			}
 
-			this._logService.logger.trace(`WorkspaceChunkSearch.searchFileChunks: found ${searchResult.val.result.chunks.length} chunks using '${searchResult.val.strategy}'`);
+			this._logService.trace(`WorkspaceChunkSearch.searchFileChunks: found ${searchResult.val.result.chunks.length} chunks using '${searchResult.val.strategy}'`);
 
 			const filteredChunks = await raceCancellationError(this.filterIgnoredChunks(searchResult.val.result.chunks), token);
 			if (this._simulationTestContext.isInSimulationTests) {
@@ -447,7 +442,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		telemetryInfo: TelemetryCorrelationId,
 		token: CancellationToken,
 	): Promise<StrategySearchOutcome> {
-		this._logService.logger.debug(`Searching for ${sizing.maxResultCountHint} chunks in workspace`);
+		this._logService.debug(`Searching for ${sizing.maxResultCountHint} chunks in workspace`);
 
 		// First try full workspace
 		try {
@@ -459,7 +454,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 			if (isCancellationError(e)) {
 				throw e;
 			}
-			this._logService.logger.error(e, `Error during full workspace search`);
+			this._logService.error(e, `Error during full workspace search`);
 		}
 
 		// Then try code search but fallback to local search on error or timeout
@@ -611,7 +606,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 				throw e;
 			}
 
-			this._logService.logger.error(e, `Error during ${strategy.id} search`);
+			this._logService.error(e, `Error during ${strategy.id} search`);
 			return Result.error<StrategySearchErr>({
 				errorDiagMessage: `${strategy.id} error: ` + e,
 			});
@@ -688,7 +683,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 				let newlyScoredChunks: Array<ScoredFileChunk<FileChunk & { index: number }>> | undefined;
 
 				if (unscoredChunks.length) {
-					this._logService.logger.debug(`WorkspaceChunkSearch.rerankChunks. Scoring ${unscoredChunks.length} new chunks`);
+					this._logService.debug(`WorkspaceChunkSearch.rerankChunks. Scoring ${unscoredChunks.length} new chunks`);
 
 					// Only show progress when we're doing a potentially long running operation
 					const scoreTask = this.scoreChunks(query, unscoredChunks, telemetryInfo, token);
@@ -710,7 +705,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 
 				for (let i = 0; i < inChunks.length; i++) {
 					if (!out[i]) {
-						this._logService.logger.error(`Missing out chunk ${i}`);
+						this._logService.error(`Missing out chunk ${i}`);
 					}
 				}
 
@@ -729,11 +724,11 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 			const topScore = sortedChunks[0].distance.value;
 			const lowestAllowedScore = topScore * maxEmbeddingSpread;
 			const filteredChunks = sortedChunks.filter(x => x.distance.value >= lowestAllowedScore);
-			this._logService.logger.debug(`Eagerly filtered out ${sortedChunks.length - filteredChunks.length} chunks due to low quality`);
+			this._logService.debug(`Eagerly filtered out ${sortedChunks.length - filteredChunks.length} chunks due to low quality`);
 			return filteredChunks;
 		} catch (e) {
 			if (!isCancellationError(e)) {
-				this._logService.logger.error(e, 'Failed to search chunk embeddings index');
+				this._logService.error(e, 'Failed to search chunk embeddings index');
 			}
 			return inChunks.slice(0, maxResults);
 		}

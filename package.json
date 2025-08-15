@@ -2,7 +2,7 @@
 	"name": "copilot-chat",
 	"displayName": "GitHub Copilot Chat",
 	"description": "AI chat features powered by Copilot",
-	"version": "0.30.0",
+	"version": "0.31.0",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
 	"internalLargeStorageAriaKey": "ec712b3202c5462fb6877acae7f1f9d7-c19ad55e-3e3c-4f99-984b-827f6d95bd9e-6917",
@@ -22,7 +22,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.103.0-20250725",
+		"vscode": "^1.104.0-20250815",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -115,8 +115,8 @@
 		"authLearnMore",
 		"testObserver",
 		"aiTextSearchProvider@2",
-		"chatParticipantPrivate@9",
-		"chatProvider",
+		"chatParticipantPrivate@10",
+		"chatProvider@1",
 		"contribDebugCreateConfiguration",
 		"chatReferenceDiagnostic",
 		"textSearchProvider2",
@@ -131,7 +131,8 @@
 		"textDocumentChangeReason",
 		"resolvers",
 		"taskExecutionTerminal",
-		"dataChannels"
+		"dataChannels",
+		"languageModelThinkingPart"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -220,7 +221,7 @@
 				"displayName": "%copilot.tools.getVSCodeAPI.name%",
 				"icon": "$(references)",
 				"userDescription": "%copilot.vscode.tool.description%",
-				"modelDescription": "Get relevant VS Code API references to answer questions about VS Code extension development. Use this tool when the user asks about VS Code APIs, capabilities, or best practices related to developing VS Code extensions. Use it in all VS Code extension development workspaces.",
+				"modelDescription": "Get comprehensive VS Code API documentation and references for extension development. This tool provides authoritative documentation for VS Code's extensive API surface, including proposed APIs, contribution points, and best practices. Use this tool for understanding complex VS Code API interactions.\n\nWhen to use this tool:\n- User asks about specific VS Code APIs, interfaces, or extension capabilities\n- Need documentation for VS Code extension contribution points (commands, views, settings, etc.)\n- Questions about proposed APIs and their usage patterns\n- Understanding VS Code extension lifecycle, activation events, and packaging\n- Best practices for VS Code extension development architecture\n- API examples and code patterns for extension features\n- Troubleshooting extension-specific issues or API limitations\n\nWhen NOT to use this tool:\n- Creating simple standalone files or scripts unrelated to VS Code extensions\n- General programming questions not specific to VS Code extension development\n- Questions about using VS Code as an editor (user-facing features)\n- Non-extension related development tasks\n- File creation or editing that doesn't involve VS Code extension APIs\n\nCRITICAL usage guidelines:\n1. Always include specific API names, interfaces, or concepts in your query\n2. Mention the extension feature you're trying to implement\n3. Include context about proposed vs stable APIs when relevant\n4. Reference specific contribution points when asking about extension manifest\n5. Be specific about the VS Code version or API version when known\n\nScope: This tool is for EXTENSION DEVELOPMENT ONLY - building tools that extend VS Code itself, not for general file creation or non-extension programming tasks.",
 				"inputSchema": {
 					"type": "object",
 					"properties": {
@@ -240,6 +241,8 @@
 				"displayName": "%copilot.tools.think.name%",
 				"name": "copilot_think",
 				"tags": [],
+				"canBeReferencedInPrompt": true,
+				"toolReferenceName": "think",
 				"when": "config.github.copilot.chat.agent.thinkingTool",
 				"modelDescription": "Use this tool to think deeply about the user's request and organize your thoughts. This tool helps improve response quality by allowing the model to consider the request carefully, brainstorm solutions, and plan complex tasks. It's particularly useful for:\n\n1. Exploring repository issues and brainstorming bug fixes\n2. Analyzing test results and planning fixes\n3. Planning complex refactoring approaches\n4. Designing new features and architecture\n5. Organizing debugging hypotheses\n\nThe tool logs your thought process for transparency but doesn't execute any code or make changes.",
 				"inputSchema": {
@@ -397,22 +400,19 @@
 				"canBeReferencedInPrompt": true,
 				"icon": "$(error)",
 				"userDescription": "%copilot.tools.errors.description%",
-				"modelDescription": "Get any compile or lint errors in a code file. If the user mentions errors or problems in a file, they may be referring to these. Use the tool to see the same errors that the user is seeing. Also use this tool after editing a file to validate the change.",
+				"modelDescription": "Get any compile or lint errors in a specific file or across all files. If the user mentions errors or problems in a file, they may be referring to these. Use the tool to see the same errors that the user is seeing. If the user asks you to analyze all errors, or does not specify a file, use this tool to gather errors for all files. Also use this tool after editing a file to validate the change.",
 				"tags": [],
 				"inputSchema": {
 					"type": "object",
 					"properties": {
 						"filePaths": {
-							"description": "The absolute paths to the files to check for errors.",
+							"description": "The absolute paths to the files to check for errors. Omit 'filePaths' when retrieving all errors.",
 							"type": "array",
 							"items": {
 								"type": "string"
 							}
 						}
-					},
-					"required": [
-						"filePaths"
-					]
+					}
 				}
 			},
 			{
@@ -496,31 +496,13 @@
 				"when": "config.github.copilot.chat.enableUserPreferences"
 			},
 			{
-				"name": "copilot_getTerminalSelection",
-				"toolReferenceName": "terminalSelection",
-				"displayName": "%github.copilot.tools.terminalSelection.name%",
-				"modelDescription": "Get the user's current selection in the active terminal.",
-				"userDescription": "%github.copilot.tools.terminalSelection.description%",
-				"canBeReferencedInPrompt": true,
-				"icon": "$(terminal)"
-			},
-			{
-				"name": "copilot_getTerminalLastCommand",
-				"toolReferenceName": "terminalLastCommand",
-				"displayName": "%github.copilot.tools.terminalLastCommand.name%",
-				"modelDescription": "Get the active terminal's last run command.",
-				"userDescription": "%github.copilot.tools.terminalLastCommand.description%",
-				"canBeReferencedInPrompt": true,
-				"icon": "$(terminal)"
-			},
-			{
 				"name": "copilot_createNewWorkspace",
 				"displayName": "%github.copilot.tools.createNewWorkspace.name%",
 				"toolReferenceName": "newWorkspace",
 				"icon": "$(new-folder)",
 				"userDescription": "%github.copilot.tools.createNewWorkspace.userDescription%",
 				"when": "config.github.copilot.chat.newWorkspaceCreation.enabled",
-				"modelDescription": "Get steps to help the user create any project in a VS Code workspace. Use this tool to help users set up new projects, including TypeScript-based projects, Model Context Protocol (MCP) servers, VS Code extensions, Next.js projects, Vite projects, or any other project.",
+				"modelDescription": "Get comprehensive setup steps to help the user create complete project structures in a VS Code workspace. This tool is designed for full project initialization and scaffolding, not for creating individual files.\n\nWhen to use this tool:\n- User wants to create a new complete project from scratch\n- Setting up entire project frameworks (TypeScript projects, React apps, Node.js servers, etc.)\n- Initializing Model Context Protocol (MCP) servers with full structure\n- Creating VS Code extensions with proper scaffolding\n- Setting up Next.js, Vite, or other framework-based projects\n- User asks for \"new project\", \"create a workspace\", \"set up a [framework] project\"\n- Need to establish complete development environment with dependencies, config files, and folder structure\n\nWhen NOT to use this tool:\n- Creating single files or small code snippets\n- Adding individual files to existing projects\n- Making modifications to existing codebases\n- User asks to \"create a file\" or \"add a component\"\n- Simple code examples or demonstrations\n- Debugging or fixing existing code\n\nThis tool provides complete project setup including:\n- Folder structure creation\n- Package.json and dependency management\n- Configuration files (tsconfig, eslint, etc.)\n- Initial boilerplate code\n- Development environment setup\n- Build and run instructions\n\nUse other file creation tools for individual files within existing projects.",
 				"inputSchema": {
 					"type": "object",
 					"properties": {
@@ -550,10 +532,6 @@
 						"projectType": {
 							"type": "string",
 							"description": "The type of project to create. Supported values are: 'python-script', 'python-project', 'mcp-server', 'model-context-protocol-server', 'vscode-extension', 'next-js', 'vite' and 'other'"
-						},
-						"language": {
-							"type": "string",
-							"description": "The programming language for the project. Supported: 'javascript', 'typescript', 'python' and 'other'."
 						}
 					},
 					"required": [
@@ -725,7 +703,7 @@
 					"properties": {
 						"url": {
 							"type": "string",
-							"description": "The website URL to preview or open in the Simple Browser inside the editor."
+							"description": "The website URL to preview or open in the Simple Browser inside the editor. Must be either an http or https URL"
 						}
 					},
 					"required": [
@@ -737,7 +715,7 @@
 				"name": "copilot_replaceString",
 				"toolReferenceName": "replaceString",
 				"displayName": "%copilot.tools.replaceString.name%",
-				"modelDescription": "This is a tool for making edits in an existing file in the workspace. For moving or renaming files, use run in terminal tool with the 'mv' command instead. For larger edits, split them into smaller edits and call the edit tool multiple times to ensure accuracy. Before editing, always ensure you have the context to understand the file's contents and context. To edit a file, provide: 1) filePath (absolute path), 2) oldString (MUST be the exact literal text to replace including all whitespace, indentation, newlines, and surrounding code etc), and 3) newString (MUST be the exact literal text to replace \\`oldString\\` with (also including all whitespace, indentation, newlines, and surrounding code etc.). Ensure the resulting code is correct and idiomatic.). Each use of this tool replaces exactly ONE occurrence of oldString.\n\nCRITICAL for \\`oldString\\`: Must uniquely identify the single instance to change. Include at least 3 lines of context BEFORE and AFTER the target text, matching whitespace and indentation precisely. If this string matches multiple locations, or does not match exactly, the tool will fail. Never use ...existing code... comments in the oldString or newString.",
+				"modelDescription": "This is a tool for making edits in an existing file in the workspace. For moving or renaming files, use run in terminal tool with the 'mv' command instead. For larger edits, split them into smaller edits and call the edit tool multiple times to ensure accuracy. Before editing, always ensure you have the context to understand the file's contents and context. To edit a file, provide: 1) filePath (absolute path), 2) oldString (MUST be the exact literal text to replace including all whitespace, indentation, newlines, and surrounding code etc), and 3) newString (MUST be the exact literal text to replace \\`oldString\\` with (also including all whitespace, indentation, newlines, and surrounding code etc.). Ensure the resulting code is correct and idiomatic.). Each use of this tool replaces exactly ONE occurrence of oldString.\n\nCRITICAL for \\`oldString\\`: Must uniquely identify the single instance to change. Include at least 3 lines of context BEFORE and AFTER the target text, matching whitespace and indentation precisely. If this string matches multiple locations, or does not match exactly, the tool will fail. Never use 'Lines 123-456 omitted' from summarized documents or ...existing code... comments in the oldString or newString.",
 				"when": "!config.github.copilot.chat.disableReplaceTool",
 				"inputSchema": {
 					"type": "object",
@@ -763,11 +741,65 @@
 				}
 			},
 			{
+				"name": "copilot_multiReplaceString",
+				"toolReferenceName": "multiReplaceString",
+				"displayName": "%copilot.tools.multiReplaceString.name%",
+				"modelDescription": "This tool allows you to apply multiple replace_string_in_file operations in a single call, which is more efficient than calling replace_string_in_file multiple times. It takes an array of replacement operations and applies them sequentially. Each replacement operation has the same parameters as replace_string_in_file: filePath, oldString, newString, and explanation. This tool is ideal when you need to make multiple edits across different files or multiple edits in the same file. The tool will provide a summary of successful and failed operations.",
+				"when": "!config.github.copilot.chat.disableReplaceTool",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"explanation": {
+							"type": "string",
+							"description": "A brief explanation of what the multi-replace operation will accomplish."
+						},
+						"replacements": {
+							"type": "array",
+							"description": "An array of replacement operations to apply sequentially.",
+							"items": {
+								"type": "object",
+								"properties": {
+									"explanation": {
+										"type": "string",
+										"description": "A brief explanation of this specific replacement operation."
+									},
+									"filePath": {
+										"type": "string",
+										"description": "An absolute path to the file to edit."
+									},
+									"oldString": {
+										"type": "string",
+										"description": "The exact literal text to replace, preferably unescaped. Include at least 3 lines of context BEFORE and AFTER the target text, matching whitespace and indentation precisely. If this string is not the exact literal text or does not match exactly, this replacement will fail."
+									},
+									"newString": {
+										"type": "string",
+										"description": "The exact literal text to replace `oldString` with, preferably unescaped. Provide the EXACT text. Ensure the resulting code is correct and idiomatic."
+									}
+								},
+								"required": [
+									"explanation",
+									"filePath",
+									"oldString",
+									"newString"
+								]
+							},
+							"minItems": 1
+						}
+					},
+					"required": [
+						"explanation",
+						"replacements"
+					]
+				}
+			},
+			{
 				"name": "copilot_editNotebook",
 				"toolReferenceName": "editNotebook",
 				"displayName": "%copilot.tools.editNotebook.name%",
 				"modelDescription": "This is a tool for editing an existing Notebook file in the workspace. Generate the \"explanation\" property first.\nThe system is very smart and can understand how to apply your edits to the notebooks.\nWhen updating the content of an existing cell, ensure newCode includes at least 3-5 lines of context both before and after the new changes, preserving whitespace and indentation exactly.",
-				"tags": [],
+				"tags": [
+					"enable_other_tool_copilot_getNotebookSummary"
+				],
 				"inputSchema": {
 					"type": "object",
 					"properties": {
@@ -787,7 +819,7 @@
 							"anyOf": [
 								{
 									"type": "string",
-									"description": "The code for the new or existing cell to be edited. Code should not be wrapped within <VSCode.Cell> tags"
+									"description": "The code for the new or existing cell to be edited. Code should not be wrapped within <VSCode.Cell> tags. Do NOT include code markers such as (...existing code...) to indicate existing code."
 								},
 								{
 									"type": "array",
@@ -814,7 +846,6 @@
 					},
 					"required": [
 						"filePath",
-						"explanation",
 						"editType"
 					]
 				}
@@ -1340,6 +1371,27 @@
 				]
 			},
 			{
+				"id": "github.copilot.notebookEditorAgent",
+				"name": "GitHubCopilot",
+				"fullName": "GitHub Copilot",
+				"description": "%copilot.description%",
+				"isDefault": true,
+				"locations": [
+					"notebook"
+				],
+				"when": "config.inlineChat.enableV2",
+				"commands": [
+					{
+						"name": "fix",
+						"description": "%copilot.workspace.fix.description%"
+					},
+					{
+						"name": "explain",
+						"description": "%copilot.workspace.explain.description%"
+					}
+				]
+			},
+			{
 				"id": "github.copilot.workspace",
 				"name": "workspace",
 				"fullName": "Workspace",
@@ -1547,11 +1599,13 @@
 			},
 			{
 				"vendor": "azure",
-				"displayName": "Azure"
+				"displayName": "Azure",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "anthropic",
-				"displayName": "Anthropic"
+				"displayName": "Anthropic",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "ollama",
@@ -1559,19 +1613,23 @@
 			},
 			{
 				"vendor": "openai",
-				"displayName": "OpenAI"
+				"displayName": "OpenAI",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "gemini",
-				"displayName": "Gemini"
+				"displayName": "Gemini",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "groq",
-				"displayName": "Groq"
+				"displayName": "Groq",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
 				"vendor": "openrouter",
-				"displayName": "OpenRouter"
+				"displayName": "OpenRouter",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			}
 		],
 		"interactiveSession": [
@@ -1810,23 +1868,8 @@
 				"category": "Developer"
 			},
 			{
-				"command": "github.copilot.terminal.explainTerminalSelection",
-				"title": "%github.copilot.command.explainTerminalSelection%",
-				"category": "GitHub Copilot"
-			},
-			{
-				"command": "github.copilot.terminal.explainTerminalSelectionContextMenu",
-				"title": "%github.copilot.command.explainTerminalSelectionContextMenu%",
-				"category": "GitHub Copilot"
-			},
-			{
 				"command": "github.copilot.terminal.explainTerminalLastCommand",
 				"title": "%github.copilot.command.explainTerminalLastCommand%",
-				"category": "GitHub Copilot"
-			},
-			{
-				"command": "github.copilot.terminal.attachTerminalSelection",
-				"title": "%github.copilot.command.attachTerminalSelection%",
 				"category": "GitHub Copilot"
 			},
 			{
@@ -1960,6 +2003,14 @@
 				"title": "Hide Tools"
 			},
 			{
+				"command": "github.copilot.chat.debug.showNesRequests",
+				"title": "Show NES Requests"
+			},
+			{
+				"command": "github.copilot.chat.debug.hideNesRequests",
+				"title": "Hide NES Requests"
+			},
+			{
 				"command": "github.copilot.chat.debug.exportLogItem",
 				"title": "Export as...",
 				"icon": "$(export)"
@@ -2001,6 +2052,10 @@
 				"title": "Disable Follow Cell Execution from Chat",
 				"shortTitle": "Unfollow",
 				"icon": "$(pinned-dirty)"
+			},
+			{
+				"command": "github.copilot.chat.manageBYOK",
+				"title": "Manage Bring Your Own Key Vendor"
 			}
 		],
 		"configuration": [
@@ -2116,6 +2171,11 @@
 						"type": "boolean",
 						"default": true,
 						"description": "%github.copilot.config.autoFix%"
+					},
+					"github.copilot.chat.customInstructionsInSystemMessage": {
+						"type": "boolean",
+						"default": true,
+						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
 					}
 				}
 			},
@@ -2225,14 +2285,6 @@
 							"preview"
 						],
 						"markdownDescription": "%github.copilot.config.codesearch.enabled%"
-					},
-					"github.copilot.chat.edits.codesearch.enabled": {
-						"type": "boolean",
-						"default": false,
-						"tags": [
-							"preview"
-						],
-						"markdownDeprecationMessage": "%github.copilot.config.edits.codesearch.enabled%"
 					},
 					"github.copilot.chat.byok.ollamaEndpoint": {
 						"type": "string",
@@ -2619,6 +2671,14 @@
 						],
 						"description": "%github.copilot.config.newWorkspaceCreation.enabled%"
 					},
+					"github.copilot.chat.newWorkspace.useContext7": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental"
+						],
+						"markdownDescription": "%github.copilot.config.newWorkspace.useContext7%"
+					},
 					"github.copilot.chat.agent.currentEditorContext.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -2626,14 +2686,6 @@
 							"experimental"
 						],
 						"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
-					},
-					"github.copilot.chat.customInstructionsInSystemMessage": {
-						"type": "boolean",
-						"default": false,
-						"tags": [
-							"experimental"
-						],
-						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
 					},
 					"github.copilot.chat.edits.newNotebook.enabled": {
 						"type": "boolean",
@@ -2661,13 +2713,15 @@
 						],
 						"description": "%github.copilot.config.summarizeAgentConversationHistory.enabled%"
 					},
-					"github.copilot.chat.virtualTools.enabled": {
-						"type": "boolean",
-						"default": false,
+					"github.copilot.chat.virtualTools.threshold": {
+						"type": "number",
+						"minimum": 0,
+						"maximum": 128,
+						"default": 128,
 						"tags": [
 							"experimental"
 						],
-						"description": "%github.copilot.config.virtualTools.enabled%"
+						"markdownDescription": "%github.copilot.config.virtualTools.threshold%"
 					},
 					"github.copilot.chat.azureModels": {
 						"type": "object",
@@ -2701,6 +2755,11 @@
 								"maxOutputTokens": {
 									"type": "number",
 									"description": "Maximum number of output tokens supported by the model"
+								},
+								"thinking": {
+									"type": "boolean",
+									"default": false,
+									"description": "Whether the model supports thinking capabilities"
 								}
 							},
 							"required": [
@@ -2714,6 +2773,39 @@
 							"additionalProperties": false
 						},
 						"markdownDescription": "Configure custom Azure OpenAI models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
+					},
+					"github.copilot.chat.byok.responsesApi": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental",
+							"onExP"
+						],
+						"markdownDescription": "%github.copilot.config.byok.responsesApi%"
+					},
+					"github.copilot.chat.enableRetryAfterFilteredResponse": {
+						"type": "boolean",
+						"default": true,
+						"tags": [
+							"experimental"
+						],
+						"description": "%github.copilot.config.retryAfterFilteredResponse.enabled%"
+					},
+					"github.copilot.chat.alternateGptPrompt.enabled": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental"
+						],
+						"description": "%github.copilot.config.alternateGptPrompt.enabled%"
+					},
+					"github.copilot.chat.gpt5AlternatePrompt": {
+						"type": "string",
+						"default": "default",
+						"tags": [
+							"experimental"
+						],
+						"description": "%github.copilot.config.gpt5AlternatePrompt%"
 					}
 				}
 			}
@@ -2781,16 +2873,6 @@
 					"group": "copilotAction@5"
 				}
 			],
-			"terminal/context/chat": [
-				{
-					"command": "github.copilot.terminal.explainTerminalSelectionContextMenu",
-					"group": "copilotAction@1"
-				},
-				{
-					"command": "github.copilot.terminal.attachTerminalSelection",
-					"group": "zEditContext@1"
-				}
-			],
 			"testing/item/result": [
 				{
 					"command": "github.copilot.tests.fixTestFailure.fromInline",
@@ -2820,10 +2902,6 @@
 				},
 				{
 					"command": "github.copilot.chat.startCopilotDebugCommand",
-					"when": "false"
-				},
-				{
-					"command": "github.copilot.terminal.explainTerminalSelectionContextMenu",
 					"when": "false"
 				},
 				{
@@ -2939,6 +3017,14 @@
 					"when": "false"
 				},
 				{
+					"command": "github.copilot.chat.debug.showNesRequests",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.debug.hideNesRequests",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.chat.debug.exportLogItem",
 					"when": "false"
 				},
@@ -2967,7 +3053,8 @@
 				},
 				{
 					"command": "github.copilot.debug.showChatLogView",
-					"when": "view == workbench.panel.chat.view.copilot"
+					"when": "view == workbench.panel.chat.view.copilot",
+					"group": "3_show"
 				}
 			],
 			"view/item/context": [
@@ -3182,6 +3269,16 @@
 					"command": "github.copilot.chat.debug.hideTools",
 					"when": "!github.copilot.chat.debug.toolsHidden",
 					"group": "commands@1"
+				},
+				{
+					"command": "github.copilot.chat.debug.showNesRequests",
+					"when": "github.copilot.chat.debug.nesRequestsHidden",
+					"group": "commands@2"
+				},
+				{
+					"command": "github.copilot.chat.debug.hideNesRequests",
+					"when": "!github.copilot.chat.debug.nesRequestsHidden",
+					"group": "commands@2"
 				}
 			],
 			"notebook/toolbar": [
@@ -3554,8 +3651,8 @@
 		"simulate-gc": "node dist/simulationMain.js --require-cache --gc",
 		"setup": "npm run get_env && npm run get_token",
 		"setup:dotnet": "run-script-os",
-		"setup:dotnet:darwin:linux": "curl -O https://raw.githubusercontent.com/dotnet/install-scripts/main/src/dotnet-install.sh && chmod u+x dotnet-install.sh && ./dotnet-install.sh --version latest --quality GA --channel STS && rm dotnet-install.sh",
-		"setup:dotnet:win32": "Invoke-WebRequest -Uri https://raw.githubusercontent.com/dotnet/install-scripts/main/src/dotnet-install.ps1 && chmod u+x dotnet-install.ps1 && ./dotnet-install.ps1 --version latest --quality GA --channel STS && rm dotnet-install.ps1",
+		"setup:dotnet:darwin:linux": "curl -O https://raw.githubusercontent.com/dotnet/install-scripts/main/src/dotnet-install.sh && chmod u+x dotnet-install.sh && ./dotnet-install.sh --channel 10.0 && rm dotnet-install.sh",
+		"setup:dotnet:win32": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"Invoke-WebRequest -Uri https://raw.githubusercontent.com/dotnet/install-scripts/main/src/dotnet-install.ps1 -OutFile dotnet-install.ps1; ./dotnet-install.ps1 -channel 10.0; Remove-Item dotnet-install.ps1\"",
 		"create_venv": "tsx script/setup/createVenv.mts",
 		"package": "vsce package",
 		"web": "vscode-test-web --headless --extensionDevelopmentPath=. ."
@@ -3620,6 +3717,7 @@
 		"monaco-editor": "0.44.0",
 		"npm-run-all": "^4.1.5",
 		"open": "^10.1.2",
+		"openai": "^5.11.0",
 		"outdent": "^0.8.0",
 		"picomatch": "^4.0.2",
 		"playwright": "^1.54.2",
@@ -3647,7 +3745,7 @@
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@modelcontextprotocol/sdk": "^1.16.0",
 		"@roamhq/mac-ca": "^1.0.7",
-		"@vscode/copilot-api": "^0.1.1",
+        "@vscode/copilot-api": "^0.1.4",
 		"@vscode/extension-telemetry": "^1.0.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",

@@ -8,7 +8,11 @@ import path from 'path';
 import { ssuite, stest } from '../base/stest';
 import { fetchToolScenarios, generateToolTestRunner } from './toolSimTest';
 
-ssuite({ title: 'toolCalling', location: 'panel' }, (inputPath) => {
+export function shouldSkipAgentTests(): boolean {
+	return process.env.AGENT_TESTS !== '1';
+}
+
+ssuite.optional(shouldSkipAgentTests, { title: 'toolCalling', location: 'panel' }, (inputPath) => {
 	const scenarioFolder = inputPath ?? path.join(__dirname, '..', 'test/scenarios/test-tools');
 	const scenarios = fetchToolScenarios(scenarioFolder);
 

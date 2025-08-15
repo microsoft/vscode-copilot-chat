@@ -91,7 +91,7 @@ export class GitServiceImpl extends Disposable implements IGitService {
 			this._isInitialized.set(true, undefined);
 			this._onDidFinishInitialRepositoryDiscovery.fire();
 
-			this.logService.logger.trace(`[GitServiceImpl] Initial repository discovery finished: ${this.repositories.length} repositories found.`);
+			this.logService.trace(`[GitServiceImpl] Initial repository discovery finished: ${this.repositories.length} repositories found.`);
 		}));
 	}
 
@@ -128,7 +128,7 @@ export class GitServiceImpl extends Disposable implements IGitService {
 	}
 
 	async getRepositoryFetchUrls(uri: URI): Promise<Pick<RepoContext, 'rootUri' | 'remoteFetchUrls'> | undefined> {
-		this.logService.logger.trace(`[GitServiceImpl][getRepositoryFetchUrls] URI: ${uri.toString()}`);
+		this.logService.trace(`[GitServiceImpl][getRepositoryFetchUrls] URI: ${uri.toString()}`);
 
 		const gitAPI = this.gitExtensionService.getExtensionApi();
 		if (!gitAPI) {
@@ -145,7 +145,7 @@ export class GitServiceImpl extends Disposable implements IGitService {
 				remoteFetchUrls: repository.state.remotes.map(r => r.fetchUrl),
 			};
 
-			this.logService.logger.trace(`[GitServiceImpl][getRepositoryFetchUrls] Remotes (open repository): ${JSON.stringify(remotes)}`);
+			this.logService.trace(`[GitServiceImpl][getRepositoryFetchUrls] Remotes (open repository): ${JSON.stringify(remotes)}`);
 			return remotes;
 		}
 
@@ -158,11 +158,11 @@ export class GitServiceImpl extends Disposable implements IGitService {
 			// Get repository root
 			const repositoryRoot = await gitAPI.getRepositoryRoot(uri);
 			if (!repositoryRoot) {
-				this.logService.logger.trace(`[GitServiceImpl][getRepositoryFetchUrls] No repository root found`);
+				this.logService.trace(`[GitServiceImpl][getRepositoryFetchUrls] No repository root found`);
 				return undefined;
 			}
 
-			this.logService.logger.trace(`[GitServiceImpl][getRepositoryFetchUrls] Repository root: ${repositoryRoot.toString()}`);
+			this.logService.trace(`[GitServiceImpl][getRepositoryFetchUrls] Repository root: ${repositoryRoot.toString()}`);
 			const buffer = await vscode.workspace.fs.readFile(URI.file(path.join(repositoryRoot.fsPath, '.git', 'config')));
 
 			const remotes = {
@@ -170,10 +170,10 @@ export class GitServiceImpl extends Disposable implements IGitService {
 				remoteFetchUrls: parseGitRemotes(buffer.toString()).map(remote => remote.fetchUrl)
 			};
 
-			this.logService.logger.trace(`[GitServiceImpl][getRepositoryFetchUrls] Remotes (.git/config): ${JSON.stringify(remotes)}`);
+			this.logService.trace(`[GitServiceImpl][getRepositoryFetchUrls] Remotes (.git/config): ${JSON.stringify(remotes)}`);
 			return remotes;
 		} catch (error) {
-			this.logService.logger.error(`[GitServiceImpl][getRepositoryFetchUrls] Failed to read remotes from .git/config: ${error.message}`);
+			this.logService.error(`[GitServiceImpl][getRepositoryFetchUrls] Failed to read remotes from .git/config: ${error.message}`);
 			return undefined;
 		}
 	}
@@ -217,7 +217,7 @@ export class GitServiceImpl extends Disposable implements IGitService {
 	}
 
 	private async doOpenRepository(repository: Repository): Promise<void> {
-		this.logService.logger.trace(`[GitServiceImpl][doOpenRepository] Repository: ${repository.rootUri.toString()}`);
+		this.logService.trace(`[GitServiceImpl][doOpenRepository] Repository: ${repository.rootUri.toString()}`);
 
 		// The `gitAPI.onDidOpenRepository` event is fired before `git status` completes and the repository
 		// state is initialized. `IGitService.onDidOpenRepository` will only fire after the repository state
@@ -225,7 +225,7 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		const HEAD = observableFromEvent(this, repository.state.onDidChange as Event<void>, () => repository.state.HEAD);
 		await waitForState(HEAD, state => state !== undefined, undefined, cancelOnDispose(this._store));
 
-		this.logService.logger.trace(`[GitServiceImpl][doOpenRepository] Repository initialized: ${JSON.stringify(HEAD.get())}`);
+		this.logService.trace(`[GitServiceImpl][doOpenRepository] Repository initialized: ${JSON.stringify(HEAD.get())}`);
 
 		// Active repository
 		const selectedObs = observableFromEvent(this,
@@ -242,7 +242,7 @@ export class GitServiceImpl extends Disposable implements IGitService {
 			}
 
 			const repositoryContext = GitServiceImpl.repoToRepoContext(repository);
-			this.logService.logger.trace(`[GitServiceImpl][doOpenRepository] Active repository: ${JSON.stringify(repositoryContext)}`);
+			this.logService.trace(`[GitServiceImpl][doOpenRepository] Active repository: ${JSON.stringify(repositoryContext)}`);
 			this.activeRepository.set(repositoryContext, undefined);
 		}));
 
@@ -254,7 +254,7 @@ export class GitServiceImpl extends Disposable implements IGitService {
 	}
 
 	private doCloseRepository(repository: Repository): void {
-		this.logService.logger.trace(`[GitServiceImpl][doCloseRepository] Repository: ${repository.rootUri.toString()}`);
+		this.logService.trace(`[GitServiceImpl][doCloseRepository] Repository: ${repository.rootUri.toString()}`);
 
 		const repositoryContext = GitServiceImpl.repoToRepoContext(repository);
 		if (repositoryContext) {

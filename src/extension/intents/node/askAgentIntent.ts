@@ -96,9 +96,7 @@ export class AskAgentIntent implements IIntent {
 export class AskAgentIntentInvocation extends AgentIntentInvocation {
 
 	public override get linkification(): IntentLinkificationOptions {
-		// on by default:
-		const enabled = this.configurationService.getConfig(ConfigKey.Internal.EditLinkification) !== false;
-		return { disable: !enabled };
+		return { disable: false };
 	}
 
 	protected override prompt = AgentPrompt;

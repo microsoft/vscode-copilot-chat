@@ -91,7 +91,8 @@ export function sendModelMessageTelemetry(
 	appliedText: string,
 	requestId: string,
 	doc: TextDocumentSnapshot | undefined,
-	baseTelemetry: ConversationalBaseTelemetryData
+	baseTelemetry: ConversationalBaseTelemetryData,
+	modeName: string,
 ): void {
 	// Get the languages of code blocks within the message
 	const codeBlockLanguages = getCodeBlocks(appliedText);
@@ -108,6 +109,7 @@ export function sendModelMessageTelemetry(
 			headerRequestId: requestId,
 			uiKind: ChatLocation.toString(location),
 			codeBlockLanguages: JSON.stringify({ ...codeBlockLanguages }),
+			mode: modeName,
 		},
 		{ messageCharLen: appliedText.length, numCodeBlocks: codeBlockLanguages.length },
 		baseTelemetry
@@ -170,6 +172,7 @@ export function sendConversationalMessageTelemetry(
 
 	telemetryService.sendGHTelemetryEvent(`${prefix}.message`, standardTelemetryData.raw.properties, standardTelemetryData.raw.measurements);
 	telemetryService.sendEnhancedGHTelemetryEvent(`${prefix}.messageText`, enhancedTelemetryLogger.raw.properties, enhancedTelemetryLogger.raw.measurements);
+	telemetryService.sendInternalMSFTTelemetryEvent(`${prefix}.messageText`, enhancedTelemetryLogger.raw.properties, enhancedTelemetryLogger.raw.measurements);
 
 	return standardTelemetryData.raw;
 }

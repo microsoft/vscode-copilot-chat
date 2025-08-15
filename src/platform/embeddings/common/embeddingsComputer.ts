@@ -5,8 +5,6 @@
 
 import type { CancellationToken } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { EMBEDDING_MODEL } from '../../configuration/common/configurationService';
-import { EmbeddingsEndpointFamily } from '../../endpoint/common/endpointProvider';
 
 /**
  * Fully qualified type of the embedding.
@@ -15,6 +13,7 @@ import { EmbeddingsEndpointFamily } from '../../endpoint/common/endpointProvider
  */
 export class EmbeddingType {
 	public static readonly text3small_512 = new EmbeddingType('text-embedding-3-small-512');
+	public static readonly metis_1024_I16_Binary = new EmbeddingType('metis-1024-I16-Binary');
 
 	constructor(
 		public readonly id: string
@@ -29,19 +28,42 @@ export class EmbeddingType {
 	}
 }
 
-export interface EmbeddingTypeInfo {
-	readonly model: EMBEDDING_MODEL;
-	readonly family: EmbeddingsEndpointFamily;
-	readonly dimensions: number;
+// WARNING
+// These values are used in the request and are case sensitive. Do not change them unless advised by CAPI.
+export const enum LEGACY_EMBEDDING_MODEL_ID {
+	TEXT3SMALL = 'text-embedding-3-small',
+	Metis_I16_Binary = 'metis-I16-Binary'
 }
 
-const wellKnownEmbeddingMetadata = {
+type EmbeddingQuantization = 'float32' | 'float16' | 'binary';
+
+export interface EmbeddingTypeInfo {
+	readonly model: LEGACY_EMBEDDING_MODEL_ID;
+	readonly dimensions: number;
+	readonly quantization: {
+		readonly query: EmbeddingQuantization;
+		readonly document: EmbeddingQuantization;
+	};
+}
+
+const wellKnownEmbeddingMetadata = Object.freeze<Record<string, EmbeddingTypeInfo>>({
 	[EmbeddingType.text3small_512.id]: {
-		model: EMBEDDING_MODEL.TEXT3SMALL,
-		family: 'text3small',
+		model: LEGACY_EMBEDDING_MODEL_ID.TEXT3SMALL,
 		dimensions: 512,
-	}
-} as const satisfies Record<string, EmbeddingTypeInfo>;
+		quantization: {
+			query: 'float32',
+			document: 'float32'
+		},
+	},
+	[EmbeddingType.metis_1024_I16_Binary.id]: {
+		model: LEGACY_EMBEDDING_MODEL_ID.Metis_I16_Binary,
+		dimensions: 1024,
+		quantization: {
+			query: 'float16',
+			document: 'binary'
+		},
+	},
+});
 
 export function getWellKnownEmbeddingTypeInfo(type: EmbeddingType): EmbeddingTypeInfo | undefined {
 	return wellKnownEmbeddingMetadata[type.id];
@@ -86,7 +108,7 @@ export interface IEmbeddingsComputer {
 		type: EmbeddingType,
 		inputs: readonly string[],
 		options?: ComputeEmbeddingsOptions,
-		cancellationToken?: CancellationToken,
+		token?: CancellationToken,
 	): Promise<Embeddings | undefined>;
 }
 

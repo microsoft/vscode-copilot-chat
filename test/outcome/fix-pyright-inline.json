@@ -2,133 +2,133 @@
 	{
 		"name": "fix (pyright) [inline] [python] - (AML-10-15) object not subscriptable",
 		"requests": [
-			"336e2b35ee7573982880a03cad03a3be262894346c82e57fc4fa29b6e3372f54"
+			"e628a316e17177c62367fa811438d9f27c74988eb7c5f022fb8ba1e8fb757753"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - (AML-10-2) can not be assigned 1",
 		"requests": [
-			"f41962104ac81a647b1830d700dfa8b50e3ad8edb76a057ce2312242a7121a5f"
+			"c5dc8396801a1818ef89640e7fcdf885b784405344ebcfd75501edf5c8871b97"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - (AML-10-29) instance of bool has no to_string member",
 		"requests": [
-			"3a7ace6e0a42572e43530846a5982f6e2e1d0d90173045446a1ef584da44007e"
+			"0ca5a906c520754fd03e59bc1fd4688d32eaf2220e2b88abcb99f41dc1211602"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - (AML-10-35) can not access member",
 		"requests": [
-			"aef33a719398d43d4d578bc50e363519c8e9ea8bfc4bb07b05f72b796fa4c8c9"
+			"6b27a53bfea323291f24ed143ffa2eef6111d993ea79c8b15cc291e48268fc93"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - (AML-10-36) can not be assigned 2",
 		"requests": [
-			"803dd253ff2b34cc25998fcd2035f8aab34d9eb7cd5bc4a6017c1cd7cb66d03d"
+			"464f34f8c0635a8afaebffbbbdf1f12c1c546cabb0a3d54e2a917091ab7bb253"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - (AML-10-4) parameter already assigned",
 		"requests": [
-			"e2bd98564f5ddeb9665ba811969d4075a074aafdb002c725ba4ba8717efa219b"
+			"30302564a87cf8d92c8f89bf12862b1ee142eb9b15b0cd5fdbaf57f4948c5943"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - (AML-10-48) can not be assigned 3",
 		"requests": [
-			"ca9cedbc20019f30334d89094a8bf5a6e50020ed5e5b738f85161f5c19bbfb15"
+			"397082fa583232df947c14d725aa4cef49ae82008a0ee2992a123e1d67606e1b"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - (AML-10-58) not defined",
 		"requests": [
-			"cde6ce42c314e8a81af25b07e707598c5926bf6bab55e5c3f61d48ecc539a855"
+			"bb9ff37b3c5a26238503ac049aa6e5d90a03738712c3e4a8138f7352b6a6771a"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - (AML-8-110) not defined",
 		"requests": [
-			"b9690b9f2c0cbf3d9543b7e55282c21e417f8b32d59d76ea76c1a915e8d526af"
+			"f202360344a507420912a1f1cac3aa7405abd9f160dce9893176f054fc289e4a"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - (AML-8-73) no value for argument in function call",
 		"requests": [
-			"3776033b7e1cd85c79a2df7d4fa353b14edd2f9f84fe2c76a80b126ca661220f"
+			"2291b12e86d7b60ccab248954417a2dc525aab091a7b64835f33caa4b82e24c0"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - all Annotated types should include at least two type arguments",
 		"requests": [
-			"12810873423749d2b632fb5aaa21557722bd03fcf795d3a4225b357889f49532"
+			"e48130ad3a05c3e7e3cb0e84a35b8a5f3f6c74ba3018ad09a83844e559601edb"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - async cannot be used in a non-async function",
 		"requests": [
-			"9444daadee7cfebea8898440c2f5f5a547c47728ad35997f88c255e397a827b8"
+			"27d22fc5ab578191e525a1dfa8d23e1615275aebdc1aaf7955dfa04b2b0976de"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - await cannot be used in a non-async function",
 		"requests": [
-			"ba526bead33780af0b847fde0f54864077dbfa58f77796a12e6ae18f0079ba57"
+			"b889a4c6da99cc0f08739c75681663692bf8e9328fb9f916a811b546a91be6ba"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - bad token",
 		"requests": [
-			"a34e6e80c057343da33e73a18b6987e3ec5052a659ea481bbddb6044f5fd7d20"
+			"8dc4065dbed72dc5572d860bd339ddddd0727df9975b22bd1b5cab3b9f199f17"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - Bar does not define a do_something2 method",
 		"requests": [
-			"05ca24ff52bfdfeced94ae1cd4809a370d57bda1db20017e83e4918a40b7ef18"
+			"4f4a89c50246fd2ffc975fde9626e04fcb65d54f10957187e8ae76b85c8b232f"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - cannot instantiate abstract class",
 		"requests": [
-			"6cd69995e66159ef4d3d4157484b9cef96de57247ac4119f0fe13546df3348d9"
+			"bd6517e7289b682e216612a507b14c93bb940e4845dccf40a3b1a92181f25ee1"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - general type issue",
 		"requests": [
-			"1896bf1faba7fd39f9dd211c759ee2bc4ed3daceb72adae7403a5daf0f17fc37"
+			"5fb1a6ab3006aa0b3ba974f619ed11b160d5b7cf21a45ed181239a76a0fa8c8c"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - import missing",
 		"requests": [
-			"7307846d58d0470e0bac188f8b80997f74523b41456b1084c5ac0642609fe90e"
+			"018e4c77b529ff72633711d3fc119d16902973fc1b1b530948697039f875ee6c"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - optional member access",
 		"requests": [
-			"4cf53962cb4132bbe8367389a31a0a54e05ffe6d2251dbaebca7f4e241e8bdd9"
+			"d15aee1f6a90a9181ae99f781ced95e439c997a1225d8d98eb378b76cde1de22"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - should not generate an error for variables declared in outer scopes",
 		"requests": [
-			"fe384a6cc3e6aa15c069b59bfcd2c31d44d1e6f3fad39be9506a46e1377dd9f2"
+			"04cb23b35003597cd263eea38f6395232d2f8791448a075fce3221aa70aafd00"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - unbound variable",
 		"requests": [
-			"a9333400a9061f3bc9752f2c71383ed5a36d0cfa3ed3f4e4f24e922376fd7820"
+			"6cae8e0075a864c7cabdbc45a16f44f27f561be870b7e33095f41025b992adf7"
 		]
 	},
 	{
 		"name": "fix (pyright) [inline] [python] - undefined variable",
 		"requests": [
-			"9b1ed4059d3c1db07d5de4cf1084a710715538ab038068b8549dfac277aae578"
+			"93f3191657b6be2062dde4d30dd6c834d5a84cb8d3a01b8bf4ca82b491d4a32a"
 		]
 	}
 ]

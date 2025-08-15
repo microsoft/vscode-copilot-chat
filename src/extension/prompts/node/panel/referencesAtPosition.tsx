@@ -70,12 +70,12 @@ export class ReferencesAtPosition extends PromptElement<Props> {
 
 		const [definitions, usages] = await this.findReferences(timeout);
 
-		this.logService.logger.debug(`Found ${definitions.length} implementation(s)/definition(s), ${usages.length} usages`);
+		this.logService.debug(`Found ${definitions.length} implementation(s)/definition(s), ${usages.length} usages`);
 		if (definitions.length > 0) {
-			this.logService.logger.debug(`Implementation(s)/definition(s) found:` + JSON.stringify(definitions, null, '\t'));
+			this.logService.debug(`Implementation(s)/definition(s) found:` + JSON.stringify(definitions, null, '\t'));
 		}
 		if (usages.length > 0) {
-			this.logService.logger.debug(`Usages found:` + JSON.stringify(usages, null, '\t'));
+			this.logService.debug(`Usages found:` + JSON.stringify(usages, null, '\t'));
 		}
 
 		return (
@@ -112,7 +112,7 @@ export class ReferencesAtPosition extends PromptElement<Props> {
 		const findReference = async () => {
 			try {
 				const refs = await this.languageFeaturesService.getReferences(document.uri, position);
-				this.logService.logger.debug(`Found ${refs.length} references: ` + JSON.stringify(refs, null, '\t'));
+				this.logService.debug(`Found ${refs.length} references: ` + JSON.stringify(refs, null, '\t'));
 				return refs;
 			} catch (e) {
 				return [];

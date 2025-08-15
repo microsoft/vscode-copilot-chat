@@ -35,6 +35,7 @@ import { IDialogService } from '../../dialog/common/dialogService';
 import { IDiffService } from '../../diff/common/diffService';
 import { DiffServiceImpl } from '../../diff/node/diffServiceImpl';
 import { IEditSurvivalTrackerService, NullEditSurvivalTrackerService } from '../../editSurvivalTracking/common/editSurvivalTrackerService';
+import { AutomodeService, IAutomodeService } from '../../endpoint/common/automodeService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IDomainService } from '../../endpoint/common/domainService';
 import { CAPIClientImpl } from '../../endpoint/node/capiClientImpl';
@@ -95,6 +96,7 @@ import { TestAuthenticationService } from './testAuthenticationService';
 import { TestChatAgentService } from './testChatAgentService';
 import { TestWorkbenchService } from './testWorkbenchService';
 import { TestWorkspaceService } from './testWorkspaceService';
+import { IImageService, nullImageService } from '../../image/common/imageService';
 
 /**
  * Collects descriptors for services to use in testing.
@@ -211,6 +213,7 @@ export function _createBaselineServices(): TestingServiceCollection {
 	testingServiceCollection.define(IAuthenticationChatUpgradeService, new SyncDescriptor(AuthenticationChatUpgradeService));
 	testingServiceCollection.define(IOctoKitService, new SyncDescriptor(OctoKitService));
 	testingServiceCollection.define(IInteractionService, new SyncDescriptor(InteractionService));
+	testingServiceCollection.define(IAutomodeService, new SyncDescriptor(AutomodeService));
 	testingServiceCollection.define(IWorkbenchService, new SyncDescriptor(TestWorkbenchService));
 	testingServiceCollection.define(ICustomInstructionsService, new SyncDescriptor(CustomInstructionsService));
 	testingServiceCollection.define(ISurveyService, new SyncDescriptor(NullSurveyService));
@@ -253,6 +256,7 @@ export function createPlatformServices(): TestingServiceCollection {
 	testingServiceCollection.define(IRunCommandExecutionService, new SyncDescriptor(MockRunCommandExecutionService));
 	testingServiceCollection.define(INaiveChunkingService, new SyncDescriptor(NaiveChunkingService));
 	testingServiceCollection.define(IHeatmapService, nullHeatmapService);
+	testingServiceCollection.define(IImageService, nullImageService);
 	testingServiceCollection.define(ILanguageContextService, NullLanguageContextService);
 	testingServiceCollection.define(ILanguageContextProviderService, new SyncDescriptor(NullLanguageContextProviderService));
 	testingServiceCollection.define(ILanguageDiagnosticsService, new SyncDescriptor(TestLanguageDiagnosticsService));

@@ -5,6 +5,7 @@
 
 import { PromptReference, Raw } from '@vscode/prompt-tsx';
 import type { ChatRequestEditedFileEvent, ChatResponseStream, ChatResult, LanguageModelToolResult } from 'vscode';
+import { FilterReason } from '../../../platform/networking/common/openai';
 import { isLocation, toLocation } from '../../../util/common/types';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { assertType } from '../../../util/vs/base/common/types';
@@ -22,6 +23,7 @@ export enum TurnStatus {
 	Cancelled = 'cancelled',
 	OffTopic = 'off-topic',
 	Filtered = 'filtered',
+	PromptFiltered = 'prompt-filtered',
 	Error = 'error',
 }
 
@@ -315,6 +317,7 @@ export interface IResultMetadata {
 	renderedUserMessage?: Raw.ChatCompletionContentPart[];
 	renderedGlobalContext?: Raw.ChatCompletionContentPart[];
 	command?: string;
+	filterCategory?: FilterReason;
 
 	/**
 	 * All code blocks that were in the response

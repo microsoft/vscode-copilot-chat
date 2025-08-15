@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { IChatAgentService, defaultAgentName, editingSessionAgent2Name, editingSessionAgentEditorName, editingSessionAgentName, editorAgentName, editsAgentName, getChatParticipantIdFromName, terminalAgentName, vscodeAgentName, workspaceAgentName } from '../../../platform/chat/common/chatAgents';
+import { IChatAgentService, defaultAgentName, editingSessionAgent2Name, editingSessionAgentEditorName, editingSessionAgentName, editorAgentName, editsAgentName, getChatParticipantIdFromName, notebookEditorAgentName, terminalAgentName, vscodeAgentName, workspaceAgentName } from '../../../platform/chat/common/chatAgents';
 import { IChatQuotaService } from '../../../platform/chat/common/chatQuotaService';
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -81,6 +81,7 @@ class ChatAgents implements IDisposable {
 		this._disposables.add(this.registerEditingAgentEditor());
 		this._disposables.add(this.registerEditsAgent());
 		this._disposables.add(this.registerEditorDefaultAgent());
+		this._disposables.add(this.registerNotebookEditorDefaultAgent());
 		this._disposables.add(this.registerNotebookDefaultAgent());
 		this._disposables.add(this.registerWorkspaceAgent());
 		this._disposables.add(this.registerVSCodeAgent());
@@ -194,7 +195,7 @@ class ChatAgents implements IDisposable {
 
 	private registerDefaultAgent(): IDisposable {
 		const intentGetter = (request: vscode.ChatRequest) => {
-			if (this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.AskAgent, this.experimentationService) && request.model.capabilities.supportsToolCalling) {
+			if (this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.AskAgent, this.experimentationService) && request.model.capabilities.supportsToolCalling && this.configurationService.getNonExtensionConfig('chat.agent.enabled')) {
 				return Intent.AskAgent;
 			}
 			return Intent.Unknown;
@@ -219,7 +220,6 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 		const markdownString = new vscode.MarkdownString(helpPostfix);
 		markdownString.isTrusted = { enabledCommands: ['inlineChat.start', 'github.copilot.open.walkthrough'] };
 		defaultAgent.helpTextPostfix = markdownString;
-		defaultAgent.helpTextVariablesPrefix = vscode.l10n.t('You can also help me understand your question by using the following variables to give me extra context:');
 
 		defaultAgent.additionalWelcomeMessage = this.additionalWelcomeMessage;
 		defaultAgent.titleProvider = this.instantiationService.createInstance(ChatTitleProvider);
@@ -235,8 +235,15 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 		return defaultAgent;
 	}
 
-	private registerNotebookDefaultAgent(): IDisposable {
+	private registerNotebookEditorDefaultAgent(): IDisposable {
 		const defaultAgent = this.createAgent('notebook', Intent.Editor);
+		defaultAgent.iconPath = new vscode.ThemeIcon('copilot');
+
+		return defaultAgent;
+	}
+
+	private registerNotebookDefaultAgent(): IDisposable {
+		const defaultAgent = this.createAgent(notebookEditorAgentName, Intent.notebookEditor);
 		defaultAgent.iconPath = new vscode.ThemeIcon('copilot');
 
 		return defaultAgent;
@@ -296,8 +303,8 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 	private async switchToBaseModel(request: vscode.ChatRequest, stream: vscode.ChatResponseStream): Promise<ChatRequest> {
 		const endpoint = await this.endpointProvider.getChatEndpoint(request);
 		const baseEndpoint = await this.endpointProvider.getChatEndpoint('copilot-base');
-		// IF base model or BYOK model, we just continue
-		if (endpoint.model === baseEndpoint.model || request.model.vendor !== 'copilot') {
+		// If it has a 0x multipler, it's free so don't switch them. If it's BYOK, it's free so don't switch them.
+		if (endpoint.multiplier === 0 || request.model.vendor !== 'copilot' || endpoint.multiplier === undefined) {
 			return request;
 		}
 		if (this._chatQuotaService.overagesEnabled || !this._chatQuotaService.quotaExhausted) {
@@ -320,7 +327,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 			}));
 			messageString.isTrusted = { enabledCommands: ['chat.enablePremiumOverages'] };
 		} else {
-			messageString = new vscode.MarkdownString(vscode.l10n.t('You have exceeded your free request allowance. We have automatically switched you to {0} which is included with your plan. To enable additional paid premium requests, contact your organization admin.', baseEndpoint.name));
+			messageString = new vscode.MarkdownString(vscode.l10n.t('You have exceeded your premium request allowance. We have automatically switched you to {0} which is included with your plan. To enable additional paid premium requests, contact your organization admin.', baseEndpoint.name));
 		}
 		stream.warning(messageString);
 		return request;

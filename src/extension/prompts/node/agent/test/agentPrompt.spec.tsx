@@ -11,7 +11,6 @@ import { CodeGenerationTextInstruction, ConfigKey, IConfigurationService } from 
 import { MockEndpoint } from '../../../../../platform/endpoint/test/node/mockEndpoint';
 import { messageToMarkdown } from '../../../../../platform/log/common/messageStringify';
 import { IResponseDelta } from '../../../../../platform/networking/common/fetch';
-import { rawMessageToCAPI } from '../../../../../platform/networking/common/openai';
 import { ITestingServicesAccessor } from '../../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
@@ -20,6 +19,7 @@ import { URI } from '../../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../../../vscodeTypes';
+import { addCacheBreakpoints } from '../../../../intents/node/cacheBreakpoints';
 import { ChatVariablesCollection } from '../../../../prompt/common/chatVariablesCollection';
 import { Conversation, ICopilotChatResultIn, Turn, TurnStatus } from '../../../../prompt/common/conversation';
 import { IBuildPromptContext, IToolCall } from '../../../../prompt/common/intents';
@@ -29,7 +29,6 @@ import { ToolName } from '../../../../tools/common/toolNames';
 import { IToolsService } from '../../../../tools/common/toolsService';
 import { PromptRenderer } from '../../base/promptRenderer';
 import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
-import { addCacheBreakpoints } from '../../../../intents/node/cacheBreakpoints';
 
 suite('AgentPrompt', () => {
 	let accessor: ITestingServicesAccessor;
@@ -86,7 +85,7 @@ suite('AgentPrompt', () => {
 
 		const r = await renderer.render();
 		addCacheBreakpoints(r.messages);
-		return rawMessageToCAPI(r.messages)
+		return r.messages
 			.map(messageToMarkdown)
 			.join('\n\n')
 			.replace(/\\+/g, '/')
@@ -134,6 +133,20 @@ suite('AgentPrompt', () => {
 	});
 
 	test('all tools, replace_string/insert_edit', async () => {
+		const toolsService = accessor.get(IToolsService);
+		expect(await agentPromptToString(accessor, {
+			chatVariables: new ChatVariablesCollection(),
+			history: [],
+			query: 'hello',
+			tools: {
+				availableTools: toolsService.tools.filter(tool => tool.name !== ToolName.ApplyPatch && tool.name !== ToolName.MultiReplaceString),
+				toolInvocationToken: null as never,
+				toolReferences: [],
+			}
+		}, undefined)).toMatchSnapshot();
+	});
+
+	test('all tools, replace_string/multi_replace_string/insert_edit', async () => {
 		const toolsService = accessor.get(IToolsService);
 		expect(await agentPromptToString(accessor, {
 			chatVariables: new ChatVariablesCollection(),
@@ -233,8 +246,8 @@ suite('AgentPrompt', () => {
 			})).toMatchSnapshot();
 	});
 
-	test('custom instructions in system message', async () => {
-		accessor.get(IConfigurationService).setConfig(ConfigKey.CustomInstructionsInSystemMessage, true);
+	test('custom instructions not in system message', async () => {
+		accessor.get(IConfigurationService).setConfig(ConfigKey.CustomInstructionsInSystemMessage, false);
 		expect(await agentPromptToString(accessor, {
 			chatVariables: new ChatVariablesCollection(),
 			history: [],

@@ -87,6 +87,8 @@ export enum ChatFetchResponseType {
 	OffTopic = 'offTopic',
 	Canceled = 'canceled',
 	Filtered = 'filtered',
+	FilteredRetry = 'filteredRetry',
+	PromptFiltered = 'promptFiltered',
 	Length = 'length',
 	RateLimited = 'rateLimited',
 	QuotaExceeded = 'quotaExceeded',
@@ -95,8 +97,10 @@ export enum ChatFetchResponseType {
 	NotFound = 'notFound',
 	Failed = 'failed',
 	Unknown = 'unknown',
+	NetworkError = 'networkError',
 	AgentUnauthorized = 'agent_unauthorized',
 	AgentFailedDependency = 'agent_failed_dependency',
+	InvalidStatefulMarker = 'invalid_stateful_marker',
 	Success = 'success'
 }
 
@@ -124,6 +128,10 @@ export type ChatFetchError =
 	 */
 	| { type: ChatFetchResponseType.Filtered; reason: string; category: FilterReason; requestId: string; serverRequestId: string | undefined }
 	/**
+	 * We requested conversation, but the prompt was filtered by RAI.
+	 */
+	| { type: ChatFetchResponseType.PromptFiltered; reason: string; category: FilterReason; requestId: string; serverRequestId: string | undefined }
+	/**
 	 * We requested conversation, but the response was too long.
 	 */
 	| { type: ChatFetchResponseType.Length; reason: string; requestId: string; serverRequestId: string | undefined; truncatedValue: string }
@@ -150,10 +158,25 @@ export type ChatFetchError =
 	 */
 	| { type: ChatFetchResponseType.Failed; reason: string; requestId: string; serverRequestId: string | undefined; streamError?: APIErrorResponse }
 	/**
+	 * We requested conversation, but didn't come up with any results because of a network error
+	 */
+	| { type: ChatFetchResponseType.NetworkError; reason: string; requestId: string; serverRequestId: string | undefined; streamError?: APIErrorResponse }
+	/**
 	 * We requested conversation, but didn't come up with any results for some "unknown"
 	 * reason, such as slur redaction or snippy.
 	 */
-	| { type: ChatFetchResponseType.Unknown; reason: string; requestId: string; serverRequestId: string | undefined };
+	| { type: ChatFetchResponseType.Unknown; reason: string; requestId: string; serverRequestId: string | undefined }
+	/**
+	 * The `statefulMarker` present in the request was invalid or expired. The
+	 * request may be retried without that marker to resubmit it anew.
+	 */
+	| { type: ChatFetchResponseType.InvalidStatefulMarker; reason: string; requestId: string; serverRequestId: string | undefined };
+
+export type ChatFetchRetriableError<T> =
+	/**
+	 * We requested conversation, the response was filtered by RAI, but we want to retry.
+	 */
+	{ type: ChatFetchResponseType.FilteredRetry; reason: string; category: FilterReason; value: T; requestId: string; serverRequestId: string | undefined }
 
 export type FetchSuccess<T> =
 	{ type: ChatFetchResponseType.Success; value: T; requestId: string; serverRequestId: string | undefined; usage: APIUsage | undefined };
@@ -256,7 +279,10 @@ export function getErrorDetailsFromChatFetchError(fetchResult: ChatFetchError, c
 		case ChatFetchResponseType.BadRequest:
 		case ChatFetchResponseType.Failed:
 			return { message: l10n.t(`Sorry, your request failed. Please try again. Request id: {0}\n\nReason: {1}`, fetchResult.requestId, fetchResult.reason) };
+		case ChatFetchResponseType.NetworkError:
+			return { message: l10n.t(`Sorry, there was a network error. Please try again later. Request id: {0}\n\nReason: {1}`, fetchResult.requestId, fetchResult.reason) };
 		case ChatFetchResponseType.Filtered:
+		case ChatFetchResponseType.PromptFiltered:
 			return {
 				message: getFilteredMessage(fetchResult.category),
 				responseIsFiltered: true,
@@ -274,6 +300,9 @@ export function getErrorDetailsFromChatFetchError(fetchResult: ChatFetchError, c
 			return { message: l10n.t(`Sorry, no response was returned.`) };
 		case ChatFetchResponseType.ExtensionBlocked:
 			return { message: l10n.t(`Sorry, something went wrong.`) };
+		case ChatFetchResponseType.InvalidStatefulMarker:
+			// should be unreachable, retried within the endpoint
+			return { message: l10n.t(`Your chat session state is invalid, please start a new chat.`) };
 	}
 }
 
@@ -288,6 +317,16 @@ export function getFilteredMessage(category: FilterReason, supportsMarkdown: boo
 				});
 			} else {
 				return l10n.t(`Sorry, the response matched public code so it was blocked. Please rephrase your prompt.`);
+			}
+		case FilterReason.Prompt:
+			if (supportsMarkdown) {
+				return l10n.t({
+					message:
+						`Sorry, your prompt was filtered by the Responsible AI Service. Please rephrase your prompt and try again. [Learn more](https://aka.ms/copilot-chat-filtered-docs).`,
+					comment: ["{Locked='](https://aka.ms/copilot-chat-filtered-docs)'}"]
+				});
+			} else {
+				return l10n.t(`Sorry, your prompt was filtered by the Responsible AI Service. Please rephrase your prompt and try again.`);
 			}
 		default:
 			if (supportsMarkdown) {

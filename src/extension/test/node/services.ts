@@ -7,12 +7,13 @@ import { ToolGroupingCache } from '../../../extension/tools/common/virtualTools/
 import { IToolGroupingCache, IToolGroupingService } from '../../../extension/tools/common/virtualTools/virtualToolTypes';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { MockChatMLFetcher } from '../../../platform/chat/test/common/mockChatMLFetcher';
-import { EMBEDDING_MODEL } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { DiffServiceImpl } from '../../../platform/diff/node/diffServiceImpl';
+import { LEGACY_EMBEDDING_MODEL_ID } from '../../../platform/embeddings/common/embeddingsComputer';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IModelConfig } from '../../../platform/endpoint/test/node/openaiCompatibleEndpoint';
 import { TestEndpointProvider } from '../../../platform/endpoint/test/node/testEndpointProvider';
+import { ILogService } from '../../../platform/log/common/logService';
 import { EditLogService, IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IMultiFileEditInternalTelemetryService, MultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
@@ -26,6 +27,7 @@ import { ITerminalService, NullTerminalService } from '../../../platform/termina
 import { TestingServiceCollection, createPlatformServices } from '../../../platform/test/node/services';
 import { SimulationAlternativeNotebookContentService, SimulationNotebookService, SimulationNotebookSummaryTracker } from '../../../platform/test/node/simulationWorkspaceServices';
 import { NullTestProvider } from '../../../platform/testing/common/nullTestProvider';
+import { TestLogService } from '../../../platform/testing/common/testLogService';
 import { ITestProvider } from '../../../platform/testing/common/testProvider';
 import { IWorkspaceChunkSearchService, NullWorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
@@ -44,7 +46,7 @@ export interface ISimulationModelConfig {
 	chatModel?: string;
 	smartChatModel?: string;
 	fastChatModel?: string;
-	embeddingModel?: EMBEDDING_MODEL;
+	embeddingModel?: LEGACY_EMBEDDING_MODEL_ID;
 	fastRewriteModel?: string;
 	skipModelMetadataCache?: boolean;
 	customModelConfigs?: Map<string, IModelConfig>;
@@ -57,7 +59,6 @@ export function createExtensionUnitTestingServices(currentTestRunInfo?: any, mod
 		new SyncDescriptor(TestEndpointProvider, [
 			modelConfig?.smartChatModel ?? modelConfig?.chatModel,
 			modelConfig?.fastChatModel ?? modelConfig?.chatModel,
-			modelConfig?.embeddingModel,
 			modelConfig?.fastRewriteModel,
 			currentTestRunInfo,
 			!!modelConfig?.skipModelMetadataCache,
@@ -66,6 +67,7 @@ export function createExtensionUnitTestingServices(currentTestRunInfo?: any, mod
 	);
 	testingServiceCollection.define(IGithubCodeSearchService, new SyncDescriptor(GithubCodeSearchService));
 	testingServiceCollection.define(ITestProvider, new NullTestProvider());
+	testingServiceCollection.define(ILogService, new SyncDescriptor(TestLogService));
 	testingServiceCollection.define(IAdoCodeSearchService, new SyncDescriptor(AdoCodeSearchService));
 	testingServiceCollection.define(IWorkspaceChunkSearchService, new SyncDescriptor(NullWorkspaceChunkSearchService));
 	testingServiceCollection.define(IPromptVariablesService, new SyncDescriptor(NullPromptVariablesService));

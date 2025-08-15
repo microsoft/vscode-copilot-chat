@@ -36,8 +36,9 @@ type ResponseInternalTelemetryProperties = {
 };
 
 // EVENT: interactiveSessionResponse
-export type ResponseInternalPanelTelemetryProperties = ResponseInternalTelemetryProperties & {
+type ResponseInternalPanelTelemetryProperties = ResponseInternalTelemetryProperties & {
 	chatLocation: 'panel';
+	requestId: string;
 
 	// shareable but NOT
 	isParticipantDetected: string;
@@ -45,12 +46,12 @@ export type ResponseInternalPanelTelemetryProperties = ResponseInternalTelemetry
 };
 
 // EVENT: interactiveSessionResponse
-export type ResponseInternalPanelTelemetryMeasurements = {
+type ResponseInternalPanelTelemetryMeasurements = {
 	turnNumber: number;
 };
 
 // EVENT: interactiveSessionResponse
-export type ResponseInternalInlineTelemetryProperties = ResponseInternalTelemetryProperties & {
+type ResponseInternalInlineTelemetryProperties = ResponseInternalTelemetryProperties & {
 	chatLocation: 'inline';
 
 	// shareable but NOT
@@ -68,8 +69,9 @@ export type ResponseInternalInlineTelemetryProperties = ResponseInternalTelemetr
 };
 
 // EVENT: interactiveSessionResponse
-export type ResponseInternalInlineTelemetryMeasurements = {
+type ResponseInternalInlineTelemetryMeasurements = {
 	isNotebook: number;
+	turnNumber: number;
 };
 
 // #endregion
@@ -78,7 +80,11 @@ export type ResponseInternalInlineTelemetryMeasurements = {
 
 // EVENT: interactiveSessionMessage
 
-export type RequestInternalPanelTelemetryProperties = {
+type RequestInternalPanelTelemetryProperties = {
+	chatLocation: 'panel';
+	sessionId: string;
+	requestId: string;
+	baseModel: string;
 	intent: string;
 	isParticipantDetected: string;
 	detectedIntent: string;
@@ -88,7 +94,7 @@ export type RequestInternalPanelTelemetryProperties = {
 
 // EVENT: interactiveSessionRequest
 
-export type RequestInternalInlineTelemetryProperties = {
+type RequestInternalInlineTelemetryProperties = {
 	chatLocation: 'inline';
 	conversationId: string;
 	requestId: string;
@@ -98,8 +104,9 @@ export type RequestInternalInlineTelemetryProperties = {
 	model: string;
 };
 
-export type RequestInternalInlineTelemetryMeasurements = {
+type RequestInternalInlineTelemetryMeasurements = {
 	isNotebook: number;
+	turnNumber: number;
 };
 
 // #endregion
@@ -121,14 +128,14 @@ type RequestTelemetryProperties = {
 	model: string;
 };
 
-export type RequestPanelTelemetryProperties = RequestTelemetryProperties & {
+type RequestPanelTelemetryProperties = RequestTelemetryProperties & {
 	responseId: string;
 	codeBlocks: string;
 	isParticipantDetected: string;
 	toolCounts: string;
 };
 
-export type RequestTelemetryMeasurements = {
+type RequestTelemetryMeasurements = {
 	promptTokenCount: number;
 	timeToRequest: number;
 	timeToFirstToken: number;
@@ -137,7 +144,7 @@ export type RequestTelemetryMeasurements = {
 	messageTokenCount: number;
 };
 
-export type RequestPanelTelemetryMeasurements = RequestTelemetryMeasurements & {
+type RequestPanelTelemetryMeasurements = RequestTelemetryMeasurements & {
 	turn: number;
 	round: number;
 	textBlocks: number;
@@ -152,7 +159,7 @@ export type RequestPanelTelemetryMeasurements = RequestTelemetryMeasurements & {
 
 // EVENT: inline.request
 
-export type RequestInlineTelemetryProperties = RequestTelemetryProperties & {
+type RequestInlineTelemetryProperties = RequestTelemetryProperties & {
 	languageId: string;
 	replyType: string;
 	diagnosticsProvider: string;
@@ -161,7 +168,7 @@ export type RequestInlineTelemetryProperties = RequestTelemetryProperties & {
 	outcomeAnnotations: string;
 };
 
-export type RequestInlineTelemetryMeasurements = RequestTelemetryMeasurements & {
+type RequestInlineTelemetryMeasurements = RequestTelemetryMeasurements & {
 	firstTurn: number;
 	isNotebook: number;
 	withIntentDetection: number;
@@ -351,7 +358,8 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 				response,
 				this.telemetryMessageId, // That's the message id of the user message
 				this._documentContext?.document,
-				this._userTelemetry.extendedBy({ replyType: interactionOutcome.kind })
+				this._userTelemetry.extendedBy({ replyType: interactionOutcome.kind }),
+				this._getModeName()
 			);
 		}
 
@@ -444,8 +452,16 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 
 		this._telemetryService.sendInternalMSFTTelemetryEvent('toolCallDetailsInternal', {
 			...toolCallProperties,
-			availableTools: JSON.stringify(availableTools.map(tool => tool.name)),
+			messageId: this.telemetryMessageId,
+			availableTools: JSON.stringify(availableTools.map(tool => tool.name))
 		}, toolCallMeasurements);
+
+		this._telemetryService.sendEnhancedGHTelemetryEvent('toolCallDetailsExternal', {
+			...toolCallProperties,
+			messageId: this.telemetryMessageId,
+			availableTools: JSON.stringify(availableTools.map(tool => tool.name))
+		}, toolCallMeasurements);
+
 	}
 
 	protected abstract _sendInternalRequestTelemetryEvent(): void;
@@ -457,6 +473,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 	protected _getTelemetryData<T extends TelemetryData>(ctor: new (...args: any[]) => T): T | undefined {
 		return <T>this._genericTelemetryData.find(d => d instanceof ctor);
 	}
+
 }
 
 export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefined> {
@@ -502,12 +519,18 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 
 		// Capture the created prompt in internal telemetry
 		this._telemetryService.sendInternalMSFTTelemetryEvent('interactiveSessionMessage', {
+			chatLocation: 'panel',
+			sessionId: this._sessionId,
+			requestId: this.telemetryMessageId,
+			baseModel: this._endpoint.model,
 			intent: this._intent.id,
 			isParticipantDetected: String(this._request.isParticipantDetected),
 			detectedIntent: this._request.enableCommandDetection ? this._intent?.id : 'none',
 			contextTypes: 'none', // TODO this is defunct
 			query: this._request.prompt
-		} satisfies RequestInternalPanelTelemetryProperties, {});
+		} satisfies RequestInternalPanelTelemetryProperties, {
+			turnNumber: this._conversation.turns.length,
+		} satisfies ResponseInternalPanelTelemetryMeasurements);
 	}
 
 	protected override async _sendResponseTelemetryEvent(responseType: ChatFetchResponseType, response: string, interactionOutcome: InteractionOutcome, toolCalls: IToolCall[] = []): Promise<void> {
@@ -654,6 +677,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		this._telemetryService.sendInternalMSFTTelemetryEvent('interactiveSessionResponse', {
 			// shared
 			chatLocation: 'panel',
+			requestId: this.telemetryMessageId,
 			intent: this._intent.id,
 			request: this._request.prompt,
 			response: response ?? '',
@@ -730,7 +754,8 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			prompt: this._messages.map(m => `${roleToString(m.role).toUpperCase()}:\n${m.content}`).join('\n---\n'),
 			model: this._endpoint.model
 		} satisfies RequestInternalInlineTelemetryProperties, {
-			isNotebook: this._isNotebookDocument
+			isNotebook: this._isNotebookDocument,
+			turnNumber: this._conversation.turns.length,
 		} satisfies RequestInternalInlineTelemetryMeasurements);
 	}
 
@@ -841,7 +866,8 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			diagnosticsProvider: this._diagnosticsTelemetryData.diagnosticsProvider,
 			language: this._documentContext.document.languageId,
 		} satisfies ResponseInternalInlineTelemetryProperties, {
-			isNotebook: this._isNotebookDocument
+			isNotebook: this._isNotebookDocument,
+			turnNumber: this._conversation.turns.length,
 		} satisfies ResponseInternalInlineTelemetryMeasurements);
 	}
 }

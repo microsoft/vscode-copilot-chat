@@ -34,7 +34,6 @@ import { InlineCodeSymbolLinkifier } from '../../linkify/vscode-node/inlineCodeS
 import { NotebookCellLinkifier } from '../../linkify/vscode-node/notebookCellLinkifier';
 import { SymbolLinkifier } from '../../linkify/vscode-node/symbolLinkifier';
 import { IntentDetector } from '../../prompt/node/intentDetector';
-import { ContributedToolName } from '../../tools/common/toolNames';
 import { SemanticSearchTextSearchProvider } from '../../workspaceSemanticSearch/node/semanticSearchTextSearchProvider';
 import { GitHubPullRequestProviders } from '../node/githubPullRequestProviders';
 import { startFeedbackCollection } from './feedbackCollection';
@@ -88,14 +87,14 @@ export class ConversationFeature implements IExtensionContribution {
 		const activationBlockerDeferred = new DeferredPromise<void>();
 		this.activationBlocker = activationBlockerDeferred.p;
 		if (authenticationService.copilotToken) {
-			this.logService.logger.debug(`ConversationFeature: Copilot token already available`);
+			this.logService.debug(`ConversationFeature: Copilot token already available`);
 			this.activated = true;
 			activationBlockerDeferred.complete();
 		}
 
 		this._disposables.add(authenticationService.onDidAuthenticationChange(async () => {
 			const hasSession = !!authenticationService.copilotToken;
-			this.logService.logger.debug(`ConversationFeature: onDidAuthenticationChange has token: ${hasSession}`);
+			this.logService.debug(`ConversationFeature: onDidAuthenticationChange has token: ${hasSession}`);
 			if (hasSession) {
 				this.activated = true;
 			} else {
@@ -191,7 +190,7 @@ export class ConversationFeature implements IExtensionContribution {
 				disposables.add(settingsSearchDisposable);
 			}
 		} catch (err: any) {
-			this.logService.logger.error(err, 'Registration of interactive providers failed');
+			this.logService.error(err, 'Registration of interactive providers failed');
 		}
 		return disposables;
 	}
@@ -210,9 +209,6 @@ export class ConversationFeature implements IExtensionContribution {
 			vscode.commands.registerCommand('github.copilot.interactiveSession.feedback', async () => {
 				return vscode.env.openExternal(vscode.Uri.parse(FEEDBACK_URL));
 			}),
-			vscode.commands.registerCommand('github.copilot.terminal.explainTerminalSelection', async () => this.triggerTerminalChat({ query: `/${TerminalExplainIntent.intentName} #terminalSelection` })),
-			// This command is an alias to use a different title in the context menu
-			vscode.commands.registerCommand('github.copilot.terminal.explainTerminalSelectionContextMenu', () => vscode.commands.executeCommand('github.copilot.terminal.explainTerminalSelection')),
 			vscode.commands.registerCommand('github.copilot.terminal.explainTerminalLastCommand', async () => this.triggerTerminalChat({ query: `/${TerminalExplainIntent.intentName} #terminalLastCommand` })),
 			vscode.commands.registerCommand('github.copilot.terminal.fixTerminalLastCommand', async () => generateTerminalFixes(this.instantiationService)),
 			vscode.commands.registerCommand('github.copilot.terminal.generateCommitMessage', async () => {
@@ -238,12 +234,6 @@ export class ConversationFeature implements IExtensionContribution {
 					const message = `git commit -m "${sanitizedMessage}"`;
 					vscode.window.activeTerminal?.sendText(message, false);
 				}
-			}),
-			vscode.commands.registerCommand('github.copilot.terminal.attachTerminalSelection', async () => {
-				await vscode.commands.executeCommand('workbench.action.chat.open', {
-					toolIds: [ContributedToolName.TerminalSelection],
-					isPartialQuery: true
-				});
 			}),
 			vscode.commands.registerCommand('github.copilot.git.generateCommitMessage', async (rootUri: vscode.Uri | undefined, _: vscode.SourceControlInputBoxValueProviderContext[], cancellationToken: vscode.CancellationToken | undefined) => {
 				const repository = this.gitCommitMessageService.getRepository(rootUri);
@@ -322,7 +312,7 @@ export class ConversationFeature implements IExtensionContribution {
 	private registerCopilotTokenListener() {
 		this._disposables.add(this.authenticationService.onDidAuthenticationChange(() => {
 			const chatEnabled = this.authenticationService.copilotToken?.isChatEnabled();
-			this.logService.logger.info(`copilot token chat_enabled: ${chatEnabled}, sku: ${this.authenticationService.copilotToken?.sku ?? ''}`);
+			this.logService.info(`copilot token chat_enabled: ${chatEnabled}, sku: ${this.authenticationService.copilotToken?.sku ?? ''}`);
 			this.enabled = chatEnabled ?? false;
 		}));
 	}

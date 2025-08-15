@@ -7,12 +7,18 @@ import type { LanguageModelToolInformation, LanguageModelToolResult } from 'vsco
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { VirtualTool } from './virtualTool';
+import { IObservable } from '../../../../util/vs/base/common/observableInternal';
 
 export interface IToolGrouping {
 	/**
 	 * Gets or sets the list of tools available for the group.
 	 */
 	tools: readonly LanguageModelToolInformation[];
+
+	/**
+	 * Whether tool grouping logic is enabled at the current tool threshold.
+	 */
+	isEnabled: boolean;
 
 	/**
 	 * Should be called for each model tool call. Returns a tool result if the
@@ -39,6 +45,11 @@ export interface IToolGrouping {
 	getContainerFor(toolName: string): VirtualTool | undefined;
 
 	/**
+	 * Ensures the given tool is available in the next call to `compute`.
+	 */
+	ensureExpanded(toolName: string): void;
+
+	/**
 	 * Returns a list of tools that should be used for the given request.
 	 * Internally re-reads the request and conversation state.
 	 */
@@ -53,10 +64,14 @@ export interface IToolGrouping {
 export interface IToolGroupingService {
 	_serviceBrand: undefined;
 	/**
+	 * The current tool count threshold for grouping to kick in.
+	 */
+	threshold: IObservable<number>;
+	/**
 	 * Creates a tool grouping for a request, based on its conversation and the
 	 * initial set of tools.
 	 */
-	create(tools: readonly LanguageModelToolInformation[]): IToolGrouping;
+	create(sessionId: string, tools: readonly LanguageModelToolInformation[]): IToolGrouping;
 }
 
 export const IToolGroupingService = createServiceIdentifier<IToolGroupingService>('IToolGroupingService');

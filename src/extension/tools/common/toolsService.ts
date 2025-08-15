@@ -70,7 +70,7 @@ export interface IToolsService {
 	getEnabledTools(request: vscode.ChatRequest, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[];
 }
 
-export function ajvValidateForTool(toolName: string, fn: ValidateFunction, inputObj: unknown): IToolValidationResult {
+function ajvValidateForTool(toolName: string, fn: ValidateFunction, inputObj: unknown): IToolValidationResult {
 	// Empty output can be valid when the schema only has optional properties
 	if (fn(inputObj ?? {})) {
 		return { inputObj };
@@ -132,7 +132,7 @@ export abstract class BaseToolsService extends Disposable implements IToolsServi
 				if (!this.didWarnAboutValidationError?.has(tool.name)) {
 					this.didWarnAboutValidationError ??= new Set();
 					this.didWarnAboutValidationError.add(tool.name);
-					this.logService.logger.warn(`Error compiling input schema for tool ${tool.name}: ${e}`);
+					this.logService.warn(`Error compiling input schema for tool ${tool.name}: ${e}`);
 				}
 
 				return { inputObj };
