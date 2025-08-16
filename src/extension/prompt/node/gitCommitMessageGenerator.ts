@@ -38,7 +38,7 @@ export class GitCommitMessageGenerator {
 
 		const temperature = Math.min(
 			this.conversationOptions.temperature * (1 + attemptCount),
-			2 /* MAX temperature - https://platform.openai.com/docs/api-reference/chat/create#chat/create-temperature */
+			2 /* MAX temperature - https://platform.openai.com/docs/api-reference/chat/create#chat_create-temperature */
 		);
 
 		const requestStartTime = Date.now();
