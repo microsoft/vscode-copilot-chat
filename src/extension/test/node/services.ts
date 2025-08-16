@@ -35,6 +35,7 @@ import { CommandServiceImpl, ICommandService } from '../../commands/node/command
 import { ILinkifyService, LinkifyService } from '../../linkify/common/linkifyService';
 import { IFeedbackReporter, NullFeedbackReporterImpl } from '../../prompt/node/feedbackReporter';
 import { IPromptVariablesService, NullPromptVariablesService } from '../../prompt/node/promptVariablesService';
+import { ITodoListContextProvider, TodoListContextProvider } from '../../prompt/node/todoListContextProvider';
 import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inline/fixCookbookService';
 import { IToolsService } from '../../tools/common/toolsService';
@@ -89,5 +90,6 @@ export function createExtensionUnitTestingServices(currentTestRunInfo?: any, mod
 	testingServiceCollection.define(ITerminalService, new SyncDescriptor(NullTerminalService));
 	testingServiceCollection.define(IToolGroupingCache, new SyncDescriptor(ToolGroupingCache));
 	testingServiceCollection.define(IToolGroupingService, new SyncDescriptor(ToolGroupingService));
+	testingServiceCollection.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
 	return testingServiceCollection;
 }
