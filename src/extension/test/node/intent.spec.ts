@@ -48,7 +48,7 @@ suite('Intent Streaming', function () {
 			selection: new Selection(0, 0, 0, 0),
 		};
 
-		const endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint);
+		const endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint, undefined);
 		const progressReporter = { report() { } };
 		const renderer = PromptRenderer.create(accessor.get(IInstantiationService), endpoint, InlineChatEditCodePrompt, {
 			documentContext: context,

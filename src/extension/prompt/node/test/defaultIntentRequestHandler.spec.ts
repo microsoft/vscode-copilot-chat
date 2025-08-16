@@ -53,7 +53,7 @@ suite('defaultIntentRequestHandler', () => {
 		services.define(ITelemetryService, telemetry);
 		services.define(IChatMLFetcher, new StaticChatMLFetcher(chatResponse));
 		accessor = services.createTestingAccessor();
-		endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint);
+		endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint, undefined);
 		builtPrompts = [];
 		response = [];
 		promptResult = nullRenderPromptResult();

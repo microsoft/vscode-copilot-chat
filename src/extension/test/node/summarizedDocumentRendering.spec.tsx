@@ -61,7 +61,7 @@ suite('SummarizedDocumentRendering', () => {
 	beforeEach(async function () {
 		accessor = createExtensionUnitTestingServices().createTestingAccessor();
 		instaService = accessor.get(IInstantiationService);
-		endpoint = instaService.createInstance(MockEndpoint);
+		endpoint = instaService.createInstance(MockEndpoint, undefined);
 	});
 
 

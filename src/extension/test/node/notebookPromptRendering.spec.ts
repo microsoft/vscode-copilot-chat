@@ -220,7 +220,7 @@ describe('Notebook Prompt Rendering', function () {
 	});
 
 	test('Notebook prompt structure is rendered correctly', async function () {
-		const endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint);
+		const endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint, undefined);
 		const progressReporter = { report() { } };
 		const renderer = PromptRenderer.create(accessor.get(IInstantiationService), endpoint, InlineChatNotebookGeneratePrompt, {
 			documentContext: contexts[1],
@@ -241,7 +241,7 @@ describe('Notebook Prompt Rendering', function () {
 
 	test('Disable package should not render packages', async function () {
 		treatmeants['copilotchat.notebookPackages'] = true;
-		const endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint);
+		const endpoint = accessor.get(IInstantiationService).createInstance(MockEndpoint, undefined);
 		const progressReporter = { report() { } };
 		const renderer = PromptRenderer.create(accessor.get(IInstantiationService), endpoint, InlineChatNotebookGeneratePrompt, {
 			documentContext: contexts[1],
