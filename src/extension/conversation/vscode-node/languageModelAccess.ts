@@ -16,7 +16,7 @@ import { IAutomodeService } from '../../../platform/endpoint/common/automodeServ
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { encodeStatefulMarker } from '../../../platform/endpoint/common/statefulMarkerContainer';
-import { IEnvService } from '../../../platform/env/common/envService';
+import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
 import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
@@ -64,7 +64,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 		this._lmWrapper = this._instantiationService.createInstance(CopilotLanguageModelWrapper);
 
-		if (this._vsCodeExtensionContext.extensionMode === ExtensionMode.Test) {
+		if (this._vsCodeExtensionContext.extensionMode === ExtensionMode.Test && !isScenarioAutomation) {
 			this._logService.warn('[LanguageModelAccess] LanguageModels and Embeddings are NOT AVAILABLE in test mode.');
 			return;
 		}
