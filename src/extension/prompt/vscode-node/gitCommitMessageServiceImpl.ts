@@ -3,17 +3,19 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ProgressLocation, Uri, l10n, window } from 'vscode';
+import { l10n, ProgressLocation, Uri, window } from 'vscode';
 import { compute4GramTextSimilarity } from '../../../platform/editSurvivalTracking/common/editSurvivalTracker';
 import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
+import { getGitHubRepoInfoFromContext, IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { API, Repository } from '../../../platform/git/vscode/git';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { DisposableMap, DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { RecentCommitMessages } from '../common/repository';
+import { GitHubPullRequestProviders } from '../../conversation/node/githubPullRequestProviders';
+import { GitCommitRepoContext, RecentCommitMessages } from '../common/repository';
 import { GitCommitMessageGenerator } from '../node/gitCommitMessageGenerator';
 
 interface CommitMessage {
@@ -37,6 +39,7 @@ export class GitCommitMessageServiceImpl implements IGitCommitMessageService {
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IGitDiffService private readonly _gitDiffService: IGitDiffService,
+		@IGitService private readonly _gitService: IGitService,
 	) {
 		const initialize = () => {
 			this._disposables.add(this._gitExtensionApi!.onDidOpenRepository(this._onDidOpenRepository, this));
@@ -96,8 +99,12 @@ export class GitCommitMessageServiceImpl implements IGitCommitMessageService {
 			const attemptCount = this._getAttemptCount(repository, diffs);
 			const recentCommitMessages = await this._getRecentCommitMessages(repository);
 
+			const repoContext = this._gitService.activeRepository?.get();
+			const prProvider = this._instantiationService.createInstance(GitHubPullRequestProviders);
+			const gitCommitRepoContext = await this._getGitCommitRepoContext(repository, repoContext, prProvider);
+
 			const gitCommitMessageGenerator = this._instantiationService.createInstance(GitCommitMessageGenerator);
-			const commitMessage = await gitCommitMessageGenerator.generateGitCommitMessage(changes, recentCommitMessages, attemptCount, cancellationToken);
+			const commitMessage = await gitCommitMessageGenerator.generateGitCommitMessage(changes, recentCommitMessages, gitCommitRepoContext, attemptCount, cancellationToken);
 
 			// Save generated commit message
 			if (commitMessage && repository.state.HEAD && repository.state.HEAD.commit) {
@@ -161,6 +168,20 @@ export class GitCommitMessageServiceImpl implements IGitCommitMessageService {
 		catch (err) { }
 
 		return { repository: repositoryCommitMessages, user: userCommitMessages };
+	}
+
+	private async _getGitCommitRepoContext(repository: Repository, repoContext: RepoContext | undefined, prProvider: GitHubPullRequestProviders): Promise<GitCommitRepoContext> {
+		const headBranchName = repository.state.HEAD?.name;
+		const gitHubRepoInfo = repoContext && getGitHubRepoInfoFromContext(repoContext);
+		const gitHubRepoDescription = await prProvider.getRepositoryDescription(repository.rootUri);
+
+		return {
+			headBranchName,
+			repositoryName: gitHubRepoInfo?.id.repo,
+			owner: gitHubRepoInfo?.id.org,
+			defaultBranch: gitHubRepoDescription?.defaultBranch,
+			pullRequest: gitHubRepoDescription?.pullRequest
+		};
 	}
 
 	private _onDidOpenRepository(repository: Repository): void {

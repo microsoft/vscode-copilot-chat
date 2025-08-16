@@ -5,7 +5,7 @@
 import { BasePromptElementProps, PromptElement, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
 import { Diff } from '../../../../platform/git/common/gitDiffService';
 import { basename } from '../../../../util/vs/base/common/path';
-import { RecentCommitMessages } from '../../../prompt/common/repository';
+import { GitCommitRepoContext, RecentCommitMessages } from '../../../prompt/common/repository';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { SafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
@@ -16,6 +16,7 @@ import { UnsafeCodeBlock } from '../panel/unsafeElements';
 export interface GitCommitMessagePromptProps extends BasePromptElementProps {
 	readonly changes: Diff[];
 	readonly recentCommitMessages: RecentCommitMessages;
+	readonly repoContext: GitCommitRepoContext;
 }
 
 export class GitCommitMessagePrompt extends PromptElement<GitCommitMessagePromptProps> {
@@ -40,6 +41,18 @@ export class GitCommitMessagePrompt extends PromptElement<GitCommitMessagePrompt
 							{this.props.recentCommitMessages.repository.map(message => `- ${message}\n`).join('')}
 						</Tag>
 					)}
+					{this.props.repoContext &&
+						<Tag priority={800} name='repoContext'>
+							<>
+								# REPOSITORY CONTEXT<br />
+								{this.props.repoContext.repositoryName ? <>Repository name: {this.props.repoContext.repositoryName}<br /></> : ''}
+								{this.props.repoContext.owner ? <>Owner: {this.props.repoContext.owner}<br /></> : ''}
+								{this.props.repoContext.headBranchName ? <>Current branch: {this.props.repoContext.headBranchName}<br /></> : ''}
+								{this.props.repoContext.defaultBranch ? <>Default branch: {this.props.repoContext.defaultBranch}<br /></> : ''}
+								{this.props.repoContext?.pullRequest ? <>Active pull request: {this.props.repoContext.pullRequest.title} ({this.props.repoContext.pullRequest.url})<br /></> : ''}
+							</>
+						</Tag>
+					}
 					<Tag priority={900} name='changes'>
 						{this.props.changes.map((change) => (
 							<>
@@ -89,7 +102,7 @@ class GitCommitMessageSystemRules extends PromptElement {
 				# First, think step-by-step:<br />
 				1. Analyze the CODE CHANGES thoroughly to understand what's been modified.<br />
 				2. Use the ORIGINAL CODE to understand the context of the CODE CHANGES. Use the line numbers to map the CODE CHANGES to the ORIGINAL CODE.<br />
-				3. Identify the purpose of the changes to answer the *why* for the commit messages, also considering the optionally provided RECENT USER COMMITS.<br />
+				3. Identify the purpose of the changes to answer the *why* for the commit messages, also considering the REPOSITORY CONTEXT and the optionally provided RECENT USER COMMITS.<br />
 				4. Review the provided RECENT REPOSITORY COMMITS to identify established commit message conventions. Focus on the format and style, ignoring commit-specific details like refs, tags, and authors.<br />
 				5. Generate a thoughtful and succinct commit message for the given CODE CHANGES. It MUST follow the established writing conventions.
 				6. Remove any meta information like issue references, tags, or author names from the commit message. The developer will add them.<br />
