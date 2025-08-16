@@ -22,6 +22,7 @@ import { OffsetRange } from '../../../../../util/vs/editor/common/core/ranges/of
 import { INextEditDisplayLocation } from '../../../node/nextEditResult';
 import { IVSCodeObservableDocument } from '../../parts/vscodeWorkspace';
 import { toExternalRange, toInternalRange } from '../../utils/translations';
+import { InlineCompletionDisplayLocationKind } from 'vscode';
 
 export interface IDiagnosticCodeAction {
 	edit: TextReplacement;
@@ -59,7 +60,7 @@ export abstract class DiagnosticCompletionItem implements vscode.InlineCompletio
 	}
 	get displayLocation(): vscode.InlineCompletionDisplayLocation | undefined {
 		const displayLocation = this.nextEditDisplayLocation;
-		return displayLocation ? { range: toExternalRange(displayLocation.range), label: displayLocation.label } : undefined;
+		return displayLocation ? { range: toExternalRange(displayLocation.range), label: displayLocation.label, kind: InlineCompletionDisplayLocationKind.Code } : undefined;
 	}
 	get documentId(): DocumentId {
 		return this._workspaceDocument.id;
