@@ -35,6 +35,8 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 	}
 
 	getConfig<T>(key: Config<T>, scope?: vscode.ConfigurationScope): T {
+		console.log('[ALERT!Config] ConfigurationService: getConfig called for', key.fullyQualifiedId);
+
 		if (key.options?.valueIgnoredForExternals && !this._isInternal) {
 			// If the setting is restricted to internal users and the user is not internal, we return the default value
 			return this.getDefaultValue(key);
