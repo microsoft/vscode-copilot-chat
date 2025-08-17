@@ -17,7 +17,7 @@ import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, OptionalChatRequestParams, RequestId, getProcessingTime, getRequestId } from '../../networking/common/fetch';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
-import { IChatEndpoint, IEndpointBody, postRequest, stringifyUrlOrRequestMetadata } from '../../networking/common/networking';
+import { IChatEndpoint, IChatRequestDelegate, IEndpointBody, postRequest, stringifyUrlOrRequestMetadata } from '../../networking/common/networking';
 import { CAPIChatMessage, ChatCompletion } from '../../networking/common/openai';
 import { sendEngineMessagesTelemetry } from '../../networking/node/chatStream';
 import { sendCommunicationErrorTelemetry } from '../../networking/node/stream';
@@ -106,6 +106,7 @@ export async function fetchAndStreamChat(
 	authenticationService: IAuthenticationService,
 	interactionService: IInteractionService,
 	chatEndpointInfo: IChatEndpoint,
+	delegate: IChatRequestDelegate,
 	request: IEndpointBody,
 	baseTelemetryData: TelemetryData,
 	finishedCb: FinishedCallback,
@@ -128,7 +129,7 @@ export async function fetchAndStreamChat(
 	secretKey ??= (await authenticationService.getCopilotToken()).token;
 	if (!secretKey) {
 		// If no key is set we error
-		const urlOrRequestMetadata = stringifyUrlOrRequestMetadata(chatEndpointInfo.urlOrRequestMetadata);
+		const urlOrRequestMetadata = stringifyUrlOrRequestMetadata(delegate.urlOrRequestMetadata);
 		logService.error(`Failed to send request to ${urlOrRequestMetadata} due to missing key`);
 		sendCommunicationErrorTelemetry(telemetryService, `Failed to send request to ${urlOrRequestMetadata} due to missing key`);
 		return {
@@ -151,6 +152,7 @@ export async function fetchAndStreamChat(
 		capiClientService,
 		interactionService,
 		chatEndpointInfo,
+		delegate,
 		ourRequestId,
 		request,
 		secretKey,
@@ -177,7 +179,7 @@ export async function fetchAndStreamChat(
 	}
 
 	if (response.status !== 200) {
-		const telemetryData = createTelemetryData(chatEndpointInfo, location, ourRequestId);
+		const telemetryData = createTelemetryData(location, ourRequestId);
 		logService.info('Request ID for failed request: ' + ourRequestId);
 		return handleError(logService, telemetryService, authenticationService, telemetryData, response, ourRequestId);
 	}
@@ -185,7 +187,7 @@ export async function fetchAndStreamChat(
 	// Extend baseTelemetryData with modelCallId for output messages
 	const extendedBaseTelemetryData = baseTelemetryData.extendedBy({ modelCallId });
 
-	const chatCompletions = await chatEndpointInfo.processResponseFromChatEndpoint(
+	const chatCompletions = await delegate.processResponseFromChatEndpoint(
 		telemetryService,
 		logService,
 		response,
@@ -210,7 +212,7 @@ export async function fetchAndStreamChat(
 	};
 }
 
-function createTelemetryData(chatEndpointInfo: IChatEndpoint, location: ChatLocation, headerRequestId: string) {
+function createTelemetryData(location: ChatLocation, headerRequestId: string) {
 	return TelemetryData.createAndMarkAsIssued({
 		endpoint: 'completions',
 		engineName: 'chat',
@@ -454,7 +456,8 @@ async function fetchWithInstrumentation(
 	domainService: IDomainService,
 	capiClientService: ICAPIClientService,
 	interactionService: IInteractionService,
-	chatEndpoint: IChatEndpoint,
+	endpoint: IChatEndpoint,
+	delegate: IChatRequestDelegate,
 	ourRequestId: string,
 	request: IEndpointBody,
 	secretKey: string,
@@ -469,7 +472,7 @@ async function fetchWithInstrumentation(
 		'X-Interaction-Id': interactionService.interactionId,
 		'X-Initiator': userInitiatedRequest ? 'user' : 'agent', // Agent = a system request / not the primary user query.
 	};
-	if (request.messages?.some((m: CAPIChatMessage) => Array.isArray(m.content) ? m.content.some(c => 'image_url' in c) : false) && chatEndpoint.supportsVision) {
+	if (request.messages?.some((m: CAPIChatMessage) => Array.isArray(m.content) ? m.content.some(c => 'image_url' in c) : false) && endpoint.supportsVision) {
 		additionalHeaders['Copilot-Vision-Request'] = 'true';
 	}
 	const telemetryData = TelemetryData.createAndMarkAsIssued({
@@ -478,7 +481,7 @@ async function fetchWithInstrumentation(
 		uiKind: ChatLocation.toString(location),
 		...telemetryProperties // This includes the modelCallId from fetchAndStreamChat
 	}, {
-		maxTokenWindow: chatEndpoint.modelMaxPromptTokens
+		maxTokenWindow: endpoint.modelMaxPromptTokens
 	});
 
 	for (const [key, value] of Object.entries(request)) {
@@ -505,7 +508,7 @@ async function fetchWithInstrumentation(
 		telemetryService,
 		domainService,
 		capiClientService,
-		chatEndpoint,
+		delegate,
 		secretKey,
 		await createRequestHMAC(process.env.HMAC_SECRET),
 		intent,
@@ -527,7 +530,7 @@ async function fetchWithInstrumentation(
 		const totalTimeMs = Date.now() - requestStart;
 		telemetryData.measurements.totalTimeMs = totalTimeMs;
 
-		logService.debug(`request.response: [${stringifyUrlOrRequestMetadata(chatEndpoint.urlOrRequestMetadata)}], took ${totalTimeMs} ms`);
+		logService.debug(`request.response: [${stringifyUrlOrRequestMetadata(delegate.urlOrRequestMetadata)}], took ${totalTimeMs} ms`);
 
 		if (request.messages) {
 			logService.debug(`messages: ${JSON.stringify(request.messages)}`);
@@ -556,7 +559,7 @@ async function fetchWithInstrumentation(
 			const totalTimeMs = Date.now() - requestStart;
 			telemetryData.measurements.totalTimeMs = totalTimeMs;
 
-			logService.debug(`request.response: [${chatEndpoint.urlOrRequestMetadata}] took ${totalTimeMs} ms`);
+			logService.debug(`request.response: [${delegate.urlOrRequestMetadata}] took ${totalTimeMs} ms`);
 
 			telemetryService.sendGHTelemetryEvent('request.error', telemetryData.properties, telemetryData.measurements);
 

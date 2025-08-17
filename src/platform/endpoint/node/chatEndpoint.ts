@@ -20,7 +20,7 @@ import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, ICopilotToolCall, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
-import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions, postRequest } from '../../networking/common/networking';
+import { createCapiRequestBody, IChatEndpoint, IChatRequestDelegate, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions, postRequest } from '../../networking/common/networking';
 import { CAPIChatMessage, ChatCompletion, FinishedCompletionReason } from '../../networking/common/openai';
 import { prepareChatCompletionForReturn } from '../../networking/node/chatStream';
 import { SSEProcessor } from '../../networking/node/stream';
@@ -31,7 +31,7 @@ import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
 import { IChatModelInformation, ModelPolicy, ModelSupportedEndpoint } from '../common/endpointProvider';
-import { createResponsesRequestBody, processResponseFromChatEndpoint } from './responsesApi';
+import { ResponsesApiDelegate } from './responsesApi';
 
 // get ChatMaxNumTokens from config for experimentation
 export function getMaxPromptTokens(configService: IConfigurationService, expService: IExperimentationService, chatModelInfo: IChatModelInformation): number {
@@ -221,72 +221,6 @@ export class ChatEndpoint implements IChatEndpoint {
 		return { terms: this._policyDetails.terms ?? 'Unknown policy terms' };
 	}
 
-	interceptBody(body: IEndpointBody | undefined): void {
-		// Remove tool calls from requests that don't support them
-		// We really shouldn't make requests to models that don't support tool calls with tools though
-		if (body && !this.supportsToolCalls) {
-			delete body['tools'];
-		}
-
-		// If the model doesn't support streaming, don't ask for a streamed request
-		if (body && !this._supportsStreaming) {
-			body.stream = false;
-		}
-
-		// If it's o1 we must modify the body significantly as the request is very different
-		if (body?.messages && (this.family.startsWith('o1') || this.model === CHAT_MODEL.O1 || this.model === CHAT_MODEL.O1MINI)) {
-			const newMessages: CAPIChatMessage[] = body.messages.map((message: CAPIChatMessage): CAPIChatMessage => {
-				if (message.role === OpenAI.ChatRole.System) {
-					return {
-						role: OpenAI.ChatRole.User,
-						content: message.content,
-					};
-				} else {
-					return message;
-				}
-			});
-			// Add the messages & model back
-			body['messages'] = newMessages;
-		}
-
-		if (body && this.useResponsesApi) {
-			delete body.temperature;
-			body.reasoning = {
-				'effort': 'high',
-				'summary': 'detailed'
-			};
-			body.truncation = this._configurationService.getConfig(ConfigKey.Internal.UseResponsesApiTruncation) ?
-				'auto' :
-				'disabled';
-		}
-	}
-
-	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
-		if (this.useResponsesApi) {
-			return createResponsesRequestBody(options, this.model, this._modelMetadata);
-		} else {
-			return createCapiRequestBody(this.model, options);
-		}
-	}
-
-	public async processResponseFromChatEndpoint(
-		telemetryService: ITelemetryService,
-		logService: ILogService,
-		response: Response,
-		expectedNumChoices: number,
-		finishCallback: FinishedCallback,
-		telemetryData: TelemetryData,
-		cancellationToken?: CancellationToken | undefined
-	): Promise<AsyncIterableObject<ChatCompletion>> {
-		if (this.useResponsesApi) {
-			return processResponseFromChatEndpoint(this._instantiationService, telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData);
-		} else if (!this._supportsStreaming) {
-			return defaultNonStreamChatResponseProcessor(response, finishCallback, telemetryData);
-		} else {
-			return defaultChatResponseProcessor(telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData, cancellationToken);
-		}
-	}
-
 	public async acceptChatPolicy(): Promise<boolean> {
 		if (this.policy === 'enabled') {
 			return true;
@@ -336,6 +270,9 @@ export class ChatEndpoint implements IChatEndpoint {
 		return this._chatMLFetcher.fetchOne({
 			requestOptions: {},
 			...options,
+			delegate: this.useResponsesApi ?
+				this._instantiationService.createInstance(ResponsesApiDelegate, this.model, this._modelMetadata, this.urlOrRequestMetadata) :
+				this._instantiationService.createInstance(NonStreamingChatCompletionsDelegate, this.model, this._modelMetadata, this.urlOrRequestMetadata),
 			endpoint: this,
 		}, token);
 	}
@@ -367,6 +304,69 @@ export class ChatEndpoint implements IChatEndpoint {
 		return this._instantiationService.createInstance(
 			ChatEndpoint,
 			mixin(deepClone(this._modelMetadata), { capabilities: { limits: { max_prompt_tokens: modelMaxPromptTokens } } }));
+	}
+}
+
+class NonStreamingChatCompletionsDelegate implements IChatRequestDelegate {
+	constructor(
+		private readonly model: string,
+		private readonly _modelMetadata: IChatModelMetadata,
+		private readonly urlOrRequestMetadata: string | RequestMetadata,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+	) { }
+
+	processResponseFromChatEndpoint(telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData, cancellationToken?: CancellationToken): Promise<AsyncIterableObject<ChatCompletion>> {
+		return defaultNonStreamChatResponseProcessor(response, finishCallback, telemetryData);
+	}
+
+	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		return createCapiRequestBody(this.model, options);
+	}
+
+	interceptBody(body: IEndpointBody | undefined): void {
+		// Remove tool calls from requests that don't support them
+		// We really shouldn't make requests to models that don't support tool calls with tools though
+		if (body && !this.supportsToolCalls) {
+			delete body['tools'];
+		}
+
+		body.stream = false;
+
+		// If it's o1 we must modify the body significantly as the request is very different
+		if (body?.messages && (this.family.startsWith('o1') || this.model === CHAT_MODEL.O1 || this.model === CHAT_MODEL.O1MINI)) {
+			const newMessages: CAPIChatMessage[] = body.messages.map((message: CAPIChatMessage): CAPIChatMessage => {
+				if (message.role === OpenAI.ChatRole.System) {
+					return {
+						role: OpenAI.ChatRole.User,
+						content: message.content,
+					};
+				} else {
+					return message;
+				}
+			});
+			// Add the messages & model back
+			body['messages'] = newMessages;
+		}
+	}
+}
+
+class StreamingChatCompletionsDelegate extends NonStreamingChatCompletionsDelegate {
+	constructor(
+		model: string,
+		_modelMetadata: IChatModelMetadata,
+		urlOrRequestMetadata: string | RequestMetadata,
+		@IConfigurationService _configurationService: IConfigurationService,
+	) {
+		super(model, _modelMetadata, urlOrRequestMetadata, _configurationService);
+	}
+
+	override processResponseFromChatEndpoint(telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData, cancellationToken?: CancellationToken): Promise<AsyncIterableObject<ChatCompletion>> {
+		return defaultChatResponseProcessor(telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData, cancellationToken);
+	}
+
+	interceptBody(body: IEndpointBody | undefined): void {
+		super.interceptBody(body);
+		body!.stream = true;
 	}
 }
 

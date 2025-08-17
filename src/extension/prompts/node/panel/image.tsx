@@ -54,6 +54,7 @@ export class Image extends PromptElement<ImageProps, unknown> {
 			}
 			const variable = await this.props.variableValue;
 			let imageSource = Buffer.from(variable).toString('base64');
+			// add other flag to endpoint
 			const isChatCompletions = typeof this.promptEndpoint.urlOrRequestMetadata !== 'string' && this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatCompletions;
 			const enabled = this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.EnableChatImageUpload, this.experimentationService);
 			if (isChatCompletions && enabled) {

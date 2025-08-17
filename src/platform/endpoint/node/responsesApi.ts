@@ -3,51 +3,127 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { RequestMetadata } from '@vscode/copilot-api';
 import { Raw } from '@vscode/prompt-tsx';
 import { ClientHttp2Stream } from 'http2';
 import { OpenAI } from 'openai';
 import { Response } from '../../../platform/networking/common/fetcherService';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { binaryIndexOf } from '../../../util/vs/base/common/buffer';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Lazy } from '../../../util/vs/base/common/lazy';
 import { SSEParser } from '../../../util/vs/base/common/sseParser';
 import { isDefined } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../networking/common/fetch';
-import { ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
+import { IChatRequestDelegate, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, TokenLogProb } from '../../networking/common/openai';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { IThinkingDataService } from '../../thinking/node/thinkingDataService';
 import { IChatModelInformation } from '../common/endpointProvider';
 import { getStatefulMarkerAndIndex } from '../common/statefulMarkerContainer';
-import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 
-export function createResponsesRequestBody(options: ICreateEndpointBodyOptions, model: string, modelInfo: IChatModelInformation): IEndpointBody {
-	return {
-		model,
-		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
-		reasoning: modelInfo.capabilities.supports.thinking ? { summary: 'concise' } : undefined,
-		stream: true,
-		tools: options.requestOptions?.tools?.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
-			...tool.function,
-			type: 'function',
-			strict: false,
-			parameters: (tool.function.parameters || {}) as Record<string, unknown>,
-		})),
-		// Only a subset of completion post options are supported, and some
-		// are renamed. Handle them manually:
-		temperature: options.postOptions.temperature,
-		top_p: options.postOptions.top_p,
-		max_output_tokens: options.postOptions.max_tokens,
-		tool_choice: typeof options.postOptions.tool_choice === 'object'
-			? { type: 'function', name: options.postOptions.tool_choice.function.name }
-			: options.postOptions.tool_choice,
-		// top_logprobs is documented but not in the API types yet
-		//@ts-expect-error
-		top_logprobs: options.postOptions.logprobs ? 3 : undefined,
-	} satisfies OpenAI.Responses.ResponseCreateParamsStreaming;
+export class ResponsesApiDelegate implements IChatRequestDelegate {
+	constructor(
+		public readonly model: string,
+		private readonly modelInfo: IChatModelInformation,
+		public readonly urlOrRequestMetadata: string | RequestMetadata,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+	) { }
+
+	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		return {
+			model: this.model,
+			...rawMessagesToResponseAPI(this.model, options.messages, !!options.ignoreStatefulMarker),
+			reasoning: this.modelInfo.capabilities.supports.thinking ? { summary: 'concise' } : undefined,
+			stream: true,
+			tools: options.requestOptions?.tools?.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
+				...tool.function,
+				type: 'function',
+				strict: false,
+				parameters: (tool.function.parameters || {}) as Record<string, unknown>,
+			})),
+			// Only a subset of completion post options are supported, and some
+			// are renamed. Handle them manually:
+			temperature: options.postOptions.temperature,
+			top_p: options.postOptions.top_p,
+			max_output_tokens: options.postOptions.max_tokens,
+			tool_choice: typeof options.postOptions.tool_choice === 'object'
+				? { type: 'function', name: options.postOptions.tool_choice.function.name }
+				: options.postOptions.tool_choice,
+			// top_logprobs is documented but not in the API types yet
+			//@ts-expect-error
+			top_logprobs: options.postOptions.logprobs ? 3 : undefined,
+		} satisfies OpenAI.Responses.ResponseCreateParamsStreaming;
+	}
+	
+	interceptBody(body: IEndpointBody | undefined): void {
+		// Remove tool calls from requests that don't support them
+		// We really shouldn't make requests to models that don't support tool calls with tools though
+		if (body && !this.supportsToolCalls) {
+			delete body['tools'];
+		}
+
+		// If the model doesn't support streaming, don't ask for a streamed request
+		if (body && !this._supportsStreaming) {
+			body.stream = false;
+		}
+
+		// If it's o1 we must modify the body significantly as the request is very different
+		if (body?.messages && (this.family.startsWith('o1') || this.model === CHAT_MODEL.O1 || this.model === CHAT_MODEL.O1MINI)) {
+			const newMessages: CAPIChatMessage[] = body.messages.map((message: CAPIChatMessage): CAPIChatMessage => {
+				if (message.role === OpenAI.ChatRole.System) {
+					return {
+						role: OpenAI.ChatRole.User,
+						content: message.content,
+					};
+				} else {
+					return message;
+				}
+			});
+			// Add the messages & model back
+			body['messages'] = newMessages;
+		}
+
+		if (body && this.useResponsesApi) {
+			delete body.temperature;
+			body.reasoning = {
+				'effort': 'high',
+				'summary': 'detailed'
+			};
+			body.truncation = this._configurationService.getConfig(ConfigKey.Internal.UseResponsesApiTruncation) ?
+				'auto' :
+				'disabled';
+		}
+	}
+
+	async processResponseFromChatEndpoint(telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData, cancellationToken?: CancellationToken): Promise<AsyncIterableObject<ChatCompletion>> {
+		const body = (await response.body()) as ClientHttp2Stream;
+		return new AsyncIterableObject<ChatCompletion>(async feed => {
+			const requestId = response.headers.get('X-Request-ID') ?? generateUuid();
+			const processor = this.instantiationService.createInstance(OpenAIResponsesProcessor, telemetryData, requestId);
+			const parser = new SSEParser((ev) => {
+				try {
+					logService.trace(`SSE: ${ev.data}`);
+					const completion = processor.push({ type: ev.type, ...JSON.parse(ev.data) }, finishCallback);
+					if (completion) {
+						feed.emitOne(completion);
+					}
+				} catch (e) {
+					feed.reject(e);
+				}
+			});
+
+			for await (const chunk of body) {
+				parser.feed(chunk);
+			}
+		}, () => {
+			body.destroy();
+		});
+	}
 }
 
 function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMessage[], ignoreStatefulMarker: boolean): { input: OpenAI.Responses.ResponseInputItem[]; previous_response_id?: string } {
@@ -131,31 +207,6 @@ function rawContentToResponsesOutputContent(part: Raw.ChatCompletionContentPart)
 		case Raw.ChatCompletionContentPartKind.Text:
 			return { type: 'output_text', text: part.text, annotations: [] };
 	}
-}
-
-export async function processResponseFromChatEndpoint(instantiationService: IInstantiationService, telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData): Promise<AsyncIterableObject<ChatCompletion>> {
-	const body = (await response.body()) as ClientHttp2Stream;
-	return new AsyncIterableObject<ChatCompletion>(async feed => {
-		const requestId = response.headers.get('X-Request-ID') ?? generateUuid();
-		const processor = instantiationService.createInstance(OpenAIResponsesProcessor, telemetryData, requestId);
-		const parser = new SSEParser((ev) => {
-			try {
-				logService.trace(`SSE: ${ev.data}`);
-				const completion = processor.push({ type: ev.type, ...JSON.parse(ev.data) }, finishCallback);
-				if (completion) {
-					feed.emitOne(completion);
-				}
-			} catch (e) {
-				feed.reject(e);
-			}
-		});
-
-		for await (const chunk of body) {
-			parser.feed(chunk);
-		}
-	}, () => {
-		body.destroy();
-	});
 }
 
 class OpenAIResponsesProcessor {

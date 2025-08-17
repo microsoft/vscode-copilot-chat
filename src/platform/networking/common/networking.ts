@@ -101,15 +101,20 @@ export interface IEndpointBody {
 }
 
 export interface IEndpoint {
-	readonly urlOrRequestMetadata: string | RequestMetadata;
-	getExtraHeaders?(): Record<string, string>;
-	interceptBody?(body: IEndpointBody | undefined): void;
+	// ??
+	readonly urlOrRequestMetadata?: string | RequestMetadata;
 	acquireTokenizer(): ITokenizer;
 	readonly modelMaxPromptTokens: number;
 	readonly name: string;
 	readonly version: string;
 	readonly family: string;
 	readonly tokenizer: TokenizerType;
+}
+
+export interface IRequestDelegate {
+	readonly urlOrRequestMetadata: string | RequestMetadata;
+	getExtraHeaders?(): Record<string, string>;
+	interceptBody?(body: IEndpointBody | undefined): void;
 }
 
 export function stringifyUrlOrRequestMetadata(urlOrRequestMetadata: string | RequestMetadata): string {
@@ -161,26 +166,6 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly isDefault: boolean;
 	readonly isFallback: boolean;
 	readonly policy: 'enabled' | { terms: string };
-	/**
-	 * Handles processing of responses from a chat endpoint. Each endpoint can have different response formats.
-	 * @param telemetryService The telemetry service
-	 * @param logService The log service
-	 * @param response The response from the chat endpoint
-	 * @param expectedNumChoices The expected number of choices in the response
-	 * @param finishCallback A finish callback to indicate when the response should be complete
-	 * @param telemetryData GH telemetry data from the originating request, will be extended with request information
-	 * @param cancellationToken A cancellation tokenf for cancelling the request
-	 * @returns An async iterable object of chat completions
-	 */
-	processResponseFromChatEndpoint(
-		telemetryService: ITelemetryService,
-		logService: ILogService,
-		response: Response,
-		expectedNumChoices: number,
-		finishCallback: FinishedCallback,
-		telemetryData: TelemetryData,
-		cancellationToken?: CancellationToken
-	): Promise<AsyncIterableObject<ChatCompletion>>;
 
 	/**
 	 * Accepts the chat policy for the given endpoint, enabling its usage.
@@ -214,12 +199,35 @@ export interface IChatEndpoint extends IEndpoint {
 	 */
 	makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse>;
 
+	cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint;
+}
+
+export interface IChatRequestDelegate extends IRequestDelegate {
+	/**
+	 * Handles processing of responses from a chat endpoint. Each endpoint can have different response formats.
+	 * @param telemetryService The telemetry service
+	 * @param logService The log service
+	 * @param response The response from the chat endpoint
+	 * @param expectedNumChoices The expected number of choices in the response
+	 * @param finishCallback A finish callback to indicate when the response should be complete
+	 * @param telemetryData GH telemetry data from the originating request, will be extended with request information
+	 * @param cancellationToken A cancellation tokenf for cancelling the request
+	 * @returns An async iterable object of chat completions
+	 */
+	processResponseFromChatEndpoint(
+		telemetryService: ITelemetryService,
+		logService: ILogService,
+		response: Response,
+		expectedNumChoices: number,
+		finishCallback: FinishedCallback,
+		telemetryData: TelemetryData,
+		cancellationToken?: CancellationToken
+	): Promise<AsyncIterableObject<ChatCompletion>>;
+
 	/**
 	 * Creates the request body to be sent to the endpoint based on the request.
 	 */
 	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody;
-
-	cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint;
 }
 
 /** Function to create a standard request body for CAPI completions */
@@ -248,7 +256,7 @@ function networkRequest(
 	domainService: IDomainService,
 	capiClientService: ICAPIClientService,
 	requestType: 'GET' | 'POST',
-	endpointOrUrl: IEndpoint | string | RequestMetadata,
+	endpointOrUrl: IRequestDelegate | string | RequestMetadata,
 	secretKey: string,
 	hmac: string | undefined,
 	intent: string,
@@ -258,17 +266,9 @@ function networkRequest(
 	cancelToken?: CancellationToken
 ): Promise<Response> {
 	// TODO @lramos15 Eventually don't even construct this fake endpoint object.
-	const endpoint = typeof endpointOrUrl === 'string' || 'type' in endpointOrUrl ? {
-		modelMaxPromptTokens: 0,
+	const delegate = typeof endpointOrUrl === 'string' || 'type' in endpointOrUrl ? {
 		urlOrRequestMetadata: endpointOrUrl,
-		family: '',
-		tokenizer: TokenizerType.O200K,
-		acquireTokenizer: () => {
-			throw new Error('Method not implemented.');
-		},
-		name: '',
-		version: '',
-	} satisfies IEndpoint : endpointOrUrl;
+	} satisfies IRequestDelegate : endpointOrUrl;
 	const headers: ReqHeaders = {
 		Authorization: `Bearer ${secretKey}`,
 		'X-Request-Id': requestId,
@@ -277,11 +277,11 @@ function networkRequest(
 		'X-GitHub-Api-Version': '2025-05-01',
 		'editor-version': 'vscode/1.103.0',
 		...additionalHeaders,
-		...(endpoint.getExtraHeaders ? endpoint.getExtraHeaders() : {}),
+		...(delegate.getExtraHeaders ? delegate.getExtraHeaders() : {}),
 	};
 
-	if (endpoint.interceptBody) {
-		endpoint.interceptBody(body);
+	if (delegate.interceptBody) {
+		delegate.interceptBody(body);
 	}
 
 	const request: FetchOptions = {
@@ -303,13 +303,13 @@ function networkRequest(
 		// pass the controller abort signal to the request
 		request.signal = abort.signal;
 	}
-	if (typeof endpoint.urlOrRequestMetadata === 'string') {
-		const requestPromise = fetcher.fetch(endpoint.urlOrRequestMetadata, request).catch(reason => {
+	if (typeof delegate.urlOrRequestMetadata === 'string') {
+		const requestPromise = fetcher.fetch(delegate.urlOrRequestMetadata, request).catch(reason => {
 			if (canRetryOnceNetworkError(reason)) {
 				// disconnect and retry the request once if the connection was reset
 				telemetryService.sendGHTelemetryEvent('networking.disconnectAll');
 				return fetcher.disconnectAll().then(() => {
-					return fetcher.fetch(endpoint.urlOrRequestMetadata as string, request);
+					return fetcher.fetch(delegate.urlOrRequestMetadata as string, request);
 				});
 			} else if (fetcher.isAbortError(reason)) {
 				throw new CancellationError();
@@ -319,7 +319,7 @@ function networkRequest(
 		});
 		return requestPromise;
 	} else {
-		return capiClientService.makeRequest(request, endpoint.urlOrRequestMetadata as RequestMetadata);
+		return capiClientService.makeRequest(request, delegate.urlOrRequestMetadata as RequestMetadata);
 	}
 }
 
@@ -341,7 +341,7 @@ export function postRequest(
 	telemetryService: ITelemetryService,
 	domainService: IDomainService,
 	capiClientService: ICAPIClientService,
-	endpointOrUrl: IEndpoint | string | RequestMetadata,
+	endpointOrUrl: IRequestDelegate | string | RequestMetadata,
 	secretKey: string,
 	hmac: string | undefined,
 	intent: string,
@@ -373,7 +373,7 @@ export function getRequest(
 	telemetryService: ITelemetryService,
 	domainService: IDomainService,
 	capiClientService: ICAPIClientService,
-	endpointOrUrl: IEndpoint | string | RequestMetadata,
+	endpointOrUrl: IRequestDelegate | string | RequestMetadata,
 	secretKey: string,
 	hmac: string | undefined,
 	intent: string,
