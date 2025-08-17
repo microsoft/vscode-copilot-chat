@@ -57,7 +57,7 @@ export class MockEndpoint implements IChatEndpoint {
 		return this._chatMLFetcher.fetchOne({
 			requestOptions: {},
 			...options,
-			endpoint: this,
+			delegate: this,
 		}, token);
 	}
 

@@ -153,7 +153,7 @@ export class CachingChatMLFetcher extends AbstractChatMLFetcher implements IDisp
 		}
 
 		const finalReqOptions = this.preparePostOptions(opts.requestOptions);
-		const req = new CacheableChatRequest(opts.messages, opts.endpoint.model, finalReqOptions, this.extraCacheProperties);
+		const req = new CacheableChatRequest(opts.messages, opts.delegate.model, finalReqOptions, this.extraCacheProperties);
 		// console.log(`request with hash: ${req.hash}`);
 
 		return CachingChatMLFetcher.Locks.withLock(req.hash, async () => {

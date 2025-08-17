@@ -103,7 +103,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 	 * Note: the returned array of strings may be less than `n` (e.g., in case there were errors during streaming)
 	 */
 	public async fetchMany(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponses> {
-		let { debugName, endpoint: chatEndpoint, finishedCb, location, messages, requestOptions, source, telemetryProperties, userInitiatedRequest } = opts;
+		let { debugName, delegate, endpoint: chatEndpoint, finishedCb, location, messages, requestOptions, source, telemetryProperties, userInitiatedRequest } = opts;
 		if (!telemetryProperties) {
 			telemetryProperties = {};
 		}
@@ -125,7 +125,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		}
 
 		const postOptions = this.preparePostOptions(requestOptions);
-		const requestBody = chatEndpoint.createRequestBody({
+		const requestBody = delegate.createRequestBody({
 			...opts,
 			requestId: ourRequestId,
 			postOptions
@@ -138,7 +138,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			uiKind: ChatLocation.toString(location)
 		});
 
-		const pendingLoggedChatRequest = this._requestLogger.logChatRequest(debugName, chatEndpoint, {
+		const pendingLoggedChatRequest = this._requestLogger.logChatRequest(debugName, delegate, {
 			messages: opts.messages,
 			model: chatEndpoint.model,
 			ourRequestId,
@@ -171,6 +171,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					this._authenticationService,
 					this._interactionService,
 					chatEndpoint,
+					delegate,
 					requestBody,
 					baseTelemetry,
 					streamRecorder.callback,
@@ -223,6 +224,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 									finishedCb,
 									location,
 									endpoint: chatEndpoint,
+									delegate,
 									source,
 									requestOptions,
 									userInitiatedRequest: false, // do not mark the retry as user initiated
@@ -262,7 +264,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						timeToFirstToken,
 						timeToCancelled: baseTelemetry ? Date.now() - baseTelemetry.issuedTime : -1,
 						isVisionRequest: this.filterImageMessages(messages) ? 1 : -1,
-						isBYOK: chatEndpoint instanceof OpenAIEndpoint ? 1 : -1
+						isBYOK: delegate instanceof OpenAIEndpoint ? 1 : -1
 					});
 					pendingLoggedChatRequest?.resolveWithCancelation();
 					return this.processCanceledResponse(response, ourRequestId);

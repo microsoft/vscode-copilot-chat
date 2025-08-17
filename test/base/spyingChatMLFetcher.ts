@@ -137,7 +137,7 @@ export class SpyingChatMLFetcher extends AbstractChatMLFetcher {
 					tool_calls: message.role === Raw.ChatRole.Assistant ? message.toolCalls : undefined,
 					name: message.name,
 				};
-			}), opts.requestOptions, resp, cacheKey, opts.endpoint.model);
+			}), opts.requestOptions, resp, cacheKey, opts.delegate.model);
 		}));
 
 		return await respPromise;
