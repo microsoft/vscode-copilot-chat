@@ -97,44 +97,6 @@ export enum ContributedToolName {
 	CodexTool = 'copilot_codexTool'
 }
 
-const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>([
-	[ContributedToolName.ApplyPatch, ToolName.ApplyPatch],
-	[ContributedToolName.Codebase, ToolName.Codebase],
-	[ContributedToolName.SearchWorkspaceSymbols, ToolName.SearchWorkspaceSymbols],
-	[ContributedToolName.Usages, ToolName.Usages],
-	[ContributedToolName.VSCodeAPI, ToolName.VSCodeAPI],
-	[ContributedToolName.TestFailure, ToolName.TestFailure],
-	[ContributedToolName.FindFiles, ToolName.FindFiles],
-	[ContributedToolName.FindTextInFiles, ToolName.FindTextInFiles],
-	[ContributedToolName.ReadFile, ToolName.ReadFile],
-	[ContributedToolName.ListDirectory, ToolName.ListDirectory],
-	[ContributedToolName.GetErrors, ToolName.GetErrors],
-	[ContributedToolName.DocInfo, ToolName.DocInfo],
-	[ContributedToolName.GetScmChanges, ToolName.GetScmChanges],
-	[ContributedToolName.ReadProjectStructure, ToolName.ReadProjectStructure],
-	[ContributedToolName.EditFile, ToolName.EditFile],
-	[ContributedToolName.UpdateUserPreferences, ToolName.UpdateUserPreferences],
-	[ContributedToolName.CreateNewWorkspace, ToolName.CreateNewWorkspace],
-	[ContributedToolName.CreateNewJupyterNotebook, ToolName.CreateNewJupyterNotebook],
-	[ContributedToolName.InstallExtension, ToolName.InstallExtension],
-	[ContributedToolName.Think, ToolName.Think],
-	[ContributedToolName.FetchWebPage, ToolName.FetchWebPage],
-	[ContributedToolName.FindTestFiles, ToolName.FindTestFiles],
-	[ContributedToolName.CreateFile, ToolName.CreateFile],
-	[ContributedToolName.ReplaceString, ToolName.ReplaceString],
-	[ContributedToolName.EditNotebook, ToolName.EditNotebook],
-	[ContributedToolName.RunNotebookCell, ToolName.RunNotebookCell],
-	[ContributedToolName.GetNotebookSummary, ToolName.GetNotebookSummary],
-	[ContributedToolName.ReadCellOutput, ToolName.ReadCellOutput],
-	[ContributedToolName.GetProjectSetupInfo, ToolName.GetProjectSetupInfo],
-	[ContributedToolName.SearchViewResults, ToolName.SearchViewResults],
-	[ContributedToolName.GithubRepo, ToolName.GithubRepo],
-	[ContributedToolName.SimpleBrowser, ToolName.SimpleBrowser],
-	[ContributedToolName.CreateDirectory, ToolName.CreateDirectory],
-	[ContributedToolName.RunVscodeCmd, ToolName.RunVscodeCmd],
-	[ContributedToolName.CodexTool, ToolName.CodexTool]
-]);
-
 const toolNameToContributedToolNames = new Map<ToolName, ContributedToolName>();
 const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>();
 for (const [contributedNameKey, contributedName] of Object.entries(ContributedToolName)) {

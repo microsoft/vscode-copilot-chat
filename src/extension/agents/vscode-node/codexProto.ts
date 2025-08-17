@@ -11,6 +11,7 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { removeAnsiEscapeCodes } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
 import { LanguageModelServer } from './langModelServer';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 
 /*
  * See codex-rs/core/src/protocol.rs and codex-rs/docs/protocol_v1.md
@@ -284,7 +285,8 @@ export class CodexClient extends Disposable {
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
-		@IFileSystemService private readonly fileSystemService: IFileSystemService
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService
 	) {
 		super();
 	}
@@ -302,7 +304,7 @@ export class CodexClient extends Disposable {
 		const codexHome = '/tmp/vscode-codex';
 		await this.fileSystemService.createDirectory(URI.file(codexHome));
 
-		const lmServer = new LanguageModelServer();
+		const lmServer = this.instantiationService.createInstance(LanguageModelServer);
 		await lmServer.start();
 		const lmServerConfig = lmServer.getConfig();
 
