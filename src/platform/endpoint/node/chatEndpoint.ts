@@ -139,6 +139,7 @@ export async function defaultNonStreamChatResponseProcessor(response: Response, 
 }
 
 export class ChatEndpoint implements IChatEndpoint {
+	private readonly _urlOrRequestMetadata: string | RequestMetadata;
 	private readonly _maxTokens: number;
 	private readonly _maxOutputTokens: number;
 	public readonly model: string;
@@ -170,8 +171,9 @@ export class ChatEndpoint implements IChatEndpoint {
 		@ITokenizerProvider private readonly _tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService protected readonly _instantiationService: IInstantiationService,
 		@IConfigurationService protected readonly _configurationService: IConfigurationService,
-		@IExperimentationService private readonly _experimentService: IExperimentationService
+		@IExperimentationService private readonly _expService: IExperimentationService,
 	) {
+		this._urlOrRequestMetadata = _modelMetadata.urlOrRequestMetadata ?? (this.useResponsesApi ? { type: RequestType.ChatResponses } : { type: RequestType.ChatCompletions });
 		// This metadata should always be present, but if not we will default to 8192 tokens
 		this._maxTokens = _modelMetadata.capabilities.limits?.max_prompt_tokens ?? 8192;
 		// This metadata should always be present, but if not we will default to 4096 tokens
@@ -194,11 +196,6 @@ export class ChatEndpoint implements IChatEndpoint {
 		this._policyDetails = _modelMetadata.policy;
 	}
 
-	private get useResponsesApi(): boolean {
-		// Don't use responses API if someone has overridden the url/request type
-		return !this._modelMetadata.urlOrRequestMetadata && !!(this._modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.Responses) && this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseResponsesApi, this._experimentService));
-	}
-
 	public get modelMaxPromptTokens(): number {
 		return this._maxTokens;
 	}
@@ -208,7 +205,12 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	public get urlOrRequestMetadata(): string | RequestMetadata {
-		return this._modelMetadata.urlOrRequestMetadata ?? this.useResponsesApi ? { type: RequestType.ChatResponses } : { type: RequestType.ChatCompletions };
+		return this._urlOrRequestMetadata;
+	}
+
+	private get useResponsesApi(): boolean {
+		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseResponsesApi, this._expService);
+		return !!(enableResponsesApi && this._modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.Responses));
 	}
 
 	public get policy(): 'enabled' | { terms: string } {

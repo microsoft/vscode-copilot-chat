@@ -136,7 +136,7 @@ export class ProxyExperimentEndpoint implements IChatEndpoint {
 }
 
 
-interface ExperimentConfig {
+export interface ExperimentConfig {
 	selected: string;
 	name: string;
 	id: string;

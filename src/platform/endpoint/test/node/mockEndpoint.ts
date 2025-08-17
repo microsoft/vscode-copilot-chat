@@ -34,7 +34,6 @@ export class MockEndpoint implements IChatEndpoint {
 	supportsVision: boolean = false;
 	supportsPrediction: boolean = true;
 	showInModelPicker: boolean = true;
-	supportsStatefulResponses: boolean = false;
 	isDefault: boolean = false;
 	isFallback: boolean = false;
 	policy: 'enabled' | { terms: string } = 'enabled';

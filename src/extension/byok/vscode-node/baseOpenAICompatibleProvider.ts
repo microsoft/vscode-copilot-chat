@@ -4,9 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatRequestHandleOptions, Progress } from 'vscode';
-import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IChatModelInformation, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotLanguageModelWrapper } from '../../conversation/vscode-node/languageModelAccess';
 import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, LMResponsePart, resolveModelInfo } from '../common/byokProvider';
@@ -27,6 +29,8 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 		@IFetcherService protected readonly _fetcherService: IFetcherService,
 		@ILogService protected readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _expService: IExperimentationService
 	) {
 		this._lmWrapper = this._instantiationService.createInstance(CopilotLanguageModelWrapper);
 	}
@@ -94,7 +98,17 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 
 	private async getEndpointImpl(model: LanguageModelChatInformation): Promise<OpenAIEndpoint> {
 		const modelInfo: IChatModelInformation = await this.getModelInfo(model.id, this._apiKey);
-		return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, this._apiKey ?? '', `${this._baseUrl}/chat/completions`);
+		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseResponsesApi, this._expService);
+		if (enableResponsesApi) {
+			modelInfo.supported_endpoints = [
+				ModelSupportedEndpoint.ChatCompletions,
+				ModelSupportedEndpoint.Responses
+			];
+		}
+		const url = enableResponsesApi ?
+			`${this._baseUrl}/responses` :
+			`${this._baseUrl}/chat/completions`;
+		return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, this._apiKey ?? '', url);
 	}
 
 	async updateAPIKey(): Promise<void> {

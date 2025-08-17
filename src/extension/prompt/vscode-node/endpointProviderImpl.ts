@@ -13,7 +13,7 @@ import { IDomainService } from '../../../platform/endpoint/common/domainService'
 import { ChatEndpointFamily, IChatModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CopilotChatEndpoint } from '../../../platform/endpoint/node/copilotChatEndpoint';
 import { IModelMetadataFetcher, ModelMetadataFetcher } from '../../../platform/endpoint/node/modelMetadataFetcher';
-import { applyExperimentModifications, getCustomDefaultModelExperimentConfig, ProxyExperimentEndpoint } from '../../../platform/endpoint/node/proxyExperimentEndpoint';
+import { applyExperimentModifications, ExperimentConfig, getCustomDefaultModelExperimentConfig, ProxyExperimentEndpoint } from '../../../platform/endpoint/node/proxyExperimentEndpoint';
 import { ExtensionContributedChatEndpoint } from '../../../platform/endpoint/vscode-node/extChatEndpoint';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -172,7 +172,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 				// The above telemetry is needed for easier filtering.
 			}
 
-			model = applyExperimentModifications(model, experimentModelConfig) ?? model;
+			model = this.applyModifications(model, experimentModelConfig);
 			const chatEndpoint = this.getOrCreateChatEndpointInstance(model);
 			chatEndpoints.push(chatEndpoint);
 			if (experimentModelConfig && chatEndpoint.model === experimentModelConfig.selected) {
@@ -181,5 +181,11 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		}
 
 		return chatEndpoints;
+	}
+
+	private applyModifications(modelMetadata: IChatModelInformation, experimentModelConfig: ExperimentConfig | undefined): IChatModelInformation {
+		modelMetadata = applyExperimentModifications(modelMetadata, experimentModelConfig);
+
+		return modelMetadata;
 	}
 }

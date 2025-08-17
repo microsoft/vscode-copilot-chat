@@ -2,8 +2,10 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { BYOKAuthType, BYOKKnownModels } from '../common/byokProvider';
 import { BaseOpenAICompatibleLMProvider } from './baseOpenAICompatibleProvider';
@@ -18,6 +20,8 @@ export class OAIBYOKLMProvider extends BaseOpenAICompatibleLMProvider {
 		@IFetcherService _fetcherService: IFetcherService,
 		@ILogService _logService: ILogService,
 		@IInstantiationService _instantiationService: IInstantiationService,
+		@IConfigurationService _configurationService: IConfigurationService,
+		@IExperimentationService _expService: IExperimentationService
 	) {
 		super(
 			BYOKAuthType.GlobalApiKey,
@@ -27,7 +31,9 @@ export class OAIBYOKLMProvider extends BaseOpenAICompatibleLMProvider {
 			byokStorageService,
 			_fetcherService,
 			_logService,
-			_instantiationService
+			_instantiationService,
+			_configurationService,
+			_expService
 		);
 	}
 }

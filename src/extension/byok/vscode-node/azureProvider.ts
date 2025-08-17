@@ -5,6 +5,7 @@
 
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IBYOKStorageService } from './byokStorageService';
 import { CustomOAIBYOKModelProvider } from './customOAIProvider';

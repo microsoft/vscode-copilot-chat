@@ -36,7 +36,7 @@ export class CopilotChatEndpoint extends ChatEndpoint {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IThinkingDataService private readonly thinkingDataService: IThinkingDataService,
 		@IConfigurationService configurationService: IConfigurationService,
-		@IConfigurationService experimentService: IExperimentationService
+		@IExperimentationService experimentService: IExperimentationService
 	) {
 		super(
 			modelMetadata,

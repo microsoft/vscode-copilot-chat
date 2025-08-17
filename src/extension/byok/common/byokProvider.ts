@@ -54,7 +54,6 @@ export interface BYOKModelCapabilities {
 	toolCalling: boolean;
 	vision: boolean;
 	thinking?: boolean;
-	responsesApi?: boolean;
 }
 
 export interface BYOKModelRegistry {
