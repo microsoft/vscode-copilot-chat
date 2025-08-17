@@ -272,7 +272,9 @@ export class ChatEndpoint implements IChatEndpoint {
 			...options,
 			delegate: this.useResponsesApi ?
 				this._instantiationService.createInstance(ResponsesApiDelegate, this.model, this._modelMetadata, this.urlOrRequestMetadata) :
-				this._instantiationService.createInstance(NonStreamingChatCompletionsDelegate, this.model, this._modelMetadata, this.urlOrRequestMetadata),
+				this._supportsStreaming ?
+					this._instantiationService.createInstance(NonStreamingChatCompletionsDelegate, this.model, this._modelMetadata, this.urlOrRequestMetadata) :
+					this._instantiationService.createInstance(StreamingChatCompletionsDelegate, this.model, this._modelMetadata, this.urlOrRequestMetadata),
 			endpoint: this,
 		}, token);
 	}
