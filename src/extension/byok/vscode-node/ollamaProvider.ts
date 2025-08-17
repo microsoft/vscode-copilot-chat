@@ -2,11 +2,9 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
-import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { BYOKAuthType, BYOKKnownModels, BYOKModelCapabilities } from '../common/byokProvider';
 import { BaseOpenAICompatibleLMProvider } from './baseOpenAICompatibleProvider';
@@ -40,8 +38,6 @@ export class OllamaLMProvider extends BaseOpenAICompatibleLMProvider {
 		@IFetcherService _fetcherService: IFetcherService,
 		@ILogService _logService: ILogService,
 		@IInstantiationService _instantiationService: IInstantiationService,
-		@IConfigurationService _configurationService: IConfigurationService,
-		@IExperimentationService _expService: IExperimentationService
 	) {
 		super(
 			BYOKAuthType.None,
@@ -52,8 +48,6 @@ export class OllamaLMProvider extends BaseOpenAICompatibleLMProvider {
 			_fetcherService,
 			_logService,
 			_instantiationService,
-			_configurationService,
-			_expService
 		);
 	}
 
