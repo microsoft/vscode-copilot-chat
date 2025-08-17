@@ -53,6 +53,8 @@ export class FetchRequestCollector {
 	}
 
 	public get usage(): APIUsage {
+		// Have to extract this to give it an explicit type or TS is confused
+		const initial: APIUsage = { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } };
 		return this.interceptedRequests.reduce((p, c): APIUsage => {
 			const initialUsage: APIUsage = { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } };
 			const cUsage = c.response.usage || initialUsage;
@@ -64,7 +66,7 @@ export class FetchRequestCollector {
 					cached_tokens: (p.prompt_tokens_details?.cached_tokens ?? 0) + (cUsage.prompt_tokens_details?.cached_tokens ?? 0),
 				}
 			};
-		}, { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } });
+		}, initial);
 	}
 
 	public get averageRequestDuration(): number {
