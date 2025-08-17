@@ -163,7 +163,6 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 			url: model.url,
 			thinking: model.thinking
 		});
-		modelInfo.capabilities.supports.statefulResponses = this._configurationService.getExperimentBasedConfig(ConfigKey.ByokResponsesApi, this._experimentationService);
 		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey ?? '', model.url);
 		return this._lmWrapper.provideLanguageModelResponse(openAIChatEndpoint, messages, options, options.extensionId, progress, token);
 	}
