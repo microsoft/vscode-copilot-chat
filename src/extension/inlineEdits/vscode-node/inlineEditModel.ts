@@ -202,8 +202,13 @@ class InlineEditTriggerer extends Disposable {
 				tracer.returns('no recent trigger');
 				return;
 			}
+			const range = doc.toRange(e.textEditor.document, e.selections[0]);
+			if (!range) {
+				tracer.returns('no range');
+				return;
+			}
 
-			const selectionLine = e.selections[0].active.line;
+			const selectionLine = range.start.line;
 			const lastTriggerTimestampForLine = mostRecentChange.lineNumberTriggers.get(selectionLine);
 			if (lastTriggerTimestampForLine !== undefined && timeSince(lastTriggerTimestampForLine) < TRIGGER_INLINE_EDIT_ON_SAME_LINE_COOLDOWN) {
 				tracer.returns('same line cooldown');
