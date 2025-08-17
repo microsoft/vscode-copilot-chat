@@ -174,12 +174,12 @@ export class ThrottlingChatMLFetcher extends AbstractChatMLFetcher {
 	}
 
 	override async fetchMany(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponses> {
-		const taskLauncher = this._modelTaskLaunchers.getThrottler(opts.endpoint.model);
+		const taskLauncher = this._modelTaskLaunchers.getThrottler(opts.delegate.model);
 
 		return new Promise<ChatResponses>((resolve, reject) => {
 			taskLauncher.work([async () => {
 				try {
-					const result = await this._modelTaskLaunchers.executeWithRateLimitHandling(opts.endpoint.model, () =>
+					const result = await this._modelTaskLaunchers.executeWithRateLimitHandling(opts.delegate.model, () =>
 						this._fetcher.fetchMany(opts, token)
 					);
 					resolve(result);

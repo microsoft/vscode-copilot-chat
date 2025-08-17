@@ -8,7 +8,7 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { AsyncIterableObject, AsyncIterableSource } from '../../../util/vs/base/common/async';
 import { Event } from '../../../util/vs/base/common/event';
 import { FinishedCallback, IResponseDelta, OptionalChatRequestParams } from '../../networking/common/fetch';
-import { IChatEndpoint, IMakeChatRequestOptions } from '../../networking/common/networking';
+import { IChatEndpoint, IChatRequestDelegate, IMakeChatRequestOptions } from '../../networking/common/networking';
 import { ChatResponse, ChatResponses } from './commonTypes';
 
 export interface Source {
@@ -22,9 +22,9 @@ export interface IResponsePart {
 
 export interface IFetchMLOptions extends IMakeChatRequestOptions {
 	endpoint: IChatEndpoint;
+	delegate: IChatRequestDelegate;
 	requestOptions: OptionalChatRequestParams;
 }
-
 
 export const IChatMLFetcher = createServiceIdentifier<IChatMLFetcher>('IChatMLFetcher');
 
