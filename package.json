@@ -115,8 +115,8 @@
 		"authLearnMore",
 		"testObserver",
 		"aiTextSearchProvider@2",
-		"chatParticipantPrivate@9",
-		"chatProvider",
+		"chatParticipantPrivate@10",
+		"chatProvider@1",
 		"contribDebugCreateConfiguration",
 		"chatReferenceDiagnostic",
 		"textSearchProvider2",
@@ -1630,6 +1630,11 @@
 				"vendor": "openrouter",
 				"displayName": "OpenRouter",
 				"managementCommand": "github.copilot.chat.manageBYOK"
+			},
+			{
+				"vendor": "customoai",
+				"displayName": "Custom OpenAI Compatible Models",
+				"managementCommand": "github.copilot.chat.manageBYOK"
 			}
 		],
 		"interactiveSession": [
@@ -2773,6 +2778,72 @@
 							"additionalProperties": false
 						},
 						"markdownDescription": "Configure custom Azure OpenAI models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
+					},
+					"github.copilot.chat.customOAIModels": {
+						"type": "object",
+						"default": {},
+						"tags": [
+							"experimental"
+						],
+						"additionalProperties": {
+							"type": "object",
+							"properties": {
+								"name": {
+									"type": "string",
+									"description": "Display name of the custom OpenAI model"
+								},
+								"url": {
+									"type": "string",
+									"description": "URL endpoint for the custom OpenAI-compatible model"
+								},
+								"toolCalling": {
+									"type": "boolean",
+									"description": "Whether the model supports tool calling"
+								},
+								"vision": {
+									"type": "boolean",
+									"description": "Whether the model supports vision capabilities"
+								},
+								"maxInputTokens": {
+									"type": "number",
+									"description": "Maximum number of input tokens supported by the model"
+								},
+								"maxOutputTokens": {
+									"type": "number",
+									"description": "Maximum number of output tokens supported by the model"
+								},
+								"requiresAPIKey": {
+									"type": "boolean",
+									"description": "Whether the model requires an API key for authentication",
+									"default": true
+								},
+								"thinking": {
+									"type": "boolean",
+									"default": false,
+									"description": "Whether the model supports thinking capabilities"
+								}
+							},
+							"required": [
+								"name",
+								"url",
+								"toolCalling",
+								"vision",
+								"maxInputTokens",
+								"maxOutputTokens",
+								"requiresAPIKey"
+							],
+							"additionalProperties": false
+						},
+						"markdownDescription": "Configure custom OpenAI-compatible models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
+					},
+					"github.copilot.chat.byok.responsesApi": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental",
+							"onExP"
+						],
+						"markdownDescription": "%github.copilot.config.byok.responsesApi%"
 					},
 					"github.copilot.chat.enableRetryAfterFilteredResponse": {
 						"type": "boolean",
