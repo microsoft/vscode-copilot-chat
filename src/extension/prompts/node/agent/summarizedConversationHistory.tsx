@@ -608,7 +608,7 @@ class ConversationHistorySummarizer {
 			hasWorkingNotebook,
 			duration: elapsedTime,
 			promptTokenCount: usage?.prompt_tokens,
-			promptCacheTokenCount: usage?.prompt_tokens_details.cached_tokens,
+			promptCacheTokenCount: usage?.prompt_tokens_details?.cached_tokens,
 			responseTokenCount: usage?.completion_tokens,
 		});
 	}

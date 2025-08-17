@@ -61,7 +61,7 @@ export class FetchRequestCollector {
 				prompt_tokens: p.prompt_tokens + cUsage.prompt_tokens,
 				total_tokens: p.total_tokens + cUsage.total_tokens,
 				prompt_tokens_details: {
-					cached_tokens: p.prompt_tokens_details.cached_tokens + (cUsage.prompt_tokens_details?.cached_tokens ?? 0),
+					cached_tokens: (p.prompt_tokens_details?.cached_tokens ?? 0) + (cUsage.prompt_tokens_details?.cached_tokens ?? 0),
 				}
 			};
 		}, { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } });
