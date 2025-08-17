@@ -527,12 +527,6 @@ export const enum CHAT_MODEL {
 	EXPERIMENTAL = 'experimental-01'
 }
 
-// WARNING
-// These values are used in the request and are case sensitive. Do not change them unless advised by CAPI.
-export const enum EMBEDDING_MODEL {
-	TEXT3SMALL = "text-embedding-3-small"
-}
-
 export enum AuthProviderId {
 	GitHub = 'github',
 	GitHubEnterprise = 'github-enterprise',
@@ -588,9 +582,6 @@ export namespace ConfigKey {
 		 * a fundamental different experience compared to our end-users.
 		 */
 		export const DebugOverrideChatEngine = defineSetting<string | undefined>('chat.advanced.debug.overrideChatEngine', undefined, INTERNAL_RESTRICTED);
-		/** Allows forcing a particular embeddings model.
-		 */
-		export const DebugOverrideEmbeddingsModel = defineSetting<EMBEDDING_MODEL | undefined>('chat.advanced.debug.overrideEmbeddingsModel', undefined, INTERNAL_RESTRICTED);
 		/** Allows forcing a particular context window size.
 		 * This setting doesn't validate values so large windows may not be supported by the model.
 		 * Note: this should not be used while self-hosting because it might lead to
@@ -704,6 +695,8 @@ export namespace ConfigKey {
 		export const AgentHistorySummarizationForceGpt41 = defineExpSetting<boolean | undefined>('chat.advanced.agentHistorySummarizationForceGpt41', false, INTERNAL_RESTRICTED);
 		export const UseResponsesApiTruncation = defineSetting<boolean | undefined>('chat.advanced.useResponsesApiTruncation', false, INTERNAL_RESTRICTED);
 
+		export const EnableChatImageUpload = defineExpSetting<boolean>('chat.advanced.imageUpload', false, INTERNAL);
+
 		export const EnableReadFileV2 = defineExpSetting<boolean>('chat.advanced.enableReadFileV2', isPreRelease, INTERNAL_RESTRICTED);
 		export const AskAgent = defineExpSetting<boolean>('chat.advanced.enableAskAgent', { defaultValue: false, teamDefaultValue: true, internalDefaultValue: true }, INTERNAL_RESTRICTED);
 		export const VerifyTextDocumentChanges = defineExpSetting<boolean>('chat.advanced.inlineEdits.verifyTextDocumentChanges', true, INTERNAL_RESTRICTED);
@@ -711,7 +704,7 @@ export namespace ConfigKey {
 		export const OmitBaseAgentInstructions = defineSetting<boolean>('chat.advanced.omitBaseAgentInstructions', false, INTERNAL);
 
 		export const PromptFileContext = defineExpSetting<boolean>('chat.advanced.promptFileContextProvider.enabled', true);
-		export const GeminiReplaceString = defineExpSetting<boolean>('chat.advanced.geminiReplaceString.enabled', false, INTERNAL, { experimentName: 'copilotchat.geminiReplaceString' });
+		export const MultiReplaceString = defineExpSetting<boolean>('chat.advanced.multiReplaceString.enabled', false, INTERNAL);
 	}
 
 	export const AgentThinkingTool = defineSetting<boolean>('chat.agent.thinkingTool', false);
@@ -760,13 +753,16 @@ export namespace ConfigKey {
 	export const CurrentEditorAgentContext = defineSetting<boolean>('chat.agent.currentEditorContext.enabled', true);
 	/** BYOK  */
 	export const OllamaEndpoint = defineSetting<string>('chat.byok.ollamaEndpoint', 'http://localhost:11434');
-	export const AzureModels = defineSetting<Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; thinking?: boolean }>>('chat.azureModels', {});
+	export const AzureModels = defineSetting<Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey?: boolean; thinking?: boolean }>>('chat.azureModels', {});
+	export const CustomOAIModels = defineSetting<Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey?: boolean; thinking?: boolean }>>('chat.customOAIModels', {});
 	export const EditsCodeNewNotebookAgentEnabled = defineExpSetting<boolean>('chat.edits.newNotebook.enabled', true);
 	export const AutoFixDiagnostics = defineSetting<boolean>('chat.agent.autoFix', true);
 	export const NotebookFollowCellExecution = defineSetting<boolean>('chat.notebook.followCellExecution.enabled', false);
 	export const CustomInstructionsInSystemMessage = defineSetting<boolean>('chat.customInstructionsInSystemMessage', true);
 
 	export const EnableRetryAfterFilteredResponse = defineExpSetting<boolean>('chat.enableRetryAfterFilteredResponse', true);
+	export const EnableAlternateGptPrompt = defineExpSetting<boolean>('chat.alternateGptPrompt.enabled', false);
+	export const Gpt5AlternatePrompt = defineExpSetting<string>('chat.gpt5AlternatePrompt', 'default');
 }
 
 export function getAllConfigKeys(): string[] {

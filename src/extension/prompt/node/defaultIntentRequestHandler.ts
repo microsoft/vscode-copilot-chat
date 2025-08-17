@@ -392,10 +392,18 @@ export class DefaultIntentRequestHandler {
 			appliedText,
 			requestId,
 			this.documentContext?.document,
-			baseModelTelemetry
+			baseModelTelemetry,
+			this.getModeName()
 		);
 
 		return chatResult;
+	}
+
+	private getModeName(): string {
+		return this.request.modeInstructions ? 'custom' :
+			this.intent.id === 'editAgent' ? 'agent' :
+				(this.intent.id === 'edit' || this.intent.id === 'edit2') ? 'edit' :
+					'ask';
 	}
 
 	private processOffTopicFetchResult(baseModelTelemetry: ConversationalBaseTelemetryData): ChatResult {
@@ -687,7 +695,6 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 				conversationId: this.options.conversation.sessionId,
 				messageSource: this.options.intent?.id && this.options.intent.id !== UnknownIntent.ID ? `${messageSourcePrefix}.${this.options.intent.id}` : `${messageSourcePrefix}.user`,
 			},
-			intentParams: { intent: true }
 		}, token);
 	}
 

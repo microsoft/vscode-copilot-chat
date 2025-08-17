@@ -226,7 +226,6 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 									requestOptions,
 									userInitiatedRequest: false, // do not mark the retry as user initiated
 									telemetryProperties: { ...telemetryProperties, retryAfterFilterCategory: result.category ?? 'uncategorized' },
-									intentParams: opts.intentParams,
 									isFilterRetry: true,
 								}, token);
 

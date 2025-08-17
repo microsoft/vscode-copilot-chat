@@ -92,7 +92,6 @@ export class McpToolCallingLoop extends ToolCallingLoop<IMcpToolCallingLoopOptio
 				...opts.requestOptions,
 				temperature: 0
 			},
-			intentParams: { intent: true }
 		}, token);
 	}
 }

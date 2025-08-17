@@ -219,16 +219,14 @@ export class RequestLogger extends AbstractRequestLogger {
 			result.push(`~~~`);
 		}
 
-		if (entry.thinking) {
+		if (entry.thinking?.text) {
 			result.push(`## Thinking`);
 			if (entry.thinking.id) {
 				result.push(`thinkingId: ${entry.thinking.id}`);
 			}
-			if (entry.thinking.text) {
-				result.push(`~~~`);
-				result.push(entry.thinking.text);
-				result.push(`~~~`);
-			}
+			result.push(`~~~`);
+			result.push(entry.thinking.text);
+			result.push(`~~~`);
 		}
 
 		return result.join('\n');
@@ -419,7 +417,6 @@ export class RequestLogger extends AbstractRequestLogger {
 			result.push(`~~~`);
 			result.push(`Total models     : ${models.length}`);
 			result.push(`Chat models      : ${models.filter(m => m.capabilities.type === 'chat').length}`);
-			result.push(`Embedding models : ${models.filter(m => m.capabilities.type === 'embeddings').length}`);
 			result.push(`Completion models: ${models.filter(m => m.capabilities.type === 'completion').length}`);
 			result.push(`Premium models   : ${models.filter(m => m.billing?.is_premium).length}`);
 			result.push(`Preview models   : ${models.filter(m => m.preview).length}`);

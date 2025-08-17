@@ -89,6 +89,11 @@ jobs:
           python-version: '3.12'
           architecture: 'x64'
 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0'
+
       - name: Install setuptools
         run: pip install setuptools
 
@@ -115,9 +120,6 @@ jobs:
           node build/listBuildCacheFiles.js .build/build_cache_list.txt
           mkdir -p .build/build_cache
           tar -czf .build/build_cache/cache.tgz --files-from .build/build_cache_list.txt
-
-      - name: Install dotnet cli
-        run: npm run setup:dotnet
 
       - name: TypeScript type checking
         run: npm run typecheck
@@ -170,6 +172,11 @@ jobs:
         with:
           python-version: '3.12'
           architecture: 'x64'
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0'
 
       - name: Install setuptools
         run: pip install setuptools

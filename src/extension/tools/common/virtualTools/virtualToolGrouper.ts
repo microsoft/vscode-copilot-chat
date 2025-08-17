@@ -69,7 +69,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 		}));
 
 		this._cache.flush();
-		root.contents = grouped.flat();
+		root.contents = VirtualToolGrouper.deduplicateGroups(grouped.flat());
 
 		for (const tool of root.all()) {
 			if (tool instanceof VirtualTool) {
@@ -83,6 +83,30 @@ export class VirtualToolGrouper implements IToolCategorization {
 		}
 
 		this._reExpandToolsToHitBudget(root);
+	}
+
+	public static deduplicateGroups(grouped: readonly (VirtualTool | LanguageModelToolInformation)[]) {
+		const seen = new Map<string, VirtualTool | LanguageModelToolInformation>();
+
+		for (const item of grouped) {
+			const saw = seen.get(item.name);
+			if (!saw) {
+				seen.set(item.name, item);
+				continue;
+			}
+
+			if (saw instanceof VirtualTool && saw.metadata.possiblePrefix) {
+				seen.delete(saw.name);
+				const replacement = saw.cloneWithPrefix(saw.metadata.possiblePrefix);
+				seen.set(replacement.name, replacement);
+				seen.set(item.name, item);
+			} else if (item instanceof VirtualTool && item.metadata.possiblePrefix) {
+				const next = item.cloneWithPrefix(item.metadata.possiblePrefix);
+				seen.set(next.name, next);
+			}
+		}
+
+		return [...seen.values()];
 	}
 
 	/**
@@ -182,8 +206,15 @@ export class VirtualToolGrouper implements IToolCategorization {
 		}, { retries, durationMs: sw.elapsed() });
 
 		const virtualTools: (VirtualTool | LanguageModelToolInformation)[] = virts?.map(v => {
-			const vt = new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX + v.name, SUMMARY_PREFIX + v.summary + SUMMARY_SUFFIX, 0, { toolsetKey: key, groups: virts });
-			vt.contents = v.tools;
+			const src = tools[0].source;
+			const possiblePrefix = src instanceof LanguageModelToolExtensionSource
+				? (src.id.split('.').at(1) || src.id)
+				: src?.label;
+			const vt = new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX + v.name, SUMMARY_PREFIX + v.summary + SUMMARY_SUFFIX, 0, {
+				toolsetKey: key,
+				groups: virts,
+				possiblePrefix: possiblePrefix?.replaceAll(/[^a-zA-Z0-9]/g, '_').slice(0, 10) + '_'
+			}, v.tools);
 			return vt;
 		}) || [];
 

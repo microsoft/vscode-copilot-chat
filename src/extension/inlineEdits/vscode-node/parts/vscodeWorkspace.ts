@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, CodeAction, CodeActionKind, commands, Diagnostic, DiagnosticSeverity, EndOfLine, languages, NotebookDocument, Range, TextDocument, TextDocumentChangeEvent, TextDocumentContentChangeEvent, TextEditor, Uri, window, workspace } from 'vscode';
+import { CancellationToken, CodeAction, CodeActionKind, commands, Diagnostic, DiagnosticSeverity, EndOfLine, languages, NotebookCell, NotebookCellKind, NotebookDocument, Range, TextDocument, TextDocumentChangeEvent, TextDocumentContentChangeEvent, TextEditor, Uri, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { CodeActionData } from '../../../../platform/inlineEdits/common/dataTypes/codeActionData';
@@ -12,7 +12,7 @@ import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/do
 import { LanguageId } from '../../../../platform/inlineEdits/common/dataTypes/languageId';
 import { EditReason } from '../../../../platform/inlineEdits/common/editReason';
 import { IObservableDocument, ObservableWorkspace, StringEditWithReason } from '../../../../platform/inlineEdits/common/observableWorkspace';
-import { createAlternativeNotebookDocument, IAlternativeNotebookDocument, toAltDiagnostics, toAltNotebookCellChangeEdit, toAltNotebookChangeEdit } from '../../../../platform/notebook/common/alternativeNotebookTextDocument';
+import { createAlternativeNotebookDocument, IAlternativeNotebookDocument, toAltNotebookCellChangeEdit, toAltNotebookChangeEdit } from '../../../../platform/notebook/common/alternativeNotebookTextDocument';
 import { getDefaultLanguage } from '../../../../platform/notebook/common/helpers';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
@@ -35,6 +35,17 @@ import { StringText } from '../../../../util/vs/editor/common/core/text/abstract
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { toInternalTextEdit } from '../utils/translations';
 import { assertStoreNotDisposed } from '../../../../util/common/lifecycle';
+import { ResourceSet } from '../../../../util/vs/base/common/map';
+import { Lazy } from '../../../../util/vs/base/common/lazy';
+
+function trackMarkdownCells(cells: NotebookCell[], resources: ResourceSet): void {
+	cells.forEach(c => {
+		if (c.kind === NotebookCellKind.Markup) {
+			resources.add(c.document.uri);
+		}
+	});
+}
+
 
 export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable {
 	private readonly _openDocuments = observableValue<readonly IVSCodeObservableDocument[], { added: readonly IVSCodeObservableDocument[]; removed: readonly IVSCodeObservableDocument[] }>(this, []);
@@ -44,6 +55,13 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 	private get useAlternativeNotebookFormat(): boolean {
 		return this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, this._experimentationService);
 	}
+	private readonly markdownNotebookCells = new Lazy<ResourceSet>(() => {
+		const markdownCellUris = new ResourceSet();
+		workspace.notebookDocuments.forEach(doc => trackMarkdownCells(doc.getCells(), markdownCellUris));
+		return markdownCellUris;
+	}
+
+	);
 	constructor(
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 		@IInstantiationService private readonly _instaService: IInstantiationService,
@@ -98,6 +116,10 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 			}
 		}));
 
+		if (this.useAlternativeNotebookFormat) {
+			this._store.add(workspace.onDidOpenNotebookDocument(e => trackMarkdownCells(e.getCells(), this.markdownNotebookCells.value)));
+		}
+
 		this._store.add(workspace.onDidChangeNotebookDocument(e => {
 			const doc = this._getDocumentByDocumentAndUpdateShouldTrack(e.notebook.uri);
 			if (!doc || !e.contentChanges.length || doc instanceof VSCodeObservableTextDocument) {
@@ -113,6 +135,13 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 				doc.value.set(stringValueFromDoc(doc.altNotebook), tx, editWithReason);
 				doc.version.set(doc.notebook.version, tx);
 			});
+
+			if (this.useAlternativeNotebookFormat) {
+				e.contentChanges.map(c => c.removedCells).flat().forEach(c => {
+					this.markdownNotebookCells.value.delete(c.document.uri);
+				});
+				trackMarkdownCells(e.contentChanges.map(c => c.addedCells).flat(), this.markdownNotebookCells.value);
+			}
 		}));
 
 		this._store.add(window.onDidChangeTextEditorSelection(e => {
@@ -167,7 +196,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 	});
 
 	private getTextDocuments() {
-		return getTextDocuments(this.useAlternativeNotebookFormat);
+		return getTextDocuments(this.useAlternativeNotebookFormat, this.markdownNotebookCells.value);
 	}
 	private readonly _vscodeTextDocuments: IObservable<readonly TextDocument[]> = this.getTextDocuments();
 	private readonly _textDocsWithShouldTrackFlag = mapObservableArrayCached(this, this._vscodeTextDocuments, (doc, store) => {
@@ -336,7 +365,8 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 		const notebookDocs = this._notebookDocsWithShouldTrackFlag.read(reader);
 		notebookDocs.forEach(d => {
 			map.set(d.doc.uri.toString(), d);
-			d.doc.getCells().forEach(cell => map.set(cell.document.uri.toString(), d));
+			// Markdown cells will be treated as standalone text documents (old behaviour).
+			d.doc.getCells().filter(cell => cell.kind === NotebookCellKind.Code).forEach(cell => map.set(cell.document.uri.toString(), d));
 		});
 		return map;
 	});
@@ -367,7 +397,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 }
 
 
-export interface IBaseVSCodeObservableDocument extends IObservableDocument {
+export interface IVSCodeObservableDocument extends IObservableDocument {
 	/**
 	 * Converts the OffsetRange of the Observable document to a range within the provided Text document.
 	 * If this is a Text Document, performs a simple OffsetRange to Range translation.
@@ -411,7 +441,7 @@ export interface IBaseVSCodeObservableDocument extends IObservableDocument {
 	getCodeActions(range: OffsetRange, itemResolveCount: number, token: CancellationToken): Promise<CodeActionData[] | undefined>;
 }
 
-export interface IVSCodeObservableTextDocument extends IObservableDocument, IBaseVSCodeObservableDocument {
+export interface IVSCodeObservableTextDocument extends IObservableDocument, IVSCodeObservableDocument {
 	kind: 'textDocument';
 	readonly textDocument: TextDocument;
 }
@@ -519,14 +549,7 @@ class VSCodeObservableTextDocument extends AbstractVSCodeObservableDocument impl
 	}
 }
 
-export interface IVSCodeObservableNotebookDocument extends IObservableDocument, IBaseVSCodeObservableDocument {
-	kind: 'notebookDocument';
-	readonly notebook: NotebookDocument;
-	/** @deprecated Do not use this. Use diagnostics property instead. */
-	projectDiagnostics(cell: TextDocument, diagnostics: readonly Diagnostic[]): Diagnostic[];
-}
-
-class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument implements IVSCodeObservableNotebookDocument {
+class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument implements IVSCodeObservableDocument {
 	/** @deprecated Do not use this */
 	public kind: 'notebookDocument' = 'notebookDocument';
 
@@ -583,13 +606,6 @@ class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument 
 		const offsetRanges = this.altNotebook.toAltOffsetRange(cell, [range]);
 		return offsetRanges.length ? offsetRanges[0] : undefined;
 	}
-	projectDiagnostics(textDocument: TextDocument, diagnostics: readonly Diagnostic[]): Diagnostic[] {
-		const cell = this.altNotebook.getCell(textDocument);
-		if (!cell) {
-			return [];
-		}
-		return toAltDiagnostics(this.altNotebook, cell, diagnostics);
-	}
 	toRange(textDocument: TextDocument, range: Range): Range | undefined {
 		const cell = this.altNotebook.getCell(textDocument);
 		if (!cell) {
@@ -624,9 +640,7 @@ class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument 
 	}
 }
 
-export type IVSCodeObservableDocument = IVSCodeObservableTextDocument | IVSCodeObservableNotebookDocument;
-
-function getTextDocuments(excludeNotebookCells: boolean): IObservable<readonly TextDocument[]> {
+function getTextDocuments(excludeNotebookCells: boolean, markdownCellUris: ResourceSet): IObservable<readonly TextDocument[]> {
 	return observableFromEvent(undefined, e => {
 		const d1 = workspace.onDidOpenTextDocument(e);
 		const d2 = workspace.onDidCloseTextDocument(e);
@@ -636,7 +650,9 @@ function getTextDocuments(excludeNotebookCells: boolean): IObservable<readonly T
 				d2.dispose();
 			}
 		};
-	}, () => excludeNotebookCells ? workspace.textDocuments.filter(doc => doc.uri.scheme !== Schemas.vscodeNotebookCell) : workspace.textDocuments);
+		// If we're meant to exclude notebook cells, we will still include the markdown cells as separate documents.
+		// Thats because markdown cells will be treated as standalone text documents in the editor.
+	}, () => excludeNotebookCells ? workspace.textDocuments.filter(doc => doc.uri.scheme !== Schemas.vscodeNotebookCell || markdownCellUris.has(doc.uri)) : workspace.textDocuments);
 }
 
 function getNotebookDocuments(): IObservable<readonly NotebookDocument[]> {
@@ -827,7 +843,7 @@ function toCodeActionData(codeAction: CodeAction, workspaceDocument: IVSCodeObse
 	const codeActionData = new CodeActionData(
 		codeAction.title,
 		diagnostics,
-		getDocumentEdits(codeAction, workspaceDocument),
+		documentEdits,
 	);
 	return codeActionData;
 }

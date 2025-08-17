@@ -6,6 +6,7 @@
 import type * as vscode from 'vscode';
 import { ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { modelSupportsReplaceString } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -40,14 +41,18 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 		const experimentalService = accessor.get<IExperimentationService>(IExperimentationService);
 		const model = await endpointProvider.getChatEndpoint(request);
 		const lookForTools = new Set<string>([ToolName.EditFile]);
+		const experimentationService = accessor.get<IExperimentationService>(IExperimentationService);
 
 
 		if (configurationService.getExperimentBasedConfig(ConfigKey.EditsCodeNewNotebookAgentEnabled, experimentalService) !== false && requestHasNotebookRefs(request, notebookService, { checkPromptAsWell: true })) {
 			lookForTools.add(ToolName.CreateNewJupyterNotebook);
 		}
 
-		if (model.family.startsWith('claude')) {
+		if (modelSupportsReplaceString(model)) {
 			lookForTools.add(ToolName.ReplaceString);
+			if (configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
+				lookForTools.add(ToolName.MultiReplaceString);
+			}
 		}
 		lookForTools.add(ToolName.EditNotebook);
 		if (requestHasNotebookRefs(request, notebookService, { checkPromptAsWell: true })) {

@@ -5,21 +5,20 @@
 
 import { LanguageModelChat, type ChatRequest } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { ConfigKey, EMBEDDING_MODEL, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { AutoChatEndpoint } from '../../../platform/endpoint/common/autoChatEndpoint';
 import { IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
-import { ChatEndpointFamily, EmbeddingsEndpointFamily, IChatModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { ChatEndpointFamily, IChatModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CopilotChatEndpoint } from '../../../platform/endpoint/node/copilotChatEndpoint';
-import { EmbeddingEndpoint } from '../../../platform/endpoint/node/embeddingsEndpoint';
 import { IModelMetadataFetcher, ModelMetadataFetcher } from '../../../platform/endpoint/node/modelMetadataFetcher';
 import { applyExperimentModifications, getCustomDefaultModelExperimentConfig, ProxyExperimentEndpoint } from '../../../platform/endpoint/node/proxyExperimentEndpoint';
 import { ExtensionContributedChatEndpoint } from '../../../platform/endpoint/vscode-node/extChatEndpoint';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
-import { IChatEndpoint, IEmbeddingEndpoint } from '../../../platform/networking/common/networking';
+import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -32,11 +31,10 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 	declare readonly _serviceBrand: undefined;
 
 	private _chatEndpoints: Map<string, IChatEndpoint> = new Map();
-	private _embeddingEndpoints: Map<EMBEDDING_MODEL, IEmbeddingEndpoint> = new Map();
 	private readonly _modelFetcher: IModelMetadataFetcher;
 
 	constructor(
-		collectFetcherTelemetry: (accessor: ServicesAccessor) => void,
+		collectFetcherTelemetry: (accessor: ServicesAccessor, error: any) => void,
 		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IFetcherService fetcher: IFetcherService,
@@ -70,18 +68,12 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		// When new models come in from CAPI we want to clear our local caches and let the endpoints be recreated since there may be new info
 		this._modelFetcher.onDidModelsRefresh(() => {
 			this._chatEndpoints.clear();
-			this._embeddingEndpoints.clear();
 		});
 	}
 
 	private get _overridenChatModel(): string | undefined {
 		return this._configService.getConfig(ConfigKey.Internal.DebugOverrideChatEngine);
 	}
-
-	private get _overridenEmbeddingsModel(): EMBEDDING_MODEL | undefined {
-		return this._configService.getConfig(ConfigKey.Internal.DebugOverrideEmbeddingsModel);
-	}
-
 
 	private getOrCreateChatEndpointInstance(modelMetadata: IChatModelInformation): IChatEndpoint {
 		const modelId = modelMetadata.id;
@@ -100,16 +92,6 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 			this._chatEndpoints.set(id, chatEndpoint);
 		}
 		return chatEndpoint;
-	}
-
-	private async getOrCreateEmbeddingEndpointInstance(modelMetadata: IEmbeddingModelInformation): Promise<IEmbeddingEndpoint> {
-		const modelId = modelMetadata.id as EMBEDDING_MODEL;
-		let embeddingEndpoint = this._embeddingEndpoints.get(modelId);
-		if (!embeddingEndpoint) {
-			embeddingEndpoint = this._instantiationService.createInstance(EmbeddingEndpoint, modelMetadata);
-			this._embeddingEndpoints.set(modelId, embeddingEndpoint);
-		}
-		return embeddingEndpoint;
 	}
 
 	async getChatEndpoint(requestOrFamilyOrModel: LanguageModelChat | ChatRequest | ChatEndpointFamily): Promise<IChatEndpoint> {
@@ -167,29 +149,6 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		return endpoint;
 	}
 
-	async getEmbeddingsEndpoint(family: EmbeddingsEndpointFamily): Promise<IEmbeddingEndpoint> {
-		this._logService.trace(`Resolving embedding model`);
-		if (this._overridenEmbeddingsModel) {
-			this._logService.trace(`Using overriden embeddings model`);
-			return this.getOrCreateEmbeddingEndpointInstance({
-				id: this._overridenEmbeddingsModel,
-				name: 'Custom Overriden Embeddings Model',
-				model_picker_enabled: false,
-				is_chat_default: false,
-				is_chat_fallback: false,
-				version: '1.0.0',
-				capabilities: {
-					tokenizer: TokenizerType.O200K,
-					family: 'custom',
-					type: 'embeddings'
-				}
-			});
-		}
-		const modelMetadata = await this._modelFetcher.getEmbeddingsModel('text-embedding-3-small');
-		const model = await this.getOrCreateEmbeddingEndpointInstance(modelMetadata);
-		this._logService.trace(`Resolved embedding model`);
-		return model;
-	}
 
 	async getAllChatEndpoints(): Promise<IChatEndpoint[]> {
 		const models: IChatModelInformation[] = await this._modelFetcher.getAllChatModels();

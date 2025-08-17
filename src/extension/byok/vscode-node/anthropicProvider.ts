@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import Anthropic from '@anthropic-ai/sdk';
-import { CancellationToken, ChatResponseFragment2, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatRequestHandleOptions, LanguageModelTextPart, LanguageModelToolCallPart, Progress } from 'vscode';
+import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatRequestHandleOptions, LanguageModelTextPart, LanguageModelToolCallPart, Progress } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
@@ -13,7 +13,7 @@ import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogg
 import { RecordedProgress } from '../../../util/common/progressRecorder';
 import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider } from '../common/byokProvider';
+import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, LMResponsePart } from '../common/byokProvider';
 import { anthropicMessagesToRawMessagesForLogging, apiMessageToAnthropicMessage } from './anthropicMessageConverter';
 import { IBYOKStorageService } from './byokStorageService';
 import { promptForAPIKey } from './byokUIService';
@@ -53,11 +53,11 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 	async updateAPIKey(): Promise<void> {
 		this._apiKey = await promptForAPIKey(AnthropicLMProvider.providerName, await this._byokStorageService.getAPIKey(AnthropicLMProvider.providerName) !== undefined);
 		if (this._apiKey) {
-			this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, this._apiKey, BYOKAuthType.GlobalApiKey);
+			await this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, this._apiKey, BYOKAuthType.GlobalApiKey);
 		}
 	}
 
-	async prepareLanguageModelChat(options: { silent: boolean }, token: CancellationToken): Promise<LanguageModelChatInformation[]> {
+	async prepareLanguageModelChatInformation(options: { silent: boolean }, token: CancellationToken): Promise<LanguageModelChatInformation[]> {
 		if (!this._apiKey) { // If we don't have the API key it might just be in storage, so we try to read it first
 			this._apiKey = await this._byokStorageService.getAPIKey(AnthropicLMProvider.providerName);
 		}
@@ -79,7 +79,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		}
 	}
 
-	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: LanguageModelChatRequestHandleOptions, progress: Progress<ChatResponseFragment2>, token: CancellationToken): Promise<any> {
+	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: LanguageModelChatRequestHandleOptions, progress: Progress<LMResponsePart>, token: CancellationToken): Promise<any> {
 		if (!this._anthropicAPIClient) {
 			return;
 		}
@@ -157,11 +157,11 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				value: ['value'],
 			}, wrappedProgress.items.map((i): IResponseDelta => {
 				return {
-					text: i.part instanceof LanguageModelTextPart ? i.part.value : '',
-					copilotToolCalls: i.part instanceof LanguageModelToolCallPart ? [{
-						name: i.part.name,
-						arguments: JSON.stringify(i.part.input),
-						id: i.part.callId
+					text: i instanceof LanguageModelTextPart ? i.value : '',
+					copilotToolCalls: i instanceof LanguageModelToolCallPart ? [{
+						name: i.name,
+						arguments: JSON.stringify(i.input),
+						id: i.callId
 					}] : undefined,
 				};
 			}));
@@ -174,11 +174,11 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				reason: err.message
 			}, wrappedProgress.items.map((i): IResponseDelta => {
 				return {
-					text: i.part instanceof LanguageModelTextPart ? i.part.value : '',
-					copilotToolCalls: i.part instanceof LanguageModelToolCallPart ? [{
-						name: i.part.name,
-						arguments: JSON.stringify(i.part.input),
-						id: i.part.callId
+					text: i instanceof LanguageModelTextPart ? i.value : '',
+					copilotToolCalls: i instanceof LanguageModelToolCallPart ? [{
+						name: i.name,
+						arguments: JSON.stringify(i.input),
+						id: i.callId
 					}] : undefined,
 				};
 			}));
@@ -191,7 +191,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		return Math.ceil(text.toString().length / 4);
 	}
 
-	private async _makeRequest(progress: Progress<ChatResponseFragment2>, params: Anthropic.MessageCreateParamsStreaming, token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
+	private async _makeRequest(progress: Progress<LMResponsePart>, params: Anthropic.MessageCreateParamsStreaming, token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
 		if (!this._anthropicAPIClient) {
 			return { ttft: undefined, usage: undefined };
 		}
@@ -222,7 +222,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				if ('content_block' in chunk && chunk.content_block.type === 'tool_use') {
 					if (hasText && firstTool) {
 						// Flush the linkifier stream otherwise it pauses before the tool call if the last word ends with a punctuation mark.
-						progress.report({ index: 0, part: new LanguageModelTextPart(' ') });
+						progress.report(new LanguageModelTextPart(' '));
 					}
 					pendingToolCall = {
 						toolId: chunk.content_block.id,
@@ -236,10 +236,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 
 			if (chunk.type === 'content_block_delta') {
 				if (chunk.delta.type === 'text_delta') {
-					progress.report({
-						index: 0,
-						part: new LanguageModelTextPart(chunk.delta.text || ''),
-					});
+					progress.report(new LanguageModelTextPart(chunk.delta.text || ''));
 					hasText ||= chunk.delta.text?.length > 0;
 				} else if (chunk.delta.type === 'input_json_delta' && pendingToolCall) {
 					pendingToolCall.jsonInput = (pendingToolCall.jsonInput || '') + (chunk.delta.partial_json || '');
@@ -247,14 +244,11 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 					try {
 						// Try to parse the accumulated JSON to see if it's complete
 						const parsedJson = JSON.parse(pendingToolCall.jsonInput);
-						progress.report({
-							index: 0,
-							part: new LanguageModelToolCallPart(
-								pendingToolCall.toolId!,
-								pendingToolCall.name!,
-								parsedJson
-							)
-						});
+						progress.report(new LanguageModelToolCallPart(
+							pendingToolCall.toolId!,
+							pendingToolCall.name!,
+							parsedJson
+						));
 						pendingToolCall = undefined;
 					} catch {
 						// JSON is not complete yet, continue accumulating
@@ -266,14 +260,13 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			if (chunk.type === 'content_block_stop' && pendingToolCall) {
 				try {
 					const parsedJson = JSON.parse(pendingToolCall.jsonInput || '{}');
-					progress.report({
-						index: 0,
-						part: new LanguageModelToolCallPart(
+					progress.report(
+						new LanguageModelToolCallPart(
 							pendingToolCall.toolId!,
 							pendingToolCall.name!,
 							parsedJson
 						)
-					});
+					);
 				} catch (e) {
 					console.error('Failed to parse tool call JSON:', e);
 				}

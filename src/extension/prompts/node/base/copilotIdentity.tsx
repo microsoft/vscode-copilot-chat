@@ -15,3 +15,13 @@ export class CopilotIdentityRules extends PromptElement {
 		);
 	}
 }
+
+export class GPT5CopilotIdentityRule extends PromptElement {
+	render() {
+		return (
+			<>
+				Your name is GitHub Copilot.<br />
+			</>
+		);
+	}
+}

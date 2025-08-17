@@ -58,14 +58,6 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 		return processedMsg;
 	});
 
-	// Log the messages before sending to telemetry with modelCallId as top-level property
-	const logData = {
-		modelCallId: modelCallId,
-		messageType: messageType,
-		messages: messagesWithLength
-	};
-	logService?.debug(`[TELEMETRY] engine.messages.length: ${JSON.stringify(logData, null, 2)}`);
-
 	const telemetryDataWithPrompt = telemetryData.extendedBy({
 		messagesJson: JSON.stringify(messagesWithLength),
 		message_direction: messageType,

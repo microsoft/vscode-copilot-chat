@@ -138,6 +138,7 @@ class EditCode2UserMessage extends PromptElement<AgentPromptProps> {
 		const useProjectLabels = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.ProjectLabelsChat, this.experimentationService);
 		const hasReplaceStringTool = !!this.props.promptContext.tools?.availableTools.find(tool => tool.name === ToolName.ReplaceString);
 		const hasEditFileTool = !!this.props.promptContext.tools?.availableTools.find(tool => tool.name === ToolName.EditFile);
+		const hasMultiReplaceStringTool = !!this.props.promptContext.tools?.availableTools.find(tool => tool.name === ToolName.MultiReplaceString);
 
 		return (
 			<>
@@ -148,7 +149,7 @@ class EditCode2UserMessage extends PromptElement<AgentPromptProps> {
 					<ChatToolReferences flexGrow={4} priority={898} promptContext={this.props.promptContext} documentContext={this.props.documentContext} />
 					<ChatVariables flexGrow={3} priority={898} chatVariables={chatVariables} />
 					<Tag name='reminder'>
-						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint))}
+						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint), hasMultiReplaceStringTool)}
 						<NotebookReminderInstructions chatVariables={chatVariables} query={query} />
 						<NewFilesLocationHint />
 					</Tag>

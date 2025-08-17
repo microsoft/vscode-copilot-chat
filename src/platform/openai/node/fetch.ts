@@ -8,7 +8,6 @@ import type { CancellationToken } from 'vscode';
 import { createRequestHMAC } from '../../../util/common/crypto';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IAuthenticationService } from '../../authentication/common/authentication';
-import { IntentParams } from '../../chat/common/chatMLFetcher';
 import { IChatQuotaService } from '../../chat/common/chatQuotaService';
 import { ChatLocation } from '../../chat/common/commonTypes';
 import { IInteractionService } from '../../chat/common/interactionService';
@@ -43,7 +42,7 @@ interface CopilotOnlyParams {
 }
 
 export interface ChatRequest extends
-	RequiredChatRequestParams, OptionalChatRequestParams, CopilotOnlyParams, IntentParams {
+	RequiredChatRequestParams, OptionalChatRequestParams, CopilotOnlyParams {
 }
 
 export enum FetchResponseKind {
@@ -564,7 +563,7 @@ async function fetchWithInstrumentation(
 			throw error;
 		})
 		.finally(() => {
-			sendEngineMessagesTelemetry(telemetryService, request.messages!, telemetryData, false, logService);
+			sendEngineMessagesTelemetry(telemetryService, request.messages ?? [], telemetryData, false, logService);
 		});
 }
 
