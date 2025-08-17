@@ -253,10 +253,10 @@ export class ChatEndpoint implements IChatEndpoint {
 
 		if (body && this.useResponsesApi) {
 			delete body.temperature;
-			body.reasoning = {
-				'effort': 'high',
-				'summary': 'detailed'
-			};
+			// body.reasoning = {
+			// 	'effort': 'high',
+			// 	'summary': 'detailed'
+			// };
 			body.truncation = this._configurationService.getConfig(ConfigKey.Internal.UseResponsesApiTruncation) ?
 				'auto' :
 				'disabled';
