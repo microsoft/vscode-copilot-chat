@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import minimist from 'minimist';
-import { EMBEDDING_MODEL } from '../../src/platform/configuration/common/configurationService';
+import { LEGACY_EMBEDDING_MODEL_ID } from '../../src/platform/embeddings/common/embeddingsComputer';
 import { CacheMode } from './simulationContext';
 
 /** Number of runs that are stored in baseline.json */
@@ -32,7 +32,7 @@ export class SimulationOptions {
 	public readonly fastRewriteModel: string | undefined;
 	public readonly summarizeHistory: boolean;
 	public readonly swebenchPrompt: boolean;
-	public readonly embeddingModel: EMBEDDING_MODEL | undefined;
+	public readonly embeddingModel: LEGACY_EMBEDDING_MODEL_ID | undefined;
 	public readonly boost: boolean;
 	public readonly parallelism: number;
 	public readonly lmCacheMode: CacheMode;
@@ -252,11 +252,11 @@ export class SimulationOptions {
 	}
 }
 
-export function cliOptionsToEmbeddingsModel(model: string | undefined): EMBEDDING_MODEL | undefined {
-	let embeddingModel: EMBEDDING_MODEL | undefined;
+export function cliOptionsToEmbeddingsModel(model: string | undefined): LEGACY_EMBEDDING_MODEL_ID | undefined {
+	let embeddingModel: LEGACY_EMBEDDING_MODEL_ID | undefined;
 	switch (model) {
 		case 'text3small':
-			embeddingModel = EMBEDDING_MODEL.TEXT3SMALL;
+			embeddingModel = LEGACY_EMBEDDING_MODEL_ID.TEXT3SMALL;
 			break;
 		case undefined:
 			embeddingModel = undefined;

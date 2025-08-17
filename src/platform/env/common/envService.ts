@@ -128,3 +128,7 @@ export abstract class AbstractEnvService implements IEnvService {
 
 	abstract openExternal(target: URI): Promise<boolean>;
 }
+
+// FIXME: This needs to be used in locations where the EnvService is not yet available, so it's
+//        not part of the env service itself.
+export const isScenarioAutomation = env['IS_SCENARIO_AUTOMATION'] === '1';

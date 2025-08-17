@@ -5,7 +5,7 @@
 
 import { cloneAndChange } from '../../../util/vs/base/common/objects';
 
-export const enum ToolName {
+export enum ToolName {
 	ApplyPatch = 'apply_patch',
 	Codebase = 'semantic_search',
 	VSCodeAPI = 'get_vscode_api',
@@ -26,6 +26,7 @@ export const enum ToolName {
 	EditFile = 'insert_edit_into_file',
 	CreateFile = 'create_file',
 	ReplaceString = 'replace_string_in_file',
+	MultiReplaceString = 'multi_replace_string_in_file',
 	EditNotebook = 'edit_notebook_file',
 	RunNotebookCell = 'run_notebook_cell',
 	GetNotebookSummary = 'copilot_getNotebookSummary',
@@ -54,8 +55,7 @@ export const enum ToolName {
 	CoreRunTest = 'runTests',
 }
 
-// When updating this, also update contributedToolNameToToolNames
-export const enum ContributedToolName {
+export enum ContributedToolName {
 	ApplyPatch = 'copilot_applyPatch',
 	Codebase = 'copilot_searchCodebase',
 	SearchWorkspaceSymbols = 'copilot_searchWorkspaceSymbols',
@@ -78,6 +78,7 @@ export const enum ContributedToolName {
 	EditFile = 'copilot_insertEdit',
 	CreateFile = 'copilot_createFile',
 	ReplaceString = 'copilot_replaceString',
+	MultiReplaceString = 'copilot_multiReplaceString',
 	EditNotebook = 'copilot_editNotebook',
 	RunNotebookCell = 'copilot_runNotebookCell',
 	GetNotebookSummary = 'copilot_getNotebookSummary',
@@ -135,8 +136,13 @@ const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>([
 ]);
 
 const toolNameToContributedToolNames = new Map<ToolName, ContributedToolName>();
-for (const [contributedName, name] of contributedToolNameToToolNames) {
-	toolNameToContributedToolNames.set(name, contributedName);
+const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>();
+for (const [contributedNameKey, contributedName] of Object.entries(ContributedToolName)) {
+	const toolName = ToolName[contributedNameKey as keyof typeof ToolName];
+	if (toolName) {
+		toolNameToContributedToolNames.set(toolName, contributedName);
+		contributedToolNameToToolNames.set(contributedName, toolName);
+	}
 }
 
 export function getContributedToolName(name: string | ToolName): string | ContributedToolName {

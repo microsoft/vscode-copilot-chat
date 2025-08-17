@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`Alternative Notebook (text) Content > Alt Content > EOLs 1`] = `
+exports[`Alternative Notebook (text) Content > Alt Content with Markdown Cells > EOLs 1`] = `
 "#%% vscode.cell [id=#VSC-ad3571c0] [language=python]
 import sys
 import os
@@ -16,21 +16,70 @@ print(sys.executable)
 print(sys.version)"
 `;
 
-exports[`Alternative Notebook (text) Content > Alt Content > Exclude Markdown Cells 1`] = `
+exports[`Alternative Notebook (text) Content > Alt Content with Markdown Cells > Generate Alt Content 1`] = `
+"#%% vscode.cell [id=#VSC-ad3571c0] [language=python]
+print("Hello World")"
+`;
+
+exports[`Alternative Notebook (text) Content > Alt Content with Markdown Cells > No Content 1`] = `""`;
+
+exports[`Alternative Notebook (text) Content > Alt Content with Markdown Cells > No Content without code cells 1`] = `
+"#%% vscode.cell [id=#VSC-ad3571c0] [language=markdown]
+"""
+# This is a sample notebook
+""""
+`;
+
+exports[`Alternative Notebook (text) Content > Alt Content with Markdown Cells > With Markdown Cells 1`] = `
+"#%% vscode.cell [id=#VSC-ad3571c0] [language=markdown]
+"""
+# This is a sample notebook
+"""
+#%% vscode.cell [id=#VSC-bdb3864a] [language=markdown]
+"""
+## Header
+"""
+#%% vscode.cell [id=#VSC-8862d4f3] [language=python]
+print("Hello World")
+#%% vscode.cell [id=#VSC-e07487cb] [language=markdown]
+"""
+Comments
+"""
+#%% vscode.cell [id=#VSC-53ab90bb] [language=python]
+print("Foo Bar")"
+`;
+
+exports[`Alternative Notebook (text) Content > Alt Content without Markdown Cells > EOLs 1`] = `
+"#%% vscode.cell [id=#VSC-ad3571c0] [language=python]
+import sys
+import os
+#%% vscode.cell [id=#VSC-bdb3864a] [language=python]
+import pandas
+import requests
+#%% vscode.cell [id=#VSC-8862d4f3] [language=python]
+print("Hello World")
+print("Foo Bar")
+print("Bar Baz")
+#%% vscode.cell [id=#VSC-e07487cb] [language=python]
+print(sys.executable)
+print(sys.version)"
+`;
+
+exports[`Alternative Notebook (text) Content > Alt Content without Markdown Cells > Generate Alt Content 1`] = `
+"#%% vscode.cell [id=#VSC-ad3571c0] [language=python]
+print("Hello World")"
+`;
+
+exports[`Alternative Notebook (text) Content > Alt Content without Markdown Cells > No Content 1`] = `""`;
+
+exports[`Alternative Notebook (text) Content > Alt Content without Markdown Cells > No Content without code cells 1`] = `""`;
+
+exports[`Alternative Notebook (text) Content > Alt Content without Markdown Cells > With Markdown Cells 1`] = `
 "#%% vscode.cell [id=#VSC-8862d4f3] [language=python]
 print("Hello World")
 #%% vscode.cell [id=#VSC-53ab90bb] [language=python]
 print("Foo Bar")"
 `;
-
-exports[`Alternative Notebook (text) Content > Alt Content > Generate Alt Content 1`] = `
-"#%% vscode.cell [id=#VSC-ad3571c0] [language=python]
-print("Hello World")"
-`;
-
-exports[`Alternative Notebook (text) Content > Alt Content > No Content 1`] = `""`;
-
-exports[`Alternative Notebook (text) Content > Alt Content > No Content without code cells 1`] = `""`;
 
 exports[`Alternative Notebook (text) Content > Cell Add/Delete > Cell with 1 line > insert a code cell and markdown cell 1`] = `
 "#%% vscode.cell [id=#VSC-ad3571c0] [language=python]

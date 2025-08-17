@@ -21,7 +21,7 @@ import { IExperimentationService } from '../../telemetry/common/nullExperimentat
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
-import { ChatEndpointFamily, IChatModelInformation, IEmbeddingModelInformation, IModelAPIResponse, isChatModelInformation, isEmbeddingModelInformation } from '../common/endpointProvider';
+import { ChatEndpointFamily, IChatModelInformation, IModelAPIResponse, isChatModelInformation } from '../common/endpointProvider';
 import { getMaxPromptTokens } from './chatEndpoint';
 
 export interface IModelMetadataFetcher {
@@ -49,12 +49,6 @@ export interface IModelMetadataFetcher {
 	 * @returns The chat model information if found, otherwise undefined
 	 */
 	getChatModelFromApiModel(model: LanguageModelChat): Promise<IChatModelInformation | undefined>;
-
-	/**
-	 * Retrieves an embeddings model by its family name
-	 * @param family The family of the model to fetch
-	 */
-	getEmbeddingsModel(family: 'text-embedding-3-small'): Promise<IEmbeddingModelInformation>;
 }
 
 /**
@@ -76,7 +70,7 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 	public onDidModelsRefresh = this._onDidModelRefresh.event;
 
 	constructor(
-		private readonly collectFetcherTelemetry: ((accessor: ServicesAccessor) => void) | undefined,
+		private readonly collectFetcherTelemetry: ((accessor: ServicesAccessor, error: any) => void) | undefined,
 		protected readonly _isModelLab: boolean,
 		@IFetcherService private readonly _fetcher: IFetcherService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
@@ -172,16 +166,6 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 		return resolvedModel;
 	}
 
-	public async getEmbeddingsModel(family: 'text-embedding-3-small'): Promise<IEmbeddingModelInformation> {
-		await this._taskSingler.getOrCreate(ModelMetadataFetcher.ALL_MODEL_KEY, this._fetchModels.bind(this));
-		let resolvedModel = this._familyMap.get(family)?.[0];
-		resolvedModel = await this._hydrateResolvedModel(resolvedModel);
-		if (!isEmbeddingModelInformation(resolvedModel)) {
-			throw new Error(`Unable to resolve embeddings model with family selection: ${family}`);
-		}
-		return resolvedModel;
-	}
-
 	private _shouldRefreshModels(): boolean {
 		if (this._familyMap.size === 0) {
 			return true;
@@ -262,13 +246,16 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 			this._onDidModelRefresh.fire();
 
 			if (this.collectFetcherTelemetry) {
-				this._instantiationService.invokeFunction(this.collectFetcherTelemetry);
+				this._instantiationService.invokeFunction(this.collectFetcherTelemetry, undefined);
 			}
 		} catch (e) {
 			this._logService.error(e, `Failed to fetch models (${requestId})`);
 			this._lastFetchError = e;
 			this._lastFetchTime = 0;
 			// If we fail to fetch models, we should try again next time
+			if (this.collectFetcherTelemetry) {
+				this._instantiationService.invokeFunction(this.collectFetcherTelemetry, e);
+			}
 		}
 	}
 

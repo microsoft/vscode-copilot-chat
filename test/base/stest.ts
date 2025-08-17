@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 import * as fs from 'fs';
 import path from 'path';
-import { Config, EMBEDDING_MODEL, ExperimentBasedConfig, ExperimentBasedConfigType } from '../../src/platform/configuration/common/configurationService';
+import { Config, ExperimentBasedConfig, ExperimentBasedConfigType } from '../../src/platform/configuration/common/configurationService';
+import { LEGACY_EMBEDDING_MODEL_ID } from '../../src/platform/embeddings/common/embeddingsComputer';
 import { ILogTarget, LogLevel } from '../../src/platform/log/common/logService';
 import { ISimulationTestContext } from '../../src/platform/simulationTestContext/common/simulationTestContext';
 import { TestingServiceCollection } from '../../src/platform/test/node/services';
@@ -95,7 +96,7 @@ export interface ISimulationTestDescriptor {
 	/**
 	 * The embeddings model used for the test.
 	 */
-	readonly embeddingsModel?: EMBEDDING_MODEL;
+	readonly embeddingsModel?: LEGACY_EMBEDDING_MODEL_ID;
 
 	/**
 	 * Setting configurations defined for the test
@@ -123,7 +124,7 @@ export class SimulationTest {
 	public readonly description: string;
 	public readonly language: string | undefined;
 	public readonly model: string | undefined;
-	public readonly embeddingsModel: EMBEDDING_MODEL | undefined;
+	public readonly embeddingsModel: LEGACY_EMBEDDING_MODEL_ID | undefined;
 	public readonly configurations: Configuration<any>[] | undefined;
 	public readonly nonExtensionConfigurations: NonExtensionConfiguration[] | undefined;
 	public readonly attributes: Record<string, string | number> | undefined;

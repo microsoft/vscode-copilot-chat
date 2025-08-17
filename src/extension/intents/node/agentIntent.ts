@@ -61,12 +61,18 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 
 		const allowTools: Record<string, boolean> = {};
 		allowTools[ToolName.EditFile] = true;
-		allowTools[ToolName.ReplaceString] = modelSupportsReplaceString(model) || !!(model.family.includes('gemini') && configurationService.getExperimentBasedConfig(ConfigKey.Internal.GeminiReplaceString, experimentationService));
+		allowTools[ToolName.ReplaceString] = modelSupportsReplaceString(model);
 		allowTools[ToolName.ApplyPatch] = await modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
 
 		if (modelCanUseReplaceStringExclusively(model)) {
 			allowTools[ToolName.ReplaceString] = true;
 			allowTools[ToolName.EditFile] = false;
+		}
+
+		if (allowTools[ToolName.ReplaceString]) {
+			if (configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
+				allowTools[ToolName.MultiReplaceString] = true;
+			}
 		}
 
 		allowTools[ToolName.RunTests] = await testService.hasAnyTests();

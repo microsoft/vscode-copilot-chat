@@ -392,10 +392,18 @@ export class DefaultIntentRequestHandler {
 			appliedText,
 			requestId,
 			this.documentContext?.document,
-			baseModelTelemetry
+			baseModelTelemetry,
+			this.getModeName()
 		);
 
 		return chatResult;
+	}
+
+	private getModeName(): string {
+		return this.request.modeInstructions ? 'custom' :
+			this.intent.id === 'editAgent' ? 'agent' :
+				(this.intent.id === 'edit' || this.intent.id === 'edit2') ? 'edit' :
+					'ask';
 	}
 
 	private processOffTopicFetchResult(baseModelTelemetry: ConversationalBaseTelemetryData): ChatResult {

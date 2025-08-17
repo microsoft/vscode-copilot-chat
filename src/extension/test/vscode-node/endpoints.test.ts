@@ -6,8 +6,8 @@
 import assert from 'assert';
 import { SinonSandbox, createSandbox } from 'sinon';
 import { LanguageModelChat } from 'vscode';
-import { CHAT_MODEL, EMBEDDING_MODEL } from '../../../platform/configuration/common/configurationService';
-import { IChatModelInformation, IEmbeddingModelInformation } from '../../../platform/endpoint/common/endpointProvider';
+import { CHAT_MODEL } from '../../../platform/configuration/common/configurationService';
+import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { IModelMetadataFetcher } from '../../../platform/endpoint/node/modelMetadataFetcher';
 import { ITestingServicesAccessor } from '../../../platform/test/node/services';
 import { TokenizerType } from '../../../util/common/tokenizer';
@@ -40,22 +40,6 @@ class FakeModelMetadataFetcher implements IModelMetadataFetcher {
 			}
 		};
 	}
-	async getEmbeddingsModel(family: 'text-embedding-3-small'): Promise<IEmbeddingModelInformation> {
-		return {
-			id: EMBEDDING_MODEL.TEXT3SMALL,
-			model_picker_enabled: false,
-			is_chat_default: false,
-			is_chat_fallback: false,
-			name: 'fake-name',
-			version: 'fake-version',
-			capabilities: {
-				type: 'embeddings',
-				tokenizer: TokenizerType.CL100K,
-				family: 'fake-family'
-			}
-		};
-	}
-
 }
 
 suite('Endpoint Class Test', function () {
