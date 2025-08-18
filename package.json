@@ -796,7 +796,7 @@
 				"name": "copilot_editNotebook",
 				"toolReferenceName": "editNotebook",
 				"displayName": "%copilot.tools.editNotebook.name%",
-				"modelDescription": "This is a tool for editing an existing Notebook file in the workspace. Generate the \"explanation\" property first.\nThe system is very smart and can understand how to apply your edits to the notebooks.\nWhen updating the content of an existing cell, ensure newCode preserves whitespace and indentation exactly and does NOT include any code markers such as (...existing code...).",
+				"modelDescription": "This is a tool for editing an existing Notebook file in the workspace. Generate the \"explanation\" property first.\nThe system is very smart and can understand how to apply your edits to the notebooks.\nWhen updating the content of an existing cell, ensure newCode preserves whitespace and indentation exactly and does NOT include any code markers such as (...existing code...). Do NOT use this to read the notebook file or the contents of cell(s). To read contents of a specific cell use the copilot_getNotebookSummary followed by the read_file tool.",
 				"tags": [
 					"enable_other_tool_copilot_getNotebookSummary"
 				],
@@ -886,7 +886,7 @@
 				"name": "copilot_getNotebookSummary",
 				"toolReferenceName": "getNotebookSummary",
 				"displayName": "Get the structure of a notebook",
-				"modelDescription": "This is a tool returns the list of the Notebook cells along with the id, cell types, language, execution information and output mime types for each cell. This is useful to get Cell Ids when executing a notebook or determine what cells have been executed and what order, or what cells have outputs. Requery this tool if the contents of the notebook change.",
+				"modelDescription": "This is a tool returns the list of the Notebook cells along with the id, cell types, line ranges, language, execution information and output mime types for each cell. This is useful to get Cell Ids when executing a notebook or determine what cells have been executed and what order, or what cells have outputs. If required to read contents of a cell use this to determine the line range of a cells, and then use read_file tool to read a specific line range. Requery this tool if the contents of the notebook change.",
 				"tags": [],
 				"inputSchema": {
 					"type": "object",
