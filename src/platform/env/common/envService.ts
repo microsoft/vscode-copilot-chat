@@ -52,6 +52,14 @@ export interface IEnvService {
 	isProduction(): boolean;
 	isPreRelease(): boolean;
 	isSimulation(): boolean;
+	useRealUrlOpener(): boolean;
+	showNotifications(): boolean;
+	enableLanguageModels(): boolean;
+	useProductionTelemetry(): boolean;
+	useExperimentationService(): boolean;
+	useProductionTokenManager(): boolean;
+	updateReviewContextValues(): boolean;
+	enableLoggingActions(): boolean;
 	getBuildType(): 'prod' | 'dev';
 	getVersion(): string;
 	getBuild(): string;
@@ -91,6 +99,28 @@ export abstract class AbstractEnvService implements IEnvService {
 		return env['SIMULATION'] === '1';
 	}
 
+	isScenarioAutomation(): boolean {
+		return env['IS_SCENARIO_AUTOMATION'] === '1';
+	}
+
+	abstract useRealUrlOpener(): boolean;
+
+	abstract showNotifications(): boolean;
+
+	abstract enableLanguageModels(): boolean;
+
+	abstract useProductionTelemetry(): boolean;
+
+	abstract useExperimentationService(): boolean;
+
+	abstract useProductionTokenManager(): boolean;
+
+	abstract updateReviewContextValues(): boolean;
+
+	abstract enableLoggingActions(): boolean;
+
+	abstract activateExtension(force: boolean): boolean;
+
 	getBuildType(): 'prod' | 'dev' {
 		return packageJson.buildType;
 	}
@@ -128,7 +158,3 @@ export abstract class AbstractEnvService implements IEnvService {
 
 	abstract openExternal(target: URI): Promise<boolean>;
 }
-
-// FIXME: This needs to be used in locations where the EnvService is not yet available, so it's
-//        not part of the env service itself.
-export const isScenarioAutomation = env['IS_SCENARIO_AUTOMATION'] === '1';

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ExtensionContext, ExtensionMode } from 'vscode';
+import { ExtensionContext } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ICopilotTokenManager } from '../../../platform/authentication/common/copilotTokenManager';
 import { StaticGitHubAuthenticationService } from '../../../platform/authentication/common/staticGitHubAuthenticationService';
@@ -23,7 +23,8 @@ import { IDomainService } from '../../../platform/endpoint/common/domainService'
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
 import { DomainService } from '../../../platform/endpoint/node/domainServiceImpl';
-import { isScenarioAutomation } from '../../../platform/env/common/envService';
+import { IEnvService } from '../../../platform/env/common/envService';
+import { EnvServiceImpl } from '../../../platform/env/vscode/envServiceImpl';
 import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
 import { IGithubRepositoryService } from '../../../platform/github/common/githubService';
@@ -113,9 +114,9 @@ import { registerServices as registerCommonServices } from '../vscode/services';
 // ###########################################################################################
 
 export function registerServices(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext): void {
-	const isTestMode = extensionContext.extensionMode === ExtensionMode.Test;
-
 	registerCommonServices(builder, extensionContext);
+
+	const envService = new EnvServiceImpl(extensionContext);
 
 	builder.define(IConversationStore, new ConversationStore());
 	builder.define(IDiffService, new DiffServiceImpl());
@@ -132,20 +133,21 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	const internalAIKey = extensionContext.extension.packageJSON.internalAIKey ?? '';
 	const internalLargeEventAIKey = extensionContext.extension.packageJSON.internalLargeStorageAriaKey ?? '';
 	const ariaKey = extensionContext.extension.packageJSON.ariaKey ?? '';
-	if (isTestMode) {
-		setupTelemetry(builder, extensionContext, internalAIKey, internalLargeEventAIKey, ariaKey);
+
+	setupTelemetry(builder, extensionContext, internalAIKey, internalLargeEventAIKey, ariaKey, envService);
+
+	if (envService.useProductionTokenManager()) {
+		builder.define(ICopilotTokenManager, new SyncDescriptor(VSCodeCopilotTokenManager));
+	} else {
 		// If we're in testing mode, then most code will be called from an actual test,
 		// and not from here. However, some objects will capture the `accessor` we pass
 		// here and then re-use it later. This is particularly the case for those objects
 		// which implement VSCode interfaces so can't be changed to take `accessor` in their
 		// method parameters.
 		builder.define(ICopilotTokenManager, getOrCreateTestingCopilotTokenManager());
-	} else {
-		setupTelemetry(builder, extensionContext, internalAIKey, internalLargeEventAIKey, ariaKey);
-		builder.define(ICopilotTokenManager, new SyncDescriptor(VSCodeCopilotTokenManager));
 	}
 
-	if (isScenarioAutomation) {
+	if (envService.isScenarioAutomation()) {
 		builder.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [getStaticGitHubToken]));
 	}
 	else {
@@ -198,8 +200,8 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
 }
 
-function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext) {
-	if (ExtensionMode.Production === extensionContext.extensionMode) {
+function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext, envService: IEnvService) {
+	if (envService.useExperimentationService()) {
 		// Intitiate the experimentation service
 		builder.define(IExperimentationService, new SyncDescriptor(MicrosoftExperimentationService));
 	} else {
@@ -207,9 +209,9 @@ function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, 
 	}
 }
 
-function setupTelemetry(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext, internalAIKey: string, internalLargeEventAIKey: string, externalAIKey: string) {
+function setupTelemetry(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext, internalAIKey: string, internalLargeEventAIKey: string, externalAIKey: string, envService: IEnvService) {
 
-	if (ExtensionMode.Production === extensionContext.extensionMode) {
+	if (envService.useProductionTelemetry()) {
 		builder.define(ITelemetryService, new SyncDescriptor(TelemetryService, [
 			extensionContext.extension.packageJSON.name,
 			internalAIKey,
@@ -223,5 +225,5 @@ function setupTelemetry(builder: IInstantiationServiceBuilder, extensionContext:
 		builder.define(ITelemetryService, new NullTelemetryService());
 	}
 
-	setupMSFTExperimentationService(builder, extensionContext);
+	setupMSFTExperimentationService(builder, extensionContext, envService);
 }

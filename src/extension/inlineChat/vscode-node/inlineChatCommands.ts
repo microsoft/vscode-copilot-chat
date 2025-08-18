@@ -13,7 +13,6 @@ import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocum
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IEnvService } from '../../../platform/env/common/envService';
-import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -56,9 +55,9 @@ export function registerInlineChatCommands(accessor: ServicesAccessor): IDisposa
 	const reviewService = accessor.get(IReviewService);
 	const logService = accessor.get(ILogService);
 	const telemetryService = accessor.get(ITelemetryService);
-	const extensionContext = accessor.get(IVSCodeExtensionContext);
 	const configurationService = accessor.get(IConfigurationService);
 	const parserService = accessor.get(IParserService);
+	const envService = accessor.get(IEnvService);
 
 	const disposables = new DisposableStore();
 	const doExplain = async (arg0: any, fromPalette?: true) => {
@@ -219,8 +218,7 @@ ${message}`,
 			sendReviewActionTelemetry(reviewComment, totalComments, 'unhelpful', logService, telemetryService, instaService);
 		}
 	};
-	const extensionMode = extensionContext.extensionMode;
-	if (typeof extensionMode === 'number' && extensionMode !== vscode.ExtensionMode.Test) {
+	if (envService.updateReviewContextValues()) {
 		reviewService.updateContextValues();
 	}
 	const goToNextReview = (currentThread: vscode.CommentThread | undefined, direction: number) => {

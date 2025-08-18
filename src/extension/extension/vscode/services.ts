@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ExtensionContext, ExtensionMode, l10n } from 'vscode';
+import { ExtensionContext, l10n } from 'vscode';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { AuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgradeService';
 import { CopilotTokenStore, ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
@@ -105,14 +105,14 @@ import { IToolGroupingCache, IToolGroupingService } from '../../tools/common/vir
 // ##########################################################################
 
 export function registerServices(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext): void {
-	const isTestMode = extensionContext.extensionMode === ExtensionMode.Test;
+	const envService = new EnvServiceImpl(extensionContext);
 
 	builder.define(IInteractionService, new SyncDescriptor(InteractionService));
 	builder.define(IAutomodeService, new SyncDescriptor(AutomodeService));
 	builder.define(ICopilotTokenStore, new CopilotTokenStore());
 	builder.define(IDebugOutputService, new DebugOutputServiceImpl());
 	builder.define(IDialogService, new DialogServiceImpl());
-	builder.define(IEnvService, new EnvServiceImpl());
+	builder.define(IEnvService, envService);
 	builder.define(IFileSystemService, new VSCodeFileSystemService());
 	builder.define(IHeaderContributors, new HeaderContributors());
 	builder.define(INotebookService, new SyncDescriptor(NotebookService));
@@ -123,8 +123,8 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ITabsAndEditorsService, new TabsAndEditorsServiceImpl());
 	builder.define(ITerminalService, new SyncDescriptor(TerminalServiceImpl));
 	builder.define(ITestProvider, new SyncDescriptor(TestProvider));
-	builder.define(IUrlOpener, isTestMode ? new NullUrlOpener() : new RealUrlOpener());
-	builder.define(INotificationService, isTestMode ? new NullNotificationService() : new NotificationService());
+	builder.define(IUrlOpener, envService.useRealUrlOpener() ? new RealUrlOpener() : new NullUrlOpener());
+	builder.define(INotificationService, envService.showNotifications() ? new NotificationService() : new NullNotificationService());
 	builder.define(IVSCodeExtensionContext, <any>/*force _serviceBrand*/extensionContext);
 	builder.define(IWorkbenchService, new WorkbenchServiceImpl());
 	builder.define(IConversationOptions, {

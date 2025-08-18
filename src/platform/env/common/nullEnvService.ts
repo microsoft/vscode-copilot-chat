@@ -65,4 +65,44 @@ export class NullEnvService extends AbstractEnvService {
 	override openExternal(target: URI): Promise<boolean> {
 		return Promise.resolve(false);
 	}
+
+	override isScenarioAutomation(): boolean {
+		return false;
+	}
+
+	override activateExtension(force: boolean): boolean {
+		return false;
+	}
+
+	override useRealUrlOpener(): boolean {
+		return false;
+	}
+
+	override showNotifications(): boolean {
+		return false;
+	}
+
+	override enableLanguageModels(): boolean {
+		return false;
+	}
+
+	override useProductionTelemetry(): boolean {
+		return false;
+	}
+
+	override useExperimentationService(): boolean {
+		return false;
+	}
+
+	override useProductionTokenManager(): boolean {
+		return false;
+	}
+
+	override updateReviewContextValues(): boolean {
+		return false;
+	}
+
+	override enableLoggingActions(): boolean {
+		return false;
+	}
 }

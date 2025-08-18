@@ -4,13 +4,18 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { ExtensionMode } from 'vscode';
 import { Platform, platform } from '../../../util/vs/base/common/platform';
+import { env } from '../../../util/vs/base/common/process';
 import { IEnvService, NameAndVersion, OperatingSystem } from '../common/envService';
 import { isPreRelease, isProduction, packageJson } from '../common/packagejson';
 
 export class EnvServiceImpl implements IEnvService {
 
 	declare readonly _serviceBrand: undefined;
+
+	constructor(private readonly extensionContext: vscode.ExtensionContext) {
+	}
 
 	public get extensionId(): string {
 		return `${packageJson.publisher}.${packageJson.name}`.toLowerCase();
@@ -72,6 +77,46 @@ export class EnvServiceImpl implements IEnvService {
 
 	isSimulation(): boolean {
 		return false;
+	}
+
+	isScenarioAutomation(): boolean {
+		return env['IS_SCENARIO_AUTOMATION'] === '1';
+	}
+
+	useRealUrlOpener(): boolean {
+		return this.extensionContext.extensionMode !== vscode.ExtensionMode.Test || this.isScenarioAutomation();
+	}
+
+	showNotifications(): boolean {
+		return this.extensionContext.extensionMode !== vscode.ExtensionMode.Test || this.isScenarioAutomation();
+	}
+
+	enableLanguageModels(): boolean {
+		return this.extensionContext.extensionMode !== vscode.ExtensionMode.Test || this.isScenarioAutomation();
+	}
+
+	useProductionTelemetry(): boolean {
+		return this.extensionContext.extensionMode !== vscode.ExtensionMode.Test && !this.isScenarioAutomation();
+	}
+
+	useExperimentationService(): boolean {
+		return this.isProduction();
+	}
+
+	useProductionTokenManager(): boolean {
+		return this.extensionContext.extensionMode !== vscode.ExtensionMode.Test && !this.isScenarioAutomation();
+	}
+
+	updateReviewContextValues(): boolean {
+		return this.extensionContext.extensionMode !== vscode.ExtensionMode.Test || this.isScenarioAutomation();
+	}
+
+	enableLoggingActions(): boolean {
+		return this.extensionContext.extensionMode !== vscode.ExtensionMode.Test || this.isScenarioAutomation();
+	}
+
+	activateExtension(force: boolean | undefined): boolean {
+		return this.extensionContext.extensionMode === ExtensionMode.Test && !force && !this.isScenarioAutomation();
 	}
 
 	getBuildType(): 'prod' | 'dev' {
