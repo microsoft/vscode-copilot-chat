@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import dedent from 'ts-dedent';
-import { assert, expect, suite, test } from 'vitest';
+import { assert, suite, test } from 'vitest';
 
 import { getBlockParser } from '../parseBlock';
 
@@ -245,7 +245,12 @@ suite('parseBlock Tests', function () {
                     pass
             `;
 			const blockParser = getBlockParser('python');
-			expect(blockParser.isEmptyBlockStart(text, text.length + 1)).rejects;
+			try {
+				await blockParser.isEmptyBlockStart(text, text.length + 1);
+				assert.fail('Expected error to be thrown');
+			} catch (e) {
+				assert.ok(e instanceof RangeError);
+			}
 		});
 
 		test('simple examples', async function () {
