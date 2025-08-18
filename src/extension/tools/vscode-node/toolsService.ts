@@ -11,9 +11,6 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { getContributedToolName, getToolName, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { BaseToolsService } from '../common/toolsService';
-import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { INewWorkspaceStoredData, NEW_WORKSPACE_STORAGE_KEY } from '../../getting-started/common/newWorkspaceContext';
-import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 
 export class ToolsService extends BaseToolsService {
 	declare _serviceBrand: undefined;
@@ -69,9 +66,7 @@ export class ToolsService extends BaseToolsService {
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
-		@ILogService logService: ILogService,
-		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
-		@IWorkspaceService private readonly _workspaceService: IWorkspaceService
+		@ILogService logService: ILogService
 	) {
 		super(logService);
 		this._copilotTools = new Lazy(() => new Map(ToolRegistry.getTools().map(t => [t.toolName, instantiationService.createInstance(t)] as const)));
@@ -96,44 +91,10 @@ export class ToolsService extends BaseToolsService {
 		throw new Error('This method for tests only');
 	}
 
-	/**
-	 * Check if we're in a workspace creation context where get_project_setup_info should be enabled
-	 */
-	private _isInWorkspaceCreationContext(): boolean {
-		const workspace = this._workspaceService.getWorkspaceFolders();
-		if (!workspace || workspace.length === 0) {
-			return false;
-		}
-
-		const newWorkspaceContextsList = this._extensionContext.globalState.get<INewWorkspaceStoredData[]>(NEW_WORKSPACE_STORAGE_KEY, []);
-		const currentWorkspaceUri = workspace[0].toString();
-		
-		// Check if current workspace is in the new workspace contexts list
-		const workspaceContext = newWorkspaceContextsList.find(context => context.workspaceURI === currentWorkspaceUri);
-		return workspaceContext !== undefined;
-	}
-
 	getEnabledTools(request: vscode.ChatRequest, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[] {
 		const toolMap = new Map(this.tools.map(t => [t.name, t]));
 
 		return this.tools.filter(tool => {
-			// Special handling for get_project_setup_info tool - hide it until workspace creation
-			if (tool.name === ToolName.GetProjectSetupInfo) {
-				// Check if create_new_workspace is referenced in this request (enables the tool immediately)
-				const hasCreateWorkspaceReference = request.toolReferences.some(ref => ref.name === ToolName.CreateNewWorkspace);
-				if (hasCreateWorkspaceReference) {
-					return true;
-				}
-
-				// Check if we're in a workspace creation context
-				if (this._isInWorkspaceCreationContext()) {
-					return true;
-				}
-
-				// Otherwise, hide the tool
-				return false;
-			}
-
 			// 0. Check if the tool was disabled via the tool picker. If so, it must be disabled here
 			const toolPickerSelection = request.tools.get(getContributedToolName(tool.name));
 			if (toolPickerSelection === false) {
