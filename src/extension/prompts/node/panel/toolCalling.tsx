@@ -406,7 +406,11 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 		const uploadsEnabled = this.configurationService && this.experimentationService
 			? this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.EnableChatImageUpload, this.experimentationService)
 			: false;
-		const effectiveToken = uploadsEnabled ? githubToken : undefined;
+
+		// Anthropic (from CAPI) currently does not support image uploads from tool calls.
+		const isAnthropic = this.endpoint.family.startsWith('claude') || this.endpoint.family.startsWith('Anthropic');
+		const effectiveToken = uploadsEnabled && !isAnthropic ? githubToken : undefined;
+
 		return Promise.resolve(imageDataPartToTSX(part, effectiveToken, this.endpoint.urlOrRequestMetadata, this.logService, this.imageService));
 	}
 
