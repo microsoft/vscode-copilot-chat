@@ -100,7 +100,7 @@ export class FilePathLinkifier implements IContributedLinkifier {
 			return;
 		}
 
-		if (pathText.startsWith('/') || (isWindows && hasDriveLetter(pathText))) {
+		if (pathText.startsWith('/') || (isWindows && (pathText.startsWith('\\') || hasDriveLetter(pathText)))) {
 			try {
 				const uri = await this.statAndNormalizeUri(Uri.file(pathText.startsWith('/') ? path.posix.normalize(pathText) : path.normalize(pathText)));
 				if (uri) {
