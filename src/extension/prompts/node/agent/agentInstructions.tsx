@@ -167,7 +167,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 					`}`
 				].join('\n')}
 			</Tag>}
-			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} />}
+			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			{isGpt5 && tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 			<NotebookInstructions {...this.props} />
@@ -333,7 +333,7 @@ export class CodexStyleGPTPrompt extends PromptElement<DefaultAgentPromptProps> 
 				Before doing large chunks of work that may incur latency as experienced by the user (i.e. writing a new file), you should send a concise message to the user with an update indicating what you're about to do to ensure they know what you're spending time on. Don't start editing or writing large files before informing the user what you are doing and why.<br />
 				The messages you send before tool calls should describe what is immediately about to be done next in very concise language. If there was previous work done, this preamble message should also include a note about the work done so far to bring the user along.<br />
 			</Tag>
-			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} />}
+			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			{tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 			<Tag name='final_answer_formatting'>
 				## Presenting your work and final message<br />
@@ -521,7 +521,7 @@ export class GPT5PromptV2 extends PromptElement<DefaultAgentPromptProps> {
 						6. Move to next todo<br />
 					</Tag>
 				</>}
-				{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} />}
+				{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 				{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			</Tag>
 			<NotebookInstructions {...this.props} />
@@ -695,7 +695,7 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 					`}`
 				].join('\n')}
 			</Tag>}
-			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} />}
+			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			{isGpt5 && tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 			<NotebookInstructions {...this.props} />
@@ -922,7 +922,7 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 					`}`
 				].join('\n')}
 			</Tag>}
-			{!!tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} />}
+			{!!tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
 				<Tag name='example'>
@@ -966,11 +966,11 @@ export class ApplyPatchFormatInstructions extends PromptElement {
 	}
 }
 
-class ApplyPatchInstructions extends PromptElement<DefaultAgentPromptProps> {
+class ApplyPatchInstructions extends PromptElement<DefaultAgentPromptProps & { tools: ToolCapabilities }> {
 	async render(state: void, sizing: PromptSizing) {
 		const isGpt5 = this.props.modelFamily?.startsWith('gpt-5') === true;
 		return <Tag name='applyPatchInstructions'>
-			To edit files in the workspace, use the {ToolName.ApplyPatch} tool. If you have issues with it, you should first try to fix your patch and continue using {ToolName.ApplyPatch}. If you are stuck, you can fall back on the {ToolName.EditFile} tool. But {ToolName.ApplyPatch} is much faster and is the preferred tool.<br />
+			To edit files in the workspace, use the {ToolName.ApplyPatch} tool. If you have issues with it, you should first try to fix your patch and continue using {ToolName.ApplyPatch}. {this.props.tools[ToolName.EditFile] && <>If you are stuck, you can fall back on the {ToolName.EditFile} tool, but {ToolName.ApplyPatch} is much faster and is the preferred tool.</>}<br />
 			{isGpt5 && <>Prefer the smallest set of changes needed to satisfy the task. Avoid reformatting unrelated code; preserve existing style and public APIs unless the task requires changes. When practical, complete all edits for a file within a single message.<br /></>}
 			The input for this tool is a string representing the patch to apply, following a special format. For each snippet of code that needs to be changed, repeat the following:<br />
 			<ApplyPatchFormatInstructions /><br />
