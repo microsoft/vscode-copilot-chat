@@ -86,6 +86,17 @@ export class FetcherService implements IFetcherService {
 						continue;
 					}
 					const text = await res.text();
+					if (fetcher === this._availableFetchers[0]) {
+						// Update to unconsumed response
+						firstResponse = new Response(
+							res.status,
+							res.statusText,
+							res.headers,
+							async () => text,
+							async () => JSON.parse(text),
+							async () => Readable.from([text])
+						);
+					}
 					const json = JSON.parse(text); // Verify JSON
 					this._logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} succeeded`);
 					if (fetcher !== this._availableFetchers[0]) {
