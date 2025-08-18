@@ -57,6 +57,13 @@ export function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpo
 }
 
 /**
+ * Model supports multi_replace_string_in_file as an edit tool.
+ */
+export function modelSupportsMultiReplaceString(model: LanguageModelChat | IChatEndpoint): boolean {
+	return modelSupportsReplaceString(model) && !model.family.includes('gemini');
+}
+
+/**
  * The model is capable of using replace_string_in_file exclusively,
  * without needing insert_edit_into_file.
  */

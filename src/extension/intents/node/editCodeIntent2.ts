@@ -6,7 +6,7 @@
 import type * as vscode from 'vscode';
 import { ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { modelSupportsReplaceString } from '../../../platform/endpoint/common/chatModelCapabilities';
+import { modelSupportsMultiReplaceString, modelSupportsReplaceString } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -50,7 +50,7 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 
 		if (modelSupportsReplaceString(model)) {
 			lookForTools.add(ToolName.ReplaceString);
-			if (configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
+			if (modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
 				lookForTools.add(ToolName.MultiReplaceString);
 			}
 		}
