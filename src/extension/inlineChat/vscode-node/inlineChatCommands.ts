@@ -220,7 +220,7 @@ ${message}`,
 		}
 	};
 	const extensionMode = extensionContext.extensionMode;
-	if (typeof extensionMode === 'number' && extensionMode !== vscode.ExtensionMode.Test || isScenarioAutomation) {
+	if (typeof extensionMode === 'number' && (extensionMode !== vscode.ExtensionMode.Test || isScenarioAutomation)) {
 		reviewService.updateContextValues();
 	}
 	const goToNextReview = (currentThread: vscode.CommentThread | undefined, direction: number) => {
