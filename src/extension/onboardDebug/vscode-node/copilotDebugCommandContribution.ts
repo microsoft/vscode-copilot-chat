@@ -9,7 +9,6 @@ import { connect } from 'net';
 import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITasksService } from '../../../platform/tasks/common/tasksService';
@@ -187,7 +186,7 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 	}
 
 	private getVersionNonce() {
-		if (this.context.extensionMode !== vscode.ExtensionMode.Production && !isScenarioAutomation) {
+		if (this.context.extensionMode !== vscode.ExtensionMode.Production) {
 			return String(Date.now());
 		}
 
