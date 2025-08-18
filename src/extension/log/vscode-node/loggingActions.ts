@@ -51,6 +51,7 @@ export class LoggingActionsContrib {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IAuthenticationService private readonly authService: IAuthenticationService,
 		@ICAPIClientService private readonly capiClientService: ICAPIClientService,
+		@IFetcherService private readonly fetcherService: IFetcherService,
 		@ILogService private logService: ILogService,
 	) {
 		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.collectDiagnostics', async () => {
@@ -83,6 +84,7 @@ User Settings:
 			const nodeCurrent = !electronCurrent && this.configurationService.getConfig<boolean>(ConfigKey.Shared.DebugUseNodeFetcher);
 			const nodeFetchCurrent = !electronCurrent && !nodeCurrent && this.configurationService.getConfig<boolean>(ConfigKey.Shared.DebugUseNodeFetchFetcher);
 			const nodeCurrentFallback = !electronCurrent && !nodeFetchCurrent;
+			const activeFetcher = this.fetcherService.getUserAgentLibrary();
 			const fetchers = {
 				['Electron fetch']: {
 					fetcher: electronFetcher,
@@ -188,7 +190,7 @@ User Settings:
 					}
 				}
 				for (const [name, fetcher] of Object.entries(fetchers)) {
-					await appendText(editor, `- ${name}${fetcher.current ? ' (configured)' : ''}: `);
+					await appendText(editor, `- ${name}${fetcher.current ? ' (configured)' : fetcher.fetcher?.getUserAgentLibrary() === activeFetcher ? ' (active)' : ''}: `);
 					if (fetcher.fetcher) {
 						const start = Date.now();
 						try {
