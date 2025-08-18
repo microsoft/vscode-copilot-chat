@@ -4,9 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { TikTokenizer, createTokenizer, getRegexByEncoder, getSpecialTokensByEncoder } from '@microsoft/tiktokenizer';
+import { parseTikTokenBinary } from '../../../../platform/tokenizer/node/parseTikTokens';
 import { CopilotPromptLoadFailure } from '../../common/error';
 import { ApproximateTokenizer, MockTokenizer, Tokenizer, TokenizerName } from '../../common/tokenization/tokenizer';
-import { readFile } from '../fileLoader';
+import { locateFile } from '../fileLoader';
 
 const tokenizers = new Map<TokenizerName, Tokenizer>();
 
@@ -31,7 +32,7 @@ export class TTokenizer implements Tokenizer {
 	static async create(encoder: TokenizerName): Promise<TTokenizer> {
 		try {
 			const tokenizer = createTokenizer(
-				await parseTikTokenNoIndex(`${encoder}.tiktoken.noindex`),
+				parseTikTokenBinary(locateFile(`${encoder}.tiktoken`)),
 				getSpecialTokensByEncoder(encoder),
 				getRegexByEncoder(encoder),
 				32768
@@ -129,33 +130,6 @@ export class TTokenizer implements Tokenizer {
 		const newline = suffix.indexOf('\n');
 		return suffix.substring(newline + 1);
 	}
-}
-
-async function parseTikTokenNoIndex(file: string): Promise<Map<Uint8Array, number>> {
-	// todo@dbaeumer ensure that it is ok to use the index file
-	if (!file.endsWith('.tiktoken.noindex')) {
-		throw new Error('File does not end with .tiktoken.noindex');
-	}
-
-	const contents = await readFile(file);
-	const result = new Map<Uint8Array, number>();
-	let tokenBytes = [];
-	for (let i = 0; i < contents.length; i++) {
-		// 0xff is used as a separator byte between tokens in script/compressTokenizer.ts
-		// If the script changes, this needs to change as well.
-		// Special case, if the tokenBytes is empty, allow a 0xff byte to be
-		// added as a token which occurs once in cl100k and o200k tokenizers.
-		if (contents[i] !== 0xff || tokenBytes.length === 0) {
-			tokenBytes.push(contents[i]);
-			continue;
-		}
-		result.set(Uint8Array.from(tokenBytes), result.size);
-		tokenBytes = [];
-	}
-	// Store the last token since there is no trailing separator
-	result.set(Uint8Array.from(tokenBytes), result.size);
-
-	return result;
 }
 
 async function setTokenizer(name: TokenizerName) {

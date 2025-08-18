@@ -5,7 +5,6 @@
 
 import { downloadZMQ } from '@vscode/zeromq';
 import * as fs from 'fs';
-import { copyFile } from 'fs/promises';
 import * as path from 'path';
 import { compressTikToken } from './build/compressTikToken';
 import { copyStaticAssets } from './build/copyStaticAssets';
@@ -67,11 +66,6 @@ async function main() {
 
 	for (const tokens of vendoredTiktokenFiles) {
 		await compressTikToken(tokens, `dist/${path.basename(tokens)}`);
-	}
-
-	const vendoredTiktokenFilesNoIndex = ['src/extension/inlineCompletionPrompt/node/tokenization/resources/cl100k_base.tiktoken.noindex', 'src/extension/inlineCompletionPrompt/node/tokenization/resources/o200k_base.tiktoken.noindex'];
-	for (const tokens of vendoredTiktokenFilesNoIndex) {
-		await copyFile(tokens, `dist/${path.basename(tokens)}`);
 	}
 
 	// copy static assets to dist
