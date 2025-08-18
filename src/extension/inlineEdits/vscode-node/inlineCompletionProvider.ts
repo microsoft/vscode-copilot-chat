@@ -237,13 +237,13 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 				isInlineCompletion = allowInlineCompletions && isInlineSuggestion(position, document, range, result.edit.newText);
 				completionItem = serveAsCompletionsProvider && !isInlineCompletion ?
 					undefined :
-					this.createComletionList(doc, document, position, range, result);
+					this.createCompletionItem(doc, document, position, range, result);
 			} else {
 				// nes is for a different document.
 				range = documents[0][1];
 				completionItem = serveAsCompletionsProvider ?
 					undefined :
-					this.createNextEditorEditComletionItem(position, {
+					this.createNextEditorEditCompletionItem(position, {
 						document: documents[0][0],
 						insertText: result.edit.newText,
 						range
@@ -301,7 +301,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		}
 	}
 
-	private createNextEditorEditComletionItem(requestingPosition: Position,
+	private createNextEditorEditCompletionItem(requestingPosition: Position,
 		nextEdit: { document: TextDocument; range: Range; insertText: string }
 	): Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown'> {
 		// Display the next edit in the current document, but with a command to open the next edit in the other document.
@@ -329,7 +329,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		};
 	}
 
-	private createComletionList(
+	private createCompletionItem(
 		doc: IVSCodeObservableDocument,
 		document: TextDocument,
 		position: Position,
