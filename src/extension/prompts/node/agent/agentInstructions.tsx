@@ -76,12 +76,12 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 					Anti-laziness: Avoid generic restatements and high-level advice. Prefer concrete edits, running tools, and verifying outcomes over suggesting what the user should do.<br />
 					<Tag name='engineeringMindsetHints'>
 						Think like a software engineer—when relevant, prefer to:<br />
-						- Outline a tiny “contract” in 2-4 bullets (inputs/outputs, data shapes, error modes, success criteria).<br />
+						- Outline a tiny "contract" in 2-4 bullets (inputs/outputs, data shapes, error modes, success criteria).<br />
 						- List 3-5 likely edge cases (empty/null, large/slow, auth/permission, concurrency/timeouts) and ensure the plan covers them.<br />
 						- Write or update minimal reusable tests first (happy path + 1-2 edge/boundary) in the project's framework; then implement until green.<br />
 					</Tag>
 					<Tag name='qualityGatesHints'>
-						Before wrapping up, prefer a quick “quality gates” triage: Build, Lint/Typecheck, Unit tests, and a small smoke test. Ensure there are no syntax/type errors across the project; fix them or clearly call out any intentionally deferred ones. Report deltas only (PASS/FAIL). Include a brief “requirements coverage” line mapping each requirement to its status (Done/Deferred + reason).<br />
+						Before wrapping up, prefer a quick "quality gates" triage: Build, Lint/Typecheck, Unit tests, and a small smoke test. Ensure there are no syntax/type errors across the project; fix them or clearly call out any intentionally deferred ones. Report deltas only (PASS/FAIL). Include a brief "requirements coverage" line mapping each requirement to its status (Done/Deferred + reason).<br />
 					</Tag>
 					<Tag name='responseModeHints'>
 						Choose response mode based on task complexity. Prefer a lightweight answer when it's a greeting, small talk, or a trivial/direct Q&A that doesn't require tools or edits: keep it short, skip todo lists and progress checkpoints, and avoid tool calls unless necessary. Use the full engineering workflow (checklist, phases, checkpoints) when the task is multi-step, requires edits/builds/tests, or has ambiguity/unknowns. Escalate from light to full only when needed; if you escalate, say so briefly and continue.<br />
@@ -107,7 +107,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible{tools[ToolName.Codebase] && <>, but do not call {ToolName.Codebase} in parallel.</>}<br />
 				{isGpt5 && <>
 					Before notable tool batches, briefly tell the user what you're about to do and why. After the results return, briefly interpret them and state what you'll do next. Don't narrate every trivial call.<br />
-					You MUST preface each tool call batch with a one-sentence “why/what/outcome” preamble (why you're doing it, what you'll run, expected outcome). If you make many tool calls in a row, you MUST checkpoint progress after roughly every 3-5 calls: what you ran, key results, and what you'll do next. If you create or edit more than ~3 files in a burst, checkpoint immediately with a compact bullet summary.<br />
+					You MUST preface each tool call batch with a one-sentence "why/what/outcome" preamble (why you're doing it, what you'll run, expected outcome). If you make many tool calls in a row, you MUST checkpoint progress after roughly every 3-5 calls: what you ran, key results, and what you'll do next. If you create or edit more than ~3 files in a burst, checkpoint immediately with a compact bullet summary.<br />
 					If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible{tools[ToolName.Codebase] && <>, but do not call {ToolName.Codebase} in parallel.</>} Parallelize read-only, independent operations only; do not parallelize edits or dependent steps.<br />
 					Context acquisition: Trace key symbols to their definitions and usages. Read sufficiently large, meaningful chunks to avoid missing context. Prefer semantic or codebase search when you don't know the exact string; prefer exact search or direct reads when you do. Avoid redundant reads when the content is already attached and sufficient.<br />
 					Verification preference: For service or API checks, prefer a tiny code-based test (unit/integration or a short script) over shell probes. Use shell probes (e.g., curl) only as optional documentation or quick one-off sanity checks, and mark them as optional.<br />
@@ -167,7 +167,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 					`}`
 				].join('\n')}
 			</Tag>}
-			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} />}
+			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			{isGpt5 && tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 			<NotebookInstructions {...this.props} />
@@ -333,7 +333,7 @@ export class CodexStyleGPTPrompt extends PromptElement<DefaultAgentPromptProps> 
 				Before doing large chunks of work that may incur latency as experienced by the user (i.e. writing a new file), you should send a concise message to the user with an update indicating what you're about to do to ensure they know what you're spending time on. Don't start editing or writing large files before informing the user what you are doing and why.<br />
 				The messages you send before tool calls should describe what is immediately about to be done next in very concise language. If there was previous work done, this preamble message should also include a note about the work done so far to bring the user along.<br />
 			</Tag>
-			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} />}
+			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			{tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 			<Tag name='final_answer_formatting'>
 				## Presenting your work and final message<br />
@@ -521,7 +521,7 @@ export class GPT5PromptV2 extends PromptElement<DefaultAgentPromptProps> {
 						6. Move to next todo<br />
 					</Tag>
 				</>}
-				{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} />}
+				{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 				{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			</Tag>
 			<NotebookInstructions {...this.props} />
@@ -695,7 +695,7 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 					`}`
 				].join('\n')}
 			</Tag>}
-			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} />}
+			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			{isGpt5 && tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 			<NotebookInstructions {...this.props} />
@@ -922,7 +922,7 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 					`}`
 				].join('\n')}
 			</Tag>}
-			{!!tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} />}
+			{!!tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
 				<Tag name='example'>
@@ -966,11 +966,11 @@ export class ApplyPatchFormatInstructions extends PromptElement {
 	}
 }
 
-class ApplyPatchInstructions extends PromptElement<DefaultAgentPromptProps> {
+class ApplyPatchInstructions extends PromptElement<DefaultAgentPromptProps & { tools: ToolCapabilities }> {
 	async render(state: void, sizing: PromptSizing) {
 		const isGpt5 = this.props.modelFamily?.startsWith('gpt-5') === true;
 		return <Tag name='applyPatchInstructions'>
-			To edit files in the workspace, use the {ToolName.ApplyPatch} tool. If you have issues with it, you should first try to fix your patch and continue using {ToolName.ApplyPatch}. If you are stuck, you can fall back on the {ToolName.EditFile} tool. But {ToolName.ApplyPatch} is much faster and is the preferred tool.<br />
+			To edit files in the workspace, use the {ToolName.ApplyPatch} tool. If you have issues with it, you should first try to fix your patch and continue using {ToolName.ApplyPatch}. {this.props.tools[ToolName.EditFile] && <>If you are stuck, you can fall back on the {ToolName.EditFile} tool, but {ToolName.ApplyPatch} is much faster and is the preferred tool.</>}<br />
 			{isGpt5 && <>Prefer the smallest set of changes needed to satisfy the task. Avoid reformatting unrelated code; preserve existing style and public APIs unless the task requires changes. When practical, complete all edits for a file within a single message.<br /></>}
 			The input for this tool is a string representing the patch to apply, following a special format. For each snippet of code that needs to be changed, repeat the following:<br />
 			<ApplyPatchFormatInstructions /><br />

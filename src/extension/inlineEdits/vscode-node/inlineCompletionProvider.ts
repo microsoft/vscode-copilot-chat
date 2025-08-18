@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, Command, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, Position, Range, TextDocument, l10n, Event as vscodeEvent } from 'vscode';
+import { CancellationToken, Command, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, Position, Range, TextDocument, TextDocumentShowOptions, l10n, Event as vscodeEvent } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
@@ -35,11 +35,19 @@ import { learnMoreCommandId, learnMoreLink } from './inlineEditProviderFeature';
 import { isInlineSuggestion } from './isInlineSuggestion';
 import { InlineEditLogger } from './parts/inlineEditLogger';
 import { toExternalRange } from './utils/translations';
+import { IVSCodeObservableDocument } from './parts/vscodeWorkspace';
 
-export interface NesCompletionItem extends InlineCompletionItem {
+const learnMoreAction: Command = {
+	title: l10n.t('Learn More'),
+	command: learnMoreCommandId,
+	tooltip: learnMoreLink
+};
+
+interface NesCompletionItem extends InlineCompletionItem {
 	readonly telemetryBuilder: NextEditProviderTelemetryBuilder;
 	readonly info: NesCompletionInfo;
 	wasShown: boolean;
+	isEditInAnotherDocument?: boolean;
 }
 
 class NesCompletionList extends InlineCompletionList {
@@ -81,6 +89,8 @@ type NesCompletionInfo = LlmCompletionInfo | DiagnosticsCompletionInfo;
 function isLlmCompletionInfo(item: NesCompletionInfo): item is LlmCompletionInfo {
 	return item.source === 'provider';
 }
+
+const GoToNextEdit = l10n.t('Go To Next Edit');
 
 
 export class InlineCompletionProviderImpl implements InlineCompletionItemProvider {
@@ -213,63 +223,42 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			}
 
 			tracer.trace(`using next edit suggestion from ${suggestionInfo.source}`);
+			let range: Range | undefined;
+			let isInlineCompletion: boolean = false;
+			let completionItem: Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined;
 
-			const range = doc.fromOffsetRange(document, result.edit.replaceRange);
-			if (!range) {
-				tracer.trace('no next edit suggestion for notebook cell');
+			const documents = doc.fromOffsetRange(result.edit.replaceRange);
+			if (!documents.length) {
+				tracer.trace('no next edit suggestion');
+			} else if (documents[0][0] === document) {
+				// nes is for this same document.
+				range = documents[0][1];
+				const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
+				isInlineCompletion = allowInlineCompletions && isInlineSuggestion(position, document, range, result.edit.newText);
+				completionItem = serveAsCompletionsProvider && !isInlineCompletion ?
+					undefined :
+					this.createCompletionItem(doc, document, position, range, result);
+			} else {
+				// nes is for a different document.
+				range = documents[0][1];
+				completionItem = serveAsCompletionsProvider ?
+					undefined :
+					this.createNextEditorEditCompletionItem(position, {
+						document: documents[0][0],
+						insertText: result.edit.newText,
+						range
+					});
+			}
+
+			if (!completionItem) {
 				this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
 				return emptyList;
 			}
-
-			// Only show edit when the cursor is max 4 lines away from the edit
-			const showRange = (
-				result.showRangePreference === ShowNextEditPreference.AroundEdit
-					? new Range(
-						Math.max(range.start.line - 4, 0),
-						0,
-						range.end.line + 4,
-						Number.MAX_SAFE_INTEGER
-					)
-					: undefined
-			);
-
-			const displayRange = result.displayLocation ? doc.fromRange(document, toExternalRange(result.displayLocation.range)) : undefined;
-			const displayLocation: InlineCompletionDisplayLocation | undefined = result.displayLocation && displayRange ? {
-				range: displayRange,
-				label: result.displayLocation.label
-			} : undefined;
-
-			const learnMoreAction: Command = {
-				title: l10n.t('Learn More'),
-				command: learnMoreCommandId,
-				tooltip: learnMoreLink
-			};
 
 			const menuCommands: InlineCompletionCommand[] = [];
 			if (this.inlineEditDebugComponent) {
 				menuCommands.push(...this.inlineEditDebugComponent.getCommands(logContext));
 			}
-
-			const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
-			const isInlineCompletion = allowInlineCompletions && isInlineSuggestion(position, document, range, result.edit.newText);
-
-			if (serveAsCompletionsProvider && !isInlineCompletion) {
-				this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
-				return emptyList;
-			}
-
-			const inlineEdit: NesCompletionItem = {
-				range,
-				insertText: result.edit.newText,
-				showRange,
-				action: learnMoreAction,
-				info: suggestionInfo,
-				isInlineEdit: !isInlineCompletion,
-				showInlineEditMenu: !serveAsCompletionsProvider,
-				displayLocation,
-				telemetryBuilder,
-				wasShown: false,
-			};
 
 			// telemetry
 			telemetryBuilder.setPickedNESType(suggestionInfo.source === 'diagnostics' ? 'diagnostics' : 'llm');
@@ -284,7 +273,17 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 			this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
 
-			return new NesCompletionList(context.requestUuid, inlineEdit, menuCommands, telemetryBuilder);
+			const nesCompletionItem: NesCompletionItem = {
+				...completionItem,
+				info: suggestionInfo,
+				telemetryBuilder,
+				action: learnMoreAction,
+				isInlineEdit: !isInlineCompletion,
+				showInlineEditMenu: !serveAsCompletionsProvider,
+				wasShown: false
+			};
+
+			return new NesCompletionList(context.requestUuid, nesCompletionItem, menuCommands, telemetryBuilder);
 		} catch (e) {
 			tracer.trace('error', e);
 			logContext.setError(e);
@@ -301,6 +300,65 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			completionsCts.dispose();
 			this.logger.add(logContext);
 		}
+	}
+
+	private createNextEditorEditCompletionItem(requestingPosition: Position,
+		nextEdit: { document: TextDocument; range: Range; insertText: string }
+	): Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> {
+		// Display the next edit in the current document, but with a command to open the next edit in the other document.
+		// & range of this completion item will be the same as the current documents cursor position.
+		const range = new Range(requestingPosition, requestingPosition);
+		const displayLocation: InlineCompletionDisplayLocation = { range, label: GoToNextEdit };
+
+		const commandArgs: TextDocumentShowOptions = {
+			preserveFocus: false,
+			selection: nextEdit.range
+		};
+		const command: Command = {
+			command: 'vscode.open',
+			title: GoToNextEdit,
+			arguments: [nextEdit.document.uri, commandArgs]
+		};
+		return {
+			range,
+			insertText: nextEdit.insertText,
+			showRange: range,
+			command,
+			displayLocation,
+			isEditInAnotherDocument: true
+		};
+	}
+
+	private createCompletionItem(
+		doc: IVSCodeObservableDocument,
+		document: TextDocument,
+		position: Position,
+		range: Range,
+		result: NonNullable<(NextEditResult | DiagnosticsNextEditResult)['result']>,
+	): Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined {
+
+		// Only show edit when the cursor is max 4 lines away from the edit
+		const showRange = result.showRangePreference === ShowNextEditPreference.AroundEdit
+			? new Range(
+				Math.max(range.start.line - 4, 0),
+				0,
+				range.end.line + 4,
+				Number.MAX_SAFE_INTEGER
+			) : undefined;
+
+		const displayLocationRange = result.displayLocation && doc.fromRange(document, toExternalRange(result.displayLocation.range));
+		const displayLocation: InlineCompletionDisplayLocation | undefined = result.displayLocation && displayLocationRange ? {
+			range: displayLocationRange,
+			label: result.displayLocation.label
+		} : undefined;
+
+
+		return {
+			range,
+			insertText: result.edit.newText,
+			showRange,
+			displayLocation,
+		};
 	}
 
 	public handleDidShowCompletionItem(completionItem: NesCompletionItem, updatedInsertText: string): void {
@@ -361,7 +419,9 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		const info = item.info;
 		if (isLlmCompletionInfo(info)) {
 			this.model.nextEditProvider.handleAcceptance(info.documentId, info.suggestion);
-			this._trackSurvivalRate(info);
+			if (!item.isEditInAnotherDocument) {
+				this._trackSurvivalRate(info);
+			}
 		} else {
 			this.model.diagnosticsBasedProvider?.handleAcceptance(info.documentId, info.suggestion);
 		}

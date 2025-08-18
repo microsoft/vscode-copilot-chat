@@ -43,10 +43,11 @@ import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { PATCH_PREFIX, PATCH_SUFFIX } from './applyPatch/parseApplyPatch';
-import { ActionType, Commit, DiffError, FileChange, InvalidContextError, InvalidPatchFormatError, processPatch } from './applyPatch/parser';
+import { ActionType, Commit, DiffError, FileChange, identify_files_needed, InvalidContextError, InvalidPatchFormatError, processPatch } from './applyPatch/parser';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileOkForTool, resolveToolInputPath } from './toolUtils';
+import { createEditConfirmation } from './editFileToolUtils';
 
 export const applyPatchWithNotebookSupportDescription: vscode.LanguageModelToolInformation = {
 	name: ToolName.ApplyPatch,
@@ -575,9 +576,11 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IApplyPatchToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
-		return {
-			presentation: 'hidden'
-		};
+		return this.instantiationService.invokeFunction(
+			createEditConfirmation,
+			identify_files_needed(options.input.input).map(f => URI.file(f)),
+			() => '```\n' + options.input.input + '\n```',
+		);
 	}
 }
 
