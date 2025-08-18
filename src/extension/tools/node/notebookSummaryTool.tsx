@@ -53,16 +53,16 @@ export class NotebookSummaryTool implements ICopilotTool<INotebookSummaryToolPar
 			return;
 		}
 
-		const format = this.alternativeNotebookContent.getFormat(this.promptContext?.request?.model);
 		this.notebookStructureTracker.trackNotebook(notebook);
 		this.notebookStructureTracker.clearState(notebook);
+		const format = this.alternativeNotebookContent.getFormat(this.promptContext?.request?.model);
 		const altDoc = this.alternativeNotebookContent.create(format).getAlternativeDocument(notebook);
 		return new LanguageModelToolResult([
 			new LanguageModelPromptTsxPart(
 				await renderPromptElementJSON(
 					this.instantiationService,
 					NotebookSummary,
-					{ notebook, altDoc },
+					{ notebook, altDoc, includeCellLines: true },
 					// If we are not called with tokenization options, have _some_ fake tokenizer
 					// otherwise we end up returning the entire document
 					options.tokenizationOptions ?? {
@@ -93,7 +93,8 @@ ToolRegistry.registerTool(NotebookSummaryTool);
 
 type NotebookStatePromptProps = PromptElementProps<{
 	notebook: vscode.NotebookDocument;
-	altDoc: AlternativeNotebookDocument;
+	altDoc: AlternativeNotebookDocument | undefined;
+	includeCellLines: boolean;
 }>;
 
 export class NotebookSummary extends PromptElement<NotebookStatePromptProps> {
@@ -118,6 +119,7 @@ export class NotebookSummary extends PromptElement<NotebookStatePromptProps> {
 	private getSummary() {
 		const hasAnyCellBeenExecuted = this.props.notebook.getCells().some(cell => cell.executionSummary?.executionOrder !== undefined && cell.executionSummary?.timing);
 		const altDoc = this.props.altDoc;
+		const includeCellLines = this.props.includeCellLines && !!altDoc;
 		return (
 			<>
 				Below is a summary of the notebook {this.promptPathRepresentationService.getFilePath(this.props.notebook.uri)}:<br />
@@ -131,8 +133,8 @@ export class NotebookSummary extends PromptElement<NotebookStatePromptProps> {
 					const cellId = getCellId(cell);
 					let executionSummary = '';
 
-					const altCellStartLine = altDoc.fromCellPosition(cell, new Position(0, 0)).line + 1;
-					const altCellEndLine = altDoc.fromCellPosition(cell, new Position(cell.document.lineCount - 1, 0)).line + 1;
+					const altCellStartLine = includeCellLines ? altDoc.fromCellPosition(cell, new Position(0, 0)).line + 1 : -1;
+					const altCellEndLine = includeCellLines ? altDoc.fromCellPosition(cell, new Position(cell.document.lineCount - 1, 0)).line + 1 : -1;
 					const cellLines = `From ${altCellStartLine} to ${altCellEndLine}`;
 					// If there's no timing, then means the notebook wasn't executed in current session.
 					// Timing information is generally not stored in notebooks.
@@ -152,7 +154,7 @@ export class NotebookSummary extends PromptElement<NotebookStatePromptProps> {
 					return (
 						<>{cellNumber}. Cell Id = {cellId}<br />
 							{indent}Cell Type = {cellType}{language}<br />
-							{indent}Cell Lines = {cellLines}<br />
+							{includeCellLines && <>{indent}Cell Lines = {cellLines}<br /></>}
 							{indent}{executionSummary}<br />
 							{outputs}
 						</>
