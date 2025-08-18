@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
-import { CHAT_MODEL } from '../../../platform/configuration/common/configurationService';
+import { CHAT_MODEL, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
@@ -35,7 +35,7 @@ import { IToolsService } from '../common/toolsService';
 import { ActionType } from './applyPatch/parser';
 import { CorrectedEditResult, healReplaceStringParams } from './editFileHealing';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
-import { EditError, NoChangeError, NoMatchError, applyEdit } from './editFileToolUtils';
+import { EditError, NoChangeError, NoMatchError, applyEdit, createEditConfirmation } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileOkForTool, resolveToolInputPath } from './toolUtils';
 
@@ -70,12 +70,15 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
 		@ITelemetryService protected readonly telemetryService: ITelemetryService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
-		@IExperimentationService private readonly experimentationService: IExperimentationService
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
+		@IConfigurationService protected readonly configurationService: IConfigurationService,
 	) { }
 
 	public abstract invoke(options: vscode.LanguageModelToolInvocationOptions<T>, token: vscode.CancellationToken): Promise<LanguageModelToolResult>;
 
 	protected abstract toolName(): ToolName;
+
+	protected abstract urisForInput(input: T): readonly URI[];
 
 	protected async prepareEditsForFile(options: vscode.LanguageModelToolInvocationOptions<T>, input: IAbstractReplaceStringInput, token: vscode.CancellationToken): Promise<IPrepareEdit> {
 		const uri = resolveToolInputPath(input.filePath, this.promptPathRepresentationService);
@@ -392,8 +395,10 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<T>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
-		return {
-			presentation: 'hidden'
-		};
+		return this.instantiationService.invokeFunction(
+			createEditConfirmation,
+			this.urisForInput(options.input),
+			() => '```json\n' + JSON.stringify(options.input, null, 2) + '\n```',
+		);
 	}
 }
