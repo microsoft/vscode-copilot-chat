@@ -518,6 +518,10 @@ async function fetchWithInstrumentation(
 		if (apim) {
 			logService.debug(`APIM request id: ${apim}`);
 		}
+		const ghRequestId = response.headers.get('x-github-request-id');
+		if (ghRequestId) {
+			logService.debug(`GH request id: ${ghRequestId}`);
+		}
 		// This ID is hopefully the one the same as ourRequestId, but it is not guaranteed.
 		// If they are different then we will override the original one we set in telemetryData above.
 		const modelRequestId = getRequestId(response, undefined);
