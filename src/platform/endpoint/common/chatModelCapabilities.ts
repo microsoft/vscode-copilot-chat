@@ -72,7 +72,7 @@ export function modelCanUseReplaceStringExclusively(model: LanguageModelChat | I
 }
 
 /**
- * The model is capable of image urls as the `image_url` parameter in requests.
+ * The model can accept image urls as the `image_url` parameter in requests.
  */
 export function modelCanUseImageURL(model: LanguageModelChat | IChatEndpoint): boolean {
 	return !model.family.startsWith('claude') && !model.family.startsWith('Anthropic');
