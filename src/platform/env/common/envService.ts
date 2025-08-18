@@ -58,6 +58,7 @@ export interface IEnvService {
 	useProductionTelemetry(): boolean;
 	useExperimentationService(): boolean;
 	useProductionTokenManager(): boolean;
+	useStaticGitHubAuthenticationService(): boolean;
 	updateReviewContextValues(): boolean;
 	enableLoggingActions(): boolean;
 	getBuildType(): 'prod' | 'dev';
@@ -114,6 +115,8 @@ export abstract class AbstractEnvService implements IEnvService {
 	abstract useExperimentationService(): boolean;
 
 	abstract useProductionTokenManager(): boolean;
+
+	abstract useStaticGitHubAuthenticationService(): boolean;
 
 	abstract updateReviewContextValues(): boolean;
 

@@ -107,6 +107,10 @@ export class EnvServiceImpl implements IEnvService {
 		return this.extensionContext.extensionMode !== vscode.ExtensionMode.Test && !this.isScenarioAutomation();
 	}
 
+	useStaticGitHubAuthenticationService(): boolean {
+		return this.isScenarioAutomation();
+	}
+
 	updateReviewContextValues(): boolean {
 		return this.extensionContext.extensionMode !== vscode.ExtensionMode.Test || this.isScenarioAutomation();
 	}

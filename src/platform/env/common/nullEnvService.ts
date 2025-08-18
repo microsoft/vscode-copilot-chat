@@ -98,6 +98,10 @@ export class NullEnvService extends AbstractEnvService {
 		return false;
 	}
 
+	override useStaticGitHubAuthenticationService(): boolean {
+		return false;
+	}
+
 	override updateReviewContextValues(): boolean {
 		return false;
 	}

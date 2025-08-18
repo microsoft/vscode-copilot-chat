@@ -147,7 +147,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 		builder.define(ICopilotTokenManager, getOrCreateTestingCopilotTokenManager());
 	}
 
-	if (envService.isScenarioAutomation()) {
+	if (envService.useStaticGitHubAuthenticationService()) {
 		builder.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [getStaticGitHubToken]));
 	}
 	else {
