@@ -615,7 +615,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				let attemptsRemaining = 5;
 				const delayBetweenAttempts = 1000;
 
-				while (attemptsRemaining--) {
+				while (attemptsRemaining-- > 0) {
 					const currentStatus = (await raceCancellationError(this._repoTracker.updateRepoStateFromEndpoint(repo.repo, repo.remoteInfo, false, token), token)).status;
 					if (currentStatus === RepoStatus.Ready) {
 						// We're good to start searching
