@@ -225,7 +225,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			tracer.trace(`using next edit suggestion from ${suggestionInfo.source}`);
 			let range: Range | undefined;
 			let isInlineCompletion: boolean = false;
-			let completionItem: Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown'> | undefined;
+			let completionItem: Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined;
 
 			const documents = doc.fromOffsetRange(result.edit.replaceRange);
 			if (!documents.length) {
@@ -278,6 +278,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 				info: suggestionInfo,
 				telemetryBuilder,
 				action: learnMoreAction,
+				isInlineEdit: !isInlineCompletion,
 				showInlineEditMenu: !serveAsCompletionsProvider,
 				wasShown: false
 			};
@@ -303,7 +304,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 	private createNextEditorEditCompletionItem(requestingPosition: Position,
 		nextEdit: { document: TextDocument; range: Range; insertText: string }
-	): Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown'> {
+	): Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> {
 		// Display the next edit in the current document, but with a command to open the next edit in the other document.
 		// & range of this completion item will be the same as the current documents cursor position.
 		const range = new Range(requestingPosition, requestingPosition);
@@ -323,7 +324,6 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			insertText: nextEdit.insertText,
 			showRange: range,
 			command,
-			isInlineEdit: true,
 			displayLocation,
 			isEditInAnotherDocument: true
 		};
@@ -335,7 +335,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		position: Position,
 		range: Range,
 		result: NonNullable<(NextEditResult | DiagnosticsNextEditResult)['result']>,
-	): Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown'> | undefined {
+	): Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined {
 
 		// Only show edit when the cursor is max 4 lines away from the edit
 		const showRange = result.showRangePreference === ShowNextEditPreference.AroundEdit
@@ -352,14 +352,11 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			label: result.displayLocation.label
 		} : undefined;
 
-		const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
-		const isInlineCompletion = allowInlineCompletions && isInlineSuggestion(position, document, range, result.edit.newText);
 
 		return {
 			range,
 			insertText: result.edit.newText,
 			showRange,
-			isInlineEdit: !isInlineCompletion,
 			displayLocation,
 		};
 	}
