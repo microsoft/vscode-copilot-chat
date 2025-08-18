@@ -807,10 +807,6 @@
 							"type": "string",
 							"description": "An absolute path to the notebook file to edit, or the URI of a untitled, not yet named, file, such as `untitled:Untitled-1."
 						},
-						"explanation": {
-							"type": "string",
-							"description": "A one-sentence description of edit operation. This will be shown to the user before the tool is run."
-						},
 						"cellId": {
 							"type": "string",
 							"description": "Id of the cell that needs to be deleted or edited. Use the value `TOP`, `BOTTOM` when inserting a cell at the top or bottom of the notebook, else provide the id of the cell after which a new cell is to be inserted. Remember, if a cellId is provided and editType=insert, then a cell will be inserted after the cell with the provided cellId."

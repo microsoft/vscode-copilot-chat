@@ -37,7 +37,6 @@ import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 
 export interface IEditNotebookToolParams {
 	filePath: string;
-	explanation?: string;
 	cellId?: string;
 	newCode?: string | string[];
 	language?: string;
@@ -313,8 +312,8 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IEditNotebookToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
 		return {
-			invocationMessage: options.input.explanation || l10n.t('Editing notebook'),
-			presentation: options.input.explanation ? undefined : 'hidden'
+			invocationMessage: l10n.t('Editing notebook'),
+			presentation: 'hidden'
 		};
 	}
 
@@ -670,25 +669,21 @@ async function sendEditNotebookCellTelemetry(telemetryService: ITelemetryService
 🛠️ edit_notebook_file (call_j3TEKk5R0KHfMYhJo1x88QeS) {
 	"filePath": "/Users/donjayamanne/demo/chat/sample.ipynb",
 	"cellIndex": 2,
-	"explanation": "Deleting empty cell",
 	"editType": "delete"
 }
 🛠️ edit_notebook_file (call_Gv6WxrMzSIDMPE0lqqM3GbWo) {
 	"filePath": "/Users/donjayamanne/demo/chat/sample.ipynb",
 	"cellIndex": 3,
-	"explanation": "Deleting empty cell",
 	"editType": "delete"
 }
 🛠️ edit_notebook_file (call_iPokgpiaeYDV7JwnbAFgdgZD) {
 	"filePath": "/Users/donjayamanne/demo/chat/sample.ipynb",
 	"cellIndex": 4,
-	"explanation": "Deleting empty cell",
 	"editType": "delete"
 }
 🛠️ edit_notebook_file (call_8t3Ls4C3QLVDAeFXwU1dE7Hh) {
 	"filePath": "/Users/donjayamanne/demo/chat/sample.ipynb",
 	"cellIndex": 6,
-	"explanation": "Deleting empty cell",
 	"editType": "delete"
 }
 ````
