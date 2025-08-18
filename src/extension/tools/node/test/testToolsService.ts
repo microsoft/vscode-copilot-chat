@@ -5,14 +5,17 @@
 
 import type * as vscode from 'vscode';
 import { packageJson } from '../../../../platform/env/common/packagejson';
+import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ILanguageDiagnosticsService } from '../../../../platform/languages/common/languageDiagnosticsService';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { CancellationError } from '../../../../util/vs/base/common/errors';
 import { Iterable } from '../../../../util/vs/base/common/iterator';
 import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelToolInformation, LanguageModelToolResult2 } from '../../../../vscodeTypes';
+import { INewWorkspaceStoredData, NEW_WORKSPACE_STORAGE_KEY } from '../../../getting-started/common/newWorkspaceContext';
 import { getContributedToolName, getToolName, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolName } from '../../common/toolNames';
 import { ICopilotTool, ICopilotToolCtor, ToolRegistry } from '../../common/toolsRegistry';
 import { BaseToolsService, IToolsService } from '../../common/toolsService';
@@ -49,6 +52,8 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 		disabledTools: Set<string>,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@ILogService logService: ILogService,
+		@IVSCodeExtensionContext private readonly _extensionContext?: IVSCodeExtensionContext,
+		@IWorkspaceService private readonly _workspaceService?: IWorkspaceService,
 	) {
 		super(logService);
 
@@ -139,11 +144,49 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 		return undefined;
 	}
 
+	/**
+	 * Check if we're in a workspace creation context where get_project_setup_info should be enabled
+	 */
+	private _isInWorkspaceCreationContext(): boolean {
+		if (!this._extensionContext || !this._workspaceService) {
+			return false;
+		}
+
+		const workspace = this._workspaceService.getWorkspaceFolders();
+		if (!workspace || workspace.length === 0) {
+			return false;
+		}
+
+		const newWorkspaceContextsList = this._extensionContext.globalState.get<INewWorkspaceStoredData[]>(NEW_WORKSPACE_STORAGE_KEY, []);
+		const currentWorkspaceUri = workspace[0].toString();
+		
+		// Check if current workspace is in the new workspace contexts list
+		const workspaceContext = newWorkspaceContextsList.find(context => context.workspaceURI === currentWorkspaceUri);
+		return workspaceContext !== undefined;
+	}
+
 	getEnabledTools(request: vscode.ChatRequest, filter?: (tool: LanguageModelToolInformation) => boolean | undefined): LanguageModelToolInformation[] {
 		const toolMap = new Map(this.tools.map(t => [t.name, t]));
 
 		const packageJsonTools = getPackagejsonToolsForTest();
 		return this.tools.filter(tool => {
+			// Special handling for get_project_setup_info tool - hide it until workspace creation
+			if (tool.name === ToolName.GetProjectSetupInfo) {
+				// Check if create_new_workspace is referenced in this request (enables the tool immediately)
+				const hasCreateWorkspaceReference = request.toolReferences.some(ref => ref.name === ToolName.CreateNewWorkspace);
+				if (hasCreateWorkspaceReference) {
+					return true;
+				}
+
+				// Check if we're in a workspace creation context
+				if (this._isInWorkspaceCreationContext()) {
+					return true;
+				}
+
+				// Otherwise, hide the tool
+				return false;
+			}
+
 			// 0. Check if the tool was enabled or disabled via the tool picker
 			const toolPickerSelection = request.tools.get(getContributedToolName(tool.name));
 			if (typeof toolPickerSelection === 'boolean') {
