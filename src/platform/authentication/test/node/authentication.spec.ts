@@ -14,7 +14,7 @@ import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { createPlatformServices } from '../../../test/node/services';
-import { TestAuthenticationService } from '../../../test/node/testAuthenticationService';
+import { StaticGitHubAuthenticationService } from '../../common/staticGitHubAuthenticationService';
 import { CopilotToken } from '../../common/copilotToken';
 import { ICopilotTokenStore } from '../../common/copilotTokenStore';
 import { FixedCopilotTokenManager } from '../../node/copilotTokenManager';
@@ -24,7 +24,7 @@ suite('AuthenticationService', function () {
 	// These will be used to test the authentication service, but eventually these will
 	// be folded into the authentication service itself.
 	let copilotTokenManager: FixedCopilotTokenManager;
-	let authenticationService: TestAuthenticationService;
+	let authenticationService: StaticGitHubAuthenticationService;
 
 	const testToken = 'tid=test';
 
@@ -40,7 +40,7 @@ suite('AuthenticationService', function () {
 			accessor.get(IFetcherService),
 			accessor.get(IEnvService)
 		);
-		authenticationService = new TestAuthenticationService(
+		authenticationService = new StaticGitHubAuthenticationService(
 			() => testToken,
 			accessor.get(ILogService),
 			accessor.get(ICopilotTokenStore),

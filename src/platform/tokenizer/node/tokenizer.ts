@@ -145,7 +145,10 @@ class BPETokenizer extends Disposable implements ITokenizer {
 			case Raw.ChatCompletionContentPartKind.Opaque:
 				return text.tokenUsage || 0;
 			case Raw.ChatCompletionContentPartKind.Image:
-				return calculateImageTokenCost(text.imageUrl.url, text.imageUrl.detail);
+				if (text.imageUrl.url.startsWith('data')) {
+					return calculateImageTokenCost(text.imageUrl.url, text.imageUrl.detail);
+				}
+				return this._textTokenLength(text.imageUrl.url);
 			case Raw.ChatCompletionContentPartKind.CacheBreakpoint:
 				return 0;
 			default:
@@ -206,8 +209,12 @@ class BPETokenizer extends Disposable implements ITokenizer {
 				const casted = value as any;
 				if (casted.type === 'text') {
 					numTokens += await this.tokenLength(casted.text);
-				} else if (casted.type === 'image_url' && casted.image_url && casted.image_url.url.startsWith('data')) {
-					numTokens += calculateImageTokenCost(casted.image_url.url, casted.image_url.detail);
+				} else if (casted.type === 'image_url' && casted.image_url) {
+					if (casted.image_url.url.startsWith('data')) {
+						numTokens += calculateImageTokenCost(casted.image_url.url, casted.image_url.detail);
+					} else {
+						numTokens += await this.tokenLength(casted.image_url.url);
+					}
 				} else {
 					let newTokens = await this.countMessageObjectTokens(value);
 					if (key === 'tool_calls') {

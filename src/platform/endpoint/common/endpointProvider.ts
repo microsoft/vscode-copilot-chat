@@ -33,7 +33,6 @@ export type IChatModelCapabilities = {
 		vision?: boolean;
 		prediction?: boolean;
 		thinking?: boolean;
-		statefulResponses?: boolean;
 	};
 };
 
@@ -41,6 +40,11 @@ type ICompletionsModelCapabilities = {
 	type: 'completion';
 	family: string;
 	tokenizer: TokenizerType;
+}
+
+export enum ModelSupportedEndpoint {
+	ChatCompletions = '/chat/completions',
+	Responses = '/responses'
 }
 
 export interface IModelAPIResponse {
@@ -54,6 +58,7 @@ export interface IModelAPIResponse {
 	version: string;
 	billing?: { is_premium: boolean; multiplier: number; restricted_to?: string[] };
 	capabilities: IChatModelCapabilities | ICompletionsModelCapabilities;
+	supported_endpoints?: ModelSupportedEndpoint[];
 }
 
 export type IChatModelInformation = IModelAPIResponse & {

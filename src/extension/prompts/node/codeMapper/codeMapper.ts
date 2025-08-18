@@ -124,7 +124,7 @@ function emitCodeLine(line: string, uri: Uri, existingDocument: TextDocumentSnap
 	}
 }
 
-export async function processFullRewrite(uri: Uri, document: TextDocumentSnapshot, newContent: string, outputStream: MappedEditsResponseStream, token: CancellationToken, pushedLines: string[]): Promise<void> {
+export async function processFullRewrite(uri: Uri, document: TextDocumentSnapshot | undefined, newContent: string, outputStream: MappedEditsResponseStream, token: CancellationToken, pushedLines: string[]): Promise<void> {
 	for (const line of newContent.split(/\r?\n/)) {
 		emitCodeLine(line, uri, document, outputStream, pushedLines, token);
 	}

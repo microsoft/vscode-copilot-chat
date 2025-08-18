@@ -784,7 +784,7 @@ export class TelemetrySender implements IDisposable {
 				fetchTime: fetchTime_,
 				promptTokens: usage?.prompt_tokens,
 				responseTokens: usage?.completion_tokens,
-				cachedTokens: usage?.prompt_tokens_details.cached_tokens,
+				cachedTokens: usage?.prompt_tokens_details?.cached_tokens,
 				acceptedPredictionTokens: usage?.completion_tokens_details?.accepted_prediction_tokens,
 				rejectedPredictionTokens: usage?.completion_tokens_details?.rejected_prediction_tokens,
 				hasNextEdit: this._boolToNum(hasNextEdit),

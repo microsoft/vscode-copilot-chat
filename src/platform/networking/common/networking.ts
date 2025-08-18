@@ -154,7 +154,6 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly supportsToolCalls: boolean;
 	readonly supportsVision: boolean;
 	readonly supportsPrediction: boolean;
-	readonly supportsStatefulResponses: boolean;
 	readonly showInModelPicker: boolean;
 	readonly isPremium?: boolean;
 	readonly multiplier?: number;

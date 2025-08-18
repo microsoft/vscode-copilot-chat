@@ -22,7 +22,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.104.0-20250811",
+		"vscode": "^1.104.0-20250815",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -115,8 +115,8 @@
 		"authLearnMore",
 		"testObserver",
 		"aiTextSearchProvider@2",
-		"chatParticipantPrivate@9",
-		"chatProvider",
+		"chatParticipantPrivate@10",
+		"chatProvider@1",
 		"contribDebugCreateConfiguration",
 		"chatReferenceDiagnostic",
 		"textSearchProvider2",
@@ -796,7 +796,7 @@
 				"name": "copilot_editNotebook",
 				"toolReferenceName": "editNotebook",
 				"displayName": "%copilot.tools.editNotebook.name%",
-				"modelDescription": "This is a tool for editing an existing Notebook file in the workspace. Generate the \"explanation\" property first.\nThe system is very smart and can understand how to apply your edits to the notebooks.\nWhen updating the content of an existing cell, ensure newCode includes at least 3-5 lines of context both before and after the new changes, preserving whitespace and indentation exactly.",
+				"modelDescription": "This is a tool for editing an existing Notebook file in the workspace. Generate the \"explanation\" property first.\nThe system is very smart and can understand how to apply your edits to the notebooks.\nWhen updating the content of an existing cell, ensure newCode preserves whitespace and indentation exactly and does NOT include any code markers such as (...existing code...).",
 				"tags": [
 					"enable_other_tool_copilot_getNotebookSummary"
 				],
@@ -806,10 +806,6 @@
 						"filePath": {
 							"type": "string",
 							"description": "An absolute path to the notebook file to edit, or the URI of a untitled, not yet named, file, such as `untitled:Untitled-1."
-						},
-						"explanation": {
-							"type": "string",
-							"description": "A one-sentence description of edit operation. This will be shown to the user before the tool is run."
 						},
 						"cellId": {
 							"type": "string",
@@ -1349,7 +1345,7 @@
 					}
 				]
 			},
-{
+			{
 				"id": "github.copilot.notebook",
 				"name": "GitHubCopilot",
 				"fullName": "GitHub Copilot",
@@ -1629,6 +1625,11 @@
 			{
 				"vendor": "openrouter",
 				"displayName": "OpenRouter",
+				"managementCommand": "github.copilot.chat.manageBYOK"
+			},
+			{
+				"vendor": "customoai",
+				"displayName": "Custom OpenAI Compatible Models",
 				"managementCommand": "github.copilot.chat.manageBYOK"
 			}
 		],
@@ -2774,14 +2775,62 @@
 						},
 						"markdownDescription": "Configure custom Azure OpenAI models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
 					},
-					"github.copilot.chat.byok.responsesApi": {
-						"type": "boolean",
-						"default": false,
+					"github.copilot.chat.customOAIModels": {
+						"type": "object",
+						"default": {},
 						"tags": [
-							"experimental",
-							"onExP"
+							"experimental"
 						],
-						"markdownDescription": "%github.copilot.config.byok.responsesApi%"
+						"additionalProperties": {
+							"type": "object",
+							"properties": {
+								"name": {
+									"type": "string",
+									"description": "Display name of the custom OpenAI model"
+								},
+								"url": {
+									"type": "string",
+									"description": "URL endpoint for the custom OpenAI-compatible model"
+								},
+								"toolCalling": {
+									"type": "boolean",
+									"description": "Whether the model supports tool calling"
+								},
+								"vision": {
+									"type": "boolean",
+									"description": "Whether the model supports vision capabilities"
+								},
+								"maxInputTokens": {
+									"type": "number",
+									"description": "Maximum number of input tokens supported by the model"
+								},
+								"maxOutputTokens": {
+									"type": "number",
+									"description": "Maximum number of output tokens supported by the model"
+								},
+								"requiresAPIKey": {
+									"type": "boolean",
+									"description": "Whether the model requires an API key for authentication",
+									"default": true
+								},
+								"thinking": {
+									"type": "boolean",
+									"default": false,
+									"description": "Whether the model supports thinking capabilities"
+								}
+							},
+							"required": [
+								"name",
+								"url",
+								"toolCalling",
+								"vision",
+								"maxInputTokens",
+								"maxOutputTokens",
+								"requiresAPIKey"
+							],
+							"additionalProperties": false
+						},
+						"markdownDescription": "Configure custom OpenAI-compatible models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
 					},
 					"github.copilot.chat.enableRetryAfterFilteredResponse": {
 						"type": "boolean",
@@ -3737,13 +3786,15 @@
 		"vite-plugin-wasm": "^3.5.0",
 		"vitest": "^3.0.5",
 		"yaml": "^2.8.0",
-		"zeromq": "github:rebornix/zeromq.js#a19e8e373b3abc677f91b936d3f00d49b1b61792"
+		"zeromq": "github:rebornix/zeromq.js#a19e8e373b3abc677f91b936d3f00d49b1b61792",
+        "js-yaml": "^4.1.0",
+		"@types/js-yaml": "^4.0.9"
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "^0.56.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
-		"@vscode/copilot-api": "^0.1.4",
+		"@vscode/copilot-api": "^0.1.5",
 		"@vscode/extension-telemetry": "^1.0.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",
@@ -3760,7 +3811,8 @@
 		"undici": "^7.11.0",
 		"vscode-languageserver-textdocument": "^1.0.12",
 		"vscode-tas-client": "^0.1.84",
-		"web-tree-sitter": "^0.23.0"
+		"web-tree-sitter": "^0.23.0",
+        "diff": "^8.0.2"
 	},
 	"overrides": {
 		"@aminya/node-gyp-build": "npm:node-gyp-build@4.8.1",

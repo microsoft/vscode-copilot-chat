@@ -273,12 +273,15 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(`duration         : ${entry.endTime.getTime() - entry.startTime.getTime()}ms`);
 		result.push(`ourRequestId     : ${entry.chatParams.ourRequestId}`);
 
-		let statefulMarker: { statefulMarker: { modelId: string; marker: string }; index: number } | undefined;
-		if ('messages' in entry.chatParams) {
-			statefulMarker = Iterable.first(getAllStatefulMarkersAndIndicies(entry.chatParams.messages));
-		}
-		if (statefulMarker) {
-			result.push(`lastResponseId   : ${statefulMarker.statefulMarker.marker} using ${statefulMarker.statefulMarker.modelId}`);
+		const ignoreStatefulMarker = 'ignoreStatefulMarker' in entry.chatParams && entry.chatParams.ignoreStatefulMarker;
+		if (!ignoreStatefulMarker) {
+			let statefulMarker: { statefulMarker: { modelId: string; marker: string }; index: number } | undefined;
+			if ('messages' in entry.chatParams) {
+				statefulMarker = Iterable.first(getAllStatefulMarkersAndIndicies(entry.chatParams.messages));
+			}
+			if (statefulMarker) {
+				result.push(`lastResponseId   : ${statefulMarker.statefulMarker.marker} using ${statefulMarker.statefulMarker.modelId}`);
+			}
 		}
 
 		if (entry.type === LoggedRequestKind.ChatMLSuccess) {

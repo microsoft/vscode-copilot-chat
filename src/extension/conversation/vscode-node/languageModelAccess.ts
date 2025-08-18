@@ -16,7 +16,7 @@ import { IAutomodeService } from '../../../platform/endpoint/common/automodeServ
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { encodeStatefulMarker } from '../../../platform/endpoint/common/statefulMarkerContainer';
-import { IEnvService } from '../../../platform/env/common/envService';
+import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../platform/log/common/logService';
 import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
@@ -32,6 +32,7 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ExtensionMode } from '../../../vscodeTypes';
+import type { LMResponsePart } from '../../byok/common/byokProvider';
 import { IExtensionContribution } from '../../common/contributions';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { isImageDataPart } from '../common/languageModelChatMessageHelpers';
@@ -63,7 +64,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 		this._lmWrapper = this._instantiationService.createInstance(CopilotLanguageModelWrapper);
 
-		if (this._vsCodeExtensionContext.extensionMode === ExtensionMode.Test) {
+		if (this._vsCodeExtensionContext.extensionMode === ExtensionMode.Test && !isScenarioAutomation) {
 			this._logService.warn('[LanguageModelAccess] LanguageModels and Embeddings are NOT AVAILABLE in test mode.');
 			return;
 		}
@@ -84,13 +85,13 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 	}
 
 	private async _registerChatProvider(): Promise<void> {
-		const provider: vscode.LanguageModelChatProvider2 = {
-			onDidChange: this._onDidChange.event,
-			prepareLanguageModelChat: this._prepareLanguageModelChat.bind(this),
+		const provider: vscode.LanguageModelChatProvider = {
+			onDidChangeLanguageModelInformation: this._onDidChange.event,
+			prepareLanguageModelChatInformation: this._prepareLanguageModelChat.bind(this),
 			provideLanguageModelChatResponse: this._provideLanguageModelChatResponse.bind(this),
 			provideTokenCount: this._provideTokenCount.bind(this)
 		};
-		this._register(vscode.lm.registerChatModelProvider('copilot', provider));
+		this._register(vscode.lm.registerLanguageModelChatProvider('copilot', provider));
 	}
 
 	private async _prepareLanguageModelChat(options: { silent: boolean }, token: vscode.CancellationToken): Promise<vscode.LanguageModelChatInformation[]> {
@@ -148,8 +149,8 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				id: endpoint.model,
 				name: endpoint.model === AutoChatEndpoint.id ? 'Auto' : endpoint.name,
 				family: endpoint.family,
-				description: modelDescription,
-				cost: multiplierString,
+				tooltip: modelDescription,
+				detail: multiplierString,
 				category: modelCategory,
 				version: endpoint.version,
 				maxInputTokens: endpoint.modelMaxPromptTokens - baseCount - BaseTokensPerCompletion,
@@ -175,7 +176,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		model: vscode.LanguageModelChatInformation,
 		messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>,
 		options: vscode.LanguageModelChatRequestHandleOptions,
-		progress: vscode.Progress<vscode.ChatResponseFragment2>,
+		progress: vscode.Progress<LMResponsePart>,
 		token: vscode.CancellationToken
 	): Promise<any> {
 		const endpoint = this._chatEndpoints.find(e => e.model === model.id);
@@ -407,16 +408,16 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		);
 	}
 
-	async provideLanguageModelResponse(endpoint: IChatEndpoint, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.LanguageModelChatRequestOptions, extensionId: string, progress: vscode.Progress<vscode.ChatResponseFragment2>, token: vscode.CancellationToken): Promise<any> {
+	async provideLanguageModelResponse(endpoint: IChatEndpoint, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.LanguageModelChatRequestOptions, extensionId: string, progress: vscode.Progress<LMResponsePart>, token: vscode.CancellationToken): Promise<any> {
 		const finishCallback: FinishedCallback = async (_text, index, delta): Promise<undefined> => {
 			if (delta.text) {
-				progress.report({ index, part: new vscode.LanguageModelTextPart(delta.text) });
+				progress.report(new vscode.LanguageModelTextPart(delta.text));
 			}
 			if (delta.copilotToolCalls) {
 				for (const call of delta.copilotToolCalls) {
 					try {
 						const parameters = JSON.parse(call.arguments);
-						progress.report({ index, part: new vscode.LanguageModelToolCallPart(call.id, call.name, parameters) });
+						progress.report(new vscode.LanguageModelToolCallPart(call.id, call.name, parameters));
 					} catch (err) {
 						this._logService.error(err, `Got invalid JSON for tool call: ${call.arguments}`);
 						throw new Error('Invalid JSON for tool call');
@@ -425,17 +426,16 @@ export class CopilotLanguageModelWrapper extends Disposable {
 			}
 			if (delta.thinking) {
 				const text = delta.thinking.text ?? '';
-				progress.report({ index, part: new vscode.LanguageModelThinkingPart(text, delta.thinking.id, delta.thinking.metadata) });
+				progress.report(new vscode.LanguageModelThinkingPart(text, delta.thinking.id, delta.thinking.metadata));
 
 				// @karthiknadig: remove this when LM API becomes available
 				this._thinkingDataService.update(index, delta.thinking);
 			}
 
 			if (delta.statefulMarker) {
-				progress.report({
-					index,
-					part: new vscode.LanguageModelDataPart(encodeStatefulMarker(endpoint.model, delta.statefulMarker), CustomDataPartMimeTypes.StatefulMarker)
-				});
+				progress.report(
+					new vscode.LanguageModelDataPart(encodeStatefulMarker(endpoint.model, delta.statefulMarker), CustomDataPartMimeTypes.StatefulMarker)
+				);
 			}
 
 			return undefined;

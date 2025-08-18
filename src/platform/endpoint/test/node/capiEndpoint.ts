@@ -7,8 +7,10 @@ import { RequestType } from '@vscode/copilot-api';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
+import { IConfigurationService } from '../../../configuration/common/configurationService';
 import { IEnvService } from '../../../env/common/envService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
+import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../../common/capiClient';
@@ -29,7 +31,9 @@ export class CAPITestEndpoint extends ChatEndpoint {
 		@IAuthenticationService authService: IAuthenticationService,
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
-		@IInstantiationService instantiationService: IInstantiationService
+		@IInstantiationService instantiationService: IInstantiationService,
+		@IConfigurationService configurationService: IConfigurationService,
+		@IExperimentationService experimentationService: IExperimentationService
 	) {
 		super(modelMetadata,
 			domainService,
@@ -40,7 +44,9 @@ export class CAPITestEndpoint extends ChatEndpoint {
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
-			instantiationService
+			instantiationService,
+			configurationService,
+			experimentationService
 		);
 	}
 

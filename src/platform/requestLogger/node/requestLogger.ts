@@ -105,6 +105,7 @@ export interface ILoggedPendingRequest {
 	location: ChatLocation;
 	intent?: string;
 	postOptions?: OptionalChatRequestParams;
+	ignoreStatefulMarker?: boolean;
 }
 
 export type LoggedInfo = ILoggedElementInfo | ILoggedRequestInfo | ILoggedToolCall;

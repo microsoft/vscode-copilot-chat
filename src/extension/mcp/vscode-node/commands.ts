@@ -9,6 +9,7 @@ import { JsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { createSha256Hash } from '../../../util/common/crypto';
 import { extractCodeBlocks } from '../../../util/common/markdown';
 import { mapFindFirst } from '../../../util/vs/base/common/arraysFind';
 import { DeferredPromise, raceCancellation } from '../../../util/vs/base/common/async';
@@ -153,7 +154,7 @@ export class McpSetupCommands extends Disposable {
 					finalState: finalState,
 					configurationType: result?.type,
 					packageType: this.pendingSetup?.validateArgs.type,
-					packageName: this.pendingSetup?.pendingArgs.name,
+					packageName: await this.lowerHash(this.pendingSetup?.pendingArgs.name || args.name),
 					packageVersion: this.pendingSetup?.pendingArgs.version,
 				}, {
 					durationMs: this.pendingSetup?.stopwatch.elapsed() ?? -1
@@ -182,8 +183,18 @@ export class McpSetupCommands extends Disposable {
 			this.telemetryService.sendMSFTTelemetryEvent(
 				'mcp.setup.validatePackage',
 				result.state === 'ok' ?
-					{ state: result.state, packageType: args.type, packageName: result.name ?? args.name, packageVersion: result.version } :
-					{ state: result.state, packageType: args.type, packageName: args.name, errorType: result.errorType },
+					{
+						state: result.state,
+						packageType: args.type,
+						packageName: await this.lowerHash(result.name || args.name),
+						packageVersion: result.version
+					} :
+					{
+						state: result.state,
+						packageType: args.type,
+						packageName: await this.lowerHash(args.name),
+						errorType: result.errorType
+					},
 				{ durationMs: sw.elapsed() });
 
 			// return the minimal result to avoid leaking implementation details
@@ -195,6 +206,10 @@ export class McpSetupCommands extends Disposable {
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.check', () => {
 			return 1;
 		}));
+	}
+
+	private async lowerHash(input: string | undefined) {
+		return input ? await createSha256Hash(input.toLowerCase()) : undefined;
 	}
 
 	private async enqueuePendingSetup(validateArgs: IValidatePackageArgs, pendingArgs: IPendingSetupArgs, sw: StopWatch) {

@@ -94,6 +94,7 @@ import { LaunchConfigService } from '../../onboardDebug/vscode/launchConfigServi
 import { ChatMLFetcherImpl } from '../../prompt/node/chatMLFetcher';
 import { IFeedbackReporter, NullFeedbackReporterImpl } from '../../prompt/node/feedbackReporter';
 import { IPromptVariablesService } from '../../prompt/node/promptVariablesService';
+import { ITodoListContextProvider, TodoListContextProvider } from '../../prompt/node/todoListContextProvider';
 import { GitDiffService } from '../../prompt/vscode-node/gitDiffService';
 import { PromptVariablesServiceImpl } from '../../prompt/vscode-node/promptVariablesService';
 import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
@@ -175,6 +176,7 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(ISearchService, new SyncDescriptor(SearchServiceImpl));
 	testingServiceCollection.define(IToolGroupingCache, new SyncDescriptor(ToolGroupingCache));
 	testingServiceCollection.define(IToolGroupingService, new SyncDescriptor(ToolGroupingService));
+	testingServiceCollection.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
 
 	return testingServiceCollection;
 }

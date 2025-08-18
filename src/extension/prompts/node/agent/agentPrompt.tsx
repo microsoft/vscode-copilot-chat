@@ -31,6 +31,7 @@ import { GlobalContextMessageMetadata, RenderedUserMessageMetadata, Turn } from 
 import { InternalToolReference } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { ToolName } from '../../../tools/common/toolNames';
+import { TodoListContextPrompt } from '../../../tools/node/todoListContextPrompt';
 import { CopilotIdentityRules, GPT5CopilotIdentityRule } from '../base/copilotIdentity';
 import { IPromptEndpoint, renderPromptElement } from '../base/promptRenderer';
 import { Gpt5SafetyRule, SafetyRules } from '../base/safetyRules';
@@ -349,6 +350,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<EditedFileEvents editedFileEvents={this.props.editedFileEvents} />
 						<NotebookSummaryChange />
 						{hasTerminalTool && <TerminalAndTaskStatePromptElement sessionId={this.props.sessionId} />}
+						{hasTodoTool && <TodoListContextPrompt sessionId={this.props.sessionId} />}
 					</Tag>
 					<CurrentEditorContext endpoint={this.props.endpoint} />
 					<RepoContext />
