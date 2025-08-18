@@ -30,7 +30,7 @@
 	"github.copilot.command.buildLocalWorkspaceIndex": "Build Local Workspace Index",
 	"github.copilot.command.buildRemoteWorkspaceIndex": "Build Remote Workspace Index",
 	"github.copilot.viewsWelcome.signIn": {
-		"message": "Sign in to enable features powered by Github Copilot.\n\n[Sign in](command:workbench.action.chat.triggerSetupForceSignIn)",
+		"message": "Sign in to enable features powered by GitHub Copilot.\n\n[Sign in](command:workbench.action.chat.triggerSetupForceSignIn)",
 		"comment": [
 			"{Locked='['}",
 			"{Locked='](command:workbench.action.chat.triggerSetupForceSignIn)'}"
