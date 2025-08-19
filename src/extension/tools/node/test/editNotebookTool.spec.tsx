@@ -21,6 +21,8 @@ import { createExtensionUnitTestingServices } from '../../../test/node/services'
 import { EditNotebookTool, IEditNotebookToolParams } from '../editNotebookTool';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
+import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 
 describe('Edit Notebook Tool', () => {
 	const disposables = new DisposableStore();
@@ -39,6 +41,8 @@ describe('Edit Notebook Tool', () => {
 			accessor.get(ITelemetryService),
 			accessor.get(IEndpointProvider),
 			accessor.get(IFileSystemService),
+			accessor.get(IConfigurationService),
+			accessor.get(IExperimentationService),
 		);
 		return [editTool, workspaceService] as const;
 	}
@@ -110,7 +114,7 @@ describe('Edit Notebook Tool', () => {
 		const [editTool, workspaceService] = initialize(notebook.document);
 
 		const promise = invokeTool(notebook, editTool,
-			[{ filePath: notebook.uri.toString(), editType: 'insert', newCode: 'print(1)', language: 'python', cellId: 'top', explanation: '' }]
+			[{ filePath: notebook.uri.toString(), editType: 'insert', newCode: 'print(1)', language: 'python', cellId: 'top' }]
 			, notebookEdits);
 		await waitForEditCount(1, notebookEdits);
 		workspaceService.didChangeNotebookDocumentEmitter.fire({
@@ -376,7 +380,7 @@ describe('Edit Notebook Tool', () => {
 		const [editTool, workspaceService] = initialize(notebook.document);
 
 		const promise = invokeTool(notebook, editTool,
-			[{ filePath: notebook.uri.toString(), explanation: '', editType: 'insert', newCode: 'print(1234)', language: 'python', cellId: getCellId(notebook.document.cellAt(0)) }]
+			[{ filePath: notebook.uri.toString(), editType: 'insert', newCode: 'print(1234)', language: 'python', cellId: getCellId(notebook.document.cellAt(0)) }]
 			, notebookEdits);
 		await waitForEditCount(1, notebookEdits);
 		workspaceService.didChangeNotebookDocumentEmitter.fire({
@@ -576,7 +580,7 @@ describe('Edit Notebook Tool', () => {
 		const [editTool, workspaceService] = initialize(notebook.document);
 
 		const promise = invokeTool(notebook, editTool,
-			[{ filePath: notebook.document.cellAt(0).document.uri.toString(), explanation: '', editType: 'insert', newCode: 'print(1234)', language: 'python', cellId: getCellId(notebook.document.cellAt(0)) }]
+			[{ filePath: notebook.document.cellAt(0).document.uri.toString(), editType: 'insert', newCode: 'print(1234)', language: 'python', cellId: getCellId(notebook.document.cellAt(0)) }]
 			, notebookEdits);
 		await waitForEditCount(1, notebookEdits);
 		workspaceService.didChangeNotebookDocumentEmitter.fire({
@@ -728,7 +732,7 @@ describe('Edit Notebook Tool', () => {
 
 		const cell2 = notebook.document.cellAt(2);
 		const promise = invokeTool(notebook, editTool, [
-			{ filePath: notebook.uri.toString(), explanation: '', editType: 'edit', cellId: getCellId(cell2), newCode: 'print("Foo Bar")' }
+			{ filePath: notebook.uri.toString(), editType: 'edit', cellId: getCellId(cell2), newCode: 'print("Foo Bar")' }
 		], notebookEdits);
 		await waitForEditCount(1, notebookEdits);
 		workspaceService.didChangeTextDocumentEmitter.fire({

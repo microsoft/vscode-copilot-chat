@@ -63,7 +63,9 @@ export class ProxyInstantApplyShortEndpoint extends ChatEndpoint {
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
-			instantiationService
+			instantiationService,
+			configurationService,
+			experimentationService
 		);
 	}
 

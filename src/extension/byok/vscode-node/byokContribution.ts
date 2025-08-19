@@ -16,6 +16,7 @@ import { IExtensionContribution } from '../../common/contributions';
 import { AnthropicLMProvider } from './anthropicProvider';
 import { AzureBYOKModelProvider } from './azureProvider';
 import { BYOKStorageService, IBYOKStorageService } from './byokStorageService';
+import { CustomOAIBYOKModelProvider } from './customOAIProvider';
 import { GeminiBYOKLMProvider } from './geminiProvider';
 import { GroqBYOKLMProvider } from './groqProvider';
 import { OllamaLMProvider } from './ollamaProvider';
@@ -64,9 +65,10 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			this._providers.set(OAIBYOKLMProvider.providerName.toLowerCase(), instantiationService.createInstance(OAIBYOKLMProvider, knownModels[OAIBYOKLMProvider.providerName], this._byokStorageService));
 			this._providers.set(OpenRouterLMProvider.providerName.toLowerCase(), instantiationService.createInstance(OpenRouterLMProvider, this._byokStorageService));
 			this._providers.set(AzureBYOKModelProvider.providerName.toLowerCase(), instantiationService.createInstance(AzureBYOKModelProvider, this._byokStorageService));
+			this._providers.set(CustomOAIBYOKModelProvider.providerName.toLowerCase(), instantiationService.createInstance(CustomOAIBYOKModelProvider, this._byokStorageService));
 
 			for (const [providerName, provider] of this._providers) {
-				this._store.add(lm.registerChatModelProvider(providerName, provider));
+				this._store.add(lm.registerLanguageModelChatProvider(providerName, provider));
 			}
 		}
 	}

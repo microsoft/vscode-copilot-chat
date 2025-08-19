@@ -44,7 +44,7 @@
 	{
 		"name": "/tests [inline] [js] - issue #1261: Failed to create new test file when in an untitled file",
 		"requests": [
-			"663353682a5961f38ba2824c005f96aefc9ddd9fa291c7953a076aed46499930",
+			"798a4ad177b366644c3f7948814b42bcf594ff2a577cb91bd2a3047d04c3f02c",
 			"b37712d57bf2df50d33bc4e69eb9ed6812178dbca0d7dc45dd5a1a83e5651115"
 		]
 	},
@@ -129,7 +129,7 @@
 	{
 		"name": "/tests [inline] [typescript] - supports chat variables",
 		"requests": [
-			"591150e19e6ccfc73da99c993bed686a4992bf1c16ac743cfd963621eb156000"
+			"1c6d4cb42ef1e2b49c136000de18ff4273d4c01297f97850ef4aad0ac1098940"
 		]
 	},
 	{

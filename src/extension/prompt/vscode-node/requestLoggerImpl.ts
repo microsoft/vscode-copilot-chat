@@ -273,12 +273,15 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(`duration         : ${entry.endTime.getTime() - entry.startTime.getTime()}ms`);
 		result.push(`ourRequestId     : ${entry.chatParams.ourRequestId}`);
 
-		let statefulMarker: { statefulMarker: { modelId: string; marker: string }; index: number } | undefined;
-		if ('messages' in entry.chatParams) {
-			statefulMarker = Iterable.first(getAllStatefulMarkersAndIndicies(entry.chatParams.messages));
-		}
-		if (statefulMarker) {
-			result.push(`lastResponseId   : ${statefulMarker.statefulMarker.marker} using ${statefulMarker.statefulMarker.modelId}`);
+		const ignoreStatefulMarker = 'ignoreStatefulMarker' in entry.chatParams && entry.chatParams.ignoreStatefulMarker;
+		if (!ignoreStatefulMarker) {
+			let statefulMarker: { statefulMarker: { modelId: string; marker: string }; index: number } | undefined;
+			if ('messages' in entry.chatParams) {
+				statefulMarker = Iterable.first(getAllStatefulMarkersAndIndicies(entry.chatParams.messages));
+			}
+			if (statefulMarker) {
+				result.push(`lastResponseId   : ${statefulMarker.statefulMarker.marker} using ${statefulMarker.statefulMarker.modelId}`);
+			}
 		}
 
 		if (entry.type === LoggedRequestKind.ChatMLSuccess) {
@@ -417,7 +420,6 @@ export class RequestLogger extends AbstractRequestLogger {
 			result.push(`~~~`);
 			result.push(`Total models     : ${models.length}`);
 			result.push(`Chat models      : ${models.filter(m => m.capabilities.type === 'chat').length}`);
-			result.push(`Embedding models : ${models.filter(m => m.capabilities.type === 'embeddings').length}`);
 			result.push(`Completion models: ${models.filter(m => m.capabilities.type === 'completion').length}`);
 			result.push(`Premium models   : ${models.filter(m => m.billing?.is_premium).length}`);
 			result.push(`Preview models   : ${models.filter(m => m.preview).length}`);

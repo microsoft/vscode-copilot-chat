@@ -66,7 +66,9 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
-			instantiationService
+			instantiationService,
+			configurationService,
+			experimentationService,
 		);
 	}
 

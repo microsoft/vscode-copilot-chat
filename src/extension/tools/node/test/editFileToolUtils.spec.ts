@@ -23,8 +23,10 @@ describe('replace_string_in_file - applyEdit', () => {
 	let alternatveContentService: IAlternativeNotebookContentService;
 	let doc: ExtHostDocumentData;
 
-	function doApplyEdit(oldString: string, newString: string, uri = doc.document.uri) {
-		return applyEdit(uri, oldString, newString, workspaceEdit, workspaceService, notebookService as INotebookService, alternatveContentService, undefined);
+	async function doApplyEdit(oldString: string, newString: string, uri = doc.document.uri) {
+		const r = await applyEdit(uri, oldString, newString, workspaceService, notebookService as INotebookService, alternatveContentService, undefined);
+		workspaceEdit.set(uri, r.edits);
+		return r;
 	}
 
 	function setText(value: string) {

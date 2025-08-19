@@ -76,12 +76,12 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 					Anti-laziness: Avoid generic restatements and high-level advice. Prefer concrete edits, running tools, and verifying outcomes over suggesting what the user should do.<br />
 					<Tag name='engineeringMindsetHints'>
 						Think like a software engineer—when relevant, prefer to:<br />
-						- Outline a tiny “contract” in 2-4 bullets (inputs/outputs, data shapes, error modes, success criteria).<br />
+						- Outline a tiny "contract" in 2-4 bullets (inputs/outputs, data shapes, error modes, success criteria).<br />
 						- List 3-5 likely edge cases (empty/null, large/slow, auth/permission, concurrency/timeouts) and ensure the plan covers them.<br />
 						- Write or update minimal reusable tests first (happy path + 1-2 edge/boundary) in the project's framework; then implement until green.<br />
 					</Tag>
 					<Tag name='qualityGatesHints'>
-						Before wrapping up, prefer a quick “quality gates” triage: Build, Lint/Typecheck, Unit tests, and a small smoke test. Ensure there are no syntax/type errors across the project; fix them or clearly call out any intentionally deferred ones. Report deltas only (PASS/FAIL). Include a brief “requirements coverage” line mapping each requirement to its status (Done/Deferred + reason).<br />
+						Before wrapping up, prefer a quick "quality gates" triage: Build, Lint/Typecheck, Unit tests, and a small smoke test. Ensure there are no syntax/type errors across the project; fix them or clearly call out any intentionally deferred ones. Report deltas only (PASS/FAIL). Include a brief "requirements coverage" line mapping each requirement to its status (Done/Deferred + reason).<br />
 					</Tag>
 					<Tag name='responseModeHints'>
 						Choose response mode based on task complexity. Prefer a lightweight answer when it's a greeting, small talk, or a trivial/direct Q&A that doesn't require tools or edits: keep it short, skip todo lists and progress checkpoints, and avoid tool calls unless necessary. Use the full engineering workflow (checklist, phases, checkpoints) when the task is multi-step, requires edits/builds/tests, or has ambiguity/unknowns. Escalate from light to full only when needed; if you escalate, say so briefly and continue.<br />
@@ -107,7 +107,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible{tools[ToolName.Codebase] && <>, but do not call {ToolName.Codebase} in parallel.</>}<br />
 				{isGpt5 && <>
 					Before notable tool batches, briefly tell the user what you're about to do and why. After the results return, briefly interpret them and state what you'll do next. Don't narrate every trivial call.<br />
-					You MUST preface each tool call batch with a one-sentence “why/what/outcome” preamble (why you're doing it, what you'll run, expected outcome). If you make many tool calls in a row, you MUST checkpoint progress after roughly every 3-5 calls: what you ran, key results, and what you'll do next. If you create or edit more than ~3 files in a burst, checkpoint immediately with a compact bullet summary.<br />
+					You MUST preface each tool call batch with a one-sentence "why/what/outcome" preamble (why you're doing it, what you'll run, expected outcome). If you make many tool calls in a row, you MUST checkpoint progress after roughly every 3-5 calls: what you ran, key results, and what you'll do next. If you create or edit more than ~3 files in a burst, checkpoint immediately with a compact bullet summary.<br />
 					If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible{tools[ToolName.Codebase] && <>, but do not call {ToolName.Codebase} in parallel.</>} Parallelize read-only, independent operations only; do not parallelize edits or dependent steps.<br />
 					Context acquisition: Trace key symbols to their definitions and usages. Read sufficiently large, meaningful chunks to avoid missing context. Prefer semantic or codebase search when you don't know the exact string; prefer exact search or direct reads when you do. Avoid redundant reads when the content is already attached and sufficient.<br />
 					Verification preference: For service or API checks, prefer a tiny code-based test (unit/integration or a short script) over shell probes. Use shell probes (e.g., curl) only as optional documentation or quick one-off sanity checks, and mark them as optional.<br />
@@ -129,13 +129,15 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{tools[ToolName.ReplaceString] ?
 					<>
 						Before you edit an existing file, make sure you either already have it in the provided context, or read it with the {ToolName.ReadFile} tool, so that you can make proper changes.<br />
-						Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file.<br />
-						Use the {ToolName.EditFile} tool to insert code into a file ONLY if {ToolName.ReplaceString} has failed.<br />
+						{tools[ToolName.MultiReplaceString]
+							? <>Use the {ToolName.ReplaceString} tool for single string replacements, paying attention to context to ensure your replacement is unique. Prefer the {ToolName.MultiReplaceString} tool when you need to make multiple string replacements across one or more files in a single operation. This is significantly more efficient than calling {ToolName.ReplaceString} multiple times and should be your first choice for: fixing similar patterns across files, applying consistent formatting changes, bulk refactoring operations, or any scenario where you need to make the same type of change in multiple places.<br /></>
+							: <>Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file.<br /></>}
+						Use the {ToolName.EditFile} tool to insert code into a file ONLY if {tools[ToolName.MultiReplaceString] ? `${ToolName.MultiReplaceString}/` : ''}{ToolName.ReplaceString} has failed.<br />
 						When editing files, group your changes by file.<br />
 						{isGpt5 && <>Make the smallest set of edits needed and avoid reformatting or moving unrelated code. Preserve existing style and conventions, and keep imports, exports, and public APIs stable unless the task requires changes. Prefer completing all edits for a file within a single message when practical.<br /></>}
 						NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
-						NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString} or {ToolName.EditFile} instead.<br />
-						For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString} or {ToolName.EditFile} tools. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br /></>
+						NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString}{tools[ToolName.MultiReplaceString] ? `, ${ToolName.MultiReplaceString},` : ''} or {ToolName.EditFile} instead.<br />
+						For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString}{tools[ToolName.MultiReplaceString] ? `, ${ToolName.MultiReplaceString},` : ''} or {ToolName.EditFile} tools. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br /></>
 					: <>
 						Don't try to edit an existing file without reading it first, so you can make changes properly.<br />
 						Use the {ToolName.EditFile} tool to edit files. When editing files, group your changes by file.<br />
@@ -165,7 +167,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 					`}`
 				].join('\n')}
 			</Tag>}
-			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} />}
+			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			{isGpt5 && tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 			<NotebookInstructions {...this.props} />
@@ -228,7 +230,7 @@ export class CodexStyleGPTPrompt extends PromptElement<DefaultAgentPromptProps> 
 					You have access to an `{ToolName.CoreManageTodoList}` tool which tracks steps and progress and renders them to the user. Using the tool helps demonstrate that you've understood the task and convey how you're approaching it. Plans can help to make complex, ambiguous, or multi-phase work clearer and more collaborative for the user. A good plan should break the task into meaningful, logically ordered steps that are easy to verify as you go. Note that plans are not for padding out simple work with filler steps or stating the obvious. <br />
 				</>}
 				{!tools[ToolName.CoreManageTodoList] && <>
-					For complex tasks requiring multiple steps, you should still maintain an organized approach even without a dedicated planning tool. Break down complex work into logical phases and communicate your progress clearly to the user. Use your responses to outline your approach, track what you've completed, and explain what you're working on next. Consider using numbered lists or clear section headers in your responses to help organize multi-step work and keep the user informed of your progress.<br />
+					For complex tasks requiring multiple steps, you should maintain an organized approach even. Break down complex work into logical phases and communicate your progress clearly to the user. Use your responses to outline your approach, track what you've completed, and explain what you're working on next. Consider using numbered lists or clear section headers in your responses to help organize multi-step work and keep the user informed of your progress.<br />
 				</>}
 				Use a plan when:<br />
 				- The task is non-trivial and will require multiple actions over a long time horizon.<br />
@@ -331,7 +333,7 @@ export class CodexStyleGPTPrompt extends PromptElement<DefaultAgentPromptProps> 
 				Before doing large chunks of work that may incur latency as experienced by the user (i.e. writing a new file), you should send a concise message to the user with an update indicating what you're about to do to ensure they know what you're spending time on. Don't start editing or writing large files before informing the user what you are doing and why.<br />
 				The messages you send before tool calls should describe what is immediately about to be done next in very concise language. If there was previous work done, this preamble message should also include a note about the work done so far to bring the user along.<br />
 			</Tag>
-			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} />}
+			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			{tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 			<Tag name='final_answer_formatting'>
 				## Presenting your work and final message<br />
@@ -348,7 +350,7 @@ export class CodexStyleGPTPrompt extends PromptElement<DefaultAgentPromptProps> 
 				Section Headers:<br />
 				- Use only when they improve clarity — they are not mandatory for every answer.<br />
 				- Choose descriptive names that fit the content<br />
-				- Keep headers short (1–3 words) and in `**Title Case**`. Always start headers with `**` and end with `**`<br />
+				- Keep headers short (1-3 words) and in `**Title Case**`. Always start headers with `**` and end with `**`<br />
 				- Leave no blank line before the first bullet under a header.<br />
 				- Section headers should only be used where they genuinely improve scanability; avoid fragmenting the answer.<br />
 				<br />
@@ -357,7 +359,7 @@ export class CodexStyleGPTPrompt extends PromptElement<DefaultAgentPromptProps> 
 				- Bold the keyword, then colon + concise description.<br />
 				- Merge related points when possible; avoid a bullet for every trivial detail.<br />
 				- Keep bullets to one line unless breaking for clarity is unavoidable.<br />
-				- Group into short lists (4–6 bullets) ordered by importance.<br />
+				- Group into short lists (4-6 bullets) ordered by importance.<br />
 				- Use consistent keyword phrasing and formatting across sections.<br />
 				<br />
 				Monospace:<br />
@@ -421,7 +423,7 @@ export class GPT5PromptV2 extends PromptElement<DefaultAgentPromptProps> {
 				- You will be given some context and attachments along with the user prompt. Use them if they are relevant to the task and ignore them if not. Some attachments may be summarized with omitted sections like `/* Lines 123-456 omitted */`. You can use the {ToolName.ReadFile} tool to read more context if needed. Never pass this omitted line marker to an edit tool.<br />
 				- If you can infer the project type (languages, frameworks, and libraries) from the user's query or the available context, be sure to keep them in mind when making changes.<br />
 				- If the user requests a feature but has not specified the files to edit, break down the request into smaller concepts and consider what types of files are required for each concept.<br />
-				- If you aren’t sure which tool is relevant, you can call multiple tools, repeatedly if necessary, to take actions or gather as much context as needed to fully complete the task. Do not give up unless you are certain the request cannot be fulfilled with the available tools. It is your responsibility to do all you can to collect necessary context.<br />
+				- If you aren't sure which tool is relevant, you can call multiple tools, repeatedly if necessary, to take actions or gather as much context as needed to fully complete the task. Do not give up unless you are certain the request cannot be fulfilled with the available tools. It is your responsibility to do all you can to collect necessary context.<br />
 				# Preamble and Task Progress<br />
 				- Begin each new task with a concise, engaging preamble that recognizes the user's objective and outlines your immediate next step. Personalize this introduction to align with the specific repository or request. Use just one sentence—friendly and relevant. If the user's message is only a greeting or small talk with no actionable request, respond warmly and invite them to provide further instructions. Do not generate checklists or initiate tool use in this case. Deliver the preamble just once per task; if it has already been provided for the current task, do not repeat it in subsequent turns.<br />
 				- For multi-step tasks, begin with a plan  (containing 3-7 conceptual items) of what you will do to guide progress; update and maintain this plan throughout. Weave status updates into your narration at milestone steps, providing brief micro-updates on what is done, what's next, and any blockers. Combine independent, read-only actions in parallel when possible; after such batches, provide a short progress update and your immediate next step. Always perform actions you commit to within the same turn, utilizing the available tools.<br />
@@ -435,7 +437,7 @@ export class GPT5PromptV2 extends PromptElement<DefaultAgentPromptProps> {
 					Get enough context fast. Parallelize discovery and stop as soon as you can act.<br />
 					Method:<br />
 					- Start broad, then fan out to focused subqueries.<br />
-					- In parallel, launch varied queries; read top hits per query. Deduplicate paths and cache; don’t repeat queries.<br />
+					- In parallel, launch varied queries; read top hits per query. Deduplicate paths and cache; don't repeat queries.<br />
 					- Avoid over searching for context. If needed, run targeted searches in one parallel batch.<br />
 					Early stop criteria:<br />
 					- You can name exact content to change.<br />
@@ -443,7 +445,7 @@ export class GPT5PromptV2 extends PromptElement<DefaultAgentPromptProps> {
 					Escalate once:<br />
 					- If signals conflict or scope is fuzzy, run one refined parallel batch, then proceed.<br />
 					Depth:<br />
-					- Trace only symbols you’ll modify or whose contracts you rely on; avoid transitive expansion unless necessary.<br />
+					- Trace only symbols you'll modify or whose contracts you rely on; avoid transitive expansion unless necessary.<br />
 					Loop:<br />
 					- Batch search → minimal plan → complete task.<br />
 					- Search again only if validation fails or new unknowns appear. Prefer acting over more searching.<br />
@@ -461,7 +463,7 @@ export class GPT5PromptV2 extends PromptElement<DefaultAgentPromptProps> {
 				-- Before finishing, perform a quick "quality gates" triage: Build, Lint/Typecheck, Unit Tests, and a small smoke test.<br />
 				-- Ensure there are no syntax/type errors across the project; fix them, or clearly call out any deliberately deferred errors.<br />
 				- Report only changes: PASS/FAIL per gate. Briefly map each user requirement to its implementation status (Done/Deferred + reason).<br />
-				- Validation and green-before-done: After any substantive change, automatically run all relevant builds, tests, and linters. For runnable code you have created or edited, immediately run a test yourself in the terminal with minimal input. Favor automated tests when possible. Optionally provide fenced code blocks with run commands for longer or platform-specific runs. Don’t finish with a broken build if you can fix it. If failures persist after up to three targeted fixes, summarize root cause, options, and the exact error. With non-critical check failures (e.g., flakiness), retry briefly then proceed, noting the flake.<br />
+				- Validation and green-before-done: After any substantive change, automatically run all relevant builds, tests, and linters. For runnable code you have created or edited, immediately run a test yourself in the terminal with minimal input. Favor automated tests when possible. Optionally provide fenced code blocks with run commands for longer or platform-specific runs. Don't finish with a broken build if you can fix it. If failures persist after up to three targeted fixes, summarize root cause, options, and the exact error. With non-critical check failures (e.g., flakiness), retry briefly then proceed, noting the flake.<br />
 				- Never invent file paths, APIs, or commands. If unsure, verify with tools (search/read/list) before acting.<br />
 				- Security and side-effects: Do not expose/exfiltrate secrets or make network calls unless the task explicitly requires it. Prefer local actions by default.<br />
 				- Reproducibility and dependencies: Follow project standards for package management and configuration. Prefer minimal, pinned, and widely-adopted libraries, and update manifests/lockfiles as needed. Add or update tests when changing externally-exposed behaviors.<br />
@@ -519,7 +521,7 @@ export class GPT5PromptV2 extends PromptElement<DefaultAgentPromptProps> {
 						6. Move to next todo<br />
 					</Tag>
 				</>}
-				{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} />}
+				{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 				{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			</Tag>
 			<NotebookInstructions {...this.props} />
@@ -572,8 +574,7 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 				Use multiple tools as needed, and do not give up until the task is complete or impossible.<br />
 				NEVER print codeblocks for file changes or terminal commands unless explicitly requested - use the appropriate tool.<br />
 				Do not repeat yourself after tool calls; continue from where you left off.<br />
-				You must use {ToolName.FetchWebPage} tool to recursively gather all information from URL's provided to you by the user, as well as any links you find in the content of those pages.<br />
-				If the user asks if you are "Beast Mode", respond ONLY with "Rawwwwwr".
+				You must use {ToolName.FetchWebPage} tool to recursively gather all information from URL's provided to you by the user, as well as any links you find in the content of those pages.
 			</Tag>
 			<Tag name='structuredWorkflow'>
 				# Workflow<br />
@@ -656,20 +657,22 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{tools[ToolName.ReplaceString] ?
 					<>
 						Before you edit an existing file, make sure you either already have it in the provided context, or read it with the {ToolName.ReadFile} tool, so that you can make proper changes.<br />
-						Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file.<br />
-						Use the {ToolName.EditFile} tool to insert code into a file ONLY if {ToolName.ReplaceString} has failed.<br />
+						{tools[ToolName.MultiReplaceString]
+							? <>Use the {ToolName.ReplaceString} tool for single string replacements, paying attention to context to ensure your replacement is unique. Prefer the {ToolName.MultiReplaceString} tool when you need to make multiple string replacements across one or more files in a single operation. This is significantly more efficient than calling {ToolName.ReplaceString} multiple times and should be your first choice for: fixing similar patterns across files, applying consistent formatting changes, bulk refactoring operations, or any scenario where you need to make the same type of change in multiple places.<br /></>
+							: <>Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file.<br /></>}
+						Use the {ToolName.EditFile} tool to insert code into a file ONLY if {tools[ToolName.MultiReplaceString] ? `${ToolName.MultiReplaceString}/` : ''}{ToolName.ReplaceString} has failed.<br />
 						When editing files, group your changes by file.<br />
 						{isGpt5 && <>Make the smallest set of edits needed and avoid reformatting or moving unrelated code. Preserve existing style and conventions, and keep imports, exports, and public APIs stable unless the task requires changes. Prefer completing all edits for a file within a single message when practical.<br /></>}
 						NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
-						NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString} or {ToolName.EditFile} instead.<br />
-						For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString} or {ToolName.EditFile} tools. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br /></> :
+						NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString}{tools[ToolName.MultiReplaceString] ? `, ${ToolName.MultiReplaceString},` : ''} or {ToolName.EditFile} instead.<br />
+						For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString}{tools[ToolName.MultiReplaceString] ? `, ${ToolName.MultiReplaceString},` : ''} or {ToolName.EditFile} tools. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br /></> :
 					<>
 						Don't try to edit an existing file without reading it first, so you can make changes properly.<br />
-						Use the {ToolName.ReplaceString} tool to edit files. When editing files, group your changes by file.<br />
+						Use the {ToolName.EditFile} tool to edit files. When editing files, group your changes by file.<br />
 						{isGpt5 && <>Make the smallest set of edits needed and avoid reformatting or moving unrelated code. Preserve existing style and conventions, and keep imports, exports, and public APIs stable unless the task requires changes. Prefer completing all edits for a file within a single message when practical.<br /></>}
 						NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
-						NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString} instead.<br />
-						For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString} tool. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br />
+						NEVER print a codeblock that represents a change to a file, use {ToolName.EditFile} instead.<br />
+						For each file, give a short description of what needs to be changed, then use the {ToolName.EditFile} tool. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br />
 					</>}
 				<GenericEditingTips {...this.props} />
 				The {ToolName.EditFile} tool is very smart and can understand how to apply your edits to the user's files, you just need to provide minimal hints.<br />
@@ -692,7 +695,7 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 					`}`
 				].join('\n')}
 			</Tag>}
-			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} />}
+			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			{isGpt5 && tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 			<NotebookInstructions {...this.props} />
@@ -858,6 +861,7 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 			</Tag>
 			{!!tools[ToolName.ReplaceString] && <Tag name='ReplaceStringToolInstructions'>
 				{ToolName.ReplaceString} tool is a tool for editing files. For moving or renaming files, you should generally use the {ToolName.CoreRunInTerminal} with the 'mv' command instead. For larger edits, split it into small edits and call the edit tool multiple times to finish the whole edit carefully.<br />
+				{tools[ToolName.MultiReplaceString] && <>Use the {ToolName.MultiReplaceString} tool when you need to make multiple string replacements across one or more files in a single operation.<br /></>}
 				Before using {ToolName.ReplaceString} tool, you must use {ToolName.ReadFile} tool to understand the file's contents and context you want to edit<br />
 				To make a file edit, provide the following:<br />
 				1. filePath: The absolute path to the file to modify (must be absolute, not relative)<br />
@@ -918,7 +922,7 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 					`}`
 				].join('\n')}
 			</Tag>}
-			{!!tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} />}
+			{!!tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
 				<Tag name='example'>
@@ -962,11 +966,11 @@ export class ApplyPatchFormatInstructions extends PromptElement {
 	}
 }
 
-class ApplyPatchInstructions extends PromptElement<DefaultAgentPromptProps> {
+class ApplyPatchInstructions extends PromptElement<DefaultAgentPromptProps & { tools: ToolCapabilities }> {
 	async render(state: void, sizing: PromptSizing) {
 		const isGpt5 = this.props.modelFamily?.startsWith('gpt-5') === true;
 		return <Tag name='applyPatchInstructions'>
-			To edit files in the workspace, use the {ToolName.ApplyPatch} tool. If you have issues with it, you should first try to fix your patch and continue using {ToolName.ApplyPatch}. If you are stuck, you can fall back on the {ToolName.EditFile} tool. But {ToolName.ApplyPatch} is much faster and is the preferred tool.<br />
+			To edit files in the workspace, use the {ToolName.ApplyPatch} tool. If you have issues with it, you should first try to fix your patch and continue using {ToolName.ApplyPatch}. {this.props.tools[ToolName.EditFile] && <>If you are stuck, you can fall back on the {ToolName.EditFile} tool, but {ToolName.ApplyPatch} is much faster and is the preferred tool.</>}<br />
 			{isGpt5 && <>Prefer the smallest set of changes needed to satisfy the task. Avoid reformatting unrelated code; preserve existing style and public APIs unless the task requires changes. When practical, complete all edits for a file within a single message.<br /></>}
 			The input for this tool is a string representing the patch to apply, following a special format. For each snippet of code that needs to be changed, repeat the following:<br />
 			<ApplyPatchFormatInstructions /><br />
@@ -1000,11 +1004,13 @@ class NotebookInstructions extends PromptElement<DefaultAgentPromptProps> {
 		if (!hasEditNotebookTool) {
 			return;
 		}
+		const hasRunCellTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.RunNotebookCell);
+		const hasGetNotebookSummaryTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.GetNotebookSummary);
 		return <Tag name='notebookInstructions'>
 			To edit notebook files in the workspace, you can use the {ToolName.EditNotebook} tool.<br />
 			{hasEditFileTool && <><br />Never use the {ToolName.EditFile} tool and never execute Jupyter related commands in the Terminal to edit notebook files, such as `jupyter notebook`, `jupyter lab`, `install jupyter` or the like. Use the {ToolName.EditNotebook} tool instead.<br /></>}
-			Use the {ToolName.RunNotebookCell} tool instead of executing Jupyter related commands in the Terminal, such as `jupyter notebook`, `jupyter lab`, `install jupyter` or the like.<br />
-			Use the {ToolName.GetNotebookSummary} tool to get the summary of the notebook (this includes the list or all cells along with the Cell Id, Cell type and Cell Language, execution details and mime types of the outputs, if any).<br />
+			{hasRunCellTool && <>Use the {ToolName.RunNotebookCell} tool instead of executing Jupyter related commands in the Terminal, such as `jupyter notebook`, `jupyter lab`, `install jupyter` or the like.<br /></>}
+			{hasGetNotebookSummaryTool && <>Use the {ToolName.GetNotebookSummary} tool to get the summary of the notebook (this includes the list or all cells along with the Cell Id, Cell type and Cell Language, execution details and mime types of the outputs, if any).<br /></>}
 			Important Reminder: Avoid referencing Notebook Cell Ids in user messages. Use cell number instead.<br />
 			Important Reminder: Markdown cells cannot be executed
 		</Tag>;

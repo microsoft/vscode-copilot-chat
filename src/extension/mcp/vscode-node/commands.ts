@@ -2,23 +2,29 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+
 import * as vscode from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { JsonSchema } from '../../../platform/configuration/common/jsonSchema';
+import { ILogService } from '../../../platform/log/common/logService';
+import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { createSha256Hash } from '../../../util/common/crypto';
 import { extractCodeBlocks } from '../../../util/common/markdown';
 import { mapFindFirst } from '../../../util/vs/base/common/arraysFind';
 import { DeferredPromise, raceCancellation } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { cloneAndChange } from '../../../util/vs/base/common/objects';
+import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatLocation as VsCodeChatLocation } from '../../../vscodeTypes';
 import { Conversation, Turn } from '../../prompt/common/conversation';
 import { McpToolCallingLoop } from './mcpToolCallingLoop';
 import { McpPickRef } from './mcpToolCallingTools';
-import { getNuGetPackageMetadata } from './nuget';
+import { NuGetMcpSetup } from './nuget';
 
 type PackageType = 'npm' | 'pip' | 'docker' | 'nuget';
 
@@ -40,12 +46,39 @@ export interface IPendingSetupArgs {
 	name: string;
 	version?: string;
 	readme?: string;
+	getServerManifest?(installConsent: Promise<void>): Promise<any>;
+}
+
+export const enum ValidatePackageErrorType {
+	NotFound = 'NotFound',
+	UnknownPackageType = 'UnknownPackageType',
+	UnhandledError = 'UnhandledError',
+	MissingCommand = 'MissingCommand',
+	BadCommandVersion = 'BadCommandVersion',
+}
+
+const enum FlowFinalState {
+	Done = 'Done',
+	Failed = 'Failed',
+	NameMismatch = 'NameMismatch',
 }
 
 // contract with https://github.com/microsoft/vscode/blob/main/src/vs/workbench/contrib/mcp/browser/mcpCommandsAddConfiguration.ts
 export type ValidatePackageResult =
 	{ state: 'ok'; publisher: string; name?: string; version?: string } & IPendingSetupArgs
-	| { state: 'error'; error: string };
+	| { state: 'error'; error: string; helpUri?: string; helpUriLabel?: string; errorType: ValidatePackageErrorType };
+
+type AssistedServerConfiguration = {
+	type: 'vscode';
+	name?: string;
+	server: any;
+	inputs: PromptStringInputInfo[];
+	inputValues: Record<string, string> | undefined;
+} | {
+	type: 'server.json';
+	name?: string;
+	server: any;
+};
 
 interface NpmPackageResponse {
 	maintainers?: Array<{ name: string }>;
@@ -74,51 +107,138 @@ interface DockerHubResponse {
 export class McpSetupCommands extends Disposable {
 	private pendingSetup?: {
 		cts: CancellationTokenSource;
-		name: string;
 		canPrompt: DeferredPromise<void>;
-		done: Promise<unknown>;
+		done: Promise<AssistedServerConfiguration | undefined>;
+		stopwatch: StopWatch; // since the validation began, may include waiting for the user,
+		validateArgs: IValidatePackageArgs;
+		pendingArgs: IPendingSetupArgs;
 	};
 
 	constructor(
 		@ITelemetryService readonly telemetryService: ITelemetryService,
+		@ILogService readonly logService: ILogService,
+		@IFetcherService readonly fetcherService: IFetcherService,
 		@IInstantiationService readonly instantiationService: IInstantiationService,
 	) {
 		super();
 		this._register(toDisposable(() => this.pendingSetup?.cts.dispose(true)));
-		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.flow', (args: { name: string }) => {
-			// allow case-insensitive comparison
-			if (this.pendingSetup?.name.toUpperCase() !== args.name.toUpperCase()) {
-				vscode.window.showErrorMessage(`Failed to generate MCP server configuration with a matching package name. Expected '${args.name}' but got '${this.pendingSetup?.name}' from generated configuration.`);
-				return undefined;
-			}
+		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.flow', async (args: { name: string }) => {
+			let finalState = FlowFinalState.Failed;
+			let result;
+			try {
+				// allow case-insensitive comparison
+				if (this.pendingSetup?.pendingArgs.name.toUpperCase() !== args.name.toUpperCase()) {
+					finalState = FlowFinalState.NameMismatch;
+					vscode.window.showErrorMessage(localize("mcp.setup.nameMismatch", "Failed to generate MCP server configuration with a matching package name. Expected '{0}' but got '{1}' from generated configuration.", args.name, this.pendingSetup?.pendingArgs.name));
+					return undefined;
+				}
 
-			this.pendingSetup.canPrompt.complete(undefined);
-			return this.pendingSetup.done;
+				this.pendingSetup.canPrompt.complete(undefined);
+				result = await this.pendingSetup.done;
+				finalState = FlowFinalState.Done;
+				return result;
+			} finally {
+				/* __GDPR__
+					"mcp.setup.flow" : {
+						"owner": "joelverhagen",
+						"comment": "Reports the result of the agent-assisted MCP server installation",
+						"finalState": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The final state of the installation (e.g., 'Done', 'Failed')" },
+						"configurationType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Generic configuration typed produced by the installation" },
+						"packageType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Package type (e.g., npm)" },
+						"packageName": { "classification": "PublicNonPersonalData", "purpose": "FeatureInsight", "comment": "Package name used for installation" },
+						"packageVersion": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Package version" },
+						"durationMs": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Duration of the installation process in milliseconds" }
+					}
+				*/
+				this.telemetryService.sendMSFTTelemetryEvent('mcp.setup.flow', {
+					finalState: finalState,
+					configurationType: result?.type,
+					packageType: this.pendingSetup?.validateArgs.type,
+					packageName: await this.lowerHash(this.pendingSetup?.pendingArgs.name || args.name),
+					packageVersion: this.pendingSetup?.pendingArgs.version,
+				}, {
+					durationMs: this.pendingSetup?.stopwatch.elapsed() ?? -1
+				});
+			}
 		}));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.validatePackage', async (args: IValidatePackageArgs): Promise<ValidatePackageResult> => {
-			const result = await this.validatePackageRegistry(args);
+			const sw = new StopWatch();
+			const result = await McpSetupCommands.validatePackageRegistry(args, this.logService, this.fetcherService);
 			if (result.state === 'ok') {
-				this.enqueuePendingSetup(args, result);
-
-				// return the minimal result to avoid leaking implementation details
-				// not all package information is needed to request consent to install the package
-				return { state: 'ok', publisher: result.publisher, name: result.name, version: result.version };
-			} else {
-				return { state: 'error', error: result.error };
+				this.enqueuePendingSetup(args, result, sw);
 			}
+
+			/* __GDPR__
+				"mcp.setup.validatePackage" : {
+					"owner": "joelverhagen",
+					"comment": "Reports success or failure of agent-assisted MCP server validation step",
+					"state": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Validation state of the package" },
+					"packageType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Package type (e.g., npm)" },
+					"packageName": { "classification": "PublicNonPersonalData", "purpose": "FeatureInsight", "comment": "Package name used for installation" },
+					"packageVersion": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Package version" },
+					"errorType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Generic type of error encountered during validation" },
+					"durationMs": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Duration of the validation process in milliseconds" }
+				}
+			*/
+			this.telemetryService.sendMSFTTelemetryEvent(
+				'mcp.setup.validatePackage',
+				result.state === 'ok' ?
+					{
+						state: result.state,
+						packageType: args.type,
+						packageName: await this.lowerHash(result.name || args.name),
+						packageVersion: result.version
+					} :
+					{
+						state: result.state,
+						packageType: args.type,
+						packageName: await this.lowerHash(args.name),
+						errorType: result.errorType
+					},
+				{ durationMs: sw.elapsed() });
+
+			// return the minimal result to avoid leaking implementation details
+			// not all package information is needed to request consent to install the package
+			return result.state === 'ok' ?
+				{ state: 'ok', publisher: result.publisher, name: result.name, version: result.version } :
+				{ state: 'error', error: result.error, helpUri: result.helpUri, helpUriLabel: result.helpUriLabel, errorType: result.errorType };
 		}));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.check', () => {
 			return 1;
 		}));
 	}
 
-	private async enqueuePendingSetup(validateArgs: IValidatePackageArgs, pendingArgs: IPendingSetupArgs) {
+	private async lowerHash(input: string | undefined) {
+		return input ? await createSha256Hash(input.toLowerCase()) : undefined;
+	}
+
+	private async enqueuePendingSetup(validateArgs: IValidatePackageArgs, pendingArgs: IPendingSetupArgs, sw: StopWatch) {
 		const cts = new CancellationTokenSource();
 		const canPrompt = new DeferredPromise<void>();
 		const pickRef = new McpPickRef(raceCancellation(canPrompt.p, cts.token));
 
 		// we start doing the prompt in the background so the first call is speedy
 		const done = (async () => {
+
+			// if the package has a server manifest, we can fetch it and use it instead of a tool loop
+			if (pendingArgs.getServerManifest) {
+				let serverManifest;
+				try {
+					serverManifest = await pendingArgs.getServerManifest(canPrompt.p);
+				} catch (error) {
+					this.logService.warn(`Unable to fetch server manifest for ${validateArgs.type} package ${pendingArgs.name}@${pendingArgs.version}. Configuration will be generated from the package README.
+Error: ${error}`);
+				}
+
+				if (serverManifest) {
+					return {
+						type: "server.json" as const,
+						name: pendingArgs.name,
+						server: serverManifest
+					};
+				}
+			}
+
 			const fakePrompt = `Generate an MCP configuration for ${validateArgs.name}`;
 			const mcpLoop = this.instantiationService.createInstance(McpToolCallingLoop, {
 				toolCallLimit: 100, // limited via `getAvailableTools` in the loop
@@ -151,7 +271,7 @@ export class McpSetupCommands extends Disposable {
 
 			const toolCallLoopResult = await mcpLoop.run(undefined, cts.token);
 			if (toolCallLoopResult.response.type !== ChatFetchResponseType.Success) {
-				vscode.window.showErrorMessage(`Failed to generate MCP configuration for ${validateArgs.name}: ${toolCallLoopResult.response.reason}`);
+				vscode.window.showErrorMessage(localize("mcp.setup.failed", "Failed to generate MCP configuration for {0}: {1}", validateArgs.name, toolCallLoopResult.response.reason));
 				return undefined;
 			}
 
@@ -186,22 +306,22 @@ export class McpSetupCommands extends Disposable {
 				}
 			});
 
-			return { name, server: extracted, inputs, inputValues };
+			return { type: "vscode" as const, name, server: extracted, inputs, inputValues };
 		})().finally(() => {
 			cts.dispose();
 			pickRef.dispose();
 		});
 
 		this.pendingSetup?.cts.dispose(true);
-		this.pendingSetup = { cts, name: pendingArgs.name, canPrompt, done };
+		this.pendingSetup = { cts, canPrompt, done, validateArgs, pendingArgs, stopwatch: sw };
 	}
 
-	private async validatePackageRegistry(args: IValidatePackageArgs): Promise<ValidatePackageResult> {
+	public static async validatePackageRegistry(args: { type: PackageType; name: string }, logService: ILogService, fetcherService: IFetcherService): Promise<ValidatePackageResult> {
 		try {
 			if (args.type === 'npm') {
-				const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(args.name)}`);
+				const response = await fetcherService.fetch(`https://registry.npmjs.org/${encodeURIComponent(args.name)}`, { method: 'GET' });
 				if (!response.ok) {
-					return { state: 'error', error: `Package ${args.name} not found in npm registry` };
+					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.npmPackageNotFound", "Package {0} not found in npm registry", args.name) };
 				}
 				const data = await response.json() as NpmPackageResponse;
 				const version = data['dist-tags']?.latest;
@@ -213,9 +333,9 @@ export class McpSetupCommands extends Disposable {
 					readme: data.readme,
 				};
 			} else if (args.type === 'pip') {
-				const response = await fetch(`https://pypi.org/pypi/${encodeURIComponent(args.name)}/json`);
+				const response = await fetcherService.fetch(`https://pypi.org/pypi/${encodeURIComponent(args.name)}/json`, { method: 'GET' });
 				if (!response.ok) {
-					return { state: 'error', error: `Package ${args.name} not found in PyPI registry` };
+					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.pythonPackageNotFound", "Package {0} not found in PyPI registry", args.name) };
 				}
 				const data = await response.json() as PyPiPackageResponse;
 				const publisher = data.info?.author || data.info?.author_email || 'unknown';
@@ -229,7 +349,8 @@ export class McpSetupCommands extends Disposable {
 					readme: data.info?.description
 				};
 			} else if (args.type === 'nuget') {
-				return await getNuGetPackageMetadata(args);
+				const nuGetMcpSetup = new NuGetMcpSetup(logService, fetcherService);
+				return await nuGetMcpSetup.getNuGetPackageMetadata(args.name);
 			} else if (args.type === 'docker') {
 				// Docker Hub API uses namespace/repository format
 				// Handle both formats: 'namespace/repository' or just 'repository' (assumes 'library/' namespace)
@@ -237,9 +358,9 @@ export class McpSetupCommands extends Disposable {
 					? args.name.split('/', 2)
 					: ['library', args.name];
 
-				const response = await fetch(`https://hub.docker.com/v2/repositories/${encodeURIComponent(namespace)}/${encodeURIComponent(repository)}`);
+				const response = await fetcherService.fetch(`https://hub.docker.com/v2/repositories/${encodeURIComponent(namespace)}/${encodeURIComponent(repository)}`, { method: 'GET' });
 				if (!response.ok) {
-					return { state: 'error', error: `Docker image ${args.name} not found in Docker Hub registry` };
+					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.dockerRepositoryNotFound", "Docker image {0} not found in Docker Hub registry", args.name) };
 				}
 				const data = await response.json() as DockerHubResponse;
 				return {
@@ -249,9 +370,9 @@ export class McpSetupCommands extends Disposable {
 					readme: data.full_description || data.description,
 				};
 			}
-			return { state: 'error', error: `Unsupported package type: ${args.type}` };
+			return { state: 'error', error: localize("mcp.setup.unknownPackageType", "Unsupported package type: {0}", args.type), errorType: ValidatePackageErrorType.UnknownPackageType };
 		} catch (error) {
-			return { state: 'error', error: `Error querying package: ${(error as Error).message}` };
+			return { state: 'error', error: localize("mcp.setup.errorQueryingPackage", "Error querying package: {0}", (error as Error).message), errorType: ValidatePackageErrorType.UnhandledError };
 		}
 	}
 }

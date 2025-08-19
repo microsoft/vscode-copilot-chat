@@ -91,10 +91,6 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		return false;
 	}
 
-	get supportsStatefulResponses() {
-		return false; // todo@connor4312 ?
-	}
-
 	get policy(): 'enabled' | { terms: string } {
 		return 'enabled';
 	}

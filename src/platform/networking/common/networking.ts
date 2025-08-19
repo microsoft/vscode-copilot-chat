@@ -12,7 +12,6 @@ import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { CancellationError } from '../../../util/vs/base/common/errors';
 import { Source } from '../../chat/common/chatMLFetcher';
 import type { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
-import { EMBEDDING_MODEL } from '../../configuration/common/configurationService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
@@ -96,7 +95,6 @@ export interface IEndpointBody {
 	similarity?: number;
 	/** Code search: */
 	scoping_query?: string;
-	include_embeddings?: boolean;
 	/** Responses API: */
 	input?: readonly any[];
 	truncation?: 'auto' | 'disabled';
@@ -119,11 +117,6 @@ export function stringifyUrlOrRequestMetadata(urlOrRequestMetadata: string | Req
 		return urlOrRequestMetadata;
 	}
 	return JSON.stringify(urlOrRequestMetadata);
-}
-
-export interface IEmbeddingEndpoint extends IEndpoint {
-	readonly maxBatchSize: number;
-	readonly model: EMBEDDING_MODEL;
 }
 
 export interface IMakeChatRequestOptions {
@@ -161,7 +154,6 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly supportsToolCalls: boolean;
 	readonly supportsVision: boolean;
 	readonly supportsPrediction: boolean;
-	readonly supportsStatefulResponses: boolean;
 	readonly showInModelPicker: boolean;
 	readonly isPremium?: boolean;
 	readonly multiplier?: number;

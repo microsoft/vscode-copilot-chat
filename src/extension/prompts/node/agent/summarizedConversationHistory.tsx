@@ -181,7 +181,7 @@ class WorkingNotebookSummary extends PromptElement<NotebookSummaryProps> {
 		return (
 			<UserMessage>
 				This is the current state of the notebook that you have been working on:<br />
-				<NotebookSummary notebook={this.props.notebook} />
+				<NotebookSummary notebook={this.props.notebook} includeCellLines={false} altDoc={undefined} />
 			</UserMessage>
 		);
 	}
@@ -608,7 +608,7 @@ class ConversationHistorySummarizer {
 			hasWorkingNotebook,
 			duration: elapsedTime,
 			promptTokenCount: usage?.prompt_tokens,
-			promptCacheTokenCount: usage?.prompt_tokens_details.cached_tokens,
+			promptCacheTokenCount: usage?.prompt_tokens_details?.cached_tokens,
 			responseTokenCount: usage?.completion_tokens,
 		});
 	}

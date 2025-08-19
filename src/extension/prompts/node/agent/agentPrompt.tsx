@@ -31,9 +31,10 @@ import { GlobalContextMessageMetadata, RenderedUserMessageMetadata, Turn } from 
 import { InternalToolReference } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { ToolName } from '../../../tools/common/toolNames';
+import { TodoListContextPrompt } from '../../../tools/node/todoListContextPrompt';
 import { CopilotIdentityRules, GPT5CopilotIdentityRule } from '../base/copilotIdentity';
 import { IPromptEndpoint, renderPromptElement } from '../base/promptRenderer';
-import { SafetyRules } from '../base/safetyRules';
+import { Gpt5SafetyRule, SafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
 import { TerminalAndTaskStatePromptElement } from '../base/terminalAndTaskState';
 import { ChatVariables } from '../panel/chatVariables';
@@ -89,8 +90,17 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		const baseAgentInstructions = <>
 			<SystemMessage>
 				You are an expert AI programming assistant, working with a user in the VS Code editor.<br />
-				{this.props.endpoint.family.startsWith('gpt-5') ? <GPT5CopilotIdentityRule /> : <CopilotIdentityRules />}
-				<SafetyRules />
+				{this.props.endpoint.family.startsWith('gpt-5') ? (
+					<>
+						<GPT5CopilotIdentityRule />
+						<Gpt5SafetyRule />
+					</>
+				) : (
+					<>
+						<CopilotIdentityRules />
+						<SafetyRules />
+					</>
+				)}
 			</SystemMessage>
 			{instructions}
 		</>;
@@ -134,10 +144,8 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			return <SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} />;
 		}
 
-		const promptType = this.configurationService.getConfig(ConfigKey.Internal.Gpt5AlternatePromptConfig);
-		const modelFamily = this.props.endpoint.family;
-
-		if (modelFamily.startsWith('gpt-5') && promptType) {
+		if (this.props.endpoint.family.startsWith('gpt-5')) {
+			const promptType = this.configurationService.getExperimentBasedConfig(ConfigKey.Gpt5AlternatePrompt, this.experimentationService);
 			switch (promptType) {
 				case 'codex':
 					return <CodexStyleGPTPrompt
@@ -151,8 +159,8 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 						modelFamily={this.props.endpoint.family}
 						codesearchMode={this.props.codesearchMode}
 					/>;
-				case 'alternate':
-					return <AlternateGPTPrompt
+				default:
+					return <DefaultAgentPrompt
 						availableTools={this.props.promptContext.tools?.availableTools}
 						modelFamily={this.props.endpoint.family}
 						codesearchMode={this.props.codesearchMode}
@@ -301,7 +309,6 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		props: AgentUserMessageProps,
 		@IPromptVariablesService private readonly promptVariablesService: IPromptVariablesService,
 		@ILogService private readonly logService: ILogService,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super(props);
 	}
@@ -318,6 +325,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 
 		const query = await this.promptVariablesService.resolveToolReferencesInPrompt(this.props.request, this.props.toolReferences ?? []);
 		const hasReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ReplaceString);
+		const hasMultiReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.MultiReplaceString);
 		const hasApplyPatchTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ApplyPatch);
 		const hasCreateFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CreateFile);
 		const hasEditFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
@@ -328,7 +336,6 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 			: '';
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;
 		const hasTodoTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreManageTodoList);
-		const skipReminderInstructions = this.props.endpoint.family.startsWith('gpt-5') && this.configurationService.getConfig(ConfigKey.Internal.Gpt5AlternatePromptConfig);
 
 		return (
 			<>
@@ -343,19 +350,17 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<EditedFileEvents editedFileEvents={this.props.editedFileEvents} />
 						<NotebookSummaryChange />
 						{hasTerminalTool && <TerminalAndTaskStatePromptElement sessionId={this.props.sessionId} />}
+						{hasTodoTool && <TodoListContextPrompt sessionId={this.props.sessionId} />}
 					</Tag>
 					<CurrentEditorContext endpoint={this.props.endpoint} />
 					<RepoContext />
-
-					{!skipReminderInstructions && (
-						<Tag name='reminderInstructions'>
-							{/* Critical reminders that are effective when repeated right next to the user message */}
-							<KeepGoingReminder modelFamily={this.props.endpoint.family} />
-							{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint))}
-							<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
-							{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
-						</Tag>
-					)}
+					<Tag name='reminderInstructions'>
+						{/* Critical reminders that are effective when repeated right next to the user message */}
+						<KeepGoingReminder modelFamily={this.props.endpoint.family} />
+						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint), hasMultiReplaceStringTool)}
+						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
+						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
+					</Tag>
 					{query && <Tag name='userRequest' priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 				</UserMessage>
@@ -577,7 +582,7 @@ class RepoContext extends PromptElement<{}> {
 			Owner: {repoContext.id.org}<br />
 			Current branch: {activeRepository.headBranchName}<br />
 			{repoDescription ? <>Default branch: {repoDescription?.defaultBranch}<br /></> : ''}
-			{repoDescription?.pullRequest ? <>Active pull request: {repoDescription.pullRequest.title} ({repoDescription.pullRequest.url})<br /></> : ''}
+			{repoDescription?.pullRequest ? <>Active pull request (may not be the same as open pull request): {repoDescription.pullRequest.title} ({repoDescription.pullRequest.url})<br /></> : ''}
 		</Tag>;
 	}
 }
@@ -622,7 +627,7 @@ class AgentTasksInstructions extends PromptElement {
 			return null;
 		}
 
-		const taskGroups = taskGroupsRaw.map(([wf, tasks]) => [wf, tasks.filter(task => !!task.type && !task.hide)] as const).filter(([, tasks]) => tasks.length > 0);
+		const taskGroups = taskGroupsRaw.map(([wf, tasks]) => [wf, tasks.filter(task => (!!task.type || task.dependsOn) && !task.hide)] as const).filter(([, tasks]) => tasks.length > 0);
 		if (taskGroups.length === 0) {
 			return 0;
 		}
@@ -634,7 +639,7 @@ class AgentTasksInstructions extends PromptElement {
 					{tasks.map((t, i) => {
 						const isActive = this._tasksService.isTaskActive(t);
 						return (
-							<Tag name='task' attrs={{ id: `${t.type}: ${t.label || i}` }}>
+							<Tag name='task' attrs={{ id: t.type ? `${t.type}: ${t.label || i}` : `${t.label || i}` }}>
 								{this.makeTaskPresentation(t)}
 								{isActive && <> (This task is currently running. You can use the {ToolName.CoreGetTaskOutput} or {ToolName.GetTaskOutput} tool to view its output.)</>}
 							</Tag>
@@ -674,19 +679,23 @@ class AgentTasksInstructions extends PromptElement {
 	}
 }
 
-export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringTool: boolean, useStrongReplaceStringHint: boolean) {
+export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringTool: boolean, useStrongReplaceStringHint: boolean, hasMultiStringReplace: boolean) {
 	const lines = [];
 	if (hasEditFileTool) {
 		lines.push(<>When using the {ToolName.EditFile} tool, avoid repeating existing code, instead use a line comment with \`{EXISTING_CODE_MARKER}\` to represent regions of unchanged code.<br /></>);
 	}
 	if (hasReplaceStringTool) {
-		lines.push(<>When using the {ToolName.ReplaceString} tool, include 3-5 lines of unchanged code before and after the string you want to replace, to make it unambiguous which part of the file should be edited.<br /></>);
+		lines.push(<>
+			When using the {ToolName.ReplaceString} tool, include 3-5 lines of unchanged code before and after the string you want to replace, to make it unambiguous which part of the file should be edited.<br />
+			{hasMultiStringReplace && <>For maximum efficiency, whenever you plan to perform multiple independent edit operations, invoke them simultaneously using {ToolName.MultiReplaceString} tool rather than sequentially. This will greatly improve user's cost and time efficiency leading to a better user experience.<br /></>}
+		</>);
 	}
 	if (hasEditFileTool && hasReplaceStringTool) {
+		const eitherOr = hasMultiStringReplace ? `${ToolName.ReplaceString} or ${ToolName.MultiReplaceString} tools` : `${ToolName.ReplaceString} tool`;
 		if (useStrongReplaceStringHint) {
-			lines.push(<>You must always try making file edits using {ToolName.ReplaceString} tool. NEVER use {ToolName.EditFile} unless told to by the user or by a tool.</>);
+			lines.push(<>You must always try making file edits using the {eitherOr}. NEVER use {ToolName.EditFile} unless told to by the user or by a tool.</>);
 		} else {
-			lines.push(<>It is much faster to edit using the {ToolName.ReplaceString} tool. Prefer {ToolName.ReplaceString} for making edits and only fall back to {ToolName.EditFile} if it fails.</>);
+			lines.push(<>It is much faster to edit using the {eitherOr}. Prefer the {eitherOr} for making edits and only fall back to {ToolName.EditFile} if it fails.</>);
 		}
 	}
 
@@ -744,7 +753,7 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {
 	return modelFamily?.startsWith('gpt-5') === true ?
 		<>
-			Skip filler acknowledgements like “Sounds good” or “Okay, I will…”. Open with a purposeful one-liner about what you're doing next.<br />
+			Skip filler acknowledgements like "Sounds good" or "Okay, I will…". Open with a purposeful one-liner about what you're doing next.<br />
 			When sharing setup or run steps, present terminal commands in fenced code blocks with the correct language tag. Keep commands copyable and on separate lines.<br />
 			Avoid definitive claims about the build or runtime setup unless verified from the provided context (or quick tool checks). If uncertain, state what's known from attachments and proceed with minimal steps you can adapt later.<br />
 			When you create or edit runnable code, run a test yourself to confirm it works; then share optional fenced commands for more advanced runs.<br />

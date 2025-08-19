@@ -1,0 +1,86 @@
+name: 'small current file, open files, cursor at end, empty context provider'
+
+state:
+    context-items:
+        code-snippets:
+    current-file:
+        uri: file:///dad-jokes/src/main.ts
+        language: typescript
+        text: |-
+            const dj = new DadJoke {⮑
+    # The open file is ignored, since a provider is registered (but returns empty data)
+    open-files:
+        - uri: file:///dad-jokes/src/dadJoke.ts
+          language: typescript
+          text: |-
+              export class DadJoke {
+                  id: number;
+                  question: string;
+                  answer: string;
+                  status: DadJokeStatus;
+                  rating: DadJokeRating;
+
+                  constructor(
+                      id: number,
+                      question: string,
+                      answer: string,
+                      status: DadJokeStatus = DadJokeStatus.Unseen,
+                      rating: DadJokeRating = DadJokeRating.Unrated
+                  ) {
+                      this.id = id;
+                      this.question = question;
+                      this.answer = answer;
+                      this.status = status;
+                      this.rating = rating;
+                  }
+              }
+
+              export enum DadJokeStatus {
+                  Seen,
+                  Unseen
+              }
+
+              export enum DadJokeRating {
+                  Unrated,
+                  Good,
+                  Bad
+              }
+
+expected-prompt:
+    prefix: |-
+        // Path: main.ts
+        // Compare this snippet from dadJoke.ts:
+        // export class DadJoke {
+        //     id: number;
+        //     question: string;
+        //     answer: string;
+        //     status: DadJokeStatus;
+        //     rating: DadJokeRating;
+        // 
+        //     constructor(
+        //         id: number,
+        //         question: string,
+        //         answer: string,
+        //         status: DadJokeStatus = DadJokeStatus.Unseen,
+        //         rating: DadJokeRating = DadJokeRating.Unrated
+        //     ) {
+        //         this.id = id;
+        //         this.question = question;
+        //         this.answer = answer;
+        //         this.status = status;
+        //         this.rating = rating;
+        //     }
+        // }
+        // 
+        // export enum DadJokeStatus {
+        //     Seen,
+        //     Unseen
+        // }
+        // 
+        // export enum DadJokeRating {
+        //     Unrated,
+        //     Good,
+        //     Bad
+        // }
+        const dj = new DadJoke {
+    suffix: ''

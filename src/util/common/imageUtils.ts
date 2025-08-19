@@ -100,7 +100,7 @@ export function getWebPDimensions(base64String: string) {
 	}
 }
 
-function getMimeType(base64String: string): string | undefined {
+export function getMimeType(base64String: string): string | undefined {
 	const mimeTypes: { [key: string]: string } = {
 		'/9j/': 'image/jpeg',
 		'iVBOR': 'image/png',

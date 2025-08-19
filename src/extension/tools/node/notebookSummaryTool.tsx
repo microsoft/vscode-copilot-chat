@@ -13,11 +13,13 @@ import { IPromptPathRepresentationService } from '../../../platform/prompts/comm
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { findNotebook } from '../../../util/common/notebooks';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelPromptTsxPart, LanguageModelToolResult, MarkdownString, NotebookCellKind } from '../../../vscodeTypes';
+import { LanguageModelPromptTsxPart, LanguageModelToolResult, MarkdownString, NotebookCellKind, Position } from '../../../vscodeTypes';
+import { IBuildPromptContext } from '../../prompt/common/intents';
+import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { NotebookVariables } from '../../prompts/node/panel/notebookVariables';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
+import { AlternativeNotebookDocument } from '../../../platform/notebook/common/alternativeNotebookDocument';
 
 
 export interface INotebookSummaryToolParams {
@@ -26,6 +28,7 @@ export interface INotebookSummaryToolParams {
 
 export class NotebookSummaryTool implements ICopilotTool<INotebookSummaryToolParams> {
 	public static toolName = ToolName.GetNotebookSummary;
+	private promptContext?: IBuildPromptContext;
 
 	constructor(
 		@IPromptPathRepresentationService protected readonly promptPathRepresentationService: IPromptPathRepresentationService,
@@ -52,13 +55,14 @@ export class NotebookSummaryTool implements ICopilotTool<INotebookSummaryToolPar
 
 		this.notebookStructureTracker.trackNotebook(notebook);
 		this.notebookStructureTracker.clearState(notebook);
-
+		const format = this.alternativeNotebookContent.getFormat(this.promptContext?.request?.model);
+		const altDoc = this.alternativeNotebookContent.create(format).getAlternativeDocument(notebook);
 		return new LanguageModelToolResult([
 			new LanguageModelPromptTsxPart(
 				await renderPromptElementJSON(
 					this.instantiationService,
 					NotebookSummary,
-					{ notebook },
+					{ notebook, altDoc, includeCellLines: true },
 					// If we are not called with tokenization options, have _some_ fake tokenizer
 					// otherwise we end up returning the entire document
 					options.tokenizationOptions ?? {
@@ -69,6 +73,11 @@ export class NotebookSummaryTool implements ICopilotTool<INotebookSummaryToolPar
 				),
 			)
 		]);
+	}
+
+	async resolveInput(input: INotebookSummaryToolParams, promptContext: IBuildPromptContext): Promise<INotebookSummaryToolParams> {
+		this.promptContext = promptContext;
+		return input;
 	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<INotebookSummaryToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
@@ -84,6 +93,8 @@ ToolRegistry.registerTool(NotebookSummaryTool);
 
 type NotebookStatePromptProps = PromptElementProps<{
 	notebook: vscode.NotebookDocument;
+	altDoc: AlternativeNotebookDocument | undefined;
+	includeCellLines: boolean;
 }>;
 
 export class NotebookSummary extends PromptElement<NotebookStatePromptProps> {
@@ -107,7 +118,8 @@ export class NotebookSummary extends PromptElement<NotebookStatePromptProps> {
 
 	private getSummary() {
 		const hasAnyCellBeenExecuted = this.props.notebook.getCells().some(cell => cell.executionSummary?.executionOrder !== undefined && cell.executionSummary?.timing);
-
+		const altDoc = this.props.altDoc;
+		const includeCellLines = this.props.includeCellLines && !!altDoc;
 		return (
 			<>
 				Below is a summary of the notebook {this.promptPathRepresentationService.getFilePath(this.props.notebook.uri)}:<br />
@@ -120,6 +132,10 @@ export class NotebookSummary extends PromptElement<NotebookStatePromptProps> {
 					const executionOrder = cell.executionSummary?.executionOrder;
 					const cellId = getCellId(cell);
 					let executionSummary = '';
+
+					const altCellStartLine = includeCellLines ? altDoc.fromCellPosition(cell, new Position(0, 0)).line + 1 : -1;
+					const altCellEndLine = includeCellLines ? altDoc.fromCellPosition(cell, new Position(cell.document.lineCount - 1, 0)).line + 1 : -1;
+					const cellLines = `From ${altCellStartLine} to ${altCellEndLine}`;
 					// If there's no timing, then means the notebook wasn't executed in current session.
 					// Timing information is generally not stored in notebooks.
 					if (executionOrder === undefined || !cell.executionSummary?.timing) {
@@ -138,6 +154,7 @@ export class NotebookSummary extends PromptElement<NotebookStatePromptProps> {
 					return (
 						<>{cellNumber}. Cell Id = {cellId}<br />
 							{indent}Cell Type = {cellType}{language}<br />
+							{includeCellLines && <>{indent}Cell Lines = {cellLines}<br /></>}
 							{indent}{executionSummary}<br />
 							{outputs}
 						</>

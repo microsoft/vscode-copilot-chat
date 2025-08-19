@@ -15,7 +15,7 @@ import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/
 import { IGitCommitMessageService, NoopGitCommitMessageService } from '../../../../platform/git/common/gitCommitMessageService';
 import { ISettingsEditorSearchService, NoopSettingsEditorSearchService } from '../../../../platform/settingsEditor/common/settingsEditorSearchService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
-import { setCopilotToken } from '../../../../platform/test/node/testAuthenticationService';
+import { setCopilotToken } from '../../../../platform/authentication/common/staticGitHubAuthenticationService';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IIntentService, IntentService } from '../../../intents/node/intentService';

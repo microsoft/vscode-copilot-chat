@@ -1,0 +1,101 @@
+name: 'small current file, 1 open file in different language, cursor near beginning'
+
+state:
+    current-file:
+        uri: file:///dad-jokes/src/dadJoke.ts
+        language: typescript
+        text: |-
+            export class DadJoke {⮑
+
+                id: number;
+                question: string;
+                answer: string;
+                status: DadJokeStatus;
+                rating: DadJokeRating;
+
+                constructor(
+                    id: number,
+                    question: string,
+                    answer: string,
+                    status: DadJokeStatus = DadJokeStatus.Unseen,
+                    rating: DadJokeRating = DadJokeRating.Unrated
+                ) {
+                    this.id = id;
+                    this.question = question;
+                    this.answer = answer;
+                    this.status = status;
+                    this.rating = rating;
+                }
+            }
+
+            export enum DadJokeStatus {
+                Seen,
+                Unseen
+            }
+
+            export enum DadJokeRating {
+                Unrated,
+                Good,
+                Bad
+            }
+    open-files:
+        - uri: file:///dad-jokes/src/index.html
+          language: html
+          text: |-
+              <!DOCTYPE html>
+              <html lang="en">
+              <head>
+                  <meta charset="UTF-8">
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                  <title>Dad Jokes</title>
+              </head>
+              <body>
+              <header>
+                  <h1>Dad Jokes</h1>
+              </header>
+              <main>
+                  <section id="joke-section">
+                      <h2 id="joke-question">Loading...</h2>
+                      <p id="joke-answer"></p>
+                  </section>
+                  <button id="next-joke-button">Next Joke</button>
+              </main>
+              </body>
+              </html>
+
+expected-prompt:
+    prefix: |-
+        // Path: dadJoke.ts
+        export class DadJoke {
+    suffix: |-
+        id: number;
+            question: string;
+            answer: string;
+            status: DadJokeStatus;
+            rating: DadJokeRating;
+
+            constructor(
+                id: number,
+                question: string,
+                answer: string,
+                status: DadJokeStatus = DadJokeStatus.Unseen,
+                rating: DadJokeRating = DadJokeRating.Unrated
+            ) {
+                this.id = id;
+                this.question = question;
+                this.answer = answer;
+                this.status = status;
+                this.rating = rating;
+            }
+        }
+
+        export enum DadJokeStatus {
+            Seen,
+            Unseen
+        }
+
+        export enum DadJokeRating {
+            Unrated,
+            Good,
+            Bad
+        }
