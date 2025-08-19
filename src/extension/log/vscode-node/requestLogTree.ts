@@ -40,14 +40,28 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 
 		let server: RequestServer | undefined;
 
-		// Helper method to process log entries for a single prompt
-		const processPromptLogs = async (chatPromptItem: ChatPromptItem): Promise<any> => {
-			const logEntries = chatPromptItem.children.map(child => {
+		const getExportableLogEntries = (treeItem: ChatPromptItem): LoggedInfo[] => {
+			if (!treeItem || !treeItem.children) {
+				return [];
+			}
+
+			const logEntries = treeItem.children.map(child => {
 				if (child instanceof ChatRequestItem || child instanceof ToolCallItem || child instanceof ChatElementItem) {
 					return child.info;
 				}
 				return undefined; // Skip non-loggable items
 			}).filter((entry): entry is LoggedInfo => !!entry);
+
+			return logEntries;
+		};
+
+		// Helper method to process log entries for a single prompt
+		const preparePromptLogsAsJson = async (treeItem: ChatPromptItem): Promise<any> => {
+			const logEntries = getExportableLogEntries(treeItem);
+
+			if (logEntries.length === 0) {
+				return;
+			}
 
 			const promptLogs: any[] = [];
 
@@ -73,11 +87,10 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				}
 			}
 
-			// Return the prompt object with the same structure
 			return {
-				prompt: chatPromptItem.request.prompt,
-				promptId: chatPromptItem.id,
-				hasSeen: chatPromptItem.hasSeen,
+				prompt: treeItem.request.prompt,
+				promptId: treeItem.id,
+				hasSeen: treeItem.hasSeen,
 				logCount: promptLogs.length,
 				logs: promptLogs
 			};
@@ -253,16 +266,7 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 		}));
 
 		this._register(vscode.commands.registerCommand(exportPromptArchiveCommand, async (treeItem: ChatPromptItem) => {
-			if (!treeItem || !treeItem.children) {
-				return;
-			}
-
-			const logEntries = treeItem.children.map(child => {
-				if (child instanceof ChatRequestItem || child instanceof ToolCallItem || child instanceof ChatElementItem) {
-					return child.info;
-				}
-				return undefined; // Skip non-loggable items
-			}).filter((entry): entry is LoggedInfo => !!entry);
+			const logEntries = getExportableLogEntries(treeItem);
 
 			if (logEntries.length === 0) {
 				vscode.window.showInformationMessage('No exportable entries found in this prompt.');
@@ -361,19 +365,9 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 		}));
 
 		this._register(vscode.commands.registerCommand(exportPromptLogsAsJsonCommand, async (treeItem: ChatPromptItem) => {
-			if (!treeItem || !treeItem.children) {
-				return;
-			}
-
-			const logEntries = treeItem.children.map(child => {
-				if (child instanceof ChatRequestItem || child instanceof ToolCallItem || child instanceof ChatElementItem) {
-					return child.info;
-				}
-				return undefined; // Skip non-loggable items
-			}).filter((entry): entry is LoggedInfo => !!entry);
-
-			if (logEntries.length === 0) {
-				vscode.window.showInformationMessage('No exportable entries found in this prompt.');
+			const promptObject = await preparePromptLogsAsJson(treeItem);
+			if (!promptObject) {
+				vscode.window.showWarningMessage('No exportable entries found for this prompt.');
 				return;
 			}
 
@@ -396,9 +390,6 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 			}
 
 			try {
-				// Use the shared processing function
-				const promptObject = await processPromptLogs(treeItem);
-
 				// Convert to JSON
 				const finalContent = JSON.stringify(promptObject, null, 2);
 
@@ -425,10 +416,6 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 		}));
 
 		this._register(vscode.commands.registerCommand(exportAllPromptLogsAsJsonCommand, async (savePath?: string) => {
-			// This command supports two invocation patterns:
-			// 1. From view title (no args) - shows save dialog to user
-			// 2. Programmatically via executeCommand with savePath - uses provided path directly
-
 			// Build the tree structure to get all chat prompt items
 			const allTreeItems = await this.chatRequestProvider.getChildren();
 
@@ -477,22 +464,12 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 
 				// Process each chat prompt item using the shared function
 				for (const chatPromptItem of chatPromptItems) {
-					// Check if prompt has exportable entries
-					const logEntries = chatPromptItem.children.map(child => {
-						if (child instanceof ChatRequestItem || child instanceof ToolCallItem || child instanceof ChatElementItem) {
-							return child.info;
-						}
-						return undefined; // Skip non-loggable items
-					}).filter((entry): entry is LoggedInfo => !!entry);
-
-					if (logEntries.length === 0) {
-						continue; // Skip prompts with no exportable entries
-					}
-
 					// Use the shared processing function
-					const promptObject = await processPromptLogs(chatPromptItem);
-					allPromptsContent.push(promptObject);
-					totalLogEntries += promptObject.logCount;
+					const promptObject = await preparePromptLogsAsJson(chatPromptItem);
+					if (promptObject) {
+						allPromptsContent.push(promptObject);
+						totalLogEntries += promptObject.logCount;
+					}
 				}
 
 				// Combine all content as JSON
