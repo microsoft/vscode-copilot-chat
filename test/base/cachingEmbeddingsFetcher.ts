@@ -11,6 +11,7 @@ import { IDomainService } from '../../src/platform/endpoint/common/domainService
 import { IEnvService } from '../../src/platform/env/common/envService';
 import { IFetcherService } from '../../src/platform/networking/common/fetcherService';
 import { ITelemetryService } from '../../src/platform/telemetry/common/telemetry';
+import { CallTracker } from '../../src/util/common/telemetryCorrelationId';
 import { computeSHA256 } from './hash';
 
 export class CacheableEmbeddingRequest {
@@ -64,7 +65,8 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 		type: EmbeddingType,
 		inputs: string[],
 		options: ComputeEmbeddingsOptions,
-		cancellationToken: CancellationToken | undefined,
+		telemetryInfo: CallTracker,
+		token: CancellationToken | undefined,
 	): Promise<Embeddings | undefined> {
 		const embeddingEntries = new Map<string, Embedding>();
 		const nonCached: string[] = [];
@@ -85,7 +87,7 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 		}
 
 		if (nonCached.length) {
-			const embeddingsResult = await super.computeEmbeddings(type, nonCached, options, cancellationToken);
+			const embeddingsResult = await super.computeEmbeddings(type, nonCached, options, telemetryInfo, token);
 			if (!embeddingsResult) {
 				return undefined;
 			}

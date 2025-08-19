@@ -11,6 +11,7 @@ import { IFileSystemService } from '../../../platform/filesystem/common/fileSyst
 import { IGitService } from '../../../platform/git/common/gitService';
 import { Commit } from '../../../platform/git/vscode/git';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { CallTracker } from '../../../util/common/telemetryCorrelationId';
 import { intersection, SetWithKey } from '../../../util/vs/base/common/collections';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
@@ -152,7 +153,7 @@ export class GitRelatedFilesProvider extends Disposable implements vscode.ChatRe
 		// Calculate the embeddings for the commits we don't have cached embeddings for
 		const commitMessages = commitsToComputeEmbeddingsFor.map((commit) => commit.commit.message);
 		const text = prompt ? [prompt, ...commitMessages] : commitMessages;
-		const result = await this._embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, text, {}, token);
+		const result = await this._embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, text, {}, new CallTracker('GitRelatedFilesProvider::computeCommitMessageEmbeddings'), token);
 		if (!result) {
 			return undefined;
 		}

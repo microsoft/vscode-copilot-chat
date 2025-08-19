@@ -25,6 +25,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { BaseTokensPerCompletion } from '../../../platform/tokenizer/node/tokenizer';
+import { CallTracker } from '../../../util/common/telemetryCorrelationId';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
 import { isDefined, isNumber, isString, isStringArray } from '../../../util/vs/base/common/types';
@@ -225,7 +226,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			dispo.clear();
 			dispo.value = vscode.lm.registerEmbeddingsProvider(`copilot.${model}`, new class implements vscode.EmbeddingsProvider {
 				async provideEmbeddings(input: string[], token: vscode.CancellationToken): Promise<vscode.Embedding[]> {
-					const result = await embeddingsComputer.computeEmbeddings(embeddingType, input, { parallelism: 2 }, token);
+					const result = await embeddingsComputer.computeEmbeddings(embeddingType, input, { parallelism: 2 }, new CallTracker('EmbeddingsProvider::provideEmbeddings'), token);
 					if (!result) {
 						throw new Error('Failed to compute embeddings');
 					}
