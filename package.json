@@ -3752,7 +3752,6 @@
 		"@nteract/messaging": "^7.0.20",
 		"@parcel/watcher": "^2.5.1",
 		"@stylistic/eslint-plugin": "^3.0.1",
-		"@types/diff": "^7.0.2",
 		"@types/eslint": "^9.0.0",
 		"@types/google-protobuf": "^3.15.12",
 		"@types/markdown-it": "^14.0.0",
