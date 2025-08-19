@@ -2022,8 +2022,13 @@
 				"icon": "$(archive)"
 			},
 			{
-				"command": "github.copilot.chat.debug.exportAllLogsAsJson",
-				"title": "Export All Logs as JSON...",
+				"command": "github.copilot.chat.debug.exportPromptLogsAsJson",
+				"title": "Export All as JSON...",
+				"icon": "$(export)"
+			},
+			{
+				"command": "github.copilot.chat.debug.exportAllPromptLogsAsJson",
+				"title": "Export All Prompt Logs as JSON...",
 				"icon": "$(export)"
 			},
 			{
@@ -2883,7 +2888,7 @@
 				"icon": "$(filter)"
 			},
 			{
-				"id": "github.copilot.chat.debug.exportAllLogsAsJson",
+				"id": "github.copilot.chat.debug.exportAllPromptLogsAsJson",
 				"label": "Export All Logs as JSON",
 				"icon": "$(file-export)"
 			}
@@ -3092,7 +3097,11 @@
 					"when": "false"
 				},
 				{
-					"command": "github.copilot.chat.debug.exportAllLogsAsJson",
+					"command": "github.copilot.chat.debug.exportPromptLogsAsJson",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.debug.exportAllPromptLogsAsJson",
 					"when": "false"
 				},
 				{
@@ -3115,7 +3124,7 @@
 					"group": "navigation"
 				},
 				{
-					"command": "github.copilot.chat.debug.exportAllLogsAsJson",
+					"command": "github.copilot.chat.debug.exportAllPromptLogsAsJson",
 					"when": "view == copilot-chat",
 					"group": "export@1"
 				},
@@ -3135,6 +3144,11 @@
 					"command": "github.copilot.chat.debug.exportPromptArchive",
 					"when": "view == copilot-chat && viewItem == chatprompt",
 					"group": "export@2"
+				},
+				{
+					"command": "github.copilot.chat.debug.exportPromptLogsAsJson",
+					"when": "view == copilot-chat && viewItem == chatprompt",
+					"group": "export@3"
 				}
 			],
 			"searchPanel/aiResults/commands": [
