@@ -66,10 +66,9 @@ class SimulationGithubCodeSearchService extends Disposable implements IGithubCod
 		return Result.ok({ status: RemoteCodeSearchIndexStatus.Ready, indexedCommit: 'HEAD' });
 	}
 
-	triggerIndexing(authOptions: { silent: boolean }, triggerReason: 'auto' | 'manual' | 'tool', githubRepoId: GithubRepoId): Promise<boolean> {
+	triggerIndexing(authOptions: { silent: boolean }, triggerReason: 'auto' | 'manual' | 'tool', githubRepoId: GithubRepoId): Promise<Result<true, RemoteCodeSearchError>> {
 		throw new Error('Method not implemented.');
 	}
-
 }
 
 

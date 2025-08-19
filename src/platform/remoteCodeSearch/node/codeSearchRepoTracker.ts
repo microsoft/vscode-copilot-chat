@@ -28,7 +28,7 @@ import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { IWorkspaceService } from '../../workspace/common/workspaceService';
 import { IAdoCodeSearchService } from '../common/adoCodeSearchService';
 import { IGithubCodeSearchService } from '../common/githubCodeSearchService';
-import { RemoteCodeSearchIndexState, RemoteCodeSearchIndexStatus } from '../common/remoteCodeSearch';
+import { RemoteCodeSearchError, RemoteCodeSearchIndexState, RemoteCodeSearchIndexStatus } from '../common/remoteCodeSearch';
 import { ICodeSearchAuthenticationService } from './codeSearchRepoAuth';
 
 export enum RepoStatus {
@@ -655,41 +655,28 @@ export class CodeSearchRepoTracker extends Disposable {
 			remoteInfo,
 		};
 
-		let statusResult: Result<RemoteCodeSearchIndexState, Error>;
+		let statusResult: Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>;
 		if (remoteInfo.repoId.type === 'github') {
-			const githubResult = await this._githubCodeSearchService.getRemoteIndexState({ silent: true }, remoteInfo.repoId, token);
-			if (githubResult.isOk()) {
-				statusResult = githubResult;
-			} else {
-				if (githubResult.err.type === 'not-authorized') {
-					this._logService.error(`CodeSearchRepoTracker.getIndexedStatus(${remoteInfo.repoId}). Failed to fetch indexing status. No valid github auth token.`);
-					return {
-						status: RepoStatus.NotAuthorized,
-						repo,
-						remoteInfo,
-					};
-				} else {
-					statusResult = Result.error(githubResult.err.error);
-				}
-			}
+			statusResult = await this._githubCodeSearchService.getRemoteIndexState({ silent: true }, remoteInfo.repoId, token);
 		} else if (remoteInfo.repoId.type === 'ado') {
-			const authToken = (await this._authenticationService.getAdoAccessTokenBase64({ silent: true }));
-			if (!authToken) {
-				this._logService.error(`CodeSearchRepoTracker.getIndexedStatus(${remoteInfo.repoId}).Failed to fetch indexing status.No valid ado auth token.`);
+			statusResult = await this._adoCodeSearchService.getRemoteIndexState({ silent: true }, remoteInfo.repoId, token);
+		} else {
+			this._logService.error(`CodeSearchRepoTracker::getIndexedStatus(${remoteInfo.repoId}). Failed to fetch indexing status. Unknown repository type.`);
+			return couldNotCheckStatus;
+		}
+
+		if (!statusResult.isOk()) {
+			if (statusResult.err.type === 'not-authorized') {
+				this._logService.error(`CodeSearchRepoTracker::getIndexedStatus(${remoteInfo.repoId}). Failed to fetch indexing status. Unauthorized.`);
 				return {
 					status: RepoStatus.NotAuthorized,
 					repo,
 					remoteInfo,
 				};
+			} else {
+				this._logService.error(`CodeSearchRepoTracker::getIndexedStatus(${remoteInfo.repoId}). Failed to fetch indexing status. Encountered eror: ${statusResult.err.error}`);
+				return couldNotCheckStatus;
 			}
-
-			statusResult = await this._adoCodeSearchService.getRemoteIndexState(authToken, remoteInfo.repoId, token);
-		} else {
-			return couldNotCheckStatus;
-		}
-
-		if (!statusResult.isOk()) {
-			return couldNotCheckStatus;
 		}
 
 		switch (statusResult.val.status) {
@@ -817,15 +804,6 @@ export class CodeSearchRepoTracker extends Disposable {
 	public async triggerRemoteIndexingOfRepo(repoEntry: ResolvedRepoEntry, triggerReason: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
 		this._logService.trace(`Triggering indexing for repo: ${repoEntry.remoteInfo.repoId} `);
 
-		const authToken = await this.getGithubAuthToken();
-		if (this._isDisposed) {
-			return Result.ok(true);
-		}
-
-		if (!authToken) {
-			return Result.error(TriggerRemoteIndexingError.noValidAuthToken);
-		}
-
 		// Update UI state as soon as possible if triggered by the user
 		if (triggerReason === 'manual') {
 			this.updateRepoEntry(repoEntry.repo, {
@@ -836,14 +814,14 @@ export class CodeSearchRepoTracker extends Disposable {
 
 		const triggerSuccess = repoEntry.remoteInfo.repoId instanceof GithubRepoId
 			? await this._githubCodeSearchService.triggerIndexing({ silent: true }, triggerReason, repoEntry.remoteInfo.repoId, telemetryInfo)
-			: await this._adoCodeSearchService.triggerIndexing(authToken, triggerReason, repoEntry.remoteInfo.repoId, telemetryInfo);
+			: await this._adoCodeSearchService.triggerIndexing({ silent: true }, triggerReason, repoEntry.remoteInfo.repoId, telemetryInfo);
 
 		if (this._isDisposed) {
 			return Result.ok(true);
 		}
 
 		if (!triggerSuccess) {
-			this._logService.error(`RepoTracker.TriggerRemoteIndexing(${triggerReason}).Failed to request indexing for '${repoEntry.remoteInfo.repoId}'.`);
+			this._logService.error(`RepoTracker::TriggerRemoteIndexing(${triggerReason}). Failed to request indexing for '${repoEntry.remoteInfo.repoId}'.`);
 
 			this.updateRepoEntry(repoEntry.repo, {
 				...repoEntry,

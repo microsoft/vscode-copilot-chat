@@ -84,7 +84,7 @@ export interface IGithubCodeSearchService {
 		triggerReason: 'auto' | 'manual' | 'tool',
 		githubRepoId: GithubRepoId,
 		telemetryInfo: TelemetryCorrelationId,
-	): Promise<boolean>;
+	): Promise<Result<true, RemoteCodeSearchError>>;
 
 	/**
 	 * Semantic searches a given github repo for relevant code snippets
@@ -195,10 +195,10 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 		triggerReason: 'auto' | 'manual' | 'tool',
 		githubRepoId: GithubRepoId,
 		telemetryInfo: TelemetryCorrelationId,
-	): Promise<boolean> {
+	): Promise<Result<true, RemoteCodeSearchError>> {
 		const authToken = await this.getGithubAccessToken(auth.silent);
 		if (!authToken) {
-			return false;
+			return Result.error({ type: 'not-authorized' });
 		}
 
 		const response = await this._capiClientService.makeRequest<Response>({
@@ -232,7 +232,7 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 				statusCode: response.status,
 			});
 
-			return false;
+			return Result.error({ type: 'generic-error', error: new Error(`Failed to request indexing for '${githubRepoId}'. Response: ${response.status}.`) });
 		}
 
 		/* __GDPR__
@@ -250,7 +250,7 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 			triggerReason,
 		}, {});
 
-		return true;
+		return Result.ok(true);
 	}
 
 	async searchRepo(
