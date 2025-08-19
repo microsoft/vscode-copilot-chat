@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Props, query } from '@anthropic-ai/claude-code';
+import { Options, query } from '@anthropic-ai/claude-code';
 import type * as vscode from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -60,7 +60,7 @@ export class ClaudeAgentManager extends Disposable {
 
 		// Build options for the Claude Code SDK
 		const serverConfig = (await this.getLangModelServer()).getConfig();
-		const options: Props['options'] & { env: typeof process.env } = {
+		const options: Options = {
 			// allowedTools: uniqueTools,
 			cwd: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
 			abortController,
@@ -75,7 +75,8 @@ export class ClaudeAgentManager extends Disposable {
 				ANTHROPIC_API_KEY: serverConfig.nonce
 			},
 			// permissionMode: 'bypassPermissions',
-			// permissionPromptToolName: 'get_permission'
+			// permissionPromptToolName: 'get_permission',
+			// mcpServers: {}
 		};
 
 		// Add resume session if provided
