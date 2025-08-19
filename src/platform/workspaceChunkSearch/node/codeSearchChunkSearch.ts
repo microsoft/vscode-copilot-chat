@@ -569,7 +569,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 					return;
 				}
 
-				return this._githubCodeSearchService.searchRepo(authToken, this._embeddingType, {
+				return this._githubCodeSearchService.searchRepo({ silent: true }, this._embeddingType, {
 					githubRepoId: repo.remoteInfo.repoId,
 					localRepoRoot: repo.repo.rootUri,
 					indexedCommit: repo.status === RepoStatus.Ready ? repo.indexedCommit : undefined,

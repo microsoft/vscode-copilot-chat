@@ -650,17 +650,21 @@ export class CodeSearchRepoTracker extends Disposable {
 
 		let statusResult: Result<RemoteCodeSearchIndexState, Error>;
 		if (remoteInfo.repoId.type === 'github') {
-			const authToken = await this.getGithubAccessToken(true);
-			if (!authToken) {
-				this._logService.error(`CodeSearchRepoTracker.getIndexedStatus(${remoteInfo.repoId}).Failed to fetch indexing status.No valid github auth token.`);
-				return {
-					status: RepoStatus.NotAuthorized,
-					repo,
-					remoteInfo,
-				};
+			const githubResult = await this._githubCodeSearchService.getRemoteIndexState({ silent: true }, remoteInfo.repoId, token);
+			if (githubResult.isOk()) {
+				statusResult = githubResult;
+			} else {
+				if (githubResult.err.type === 'not-authorized') {
+					this._logService.error(`CodeSearchRepoTracker.getIndexedStatus(${remoteInfo.repoId}). Failed to fetch indexing status. No valid github auth token.`);
+					return {
+						status: RepoStatus.NotAuthorized,
+						repo,
+						remoteInfo,
+					};
+				} else {
+					statusResult = Result.error(githubResult.err.error);
+				}
 			}
-
-			statusResult = await this._githubCodeSearchService.getRemoteIndexState(authToken, remoteInfo.repoId, token);
 		} else if (remoteInfo.repoId.type === 'ado') {
 			const authToken = (await this._authenticationService.getAdoAccessTokenBase64({ silent: true }));
 			if (!authToken) {
@@ -699,11 +703,6 @@ export class CodeSearchRepoTracker extends Disposable {
 			case RemoteCodeSearchIndexStatus.NotIndexable:
 				return { status: RepoStatus.NotIndexable, repo, remoteInfo };
 		}
-	}
-
-	private async getGithubAccessToken(silent: boolean) {
-		return (await this._authenticationService.getPermissiveGitHubSession({ silent }))?.accessToken
-			?? (await this._authenticationService.getAnyGitHubSession({ silent }))?.accessToken;
 	}
 
 	private closeRepo(repo: RepoContext) {
@@ -825,7 +824,7 @@ export class CodeSearchRepoTracker extends Disposable {
 		}
 
 		const triggerSuccess = repoEntry.remoteInfo.repoId instanceof GithubRepoId
-			? await this._githubCodeSearchService.triggerIndexing(authToken, triggerReason, repoEntry.remoteInfo.repoId, telemetryInfo)
+			? await this._githubCodeSearchService.triggerIndexing({ silent: true }, triggerReason, repoEntry.remoteInfo.repoId, telemetryInfo)
 			: await this._adoCodeSearchService.triggerIndexing(authToken, triggerReason, repoEntry.remoteInfo.repoId, telemetryInfo);
 
 		if (this._isDisposed) {
