@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { InputBoxOptions, QuickInputButtons, QuickPickItem, window } from 'vscode';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { Config, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 
 interface ModelConfig {
@@ -52,14 +52,16 @@ function isBackButtonClick(value: unknown): value is BackButtonClick {
  */
 export class CustomOAIModelConfigurator {
 	constructor(
-		@IConfigurationService private readonly _configurationService: IConfigurationService
+		private readonly _configurationService: IConfigurationService,
+		private readonly _configKey: Config<Record<string, ModelConfig>> = ConfigKey.CustomOAIModels,
+		private readonly _forceRequiresAPIKey: boolean = false
 	) { }
 
 	/**
 	 * Main entry point for configuring Custom OAI models
 	 */
 	async configure(): Promise<void> {
-		const models = this._configurationService.getConfig(ConfigKey.CustomOAIModels);
+		const models = this._configurationService.getConfig(this._configKey);
 
 		while (true) {
 			const items: ModelQuickPickItem[] = [];
@@ -125,7 +127,7 @@ export class CustomOAIModelConfigurator {
 				const newModel = await this._configureModel();
 				if (newModel) {
 					const updatedModels = { ...models, [newModel.id]: newModel.config };
-					await this._configurationService.setConfig(ConfigKey.CustomOAIModels, updatedModels);
+					await this._configurationService.setConfig(this._configKey, updatedModels);
 					Object.assign(models, updatedModels);
 				}
 			} else if (selected.action === 'edit' && selected.modelId) {
@@ -133,12 +135,12 @@ export class CustomOAIModelConfigurator {
 				if (result) {
 					if (result.action === 'update') {
 						const updatedModels = { ...models, [result.id]: result.config };
-						await this._configurationService.setConfig(ConfigKey.CustomOAIModels, updatedModels);
+						await this._configurationService.setConfig(this._configKey, updatedModels);
 						Object.assign(models, updatedModels);
 					} else if (result.action === 'delete') {
 						const updatedModels = { ...models };
 						delete updatedModels[selected.modelId];
-						await this._configurationService.setConfig(ConfigKey.CustomOAIModels, updatedModels);
+						await this._configurationService.setConfig(this._configKey, updatedModels);
 						Object.assign(models, updatedModels);
 					}
 				}
@@ -159,7 +161,7 @@ export class CustomOAIModelConfigurator {
 				if (!value.trim()) {
 					return 'Model ID cannot be empty';
 				}
-				const existingModels = this._configurationService.getConfig(ConfigKey.CustomOAIModels);
+				const existingModels = this._configurationService.getConfig(this._configKey);
 				if (existingModels[value.trim()]) {
 					return 'A model with this ID already exists';
 				}
@@ -389,7 +391,7 @@ export class CustomOAIModelConfigurator {
 			toolCalling: defaults?.toolCalling ?? false,
 			vision: defaults?.vision ?? false,
 			thinking: defaults?.thinking ?? false,
-			requiresAPIKey: defaults?.requiresAPIKey ?? true
+			requiresAPIKey: this._forceRequiresAPIKey || (defaults?.requiresAPIKey ?? true)
 		};
 
 		const items: QuickPickItem[] = [
@@ -404,12 +406,16 @@ export class CustomOAIModelConfigurator {
 			{
 				label: 'Thinking',
 				picked: capabilities.thinking
-			},
-			{
-				label: 'Requires API Key',
-				picked: capabilities.requiresAPIKey
 			}
 		];
+
+		// Only show "Requires API Key" option if not forced to true
+		if (!this._forceRequiresAPIKey) {
+			items.push({
+				label: 'Requires API Key',
+				picked: capabilities.requiresAPIKey
+			});
+		}
 
 		const quickPick = window.createQuickPick();
 		quickPick.title = 'Model Capabilities';
@@ -443,7 +449,9 @@ export class CustomOAIModelConfigurator {
 				capabilities.toolCalling = items.some(item => item.label.includes('Tool Calling'));
 				capabilities.vision = items.some(item => item.label.includes('Vision'));
 				capabilities.thinking = items.some(item => item.label.includes('Thinking'));
-				capabilities.requiresAPIKey = items.some(item => item.label.includes('Requires API Key'));
+				if (!this._forceRequiresAPIKey) {
+					capabilities.requiresAPIKey = items.some(item => item.label.includes('Requires API Key'));
+				}
 
 				// Update items to reflect current state
 				items.forEach(item => {
