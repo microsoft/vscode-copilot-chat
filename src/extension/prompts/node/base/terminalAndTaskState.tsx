@@ -27,16 +27,8 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 		const resultTasks: ITaskPromptInfo[] = [];
 		const allTasks = this.tasksService.getTasks()?.[0]?.[1] ?? [];
 		const tasks = Array.isArray(allTasks) ? allTasks : [];
-		const taskTerminalPids = new Set<number>();
-		const taskWithTerminals = await Promise.all(tasks.map(async (task) => {
-			const terminal = await this.tasksService.getTerminalForTask(task);
-			const terminalPid = terminal ? await terminal.processId : undefined;
-			if (terminalPid) {
-				taskTerminalPids.add(terminalPid);
-				return task;
-			}
-		}));
-		for (const exec of taskWithTerminals) {
+		const tasksToRender = tasks.filter(async (task) => this.tasksService.isTaskActive(task) || (await this.tasksService.getTerminalForTask(task)));
+		for (const exec of tasksToRender) {
 			if (exec?.label) {
 				resultTasks.push({
 					name: exec.label,
@@ -55,13 +47,8 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 		if (this.terminalService && Array.isArray(this.terminalService.terminals)) {
 			const terminals = await Promise.all(this.terminalService.terminals.map(async (term) => {
 				const lastCommand = await this.terminalService.getLastCommandForTerminal(term);
-				const pid = await term.processId;
-				if (taskTerminalPids.has(pid)) {
-					return undefined;
-				}
 				return {
 					name: term.name,
-					pid,
 					lastCommand: lastCommand ? {
 						commandLine: lastCommand.commandLine ?? '(no last command)',
 						cwd: lastCommand.cwd?.toString() ?? '(unknown)',
