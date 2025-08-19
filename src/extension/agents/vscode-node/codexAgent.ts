@@ -92,7 +92,7 @@ export class CodexAgentManager extends Disposable {
 
 						let gotApproval;
 						try {
-							await this.toolsService.invokeTool(ToolName.CodexTool, { input: { message: 'Run command?', detail: commandStr }, toolInvocationToken: request.toolInvocationToken }, token);
+							await this.toolsService.invokeTool(ToolName.ConfirmationTool, { input: { message: 'Run command?', detail: commandStr }, toolInvocationToken: request.toolInvocationToken }, token);
 							gotApproval = true;
 						} catch (error) {
 							this.logService.error(error, 'Codex command approval failed');

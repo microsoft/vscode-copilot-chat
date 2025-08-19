@@ -4,13 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
-import { LanguageModelToolResult } from '../../../vscodeTypes';
+import { LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { ReadFileParams } from './readFileTool';
 
 export class CodexTool implements ICopilotTool<ReadFileParams> {
-	public static toolName = ToolName.CodexTool;
+	public static toolName = ToolName.ConfirmationTool;
 
 	constructor() { }
 
@@ -29,7 +29,7 @@ export class CodexTool implements ICopilotTool<ReadFileParams> {
 		return {
 			confirmationMessages: {
 				title: options.input.message,
-				message: options.input.detail,
+				message: new MarkdownString(options.input.detail),
 			}
 		};
 	}

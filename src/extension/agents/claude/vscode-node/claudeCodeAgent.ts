@@ -12,14 +12,23 @@ import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseTurn } from '../../../../vscodeTypes';
 import { LanguageModelServer } from '../../vscode-node/langModelServer';
+import { PermissionMcpServer } from './permissionMcp';
 
 export class ClaudeAgentManager extends Disposable {
 	private _langModelServer: LanguageModelServer | undefined;
+	private _permissionMcpServer: PermissionMcpServer | undefined;
 	private async getLangModelServer(): Promise<LanguageModelServer> {
 		if (!this._langModelServer) {
 			this._langModelServer = this.instantiationService.createInstance(LanguageModelServer);
 			await this._langModelServer.start();
 		}
+
+		if (!this._permissionMcpServer) {
+			const serverConfig = this._langModelServer.getConfig();
+			this._permissionMcpServer = this.instantiationService.createInstance(PermissionMcpServer, serverConfig.port);
+			this._langModelServer.registerHandler('/mcp', (req, res, body) => this._permissionMcpServer!.handleMcp(req, res, body));
+		}
+
 		return this._langModelServer;
 	}
 
@@ -32,6 +41,8 @@ export class ClaudeAgentManager extends Disposable {
 	}
 
 	public async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult> {
+		this._permissionMcpServer?.setToolInvocationToken(request.toolInvocationToken);
+
 		const lastMessage = findLast(context.history, msg => msg instanceof ChatResponseTurn) as ChatResponseTurn | undefined;
 		const sessionId = lastMessage?.result?.metadata?.sessionId;
 		try {
@@ -75,8 +86,16 @@ export class ClaudeAgentManager extends Disposable {
 				ANTHROPIC_API_KEY: serverConfig.nonce
 			},
 			// permissionMode: 'bypassPermissions',
-			// permissionPromptToolName: 'get_permission',
-			// mcpServers: {}
+			permissionPromptToolName: 'mcp__permission__get_permission',
+			mcpServers: {
+				permission: {
+					type: 'http',
+					url: `http://localhost:${serverConfig.port}/mcp`,
+					headers: {
+						vscode_nonce: serverConfig.nonce
+					}
+				}
+			}
 		};
 
 		// Add resume session if provided

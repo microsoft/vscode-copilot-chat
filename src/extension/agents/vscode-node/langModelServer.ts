@@ -6,6 +6,7 @@
 import * as http from 'http';
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { AnthropicAdapter, OpenAIAdapter, ProtocolAdapter, StreamingContext } from './adapters';
 
 export interface ServerTextLineResponse {
@@ -28,17 +29,19 @@ class LanguageModelServer {
 	private server: http.Server;
 	private config: ServerConfig;
 	private adapters: Map<string, ProtocolAdapter>;
+	private pathHandlers: Map<string, (req: http.IncomingMessage, res: http.ServerResponse, body: string) => Promise<void>>;
 
 	constructor(
 		@ILogService private readonly logService: ILogService
 	) {
 		this.config = {
 			port: 0, // Will be set to random available port
-			nonce: 'vscode-nonce'
+			nonce: generateUuid()
 		};
 		this.adapters = new Map();
 		this.adapters.set('/v1/chat/completions', new OpenAIAdapter());
 		this.adapters.set('/v1/messages', new AnthropicAdapter());
+		this.pathHandlers = new Map();
 
 		this.server = this.createServer();
 	}
@@ -64,6 +67,23 @@ class LanguageModelServer {
 			}
 
 			if (req.method === 'POST') {
+				// Check for registered path handlers first
+				const pathHandler = this.pathHandlers.get(req.url || '');
+				if (pathHandler) {
+					try {
+						const body = await this.readRequestBody(req);
+						await pathHandler(req, res, body);
+						return;
+					} catch (error) {
+						res.writeHead(500, { 'Content-Type': 'application/json' });
+						res.end(JSON.stringify({
+							error: 'Handler request failed',
+							details: error instanceof Error ? error.message : String(error)
+						}));
+						return;
+					}
+				}
+
 				const adapter = this.getAdapterForPath(req.url || '');
 				if (adapter) {
 					try {
@@ -325,6 +345,10 @@ class LanguageModelServer {
 
 	public getConfig(): ServerConfig {
 		return { ...this.config };
+	}
+
+	public registerHandler(path: string, handler: (req: http.IncomingMessage, res: http.ServerResponse, body: string) => Promise<void>): void {
+		this.pathHandlers.set(path, handler);
 	}
 
 	public async getAvailableModels(): Promise<Array<{
