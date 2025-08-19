@@ -119,7 +119,13 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				const content = document.getText();
 
 				// Write to the selected file
-				await vscode.workspace.fs.writeFile(saveUri, Buffer.from(content, 'utf8'));
+				await vscode.window.withProgress({
+					location: vscode.ProgressLocation.Notification,
+					title: 'Exporting all logs as JSON ...',
+					cancellable: true
+				}, async () => {
+					await vscode.workspace.fs.writeFile(saveUri, Buffer.from(content, 'utf8'));
+				});
 
 				// Show success message with option to open the file
 				const openAction = 'Open File';
@@ -309,7 +315,7 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 			}
 		}));
 
-		this._register(vscode.commands.registerCommand(exportAllLogsAsJsonCommand, async () => {
+		this._register(vscode.commands.registerCommand(exportAllLogsAsJsonCommand, async (savePath?: string) => {
 			const allLogEntries = requestLogger.getRequests();
 
 			if (allLogEntries.length === 0) {
@@ -317,24 +323,32 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				return;
 			}
 
-			// Generate a default filename based on current timestamp
-			const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
-			const defaultFilename = `copilot_logs_${timestamp}.json`;
+			let saveUri: vscode.Uri;
 
-			// Show save dialog
-			const saveUri = await vscode.window.showSaveDialog({
-				defaultUri: vscode.Uri.file(path.join(os.homedir(), defaultFilename)),
-				filters: {
-					'JSON': ['json'],
-					'Copilot Markdown': ['copilotmd'],
-					'Markdown': ['md'],
-					'All Files': ['*']
-				},
-				title: 'Export All Logs as JSON'
-			});
+			if (savePath) {
+				// Use provided path
+				saveUri = vscode.Uri.file(savePath);
+			} else {
+				// Generate a default filename based on current timestamp
+				const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+				const defaultFilename = `copilot_logs_${timestamp}.json`;
 
-			if (!saveUri) {
-				return; // User cancelled
+				// Show save dialog
+				const dialogResult = await vscode.window.showSaveDialog({
+					defaultUri: vscode.Uri.file(path.join(os.homedir(), defaultFilename)),
+					filters: {
+						'JSON': ['json'],
+						'Copilot Markdown': ['copilotmd'],
+						'Markdown': ['md'],
+						'All Files': ['*']
+					},
+					title: 'Export All Logs as JSON'
+				});
+
+				if (!dialogResult) {
+					return; // User cancelled
+				}
+				saveUri = dialogResult;
 			}
 
 			try {
