@@ -13,7 +13,7 @@ import { getAllStatefulMarkersAndIndicies } from '../../../platform/endpoint/com
 import { ILogService } from '../../../platform/log/common/logService';
 import { messageToMarkdown } from '../../../platform/log/common/messageStringify';
 import { IResponseDelta } from '../../../platform/networking/common/fetch';
-import { AbstractRequestLogger, ChatRequestScheme, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
+import { AbstractRequestLogger, ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, LoggedInfo, LoggedInfoKind, LoggedRequest, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
 import { ThinkingData } from '../../../platform/thinking/common/thinking';
 import { createFencedCodeBlock } from '../../../util/common/markdown';
 import { assertNever } from '../../../util/vs/base/common/assert';
@@ -23,6 +23,95 @@ import { Iterable } from '../../../util/vs/base/common/iterator';
 import { safeStringify } from '../../../util/vs/base/common/objects';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { renderToolResultToStringNoBudget } from './requestLoggerToolResult';
+
+// Implementation classes with toJson methods
+class LoggedElementInfo implements ILoggedElementInfo {
+	public readonly kind = LoggedInfoKind.Element;
+
+	constructor(
+		public readonly id: string,
+		public readonly name: string,
+		public readonly tokens: number,
+		public readonly maxTokens: number,
+		public readonly trace: HTMLTracer,
+		public readonly chatRequest: any | undefined
+	) { }
+
+	toJson(): any {
+		return {
+			id: this.id,
+			kind: 'element',
+			name: this.name,
+			tokens: this.tokens,
+			maxTokens: this.maxTokens
+		};
+	}
+}
+
+class LoggedRequestInfo implements ILoggedRequestInfo {
+	public readonly kind = LoggedInfoKind.Request;
+
+	constructor(
+		public readonly id: string,
+		public readonly entry: LoggedRequest,
+		public readonly chatRequest: any | undefined
+	) { }
+
+	toJson(): any {
+		const baseInfo = {
+			id: this.id,
+			kind: 'request',
+			type: this.entry.type,
+			name: this.entry.debugName
+		};
+
+		if (this.entry.type === LoggedRequestKind.MarkdownContentRequest) {
+			return {
+				...baseInfo,
+				startTime: new Date(this.entry.startTimeMs).toISOString()
+			};
+		} else {
+			return {
+				...baseInfo,
+				startTime: this.entry.startTime?.toISOString(),
+				endTime: this.entry.endTime?.toISOString(),
+				duration: this.entry.endTime && this.entry.startTime ?
+					this.entry.endTime.getTime() - this.entry.startTime.getTime() : undefined,
+				model: 'model' in this.entry.chatParams ? this.entry.chatParams.model : undefined,
+				messages: 'messages' in this.entry.chatParams ? this.entry.chatParams.messages : undefined,
+				usage: this.entry.type === LoggedRequestKind.ChatMLSuccess ? this.entry.usage : undefined,
+				timeToFirstToken: this.entry.type !== LoggedRequestKind.ChatMLCancelation ? this.entry.timeToFirstToken : undefined,
+				result: this.entry.type !== LoggedRequestKind.ChatMLCancelation ? this.entry.result : undefined,
+			};
+		}
+	}
+}
+
+class LoggedToolCall implements ILoggedToolCall {
+	public readonly kind = LoggedInfoKind.ToolCall;
+
+	constructor(
+		public readonly id: string,
+		public readonly name: string,
+		public readonly args: unknown,
+		public readonly response: LanguageModelToolResult2,
+		public readonly chatRequest: any | undefined,
+		public readonly time: number,
+		public readonly thinking?: ThinkingData
+	) { }
+
+	toJson(): any {
+		return {
+			id: this.id,
+			kind: 'toolCall',
+			name: this.name,
+			args: this.args,
+			response: this.response,
+			time: this.time,
+			thinking: this.thinking || {}
+		};
+	}
+}
 
 export class RequestLogger extends AbstractRequestLogger {
 
@@ -38,21 +127,27 @@ export class RequestLogger extends AbstractRequestLogger {
 		this._register(workspace.registerTextDocumentContentProvider(ChatRequestScheme.chatRequestScheme, {
 			onDidChange: Event.map(this.onDidChangeRequests, () => Uri.parse(ChatRequestScheme.buildUri({ kind: 'latest' }))),
 			provideTextDocumentContent: (uri) => {
-				const uriData = ChatRequestScheme.parseUri(uri.toString());
-				if (!uriData) { return `Invalid URI: ${uri}`; }
+				const parseResult = ChatRequestScheme.parseUri(uri.toString());
+				if (!parseResult) { return `Invalid URI: ${uri}`; }
 
+				const { data: uriData, format } = parseResult;
 				const entry = uriData.kind === 'latest' ? this._entries.at(-1) : this._entries.find(e => e.id === uriData.id);
 				if (!entry) { return `Request not found`; }
 
-				switch (entry.kind) {
-					case LoggedInfoKind.Element:
-						return 'Not available';
-					case LoggedInfoKind.ToolCall:
-						return this._renderToolCallToMarkdown(entry);
-					case LoggedInfoKind.Request:
-						return this._renderRequestToMarkdown(entry.id, entry.entry);
-					default:
-						assertNever(entry);
+				if (format === 'json') {
+					return this._renderToJson(entry);
+				} else {
+					// Existing markdown logic
+					switch (entry.kind) {
+						case LoggedInfoKind.Element:
+							return 'Not available';
+						case LoggedInfoKind.ToolCall:
+							return this._renderToolCallToMarkdown(entry);
+						case LoggedInfoKind.Request:
+							return this._renderRequestToMarkdown(entry.id, entry.entry);
+						default:
+							assertNever(entry);
+					}
 				}
 			}
 		}));
@@ -76,21 +171,20 @@ export class RequestLogger extends AbstractRequestLogger {
 	}
 
 	public override logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void {
-		this._addEntry({
-			kind: LoggedInfoKind.ToolCall,
+		this._addEntry(new LoggedToolCall(
 			id,
-			chatRequest: this.currentRequest,
 			name,
 			args,
 			response,
-			time: Date.now(),
+			this.currentRequest,
+			Date.now(),
 			thinking
-		});
+		));
 	}
 
 	public override addPromptTrace(elementName: string, endpoint: IChatEndpointInfo, result: RenderPromptResult, trace: HTMLTracer): void {
 		const id = generateUuid().substring(0, 8);
-		this._addEntry({ kind: LoggedInfoKind.Element, id, name: elementName, tokens: result.tokenCount, maxTokens: endpoint.modelMaxPromptTokens, trace, chatRequest: this.currentRequest })
+		this._addEntry(new LoggedElementInfo(id, elementName, result.tokenCount, endpoint.modelMaxPromptTokens, trace, this.currentRequest))
 			.catch(e => this._logService.error(e));
 	}
 
@@ -99,7 +193,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		if (!this._shouldLog(entry)) {
 			return;
 		}
-		this._addEntry({ kind: LoggedInfoKind.Request, id, entry, chatRequest: this.currentRequest })
+		this._addEntry(new LoggedRequestInfo(id, entry, this.currentRequest))
 			.then(ok => {
 				if (ok) {
 					this._ensureLinkProvider();
@@ -152,7 +246,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		const docLinkProvider = new (class implements DocumentLinkProvider {
 			provideDocumentLinks(
 				td: TextDocument,
-				ct: CancellationToken
+				_ct: CancellationToken
 			): DocumentLink[] {
 				return ChatRequestScheme.findAllUris(td.getText()).map(u => new DocumentLink(
 					new Range(td.positionAt(u.range.start), td.positionAt(u.range.endExclusive)),
@@ -179,6 +273,20 @@ export class RequestLogger extends AbstractRequestLogger {
 }
 </style>
 `;
+	}
+
+	private _renderToJson(entry: LoggedInfo): string {
+		try {
+			const jsonObject = entry.toJson();
+			return JSON.stringify(jsonObject, null, 2);
+		} catch (error) {
+			return JSON.stringify({
+				id: entry.id,
+				kind: 'error',
+				error: error?.toString() || 'Unknown error',
+				timestamp: new Date().toISOString()
+			}, null, 2);
+		}
 	}
 
 	private async _renderToolCallToMarkdown(entry: ILoggedToolCall) {

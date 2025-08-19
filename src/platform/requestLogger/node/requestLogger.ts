@@ -29,28 +29,42 @@ export type UriData = { kind: 'request'; id: string } | { kind: 'latest' };
 export class ChatRequestScheme {
 	public static readonly chatRequestScheme = 'ccreq';
 
-	public static buildUri(data: UriData): string {
+	public static buildUri(data: UriData, format: 'markdown' | 'json' = 'markdown'): string {
+		const extension = format === 'json' ? 'json' : 'copilotmd';
 		if (data.kind === 'latest') {
-			return `${ChatRequestScheme.chatRequestScheme}:latestrequest.copilotmd`;
+			return `${ChatRequestScheme.chatRequestScheme}:latest.${extension}`;
 		} else {
-			return `${ChatRequestScheme.chatRequestScheme}:${data.id}.copilotmd`;
+			return `${ChatRequestScheme.chatRequestScheme}:${data.id}.${extension}`;
 		}
 	}
 
-	public static parseUri(uri: string): UriData | undefined {
-		if (uri === ChatRequestScheme.buildUri({ kind: 'latest' })) {
-			return { kind: 'latest' };
-		} else {
-			const match = uri.match(/ccreq:([^\s]+)\.copilotmd/);
-			if (match) {
-				return { kind: 'request', id: match[1] };
-			}
+	public static parseUri(uri: string): { data: UriData; format: 'markdown' | 'json' } | undefined {
+		// Check for latest markdown
+		if (uri === this.buildUri({ kind: 'latest' }, 'markdown')) {
+			return { data: { kind: 'latest' }, format: 'markdown' };
 		}
+		// Check for latest JSON
+		if (uri === this.buildUri({ kind: 'latest' }, 'json')) {
+			return { data: { kind: 'latest' }, format: 'json' };
+		}
+
+		// Check for specific request markdown
+		const mdMatch = uri.match(/ccreq:([^\s]+)\.copilotmd/);
+		if (mdMatch) {
+			return { data: { kind: 'request', id: mdMatch[1] }, format: 'markdown' };
+		}
+
+		// Check for specific request JSON
+		const jsonMatch = uri.match(/ccreq:([^\s]+)\.json/);
+		if (jsonMatch) {
+			return { data: { kind: 'request', id: jsonMatch[1] }, format: 'json' };
+		}
+
 		return undefined;
 	}
 
 	public static findAllUris(text: string): { uri: string; range: OffsetRange }[] {
-		const linkRE = /(ccreq:[^\s]+\.copilotmd)/g;
+		const linkRE = /(ccreq:[^\s]+\.(copilotmd|json))/g;
 		return [...text.matchAll(linkRE)].map(
 			(m) => {
 				const identifier = m[1];
@@ -77,6 +91,7 @@ export interface ILoggedElementInfo {
 	maxTokens: number;
 	trace: HTMLTracer;
 	chatRequest: ChatRequest | undefined;
+	toJson(): any;
 }
 
 export interface ILoggedRequestInfo {
@@ -84,6 +99,7 @@ export interface ILoggedRequestInfo {
 	id: string;
 	entry: LoggedRequest;
 	chatRequest: ChatRequest | undefined;
+	toJson(): any;
 }
 
 export interface ILoggedToolCall {
@@ -95,6 +111,7 @@ export interface ILoggedToolCall {
 	chatRequest: ChatRequest | undefined;
 	time: number;
 	thinking?: ThinkingData;
+	toJson(): any;
 }
 
 export interface ILoggedPendingRequest {
