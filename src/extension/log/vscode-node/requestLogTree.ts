@@ -379,7 +379,7 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 
 			// Generate a default filename based on the prompt
 			const promptText = treeItem.request.prompt.replace(/\W/g, '_').substring(0, 50);
-			const defaultFilename = `${promptText}_logs.json`;
+			const defaultFilename = `${promptText}_logs.chatreplay.json`;
 
 			// Show save dialog
 			const saveUri = await vscode.window.showSaveDialog({
@@ -453,7 +453,7 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 			} else {
 				// Generate a default filename based on current timestamp
 				const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
-				const defaultFilename = `copilot_all_prompts_${timestamp}.json`;
+				const defaultFilename = `copilot_all_prompts_${timestamp}.chatreplay.json`;
 
 				// Show save dialog
 				const dialogResult = await vscode.window.showSaveDialog({
