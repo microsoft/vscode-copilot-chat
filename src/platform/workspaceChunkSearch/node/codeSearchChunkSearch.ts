@@ -248,7 +248,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			if (allRepos.some(repo => repo.status === RepoStatus.CouldNotCheckIndexStatus || repo.status === RepoStatus.NotAuthorized)) {
 				if (await raceCancellationError(this._authUpgradeService.shouldRequestPermissiveSessionUpgrade(), token)) { // Needs more thought
 					if (await raceCancellationError(this._authUpgradeService.shouldRequestPermissiveSessionUpgrade(), token)) {
-						await raceCancellationError(this._repoTracker.updateAllRepoStatuses(), token);
+						await raceCancellationError(this._repoTracker.updateRepoStatuses(), token);
 						allRepos = Array.from(this._repoTracker.getAllRepos());
 					}
 				}

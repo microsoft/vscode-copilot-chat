@@ -303,13 +303,18 @@ export class CodeSearchRepoTracker extends Disposable {
 		const refreshInterval = this._register(new IntervalTimer());
 		refreshInterval.cancelAndSet(() => this.updateIndexedCommitForAllRepos(), 5 * 60 * 1000); // 5 minutes
 
-		// When the authentication state changes, we need to update the state of all valid repos
+		// When the authentication state changes, update repos
 		this._register(Event.any(
 			this._authenticationService.onDidAuthenticationChange,
-			this._authenticationService.onDidAdoAuthenticationChange,
 			this._adoCodeSearchService.onDidChangeIndexState
 		)(() => {
-			this.updateAllRepoStatuses();
+			this.updateRepoStatuses();
+		}));
+
+		this._register(Event.any(
+			this._authenticationService.onDidAdoAuthenticationChange,
+		)(() => {
+			this.updateRepoStatuses('ado');
 		}));
 	}
 
@@ -779,7 +784,7 @@ export class CodeSearchRepoTracker extends Disposable {
 		return error ?? Result.ok(true);
 	}
 
-	public async updateAllRepoStatuses(): Promise<void> {
+	public async updateRepoStatuses(onlyReposOfType?: 'github' | 'ado'): Promise<void> {
 		await Promise.all(Array.from(this._repos.values(), repo => {
 			switch (repo.status) {
 				case RepoStatus.NotResolvable:
@@ -793,8 +798,12 @@ export class CodeSearchRepoTracker extends Disposable {
 				case RepoStatus.BuildingIndex:
 				case RepoStatus.Ready:
 				case RepoStatus.CouldNotCheckIndexStatus:
-				case RepoStatus.NotAuthorized:
-					return this.updateRepoStateFromEndpoint(repo.repo, repo.remoteInfo, true, CancellationToken.None).catch(() => { });
+				case RepoStatus.NotAuthorized: {
+					if (!onlyReposOfType || repo.remoteInfo.repoId.type === onlyReposOfType) {
+						return this.updateRepoStateFromEndpoint(repo.repo, repo.remoteInfo, true, CancellationToken.None).catch(() => { });
+					}
+					break;
+				}
 			}
 		}));
 	}
