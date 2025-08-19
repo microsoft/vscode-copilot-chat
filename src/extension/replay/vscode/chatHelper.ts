@@ -5,10 +5,10 @@
 
 import { commands } from 'vscode';
 
-export async function startReplayInChat(request: string) {
+export async function startReplayInChat() {
 	await commands.executeCommand('workbench.panel.chat.view.copilot.focus');
 	await commands.executeCommand('type', {
-		text: request,
+		text: `\@chatReplay`,
 	});
 	await commands.executeCommand('workbench.action.chat.submit');
 }

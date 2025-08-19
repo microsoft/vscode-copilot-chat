@@ -283,6 +283,7 @@ export class ChatParticipantRequestHandler {
 	}
 
 	private async selectIntent(command: CommandDetails | undefined, history: Turn[]): Promise<IIntent> {
+
 		if (!command?.intent && this.location === ChatLocation.Editor) { // TODO@jrieken do away with location specific code
 
 			let preferredIntent: Intent | undefined;

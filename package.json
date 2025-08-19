@@ -3467,8 +3467,8 @@
 					"Chat Replay"
 				],
 				"extensions": [
-					".chatReplay",
-					".chatreplay"
+					".chatReplay.json",
+					".chatreplay.json"
 				]
       		}
 		],

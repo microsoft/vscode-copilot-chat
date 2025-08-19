@@ -16,15 +16,15 @@ import { IDocumentContext } from '../../prompt/node/documentContext';
 import { IIntent, IIntentInvocation, IIntentInvocationContext } from '../../prompt/node/intents';
 import { ChatStep, getResponse } from '../../replay/common/responseQueue';
 
-export class ReplayIntent implements IIntent {
+export class ChatReplayIntent implements IIntent {
 
-	static readonly ID: Intent = Intent.Replay;
+	static readonly ID: Intent = Intent.ChatReplay;
 
-	readonly id: string = ReplayIntent.ID;
+	readonly id: string = ChatReplayIntent.ID;
 
 	readonly description = l10n.t('Replay a previous conversation');
 
-	readonly locations = [ChatLocation.Editor, ChatLocation.Panel];
+	readonly locations = [ChatLocation.Panel];
 
 	constructor(
 		@ITabsAndEditorsService private readonly tabsAndEditorsService: ITabsAndEditorsService,
@@ -56,15 +56,17 @@ export class ReplayIntent implements IIntent {
 }
 
 function displayResponse(step: ChatStep, stream: vscode.ChatResponseStream): void {
-	switch (step.type) {
-		case 'user':
-			stream.markdown(`**User:**\n\n${step.body}`);
+	switch (step.kind) {
+		case 'userQuery':
+			stream.markdown(`**User Query:**\n\n${step.prompt}\n\n`);
+			stream.markdown(`**Response:**\n\n`);
 			break;
-		case 'response':
-			stream.markdown(`\n\n${step.body}`);
+		case 'request':
+			stream.markdown(`\n\n${step.result}`);
 			break;
-		case 'tool':
-			stream.markdown(`\n\n**Tool call (${step.toolName}):**\n\n${step.body}`);
+		case 'toolCall':
+			stream.markdown(`\n\n**Tool call (${step.toolName}):**`);
 			break;
 	}
 }
+

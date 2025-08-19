@@ -17,7 +17,7 @@ import type { DebugProtocol } from '@vscode/debugprotocol';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { WorkspaceFolder } from 'vscode';
-import { ChatStep, replayResponse } from '../common/responseQueue';
+import { ChatStep, markDone, replayResponse } from '../common/responseQueue';
 import { startReplayInChat } from './chatHelper';
 
 export class ChatReplayDebugSession extends LoggingDebugSession {
@@ -75,7 +75,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 			}
 
 			this._currentIndex = 0;
-			startReplayInChat(this._chatSteps[this._currentIndex++].body);
+			startReplayInChat();
 
 			if (this._stopOnEntry) {
 				this.sendEvent(new StoppedEvent('entry', ChatReplayDebugSession.THREAD_ID));
@@ -86,6 +86,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 	}
 
 	protected override disconnectRequest(response: DebugProtocol.DisconnectResponse): void {
+		markDone();
 		this.sendResponse(response);
 		this.sendEvent(new TerminatedEvent());
 	}
@@ -102,7 +103,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 		const step = this.currentStep();
 		if (step) {
 			const source = new Source(path.basename(this._program), this._program);
-			frames.push(new StackFrame(1, `#${step.type} ${step.filePath}`, source, step.line, 1));
+			frames.push(new StackFrame(1, `#${step.kind} ${step.id}`, source, step.line, 1));
 		}
 		response.body = {
 			stackFrames: frames,
@@ -145,6 +146,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 			this.sendResponse(response);
 		} else {
 			// We're done
+			markDone();
 			this.sendResponse(response);
 			this.sendEvent(new TerminatedEvent());
 		}
@@ -156,6 +158,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 			this.replayNextResponse(step);
 			this.sendResponse(response);
 		} else {
+			markDone();
 			this.sendResponse(response);
 			this.sendEvent(new TerminatedEvent());
 		}
@@ -186,74 +189,28 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 	}
 
 	private parseSteps(content: string): ChatStep[] {
-		const steps: ChatStep[] = [];
-		let currentStep: ChatStep | undefined;
-		let currentBody: string[] = [];
-		const lines = content.split(/\r?\n/);
+		const items = JSON.parse(content) as { [key: string]: any }[];
+		const steps = items.map(item => ({
+			id: item.id,
+			kind: item.kind,
+			result: item.kind === 'request' ? item.result.value : undefined,
+			toolName: item.kind === 'toolCall' ? item.name : undefined,
+			prompt: item.kind === 'request' ? item.messages
+				: item.kind === 'userQuery' ? item.content : undefined,
+			line: 0
+		}));
 
-		//# UserRequest
-		//# [prompt](fileName)
-		//# tool [toolName](fileName)
-		const userRequestRegex = /#\sUserRequest\s*$/;
-		const promptRegex = /^#\s\[prompt\]\((.*)\)\s*$/;
-		const toolCallRegex = /^#\stool\s\[(.*)\]\((.*)\)\s*$/;
-
-
-		for (let i = 0; i < lines.length; i++) {
-			const userRequestMatch = userRequestRegex.exec(lines[i]);
-			const promptMatch = promptRegex.exec(lines[i]);
-			const toolCallMatch = toolCallRegex.exec(lines[i]);
-
-			if (userRequestMatch) {
-				if (currentStep) {
-					currentStep.body = currentBody.join('\n').trim();
+		let stepIx = 0;
+		const lines = content.split('\n');
+		lines.forEach((line, index) => {
+			if (stepIx < steps.length) {
+				const match = line.match(`"id": "${steps[stepIx].id}"`);
+				if (match) {
+					steps[stepIx].line = index + 1;
+					stepIx++;
 				}
-
-				currentBody = [];
-				currentStep = {
-					type: 'user',
-					line: i + 1,
-					body: ''
-				};
-
-				steps.push(currentStep);
-			} else if (promptMatch) {
-				if (currentStep) {
-					currentStep.body = currentBody.join('\n').trim();
-				}
-
-				currentBody = [];
-				currentStep = {
-					type: 'response',
-					line: i + 1,
-					filePath: promptMatch[1],
-					body: ''
-				};
-
-				steps.push(currentStep);
-			} else if (toolCallMatch) {
-				if (currentStep) {
-					currentStep.body = currentBody.join('\n').trim();
-				}
-
-				currentBody = [];
-				currentStep = {
-					type: 'tool',
-					line: i + 1,
-					toolName: toolCallMatch[1],
-					filePath: toolCallMatch[2],
-					body: ''
-				};
-
-				steps.push(currentStep);
-			} else if (currentStep) {
-				currentBody.push(lines[i]);
 			}
-		}
-
-		if (currentStep) {
-			currentStep.body = currentBody.join('\n').trim();
-		}
+		});
 		return steps;
 	}
 }

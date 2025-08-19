@@ -8,6 +8,7 @@ import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/d
 import { IntentRegistry } from '../../prompt/node/intentRegistry';
 import { AgentIntent } from './agentIntent';
 import { AskAgentIntent } from './askAgentIntent';
+import { ChatReplayIntent } from './chatReplayIntent';
 import { InlineDocIntent } from './docIntent';
 import { EditCodeIntent } from './editCodeIntent';
 import { EditCode2Intent } from './editCodeIntent2';
@@ -53,5 +54,6 @@ IntentRegistry.setIntents([
 	new SyncDescriptor(SearchPanelIntent),
 	new SyncDescriptor(SearchKeywordsIntent),
 	new SyncDescriptor(AskAgentIntent),
-	new SyncDescriptor(NotebookEditorIntent)
+	new SyncDescriptor(NotebookEditorIntent),
+	new SyncDescriptor(ChatReplayIntent)
 ]);

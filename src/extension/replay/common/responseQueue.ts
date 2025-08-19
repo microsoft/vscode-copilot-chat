@@ -4,18 +4,20 @@
  *--------------------------------------------------------------------------------------------*/
 
 type ToolStep = {
-	type: 'tool';
-	line: number; // 1-based line number
-	filePath: string;
+	kind: 'toolCall';
+	id: string;
+	line: number; // 1-based line number for debugger
+	args: any[];
 	toolName: string;
-	body: string;
+	result: string;
 };
 
 export type ChatStep = {
-	type: 'user' | 'response';
-	line: number; // 1-based line number
-	filePath?: string;
-	body: string;
+	kind: 'userQuery' | 'request';
+	id: string;
+	line: number; // 1-based line number for debugger
+	result: string;
+	prompt: string;
 } | ToolStep;
 
 type Deferred<T> = {
