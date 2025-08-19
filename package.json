@@ -164,6 +164,26 @@
 				}
 			},
 			{
+				"name": "execute_prompt",
+				"toolReferenceName": "executePrompt",
+				"displayName": "Execute Prompt File",
+				"canBeReferencedInPrompt": true,
+				"modelDescription": "Use a separate agent loop to execute a user's chat prompt file. Provide a file path; the file contents will be treated as the user's chat message and run with full tool access and conversation history.",
+				"tags": [],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"filePath": {
+							"type": "string",
+							"description": "Absolute path to the prompt file to execute."
+						}
+					},
+					"required": [
+						"filePath"
+					]
+				}
+			},
+			{
 				"name": "copilot_searchWorkspaceSymbols",
 				"toolReferenceName": "symbols",
 				"displayName": "%copilot.tools.searchWorkspaceSymbols.name%",
