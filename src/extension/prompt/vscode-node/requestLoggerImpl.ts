@@ -255,7 +255,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		const docLinkProvider = new (class implements DocumentLinkProvider {
 			provideDocumentLinks(
 				td: TextDocument,
-				_ct: CancellationToken
+				ct: CancellationToken
 			): DocumentLink[] {
 				return ChatRequestScheme.findAllUris(td.getText()).map(u => new DocumentLink(
 					new Range(td.positionAt(u.range.start), td.positionAt(u.range.endExclusive)),

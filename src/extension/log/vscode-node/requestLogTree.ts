@@ -177,13 +177,7 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				const content = document.getText();
 
 				// Write to the selected file
-				await vscode.window.withProgress({
-					location: vscode.ProgressLocation.Notification,
-					title: 'Exporting all logs as JSON ...',
-					cancellable: true
-				}, async () => {
-					await vscode.workspace.fs.writeFile(saveUri, Buffer.from(content, 'utf8'));
-				});
+				await vscode.workspace.fs.writeFile(saveUri, Buffer.from(content, 'utf8'));
 
 				// Show success message with option to open the file
 				const openAction = 'Open File';
