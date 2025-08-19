@@ -215,3 +215,70 @@ export function anthropicMessagesToRawMessagesForLogging(messages: MessageParam[
 
 	return rawMessages;
 }
+
+export function anthropicMessageParamsToApiMessages(message: MessageParam): LanguageModelChatMessage[] {
+	const vscodeMessages: LanguageModelChatMessage[] = [];
+	const pendingTextParts: LanguageModelTextPart[] = [];
+
+	const flushText = () => {
+		if (pendingTextParts.length === 0) { return; }
+		if (message.role === 'user') {
+			vscodeMessages.push(LanguageModelChatMessage.User([...pendingTextParts]));
+		} else if (message.role === 'assistant') {
+			vscodeMessages.push(LanguageModelChatMessage.Assistant([...pendingTextParts]));
+		}
+		pendingTextParts.length = 0;
+	};
+
+	if (typeof message.content === 'string') {
+		if (message.role === 'user') {
+			vscodeMessages.push(LanguageModelChatMessage.User(message.content));
+		} else if (message.role === 'assistant') {
+			vscodeMessages.push(LanguageModelChatMessage.Assistant(message.content));
+		}
+		return vscodeMessages;
+	}
+
+	// TODO - some Anthropic content types aren't supported in the LM API
+	for (const block of message.content) {
+		if (message.role === 'user') {
+			if (block.type === 'text') {
+				pendingTextParts.push(new LanguageModelTextPart(block.text));
+			} else if (block.type === 'tool_result') {
+				// Break around tool result blocks
+				flushText();
+				const parts: (LanguageModelTextPart | LanguageModelDataPart)[] = [];
+				for (const c of block.content ?? []) {
+					if (typeof c === 'string') {
+						parts.push(new LanguageModelTextPart(c));
+					} else if (c.type === 'text') {
+						parts.push(new LanguageModelTextPart(c.text));
+					} else if (c.type === 'image' && c.source.type === 'base64') {
+						parts.push(new LanguageModelDataPart(Buffer.from(c.source.data, 'base64'), c.source.media_type));
+					} else if (c.type === 'image' && c.source.type === 'url') {
+						// Not supported
+					}
+				}
+				vscodeMessages.push(LanguageModelChatMessage.User([
+					new LanguageModelToolResultPart2(block.tool_use_id, parts)
+				]));
+			}
+			// Ignore other block types (e.g., images, thinking, cache control)
+		} else if (message.role === 'assistant') {
+			if (block.type === 'text') {
+				pendingTextParts.push(new LanguageModelTextPart(block.text));
+			} else if (block.type === 'tool_use') {
+				// Break around tool use blocks
+				flushText();
+				vscodeMessages.push(LanguageModelChatMessage.Assistant([
+					new LanguageModelToolCallPart(block.id, block.name, block.input ?? {})
+				]));
+			}
+		}
+	}
+
+	// Flush any remaining text as a single message
+	flushText();
+
+	return vscodeMessages;
+}
