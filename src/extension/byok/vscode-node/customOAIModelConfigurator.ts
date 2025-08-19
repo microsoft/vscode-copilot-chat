@@ -229,7 +229,7 @@ export class CustomOAIModelConfigurator {
 			thinking: capabilities.thinking,
 			maxInputTokens: tokenLimits.maxInputTokens,
 			maxOutputTokens: tokenLimits.maxOutputTokens,
-			requiresAPIKey: capabilities.requiresAPIKey
+			...(this._forceRequiresAPIKey ? {} : { requiresAPIKey: capabilities.requiresAPIKey })
 		};
 
 		return { id: modelId.trim(), config };
@@ -379,7 +379,7 @@ export class CustomOAIModelConfigurator {
 			thinking: capabilities.thinking,
 			maxInputTokens: tokenLimits.maxInputTokens,
 			maxOutputTokens: tokenLimits.maxOutputTokens,
-			requiresAPIKey: capabilities.requiresAPIKey
+			...(this._forceRequiresAPIKey ? {} : { requiresAPIKey: capabilities.requiresAPIKey })
 		};
 	}
 
