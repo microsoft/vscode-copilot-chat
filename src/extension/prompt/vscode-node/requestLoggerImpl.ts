@@ -100,14 +100,23 @@ class LoggedToolCall implements ILoggedToolCall {
 		public readonly thinking?: ThinkingData
 	) { }
 
-	toJson(): any {
+	async toJson(): Promise<any> {
+		const result: string[] = [];
+		for (const content of this.response.content as (LanguageModelTextPart | LanguageModelPromptTsxPart)[]) {
+			if (content && typeof content.value === 'string') {
+				result.push(content.value);
+			} else if (content) {
+				result.push(await renderToolResultToStringNoBudget(content));
+			}
+		}
+
 		return {
 			id: this.id,
 			kind: 'toolCall',
 			name: this.name,
 			args: this.args,
-			response: this.response,
-			time: this.time,
+			response: result,
+			time: new Date(this.time).toISOString(),
 			thinking: this.thinking || {}
 		};
 	}
@@ -275,9 +284,9 @@ export class RequestLogger extends AbstractRequestLogger {
 `;
 	}
 
-	private _renderToJson(entry: LoggedInfo): string {
+	private async _renderToJson(entry: LoggedInfo) {
 		try {
-			const jsonObject = entry.toJson();
+			const jsonObject = await entry.toJson();
 			return JSON.stringify(jsonObject, null, 2);
 		} catch (error) {
 			return JSON.stringify({

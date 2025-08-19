@@ -111,7 +111,7 @@ export interface ILoggedToolCall {
 	chatRequest: ChatRequest | undefined;
 	time: number;
 	thinking?: ThinkingData;
-	toJson(): any;
+	toJson(): Promise<any>;
 }
 
 export interface ILoggedPendingRequest {
