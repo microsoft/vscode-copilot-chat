@@ -82,7 +82,7 @@ export class NotebookSummaryTool implements ICopilotTool<INotebookSummaryToolPar
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<INotebookSummaryToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
 		return {
-			invocationMessage: new MarkdownString(l10n.t`Retrieving Notebook summary.`)
+			invocationMessage: new MarkdownString(l10n.t`Retrieving notebook summary.`)
 		};
 	}
 
