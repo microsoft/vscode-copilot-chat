@@ -312,7 +312,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 		const commandArgs: TextDocumentShowOptions = {
 			preserveFocus: false,
-			selection: nextEdit.range
+			selection: new Range(nextEdit.range.start, nextEdit.range.start)
 		};
 		const command: Command = {
 			command: 'vscode.open',
