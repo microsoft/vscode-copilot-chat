@@ -8,7 +8,6 @@ import { ComputeEmbeddingsOptions, Embedding, EmbeddingType, EmbeddingVector, Em
 import { RemoteEmbeddingsComputer } from '../../src/platform/embeddings/common/remoteEmbeddingsComputer';
 import { ICAPIClientService } from '../../src/platform/endpoint/common/capiClient';
 import { IDomainService } from '../../src/platform/endpoint/common/domainService';
-import { IEndpointProvider } from '../../src/platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../src/platform/env/common/envService';
 import { IFetcherService } from '../../src/platform/networking/common/fetcherService';
 import { ITelemetryService } from '../../src/platform/telemetry/common/telemetry';
@@ -48,7 +47,6 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
-		@IEndpointProvider endpointProvider: IEndpointProvider,
 		@IEnvService envService: IEnvService,
 		@IFetcherService fetcherService: IFetcherService
 	) {

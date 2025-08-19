@@ -6,9 +6,39 @@
 import * as cp from 'child_process';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 
+export interface ICommandExecutor {
+	executeWithTimeout(
+		command: string,
+		args: string[],
+		cwd: string,
+		timeoutMs?: number,
+		expectZeroExitCode?: boolean,
+		cancellationToken?: CancellationToken): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+}
+
+export class CommandExecutor implements ICommandExecutor {
+	async executeWithTimeout(
+		command: string,
+		args: string[],
+		cwd: string,
+		timeoutMs?: number,
+		expectZeroExitCode?: boolean,
+		cancellationToken?: CancellationToken
+	): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+		return await executeWithTimeout(
+			command,
+			args,
+			cwd,
+			timeoutMs,
+			expectZeroExitCode,
+			cancellationToken
+		);
+	}
+}
+
 const GRACEFUL_SHUTDOWN_TIMEOUT_MS = 10000;
 
-export async function executeWithTimeout(
+async function executeWithTimeout(
 	command: string,
 	args: string[],
 	cwd: string,

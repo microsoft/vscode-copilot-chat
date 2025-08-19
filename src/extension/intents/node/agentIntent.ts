@@ -10,7 +10,7 @@ import { BudgetExceededError } from '@vscode/prompt-tsx/dist/base/materialized';
 import type * as vscode from 'vscode';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { modelCanUseReplaceStringExclusively, modelSupportsApplyPatch, modelSupportsReplaceString } from '../../../platform/endpoint/common/chatModelCapabilities';
+import { modelCanUseApplyPatchExclusively, modelCanUseReplaceStringExclusively, modelSupportsApplyPatch, modelSupportsMultiReplaceString, modelSupportsReplaceString } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -64,13 +64,17 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 		allowTools[ToolName.ReplaceString] = modelSupportsReplaceString(model);
 		allowTools[ToolName.ApplyPatch] = await modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
 
+		if (allowTools[ToolName.ApplyPatch] && modelCanUseApplyPatchExclusively(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.Gpt5ApplyPatchExclusively, experimentationService)) {
+			allowTools[ToolName.EditFile] = false;
+		}
+
 		if (modelCanUseReplaceStringExclusively(model)) {
 			allowTools[ToolName.ReplaceString] = true;
 			allowTools[ToolName.EditFile] = false;
 		}
 
 		if (allowTools[ToolName.ReplaceString]) {
-			if (configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
+			if (modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
 				allowTools[ToolName.MultiReplaceString] = true;
 			}
 		}

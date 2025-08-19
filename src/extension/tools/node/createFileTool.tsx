@@ -29,6 +29,7 @@ import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { ActionType } from './applyPatch/parser';
 import { EditFileResult } from './editFileToolResult';
+import { createEditConfirmation } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileOkForTool, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
 
@@ -148,7 +149,13 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ICreateFileParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
 		const uri = resolveToolInputPath(options.input.filePath, this.promptPathRepresentationService);
+
 		return {
+			...this.instantiationService.invokeFunction(
+				createEditConfirmation,
+				[uri],
+				() => 'Contents:\n\n```\n' + options.input.content || '<empty>' + '\n```',
+			),
 			invocationMessage: new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)}`),
 			pastTenseMessage: new MarkdownString(l10n.t`Created ${formatUriForFileWidget(uri)}`)
 		};

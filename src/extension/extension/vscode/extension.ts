@@ -76,7 +76,7 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 		await contributions.waitForActivationBlockers();
 	});
 
-	if (ExtensionMode.Test === context.extensionMode) {
+	if (ExtensionMode.Test === context.extensionMode && !isScenarioAutomation) {
 		return instantiationService; // The returned accessor is used in tests
 	}
 

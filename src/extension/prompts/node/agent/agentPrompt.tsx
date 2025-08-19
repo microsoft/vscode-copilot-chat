@@ -447,11 +447,18 @@ class UserShellPrompt extends PromptElement<BasePromptElementProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const shellName = basename(this.envService.shell);
+		const shellName: string = basename(this.envService.shell);
 		const shellNameHint = shellName === 'powershell.exe' ? ' (Windows PowerShell v5.1)' : '';
 		let additionalHint = '';
-		if (shellName === 'powershell.exe') {
-			additionalHint = ' Use the `;` character if joining commands on a single line is needed.';
+		switch (shellName) {
+			case 'powershell.exe': {
+				additionalHint = ' Use the `;` character if joining commands on a single line is needed.';
+				break;
+			}
+			case 'fish': {
+				additionalHint = ' Note that fish shell does not support heredocs - prefer printf or echo instead.';
+				break;
+			}
 		}
 		return <>The user's default shell is: "{shellName}"{shellNameHint}. When you generate terminal commands, please generate them correctly for this shell.{additionalHint}</>;
 	}
@@ -746,7 +753,7 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {
 	return modelFamily?.startsWith('gpt-5') === true ?
 		<>
-			Skip filler acknowledgements like “Sounds good” or “Okay, I will…”. Open with a purposeful one-liner about what you're doing next.<br />
+			Skip filler acknowledgements like "Sounds good" or "Okay, I will…". Open with a purposeful one-liner about what you're doing next.<br />
 			When sharing setup or run steps, present terminal commands in fenced code blocks with the correct language tag. Keep commands copyable and on separate lines.<br />
 			Avoid definitive claims about the build or runtime setup unless verified from the provided context (or quick tool checks). If uncertain, state what's known from attachments and proceed with minimal steps you can adapt later.<br />
 			When you create or edit runnable code, run a test yourself to confirm it works; then share optional fenced commands for more advanced runs.<br />

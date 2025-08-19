@@ -118,15 +118,24 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 			return;
 		}
 
-		const remoteIndexMessage = {
+		const remotelyIndexedMessage = Object.freeze({
 			title: t('Remotely indexed'),
 			learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
-		};
+		});
 
 		// If we have remote index info, prioritize showing information related to it
 		switch (state.remoteIndexState.status) {
 			case 'initializing':
-				return this._writeInitializingStatus();
+				return this._writeStatusItem({
+					title: {
+						title: t('Remote index'),
+						learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
+					},
+					details: {
+						message: t('Discovering repos'),
+						busy: true,
+					},
+				});
 
 			case 'loaded': {
 				if (state.remoteIndexState.repos.length > 0) {
@@ -136,18 +145,27 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 
 					if (state.remoteIndexState.repos.every(repo => repo.status === RepoStatus.Ready)) {
 						return this._writeStatusItem({
-							title: remoteIndexMessage,
+							title: remotelyIndexedMessage,
 							details: undefined
 						});
 					}
 
 					if (state.remoteIndexState.repos.some(repo => repo.status === RepoStatus.CheckingStatus || RepoStatus.Initializing)) {
-						return this._writeInitializingStatus();
+						return this._writeStatusItem({
+							title: {
+								title: t('Remote index'),
+								learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
+							},
+							details: {
+								message: t('Checking status'),
+								busy: true,
+							},
+						});
 					}
 
 					if (state.remoteIndexState.repos.some(repo => repo.status === RepoStatus.BuildingIndex)) {
 						return this._writeStatusItem({
-							title: remoteIndexMessage,
+							title: remotelyIndexedMessage,
 							details: {
 								message: t('Building'),
 								busy: true,
@@ -210,19 +228,6 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 		}
 
 		this._writeStatusItem(localStatus);
-	}
-
-	private _writeInitializingStatus(): void | PromiseLike<void> {
-		return this._writeStatusItem({
-			title: {
-				title: t('Remote index'),
-				learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
-			},
-			details: {
-				message: t('Checking status'),
-				busy: true,
-			},
-		});
 	}
 
 	private async getLocalIndexStatusItem(state: WorkspaceIndexState): Promise<ChatStatusItemState | undefined> {

@@ -8,6 +8,7 @@ import { AssistantMessage, BasePromptElementProps, PromptRenderer as BasePromptR
 import type { ChatParticipantToolToken, LanguageModelToolResult2, LanguageModelToolTokenizationOptions } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { modelCanUseImageURL } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { StatefulMarkerContainer } from '../../../../platform/endpoint/common/statefulMarkerContainer';
@@ -406,7 +407,10 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 		const uploadsEnabled = this.configurationService && this.experimentationService
 			? this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.EnableChatImageUpload, this.experimentationService)
 			: false;
-		const effectiveToken = uploadsEnabled ? githubToken : undefined;
+
+		// Anthropic (from CAPI) currently does not support image uploads from tool calls.
+		const effectiveToken = uploadsEnabled && modelCanUseImageURL(this.endpoint) ? githubToken : undefined;
+
 		return Promise.resolve(imageDataPartToTSX(part, effectiveToken, this.endpoint.urlOrRequestMetadata, this.logService, this.imageService));
 	}
 

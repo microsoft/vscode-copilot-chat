@@ -20,7 +20,6 @@ import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseWarningPart } from '../../../vscodeTypes';
-import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../authentication/common/authenticationUpgrade';
 import { FileChunkAndScore } from '../../chunking/common/chunk';
 import { ComputeBatchInfo } from '../../chunking/common/chunkingEndpointClient';
@@ -129,7 +128,6 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		embeddingsChunkSearch: EmbeddingsChunkSearch,
 		tfIdfChunkSearch: TfIdfWithSemanticChunkSearch,
 		@IInstantiationService instantiationService: IInstantiationService,
-		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IAuthenticationChatUpgradeService private readonly _authUpgradeService: IAuthenticationChatUpgradeService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
@@ -162,7 +160,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		this._isDisposed = true;
 	}
 
-	@LogExecTime(self => self._logService, 'CodeSearchChunkSearch.isAvailable')
+	@LogExecTime(self => self._logService, 'CodeSearchChunkSearch::isAvailable')
 	async isAvailable(searchTelemetryInfo?: TelemetryCorrelationId, canPrompt = false, token = CancellationToken.None): Promise<boolean> {
 		const sw = new StopWatch();
 		const checkResult = await this.doIsAvailableCheck(canPrompt, token);
@@ -248,7 +246,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			if (allRepos.some(repo => repo.status === RepoStatus.CouldNotCheckIndexStatus || repo.status === RepoStatus.NotAuthorized)) {
 				if (await raceCancellationError(this._authUpgradeService.shouldRequestPermissiveSessionUpgrade(), token)) { // Needs more thought
 					if (await raceCancellationError(this._authUpgradeService.shouldRequestPermissiveSessionUpgrade(), token)) {
-						await raceCancellationError(this._repoTracker.updateAllRepoStatuses(), token);
+						await raceCancellationError(this._repoTracker.updateRepoStatuses(), token);
 						allRepos = Array.from(this._repoTracker.getAllRepos());
 					}
 				}
@@ -480,7 +478,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		});
 	}
 
-	@LogExecTime(self => self._logService, 'CodeSearchChunkSearch.getLocalDiff')
+	@LogExecTime(self => self._logService, 'CodeSearchChunkSearch::getLocalDiff')
 	private async getLocalDiff(): Promise<readonly URI[] | 'unknown' | 'tooLarge'> {
 		await this._workspaceDiffTracker.value.initialized;
 
@@ -543,7 +541,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.WorkspaceUseCodeSearchInstantIndexing, this._experimentationService);
 	}
 
-	@LogExecTime(self => self._logService, 'CodeSearchChunkSearch.doCodeSearch', function (execTime, status) {
+	@LogExecTime(self => self._logService, 'CodeSearchChunkSearch::doCodeSearch', function (execTime, status) {
 		// Old name used for backwards compatibility with old telemetry
 		/* __GDPR__
 			"codeSearchChunkSearch.perf.doCodeSearchWithRetry" : {
@@ -558,30 +556,15 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 	private async doCodeSearch(query: WorkspaceChunkQueryWithEmbeddings, repos: ReadonlyArray<ResolvedRepoEntry | IndexedRepoEntry>, sizing: StrategySearchSizing, options: WorkspaceChunkSearchOptions, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<CodeSearchResult | undefined> {
 		const resolvedQuery = await raceCancellationError(query.resolveQuery(token), token);
 
-		const githubAuthToken = new Lazy(() => this.tryGetGitHubAuthToken());
-		const adoAuthToken = new Lazy(() => this.tryGetAdoAuthToken());
-
 		const results = await Promise.all(repos.map(async repo => {
 			if (repo.remoteInfo.repoId instanceof GithubRepoId) {
-				const authToken = await githubAuthToken.value;
-				if (!authToken) {
-					this._logService.warn(`CodeSearchChunkSearch: doCodeSearch failed to get github auth token for repo ${repo.remoteInfo.repoId}`);
-					return;
-				}
-
-				return this._githubCodeSearchService.searchRepo(authToken, this._embeddingType, {
+				return this._githubCodeSearchService.searchRepo({ silent: true }, this._embeddingType, {
 					githubRepoId: repo.remoteInfo.repoId,
 					localRepoRoot: repo.repo.rootUri,
 					indexedCommit: repo.status === RepoStatus.Ready ? repo.indexedCommit : undefined,
 				}, resolvedQuery, sizing.maxResultCountHint, options, telemetryInfo, token);
 			} else {
-				const authToken = await adoAuthToken.value;
-				if (!authToken) {
-					this._logService.warn(`CodeSearchChunkSearch: doCodeSearch failed to get ado auth token for repo ${repo.remoteInfo.repoId}`);
-					return;
-				}
-
-				return this._adoCodeSearchService.searchRepo(authToken, {
+				return this._adoCodeSearchService.searchRepo({ silent: true }, {
 					adoRepoId: repo.remoteInfo.repoId,
 					localRepoRoot: repo.repo.rootUri,
 					indexedCommit: repo.status === RepoStatus.Ready ? repo.indexedCommit : undefined,
@@ -615,7 +598,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				let attemptsRemaining = 5;
 				const delayBetweenAttempts = 1000;
 
-				while (attemptsRemaining--) {
+				while (attemptsRemaining-- > 0) {
 					const currentStatus = (await raceCancellationError(this._repoTracker.updateRepoStateFromEndpoint(repo.repo, repo.remoteInfo, false, token), token)).status;
 					if (currentStatus === RepoStatus.Ready) {
 						// We're good to start searching
@@ -649,15 +632,6 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 
 		const currentStatus = this._repoTracker.getRepoStatus(repo);
 		return currentStatus === RepoStatus.Ready || currentStatus === RepoStatus.BuildingIndex;
-	}
-
-	private async tryGetGitHubAuthToken() {
-		return (await this._authenticationService.getPermissiveGitHubSession({ silent: true }))?.accessToken
-			?? (await this._authenticationService.getAnyGitHubSession({ silent: true }))?.accessToken;
-	}
-
-	private async tryGetAdoAuthToken() {
-		return this._authenticationService.getAdoAccessTokenBase64({ createIfNone: true });
 	}
 
 	public async triggerRemoteIndexing(triggerReason: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<Result<true, TriggerIndexingError>> {
