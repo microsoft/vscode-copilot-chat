@@ -637,7 +637,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		})));
 	}
 
-	@LogExecTime(self => self._logService, 'WorkspaceChunkSearch.rerankResultIfNeeded')
+	@LogExecTime(self => self._logService, 'WorkspaceChunkSearch::rerankResultIfNeeded')
 	private async rerankResultIfNeeded(query: WorkspaceChunkQueryWithEmbeddings, result: StrategySearchOk, maxResults: number, telemetryInfo: TelemetryCorrelationId, progress: vscode.Progress<vscode.ChatResponsePart> | undefined, token: CancellationToken): Promise<WorkspaceChunkSearchResult> {
 		// If we have full workspace results, use those directly without re-ranking
 		if (result.strategy === WorkspaceChunkSearchStrategyId.FullWorkspace) {
@@ -660,7 +660,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		};
 	}
 
-	@LogExecTime(self => self._logService, 'WorkspaceChunkSearch.rerankChunks')
+	@LogExecTime(self => self._logService, 'WorkspaceChunkSearch::rerankChunks')
 	private async rerankChunks(query: WorkspaceChunkQueryWithEmbeddings, inChunks: readonly FileChunkAndScore[], maxResults: number, telemetryInfo: TelemetryCorrelationId, progress: vscode.Progress<vscode.ChatResponsePart> | undefined, token: CancellationToken): Promise<FileChunkAndScore[]> {
 		if (!inChunks.length) {
 			return [];

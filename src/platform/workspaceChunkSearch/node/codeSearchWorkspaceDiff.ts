@@ -91,7 +91,7 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 		this.init();
 	}
 
-	@LogExecTime(self => self._logService, 'CodeSearchWorkspaceDiff.init')
+	@LogExecTime(self => self._logService, 'CodeSearchWorkspaceDiff::init')
 	private async init() {
 		try {
 			await Promise.all([

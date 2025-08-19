@@ -199,7 +199,7 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.WorkspaceEnableEmbeddingsSearch, this._experimentationService);
 	}
 
-	@LogExecTime(self => self._logService)
+	@LogExecTime(self => self._logService, 'EmbeddingsChunkSearch::searchSubsetOfFiles')
 	async searchSubsetOfFiles(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, files: readonly URI[], options: WorkspaceChunkSearchOptions, telemetry: { info: TelemetryCorrelationId; batchInfo?: ComputeBatchInfo }, token: CancellationToken): Promise<StrategySearchResult> {
 		if (!files.length) {
 			return { chunks: [] };
