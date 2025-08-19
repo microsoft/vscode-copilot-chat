@@ -1588,28 +1588,12 @@
 				]
 			},
 			{
-				"id": "github.copilot.replayAgent",
-				"name": "replay",
-				"fullName": "Replay",
-				"when": "github.copilot.chat.replay",
+				"id": "github.copilot.chatReplay",
+				"name": "chatReplay",
+				"fullName": "Chat Replay",
+				"when": "debugType == 'vscode-chat-replay'",
 				"locations": [
 					"panel"
-				],
-				"commands": [
-					{
-						"name": "explain",
-						"description": "%copilot.terminal.explain.description%",
-						"sampleRequest": "%copilot.terminal.explain.sampleRequest%",
-						"disambiguation": [
-							{
-								"category": "terminal_state_questions",
-								"description": "The user wants to learn about specific state such as the selection, command, or failed command in the integrated terminal in Visual Studio Code.",
-								"examples": [
-									"Why did the latest terminal command fail?"
-								]
-							}
-						]
-					}
 				]
 			}
 		],
@@ -1720,8 +1704,8 @@
 		"commands": [
 			{
 				"command": "github.copilot.chat.replay",
-				"title": "enable replay mode",
-				"category": "GitHub Copilot"
+				"title": "Start Chat Replay",
+        		"icon": "$(debug-line-by-line)"
 			},
 			{
 				"command": "github.copilot.chat.explain",
@@ -2923,6 +2907,11 @@
 					"command": "github.copilot.chat.notebook.disableFollowCellExecution",
 					"when": "config.github.copilot.chat.notebook.followCellExecution.enabled && github.copilot.notebookFollowInSessionEnabled && github.copilot.notebookAgentModeUsage && !config.notebook.globalToolbar",
 					"group": "navigation@10"
+				},
+				{
+					"command": "github.copilot.chat.replay",
+					"group": "navigation@9",
+					"when": "resourceLangId == chatReplay"
 				}
 			],
 			"editor/context/chat": [
@@ -3470,7 +3459,18 @@
 				"extensions": [
 					".copilotmd"
 				]
-			}
+			},
+			{
+				"id": "chatReplay",
+				"aliases": [
+					"chatReplay",
+					"Chat Replay"
+				],
+				"extensions": [
+					".chatReplay",
+					".chatreplay"
+				]
+      		}
 		],
 		"views": {
 			"copilot-chat": [
@@ -3688,6 +3688,43 @@
 				"name": "@vscode/copilot-typescript-server-plugin",
 				"enableForWorkspaceTypeScriptVersions": true
 			}
+		],
+		"debuggers": [
+			{
+				"type": "vscode-chat-replay",
+				"label": "vscode-chat-replay",
+				"languages": [
+				"chatReplay"
+				],
+				"configurationAttributes": {
+				"launch": {
+					"properties": {
+						"program": {
+							"type": "string",
+							"description": "Chat replay file to debug (parse for headers)",
+							"default": "${file}"
+						},
+						"stopOnEntry": {
+							"type": "boolean",
+							"default": true,
+							"description": "Break immediately at the first header"
+						}
+					},
+					"required": [
+						"program"
+					]
+				}
+				},
+				"initialConfigurations": [
+					{
+						"type": "vscode-chat-replay",
+						"request": "launch",
+						"name": "Debug Chat Replay",
+						"program": "${file}",
+						"stopOnEntry": true
+					}
+				]
+			}
 		]
 	},
 	"extensionPack": [
@@ -3768,6 +3805,8 @@
 		"@vitest/coverage-v8": "^3.2.4",
 		"@vitest/snapshot": "^1.5.0",
 		"@vscode/dts": "^0.4.1",
+		"@vscode/debugadapter": "^1.68.0",
+		"@vscode/debugprotocol": "^1.68.0",
 		"@vscode/lsif-language-service": "^0.1.0-pre.4",
 		"@vscode/test-cli": "^0.0.11",
 		"@vscode/test-electron": "^2.5.2",

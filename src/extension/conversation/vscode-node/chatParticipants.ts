@@ -251,7 +251,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 	}
 
 	private registerReplayAgent(): IDisposable {
-		const defaultAgent = this.createAgent('replay', Intent.Replay);
+		const defaultAgent = this.createAgent('chatReplay', Intent.Replay);
 		defaultAgent.iconPath = new vscode.ThemeIcon('copilot');
 
 		return defaultAgent;

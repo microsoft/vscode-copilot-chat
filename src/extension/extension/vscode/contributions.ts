@@ -6,6 +6,7 @@
 import { NesActivationTelemetryContribution } from '../../../platform/inlineEdits/common/nesActivationStatusTelemetry.contribution';
 import { asContributionFactory, IExtensionContributionFactory } from '../../common/contributions';
 import * as contextContribution from '../../context/vscode/context.contribution';
+import { ChatReplayContribution } from '../../replay/vscode/chatReplayContrib';
 import { LifecycleTelemetryContrib } from '../../telemetry/common/lifecycleTelemetryContrib';
 import { GithubTelemetryForwardingContrib } from '../../telemetry/vscode/githubTelemetryForwardingContrib';
 
@@ -21,6 +22,7 @@ const vscodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(LifecycleTelemetryContrib),
 	asContributionFactory(NesActivationTelemetryContribution),
 	asContributionFactory(GithubTelemetryForwardingContrib),
+	asContributionFactory(ChatReplayContribution),
 	contextContribution,
 ];
 
