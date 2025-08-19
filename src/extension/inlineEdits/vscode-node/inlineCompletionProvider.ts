@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, Command, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, Position, Range, TextDocument, TextDocumentShowOptions, l10n, Event as vscodeEvent } from 'vscode';
+import { CancellationToken, Command, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, Position, Range, TextDocument, TextDocumentShowOptions, l10n, Event as vscodeEvent } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
@@ -308,7 +308,11 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		// Display the next edit in the current document, but with a command to open the next edit in the other document.
 		// & range of this completion item will be the same as the current documents cursor position.
 		const range = new Range(requestingPosition, requestingPosition);
-		const displayLocation: InlineCompletionDisplayLocation = { range, label: GoToNextEdit };
+		const displayLocation: InlineCompletionDisplayLocation = {
+			range,
+			label: GoToNextEdit,
+			kind: InlineCompletionDisplayLocationKind.Label
+		};
 
 		const commandArgs: TextDocumentShowOptions = {
 			preserveFocus: false,
@@ -349,7 +353,8 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		const displayLocationRange = result.displayLocation && doc.fromRange(document, toExternalRange(result.displayLocation.range));
 		const displayLocation: InlineCompletionDisplayLocation | undefined = result.displayLocation && displayLocationRange ? {
 			range: displayLocationRange,
-			label: result.displayLocation.label
+			label: result.displayLocation.label,
+			kind: InlineCompletionDisplayLocationKind.Code
 		} : undefined;
 
 
