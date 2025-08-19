@@ -886,7 +886,7 @@
 				"name": "copilot_getNotebookSummary",
 				"toolReferenceName": "getNotebookSummary",
 				"displayName": "Get the structure of a notebook",
-				"modelDescription": "This is a tool returns the list of the Notebook cells along with the id, cell types, language, execution information and output mime types for each cell. This is useful to get Cell Ids when executing a notebook or determine what cells have been executed and what order, or what cells have outputs. Requery this tool if the contents of the notebook change.",
+				"modelDescription": "This is a tool returns the list of the Notebook cells along with the id, cell types, line ranges, language, execution information and output mime types for each cell. This is useful to get Cell Ids when executing a notebook or determine what cells have been executed and what order, or what cells have outputs. If required to read contents of a cell use this to determine the line range of a cells, and then use read_file tool to read a specific line range. Requery this tool if the contents of the notebook change.",
 				"tags": [],
 				"inputSchema": {
 					"type": "object",

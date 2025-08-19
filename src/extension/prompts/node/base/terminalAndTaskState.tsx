@@ -117,11 +117,12 @@ export class TerminalAndTaskStatePromptElement extends PromptElement<TerminalAnd
 					)}
 				</>
 			);
-
+			const renderedTasks = renderTasks();
+			const renderedTerminals = renderTerminals();
 			return (
 				<>
-					{resultTasks.length > 0 ? renderTasks() : 'Tasks: No tasks found.'}
-					{resultTerminals.length > 0 ? renderTerminals() : 'Terminals: No terminals found.'}
+					{resultTasks.length > 0 ? renderedTasks : 'Tasks: No tasks found.\n'}
+					{resultTerminals.length > 0 ? renderedTerminals : 'Terminals: No terminals found.\n'}
 				</>
 			);
 		}

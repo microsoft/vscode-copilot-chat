@@ -181,7 +181,7 @@ class WorkingNotebookSummary extends PromptElement<NotebookSummaryProps> {
 		return (
 			<UserMessage>
 				This is the current state of the notebook that you have been working on:<br />
-				<NotebookSummary notebook={this.props.notebook} />
+				<NotebookSummary notebook={this.props.notebook} includeCellLines={false} altDoc={undefined} />
 			</UserMessage>
 		);
 	}
