@@ -2056,7 +2056,8 @@
 			},
 			{
 				"command": "github.copilot.chat.manageBYOK",
-				"title": "Manage Bring Your Own Key Vendor"
+				"title": "Manage Bring Your Own Key Vendor",
+				"enablement": "false"
 			}
 		],
 		"configuration": [
@@ -3787,7 +3788,7 @@
 		"vitest": "^3.0.5",
 		"yaml": "^2.8.0",
 		"zeromq": "github:rebornix/zeromq.js#a19e8e373b3abc677f91b936d3f00d49b1b61792",
-        "js-yaml": "^4.1.0",
+		"js-yaml": "^4.1.0",
 		"@types/js-yaml": "^4.0.9"
 	},
 	"dependencies": {
@@ -3812,7 +3813,7 @@
 		"vscode-languageserver-textdocument": "^1.0.12",
 		"vscode-tas-client": "^0.1.84",
 		"web-tree-sitter": "^0.23.0",
-        "diff": "^8.0.2"
+		"diff": "^8.0.2"
 	},
 	"overrides": {
 		"@aminya/node-gyp-build": "npm:node-gyp-build@4.8.1",
