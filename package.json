@@ -2058,6 +2058,11 @@
 				"command": "github.copilot.chat.manageBYOK",
 				"title": "Manage Bring Your Own Key Vendor",
 				"enablement": "false"
+			},
+			{
+				"command": "github.copilot.chat.configureCustomOAIModels",
+				"title": "Configure Custom OpenAI-Compatible Models",
+				"category": "GitHub Copilot"
 			}
 		],
 		"configuration": [

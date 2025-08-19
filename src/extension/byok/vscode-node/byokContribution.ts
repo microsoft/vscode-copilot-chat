@@ -16,6 +16,7 @@ import { IExtensionContribution } from '../../common/contributions';
 import { AnthropicLMProvider } from './anthropicProvider';
 import { AzureBYOKModelProvider } from './azureProvider';
 import { BYOKStorageService, IBYOKStorageService } from './byokStorageService';
+import { CustomOAIModelConfigurator } from './customOAIModelConfigurator';
 import { CustomOAIBYOKModelProvider } from './customOAIProvider';
 import { GeminiBYOKLMProvider } from './geminiProvider';
 import { GroqBYOKLMProvider } from './groqProvider';
@@ -41,10 +42,18 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 		super();
 		this._register(commands.registerCommand('github.copilot.chat.manageBYOK', async (vendor: string) => {
 			const provider = this._providers.get(vendor);
-			if (provider) {
+			if (vendor === AzureBYOKModelProvider.providerName.toLowerCase() || vendor === CustomOAIBYOKModelProvider.providerName.toLowerCase()) {
+
+			} else if (provider) {
 				await provider.updateAPIKey();
 			}
 		}));
+
+		this._register(commands.registerCommand('github.copilot.chat.configureCustomOAIModels', async () => {
+			const configurator = this._instantiationService.createInstance(CustomOAIModelConfigurator);
+			await configurator.configure();
+		}));
+
 		this._byokStorageService = new BYOKStorageService(extensionContext);
 		this._authChange(authService, this._instantiationService);
 
