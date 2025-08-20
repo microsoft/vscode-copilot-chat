@@ -182,6 +182,7 @@
 	"github.copilot.chat.attachSelection": "Add Selection to Chat",
 	"github.copilot.command.collectDiagnostics": "GitHub Copilot Chat Diagnostics",
 	"github.copilot.command.inlineEdit.clearCache": "GitHub Copilot Chat Clear Next Edit Cache",
+	"github.copilot.command.inlineEdit.reportNotebookNESIssue": "Report Notebook Next Edit Issue",
 	"github.copilot.command.showNotebookLog": "Show Chat Log Notebook",
 	"github.copilot.resetAutomaticCommandExecutionPrompt": "Reset Automatic Command Execution Prompt",
 	"github.copilot.command.generateSTest": "Generate STest From Last Chat Request",

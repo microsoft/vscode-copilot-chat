@@ -1913,6 +1913,12 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.debug.inlineEdit.reportNotebookNESIssue",
+				"title": "%github.copilot.command.inlineEdit.reportNotebookNESIssue%",
+				"enablement": "config.github.copilot.chat.advanced.notebook.alternativeNESFormat.enabled",
+				"category": "GitHub Copilot Developer"
+			},
+			{
 				"command": "github.copilot.debug.generateSTest",
 				"title": "%github.copilot.command.generateSTest%",
 				"enablement": "github.copilot.debugReportFeedback",
