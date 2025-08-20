@@ -45,7 +45,6 @@ export class TerminalStatePromptElement extends PromptElement<TerminalStateProps
 						commandLine: lastCommand.commandLine ?? '(no last command)',
 						cwd: lastCommand.cwd?.toString() ?? '(unknown)',
 						exitCode: lastCommand.exitCode,
-						id: await term.pid
 					} : undefined
 				} as ITerminalPromptInfo;
 			}));
