@@ -70,7 +70,7 @@ export class TerminalStatePromptElement extends PromptElement<TerminalStateProps
 											Exit Code: {term.lastCommand.exitCode ?? '(unknown)'}<br />
 										</>
 									) : ''}
-									Output: {'{'}Use {ToolName.CoreGetTerminalOutput} for terminal with ID: {term.pid}.{'}'}<br />
+									Output: {'{'}Use {ToolName.CoreGetTerminalOutput} for terminal.{'}'}<br />
 								</>
 							))}
 						</>
