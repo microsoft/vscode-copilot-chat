@@ -27,14 +27,7 @@ export class TerminalStatePromptElement extends PromptElement<TerminalStateProps
 		const resultTasks: ITaskPromptInfo[] = [];
 		const allTasks = this.tasksService.getTasks()?.[0]?.[1] ?? [];
 		const tasks = Array.isArray(allTasks) ? allTasks : [];
-		const taskTerminalPids = new Set<number>();
-		await Promise.all(tasks.map(async (task) => {
-			const terminal = await this.tasksService.getTerminalForTask(task);
-			const terminalPid = terminal ? await terminal.processId : undefined;
-			if (terminalPid) {
-				taskTerminalPids.add(terminalPid);
-			}
-		}));
+		const activeTaskNames = tasks.filter(t => this.tasksService.isTaskActive(t)).map(t => t.label);
 
 		if (this.terminalService && Array.isArray(this.terminalService.terminals)) {
 			const terminals = await Promise.all(this.terminalService.terminals.map(async (term) => {
@@ -48,12 +41,11 @@ export class TerminalStatePromptElement extends PromptElement<TerminalStateProps
 					} : undefined
 				} as ITerminalPromptInfo;
 			}));
-			const resultTerminals = terminals.filter(t => !!t);
+			const resultTerminals = terminals.filter(t => !!t && !activeTaskNames.includes(t.name));
 
 			if (resultTerminals.length === 0 && resultTasks.length === 0) {
 				return 'No tasks or terminals found.';
 			}
-
 
 			const renderTerminals = () => (
 				<>
