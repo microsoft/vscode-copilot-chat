@@ -39,13 +39,8 @@ export class TerminalStatePromptElement extends PromptElement<TerminalStateProps
 		if (this.terminalService && Array.isArray(this.terminalService.terminals)) {
 			const terminals = await Promise.all(this.terminalService.terminals.map(async (term) => {
 				const lastCommand = await this.terminalService.getLastCommandForTerminal(term);
-				const pid = await term.processId;
-				if (taskTerminalPids.has(pid)) {
-					return undefined;
-				}
 				return {
 					name: term.name,
-					pid,
 					lastCommand: lastCommand ? {
 						commandLine: lastCommand.commandLine ?? '(no last command)',
 						cwd: lastCommand.cwd?.toString() ?? '(unknown)',

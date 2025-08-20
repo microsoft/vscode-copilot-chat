@@ -92,7 +92,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -113,7 +113,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -130,7 +130,7 @@ hello
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -224,7 +224,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -245,7 +245,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -264,7 +264,7 @@ hello
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -358,7 +358,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -379,7 +379,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -399,7 +399,7 @@ hello
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -451,7 +451,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -472,7 +472,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -499,7 +499,7 @@ edit this file
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -570,7 +570,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -662,7 +662,7 @@ edit this file
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -694,7 +694,7 @@ success
 🛠️ tooluse_5
 success
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -726,7 +726,7 @@ success
 🛠️ tooluse_7
 success
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -774,7 +774,7 @@ The class \`Person\` is in \`src/models/person.ts\`.
 </outputFormatting>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -791,7 +791,7 @@ custom mode instructions
 </customInstructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -812,7 +812,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -829,7 +829,7 @@ hello
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -843,7 +843,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -864,7 +864,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -881,7 +881,7 @@ hello
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -933,7 +933,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -954,7 +954,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -981,7 +981,7 @@ hello
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -1033,7 +1033,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -1054,7 +1054,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -1071,7 +1071,7 @@ hello
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -1123,7 +1123,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -1144,7 +1144,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -1171,7 +1171,7 @@ edit this file
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -1191,7 +1191,7 @@ console.log('hi')"
 🛠️ tooluse_1
 success
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -1290,7 +1290,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -1311,7 +1311,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -1330,7 +1330,7 @@ hello
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -1426,7 +1426,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -1447,7 +1447,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -1468,7 +1468,7 @@ hello
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -1564,7 +1564,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -1585,7 +1585,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -1607,7 +1607,7 @@ hello
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -1661,7 +1661,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -1682,7 +1682,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -1711,7 +1711,7 @@ edit this file (See <attachments> above for file contents. You may not need to s
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -1784,7 +1784,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -1880,7 +1880,7 @@ edit this file
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -1912,7 +1912,7 @@ success
 🛠️ tooluse_5
 success
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -1944,7 +1944,7 @@ success
 🛠️ tooluse_7
 success
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -1994,7 +1994,7 @@ The class \`Person\` is in \`src/models/person.ts\`.
 </outputFormatting>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -2011,7 +2011,7 @@ custom mode instructions
 </customInstructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -2032,7 +2032,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -2051,7 +2051,7 @@ hello
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -2065,7 +2065,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -2086,7 +2086,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -2105,7 +2105,7 @@ hello
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -2159,7 +2159,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -2180,7 +2180,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -2209,7 +2209,7 @@ hello (See <attachments> above for file contents. You may not need to search or 
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -2263,7 +2263,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -2284,7 +2284,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -2303,7 +2303,7 @@ hello
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -2357,7 +2357,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -2378,7 +2378,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -2407,7 +2407,7 @@ edit this file (See <attachments> above for file contents. You may not need to s
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -2427,7 +2427,7 @@ console.log('hi')"
 🛠️ tooluse_1
 success
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -2572,7 +2572,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -2593,7 +2593,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -2630,7 +2630,7 @@ hello
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -2772,7 +2772,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -2793,7 +2793,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -2832,7 +2832,7 @@ hello
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -2974,7 +2974,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -2995,7 +2995,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -3035,7 +3035,7 @@ hello
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -3134,7 +3134,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -3155,7 +3155,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -3202,7 +3202,7 @@ edit this file (See <attachments> above for file contents. You may not need to s
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -3320,7 +3320,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -3452,7 +3452,7 @@ edit this file
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -3484,7 +3484,7 @@ success
 🛠️ tooluse_5
 success
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -3516,7 +3516,7 @@ success
 🛠️ tooluse_7
 success
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -3611,7 +3611,7 @@ The class \`Person\` is in \`src/models/person.ts\`.
 </outputFormatting>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -3628,7 +3628,7 @@ custom mode instructions
 </customInstructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -3649,7 +3649,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -3686,7 +3686,7 @@ hello
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -3700,7 +3700,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -3721,7 +3721,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -3758,7 +3758,7 @@ hello
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -3857,7 +3857,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -3878,7 +3878,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -3925,7 +3925,7 @@ hello (See <attachments> above for file contents. You may not need to search or 
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -4024,7 +4024,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -4045,7 +4045,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -4082,7 +4082,7 @@ hello
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;
@@ -4181,7 +4181,7 @@ This is a test custom instruction file
 </instructions>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -4202,7 +4202,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -4249,7 +4249,7 @@ edit this file (See <attachments> above for file contents. You may not need to s
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -4269,7 +4269,7 @@ console.log('hi')"
 🛠️ tooluse_1
 success
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 "
 `;

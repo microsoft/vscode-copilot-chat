@@ -13,7 +13,7 @@ import { NuGetMcpSetup } from '../../vscode-node/nuget';
 import { CommandExecutor, ICommandExecutor } from '../../vscode-node/util';
 import { FixtureFetcherService } from './util';
 
-const RUN_DOTNET_CLI_TESTS = !!process.env['CI'] || !!process.env['BUILD_ARTIFACTSTAGINGDIRECTORY'];
+const RUN_DOTNET_CLI_TESTS = !!process.env['CI'] && !process.env['BUILD_ARTIFACTSTAGINGDIRECTORY'];
 
 describe.runIf(RUN_DOTNET_CLI_TESTS)('get nuget MCP server info using dotnet CLI', { timeout: 30_000 }, () => {
 	let testingServiceCollection: TestingServiceCollection;

@@ -58,6 +58,7 @@ export interface ITasksService {
 	 */
 	isTaskActive(definition: vscode.TaskDefinition): boolean;
 
+
 	/**
 	 * Gets the terminal for a given task definition.
 	 * This is needed because when tasks are stopped, they're removed from the taskExecutions.
