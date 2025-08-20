@@ -150,7 +150,7 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 						});
 					}
 
-					if (state.remoteIndexState.repos.some(repo => repo.status === RepoStatus.CheckingStatus || RepoStatus.Initializing)) {
+					if (state.remoteIndexState.repos.some(repo => repo.status === RepoStatus.CheckingStatus || repo.status === RepoStatus.Initializing)) {
 						return this._writeStatusItem({
 							title: {
 								title: t('Remote index'),
