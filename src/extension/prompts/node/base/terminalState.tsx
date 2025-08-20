@@ -6,7 +6,6 @@
 import { BasePromptElementProps, PromptElement } from '@vscode/prompt-tsx';
 import { ITasksService } from '../../../../platform/tasks/common/tasksService';
 import { ITerminalService } from '../../../../platform/terminal/common/terminalService';
-import { ToolName } from '../../../tools/common/toolNames';
 
 export interface TerminalStateProps extends BasePromptElementProps {
 	sessionId?: string;
@@ -24,7 +23,6 @@ export class TerminalStatePromptElement extends PromptElement<TerminalStateProps
 		super(props);
 	}
 	async render() {
-		const resultTasks: ITaskPromptInfo[] = [];
 		const allTasks = this.tasksService.getTasks()?.[0]?.[1] ?? [];
 		const tasks = Array.isArray(allTasks) ? allTasks : [];
 		const activeTaskNames = tasks.filter(t => this.tasksService.isTaskActive(t)).map(t => t.label);
@@ -62,7 +60,6 @@ export class TerminalStatePromptElement extends PromptElement<TerminalStateProps
 											Exit Code: {term.lastCommand.exitCode ?? '(unknown)'}<br />
 										</>
 									) : ''}
-									Output: {'{'}Use {ToolName.CoreGetTerminalOutput} for terminal.{'}'}<br />
 								</>
 							))}
 						</>
@@ -77,18 +74,6 @@ export class TerminalStatePromptElement extends PromptElement<TerminalStateProps
 		}
 	}
 }
-interface ITaskPromptInfo {
-	name: string;
-	isBackground: boolean;
-	type?: string;
-	command?: string;
-	problemMatcher?: string;
-	group?: { isDefault?: boolean; kind?: string };
-	script?: string;
-	dependsOn?: string;
-	isActive?: boolean;
-}
-
 interface ITerminalPromptInfo {
 	name: string;
 	pid: number | undefined;
