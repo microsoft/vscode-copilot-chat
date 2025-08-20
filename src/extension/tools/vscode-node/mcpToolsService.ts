@@ -217,6 +217,9 @@ export class McpToolsService extends BaseToolsService {
 			throw new CancellationError();
 		}
 		const parts = [];
+		if (result.structuredContent) {
+			parts.push(new LanguageModelTextPart(JSON.stringify(result.structuredContent)));
+		}
 		for (const part of result.content as { text: string }[]) {
 			parts.push(new LanguageModelTextPart(part.text as string));
 		}
