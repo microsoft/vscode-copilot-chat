@@ -1604,6 +1604,11 @@
 				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
+				"vendor": "xai",
+				"displayName": "xAI",
+				"managementCommand": "github.copilot.chat.manageBYOK"
+			},
+			{
 				"vendor": "ollama",
 				"displayName": "Ollama"
 			},
