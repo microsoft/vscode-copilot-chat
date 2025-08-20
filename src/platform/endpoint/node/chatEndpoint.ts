@@ -258,7 +258,7 @@ export class ChatEndpoint implements IChatEndpoint {
 				'auto' :
 				'disabled';
 			const reasoning = this._configurationService.getConfig(ConfigKey.Internal.ResponsesApiReasoning);
-			if (typeof reasoning === 'boolean') {
+			if (reasoning === true) {
 				body.reasoning = {
 					'effort': 'high',
 					'summary': 'detailed'
