@@ -5,6 +5,7 @@
 
 import { t } from '@vscode/l10n';
 import * as vscode from 'vscode';
+import { ILogService } from '../../../platform/log/common/logService';
 import { ICodeSearchAuthenticationService } from '../../../platform/remoteCodeSearch/node/codeSearchRepoAuth';
 import { RepoStatus, ResolvedRepoEntry } from '../../../platform/remoteCodeSearch/node/codeSearchRepoTracker';
 import { LocalEmbeddingsIndexStatus } from '../../../platform/workspaceChunkSearch/node/embeddingsChunkSearch';
@@ -78,12 +79,13 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 	private readonly minOutdatedFileCountToShow = 20;
 
 	constructor(
+		@IWorkspaceChunkSearchService workspaceChunkSearch: IWorkspaceChunkSearchService,
 		@ICodeSearchAuthenticationService private readonly _codeSearchAuthService: ICodeSearchAuthenticationService,
-		@IWorkspaceChunkSearchService _workspaceChunkSearch: IWorkspaceChunkSearchService,
+		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
 
-		this._statusReporter = _workspaceChunkSearch;
+		this._statusReporter = workspaceChunkSearch;
 
 		this._statusItem = this._register(vscode.window.createChatStatusItem('copilot.workspaceIndexStatus'));
 		this._statusItem.title = statusTitle;
@@ -110,11 +112,13 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 
 	private async _updateStatusItem(): Promise<void> {
 		const id = ++this.currentUpdateRequestId;
+		this._logService.trace(`ChatStatusWorkspaceIndexingStatus::updateStatusItem(id=${id}): starting`);
 
 		const state = await this._statusReporter.getIndexState();
 
 		// Make sure a new request hasn't come in since we started
 		if (id !== this.currentUpdateRequestId) {
+			this._logService.trace(`ChatStatusWorkspaceIndexingStatus::updateStatusItem(id=${id}): skipping`);
 			return;
 		}
 
@@ -281,6 +285,8 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 	}
 
 	private _writeStatusItem(values: ChatStatusItemState | undefined) {
+		this._logService.trace(`ChatStatusWorkspaceIndexingStatus::_writeStatusItem()`);
+
 		if (!values) {
 			this._statusItem.hide();
 			return;
