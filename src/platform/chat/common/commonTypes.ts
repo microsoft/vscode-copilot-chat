@@ -261,6 +261,10 @@ function getQuotaHitMessage(fetchResult: ChatFetchError, copilotPlan: string | u
 }
 
 export function getErrorDetailsFromChatFetchError(fetchResult: ChatFetchError, copilotPlan: string, hideRateLimitTimeEstimate?: boolean): ChatErrorDetails {
+	return { code: fetchResult.type, ...getErrorDetailsFromChatFetchErrorInner(fetchResult, copilotPlan, hideRateLimitTimeEstimate) };
+}
+
+function getErrorDetailsFromChatFetchErrorInner(fetchResult: ChatFetchError, copilotPlan: string, hideRateLimitTimeEstimate?: boolean): ChatErrorDetails {
 	switch (fetchResult.type) {
 		case ChatFetchResponseType.OffTopic:
 			return { message: l10n.t('Sorry, but I can only assist with programming related questions.') };

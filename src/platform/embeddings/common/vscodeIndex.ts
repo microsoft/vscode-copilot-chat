@@ -5,6 +5,7 @@
 
 import type { CancellationToken, CommandInformationResult, RelatedInformationProvider, RelatedInformationResult, SettingInformationResult } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
+import { CallTracker } from '../../../util/common/telemetryCorrelationId';
 import { sanitizeVSCodeVersion } from '../../../util/common/vscodeVersion';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IEnvService } from '../../env/common/envService';
@@ -107,7 +108,7 @@ abstract class RelatedInformationProviderEmbeddingsIndex<V extends { key: string
 			return [];
 		}
 		const startOfEmbeddingRequest = Date.now();
-		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [query], {}, token);
+		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [query], {}, new CallTracker('RelatedInformationProviderEmbeddingsIndex::provideRelatedInformation'), token);
 		this._logService.debug(`Related Information: Remote similarly request took ${Date.now() - startOfEmbeddingRequest}ms`);
 		if (token.isCancellationRequested || !embeddingResult || !embeddingResult.values[0]) {
 			// return an array of 0s the same length as comparisons

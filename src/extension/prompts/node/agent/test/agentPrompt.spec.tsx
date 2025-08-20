@@ -89,7 +89,7 @@ import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 			const r = await renderer.render();
 			addCacheBreakpoints(r.messages);
 			return r.messages
-				.map(messageToMarkdown)
+				.map(m => messageToMarkdown(m))
 				.join('\n\n')
 				.replace(/\\+/g, '/')
 				.replace(/The current date is.*/g, '(Date removed from snapshot)');

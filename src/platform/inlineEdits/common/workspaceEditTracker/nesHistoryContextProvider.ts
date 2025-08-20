@@ -272,7 +272,7 @@ class DocumentState {
 			const potentialRecentEdit = e.edit.compose(recentEdit);
 			const potentialLineEdit = RootedEdit.toLineEdit(new RootedEdit(lastValue, potentialRecentEdit));
 			const rootedLineEdit = new RootedLineEdit(lastValue, potentialLineEdit).removeCommonSuffixPrefixLines(); // do not take into account no-op edits
-			const editLineCount = rootedLineEdit.edit.edits.length;
+			const editLineCount = rootedLineEdit.edit.replacements.length;
 			if (editLineCount > maxEditCount) {
 				break;
 			}

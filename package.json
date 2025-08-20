@@ -1604,6 +1604,11 @@
 				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
+				"vendor": "xai",
+				"displayName": "xAI",
+				"managementCommand": "github.copilot.chat.manageBYOK"
+			},
+			{
 				"vendor": "ollama",
 				"displayName": "Ollama"
 			},
@@ -1629,7 +1634,7 @@
 			},
 			{
 				"vendor": "customoai",
-				"displayName": "Custom OpenAI Compatible Models",
+				"displayName": "OpenAI Compatible",
 				"managementCommand": "github.copilot.chat.manageBYOK"
 			}
 		],
@@ -1913,6 +1918,12 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.debug.inlineEdit.reportNotebookNESIssue",
+				"title": "%github.copilot.command.inlineEdit.reportNotebookNESIssue%",
+				"enablement": "config.github.copilot.chat.advanced.notebook.alternativeNESFormat.enabled",
+				"category": "GitHub Copilot Developer"
+			},
+			{
 				"command": "github.copilot.debug.generateSTest",
 				"title": "%github.copilot.command.generateSTest%",
 				"enablement": "github.copilot.debugReportFeedback",
@@ -2068,6 +2079,11 @@
 				"command": "github.copilot.chat.manageBYOK",
 				"title": "Manage Bring Your Own Key Vendor",
 				"enablement": "false"
+			},
+			{
+				"command": "github.copilot.chat.configureCustomOAIModels",
+				"title": "Configure Custom OpenAI-Compatible Models",
+				"category": "GitHub Copilot"
 			}
 		],
 		"configuration": [

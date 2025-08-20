@@ -36,7 +36,7 @@ import { CopilotIdentityRules, GPT5CopilotIdentityRule } from '../base/copilotId
 import { IPromptEndpoint, renderPromptElement } from '../base/promptRenderer';
 import { Gpt5SafetyRule, SafetyRules } from '../base/safetyRules';
 import { Tag } from '../base/tag';
-import { TerminalAndTaskStatePromptElement } from '../base/terminalAndTaskState';
+import { TerminalStatePromptElement } from '../base/terminalState';
 import { ChatVariables } from '../panel/chatVariables';
 import { EXISTING_CODE_MARKER } from '../panel/codeBlockFormattingRules';
 import { CustomInstructions } from '../panel/customInstructions';
@@ -349,7 +349,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<CurrentDatePrompt />
 						<EditedFileEvents editedFileEvents={this.props.editedFileEvents} />
 						<NotebookSummaryChange />
-						{hasTerminalTool && <TerminalAndTaskStatePromptElement sessionId={this.props.sessionId} />}
+						{hasTerminalTool && <TerminalStatePromptElement sessionId={this.props.sessionId} />}
 						{hasTodoTool && <TodoListContextPrompt sessionId={this.props.sessionId} />}
 					</Tag>
 					<CurrentEditorContext endpoint={this.props.endpoint} />

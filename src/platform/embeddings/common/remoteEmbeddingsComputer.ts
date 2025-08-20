@@ -39,6 +39,7 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 		embeddingType: EmbeddingType,
 		inputs: readonly string[],
 		options?: ComputeEmbeddingsOptions,
+		telemetryInfo?: CallTracker,
 		cancellationToken?: CancellationToken,
 	): Promise<Embeddings | undefined> {
 		const token = (await this._authService.getAnyGitHubSession({ silent: true }))?.accessToken;
@@ -74,7 +75,7 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 				'copilot-panel',
 				generateUuid(),
 				body as any,
-				getGithubMetadataHeaders(new CallTracker(), this._envService),
+				getGithubMetadataHeaders(telemetryInfo ?? new CallTracker(), this._envService),
 				cancellationToken
 			);
 			if (!response.ok) {
