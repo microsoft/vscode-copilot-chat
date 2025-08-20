@@ -219,10 +219,9 @@ export class McpToolsService extends BaseToolsService {
 		const parts = [];
 		if (result.structuredContent) {
 			parts.push(new LanguageModelTextPart(JSON.stringify(result.structuredContent)));
-		} else if (Array.isArray(result.content)) {
-			for (const part of result.content as { text: string }[]) {
-				parts.push(new LanguageModelTextPart(part.text as string));
-			}
+		}
+		for (const part of result.content as { text: string }[]) {
+			parts.push(new LanguageModelTextPart(part.text as string));
 		}
 		return new LanguageModelToolResult(parts);
 	}
