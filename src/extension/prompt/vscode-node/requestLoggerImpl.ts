@@ -267,6 +267,9 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(`maxResponseTokens: ${entry.chatParams.postOptions?.max_tokens}`);
 		result.push(`location         : ${entry.chatParams.location}`);
 		result.push(`postOptions      : ${JSON.stringify(postOptions)}`);
+		if ('body' in entry.chatParams && entry.chatParams.body?.reasoning) {
+			result.push(`reasoning        : ${JSON.stringify(entry.chatParams.body.reasoning)}`);
+		}
 		result.push(`intent           : ${entry.chatParams.intent}`);
 		result.push(`startTime        : ${entry.startTime.toJSON()}`);
 		result.push(`endTime          : ${entry.endTime.toJSON()}`);

@@ -48,6 +48,7 @@ export function createResponsesRequestBody(options: ICreateEndpointBodyOptions, 
 		// top_logprobs is documented but not in the API types yet
 		//@ts-expect-error
 		top_logprobs: options.postOptions.logprobs ? 3 : undefined,
+		store: false
 	} satisfies OpenAI.Responses.ResponseCreateParamsStreaming;
 }
 

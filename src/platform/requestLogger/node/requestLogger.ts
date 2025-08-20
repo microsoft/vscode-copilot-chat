@@ -9,7 +9,7 @@ import { AsyncLocalStorage } from 'async_hooks';
 import type { Event } from 'vscode';
 import { ChatFetchError, ChatFetchResponseType, ChatLocation, ChatResponses, FetchSuccess } from '../../../platform/chat/common/commonTypes';
 import { IResponseDelta, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
-import { IChatEndpoint } from '../../../platform/networking/common/networking';
+import { IChatEndpoint, IEndpointBody } from '../../../platform/networking/common/networking';
 import { Result } from '../../../util/common/result';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -105,6 +105,7 @@ export interface ILoggedPendingRequest {
 	location: ChatLocation;
 	intent?: string;
 	postOptions?: OptionalChatRequestParams;
+	body?: IEndpointBody;
 	ignoreStatefulMarker?: boolean;
 }
 
