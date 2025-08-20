@@ -4,8 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
+import path from 'node:path';
 import type * as vscode from 'vscode';
 import { ChatLocation } from '../../../platform/chat/common/commonTypes';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
 import { Position, Range, Uri, WorkspaceEdit } from '../../../vscodeTypes';
@@ -26,7 +28,7 @@ export class ChatReplayIntent implements IIntent {
 
 	readonly locations = [ChatLocation.Panel];
 
-	//constructor(@IWorkspaceService private readonly workspaceService: IWorkspaceService) { }
+	constructor(@IWorkspaceService private readonly workspaceService: IWorkspaceService) { }
 
 	invoke(invocationContext: IIntentInvocationContext): Promise<IIntentInvocation> {
 		// implement handleRequest ourselves so we can skip implementing this.
@@ -56,10 +58,10 @@ export class ChatReplayIntent implements IIntent {
 			case 'toolCall':
 				stream.markdown(`\n\n**Tool call (${step.toolName}):**`);
 				if (step.fileUpdates && step.fileUpdates.length > 0) {
-
 					step.fileUpdates.forEach(update => {
+						const targetPath = path.join(this.workspaceService.getWorkspaceFolders()[0].fsPath, update.path);
 						const newContent = update.newContent!;
-						makeEdit(update.path, newContent, stream);
+						makeEdit(targetPath, newContent, stream);
 					});
 				}
 				break;
