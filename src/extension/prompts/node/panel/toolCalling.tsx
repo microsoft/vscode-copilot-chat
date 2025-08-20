@@ -12,6 +12,7 @@ import { modelCanUseImageURL } from '../../../../platform/endpoint/common/chatMo
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { StatefulMarkerContainer } from '../../../../platform/endpoint/common/statefulMarkerContainer';
+import { ThinkingDataContainer } from '../../../../platform/endpoint/common/thinkingDataContainer';
 import { IImageService } from '../../../../platform/image/common/imageService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
@@ -97,7 +98,13 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 
 		// Don't include this when rendering and triggering summarization
 		const statefulMarker = round.statefulMarker && <StatefulMarkerContainer statefulMarker={{ modelId: this.promptEndpoint.model, marker: round.statefulMarker }} />;
-		children.push(<AssistantMessage toolCalls={assistantToolCalls}>{statefulMarker}{round.response}</AssistantMessage>);
+		const thinking = round.thinking && <ThinkingDataContainer thinking={round.thinking} />;
+		children.push(
+			<AssistantMessage toolCalls={assistantToolCalls}>
+				{statefulMarker}
+				{thinking}
+				{round.response}
+			</AssistantMessage>);
 
 		// Tool call elements should be rendered with the later elements first, allowed to grow to fill the available space
 		// Each tool 'reserves' 1/(N*4) of the available space just so that newer tool calls don't completely elimate

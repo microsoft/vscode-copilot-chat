@@ -7,22 +7,23 @@ import { Raw } from '@vscode/prompt-tsx';
 import { ClientHttp2Stream } from 'http2';
 import { OpenAI } from 'openai';
 import { Response } from '../../../platform/networking/common/fetcherService';
+import { coalesce } from '../../../util/vs/base/common/arrays';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { binaryIndexOf } from '../../../util/vs/base/common/buffer';
 import { Lazy } from '../../../util/vs/base/common/lazy';
 import { SSEParser } from '../../../util/vs/base/common/sseParser';
 import { isDefined } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../networking/common/fetch';
 import { ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, TokenLogProb } from '../../networking/common/openai';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { IThinkingDataService } from '../../thinking/node/thinkingDataService';
 import { IChatModelInformation } from '../common/endpointProvider';
 import { getStatefulMarkerAndIndex } from '../common/statefulMarkerContainer';
-import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
 
 export function createResponsesRequestBody(options: ICreateEndpointBodyOptions, model: string, modelInfo: IChatModelInformation): IEndpointBody {
 	return {
@@ -63,6 +64,7 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 		switch (message.role) {
 			case Raw.ChatRole.Assistant:
 				if (message.content.length) {
+					input.push(...extractThinkingData(message.content));
 					input.push({
 						role: 'assistant',
 						content: message.content.map(rawContentToResponsesOutputContent).filter(isDefined),
@@ -133,6 +135,22 @@ function rawContentToResponsesOutputContent(part: Raw.ChatCompletionContentPart)
 	}
 }
 
+function extractThinkingData(content: Raw.ChatCompletionContentPart[]): OpenAI.Responses.ResponseReasoningItem[] {
+	return coalesce(content.map(part => {
+		if (part.type === Raw.ChatCompletionContentPartKind.Opaque) {
+			const thinkingData = rawPartAsThinkingData(part);
+			if (thinkingData) {
+				return {
+					type: 'reasoning',
+					id: thinkingData.id,
+					summary: [],
+					encrypted_content: thinkingData.metadata,
+				} satisfies OpenAI.Responses.ResponseReasoningItem;
+			}
+		}
+	}));
+}
+
 export async function processResponseFromChatEndpoint(instantiationService: IInstantiationService, telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData): Promise<AsyncIterableObject<ChatCompletion>> {
 	const body = (await response.body()) as ClientHttp2Stream;
 	return new AsyncIterableObject<ChatCompletion>(async feed => {
@@ -164,7 +182,6 @@ class OpenAIResponsesProcessor {
 	constructor(
 		private readonly telemetryData: TelemetryData,
 		private readonly requestId: string,
-		@IThinkingDataService private readonly thinkingDataService: IThinkingDataService,
 	) { }
 
 	public push(chunk: OpenAI.Responses.ResponseStreamEvent, _onProgress: FinishedCallback): ChatCompletion | undefined {
@@ -201,16 +218,17 @@ class OpenAIResponsesProcessor {
 							arguments: chunk.item.arguments,
 						}],
 					});
+				} else if (chunk.item.type === 'reasoning') {
+					onProgress({
+						text: '',
+						thinking: {
+							id: chunk.item.id,
+							metadata: chunk.item.encrypted_content ?? undefined,
+							isEncrypted: !!chunk.item.encrypted_content
+						}
+					});
 				}
 				return;
-			case 'response.reasoning_summary_text.delta':
-				return onProgress({ text: '', thinking: { id: chunk.item_id, text: chunk.delta } });
-			case 'response.reasoning_summary_part.done':
-				this.thinkingDataService.set('0', {
-					id: chunk.item_id,
-					text: chunk.part.text,
-				});
-				return onProgress({ text: '', thinking: { id: chunk.item_id, text: '' } });
 			case 'response.completed':
 				onProgress({ text: '', statefulMarker: chunk.response.id });
 				return {
