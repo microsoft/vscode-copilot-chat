@@ -10,6 +10,7 @@ import { groupBy } from './collections';
 import { SetMap } from './map';
 import { createSingleCallFunction } from './functional';
 import { Iterable } from './iterator';
+import { BugIndicatingError, onUnexpectedError } from './errors';
 
 // #region Disposable Tracking
 
@@ -486,6 +487,12 @@ export class DisposableStore implements IDisposable {
 		if (this._toDispose.has(o)) {
 			this._toDispose.delete(o);
 			setParentOfDisposable(o, null);
+		}
+	}
+
+	public assertNotDisposed(): void {
+		if (this._isDisposed) {
+			onUnexpectedError(new BugIndicatingError('Object disposed'));
 		}
 	}
 }

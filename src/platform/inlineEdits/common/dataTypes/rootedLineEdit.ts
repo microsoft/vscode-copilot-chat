@@ -10,7 +10,7 @@ import { RootedEdit } from './edit';
 
 export class RootedLineEdit {
 	public static fromEdit<TEdit extends BaseStringEdit>(edit: RootedEdit<TEdit>): RootedLineEdit {
-		const lineEdit = LineEdit.fromEdit(edit.edit, edit.base);
+		const lineEdit = LineEdit.fromEdit(edit.edit as BaseStringEdit as StringEdit, edit.base);
 		return new RootedLineEdit(edit.base, lineEdit);
 	}
 
@@ -40,7 +40,7 @@ export class RootedLineEdit {
 
 	public removeCommonSuffixPrefixLines(): RootedLineEdit {
 		const isNotEmptyEdit = (edit: LineReplacement) => !edit.lineRange.isEmpty || edit.newLines.length > 0;
-		const newEdit = this.edit.edits.map(e => e.removeCommonSuffixPrefixLines(this.base)).filter(e => isNotEmptyEdit(e));
+		const newEdit = this.edit.replacements.map(e => e.removeCommonSuffixPrefixLines(this.base)).filter(e => isNotEmptyEdit(e));
 		return new RootedLineEdit(this.base, new LineEdit(newEdit));
 	}
 }
