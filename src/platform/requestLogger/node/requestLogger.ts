@@ -91,7 +91,7 @@ export interface ILoggedElementInfo {
 	maxTokens: number;
 	trace: HTMLTracer;
 	chatRequest: ChatRequest | undefined;
-	toJson(): any;
+	toJSON(): object;
 }
 
 export interface ILoggedRequestInfo {
@@ -99,7 +99,7 @@ export interface ILoggedRequestInfo {
 	id: string;
 	entry: LoggedRequest;
 	chatRequest: ChatRequest | undefined;
-	toJson(): any;
+	toJSON(): object;
 }
 
 export interface ILoggedToolCall {
@@ -111,7 +111,7 @@ export interface ILoggedToolCall {
 	chatRequest: ChatRequest | undefined;
 	time: number;
 	thinking?: ThinkingData;
-	toJson(): Promise<any>;
+	toJSON(): Promise<object>;
 }
 
 export interface ILoggedPendingRequest {

@@ -5,7 +5,7 @@
 
 import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { HTMLTracer, IChatEndpointInfo, RenderPromptResult } from '@vscode/prompt-tsx';
-import { CancellationToken, DocumentLink, DocumentLinkProvider, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult2, languages, Range, TextDocument, Uri, workspace } from 'vscode';
+import { CancellationToken, DocumentLink, DocumentLinkProvider, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult2, languages, Range, TextDocument, Uri, workspace } from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
 import { IModelAPIResponse } from '../../../platform/endpoint/common/endpointProvider';
@@ -22,7 +22,8 @@ import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Iterable } from '../../../util/vs/base/common/iterator';
 import { safeStringify } from '../../../util/vs/base/common/objects';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { renderToolResultToStringNoBudget } from './requestLoggerToolResult';
+import { ChatRequest } from '../../../vscodeTypes';
+import { renderDataPartToString, renderToolResultToStringNoBudget } from './requestLoggerToolResult';
 
 // Implementation classes with toJson methods
 class LoggedElementInfo implements ILoggedElementInfo {
@@ -34,10 +35,10 @@ class LoggedElementInfo implements ILoggedElementInfo {
 		public readonly tokens: number,
 		public readonly maxTokens: number,
 		public readonly trace: HTMLTracer,
-		public readonly chatRequest: any | undefined
+		public readonly chatRequest: ChatRequest | undefined
 	) { }
 
-	toJson(): any {
+	toJSON(): object {
 		return {
 			id: this.id,
 			kind: 'element',
@@ -57,7 +58,7 @@ class LoggedRequestInfo implements ILoggedRequestInfo {
 		public readonly chatRequest: any | undefined
 	) { }
 
-	toJson(): any {
+	toJSON(): object {
 		const baseInfo = {
 			id: this.id,
 			kind: 'request',
@@ -100,11 +101,13 @@ class LoggedToolCall implements ILoggedToolCall {
 		public readonly thinking?: ThinkingData
 	) { }
 
-	async toJson(): Promise<any> {
+	async toJSON(): Promise<object> {
 		const result: string[] = [];
-		for (const content of this.response.content as (LanguageModelTextPart | LanguageModelPromptTsxPart)[]) {
-			if (content && typeof content.value === 'string') {
+		for (const content of this.response.content as (LanguageModelTextPart | LanguageModelPromptTsxPart | LanguageModelDataPart)[]) {
+			if (content && 'value' in content && typeof content.value === 'string') {
 				result.push(content.value);
+			} else if (content && 'data' in content && 'mimeType' in content) {
+				result.push(renderDataPartToString(content));
 			} else if (content) {
 				result.push(await renderToolResultToStringNoBudget(content));
 			}
@@ -286,7 +289,7 @@ export class RequestLogger extends AbstractRequestLogger {
 
 	private async _renderToJson(entry: LoggedInfo) {
 		try {
-			const jsonObject = await entry.toJson();
+			const jsonObject = await entry.toJSON();
 			return JSON.stringify(jsonObject, null, 2);
 		} catch (error) {
 			return JSON.stringify({
@@ -326,10 +329,12 @@ export class RequestLogger extends AbstractRequestLogger {
 
 		result.push(`## Response`);
 
-		for (const content of entry.response.content as (LanguageModelTextPart | LanguageModelPromptTsxPart)[]) {
+		for (const content of entry.response.content as (LanguageModelTextPart | LanguageModelPromptTsxPart | LanguageModelDataPart)[]) {
 			result.push(`~~~`);
-			if (content && typeof content.value === 'string') {
+			if (content && 'value' in content && typeof content.value === 'string') {
 				result.push(content.value);
+			} else if (content && 'data' in content && 'mimeType' in content) {
+				result.push(renderDataPartToString(content));
 			} else if (content) {
 				result.push(await renderToolResultToStringNoBudget(content));
 			}

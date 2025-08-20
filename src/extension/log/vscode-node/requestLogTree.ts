@@ -15,6 +15,7 @@ import { ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolC
 import { assertNever } from '../../../util/vs/base/common/assert';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { LRUCache } from '../../../util/vs/base/common/map';
+import { isDefined } from '../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequest } from '../../../vscodeTypes';
 import { IExtensionContribution } from '../../common/contributions';
@@ -50,7 +51,7 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 					return child.info;
 				}
 				return undefined; // Skip non-loggable items
-			}).filter((entry): entry is LoggedInfo => !!entry);
+			}).filter(isDefined);
 
 			return logEntries;
 		};
