@@ -6,7 +6,10 @@
 import { LineEdit, LineReplacement } from '../../../../util/vs/editor/common/core/edits/lineEdit';
 import { BaseStringEdit, StringEdit } from '../../../../util/vs/editor/common/core/edits/stringEdit';
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
+import { ensureDependenciesAreSet } from '../../../../util/vs/editor/common/core/text/positionToOffset';
 import { RootedEdit } from './edit';
+
+ensureDependenciesAreSet();
 
 export class RootedLineEdit {
 	public static fromEdit<TEdit extends BaseStringEdit>(edit: RootedEdit<TEdit>): RootedLineEdit {
