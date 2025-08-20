@@ -3,12 +3,19 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+type FileUpdate = {
+	path: string;
+	newContentPath?: string;
+	newContent?: string;
+};
+
 type ToolStep = {
 	kind: 'toolCall';
 	id: string;
 	line: number; // 1-based line number for debugger
 	args: any[];
 	toolName: string;
+	fileUpdates: FileUpdate[];
 	result: string;
 };
 

@@ -6,9 +6,9 @@
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { ChatLocation } from '../../../platform/chat/common/commonTypes';
-import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
+import { Position, Range, Uri, WorkspaceEdit } from '../../../vscodeTypes';
 import { Intent } from '../../common/constants';
 import { Conversation } from '../../prompt/common/conversation';
 import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
@@ -26,17 +26,7 @@ export class ChatReplayIntent implements IIntent {
 
 	readonly locations = [ChatLocation.Panel];
 
-	constructor(
-		@ITabsAndEditorsService private readonly tabsAndEditorsService: ITabsAndEditorsService,
-	) { }
-
-	/**
-	 * Returns the active editor's TextDocument if available.
-	 */
-	getActiveEditorDocument(): vscode.TextDocument | undefined {
-		const editor = this.tabsAndEditorsService.activeTextEditor;
-		return editor?.document;
-	}
+	//constructor(@IWorkspaceService private readonly workspaceService: IWorkspaceService) { }
 
 	invoke(invocationContext: IIntentInvocationContext): Promise<IIntentInvocation> {
 		// implement handleRequest ourselves so we can skip implementing this.
@@ -47,26 +37,56 @@ export class ChatReplayIntent implements IIntent {
 
 		let res = await getResponse();
 		while (res !== 'finished') {
-			displayResponse(res, stream);
+			this.processStep(res, stream);
 			res = await getResponse();
 		}
 
 		return {};
 	}
+
+	private processStep(step: ChatStep, stream: vscode.ChatResponseStream): void {
+		switch (step.kind) {
+			case 'userQuery':
+				stream.markdown(`**User Query:**\n\n${step.prompt}\n\n`);
+				stream.markdown(`**Response:**\n\n`);
+				break;
+			case 'request':
+				stream.markdown(`\n\n${step.result}`);
+				break;
+			case 'toolCall':
+				stream.markdown(`\n\n**Tool call (${step.toolName}):**`);
+				if (step.fileUpdates && step.fileUpdates.length > 0) {
+
+					step.fileUpdates.forEach(update => {
+						const newContent = update.newContent!;
+						makeEdit(update.path, newContent, stream);
+					});
+				}
+				break;
+		}
+	}
 }
 
-function displayResponse(step: ChatStep, stream: vscode.ChatResponseStream): void {
-	switch (step.kind) {
-		case 'userQuery':
-			stream.markdown(`**User Query:**\n\n${step.prompt}\n\n`);
-			stream.markdown(`**Response:**\n\n`);
-			break;
-		case 'request':
-			stream.markdown(`\n\n${step.result}`);
-			break;
-		case 'toolCall':
-			stream.markdown(`\n\n**Tool call (${step.toolName}):**`);
-			break;
+function makeEdit(path: string, newContent: string, stream: vscode.ChatResponseStream) {
+	const workspaceEdit = new WorkspaceEdit();
+	const uri = Uri.file(path);
+	const lineCount = newContent.split('\n').length;
+	workspaceEdit.replace(uri, new Range(
+		new Position(0, 0),
+		new Position(lineCount, 0)
+	), newContent);
+
+	for (const textEdit of workspaceEdit.entries()) {
+		stream.markdown('\n```\n');
+		stream.codeblockUri(textEdit[0], true);
+
+		const edits = Array.isArray(textEdit[1]) ? textEdit[1] : [textEdit[1]];
+		for (const textEdit of edits) {
+			stream.textEdit(uri, textEdit);
+		}
+
+		stream.textEdit(uri, true);
+		stream.markdown('\n' + '```\n');
 	}
 }
 

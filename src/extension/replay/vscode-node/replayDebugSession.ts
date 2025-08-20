@@ -197,6 +197,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 			toolName: item.kind === 'toolCall' ? item.name : undefined,
 			prompt: item.kind === 'request' ? item.messages
 				: item.kind === 'userQuery' ? item.content : undefined,
+			fileUpdates: item.kind === 'toolCall' ? item.fileUpdates : undefined,
 			line: 0
 		}));
 
