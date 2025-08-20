@@ -301,7 +301,7 @@ export class RequestLogger extends AbstractRequestLogger {
 		if ('messages' in entry.chatParams) {
 			result.push(`## Request Messages`);
 			for (const message of entry.chatParams.messages) {
-				result.push(messageToMarkdown(message));
+				result.push(messageToMarkdown(message, ignoreStatefulMarker));
 			}
 			if (prediction) {
 				result.push(`## Prediction`);

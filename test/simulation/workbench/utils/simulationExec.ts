@@ -92,7 +92,7 @@ function splitToLines(source: AsyncIterable<string>): AsyncIterableObject<string
 
 function forkSimulationMain(args: string[], token: CancellationToken): AsyncIterableObject<string> {
 	return new AsyncIterableObject<string>((emitter) => {
-		return new Promise((resolve, reject) => {
+		return new Promise<void>((resolve, reject) => {
 			const proc = cp.spawn('node', [SIMULATION_MAIN_PATH, ...args], { stdio: 'pipe' });
 			const listener = token.onCancellationRequested(() => {
 				proc.kill('SIGTERM');
@@ -175,7 +175,7 @@ class MainProcessEventHandler {
 		const idMap = this.idMap;
 
 		return new AsyncIterableObject<string>((emitter) => {
-			return new Promise((resolve, reject) => {
+			return new Promise<void>((resolve, reject) => {
 				const cancellationListener = token.onCancellationRequested(() => {
 					ipcRenderer.send('kill-process', { id });
 				});
