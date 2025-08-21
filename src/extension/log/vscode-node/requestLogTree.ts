@@ -66,17 +66,9 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 
 			const promptLogs: any[] = [];
 
-			// Process each log entry and get its JSON content using the content provider
 			for (const logEntry of logEntries) {
 				try {
-					// Get the JSON content using the virtual document URI
-					const virtualUri = vscode.Uri.parse(ChatRequestScheme.buildUri({ kind: 'request', id: logEntry.id }, 'json'));
-					const document = await vscode.workspace.openTextDocument(virtualUri);
-					const jsonContent = document.getText();
-
-					// Parse the JSON content and add to prompt logs
-					const entryObject = JSON.parse(jsonContent);
-					promptLogs.push(entryObject);
+					promptLogs.push(await logEntry.toJSON());
 				} catch (error) {
 					// If we can't get content for this entry, add an error object
 					promptLogs.push({
