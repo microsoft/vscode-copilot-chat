@@ -4,16 +4,30 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { LanguageModelChat } from 'vscode';
+import { encodeHex, VSBuffer } from '../../../util/vs/base/common/buffer';
 import type { IChatEndpoint } from '../../networking/common/networking';
 
+const _cachedHashes = new Map<string, string>();
 
-function getSha256Hash(text: string): Promise<string> {
+async function getSha256Hash(text: string): Promise<string> {
+	if (_cachedHashes.has(text)) {
+		return _cachedHashes.get(text)!;
+	}
+
 	const encoder = new TextEncoder();
 	const data = encoder.encode(text);
-	return crypto.subtle.digest('SHA-256', data).then(hashBuffer => {
-		const hashArray = Array.from(new Uint8Array(hashBuffer));
-		return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-	});
+	const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+	const hash = encodeHex(VSBuffer.wrap(new Uint8Array(hashBuffer)));
+	_cachedHashes.set(text, hash);
+	return hash;
+}
+
+export async function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
+	return await getSha256Hash(model.family) === 'a99dd17dfee04155d863268596b7f6dd36d0a6531cd326348dbe7416142a21a3';
+}
+
+export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint) {
+	return await getSha256Hash(model.family) === '008ed1bfd28fb7f15ff17f6e308c417635da136603b83b32db4719bd1cd64c09';
 }
 
 /**
@@ -36,10 +50,7 @@ export function modelPrefersInstructionsAfterHistory(modelFamily: string) {
  * Model supports apply_patch as an edit tool.
  */
 export async function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	if (model.family === 'gpt-4.1' || model.family === 'o4-mini' || model.family.startsWith('gpt-5')) {
-		return true;
-	}
-	return await getSha256Hash(model.family) === 'a99dd17dfee04155d863268596b7f6dd36d0a6531cd326348dbe7416142a21a3';
+	return model.family === 'gpt-4.1' || model.family === 'o4-mini' || model.family.startsWith('gpt-5') || await isHiddenModelA(model);
 }
 
 /**
