@@ -95,9 +95,12 @@ export interface IEndpointBody {
 	similarity?: number;
 	/** Code search: */
 	scoping_query?: string;
+
 	/** Responses API: */
 	input?: readonly any[];
 	truncation?: 'auto' | 'disabled';
+	include?: ['reasoning.encrypted_content'];
+	store?: boolean;
 }
 
 export interface IEndpoint {

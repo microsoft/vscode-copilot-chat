@@ -616,7 +616,7 @@ export namespace ConfigKey {
 		/** Enable filtering variables by cell document symbols */
 		export const NotebookVariableFilteringEnabled = defineSetting('chat.advanced.notebook.variableFilteringEnabled', false, INTERNAL);
 		export const NotebookAlternativeDocumentFormat = defineExpSetting<AlternativeNotebookFormat>('chat.advanced.notebook.alternativeFormat', AlternativeNotebookFormat.xml, INTERNAL);
-		export const UseAlternativeNESNotebookFormat = defineExpSetting<boolean>('chat.advanced.notebook.alternativeNESFormat', false, INTERNAL);
+		export const UseAlternativeNESNotebookFormat = defineExpSetting<boolean>('chat.advanced.notebook.alternativeNESFormat.enabled', false, INTERNAL);
 		export const TerminalToDebuggerPatterns = defineSetting<string[]>('chat.advanced.debugTerminalCommandPatterns', [], INTERNAL);
 		export const InlineEditsIgnoreCompletionsDisablement = defineValidatedSetting<boolean>('chat.advanced.inlineEdits.ignoreCompletionsDisablement', vBoolean(), false, INTERNAL_RESTRICTED);
 		export const InlineEditsAsyncCompletions = defineExpSetting<boolean>('chat.advanced.inlineEdits.asyncCompletions', true, INTERNAL_RESTRICTED);
@@ -693,8 +693,9 @@ export namespace ConfigKey {
 		export const AgentHistorySummarizationMode = defineSetting<string | undefined>('chat.advanced.agentHistorySummarizationMode', undefined, INTERNAL_RESTRICTED);
 		export const AgentHistorySummarizationWithPromptCache = defineExpSetting<boolean | undefined>('chat.advanced.agentHistorySummarizationWithPromptCache', false, INTERNAL_RESTRICTED);
 		export const AgentHistorySummarizationForceGpt41 = defineExpSetting<boolean | undefined>('chat.advanced.agentHistorySummarizationForceGpt41', false, INTERNAL_RESTRICTED);
-		export const UseResponsesApiTruncation = defineSetting<boolean | undefined>('chat.advanced.useResponsesApiTruncation', false, INTERNAL_RESTRICTED);
 		export const UseResponsesApi = defineExpSetting<boolean | undefined>('chat.advanced.useResponsesApi', false, INTERNAL_RESTRICTED);
+		export const UseResponsesApiTruncation = defineSetting<boolean | undefined>('chat.advanced.useResponsesApiTruncation', false, INTERNAL_RESTRICTED);
+		export const ResponsesApiReasoning = defineSetting<boolean | string | undefined>('chat.advanced.responsesApiReasoning', false, INTERNAL_RESTRICTED);
 
 		export const EnableChatImageUpload = defineExpSetting<boolean>('chat.advanced.imageUpload', false, INTERNAL);
 
@@ -747,7 +748,6 @@ export namespace ConfigKey {
 	export const CodeSearchAgentEnabled = defineSetting<boolean>('chat.codesearch.enabled', false);
 	export const InlineEditsEnabled = defineExpSetting<boolean>('nextEditSuggestions.enabled', { defaultValue: false, teamDefaultValue: true });
 	export const InlineEditsEnableDiagnosticsProvider = defineExpSetting<boolean>('nextEditSuggestions.fixes', { defaultValue: true, teamDefaultValue: true });
-	export const AgentCanRunTasks = defineValidatedSetting('chat.agent.runTasks', vBoolean(), true);
 	export const NewWorkspaceCreationAgentEnabled = defineSetting<boolean>('chat.newWorkspaceCreation.enabled', true);
 	export const NewWorkspaceUseContext7 = defineSetting<boolean>('chat.newWorkspace.useContext7', false);
 	export const SummarizeAgentConversationHistory = defineExpSetting<boolean>('chat.summarizeAgentConversationHistory.enabled', true);

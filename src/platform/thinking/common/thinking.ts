@@ -21,20 +21,23 @@ export type ThinkingDelta = {
 	text?: string;
 	id: string;
 	metadata?: string;
+	isEncrypted?: boolean;
 } | {
 	text?: string;
 	id?: string;
 	metadata: string;
+	isEncrypted?: boolean;
 } |
 {
 	text: string;
 	id?: string;
 	metadata?: string;
+	isEncrypted?: boolean;
 };
 
 export interface ThinkingData {
 	id: string;
 	text: string;
 	metadata?: string;
+	type?: 'encrypted';
 }
-

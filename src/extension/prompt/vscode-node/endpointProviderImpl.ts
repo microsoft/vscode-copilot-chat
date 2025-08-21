@@ -10,7 +10,7 @@ import { AutoChatEndpoint } from '../../../platform/endpoint/common/autoChatEndp
 import { IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
-import { ChatEndpointFamily, IChatModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CopilotChatEndpoint } from '../../../platform/endpoint/node/copilotChatEndpoint';
 import { IModelMetadataFetcher, ModelMetadataFetcher } from '../../../platform/endpoint/node/modelMetadataFetcher';
 import { applyExperimentModifications, ExperimentConfig, getCustomDefaultModelExperimentConfig, ProxyExperimentEndpoint } from '../../../platform/endpoint/node/proxyExperimentEndpoint';
@@ -149,6 +149,9 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		return endpoint;
 	}
 
+	async getAllCompletionModels(forceRefresh?: boolean): Promise<ICompletionModelInformation[]> {
+		return this._modelFetcher.getAllCompletionModels(forceRefresh ?? false);
+	}
 
 	async getAllChatEndpoints(): Promise<IChatEndpoint[]> {
 		const models: IChatModelInformation[] = await this._modelFetcher.getAllChatModels();

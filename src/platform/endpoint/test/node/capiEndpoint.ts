@@ -17,6 +17,7 @@ import { ICAPIClientService } from '../../common/capiClient';
 import { IDomainService } from '../../common/domainService';
 import { IChatModelInformation } from '../../common/endpointProvider';
 import { ChatEndpoint } from '../../node/chatEndpoint';
+import { ILogService } from '../../../log/common/logService';
 
 export class CAPITestEndpoint extends ChatEndpoint {
 
@@ -33,7 +34,8 @@ export class CAPITestEndpoint extends ChatEndpoint {
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
-		@IExperimentationService experimentationService: IExperimentationService
+		@IExperimentationService experimentationService: IExperimentationService,
+		@ILogService logService: ILogService
 	) {
 		super(modelMetadata,
 			domainService,
@@ -46,7 +48,8 @@ export class CAPITestEndpoint extends ChatEndpoint {
 			tokenizerProvider,
 			instantiationService,
 			configurationService,
-			experimentationService
+			experimentationService,
+			logService
 		);
 	}
 

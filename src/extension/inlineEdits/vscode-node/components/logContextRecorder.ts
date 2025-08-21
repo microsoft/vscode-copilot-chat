@@ -20,7 +20,7 @@ export class LogContextRecorder extends Disposable {
 	public readonly logFilePath: string;
 	private readonly _impl: Promise<LogContextRecorderImpl>;
 
-	private readonly _shownSuggestions: DisposableMap<number, { timeout: NodeJS.Timeout; dispose: () => void }>;
+	private readonly _shownSuggestions: DisposableMap<number, { timeout: TimeoutHandle; dispose: () => void }>;
 
 	constructor(
 		public readonly recordingDirPath: string,

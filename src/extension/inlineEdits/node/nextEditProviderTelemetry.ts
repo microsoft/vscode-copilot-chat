@@ -553,7 +553,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 
 export class TelemetrySender implements IDisposable {
 
-	private readonly _map = new Map<INextEditResult, { builder: NextEditProviderTelemetryBuilder; timeout: NodeJS.Timeout }>();
+	private readonly _map = new Map<INextEditResult, { builder: NextEditProviderTelemetryBuilder; timeout: TimeoutHandle }>();
 
 	constructor(
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,

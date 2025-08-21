@@ -27,6 +27,10 @@ export class LanguageContextProviderService extends Disposable implements ILangu
 		});
 	}
 
+	public getAllProviders(): readonly Copilot.ContextProvider<Copilot.SupportedContextItem>[] {
+		return this.providers;
+	}
+
 	public getContextProviders(doc: TextDocument): Copilot.ContextProvider<Copilot.SupportedContextItem>[] {
 		return this.providers.filter(provider => languages.match(provider.selector, doc));
 	}

@@ -17,7 +17,7 @@ previous turn 1
 ~~~md
 response
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -40,7 +40,7 @@ previous turn 2
 ~~~md
 response
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -54,5 +54,5 @@ Focus particularly on:
 - How these recent operations connect to the overall user goals
 Include all important tool calls and their results as part of the appropriate sections, with special emphasis on the most recent operations.
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~

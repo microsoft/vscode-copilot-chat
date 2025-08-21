@@ -15,6 +15,7 @@ import { OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { ThinkingDelta } from '../../../platform/thinking/common/thinking';
 import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
@@ -296,7 +297,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				*/
 				this._telemetryService.sendMSFTTelemetryEvent('readFileTrajectory',
 					{
-						model: this.options.request.model.id,
+						// model will be undefined in the simulator
+						model: this.options.request.model?.id,
 					},
 					{
 						rounds: seqArgs.length,
@@ -432,6 +434,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}) : undefined;
 		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
+		let thinking: ThinkingDelta | undefined;
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
 			finishedCb: async (text, _, delta) => {
@@ -445,6 +448,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				}
 				if (delta.statefulMarker) {
 					statefulMarker = delta.statefulMarker;
+				}
+				if (delta.thinking) {
+					thinking = delta.thinking;
 				}
 
 				return stopEarly ? text.length : undefined;
@@ -483,13 +489,18 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		if (fetchResult.type === ChatFetchResponseType.Success) {
 			return {
 				response: fetchResult,
-				round: new ToolCallRound(
-					fetchResult.value,
+				round: ToolCallRound.create({
+					response: fetchResult.value,
 					toolCalls,
 					toolInputRetry,
-					undefined,
-					statefulMarker
-				),
+					statefulMarker,
+					thinking: thinking?.isEncrypted ? {
+						id: thinking.id ?? generateUuid(),
+						text: thinking.text ?? '',
+						metadata: thinking.metadata,
+						type: 'encrypted'
+					} : undefined
+				}),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
 				lastRequestMessages: buildPromptResult.messages,

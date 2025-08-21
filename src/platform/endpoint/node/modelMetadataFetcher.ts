@@ -21,7 +21,7 @@ import { IExperimentationService } from '../../telemetry/common/nullExperimentat
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
-import { ChatEndpointFamily, IChatModelInformation, IModelAPIResponse, isChatModelInformation } from '../common/endpointProvider';
+import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IModelAPIResponse, isChatModelInformation, isCompletionModelInformation } from '../common/endpointProvider';
 import { getMaxPromptTokens } from './chatEndpoint';
 
 export interface IModelMetadataFetcher {
@@ -31,6 +31,11 @@ export interface IModelMetadataFetcher {
 	 * Does not always indicate there is a change, just that the data is fresh
 	 */
 	onDidModelsRefresh: Event<void>;
+
+	/**
+	 * Gets all the completion models known by the model fetcher endpoint
+	 */
+	getAllCompletionModels(forceRefresh: boolean): Promise<ICompletionModelInformation[]>;
 
 	/**
 	 * Gets all the chat models known by the model fetcher endpoint
@@ -84,6 +89,19 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 		@ILogService private readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) { }
+
+	public async getAllCompletionModels(forceRefresh: boolean): Promise<ICompletionModelInformation[]> {
+		await this._taskSingler.getOrCreate(ModelMetadataFetcher.ALL_MODEL_KEY, () => this._fetchModels(forceRefresh));
+		const completionModels: ICompletionModelInformation[] = [];
+		for (const [, models] of this._familyMap) {
+			for (const model of models) {
+				if (isCompletionModelInformation(model)) {
+					completionModels.push(model);
+				}
+			}
+		}
+		return completionModels;
+	}
 
 	public async getAllChatModels(): Promise<IChatModelInformation[]> {
 		await this._taskSingler.getOrCreate(ModelMetadataFetcher.ALL_MODEL_KEY, this._fetchModels.bind(this));

@@ -21,7 +21,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { IExtensionContribution } from '../../common/contributions';
 import { CompletionsProvider } from '../../completions/vscode-node/completionsProvider';
 import { TelemetrySender } from '../node/nextEditProviderTelemetry';
-import { InlineEditDebugComponent } from './components/inlineEditDebugComponent';
+import { InlineEditDebugComponent, reportFeedbackCommandId } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
 import { DiagnosticsNextEditProvider } from './features/diagnosticsInlineEditProvider';
 import { InlineCompletionProviderImpl } from './inlineCompletionProvider';
@@ -30,6 +30,8 @@ import { InlineEditLogger } from './parts/inlineEditLogger';
 import { LastEditTimeTracker } from './parts/lastEditTimeTracker';
 import { VSCodeWorkspace } from './parts/vscodeWorkspace';
 import { makeSettable } from './utils/observablesUtils';
+import { isNotebookCell } from '../../../util/common/notebooks';
+import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 
 const TRIGGER_INLINE_EDIT_ON_ACTIVE_EDITOR_CHANGE = false; // otherwise, eg, NES would trigger just when going through search results
 
@@ -72,7 +74,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 		@IEnvService private readonly _envService: IEnvService,
 		@ILogService private readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext
+		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
 	) {
 		super();
 
@@ -153,6 +155,23 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 			reader.store.add(commands.registerCommand(clearCacheCommandId, () => {
 				model.nextEditProvider.clearCache();
 			}));
+
+			reader.store.add(commands.registerCommand(reportNotebookNESIssueCommandId, () => {
+				const activeNotebook = window.activeNotebookEditor;
+				const document = window.activeTextEditor?.document;
+				if (!activeNotebook || !document || !isNotebookCell(document.uri)) {
+					return;
+				}
+				const doc = model.workspace.getDocumentByTextDocument(document);
+				const selection = activeNotebook.selection;
+				if (!selection || !doc) {
+					return;
+				}
+
+				const logContext = new InlineEditRequestLogContext(doc.id.uri, document.version, undefined);
+				logContext.recordingBookmark = model.debugRecorder.createBookmark();
+				void commands.executeCommand(reportFeedbackCommandId, { logContext });
+			}));
 		}));
 
 		constructorTracer.returns();
@@ -164,3 +183,4 @@ export const learnMoreCommandId = 'github.copilot.debug.inlineEdit.learnMore';
 export const learnMoreLink = 'https://aka.ms/vscode-nes';
 
 const clearCacheCommandId = 'github.copilot.debug.inlineEdit.clearCache';
+const reportNotebookNESIssueCommandId = 'github.copilot.debug.inlineEdit.reportNotebookNESIssue';

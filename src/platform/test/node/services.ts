@@ -55,6 +55,7 @@ import { OctoKitService } from '../../github/common/octoKitServiceImpl';
 import { GithubRepositoryService } from '../../github/node/githubRepositoryService';
 import { IHeatmapService, nullHeatmapService } from '../../heatmap/common/heatmapService';
 import { IIgnoreService, NullIgnoreService } from '../../ignore/common/ignoreService';
+import { IImageService, nullImageService } from '../../image/common/imageService';
 import { IInteractiveSessionService } from '../../interactive/common/interactiveSessionService';
 import { ILanguageContextProviderService } from '../../languageContextProvider/common/languageContextProviderService';
 import { NullLanguageContextProviderService } from '../../languageContextProvider/common/nullLanguageContextProviderService';
@@ -97,7 +98,6 @@ import { SnapshotSearchService, TestingTabsAndEditorsService } from './simulatio
 import { TestChatAgentService } from './testChatAgentService';
 import { TestWorkbenchService } from './testWorkbenchService';
 import { TestWorkspaceService } from './testWorkspaceService';
-import { IImageService, nullImageService } from '../../image/common/imageService';
 
 /**
  * Collects descriptors for services to use in testing.
