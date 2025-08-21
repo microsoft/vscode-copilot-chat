@@ -22,7 +22,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.104.0-20250819",
+		"vscode": "^1.104.0-20250822",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -116,7 +116,7 @@
 		"testObserver",
 		"aiTextSearchProvider@2",
 		"chatParticipantPrivate@10",
-		"chatProvider@1",
+		"chatProvider@2",
 		"contribDebugCreateConfiguration",
 		"chatReferenceDiagnostic",
 		"textSearchProvider2",

@@ -156,11 +156,11 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				version: endpoint.version,
 				maxInputTokens: endpoint.modelMaxPromptTokens - baseCount - BaseTokensPerCompletion,
 				maxOutputTokens: endpoint.maxOutputTokens,
-				auth: session && { label: session.account.label },
+				requiresAuthorization: session && { label: session.account.label },
 				isDefault: endpoint === defaultChatEndpoint,
 				isUserSelectable: endpoint.showInModelPicker,
 				capabilities: {
-					vision: endpoint.supportsVision,
+					imageInput: endpoint.supportsVision,
 					toolCalling: endpoint.supportsToolCalls,
 				}
 			};
@@ -188,7 +188,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		return this._lmWrapper.provideLanguageModelResponse(endpoint, messages, {
 			...options,
 			modelOptions: options.modelOptions
-		}, options.extensionId, progress, token);
+		}, options.requestInitiator, progress, token);
 	}
 
 	private async _provideTokenCount(
@@ -277,7 +277,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		super();
 	}
 
-	private async _provideLanguageModelResponse(_endpoint: IChatEndpoint, _messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, _options: vscode.LanguageModelChatRequestOptions, extensionId: string, callback: FinishedCallback, token: vscode.CancellationToken): Promise<any> {
+	private async _provideLanguageModelResponse(_endpoint: IChatEndpoint, _messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, _options: vscode.LanguageModelChatRequestHandleOptions, extensionId: string, callback: FinishedCallback, token: vscode.CancellationToken): Promise<any> {
 
 		const extensionInfo = vscode.extensions.getExtension(extensionId, true);
 		if (!extensionInfo || typeof extensionInfo.packageJSON.version !== 'string') {
@@ -409,7 +409,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		);
 	}
 
-	async provideLanguageModelResponse(endpoint: IChatEndpoint, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.LanguageModelChatRequestOptions, extensionId: string, progress: vscode.Progress<LMResponsePart>, token: vscode.CancellationToken): Promise<any> {
+	async provideLanguageModelResponse(endpoint: IChatEndpoint, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.LanguageModelChatRequestHandleOptions, extensionId: string, progress: vscode.Progress<LMResponsePart>, token: vscode.CancellationToken): Promise<any> {
 		const finishCallback: FinishedCallback = async (_text, index, delta): Promise<undefined> => {
 			if (delta.text) {
 				progress.report(new vscode.LanguageModelTextPart(delta.text));
@@ -485,7 +485,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		}
 	}
 
-	private validateTools(tools: vscode.LanguageModelChatTool[]): void {
+	private validateTools(tools: readonly vscode.LanguageModelChatTool[]): void {
 		for (const tool of tools) {
 			if (!tool.name.match(/^[\w-]+$/)) {
 				throw new Error(`Invalid tool name "${tool.name}": only alphanumeric characters, hyphens, and underscores are allowed.`);
@@ -493,7 +493,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		}
 	}
 
-	private async countToolTokens(endpoint: IChatEndpoint, tools: vscode.LanguageModelChatTool[]): Promise<number> {
+	private async countToolTokens(endpoint: IChatEndpoint, tools: readonly vscode.LanguageModelChatTool[]): Promise<number> {
 		return await endpoint.acquireTokenizer().countToolTokens(tools);
 	}
 
