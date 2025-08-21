@@ -16,7 +16,10 @@
 		],
 		// Needed for tsx to run test files
 		"paths": {
-			"vscode": ["./src/util/common/test/shims/vscodeTypesShim.ts"]
+			"vscode": ["./src/util/common/test/shims/vscodeTypesShim.ts"],
+			"#lib/*": ["./src/extension/completions-core/lib/src/*"],
+			"#prompt/*": ["./src/extension/completions-core/prompt/src/*"],
+			"#types": ["./src/extension/completions-core/types/src"]
 		}
 	},
 	"include": [
