@@ -145,7 +145,7 @@ function extractThinkingData(content: Raw.ChatCompletionContentPart[]): OpenAI.R
 					type: 'reasoning',
 					id: thinkingData.id,
 					summary: [],
-					encrypted_content: thinkingData.metadata,
+					encrypted_content: thinkingData.encrypted,
 				} satisfies OpenAI.Responses.ResponseReasoningItem;
 			}
 		}
@@ -222,11 +222,10 @@ class OpenAIResponsesProcessor {
 				} else if (chunk.item.type === 'reasoning') {
 					onProgress({
 						text: '',
-						thinking: {
+						thinking: chunk.item.encrypted_content ? {
 							id: chunk.item.id,
-							metadata: chunk.item.encrypted_content ?? undefined,
-							isEncrypted: !!chunk.item.encrypted_content
-						}
+							encrypted: chunk.item.encrypted_content,
+						} : undefined
 					});
 				}
 				return;

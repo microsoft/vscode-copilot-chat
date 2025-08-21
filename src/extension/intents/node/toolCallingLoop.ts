@@ -15,7 +15,7 @@ import { OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { ThinkingDelta } from '../../../platform/thinking/common/thinking';
+import { ThinkingData } from '../../../platform/thinking/common/thinking';
 import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
@@ -433,10 +433,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}) : undefined;
 		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
-		let thinking: ThinkingDelta | undefined;
+		let thinkingId: string | undefined;
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
-			finishedCb: async (text, _, delta) => {
+			finishedCb: async (text, index, delta) => {
 				fetchStreamSource?.update(text, delta);
 				if (delta.copilotToolCalls) {
 					toolCalls.push(...delta.copilotToolCalls.map((call): IToolCall => ({
@@ -444,12 +444,18 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						id: this.createInternalToolCallId(call.id),
 						arguments: call.arguments === '' ? '{}' : call.arguments
 					})));
+					if (toolCalls.length > 0) {
+						this._thinkingDataService.update(index, { id: thinkingId, metadata: delta.copilotToolCalls[0].id });
+					}
 				}
 				if (delta.statefulMarker) {
 					statefulMarker = delta.statefulMarker;
 				}
 				if (delta.thinking) {
-					thinking = delta.thinking;
+					this._thinkingDataService.update(index, delta.thinking);
+					if (delta.thinking.id && delta.thinking.id.length > 0) {
+						thinkingId = delta.thinking.id;
+					}
 				}
 
 				return stopEarly ? text.length : undefined;
@@ -486,6 +492,12 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		this.turn.setMetadata(interactionOutcomeComputer.interactionOutcome);
 		const toolInputRetry = isToolInputFailure ? (this.toolCallRounds.at(-1)?.toolInputRetry || 0) + 1 : 0;
 		if (fetchResult.type === ChatFetchResponseType.Success) {
+			let thinking: ThinkingData | undefined;
+			if (thinkingId) {
+				thinking = this._thinkingDataService.get(thinkingId);
+			} else {
+				thinking = this._thinkingDataService.get(toolCalls.map(tc => tc.id));
+			}
 			return {
 				response: fetchResult,
 				round: ToolCallRound.create({
@@ -493,12 +505,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					toolCalls,
 					toolInputRetry,
 					statefulMarker,
-					thinking: thinking?.isEncrypted ? {
-						id: thinking.id ?? generateUuid(),
-						text: thinking.text ?? '',
-						metadata: thinking.metadata,
-						type: 'encrypted'
-					} : undefined
+					thinking
 				}),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
@@ -632,6 +639,21 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		for (const metadata of buildPromptResult.metadata.getAll(ToolResultMetadata)) {
 			this.logToolResult(buildPromptContext, metadata);
 			this.toolCallResults[metadata.toolCallId] = metadata.result;
+		}
+
+		for (const message of buildPromptResult.messages) {
+			for (const content of message.content) {
+				// opaque type
+				if (content.type === 2) {
+					const data = content.value as {
+						type: string;
+						thinking: ThinkingData;
+					};
+					if (data.type === 'thinking' && data.thinking.id) {
+						this._thinkingDataService.set(data.thinking.id, data.thinking);
+					}
+				}
+			}
 		}
 
 		if (buildPromptResult.metadata.getAll(ToolResultMetadata).some(r => r.isCancelled)) {

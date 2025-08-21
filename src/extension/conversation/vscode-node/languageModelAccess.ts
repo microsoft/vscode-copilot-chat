@@ -23,7 +23,7 @@ import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from 
 import { IChatEndpoint, IEndpoint } from '../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
+import { isEncryptedThinkingDelta } from '../../../platform/thinking/common/thinking';
 import { BaseTokensPerCompletion } from '../../../platform/tokenizer/node/tokenizer';
 import { CallTracker } from '../../../util/common/telemetryCorrelationId';
 import { Emitter } from '../../../util/vs/base/common/event';
@@ -271,8 +271,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ILogService private readonly _logService: ILogService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
-		@IEnvService private readonly _envService: IEnvService,
-		@IThinkingDataService private readonly _thinkingDataService: IThinkingDataService
+		@IEnvService private readonly _envService: IEnvService
 	) {
 		super();
 	}
@@ -410,7 +409,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 	}
 
 	async provideLanguageModelResponse(endpoint: IChatEndpoint, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.LanguageModelChatRequestOptions, extensionId: string, progress: vscode.Progress<LMResponsePart>, token: vscode.CancellationToken): Promise<any> {
-		const finishCallback: FinishedCallback = async (_text, index, delta): Promise<undefined> => {
+		const finishCallback: FinishedCallback = async (_text, _index, delta): Promise<undefined> => {
 			if (delta.text) {
 				progress.report(new vscode.LanguageModelTextPart(delta.text));
 			}
@@ -426,11 +425,10 @@ export class CopilotLanguageModelWrapper extends Disposable {
 				}
 			}
 			if (delta.thinking) {
-				const text = delta.thinking.text ?? '';
-				progress.report(new vscode.LanguageModelThinkingPart(text, delta.thinking.id, delta.thinking.metadata));
-
-				// @karthiknadig: remove this when LM API becomes available
-				this._thinkingDataService.update(index, delta.thinking);
+				if (!isEncryptedThinkingDelta(delta.thinking)) {
+					const text = delta.thinking.text ?? '';
+					progress.report(new vscode.LanguageModelThinkingPart(text, delta.thinking.id, delta.thinking.metadata));
+				}
 			}
 
 			if (delta.statefulMarker) {
