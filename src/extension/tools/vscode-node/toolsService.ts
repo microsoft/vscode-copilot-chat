@@ -4,13 +4,15 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { PackageJSONShape } from '../../../platform/env/common/packagejson';
 import { ILogService } from '../../../platform/log/common/logService';
 import { equals as arraysEqual } from '../../../util/vs/base/common/arrays';
 import { Lazy } from '../../../util/vs/base/common/lazy';
+import { isBoolean, isString } from '../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { getContributedToolName, getToolName, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { BaseToolsService } from '../common/toolsService';
+import { BaseToolsService, IToolContributionInfo } from '../common/toolsService';
 
 export class ToolsService extends BaseToolsService {
 	declare _serviceBrand: undefined;
@@ -21,12 +23,17 @@ export class ToolsService extends BaseToolsService {
 		output: readonly vscode.LanguageModelToolInformation[];
 	} = { input: [], output: [] };
 
+	private _toolContributionInfos: Map<string, IToolContributionInfo> | undefined = undefined;
+
 	get tools(): ReadonlyArray<vscode.LanguageModelToolInformation> {
 		if (arraysEqual(this._contributedToolCache.input, vscode.lm.tools)) {
 			return this._contributedToolCache.output;
 		}
 
 		const input = [...vscode.lm.tools];
+		input.forEach(tool => {
+			console.log(`${tool.name} ${tool.description}`);
+		});
 		const contributedTools = [...input]
 			.sort((a, b) => {
 				// Sort builtin tools to the top
@@ -64,12 +71,39 @@ export class ToolsService extends BaseToolsService {
 		return this._copilotTools.value;
 	}
 
+	get toolContributionInfos(): Map<string, IToolContributionInfo> {
+		if (this._toolContributionInfos === undefined) {
+			this._toolContributionInfos = new Map();
+			for (const extension of vscode.extensions.allAcrossExtensionHosts) {
+				const languageModelTools = (extension.packageJSON as Partial<PackageJSONShape>).contributes?.languageModelTools;
+				if (Array.isArray(languageModelTools)) {
+					for (const tool of languageModelTools) {
+						const { name, toolReferenceName, canBeReferencedInPrompt } = tool;
+						if (isString(name)
+							&& (isBoolean(canBeReferencedInPrompt) || canBeReferencedInPrompt === undefined)
+							&& (isString(toolReferenceName) || toolReferenceName === undefined)) {
+							const toolName = getToolName(name);
+							this._toolContributionInfos.set(toolName, {
+								toolName: toolName,
+								contributedToolName: name,
+								toolReferenceName,
+								canBeReferencedInPrompt: !!canBeReferencedInPrompt
+							});
+						}
+					}
+				}
+			}
+		}
+		return this._toolContributionInfos;
+	}
+
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
 		@ILogService logService: ILogService
 	) {
 		super(logService);
 		this._copilotTools = new Lazy(() => new Map(ToolRegistry.getTools().map(t => [t.toolName, instantiationService.createInstance(t)] as const)));
+		this._register(vscode.extensions.onDidChange(() => this._toolContributionInfos = undefined));
 	}
 
 	invokeTool(name: string | ToolName, options: vscode.LanguageModelToolInvocationOptions<Object>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult | vscode.LanguageModelToolResult2> {
@@ -87,8 +121,16 @@ export class ToolsService extends BaseToolsService {
 	}
 
 	getToolByToolReferenceName(name: string): vscode.LanguageModelToolInformation | undefined {
-		// Can't actually implement this in prod, name is not exposed
-		throw new Error('This method for tests only');
+		for (const info of this.toolContributionInfos.values()) {
+			if (info.toolReferenceName === name) {
+				return this.getTool(info.toolName);
+			}
+		}
+		return undefined;
+	}
+
+	getToolContributionInfo(name: string): IToolContributionInfo | undefined {
+		return this.toolContributionInfos.get(name);
 	}
 
 	getEnabledTools(request: vscode.ChatRequest, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[] {

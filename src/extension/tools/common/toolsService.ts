@@ -35,21 +35,33 @@ export interface IOnWillInvokeToolEvent {
 	toolName: string;
 }
 
+export interface IToolContributionInfo {
+	readonly toolName: string;
+	readonly contributedToolName: string;
+	readonly toolReferenceName: string | undefined;
+	readonly canBeReferencedInPrompt: boolean;
+}
+
 export interface IToolsService {
 	readonly _serviceBrand: undefined;
 
-	onWillInvokeTool: Event<IOnWillInvokeToolEvent>;
+	readonly onWillInvokeTool: Event<IOnWillInvokeToolEvent>;
 
 	/**
 	 * All registered LanguageModelToolInformations (vscode.lm.tools)
 	 */
-	tools: ReadonlyArray<vscode.LanguageModelToolInformation>;
+	readonly tools: ReadonlyArray<vscode.LanguageModelToolInformation>;
 
 	/**
 	 * Tool implementations from tools in this extension
 	 */
-	copilotTools: ReadonlyMap<ToolName, ICopilotTool<any>>;
+	readonly copilotTools: ReadonlyMap<ToolName, ICopilotTool<any>>;
 	getCopilotTool(name: string): ICopilotTool<any> | undefined;
+
+	/**
+	 * Tool informations as contributed by extensions
+	 */
+	readonly toolContributionInfos: Map<ToolName | string, IToolContributionInfo>;
 
 	invokeTool(name: string, options: vscode.LanguageModelToolInvocationOptions<unknown>, token: vscode.CancellationToken): Thenable<vscode.LanguageModelToolResult2>;
 	getTool(name: string): vscode.LanguageModelToolInformation | undefined;
@@ -86,8 +98,9 @@ export abstract class BaseToolsService extends Disposable implements IToolsServi
 	protected readonly _onWillInvokeTool = this._register(new Emitter<IOnWillInvokeToolEvent>());
 	public get onWillInvokeTool() { return this._onWillInvokeTool.event; }
 
-	abstract tools: ReadonlyArray<vscode.LanguageModelToolInformation>;
-	abstract copilotTools: ReadonlyMap<ToolName, ICopilotTool<any>>;
+	abstract readonly tools: ReadonlyArray<vscode.LanguageModelToolInformation>;
+	abstract readonly copilotTools: ReadonlyMap<ToolName, ICopilotTool<any>>;
+	abstract readonly toolContributionInfos: Map<string, IToolContributionInfo>;
 
 	private readonly ajv = new Ajv({ coerceTypes: true });
 	private didWarnAboutValidationError?: Set<string>;
@@ -156,6 +169,7 @@ export class NullToolsService extends BaseToolsService implements IToolsService 
 	_serviceBrand: undefined;
 	tools: readonly vscode.LanguageModelToolInformation[] = [];
 	copilotTools = new Map();
+	toolContributionInfos = new Map();
 
 	async invokeTool(id: string, options: vscode.LanguageModelToolInvocationOptions<Object>, token: vscode.CancellationToken): Promise<vscode.LanguageModelToolResult2> {
 		return {

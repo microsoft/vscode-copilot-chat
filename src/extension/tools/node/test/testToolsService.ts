@@ -15,7 +15,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { LanguageModelToolInformation, LanguageModelToolResult2 } from '../../../../vscodeTypes';
 import { getContributedToolName, getToolName, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolName } from '../../common/toolNames';
 import { ICopilotTool, ICopilotToolCtor, ToolRegistry } from '../../common/toolsRegistry';
-import { BaseToolsService, IToolsService } from '../../common/toolsService';
+import { BaseToolsService, IToolContributionInfo, IToolsService } from '../../common/toolsService';
 
 export class TestToolsService extends BaseToolsService implements IToolsService {
 	_serviceBrand: undefined;
@@ -43,6 +43,20 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 	get copilotTools() {
 		return new Map(Iterable.map(this._copilotTools.entries(),
 			([name, tool]) => [name, tool.value]));
+	}
+
+	get toolContributionInfos(): Map<string, IToolContributionInfo> {
+		const toolContributionInfos = new Map();
+		for (const tool of packageJson.contributes.languageModelTools) {
+			const toolName = getToolName(tool.name);
+			toolContributionInfos.set(toolName, {
+				toolName,
+				contributedToolName: tool.name,
+				toolReferenceName: tool.toolReferenceName,
+				canBeReferencedInPrompt: !!tool.canBeReferencedInPrompt
+			});
+		}
+		return toolContributionInfos;
 	}
 
 	constructor(

@@ -8,7 +8,7 @@
 import type { CancellationToken, ChatRequest, LanguageModelTool, LanguageModelToolInformation, LanguageModelToolInvocationOptions, LanguageModelToolResult } from 'vscode';
 import { getToolName, ToolName } from '../../../src/extension/tools/common/toolNames';
 import { ICopilotTool } from '../../../src/extension/tools/common/toolsRegistry';
-import { BaseToolsService, IToolsService } from '../../../src/extension/tools/common/toolsService';
+import { BaseToolsService, IToolContributionInfo, IToolsService } from '../../../src/extension/tools/common/toolsService';
 import { getPackagejsonToolsForTest } from '../../../src/extension/tools/node/test/testToolsService';
 import { ToolsContribution } from '../../../src/extension/tools/vscode-node/tools';
 import { ToolsService } from '../../../src/extension/tools/vscode-node/toolsService';
@@ -49,6 +49,20 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 			r.delete(name as ToolName);
 		}
 		return r;
+	}
+
+	get toolContributionInfos(): Map<string, IToolContributionInfo> {
+		const toolContributionInfos = new Map();
+		for (const tool of packageJson.contributes.languageModelTools) {
+			const toolName = getToolName(tool.name);
+			toolContributionInfos.set(toolName, {
+				toolName,
+				contributedToolName: tool.name,
+				toolReferenceName: tool.toolReferenceName,
+				canBeReferencedInPrompt: !!tool.canBeReferencedInPrompt
+			});
+		}
+		return toolContributionInfos;
 	}
 
 	constructor(
@@ -116,7 +130,6 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 				tags: []
 			};
 		}
-
 		return undefined;
 	}
 

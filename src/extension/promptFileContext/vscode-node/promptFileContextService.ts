@@ -13,6 +13,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun, IObservable } from '../../../util/vs/base/common/observableInternal';
+import { IToolsService } from '../../tools/common/toolsService';
 
 export const promptFileSelector = ['prompt', 'instructions', 'chatmode'];
 
@@ -29,6 +30,7 @@ export class PromptFileContextContribution extends Disposable {
 		@IExperimentationService experimentationService: IExperimentationService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@ILanguageContextProviderService private readonly languageContextProviderService: ILanguageContextProviderService,
+		@IToolsService private readonly toolsService: IToolsService
 	) {
 		super();
 		this._enableCompletionContext = configurationService.getExperimentBasedConfigObservable(ConfigKey.Internal.PromptFileContext, experimentationService);
@@ -199,7 +201,19 @@ export class PromptFileContextContribution extends Disposable {
 	}
 
 	private getToolNames(): string[] {
-		return ['changes', 'codebase', 'editFiles', 'extensions', 'fetch', 'findTestFiles', 'githubRepo', 'new', 'openSimpleBrowser', 'problems', 'runCommands', 'runNotebooks', 'runTasks', 'runTests', 'search', 'searchResults', 'terminalLastCommand', 'terminalSelection', 'testFailure', 'usages', 'vscodeAPI'];
+
+		const result = [];
+		const infos = this.toolsService.toolContributionInfos;
+		for (const tool of this.toolsService.tools) {
+			const info = infos.get(tool.name);
+			if (info && info.canBeReferencedInPrompt && info.toolReferenceName) {
+				result.push(`'${info.toolReferenceName}'`);
+				console.log(tool.name, info.toolReferenceName);
+			} else {
+				console.log(tool.name, '-');
+			}
+		}
+		return result;
 	}
 
 
