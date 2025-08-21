@@ -360,6 +360,19 @@ suite('applyPatch parser', () => {
 		`);
 	});
 
+	it('issue#262549', async () => {
+		const input = await fs.readFile(`${__dirname}/corpus/262549-input.txt`, 'utf-8');
+		const patchFmt = await fs.readFile(`${__dirname}/corpus/262549-call.txt`, 'utf-8');
+		const patch = JSON.parse('"' + patchFmt.replaceAll('\n', '\\n').replaceAll('\t', '\\t') + '"');
+
+		const docs = {
+			'/Users/omitted/projects/flagship/edge-ai/scripts/Fix-VisuallySimilarUnicode.ps1': new StringTextDocumentWithLanguageId(input, 'text/plain')
+		};
+		const [parsed] = text_to_patch(patch, docs);
+		const commit = patch_to_commit(parsed, docs);
+		expect(Object.values(commit.changes).at(0)?.newContent).toMatchFileSnapshot(`${__dirname}/corpus/262549-output.txt`);
+	});
+
 
 	suite('corpus', () => {
 		const corpusPath = path.join(__dirname, 'corpus');
