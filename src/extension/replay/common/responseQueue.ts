@@ -12,20 +12,28 @@ type FileUpdate = {
 type ToolStep = {
 	kind: 'toolCall';
 	id: string;
-	line: number; // 1-based line number for debugger
+	line: number;
 	args: any[];
 	toolName: string;
 	fileUpdates: FileUpdate[];
 	result: string;
 };
 
-export type ChatStep = {
-	kind: 'userQuery' | 'request';
+type UserQuery = {
+	kind: 'userQuery';
+	line: number;
+	query: string;
+};
+
+type Request = {
+	kind: 'request';
 	id: string;
-	line: number; // 1-based line number for debugger
-	result: string;
+	line: number;
 	prompt: string;
-} | ToolStep;
+	result: string;
+}
+
+export type ChatStep = UserQuery | Request | ToolStep;
 
 type Deferred<T> = {
 	promise: Promise<T>;

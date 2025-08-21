@@ -49,7 +49,7 @@ export class ChatReplayIntent implements IIntent {
 	private processStep(step: ChatStep, stream: vscode.ChatResponseStream): void {
 		switch (step.kind) {
 			case 'userQuery':
-				stream.markdown(`**User Query:**\n\n${step.prompt}\n\n`);
+				stream.markdown(`**User Query:**\n\n${step.query}\n\n`);
 				stream.markdown(`**Response:**\n\n`);
 				break;
 			case 'request':

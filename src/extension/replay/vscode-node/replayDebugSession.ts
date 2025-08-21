@@ -64,7 +64,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 				: path.join(this._workspaceFolder?.uri.fsPath || process.cwd(), programArg);
 
 			const content = fs.readFileSync(this._program, 'utf8');
-			this._chatSteps = this.parseSteps(content);
+			this._chatSteps = this.parseReplay(content);
 
 			this.sendResponse(response);
 
@@ -103,7 +103,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 		const step = this.currentStep();
 		if (step) {
 			const source = new Source(path.basename(this._program), this._program);
-			frames.push(new StackFrame(1, `#${step.kind} ${step.id}`, source, step.line, 1));
+			frames.push(new StackFrame(1, `#${step.kind} ${step.kind === 'userQuery' ? step.query : step.id}`, source, step.line, 1));
 		}
 		response.body = {
 			stackFrames: frames,
@@ -188,28 +188,61 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 		return undefined;
 	}
 
-	private parseSteps(content: string): ChatStep[] {
-		const items = JSON.parse(content) as { [key: string]: any }[];
-		const steps = items.map(item => ({
-			id: item.id,
-			kind: item.kind,
-			result: item.kind === 'request' ? item.result.value : undefined,
-			toolName: item.kind === 'toolCall' ? item.name : undefined,
-			prompt: item.kind === 'request' ? item.messages
-				: item.kind === 'userQuery' ? item.content : undefined,
-			fileUpdates: item.kind === 'toolCall' ? item.fileUpdates : undefined,
-			line: 0
-		}));
+	private parseReplay(content: string): ChatStep[] {
+		const prompts = JSON.parse(content).prompts as { [key: string]: any }[];
+		if (!Array.isArray(prompts)) {
+			throw new Error('Invalid replay content: expected an array of prompts in the base JSON structure.');
+		}
+		const steps: ChatStep[] = [];
+		for (const prompt of prompts) {
+			steps.push({
+				kind: 'userQuery',
+				query: prompt.prompt,
+				line: 0,
+			});
+
+			for (const log of prompt.logs) {
+				if (log.kind === 'toolCall') {
+					steps.push({
+						kind: 'toolCall',
+						id: log.id,
+						line: 0,
+						toolName: log.name,
+						args: log.args,
+						fileUpdates: log.fileUpdates,
+						result: log.value
+					});
+				} else if (log.kind === 'request') {
+					steps.push({
+						kind: 'request',
+						id: log.id,
+						line: 0,
+						prompt: log.messages,
+						result: log.value
+					});
+				}
+			}
+		}
 
 		let stepIx = 0;
 		const lines = content.split('\n');
 		lines.forEach((line, index) => {
 			if (stepIx < steps.length) {
-				const match = line.match(`"id": "${steps[stepIx].id}"`);
-				if (match) {
-					steps[stepIx].line = index + 1;
-					stepIx++;
+				const step = steps[stepIx];
+				if (step.kind === 'userQuery') {
+					const match = line.match(`"prompt": "${step.query}"`);
+					if (match) {
+						step.line = index + 1;
+						stepIx++;
+					}
+				} else {
+					const match = line.match(`"id": "${step.id}"`);
+					if (match) {
+						step.line = index + 1;
+						stepIx++;
+					}
 				}
+
 			}
 		});
 		return steps;
