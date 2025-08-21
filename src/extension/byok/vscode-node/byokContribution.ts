@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { commands, LanguageModelChatInformation, lm } from 'vscode';
+import { commands, LanguageModelChatInformation, lm, window } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
@@ -16,12 +16,14 @@ import { IExtensionContribution } from '../../common/contributions';
 import { AnthropicLMProvider } from './anthropicProvider';
 import { AzureBYOKModelProvider } from './azureProvider';
 import { BYOKStorageService, IBYOKStorageService } from './byokStorageService';
+import { CustomOAIModelConfigurator } from './customOAIModelConfigurator';
 import { CustomOAIBYOKModelProvider } from './customOAIProvider';
 import { GeminiBYOKLMProvider } from './geminiProvider';
 import { GroqBYOKLMProvider } from './groqProvider';
 import { OllamaLMProvider } from './ollamaProvider';
 import { OAIBYOKLMProvider } from './openAIProvider';
 import { OpenRouterLMProvider } from './openRouterProvider';
+import { XAIBYOKLMProvider } from './xAIProvider';
 
 export class BYOKContrib extends Disposable implements IExtensionContribution {
 	public readonly id: string = 'byok-contribution';
@@ -41,10 +43,65 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 		super();
 		this._register(commands.registerCommand('github.copilot.chat.manageBYOK', async (vendor: string) => {
 			const provider = this._providers.get(vendor);
-			if (provider) {
+
+			// Show quick pick for Azure and CustomOAI providers
+			if (vendor === AzureBYOKModelProvider.providerName.toLowerCase() || vendor === CustomOAIBYOKModelProvider.providerName.toLowerCase()) {
+				interface BYOKQuickPickItem {
+					label: string;
+					detail: string;
+					action: 'apiKey' | 'configureModels';
+				}
+
+				const options: BYOKQuickPickItem[] = [
+					{
+						label: '$(key) Manage API Key',
+						detail: 'Update or configure the API key for this provider',
+						action: 'apiKey'
+					},
+					{
+						label: '$(settings-gear) Configure Models',
+						detail: 'Add, edit, or remove model configurations',
+						action: 'configureModels'
+					}
+				];
+
+				const quickPick = window.createQuickPick<BYOKQuickPickItem>();
+				quickPick.title = `Manage ${vendor === AzureBYOKModelProvider.providerName.toLowerCase() ? 'Azure' : 'Custom OpenAI'} Provider`;
+				quickPick.placeholder = 'Choose an action';
+				quickPick.items = options;
+				quickPick.ignoreFocusOut = true;
+
+				const selected = await new Promise<BYOKQuickPickItem | undefined>((resolve) => {
+					quickPick.onDidAccept(() => {
+						const selectedItem = quickPick.selectedItems[0];
+						resolve(selectedItem);
+						quickPick.hide();
+					});
+
+					quickPick.onDidHide(() => {
+						resolve(undefined);
+					});
+
+					quickPick.show();
+				});
+
+				if (selected?.action === 'apiKey' && provider) {
+					await provider.updateAPIKey();
+				} else if (selected?.action === 'configureModels') {
+					if (vendor === AzureBYOKModelProvider.providerName.toLowerCase()) {
+						const configurator = new CustomOAIModelConfigurator(this._configurationService, ConfigKey.AzureModels, true);
+						await configurator.configure();
+					} else if (vendor === CustomOAIBYOKModelProvider.providerName.toLowerCase()) {
+						const configurator = new CustomOAIModelConfigurator(this._configurationService);
+						await configurator.configure();
+					}
+				}
+			} else if (provider) {
+				// For all other providers, directly go to API key management
 				await provider.updateAPIKey();
 			}
 		}));
+
 		this._byokStorageService = new BYOKStorageService(extensionContext);
 		this._authChange(authService, this._instantiationService);
 
@@ -62,6 +119,7 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			this._providers.set(AnthropicLMProvider.providerName.toLowerCase(), instantiationService.createInstance(AnthropicLMProvider, knownModels[AnthropicLMProvider.providerName], this._byokStorageService));
 			this._providers.set(GroqBYOKLMProvider.providerName.toLowerCase(), instantiationService.createInstance(GroqBYOKLMProvider, knownModels[GroqBYOKLMProvider.providerName], this._byokStorageService));
 			this._providers.set(GeminiBYOKLMProvider.providerName.toLowerCase(), instantiationService.createInstance(GeminiBYOKLMProvider, knownModels[GeminiBYOKLMProvider.providerName], this._byokStorageService));
+			this._providers.set(XAIBYOKLMProvider.providerName.toLowerCase(), instantiationService.createInstance(XAIBYOKLMProvider, knownModels[XAIBYOKLMProvider.providerName], this._byokStorageService));
 			this._providers.set(OAIBYOKLMProvider.providerName.toLowerCase(), instantiationService.createInstance(OAIBYOKLMProvider, knownModels[OAIBYOKLMProvider.providerName], this._byokStorageService));
 			this._providers.set(OpenRouterLMProvider.providerName.toLowerCase(), instantiationService.createInstance(OpenRouterLMProvider, this._byokStorageService));
 			this._providers.set(AzureBYOKModelProvider.providerName.toLowerCase(), instantiationService.createInstance(AzureBYOKModelProvider, this._byokStorageService));

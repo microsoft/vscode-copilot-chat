@@ -144,6 +144,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			ourRequestId,
 			location: opts.location,
 			postOptions,
+			body: requestBody,
 			tools: requestBody.tools,
 			ignoreStatefulMarker: opts.ignoreStatefulMarker
 		});

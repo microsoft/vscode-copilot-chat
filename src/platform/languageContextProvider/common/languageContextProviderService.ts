@@ -15,6 +15,8 @@ export interface ILanguageContextProviderService {
 
 	registerContextProvider<T extends Copilot.SupportedContextItem>(provider: Copilot.ContextProvider<T>): Disposable;
 
+	getAllProviders(): readonly Copilot.ContextProvider<Copilot.SupportedContextItem>[];
+
 	getContextProviders(doc: TextDocument): Copilot.ContextProvider<Copilot.SupportedContextItem>[];
 
 	getContextItems(doc: TextDocument, request: Copilot.ResolveRequest, cancellationToken: CancellationToken): AsyncIterable<ContextItem>;

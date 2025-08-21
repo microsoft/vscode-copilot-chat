@@ -6,7 +6,7 @@ import type { ChatResponseClearToPreviousToolInvocationReason, ChatResponseFileT
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { FinalizableChatResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { ChatResponseAnchorPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, MarkdownString } from '../../../vscodeTypes';
+import { ChatPrepareToolInvocationPart, ChatResponseAnchorPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, MarkdownString } from '../../../vscodeTypes';
 import { LinkifiedText, LinkifySymbolAnchor } from './linkifiedText';
 import { IContributedLinkifierFactory, ILinkifier, ILinkifyService, LinkifierContext } from './linkifyService';
 
@@ -105,7 +105,9 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 	private isBlockPart(part: ChatResponsePart): boolean {
 		return part instanceof ChatResponseFileTreePart
 			|| part instanceof ChatResponseCommandButtonPart
-			|| part instanceof ChatResponseConfirmationPart;
+			|| part instanceof ChatResponseConfirmationPart
+			|| part instanceof ChatPrepareToolInvocationPart
+			|| part instanceof ChatResponseThinkingProgressPart;
 	}
 
 	textEdit(target: Uri, editsOrDone: TextEdit | TextEdit[] | true): ChatResponseStream {

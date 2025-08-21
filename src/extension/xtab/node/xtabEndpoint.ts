@@ -18,6 +18,7 @@ import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDa
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ILogService } from '../../../platform/log/common/logService';
 
 
 export class XtabEndpoint extends ChatEndpoint {
@@ -62,7 +63,8 @@ export class XtabEndpoint extends ChatEndpoint {
 		@ITokenizerProvider _tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService _instantiationService: IInstantiationService,
 		@IThinkingDataService _thinkingDataService: IThinkingDataService,
-		@IExperimentationService _experimentationService: IExperimentationService
+		@IExperimentationService _experimentationService: IExperimentationService,
+		@ILogService _logService: ILogService
 	) {
 		const chatModelInfo = _configuredModelName ? { ...XtabEndpoint.chatModelInfo, id: _configuredModelName } : XtabEndpoint.chatModelInfo;
 		super(
@@ -77,7 +79,8 @@ export class XtabEndpoint extends ChatEndpoint {
 			_tokenizerProvider,
 			_instantiationService,
 			_configService,
-			_experimentationService
+			_experimentationService,
+			_logService
 		);
 	}
 

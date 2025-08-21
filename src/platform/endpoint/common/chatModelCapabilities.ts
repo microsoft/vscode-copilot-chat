@@ -72,6 +72,21 @@ export function modelCanUseReplaceStringExclusively(model: LanguageModelChat | I
 }
 
 /**
+ * The model can accept image urls as the `image_url` parameter in requests.
+ */
+export function modelCanUseImageURL(model: LanguageModelChat | IChatEndpoint): boolean {
+	return !model.family.startsWith('claude') && !model.family.startsWith('Anthropic');
+}
+
+/**
+ * The model is capable of using apply_patch as an edit tool exclusively,
+ * without needing insert_edit_into_file.
+ */
+export function modelCanUseApplyPatchExclusively(model: LanguageModelChat | IChatEndpoint): boolean {
+	return model.family.startsWith('gpt-5');
+}
+
+/**
  * Whether, when replace_string and insert_edit tools are both available,
  * verbiage should be added in the system prompt directing the model to prefer
  * replace_string.

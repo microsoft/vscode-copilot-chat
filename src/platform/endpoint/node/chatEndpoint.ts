@@ -172,6 +172,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		@IInstantiationService protected readonly _instantiationService: IInstantiationService,
 		@IConfigurationService protected readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
+		@ILogService private readonly _logService: ILogService
 	) {
 		this._urlOrRequestMetadata = _modelMetadata.urlOrRequestMetadata ?? (this.useResponsesApi ? { type: RequestType.ChatResponses } : { type: RequestType.ChatCompletions });
 		// This metadata should always be present, but if not we will default to 8192 tokens
@@ -253,13 +254,24 @@ export class ChatEndpoint implements IChatEndpoint {
 
 		if (body && this.useResponsesApi) {
 			delete body.temperature;
-			// body.reasoning = {
-			// 	'effort': 'high',
-			// 	'summary': 'detailed'
-			// };
 			body.truncation = this._configurationService.getConfig(ConfigKey.Internal.UseResponsesApiTruncation) ?
 				'auto' :
 				'disabled';
+			const reasoning = this._configurationService.getConfig(ConfigKey.Internal.ResponsesApiReasoning);
+			if (reasoning === true) {
+				body.reasoning = {
+					'effort': 'high',
+					'summary': 'detailed'
+				};
+			} else if (typeof reasoning === 'string') {
+				try {
+					body.reasoning = JSON.parse(reasoning);
+				} catch (e) {
+					this._logService.error(e, 'Failed to parse responses reasoning setting');
+				}
+			}
+
+			body.include = ['reasoning.encrypted_content'];
 		}
 	}
 
@@ -386,7 +398,8 @@ export class RemoteAgentChatEndpoint extends ChatEndpoint {
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configService: IConfigurationService,
-		@IExperimentationService experimentService: IExperimentationService
+		@IExperimentationService experimentService: IExperimentationService,
+		@ILogService logService: ILogService
 	) {
 		super(
 			modelMetadata,
@@ -400,7 +413,8 @@ export class RemoteAgentChatEndpoint extends ChatEndpoint {
 			tokenizerProvider,
 			instantiationService,
 			configService,
-			experimentService
+			experimentService,
+			logService
 		);
 	}
 

@@ -15,6 +15,7 @@ import { ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolC
 import { assertNever } from '../../../util/vs/base/common/assert';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { LRUCache } from '../../../util/vs/base/common/map';
+import { isDefined } from '../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequest } from '../../../vscodeTypes';
 import { IExtensionContribution } from '../../common/contributions';
@@ -22,19 +23,71 @@ import { IExtensionContribution } from '../../common/contributions';
 const showHtmlCommand = 'vscode.copilot.chat.showRequestHtmlItem';
 const exportLogItemCommand = 'github.copilot.chat.debug.exportLogItem';
 const exportPromptArchiveCommand = 'github.copilot.chat.debug.exportPromptArchive';
+const exportPromptLogsAsJsonCommand = 'github.copilot.chat.debug.exportPromptLogsAsJson';
+const exportAllPromptLogsAsJsonCommand = 'github.copilot.chat.debug.exportAllPromptLogsAsJson';
 const saveCurrentMarkdownCommand = 'github.copilot.chat.debug.saveCurrentMarkdown';
 
 export class RequestLogTree extends Disposable implements IExtensionContribution {
 	readonly id = 'requestLogTree';
+	private readonly chatRequestProvider: ChatRequestProvider;
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IRequestLogger requestLogger: IRequestLogger,
 	) {
 		super();
-		this._register(vscode.window.registerTreeDataProvider('copilot-chat', this._register(instantiationService.createInstance(ChatRequestProvider))));
+		this.chatRequestProvider = this._register(instantiationService.createInstance(ChatRequestProvider));
+		this._register(vscode.window.registerTreeDataProvider('copilot-chat', this.chatRequestProvider));
 
 		let server: RequestServer | undefined;
+
+		const getExportableLogEntries = (treeItem: ChatPromptItem): LoggedInfo[] => {
+			if (!treeItem || !treeItem.children) {
+				return [];
+			}
+
+			const logEntries = treeItem.children.map(child => {
+				if (child instanceof ChatRequestItem || child instanceof ToolCallItem || child instanceof ChatElementItem) {
+					return child.info;
+				}
+				return undefined; // Skip non-loggable items
+			}).filter(isDefined);
+
+			return logEntries;
+		};
+
+		// Helper method to process log entries for a single prompt
+		const preparePromptLogsAsJson = async (treeItem: ChatPromptItem): Promise<any> => {
+			const logEntries = getExportableLogEntries(treeItem);
+
+			if (logEntries.length === 0) {
+				return;
+			}
+
+			const promptLogs: any[] = [];
+
+			for (const logEntry of logEntries) {
+				try {
+					promptLogs.push(await logEntry.toJSON());
+				} catch (error) {
+					// If we can't get content for this entry, add an error object
+					promptLogs.push({
+						id: logEntry.id,
+						kind: 'error',
+						error: error?.toString() || 'Unknown error',
+						timestamp: new Date().toISOString()
+					});
+				}
+			}
+
+			return {
+				prompt: treeItem.request.prompt,
+				promptId: treeItem.id,
+				hasSeen: treeItem.hasSeen,
+				logCount: promptLogs.length,
+				logs: promptLogs
+			};
+		};
 
 		this._register(vscode.commands.registerCommand(showHtmlCommand, async (elementId: string) => {
 			if (!server) {
@@ -162,8 +215,8 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 			}
 
 			// Determine a default filename from the virtual URI
-			const parsed = ChatRequestScheme.parseUri(resource.toString());
-			const defaultBase = parsed && parsed.kind === 'request' ? parsed.id : 'latestrequest';
+			const parseResult = ChatRequestScheme.parseUri(resource.toString());
+			const defaultBase = parseResult && parseResult.data.kind === 'request' ? parseResult.data.id : 'latestrequest';
 			const defaultFilename = `${defaultBase}.md`;
 
 			const saveUri = await vscode.window.showSaveDialog({
@@ -200,16 +253,7 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 		}));
 
 		this._register(vscode.commands.registerCommand(exportPromptArchiveCommand, async (treeItem: ChatPromptItem) => {
-			if (!treeItem || !treeItem.children) {
-				return;
-			}
-
-			const logEntries = treeItem.children.map(child => {
-				if (child instanceof ChatRequestItem || child instanceof ToolCallItem || child instanceof ChatElementItem) {
-					return child.info;
-				}
-				return undefined; // Skip non-loggable items
-			}).filter((entry): entry is LoggedInfo => !!entry);
+			const logEntries = getExportableLogEntries(treeItem);
 
 			if (logEntries.length === 0) {
 				vscode.window.showInformationMessage('No exportable entries found in this prompt.');
@@ -304,6 +348,144 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				}
 			} catch (error) {
 				vscode.window.showErrorMessage(`Failed to export prompt archive: ${error}`);
+			}
+		}));
+
+		this._register(vscode.commands.registerCommand(exportPromptLogsAsJsonCommand, async (treeItem: ChatPromptItem) => {
+			const promptObject = await preparePromptLogsAsJson(treeItem);
+			if (!promptObject) {
+				vscode.window.showWarningMessage('No exportable entries found for this prompt.');
+				return;
+			}
+
+			// Generate a default filename based on the prompt
+			const promptText = treeItem.request.prompt.replace(/\W/g, '_').substring(0, 50);
+			const defaultFilename = `${promptText}_logs.chatreplay.json`;
+
+			// Show save dialog
+			const saveUri = await vscode.window.showSaveDialog({
+				defaultUri: vscode.Uri.file(path.join(os.homedir(), defaultFilename)),
+				filters: {
+					'JSON': ['json'],
+					'All Files': ['*']
+				},
+				title: 'Export Prompt Logs as JSON'
+			});
+
+			if (!saveUri) {
+				return; // User cancelled
+			}
+
+			try {
+				// Convert to JSON
+				const finalContent = JSON.stringify(promptObject, null, 2);
+
+				// Write to the selected file
+				await vscode.workspace.fs.writeFile(saveUri, Buffer.from(finalContent, 'utf8'));
+
+				// Show success message with option to reveal the file
+				const revealAction = 'Reveal in Explorer';
+				const openAction = 'Open File';
+				const result = await vscode.window.showInformationMessage(
+					`Successfully exported prompt with ${promptObject.logCount} log entries to ${saveUri.fsPath}`,
+					revealAction,
+					openAction
+				);
+
+				if (result === revealAction) {
+					await vscode.commands.executeCommand('revealFileInOS', saveUri);
+				} else if (result === openAction) {
+					await vscode.commands.executeCommand('vscode.open', saveUri);
+				}
+			} catch (error) {
+				vscode.window.showErrorMessage(`Failed to export prompt logs as JSON: ${error}`);
+			}
+		}));
+
+		this._register(vscode.commands.registerCommand(exportAllPromptLogsAsJsonCommand, async (savePath?: string) => {
+			// Build the tree structure to get all chat prompt items
+			const allTreeItems = await this.chatRequestProvider.getChildren();
+
+			if (!allTreeItems || allTreeItems.length === 0) {
+				vscode.window.showInformationMessage('No chat prompts found to export.');
+				return;
+			}
+
+			// Filter to get only ChatPromptItem instances
+			const chatPromptItems = allTreeItems.filter((item): item is ChatPromptItem => item instanceof ChatPromptItem);
+
+			if (chatPromptItems.length === 0) {
+				vscode.window.showInformationMessage('No chat prompts found to export.');
+				return;
+			}
+
+			let saveUri: vscode.Uri;
+
+			if (savePath && typeof savePath === 'string') {
+				// Use provided path
+				saveUri = vscode.Uri.file(savePath);
+			} else {
+				// Generate a default filename based on current timestamp
+				const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+				const defaultFilename = `copilot_all_prompts_${timestamp}.chatreplay.json`;
+
+				// Show save dialog
+				const dialogResult = await vscode.window.showSaveDialog({
+					defaultUri: vscode.Uri.file(path.join(os.homedir(), defaultFilename)),
+					filters: {
+						'JSON': ['json'],
+						'All Files': ['*']
+					},
+					title: 'Export All Prompt Logs as JSON'
+				});
+
+				if (!dialogResult) {
+					return; // User cancelled
+				}
+				saveUri = dialogResult;
+			}
+
+			try {
+				const allPromptsContent: any[] = [];
+				let totalLogEntries = 0;
+
+				// Process each chat prompt item using the shared function
+				for (const chatPromptItem of chatPromptItems) {
+					// Use the shared processing function
+					const promptObject = await preparePromptLogsAsJson(chatPromptItem);
+					if (promptObject) {
+						allPromptsContent.push(promptObject);
+						totalLogEntries += promptObject.logCount;
+					}
+				}
+
+				// Combine all content as JSON
+				const finalContent = JSON.stringify({
+					exportedAt: new Date().toISOString(),
+					totalPrompts: allPromptsContent.length,
+					totalLogEntries: totalLogEntries,
+					prompts: allPromptsContent
+				}, null, 2);
+
+				// Write to the selected file
+				await vscode.workspace.fs.writeFile(saveUri, Buffer.from(finalContent, 'utf8'));
+
+				// Show success message with option to reveal the file
+				const revealAction = 'Reveal in Explorer';
+				const openAction = 'Open File';
+				const result = await vscode.window.showInformationMessage(
+					`Successfully exported ${allPromptsContent.length} prompts with ${totalLogEntries} log entries to ${saveUri.fsPath}`,
+					revealAction,
+					openAction
+				);
+
+				if (result === revealAction) {
+					await vscode.commands.executeCommand('revealFileInOS', saveUri);
+				} else if (result === openAction) {
+					await vscode.commands.executeCommand('vscode.open', saveUri);
+				}
+			} catch (error) {
+				vscode.window.showErrorMessage(`Failed to export all prompt logs as JSON: ${error}`);
 			}
 		}));
 	}

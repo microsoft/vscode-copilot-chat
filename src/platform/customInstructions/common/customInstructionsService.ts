@@ -5,11 +5,17 @@
 
 import type * as vscode from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
+import { match } from '../../../util/vs/base/common/glob';
+import { Schemas } from '../../../util/vs/base/common/network';
+import { dirname, isAbsolute } from '../../../util/vs/base/common/path';
+import { isObject } from '../../../util/vs/base/common/types';
+import { URI } from '../../../util/vs/base/common/uri';
 import { Uri } from '../../../vscodeTypes';
 import { CodeGenerationImportInstruction, CodeGenerationTextInstruction, Config, IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
 import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { ILogService } from '../../log/common/logService';
+import { IPromptPathRepresentationService } from '../../prompts/common/promptPathRepresentationService';
 import { IWorkspaceService } from '../../workspace/common/workspaceService';
 
 declare const TextDecoder: {
@@ -39,6 +45,8 @@ export interface ICustomInstructionsService {
 	readonly _serviceBrand: undefined;
 	fetchInstructionsFromSetting(configKey: Config<CodeGenerationInstruction[]>): Promise<ICustomInstructions[]>;
 	fetchInstructionsFromFile(fileUri: Uri): Promise<ICustomInstructions | undefined>;
+
+	isExternalInstructionsFile(uri: URI): boolean;
 }
 
 export type CodeGenerationInstruction = { languagee?: string; text: string } | { languagee?: string; file: string };
@@ -57,6 +65,10 @@ function isCodeGenerationTextInstruction(instruction: any): instruction is CodeG
 	return false;
 }
 
+const INSTRUCTION_FILE_EXTENSION = '.instructions.md';
+const INSTRUCTIONS_LOCATION_KEY = 'chat.instructionsFilesLocations';
+
+
 export class CustomInstructionsService implements ICustomInstructionsService {
 
 	readonly _serviceBrand: undefined;
@@ -66,6 +78,7 @@ export class CustomInstructionsService implements ICustomInstructionsService {
 		@IEnvService private readonly envService: IEnvService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 		@ILogService private readonly logService: ILogService,
 	) {
 	}
@@ -144,5 +157,34 @@ export class CustomInstructionsService implements ICustomInstructionsService {
 			this.logService.debug(`Instructions file not found: ${fileUri.toString()}`);
 			return undefined;
 		}
+	}
+
+	public isExternalInstructionsFile(uri: URI): boolean {
+		if (!uri.path.endsWith(INSTRUCTION_FILE_EXTENSION)) {
+			return false;
+		}
+		if (uri.scheme === Schemas.vscodeUserData) {
+			return true;
+		}
+		if (uri.scheme !== Schemas.file) {
+			return false;
+		}
+		const instructionFilePath = this.promptPathRepresentationService.getFilePath(uri);
+		const instructionFolderPath = dirname(instructionFilePath);
+
+		const locations = this.configurationService.getNonExtensionConfig<Record<string, boolean>>(INSTRUCTIONS_LOCATION_KEY);
+		if (isObject(locations)) {
+			for (const key in locations) {
+				const location = key.trim();
+				const value = locations[key];
+				if (value === true && isAbsolute(location)) {
+					const pathToMatch = location.endsWith('/') || location.endsWith('*') ? instructionFolderPath : location;
+					if (match(pathToMatch, location)) {
+						return true;
+					}
+				}
+			}
+		}
+		return true;
 	}
 }

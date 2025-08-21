@@ -14,7 +14,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IRange, Range } from '../../../util/vs/editor/common/core/range';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { FileChunkWithEmbedding } from '../../chunking/common/chunk';
-import { Embedding, EmbeddingType, EmbeddingVector } from '../../embeddings/common/embeddingsComputer';
+import { Embedding, EmbeddingType, EmbeddingVector, getWellKnownEmbeddingTypeInfo } from '../../embeddings/common/embeddingsComputer';
 import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { ILogService } from '../../log/common/logService';
 import { FileRepresentation, IWorkspaceFileIndex } from './workspaceFileIndex';
@@ -458,7 +458,8 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
  * Packs the embedding into a binary value for efficient storage.
  */
 export function packEmbedding(embedding: Embedding): Uint8Array {
-	if (embedding.type.equals(EmbeddingType.metis_1024_I16_Binary)) {
+	const embeddingMetadata = getWellKnownEmbeddingTypeInfo(embedding.type);
+	if (embeddingMetadata?.quantization.document === 'binary') {
 		// Generate packed binary
 		if (embedding.value.length % 8 !== 0) {
 			throw new Error(`Embedding value length must be a multiple of 8 for ${embedding.type.id}, got ${embedding.value.length}`);
@@ -484,9 +485,10 @@ export function packEmbedding(embedding: Embedding): Uint8Array {
  * Unpacks an embedding from a binary value packed with {@link packEmbedding}.
  */
 export function unpackEmbedding(type: EmbeddingType, data: Uint8Array): Embedding {
-	if (type.equals(EmbeddingType.metis_1024_I16_Binary)) {
-		// Old versions may have stored the values as a float32
-		if (data.length <= 1024) {
+	const embeddingMetadata = getWellKnownEmbeddingTypeInfo(type);
+	if (embeddingMetadata?.quantization.document === 'binary') {
+		// Old metis versions may have stored the values as a float32
+		if (!(type.equals(EmbeddingType.metis_1024_I16_Binary) && data.length >= 1024)) {
 			const values = new Array(data.length * 8);
 			for (let i = 0; i < data.length; i++) {
 				const byte = data[i];

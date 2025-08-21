@@ -55,14 +55,20 @@ class Point3D {
 			expect(res).toBeTypeOf('object');
 			const result = res as Exclude<typeof res, string | undefined>;
 			expect(result[0].rebasedEditIndex).toBe(1);
-			expect(result[0].rebasedEdit.toString()).toMatchInlineSnapshot(`"[68, 76) -> "\\n\\t\\tthis.z = z;""`);
+			expect(result[0].rebasedEdit.toString()).toMatchInlineSnapshot(`
+				"[68, 76) -> "
+						this.z = z;""
+			`);
 		}
 		{
 			const res = tryRebase(originalDocument, undefined, decomposeStringEdit(suggestedEdit).edits, [], userEdit, currentDocument, [], 'lenient', tracer);
 			expect(res).toBeTypeOf('object');
 			const result = res as Exclude<typeof res, string | undefined>;
 			expect(result[0].rebasedEditIndex).toBe(1);
-			expect(result[0].rebasedEdit.toString()).toMatchInlineSnapshot(`"[68, 76) -> "\\n\\t\\tthis.z = z;""`);
+			expect(result[0].rebasedEdit.toString()).toMatchInlineSnapshot(`
+				"[68, 76) -> "
+						this.z = z;""
+			`);
 		}
 	});
 
@@ -221,7 +227,12 @@ int main()
 			const result = res as Exclude<typeof res, string | undefined>;
 			expect(result[0].rebasedEditIndex).toBe(0);
 			expect(StringEdit.single(result[0].rebasedEdit).apply(currentDocument)).toStrictEqual(final);
-			expect(result[0].rebasedEdit.removeCommonSuffixAndPrefix(currentDocument).toString()).toMatchInlineSnapshot(`"[87, 164) -> "esult42.empty())\\n        return result42.size();\\n    result42.clear();\\n    return result42""`);
+			expect(result[0].rebasedEdit.removeCommonSuffixAndPrefix(currentDocument).toString()).toMatchInlineSnapshot(`
+				"[87, 164) -> "esult42.empty())
+				        return result42.size();
+				    result42.clear();
+				    return result42""
+			`);
 		}
 		{
 			const res = tryRebase(originalDocument, undefined, suggestedEdit.replacements, [], userEdit, currentDocument, [], 'lenient', tracer);
@@ -229,7 +240,12 @@ int main()
 			const result = res as Exclude<typeof res, string | undefined>;
 			expect(result[0].rebasedEditIndex).toBe(0);
 			expect(StringEdit.single(result[0].rebasedEdit).apply(currentDocument)).toStrictEqual(final);
-			expect(result[0].rebasedEdit.removeCommonSuffixAndPrefix(currentDocument).toString()).toMatchInlineSnapshot(`"[87, 164) -> "esult42.empty())\\n        return result42.size();\\n    result42.clear();\\n    return result42""`);
+			expect(result[0].rebasedEdit.removeCommonSuffixAndPrefix(currentDocument).toString()).toMatchInlineSnapshot(`
+				"[87, 164) -> "esult42.empty())
+				        return result42.size();
+				    result42.clear();
+				    return result42""
+			`);
 		}
 	});
 });
@@ -330,10 +346,16 @@ class Point3D {
 
 		const strict = tryRebaseStringEdits(text, edit, base, 'strict')?.removeCommonSuffixAndPrefix(current);
 		expect(strict?.apply(current)).toStrictEqual(final);
-		expect(strict?.replacements.toString()).toMatchInlineSnapshot(`"[69, 69) -> "\\t\\tthis.z = z;\\n""`);
+		expect(strict?.replacements.toString()).toMatchInlineSnapshot(`
+			"[69, 69) -> "		this.z = z;
+			""
+		`);
 		const lenient = tryRebaseStringEdits(text, edit, base, 'lenient')?.removeCommonSuffixAndPrefix(current);
 		expect(lenient?.apply(current)).toStrictEqual(final);
-		expect(lenient?.replacements.toString()).toMatchInlineSnapshot(`"[69, 69) -> "\\t\\tthis.z = z;\\n""`);
+		expect(lenient?.replacements.toString()).toMatchInlineSnapshot(`
+			"[69, 69) -> "		this.z = z;
+			""
+		`);
 	});
 	test('insert 2 and 2 edits', () => {
 		const text = `

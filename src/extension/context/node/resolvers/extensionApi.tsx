@@ -3,10 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { BasePromptElementProps, PromptElement, PromptPiece, PromptSizing, TextChunk } from '@vscode/prompt-tsx';
+import { ChatResponsePart } from '@vscode/prompt-tsx/dist/base/vscodeTypes';
 import { Embedding, EmbeddingType, EmbeddingVector, IEmbeddingsComputer, rankEmbeddings } from '../../../../platform/embeddings/common/embeddingsComputer';
 import { EmbeddingCacheType, IEmbeddingsCache, LocalEmbeddingsCache, RemoteCacheType, RemoteEmbeddingsCache } from '../../../../platform/embeddings/common/embeddingsIndex';
 import { IEnvService } from '../../../../platform/env/common/envService';
+import { Progress } from '../../../../platform/notification/common/notificationService';
 import { createFencedCodeBlock } from '../../../../util/common/markdown';
+import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
 import { sanitizeVSCodeVersion } from '../../../../util/common/vscodeVersion';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { createDecorator, IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -82,14 +85,14 @@ export class VSCodeAPIContextElement extends PromptElement<VSCodeAPIContextProps
 	}
 
 	async renderAsString(): Promise<string> {
-		const snippets = await this.getSnippets();
+		const snippets = await this.getSnippets(undefined);
 		return `Below are some potentially relevant code samples related to VS Code extension development. You may use information from these samples to help you answer the question if you believe it is relevant.\n${snippets.join('\n\n')}`;
 	}
 
-	private async getSnippets(): Promise<string[]> {
+	private async getSnippets(token: CancellationToken | undefined): Promise<string[]> {
 		await this.apiEmbeddingsIndex.updateIndex();
 
-		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [this.props.query], {}, CancellationToken.None);
+		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [this.props.query], {}, new CallTracker('VSCodeAPIContextElement::getSnippets'), token);
 		if (embeddingResult && embeddingResult.values.length > 0) {
 			return this.apiEmbeddingsIndex.nClosestValues(embeddingResult.values[0], 5);
 		}
@@ -97,8 +100,8 @@ export class VSCodeAPIContextElement extends PromptElement<VSCodeAPIContextProps
 		return [];
 	}
 
-	override async render(state: undefined, sizing: PromptSizing): Promise<PromptPiece<any, any> | undefined> {
-		const snippets = await this.getSnippets();
+	override async render(state: undefined, sizing: PromptSizing, progress?: Progress<ChatResponsePart>, token?: CancellationToken): Promise<PromptPiece<any, any> | undefined> {
+		const snippets = await this.getSnippets(token);
 		if (snippets.length) {
 			return <>
 				Below are some potentially relevant code samples related to VS Code extension development. You may use information from these samples to help you answer the question if you believe it is relevant.<br />

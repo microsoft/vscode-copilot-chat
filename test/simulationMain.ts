@@ -583,7 +583,7 @@ function createSimulationTestContext(
 		chatModel: opts.chatModel,
 		fastChatModel: opts.fastChatModel,
 		smartChatModel: opts.smartChatModel,
-		embeddingModel: opts.embeddingModel,
+		embeddingType: opts.embeddingType,
 		fastRewriteModel: opts.fastRewriteModel,
 		skipModelMetadataCache: opts.modelCacheMode === CacheMode.Disable,
 		customModelConfigs: customModelConfigMap,

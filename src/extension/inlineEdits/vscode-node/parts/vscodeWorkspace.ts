@@ -507,10 +507,15 @@ class VSCodeObservableTextDocument extends AbstractVSCodeObservableDocument impl
 		if (!offsetRange) {
 			throw new Error('OffsetRange is not defined.');
 		}
-		return new Range(
+		const result = new Range(
 			textDocument.positionAt(offsetRange.start),
 			textDocument.positionAt(offsetRange.endExclusive)
 		);
+		if (arg1 instanceof OffsetRange) {
+			return [[this.textDocument, result]];
+		} else {
+			return result;
+		}
 	}
 	toOffsetRange(textDocument: TextDocument, range: Range): OffsetRange | undefined {
 		return new OffsetRange(textDocument.offsetAt(range.start), textDocument.offsetAt(range.end));
@@ -521,8 +526,11 @@ class VSCodeObservableTextDocument extends AbstractVSCodeObservableDocument impl
 
 	fromRange(arg1: TextDocument | Range, range?: Range): Range | undefined | [TextDocument, Range][] {
 		if (arg1 instanceof Range) {
-			return range;
+			return [[this.textDocument, arg1]];
 		} else if (range !== undefined) {
+			if (arg1 !== this.textDocument) {
+				throw new Error('TextDocument does not match the one of this observable document.');
+			}
 			return range;
 		} else {
 			return undefined;

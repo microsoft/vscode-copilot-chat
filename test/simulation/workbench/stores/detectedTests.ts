@@ -22,7 +22,7 @@ export class DetectedTests extends Disposable {
 		super();
 		mobx.makeObservable(this);
 
-		let timer: NodeJS.Timeout | undefined = undefined;
+		let timer: TimeoutHandle | undefined = undefined;
 		this._register(toDisposable(() => clearInterval(timer)));
 		const resume = () => {
 			this._updateTests();

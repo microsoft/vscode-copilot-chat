@@ -18,6 +18,7 @@ import { ICAPIClientService } from '../../common/capiClient';
 import { IDomainService } from '../../common/domainService';
 import { IChatModelInformation } from '../../common/endpointProvider';
 import { ChatEndpoint } from '../../node/chatEndpoint';
+import { ILogService } from '../../../log/common/logService';
 
 export class CustomNesEndpoint extends ChatEndpoint {
 	constructor(
@@ -31,7 +32,8 @@ export class CustomNesEndpoint extends ChatEndpoint {
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
-		@IExperimentationService experimentationService: IExperimentationService
+		@IExperimentationService experimentationService: IExperimentationService,
+		@ILogService logService: ILogService
 	) {
 		const modelInfo: IChatModelInformation = {
 			id: CHAT_MODEL.CUSTOM_NES,
@@ -70,7 +72,8 @@ export class CustomNesEndpoint extends ChatEndpoint {
 			tokenizerProvider,
 			instantiationService,
 			configurationService,
-			experimentationService
+			experimentationService,
+			logService
 		);
 	}
 

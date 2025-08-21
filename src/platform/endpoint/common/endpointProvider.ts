@@ -36,7 +36,7 @@ export type IChatModelCapabilities = {
 	};
 };
 
-type ICompletionsModelCapabilities = {
+type ICompletionModelCapabilities = {
 	type: 'completion';
 	family: string;
 	tokenizer: TokenizerType;
@@ -57,7 +57,7 @@ export interface IModelAPIResponse {
 	is_chat_fallback: boolean;
 	version: string;
 	billing?: { is_premium: boolean; multiplier: number; restricted_to?: string[] };
-	capabilities: IChatModelCapabilities | ICompletionsModelCapabilities;
+	capabilities: IChatModelCapabilities | ICompletionModelCapabilities;
 	supported_endpoints?: ModelSupportedEndpoint[];
 }
 
@@ -70,11 +70,24 @@ export function isChatModelInformation(model: IModelAPIResponse): model is IChat
 	return model.capabilities.type === 'chat';
 }
 
+export type ICompletionModelInformation = IModelAPIResponse & {
+	capabilities: ICompletionModelCapabilities;
+};
+
+export function isCompletionModelInformation(model: IModelAPIResponse): model is ICompletionModelInformation {
+	return model.capabilities.type === 'completion';
+}
+
 export type ChatEndpointFamily = 'gpt-4.1' | 'gpt-4o-mini' | 'copilot-base';
 export type EmbeddingsEndpointFamily = 'text3small' | 'metis';
 
 export interface IEndpointProvider {
 	readonly _serviceBrand: undefined;
+
+	/**
+	 * Gets all the completion models known by the endpoint provider.
+	 */
+	getAllCompletionModels(forceRefresh?: boolean): Promise<ICompletionModelInformation[]>;
 
 	/**
 	 * Gets all the chat endpoints known by the endpoint provider. Mainly used by language model access

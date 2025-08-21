@@ -111,7 +111,7 @@ suite('Agent Summarization', () => {
 		addCacheBreakpoints(r.messages);
 		return r.messages
 			.filter(message => message.role !== Raw.ChatRole.System)
-			.map(messageToMarkdown)
+			.map(m => messageToMarkdown(m))
 			.join('\n\n')
 			.replace(/\\+/g, '/')
 			.replace(/The current date is.*/g, '(Date removed from snapshot)');

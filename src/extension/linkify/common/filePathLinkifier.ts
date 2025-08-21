@@ -96,7 +96,7 @@ export class FilePathLinkifier implements IContributedLinkifier {
 		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
 
 		// Don't linkify very short paths such as '/' or special paths such as '../'
-		if (pathText.length < 2 || ['../', '..\\', '/.', '\\.', '..'].includes(pathText)) {
+		if (pathText.length < 2 || ['../', '..\\', '/.', './', '\\.', '..'].includes(pathText)) {
 			return;
 		}
 
