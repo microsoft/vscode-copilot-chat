@@ -297,7 +297,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				*/
 				this._telemetryService.sendMSFTTelemetryEvent('readFileTrajectory',
 					{
-						model: this.options.request.model.id,
+						// model will be undefined in the simulator
+						model: this.options.request.model?.id,
 					},
 					{
 						rounds: seqArgs.length,
