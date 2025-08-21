@@ -49,7 +49,6 @@ export class NullExperimentationService implements IExperimentationService {
 	async hasTreatments(): Promise<void> { return Promise.resolve(); }
 	async hasAccountBasedTreatments(): Promise<void> { return Promise.resolve(); }
 	getTreatmentVariable<T extends boolean | number | string>(_configId: string, _name: string): T | undefined {
-		console.log('[ALERT!ExP] NullExperimentationService: getTreatment', _configId, _name);
 		return undefined;
 	}
 }
