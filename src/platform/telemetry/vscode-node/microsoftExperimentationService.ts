@@ -12,10 +12,10 @@ import { BaseExperimentationService, UserInfoStore } from '../node/baseExperimen
 
 function getTargetPopulation(isPreRelease: boolean): TargetPopulation {
 	if (isPreRelease) {
-		return 'insider' as TargetPopulation;
+		return TargetPopulation.Insiders;
 	}
 
-	return 'public' as TargetPopulation;
+	return TargetPopulation.Public;
 }
 
 class GithubAccountFilterProvider implements IExperimentationFilterProvider {
