@@ -17,8 +17,6 @@ export interface IThinkingDataService {
 export const IThinkingDataService = createServiceIdentifier<IThinkingDataService>('IThinkingDataService');
 
 
-
-
 export class ThinkingDataImpl implements IThinkingDataService {
 	readonly _serviceBrand: undefined;
 	private data: Map<string, ThinkingData> = new Map();

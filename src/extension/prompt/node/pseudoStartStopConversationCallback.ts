@@ -8,6 +8,7 @@ import type { ChatResponseStream, ChatVulnerability } from 'vscode';
 import { IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { IResponseDelta } from '../../../platform/networking/common/fetch';
 import { FilterReason } from '../../../platform/networking/common/openai';
+import { isEncryptedThinkingDelta } from '../../../platform/thinking/common/thinking';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { URI } from '../../../util/vs/base/common/uri';
 import { ChatResponseClearToPreviousToolInvocationReason } from '../../../vscodeTypes';
@@ -60,7 +61,10 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 		}
 
 		if (delta.thinking) {
-			progress.thinkingProgress(delta.thinking);
+			// Show thinking progress for unencrypted thinking deltas
+			if (!isEncryptedThinkingDelta(delta.thinking)) {
+				progress.thinkingProgress(delta.thinking);
+			}
 		}
 	}
 
