@@ -427,6 +427,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 				}
 			}
 			if (delta.thinking) {
+				// Show thinking progress for unencrypted thinking deltas
 				if (!isEncryptedThinkingDelta(delta.thinking)) {
 					const text = delta.thinking.text ?? '';
 					progress.report(new vscode.LanguageModelThinkingPart(text, delta.thinking.id, delta.thinking.metadata));
