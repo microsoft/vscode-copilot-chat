@@ -21,7 +21,10 @@ function stringOrStringify(value: any) {
 export class ConfigurationServiceImpl extends AbstractConfigurationService {
 	private config: WorkspaceConfiguration;
 
-	constructor(@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore) {
+	constructor(
+		@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore,
+		@IExperimentationService experimentationService: IExperimentationService
+	) {
 		super(copilotTokenStore);
 		this.config = vscode.workspace.getConfiguration(CopilotConfigPrefix);
 
@@ -31,6 +34,15 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 				this.config = vscode.workspace.getConfiguration(CopilotConfigPrefix);
 			}
 			this._onDidChangeConfiguration.fire(changeEvent);
+		});
+
+		// If experimentation service reports changes, simulate a full configuration change event
+		experimentationService.onDidTreatmentsChange(() => {
+			this._onDidChangeConfiguration.fire({
+				affectsConfiguration: (section: string, scope?: vscode.ConfigurationScope) => {
+					return section.startsWith(CopilotConfigPrefix);
+				}
+			});
 		});
 	}
 
