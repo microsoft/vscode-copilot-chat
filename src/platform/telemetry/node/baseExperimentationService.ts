@@ -77,7 +77,7 @@ export type TASClientDelegateFn = (globalState: any, userInfoStore: UserInfoStor
 export class BaseExperimentationService extends Disposable implements IExperimentationService {
 
 	declare _serviceBrand: undefined;
-	private readonly _delegate: ITASExperimentationService;
+	protected readonly _delegate: ITASExperimentationService;
 	protected readonly _userInfoStore: UserInfoStore;
 
 	protected _onDidTreatmentsChange = this._register(new Emitter<void>());
