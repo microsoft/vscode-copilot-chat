@@ -4,11 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { IExperimentationService as ITASExperimentationService } from 'vscode-tas-client';
-import { RunOnceScheduler } from '../../../util/vs/base/common/async';
+import { IntervalTimer } from '../../../util/vs/base/common/async';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
+import { ILogService } from '../../log/common/logService';
 import { IExperimentationService } from '../common/nullExperimentationService';
 
 export class UserInfoStore extends Disposable {
@@ -77,6 +78,8 @@ export type TASClientDelegateFn = (globalState: any, userInfoStore: UserInfoStor
 export class BaseExperimentationService extends Disposable implements IExperimentationService {
 
 	declare _serviceBrand: undefined;
+	private readonly _refreshTimer = this._register(new IntervalTimer());
+
 	protected readonly _delegate: ITASExperimentationService;
 	protected readonly _userInfoStore: UserInfoStore;
 
@@ -88,6 +91,7 @@ export class BaseExperimentationService extends Disposable implements IExperimen
 		delegateFn: TASClientDelegateFn,
 		@IVSCodeExtensionContext context: IVSCodeExtensionContext,
 		@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore,
+		@ILogService logService: ILogService
 	) {
 		super();
 
@@ -97,14 +101,16 @@ export class BaseExperimentationService extends Disposable implements IExperimen
 		// Refresh treatments when user info changes
 		this._register(this._userInfoStore.onDidChangeUserInfo(async () => {
 			await this._delegate.getTreatmentVariableAsync('vscode', 'refresh');
+			logService.trace(`[BaseExperimentationService] User info changed, refreshed treatments`);
 			this._onDidTreatmentsChange.fire();
 		}));
 
 		// Refresh treatments every hour
-		this._register(new RunOnceScheduler(async () => {
+		this._refreshTimer.cancelAndSet(async () => {
 			await this._delegate.getTreatmentVariableAsync('vscode', 'refresh');
+			logService.trace(`[BaseExperimentationService] Refreshed treatments on timer`);
 			this._onDidTreatmentsChange.fire();
-		}, 60 * 60 * 1000));
+		}, 60 * 60 * 1000);
 
 		this._delegate = delegateFn(context.globalState, this._userInfoStore);
 	}

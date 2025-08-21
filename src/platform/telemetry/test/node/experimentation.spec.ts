@@ -9,6 +9,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { CopilotToken } from '../../../authentication/common/copilotToken';
 import { ICopilotTokenStore } from '../../../authentication/common/copilotTokenStore';
 import { IVSCodeExtensionContext } from '../../../extContext/common/extensionContext';
+import { ILogService } from '../../../log/common/logService';
 import { createPlatformServices, ITestingServicesAccessor } from '../../../test/node/services';
 import { BaseExperimentationService, TASClientDelegateFn, UserInfoStore } from '../../node/baseExperimentationService';
 
@@ -22,13 +23,14 @@ class TestExperimentationService extends BaseExperimentationService {
 
 	constructor(
 		@IVSCodeExtensionContext extensionContext: IVSCodeExtensionContext,
-		@ICopilotTokenStore tokenStore: ICopilotTokenStore
+		@ICopilotTokenStore tokenStore: ICopilotTokenStore,
+		@ILogService logService: ILogService
 	) {
 		const delegateFn: TASClientDelegateFn = (globalState: any, userInfoStore: UserInfoStore) => {
 			return new MockTASExperimentationService(userInfoStore);
 		};
 
-		super(delegateFn, extensionContext, tokenStore);
+		super(delegateFn, extensionContext, tokenStore, logService);
 		this._mockTasService = this._delegate as MockTASExperimentationService;
 	}
 
