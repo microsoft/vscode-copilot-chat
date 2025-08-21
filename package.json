@@ -1078,7 +1078,6 @@
 					"fileSearch",
 					"textSearch",
 					"listDirectory",
-					"readNotebookCellOutput",
 					"readFile"
 				]
 			},
