@@ -208,9 +208,9 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 						id: log.id,
 						line: 0,
 						toolName: log.name,
-						args: log.args,
+						args: JSON.parse(log.args),
 						fileUpdates: log.fileUpdates,
-						result: log.value
+						results: log.response
 					});
 				} else if (log.kind === 'request') {
 					steps.push({
@@ -218,7 +218,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 						id: log.id,
 						line: 0,
 						prompt: log.messages,
-						result: log.value
+						result: log.result.value
 					});
 				}
 			}

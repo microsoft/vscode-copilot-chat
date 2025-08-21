@@ -1043,6 +1043,29 @@
 						"query"
 					]
 				}
+			},
+			{
+				"name": "copilot_toolReplay",
+				"modelDescription": "Replays a tool call from a previous chat session.",
+				"displayName": "tool replay",
+				"when": "debugType === 'chatReplay'",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"toolCallId": {
+							"type": "string",
+							"description": "the id of the tool original tool call"
+						},
+						"toolName": {
+							"type": "string",
+							"description": "the name of the tool being replayed"
+						},
+						"toolCallArgs": {
+							"type": "object",
+							"description": "the arguments of the tool call"
+						}
+					}
+				}
 			}
 		],
 		"languageModelToolSets": [

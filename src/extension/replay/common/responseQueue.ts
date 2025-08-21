@@ -13,10 +13,10 @@ type ToolStep = {
 	kind: 'toolCall';
 	id: string;
 	line: number;
-	args: any[];
+	args: { [key: string]: any };
 	toolName: string;
 	fileUpdates: FileUpdate[];
-	result: string;
+	results: string[];
 };
 
 type UserQuery = {
@@ -80,4 +80,14 @@ export function getResponse(): Promise<ChatStep | 'finished'> {
 	const deferred = createDeferred<ChatStep | 'finished'>();
 	pendingRequests.push(deferred);
 	return deferred.promise;
+}
+
+const toolResults: Map<string, string[]> = new Map();
+
+export function setToolResult(id: string, result: string[]): void {
+	toolResults.set(id, result);
+}
+
+export function getToolResult(id: string): string[] | undefined {
+	return toolResults.get(id);
 }
