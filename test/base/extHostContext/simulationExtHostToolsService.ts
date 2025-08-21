@@ -5,6 +5,7 @@
 // Allow importing vscode here. eslint does not let us exclude this path: https://github.com/import-js/eslint-plugin-import/issues/2800
 /* eslint-disable import/no-restricted-paths */
 
+import * as fs from 'fs';
 import type { CancellationToken, ChatRequest, LanguageModelTool, LanguageModelToolInformation, LanguageModelToolInvocationOptions, LanguageModelToolResult } from 'vscode';
 import { getToolName, ToolName } from '../../../src/extension/tools/common/toolNames';
 import { ICopilotTool } from '../../../src/extension/tools/common/toolsRegistry';
@@ -140,7 +141,23 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 
 	getEnabledTools(request: ChatRequest, filter?: (tool: LanguageModelToolInformation) => boolean | undefined): LanguageModelToolInformation[] {
 		const packageJsonTools = getPackagejsonToolsForTest();
-		const tools = this.tools.filter(tool => filter?.(tool) ?? (!this._disabledTools.has(getToolName(tool.name)) && (tool.name.startsWith("appmod") || packageJsonTools.has(tool.name))));
+
+		let javaUpgradeToolsFromFile: string[] = [];
+		if (process.env.JAVA_UPGRADE_TOOLS) {
+			try {
+				const config = fs.readFileSync(process.env.JAVA_UPGRADE_TOOLS, 'utf8');
+				javaUpgradeToolsFromFile = config
+					.split('\n')
+					.map(line => line.trim())
+					.filter(line => line && !line.startsWith('#')); // Filter out empty lines and comments
+				logger.debug('Loaded Java upgrade tools from file:', javaUpgradeToolsFromFile);
+			} catch (error) {
+				logger.warn('Failed to read Java upgrade tools file:', error);
+			}
+		}
+
+		const javaUpgradeToolsSet = new Set(javaUpgradeToolsFromFile);
+		const tools = this.tools.filter(tool => filter?.(tool) ?? (!this._disabledTools.has(getToolName(tool.name)) && (tool.name.startsWith("appmod") || packageJsonTools.has(tool.name) || javaUpgradeToolsSet.has(tool.name))));
 
 		this._mcpToolService.getEnabledTools(request, filter);
 
