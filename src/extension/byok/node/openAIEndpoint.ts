@@ -15,12 +15,13 @@ import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
-import { IChatEndpoint, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ILogService } from '../../../platform/log/common/logService';
 
 function hydrateBYOKErrorMessages(response: ChatResponse): ChatResponse {
 	if (response.type === ChatFetchResponseType.Failed && response.streamError) {
@@ -60,7 +61,8 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		@IInstantiationService protected instantiationService: IInstantiationService,
 		@IThinkingDataService private thinkingDataService: IThinkingDataService,
 		@IConfigurationService configurationService: IConfigurationService,
-		@IExperimentationService expService: IExperimentationService
+		@IExperimentationService expService: IExperimentationService,
+		@ILogService logService: ILogService
 	) {
 		super(
 			_modelInfo,
@@ -74,8 +76,23 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			tokenizerProvider,
 			instantiationService,
 			configurationService,
-			expService
+			expService,
+			logService
 		);
+	}
+
+	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		const body = super.createRequestBody(options);
+		if (this.useResponsesApi) {
+			body.store = true;
+			body.n = undefined;
+			body.stream_options = undefined;
+			if (!this._modelInfo.capabilities.supports.thinking) {
+				body.reasoning = undefined;
+			}
+		}
+
+		return body;
 	}
 
 	override interceptBody(body: IEndpointBody | undefined): void {
@@ -121,15 +138,6 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			// Removing max tokens defaults to the maximum which is what we want for BYOK
 			delete body.max_tokens;
 			body['stream_options'] = { 'include_usage': true };
-
-			if (this.useResponsesApi) {
-				body.n = undefined;
-				body.stream_options = undefined;
-
-				if (!this._modelInfo.capabilities.supports.thinking) {
-					body.reasoning = undefined;
-				}
-			}
 		}
 	}
 

@@ -693,8 +693,9 @@ export namespace ConfigKey {
 		export const AgentHistorySummarizationMode = defineSetting<string | undefined>('chat.advanced.agentHistorySummarizationMode', undefined, INTERNAL_RESTRICTED);
 		export const AgentHistorySummarizationWithPromptCache = defineExpSetting<boolean | undefined>('chat.advanced.agentHistorySummarizationWithPromptCache', false, INTERNAL_RESTRICTED);
 		export const AgentHistorySummarizationForceGpt41 = defineExpSetting<boolean | undefined>('chat.advanced.agentHistorySummarizationForceGpt41', false, INTERNAL_RESTRICTED);
-		export const UseResponsesApiTruncation = defineSetting<boolean | undefined>('chat.advanced.useResponsesApiTruncation', false, INTERNAL_RESTRICTED);
 		export const UseResponsesApi = defineExpSetting<boolean | undefined>('chat.advanced.useResponsesApi', false, INTERNAL_RESTRICTED);
+		export const UseResponsesApiTruncation = defineSetting<boolean | undefined>('chat.advanced.useResponsesApiTruncation', false, INTERNAL_RESTRICTED);
+		export const ResponsesApiReasoning = defineSetting<boolean | string | undefined>('chat.advanced.responsesApiReasoning', false, INTERNAL_RESTRICTED);
 
 		export const EnableChatImageUpload = defineExpSetting<boolean>('chat.advanced.imageUpload', false, INTERNAL);
 
