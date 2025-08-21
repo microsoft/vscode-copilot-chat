@@ -100,6 +100,7 @@ export interface IEndpointBody {
 	input?: readonly any[];
 	truncation?: 'auto' | 'disabled';
 	include?: ['reasoning.encrypted_content'];
+	store?: boolean;
 }
 
 export interface IEndpoint {

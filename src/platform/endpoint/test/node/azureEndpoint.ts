@@ -20,6 +20,7 @@ import { IDomainService } from '../../common/domainService';
 import { IChatModelInformation } from '../../common/endpointProvider';
 import { ChatEndpoint } from '../../node/chatEndpoint';
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
+import { ILogService } from '../../../log/common/logService';
 
 export class AzureTestEndpoint extends ChatEndpoint {
 	private readonly isThinkingModel: boolean;
@@ -36,7 +37,8 @@ export class AzureTestEndpoint extends ChatEndpoint {
 		@IInstantiationService private instantiationService: IInstantiationService,
 		@IThinkingDataService private thinkingDataService: IThinkingDataService,
 		@IConfigurationService configurationService: IConfigurationService,
-		@IExperimentationService experimentationService: IExperimentationService
+		@IExperimentationService experimentationService: IExperimentationService,
+		@ILogService logService: ILogService
 	) {
 		const modelInfo: IChatModelInformation = {
 			id: _azureModel,
@@ -68,7 +70,8 @@ export class AzureTestEndpoint extends ChatEndpoint {
 			tokenizerProvider,
 			instantiationService,
 			configurationService,
-			experimentationService
+			experimentationService,
+			logService
 		);
 		this.isThinkingModel = false; // Set to true if testing a thinking model
 	}

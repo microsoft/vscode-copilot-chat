@@ -21,6 +21,7 @@ import { IChatModelInformation } from '../common/endpointProvider';
 import { ChatEndpoint } from './chatEndpoint';
 import { IConfigurationService } from '../../configuration/common/configurationService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
+import { ILogService } from '../../log/common/logService';
 
 export class CopilotChatEndpoint extends ChatEndpoint {
 	constructor(
@@ -36,7 +37,8 @@ export class CopilotChatEndpoint extends ChatEndpoint {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IThinkingDataService private readonly thinkingDataService: IThinkingDataService,
 		@IConfigurationService configurationService: IConfigurationService,
-		@IExperimentationService experimentService: IExperimentationService
+		@IExperimentationService experimentService: IExperimentationService,
+		@ILogService logService: ILogService
 	) {
 		super(
 			modelMetadata,
@@ -50,7 +52,8 @@ export class CopilotChatEndpoint extends ChatEndpoint {
 			tokenizerProvider,
 			instantiationService,
 			configurationService,
-			experimentService
+			experimentService,
+			logService
 		);
 	}
 
