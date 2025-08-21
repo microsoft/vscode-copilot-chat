@@ -3835,6 +3835,9 @@
 		"vite-plugin-top-level-await": "^1.5.0",
 		"vite-plugin-wasm": "^3.5.0",
 		"vitest": "^3.0.5",
+		"vscode-languageserver-protocol": "^3.17.5",
+		"vscode-languageserver-textdocument": "^1.0.12",
+		"vscode-languageserver-types": "^3.17.5",
 		"yaml": "^2.8.0",
 		"zeromq": "github:rebornix/zeromq.js#a19e8e373b3abc677f91b936d3f00d49b1b61792",
 		"js-yaml": "^4.1.0",
@@ -3859,7 +3862,6 @@
 		"markdown-it": "^14.1.0",
 		"minimatch": "^10.0.3",
 		"undici": "^7.11.0",
-		"vscode-languageserver-textdocument": "^1.0.12",
 		"vscode-tas-client": "^0.1.84",
 		"web-tree-sitter": "^0.23.0",
 		"diff": "^8.0.2"
