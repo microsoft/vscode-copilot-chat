@@ -12,6 +12,7 @@ import { FinishedCompletion, SSEProcessor } from '../../../networking/node/strea
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { createFakeStreamResponse } from '../../../test/node/fetcher';
 import { createPlatformServices } from '../../../test/node/services';
+import { isEncryptedThinkingDelta } from '../../../thinking/common/thinking';
 
 async function getAll<T>(iter: AsyncIterable<T>): Promise<T[]> {
 	const result: T[] = [];
@@ -578,7 +579,7 @@ data: [DONE]
 
 
 		await getAll(processor.processSSE((text: string, index: number, delta: IResponseDelta) => {
-			if (delta.thinking) {
+			if (delta.thinking && !isEncryptedThinkingDelta(delta.thinking)) {
 				if (delta.thinking.text) {
 					if (thinkingText === undefined) {
 						thinkingText = '';
@@ -625,7 +626,7 @@ data: [DONE]
 
 
 		await getAll(processor.processSSE((text: string, index: number, delta: IResponseDelta) => {
-			if (delta.thinking) {
+			if (delta.thinking && !isEncryptedThinkingDelta(delta.thinking)) {
 				if (delta.thinking.text) {
 					if (thinkingText === undefined) {
 						thinkingText = '';

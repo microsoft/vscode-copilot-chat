@@ -126,7 +126,6 @@ class SearchResponseProcessor extends PseudoStopStartResponseProcessor {
 		super(
 			[{ start: '[ARGS END]', stop: '[ARGS START]' }],
 			(delta) => jsonToTable(parseSearchParams(delta.join(''))),
-			_thinkingDataService
 		);
 	}
 

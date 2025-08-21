@@ -15,6 +15,7 @@ import { OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { ThinkingData } from '../../../platform/thinking/common/thinking';
 import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
@@ -434,9 +435,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
 		let thinking: ThinkingDataItem | undefined;
+		let thinkingId: string | undefined;
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
-			finishedCb: async (text, _, delta) => {
+			finishedCb: async (text, index, delta) => {
 				fetchStreamSource?.update(text, delta);
 				if (delta.copilotToolCalls) {
 					toolCalls.push(...delta.copilotToolCalls.map((call): IToolCall => ({
@@ -444,6 +446,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						id: this.createInternalToolCallId(call.id),
 						arguments: call.arguments === '' ? '{}' : call.arguments
 					})));
+					if (toolCalls.length > 0) {
+						this._thinkingDataService.update(index, { id: thinkingId, metadata: delta.copilotToolCalls[0].id });
+					}
 				}
 				if (delta.statefulMarker) {
 					statefulMarker = delta.statefulMarker;
@@ -628,6 +633,21 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		for (const metadata of buildPromptResult.metadata.getAll(ToolResultMetadata)) {
 			this.logToolResult(buildPromptContext, metadata);
 			this.toolCallResults[metadata.toolCallId] = metadata.result;
+		}
+
+		for (const message of buildPromptResult.messages) {
+			for (const content of message.content) {
+				// opaque type
+				if (content.type === 2) {
+					const data = content.value as {
+						type: string;
+						thinking: ThinkingData;
+					};
+					if (data.type === 'thinking' && data.thinking.id) {
+						this._thinkingDataService.set(data.thinking.id, data.thinking);
+					}
+				}
+			}
 		}
 
 		if (buildPromptResult.metadata.getAll(ToolResultMetadata).some(r => r.isCancelled)) {

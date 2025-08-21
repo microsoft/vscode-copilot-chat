@@ -21,24 +21,29 @@ export type ThinkingDelta = {
 	text?: string;
 	id: string;
 	metadata?: string;
-	isEncrypted?: boolean;
 } | {
 	text?: string;
 	id?: string;
 	metadata: string;
-	isEncrypted?: boolean;
-} |
-{
+} | {
 	text: string;
 	id?: string;
 	metadata?: string;
-	isEncrypted?: boolean;
 };
+
+export type EncryptedThinkingDelta = {
+	id: string;
+	encrypted: string;
+}
+
+export function isEncryptedThinkingDelta(delta: ThinkingDelta | EncryptedThinkingDelta): delta is EncryptedThinkingDelta {
+	return (delta as EncryptedThinkingDelta).encrypted !== undefined;
+}
 
 export interface ThinkingData {
 	id: string;
 	text: string;
 	metadata?: string;
-	type?: 'encrypted';
 	tokens?: number;
+	encrypted?: string;
 }

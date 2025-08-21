@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { ThinkingData, ThinkingDelta } from '../../thinking/common/thinking';
+import { EncryptedThinkingDelta, ThinkingData, ThinkingDelta } from '../../thinking/common/thinking';
 import { Response } from './fetcherService';
 import { ChoiceLogProbs, FilterReason } from './openai';
 
@@ -137,7 +137,7 @@ export interface IResponseDelta {
 	beginToolCalls?: ICopilotBeginToolCall[];
 	_deprecatedCopilotFunctionCalls?: ICopilotFunctionCall[];
 	copilotConfirmation?: ICopilotConfirmation;
-	thinking?: ThinkingDelta;
+	thinking?: ThinkingDelta | EncryptedThinkingDelta;
 	retryReason?: FilterReason;
 	/** Marker for the current response, which should be presented in `IMakeChatRequestOptions` on the next call */
 	statefulMarker?: string;
