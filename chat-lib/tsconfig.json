@@ -1,0 +1,21 @@
+{
+	"extends": "./tsconfig.base.json",
+	"compilerOptions": {
+		"jsx": "react",
+		"jsxFactory": "vscpp",
+		"jsxFragmentFactory": "vscppf",
+		"rootDir": ".",
+		"types": [
+			"minimist",
+			"mocha",
+			"node",
+			"picomatch",
+			"sinon",
+			"tar",
+			"vscode"
+		],
+		"noEmit": true
+	},
+	"include": ["src/**/*.ts", "src/**/*.tsx"],
+	"exclude": ["node_modules", "dist"]
+}

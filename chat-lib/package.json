@@ -1,0 +1,30 @@
+{
+	"name": "@vscode/chat-lib",
+	"version": "0.1.0",
+	"description": "Chat and inline editing SDK extracted from VS Code Copilot Chat",
+	"main": "src/main.ts",
+	"engines": {
+		"node": ">=22.14.0"
+	},
+	"peerDependencies": {
+		"typescript": "^5.0.0",
+		"@vscode/prompt-tsx": "^0.4.0-alpha.5"
+	},
+	"keywords": [
+		"chat",
+		"ai",
+		"sdk",
+		"vscode",
+		"copilot"
+	],
+	"license": "MIT",
+	"files": [
+		"src/**/*.ts",
+		"README.md",
+		"LICENSE.txt"
+	],
+	"scripts": {
+		"build": "echo \"TBD: Build step not defined\"",
+		"test": "echo \"TBD: Test step not defined\""
+	}
+}
