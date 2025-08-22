@@ -15,7 +15,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -44,7 +44,7 @@ console.log('hi')"
 🛠️ tooluse_4
 success
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -71,7 +71,7 @@ edit this file
 </userRequest>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -91,5 +91,5 @@ console.log('hi')"
 🛠️ tooluse_5
 success
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~

@@ -3,15 +3,20 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { LanguageModelChat } from 'vscode';
+import type { LanguageModelChat, PreparedToolInvocation } from 'vscode';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { OffsetLineColumnConverter } from '../../../platform/editing/common/offsetLineColumnConverter';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import * as glob from '../../../util/vs/base/common/glob';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
-import { EndOfLine, Position, Range, TextEdit } from '../../../vscodeTypes';
+import { EndOfLine, MarkdownString, Position, Range, TextEdit } from '../../../vscodeTypes';
+import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { relativePath } from '../../../util/vs/base/common/resources';
+import { t } from '@vscode/l10n';
 
 // Simplified Hunk type for the patch
 interface Hunk {
@@ -529,4 +534,58 @@ export async function applyEdit(
 			throw new EditError(`Failed to edit file: ${error.message}`, 'unknownError');
 		}
 	}
+}
+
+const ALWAYS_CHECKED_EDIT_PATTERNS: Readonly<Record<string, boolean>> = {
+	'**/.vscode/*.json': false,
+};
+
+/**
+ * Returns a function that returns whether a URI is approved for editing without
+ * further user confirmation.
+ */
+function makeUriConfirmationChecker(configuration: IConfigurationService) {
+	const patterns = configuration.getNonExtensionConfig<Record<string, boolean>>('chat.tools.edits.autoApprove');
+
+	const checks: { pattern: glob.ParsedPattern; isApproved: boolean }[] = [];
+	for (const obj of [patterns, ALWAYS_CHECKED_EDIT_PATTERNS]) {
+		if (obj) {
+			for (const [pattern, isApproved] of Object.entries(obj)) {
+				checks.push({ pattern: glob.parse(pattern), isApproved });
+			}
+		}
+	}
+
+	return (uri: URI) => {
+		let ok = true;
+		const fsPath = uri.fsPath;
+		for (const { pattern, isApproved } of checks) {
+			if (isApproved !== ok && pattern(fsPath)) {
+				ok = isApproved;
+			}
+		}
+
+		return ok;
+	};
+}
+
+export function createEditConfirmation(accessor: ServicesAccessor, uris: readonly URI[], asString: () => string): PreparedToolInvocation {
+	const checker = makeUriConfirmationChecker(accessor.get(IConfigurationService));
+	const needsConfirmation = uris.filter(uri => !checker(uri));
+	if (!needsConfirmation.length) {
+		return { presentation: 'hidden' };
+	}
+
+	const workspaceService = accessor.get(IWorkspaceService);
+	const fileParts = needsConfirmation.map(uri => {
+		const wf = workspaceService.getWorkspaceFolder(uri);
+		return '`' + (wf ? relativePath(wf, uri) : uri.fsPath) + '`';
+	}).join(', ');
+
+	return {
+		confirmationMessages: {
+			title: t('Allow edits to sensitive files?'),
+			message: new MarkdownString(t`The model wants to edit sensitive files (${fileParts}). Do you want to allow this?` + '\n\n' + asString()),
+		}
+	};
 }

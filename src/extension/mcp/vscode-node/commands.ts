@@ -9,6 +9,7 @@ import { JsonSchema } from '../../../platform/configuration/common/jsonSchema';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { createSha256Hash } from '../../../util/common/crypto';
 import { extractCodeBlocks } from '../../../util/common/markdown';
 import { mapFindFirst } from '../../../util/vs/base/common/arraysFind';
 import { DeferredPromise, raceCancellation } from '../../../util/vs/base/common/async';
@@ -153,7 +154,7 @@ export class McpSetupCommands extends Disposable {
 					finalState: finalState,
 					configurationType: result?.type,
 					packageType: this.pendingSetup?.validateArgs.type,
-					packageName: this.pendingSetup?.pendingArgs.name,
+					packageName: await this.lowerHash(this.pendingSetup?.pendingArgs.name || args.name),
 					packageVersion: this.pendingSetup?.pendingArgs.version,
 				}, {
 					durationMs: this.pendingSetup?.stopwatch.elapsed() ?? -1
@@ -182,8 +183,18 @@ export class McpSetupCommands extends Disposable {
 			this.telemetryService.sendMSFTTelemetryEvent(
 				'mcp.setup.validatePackage',
 				result.state === 'ok' ?
-					{ state: result.state, packageType: args.type, packageName: result.name ?? args.name, packageVersion: result.version } :
-					{ state: result.state, packageType: args.type, packageName: args.name, errorType: result.errorType },
+					{
+						state: result.state,
+						packageType: args.type,
+						packageName: await this.lowerHash(result.name || args.name),
+						packageVersion: result.version
+					} :
+					{
+						state: result.state,
+						packageType: args.type,
+						packageName: await this.lowerHash(args.name),
+						errorType: result.errorType
+					},
 				{ durationMs: sw.elapsed() });
 
 			// return the minimal result to avoid leaking implementation details
@@ -195,6 +206,10 @@ export class McpSetupCommands extends Disposable {
 		this._register(vscode.commands.registerCommand('github.copilot.chat.mcp.setup.check', () => {
 			return 1;
 		}));
+	}
+
+	private async lowerHash(input: string | undefined) {
+		return input ? await createSha256Hash(input.toLowerCase()) : undefined;
 	}
 
 	private async enqueuePendingSetup(validateArgs: IValidatePackageArgs, pendingArgs: IPendingSetupArgs, sw: StopWatch) {
@@ -301,10 +316,10 @@ Error: ${error}`);
 		this.pendingSetup = { cts, canPrompt, done, validateArgs, pendingArgs, stopwatch: sw };
 	}
 
-	public static async validatePackageRegistry(args: { type: PackageType; name: string }, logService: ILogService, fetcherServer: IFetcherService): Promise<ValidatePackageResult> {
+	public static async validatePackageRegistry(args: { type: PackageType; name: string }, logService: ILogService, fetcherService: IFetcherService): Promise<ValidatePackageResult> {
 		try {
 			if (args.type === 'npm') {
-				const response = await fetcherServer.fetch(`https://registry.npmjs.org/${encodeURIComponent(args.name)}`, { method: 'GET' });
+				const response = await fetcherService.fetch(`https://registry.npmjs.org/${encodeURIComponent(args.name)}`, { method: 'GET' });
 				if (!response.ok) {
 					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.npmPackageNotFound", "Package {0} not found in npm registry", args.name) };
 				}
@@ -318,7 +333,7 @@ Error: ${error}`);
 					readme: data.readme,
 				};
 			} else if (args.type === 'pip') {
-				const response = await fetcherServer.fetch(`https://pypi.org/pypi/${encodeURIComponent(args.name)}/json`, { method: 'GET' });
+				const response = await fetcherService.fetch(`https://pypi.org/pypi/${encodeURIComponent(args.name)}/json`, { method: 'GET' });
 				if (!response.ok) {
 					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.pythonPackageNotFound", "Package {0} not found in PyPI registry", args.name) };
 				}
@@ -334,7 +349,7 @@ Error: ${error}`);
 					readme: data.info?.description
 				};
 			} else if (args.type === 'nuget') {
-				const nuGetMcpSetup = new NuGetMcpSetup(logService);
+				const nuGetMcpSetup = new NuGetMcpSetup(logService, fetcherService);
 				return await nuGetMcpSetup.getNuGetPackageMetadata(args.name);
 			} else if (args.type === 'docker') {
 				// Docker Hub API uses namespace/repository format
@@ -343,7 +358,7 @@ Error: ${error}`);
 					? args.name.split('/', 2)
 					: ['library', args.name];
 
-				const response = await fetcherServer.fetch(`https://hub.docker.com/v2/repositories/${encodeURIComponent(namespace)}/${encodeURIComponent(repository)}`, { method: 'GET' });
+				const response = await fetcherService.fetch(`https://hub.docker.com/v2/repositories/${encodeURIComponent(namespace)}/${encodeURIComponent(repository)}`, { method: 'GET' });
 				if (!response.ok) {
 					return { state: 'error', errorType: ValidatePackageErrorType.NotFound, error: localize("mcp.setup.dockerRepositoryNotFound", "Docker image {0} not found in Docker Hub registry", args.name) };
 				}

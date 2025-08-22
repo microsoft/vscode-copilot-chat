@@ -1,0 +1,202 @@
+name: 'small current file, 1 small open file in subfolder, cursor near beginning'
+
+state:
+    current-file:
+        uri: file:///dad-jokes/src/dadJokeService.ts
+        language: typescript
+        text: |-
+            import {DadJoke, DadJokeRating, DadJokeStatus} from "./dadJoke";⮑
+            import {dadJokeDatabase} from "./dadJokeDatabase";
+
+            export interface DadJokeService {
+
+                getDadJokes(): DadJoke[];
+
+                getDadJokeById(id: number): DadJoke | undefined;
+
+                markDadJokeAsSeen(id: number): void;
+
+                getUnseenDadJokes(): DadJoke[];
+
+                getUnseenDadJoke(): DadJoke | undefined;
+
+                rateDadJoke(id: number, rating: DadJokeRating): void;
+            }
+
+            export function dadJokeService(dadJokes: DadJoke[] = dadJokeDatabase): DadJokeService {
+                return new DefaultDadJokeService(dadJokes);
+            }
+
+            export class DefaultDadJokeService implements DadJokeService {
+
+                private readonly dadJokes: DadJoke[];
+
+                constructor(dadJokes: DadJoke[]) {
+                    this.dadJokes = dadJokes;
+                }
+
+                getDadJokes(): DadJoke[] {
+                    return this.dadJokes;
+                }
+
+                getDadJokeById(id: number): DadJoke | undefined {
+                    return this.dadJokes.find(dadJoke => dadJoke.id === id);
+                }
+
+                markDadJokeAsSeen(id: number): void {
+                    const dadJoke = this.getDadJokeById(id);
+                    if (dadJoke) {
+                        dadJoke.status = DadJokeStatus.Seen;
+                    }
+                }
+
+                getUnseenDadJokes(): DadJoke[] {
+                    return this.dadJokes.filter(dadJoke => dadJoke.status === DadJokeStatus.Unseen);
+                }
+
+                getUnseenDadJoke(): DadJoke | undefined {
+                    return this.getUnseenDadJokes()[0];
+                }
+
+                rateDadJoke(id: number, rating: DadJokeRating): void {
+                    const dadJoke = this.getDadJokeById(id);
+                    if (dadJoke) {
+                        dadJoke.rating = rating;
+                    }
+                }
+            }
+    open-files:
+        - uri: file:///dad-jokes/src/path/dadJoke.ts
+          language: typescript
+          text: |-
+              export class DadJoke {
+
+                  id: number;
+                  question: string;
+                  answer: string;
+                  status: DadJokeStatus;
+                  rating: DadJokeRating;
+
+                  constructor(
+                      id: number,
+                      question: string,
+                      answer: string,
+                      status: DadJokeStatus = DadJokeStatus.Unseen,
+                      rating: DadJokeRating = DadJokeRating.Unrated
+                  ) {
+                      this.id = id;
+                      this.question = question;
+                      this.answer = answer;
+                      this.status = status;
+                      this.rating = rating;
+                  }
+              }
+
+              export enum DadJokeStatus {
+                  Seen,
+                  Unseen
+              }
+
+              export enum DadJokeRating {
+                  Unrated,
+                  Good,
+                  Bad
+              }
+expected-prompt:
+    prefix: |-
+        // Path: dadJokeService.ts
+        // Compare this snippet from path/dadJoke.ts:
+        // export class DadJoke {
+        // 
+        //     id: number;
+        //     question: string;
+        //     answer: string;
+        //     status: DadJokeStatus;
+        //     rating: DadJokeRating;
+        // 
+        //     constructor(
+        //         id: number,
+        //         question: string,
+        //         answer: string,
+        //         status: DadJokeStatus = DadJokeStatus.Unseen,
+        //         rating: DadJokeRating = DadJokeRating.Unrated
+        //     ) {
+        //         this.id = id;
+        //         this.question = question;
+        //         this.answer = answer;
+        //         this.status = status;
+        //         this.rating = rating;
+        //     }
+        // }
+        // 
+        // export enum DadJokeStatus {
+        //     Seen,
+        //     Unseen
+        // }
+        // 
+        // export enum DadJokeRating {
+        //     Unrated,
+        //     Good,
+        //     Bad
+        // }
+        import {DadJoke, DadJokeRating, DadJokeStatus} from "./dadJoke";
+    suffix: |-
+        import {dadJokeDatabase} from "./dadJokeDatabase";
+
+        export interface DadJokeService {
+
+            getDadJokes(): DadJoke[];
+
+            getDadJokeById(id: number): DadJoke | undefined;
+
+            markDadJokeAsSeen(id: number): void;
+
+            getUnseenDadJokes(): DadJoke[];
+
+            getUnseenDadJoke(): DadJoke | undefined;
+
+            rateDadJoke(id: number, rating: DadJokeRating): void;
+        }
+
+        export function dadJokeService(dadJokes: DadJoke[] = dadJokeDatabase): DadJokeService {
+            return new DefaultDadJokeService(dadJokes);
+        }
+
+        export class DefaultDadJokeService implements DadJokeService {
+
+            private readonly dadJokes: DadJoke[];
+
+            constructor(dadJokes: DadJoke[]) {
+                this.dadJokes = dadJokes;
+            }
+
+            getDadJokes(): DadJoke[] {
+                return this.dadJokes;
+            }
+
+            getDadJokeById(id: number): DadJoke | undefined {
+                return this.dadJokes.find(dadJoke => dadJoke.id === id);
+            }
+
+            markDadJokeAsSeen(id: number): void {
+                const dadJoke = this.getDadJokeById(id);
+                if (dadJoke) {
+                    dadJoke.status = DadJokeStatus.Seen;
+                }
+            }
+
+            getUnseenDadJokes(): DadJoke[] {
+                return this.dadJokes.filter(dadJoke => dadJoke.status === DadJokeStatus.Unseen);
+            }
+
+            getUnseenDadJoke(): DadJoke | undefined {
+                return this.getUnseenDadJokes()[0];
+            }
+
+            rateDadJoke(id: number, rating: DadJokeRating): void {
+                const dadJoke = this.getDadJokeById(id);
+                if (dadJoke) {
+                    dadJoke.rating = rating;
+                }
+            }
+        }

@@ -419,7 +419,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 
 	/**
 	 * Get the chunks and embeddings for a file.
-	 */
+	*/
 	private async getChunksAndEmbeddings(authToken: string, file: FileRepresentation, batchInfo: ComputeBatchInfo, qos: EmbeddingsComputeQos, telemetryInfo: CallTracker, token: CancellationToken): Promise<readonly FileChunkWithEmbedding[] | undefined> {
 		const cache = await raceCancellationError(this._cache.value, token);
 		const existing = await raceCancellationError(cache.get(file), token);

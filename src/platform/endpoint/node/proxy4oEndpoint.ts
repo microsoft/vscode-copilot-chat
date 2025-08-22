@@ -18,6 +18,7 @@ import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
 import { IChatModelInformation } from '../common/endpointProvider';
 import { ChatEndpoint } from './chatEndpoint';
+import { ILogService } from '../../log/common/logService';
 
 export class Proxy4oEndpoint extends ChatEndpoint {
 
@@ -35,6 +36,7 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
+		@ILogService logService: ILogService,
 	) {
 		const model = configurationService.getExperimentBasedConfig<string>(ConfigKey.Internal.InstantApplyModelName, experimentationService) ?? CHAT_MODEL.GPT4OPROXY;
 
@@ -66,7 +68,10 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
-			instantiationService
+			instantiationService,
+			configurationService,
+			experimentationService,
+			logService
 		);
 	}
 

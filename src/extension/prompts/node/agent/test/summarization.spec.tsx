@@ -74,7 +74,7 @@ suite('Agent Summarization', () => {
 
 	async function agentPromptToString(accessor: ITestingServicesAccessor, promptContext: IBuildPromptContext, otherProps?: Partial<AgentPromptProps>, promptType: TestPromptType = TestPromptType.Agent): Promise<string> {
 		const instaService = accessor.get(IInstantiationService);
-		const endpoint = instaService.createInstance(MockEndpoint);
+		const endpoint = instaService.createInstance(MockEndpoint, undefined);
 		normalizeSummariesOnRounds(promptContext.history);
 		if (!promptContext.conversation) {
 			promptContext = { ...promptContext, conversation };
@@ -111,7 +111,7 @@ suite('Agent Summarization', () => {
 		addCacheBreakpoints(r.messages);
 		return r.messages
 			.filter(message => message.role !== Raw.ChatRole.System)
-			.map(messageToMarkdown)
+			.map(m => messageToMarkdown(m))
 			.join('\n\n')
 			.replace(/\\+/g, '/')
 			.replace(/The current date is.*/g, '(Date removed from snapshot)');

@@ -86,6 +86,10 @@ export class CopilotToken {
 		return this.isFreeUser && (this._info.limited_user_quotas?.completions ?? 1) <= 0;
 	}
 
+	get codeQuoteEnabled(): boolean {
+		return this._info.code_quote_enabled ?? false;
+	}
+
 	get isVscodeTeamMember(): boolean {
 		return this._info.isVscodeTeamMember;
 	}

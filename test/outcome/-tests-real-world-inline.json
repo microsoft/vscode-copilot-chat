@@ -9,21 +9,20 @@
 		"name": "/tests (real world) [inline] [typescript] - add another test for containsUppercaseCharacter with other non latin chars",
 		"requests": [
 			"31032a78e3858810de4f26625f84210ee84c9a9dc5e30d0d2b7b5d314074fe7c",
-			"8d8e58bd80c8a6db41c9c222ac09d266625729c83a96cd40b8cd5931998f3ff0",
-			"f33d3ca1fb81529e880764e3dd6f46ba2df828945251afebebf1789e7dc7cdae"
+			"d607ee833858f8f4987f99c1670867300b08312081a19e3c45fcee2860d62c04"
 		]
 	},
 	{
 		"name": "/tests (real world) [inline] [typescript] - generate a unit test",
 		"requests": [
 			"5a4446d4b5b780097f90807565e30f68f0899c19389ad1cf1af019249a881ffb",
-			"baf3132d44b539d268cb3090a22ff2d1b443482f9d1394392a5b95eeb1a489f4"
+			"79acfa969f74adcd7d8ee2d13c8b902e51a1e460e43a5ded19ca50513ffa199d"
 		]
 	},
 	{
 		"name": "/tests (real world) [inline] [typescript] - issue #3699: add test for function",
 		"requests": [
-			"1385a014190ec345b2788c4f27772d6bc25cd9ac2da13a522a8bdc158ea7a6e0",
+			"1b2a8f5b3e3053d3653808ec184a306886c1fdc378e7ef132b4666e37e6424ed",
 			"da704f25ed7c3bd0a71a2d2cea8d522680bb0f48aa68e74f6daf1ff3c832d658"
 		]
 	},
@@ -31,7 +30,7 @@
 		"name": "/tests (real world) [inline] [typescript] - issue #3701: add some more tests for folding",
 		"requests": [
 			"4b274aca66a096c5e00eb952767319374d6bd3daeb4688f65e76710619a05399",
-			"59fcb1cd4e8b0f8104d092b10780354c830f1befe4eed3eb9aef2ebe75dbadb8"
+			"a7cb49951d57d01ca6be836eaad85df9a4d514b0b09a1c055d22fb2f5cd938ab"
 		]
 	}
 ]

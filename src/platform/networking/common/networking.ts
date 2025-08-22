@@ -95,9 +95,12 @@ export interface IEndpointBody {
 	similarity?: number;
 	/** Code search: */
 	scoping_query?: string;
+
 	/** Responses API: */
 	input?: readonly any[];
 	truncation?: 'auto' | 'disabled';
+	include?: ['reasoning.encrypted_content'];
+	store?: boolean;
 }
 
 export interface IEndpoint {
@@ -154,7 +157,6 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly supportsToolCalls: boolean;
 	readonly supportsVision: boolean;
 	readonly supportsPrediction: boolean;
-	readonly supportsStatefulResponses: boolean;
 	readonly showInModelPicker: boolean;
 	readonly isPremium?: boolean;
 	readonly multiplier?: number;

@@ -22,7 +22,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.104.0-20250815",
+		"vscode": "^1.104.0-20250822",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -116,7 +116,7 @@
 		"testObserver",
 		"aiTextSearchProvider@2",
 		"chatParticipantPrivate@10",
-		"chatProvider@1",
+		"chatProvider@2",
 		"contribDebugCreateConfiguration",
 		"chatReferenceDiagnostic",
 		"textSearchProvider2",
@@ -796,7 +796,7 @@
 				"name": "copilot_editNotebook",
 				"toolReferenceName": "editNotebook",
 				"displayName": "%copilot.tools.editNotebook.name%",
-				"modelDescription": "This is a tool for editing an existing Notebook file in the workspace. Generate the \"explanation\" property first.\nThe system is very smart and can understand how to apply your edits to the notebooks.\nWhen updating the content of an existing cell, ensure newCode includes at least 3-5 lines of context both before and after the new changes, preserving whitespace and indentation exactly.",
+				"modelDescription": "This is a tool for editing an existing Notebook file in the workspace. Generate the \"explanation\" property first.\nThe system is very smart and can understand how to apply your edits to the notebooks.\nWhen updating the content of an existing cell, ensure newCode preserves whitespace and indentation exactly and does NOT include any code markers such as (...existing code...).",
 				"tags": [
 					"enable_other_tool_copilot_getNotebookSummary"
 				],
@@ -806,10 +806,6 @@
 						"filePath": {
 							"type": "string",
 							"description": "An absolute path to the notebook file to edit, or the URI of a untitled, not yet named, file, such as `untitled:Untitled-1."
-						},
-						"explanation": {
-							"type": "string",
-							"description": "A one-sentence description of edit operation. This will be shown to the user before the tool is run."
 						},
 						"cellId": {
 							"type": "string",
@@ -890,7 +886,7 @@
 				"name": "copilot_getNotebookSummary",
 				"toolReferenceName": "getNotebookSummary",
 				"displayName": "Get the structure of a notebook",
-				"modelDescription": "This is a tool returns the list of the Notebook cells along with the id, cell types, language, execution information and output mime types for each cell. This is useful to get Cell Ids when executing a notebook or determine what cells have been executed and what order, or what cells have outputs. Requery this tool if the contents of the notebook change.",
+				"modelDescription": "This is a tool returns the list of the Notebook cells along with the id, cell types, line ranges, language, execution information and output mime types for each cell. This is useful to get Cell Ids when executing a notebook or determine what cells have been executed and what order, or what cells have outputs. If required to read contents of a cell use this to determine the line range of a cells, and then use read_file tool to read a specific line range. Requery this tool if the contents of the notebook change.",
 				"tags": [],
 				"inputSchema": {
 					"type": "object",
@@ -1082,7 +1078,6 @@
 					"fileSearch",
 					"textSearch",
 					"listDirectory",
-					"readNotebookCellOutput",
 					"readFile"
 				]
 			},
@@ -1608,6 +1603,11 @@
 				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
+				"vendor": "xai",
+				"displayName": "xAI",
+				"managementCommand": "github.copilot.chat.manageBYOK"
+			},
+			{
 				"vendor": "ollama",
 				"displayName": "Ollama"
 			},
@@ -1633,7 +1633,7 @@
 			},
 			{
 				"vendor": "customoai",
-				"displayName": "Custom OpenAI Compatible Models",
+				"displayName": "OpenAI Compatible",
 				"managementCommand": "github.copilot.chat.manageBYOK"
 			}
 		],
@@ -1917,6 +1917,12 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.debug.inlineEdit.reportNotebookNESIssue",
+				"title": "%github.copilot.command.inlineEdit.reportNotebookNESIssue%",
+				"enablement": "config.github.copilot.chat.advanced.notebook.alternativeNESFormat.enabled",
+				"category": "GitHub Copilot Developer"
+			},
+			{
 				"command": "github.copilot.debug.generateSTest",
 				"title": "%github.copilot.command.generateSTest%",
 				"enablement": "github.copilot.debugReportFeedback",
@@ -2026,6 +2032,16 @@
 				"icon": "$(archive)"
 			},
 			{
+				"command": "github.copilot.chat.debug.exportPromptLogsAsJson",
+				"title": "Export All as JSON...",
+				"icon": "$(export)"
+			},
+			{
+				"command": "github.copilot.chat.debug.exportAllPromptLogsAsJson",
+				"title": "Export All Prompt Logs as JSON...",
+				"icon": "$(export)"
+			},
+			{
 				"command": "github.copilot.debug.collectWorkspaceIndexDiagnostics",
 				"title": "%github.copilot.command.collectWorkspaceIndexDiagnostics%",
 				"category": "Developer"
@@ -2060,7 +2076,13 @@
 			},
 			{
 				"command": "github.copilot.chat.manageBYOK",
-				"title": "Manage Bring Your Own Key Vendor"
+				"title": "Manage Bring Your Own Key Vendor",
+				"enablement": "false"
+			},
+			{
+				"command": "github.copilot.chat.configureCustomOAIModels",
+				"title": "Configure Custom OpenAI-Compatible Models",
+				"category": "GitHub Copilot"
 			}
 		],
 		"configuration": [
@@ -2146,11 +2168,6 @@
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "%github.copilot.config.useProjectTemplates%"
-					},
-					"github.copilot.chat.agent.runTasks": {
-						"type": "boolean",
-						"default": true,
-						"description": "%github.copilot.config.agent.runTasks%"
 					},
 					"github.copilot.nextEditSuggestions.enabled": {
 						"type": "boolean",
@@ -2836,15 +2853,6 @@
 						},
 						"markdownDescription": "Configure custom OpenAI-compatible models. Each key should be a unique model ID, and the value should be an object with model configuration including name, url, toolCalling, vision, maxInputTokens, and maxOutputTokens properties."
 					},
-					"github.copilot.chat.byok.responsesApi": {
-						"type": "boolean",
-						"default": false,
-						"tags": [
-							"experimental",
-							"onExP"
-						],
-						"markdownDescription": "%github.copilot.config.byok.responsesApi%"
-					},
 					"github.copilot.chat.enableRetryAfterFilteredResponse": {
 						"type": "boolean",
 						"default": true,
@@ -2889,6 +2897,11 @@
 				"id": "github.copilot.chat.debug.filter",
 				"label": "Filter",
 				"icon": "$(filter)"
+			},
+			{
+				"id": "github.copilot.chat.debug.exportAllPromptLogsAsJson",
+				"label": "Export All Logs as JSON",
+				"icon": "$(file-export)"
 			}
 		],
 		"menus": {
@@ -3095,6 +3108,14 @@
 					"when": "false"
 				},
 				{
+					"command": "github.copilot.chat.debug.exportPromptLogsAsJson",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.debug.exportAllPromptLogsAsJson",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.chat.mcp.setup.check",
 					"when": "false"
 				},
@@ -3114,6 +3135,11 @@
 					"group": "navigation"
 				},
 				{
+					"command": "github.copilot.chat.debug.exportAllPromptLogsAsJson",
+					"when": "view == copilot-chat",
+					"group": "export@1"
+				},
+				{
 					"command": "github.copilot.debug.showChatLogView",
 					"when": "view == workbench.panel.chat.view.copilot",
 					"group": "3_show"
@@ -3129,6 +3155,11 @@
 					"command": "github.copilot.chat.debug.exportPromptArchive",
 					"when": "view == copilot-chat && viewItem == chatprompt",
 					"group": "export@2"
+				},
+				{
+					"command": "github.copilot.chat.debug.exportPromptLogsAsJson",
+					"when": "view == copilot-chat && viewItem == chatprompt",
+					"group": "export@3"
 				}
 			],
 			"searchPanel/aiResults/commands": [
@@ -3798,8 +3829,13 @@
 		"vite-plugin-top-level-await": "^1.5.0",
 		"vite-plugin-wasm": "^3.5.0",
 		"vitest": "^3.0.5",
+		"vscode-languageserver-protocol": "^3.17.5",
+		"vscode-languageserver-textdocument": "^1.0.12",
+		"vscode-languageserver-types": "^3.17.5",
 		"yaml": "^2.8.0",
-		"zeromq": "github:rebornix/zeromq.js#a19e8e373b3abc677f91b936d3f00d49b1b61792"
+		"zeromq": "github:rebornix/zeromq.js#a19e8e373b3abc677f91b936d3f00d49b1b61792",
+		"js-yaml": "^4.1.0",
+		"@types/js-yaml": "^4.0.9"
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "^0.56.0",
@@ -3807,7 +3843,7 @@
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@modelcontextprotocol/sdk": "^1.16.0",
 		"@roamhq/mac-ca": "^1.0.7",
-        "@vscode/copilot-api": "^0.1.4",
+		"@vscode/copilot-api": "^0.1.5",
 		"@vscode/extension-telemetry": "^1.0.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",
@@ -3822,9 +3858,9 @@
 		"markdown-it": "^14.1.0",
 		"minimatch": "^10.0.3",
 		"undici": "^7.11.0",
-		"vscode-languageserver-textdocument": "^1.0.12",
 		"vscode-tas-client": "^0.1.84",
-		"web-tree-sitter": "^0.23.0"
+		"web-tree-sitter": "^0.23.0",
+		"diff": "^8.0.2"
 	},
 	"overrides": {
 		"@aminya/node-gyp-build": "npm:node-gyp-build@4.8.1",

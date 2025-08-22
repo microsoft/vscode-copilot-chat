@@ -8,10 +8,10 @@ import { ComputeEmbeddingsOptions, Embedding, EmbeddingType, EmbeddingVector, Em
 import { RemoteEmbeddingsComputer } from '../../src/platform/embeddings/common/remoteEmbeddingsComputer';
 import { ICAPIClientService } from '../../src/platform/endpoint/common/capiClient';
 import { IDomainService } from '../../src/platform/endpoint/common/domainService';
-import { IEndpointProvider } from '../../src/platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../src/platform/env/common/envService';
 import { IFetcherService } from '../../src/platform/networking/common/fetcherService';
 import { ITelemetryService } from '../../src/platform/telemetry/common/telemetry';
+import { CallTracker } from '../../src/util/common/telemetryCorrelationId';
 import { computeSHA256 } from './hash';
 
 export class CacheableEmbeddingRequest {
@@ -48,7 +48,6 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
-		@IEndpointProvider endpointProvider: IEndpointProvider,
 		@IEnvService envService: IEnvService,
 		@IFetcherService fetcherService: IFetcherService
 	) {
@@ -66,7 +65,8 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 		type: EmbeddingType,
 		inputs: string[],
 		options: ComputeEmbeddingsOptions,
-		cancellationToken: CancellationToken | undefined,
+		telemetryInfo: CallTracker,
+		token: CancellationToken | undefined,
 	): Promise<Embeddings | undefined> {
 		const embeddingEntries = new Map<string, Embedding>();
 		const nonCached: string[] = [];
@@ -87,7 +87,7 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 		}
 
 		if (nonCached.length) {
-			const embeddingsResult = await super.computeEmbeddings(type, nonCached, options, cancellationToken);
+			const embeddingsResult = await super.computeEmbeddings(type, nonCached, options, telemetryInfo, token);
 			if (!embeddingsResult) {
 				return undefined;
 			}

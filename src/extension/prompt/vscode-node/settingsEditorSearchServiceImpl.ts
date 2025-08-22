@@ -8,6 +8,7 @@ import { EmbeddingType, IEmbeddingsComputer } from '../../../platform/embeddings
 import { ICombinedEmbeddingIndex, SettingListItem } from '../../../platform/embeddings/common/vscodeIndex';
 import { ChatEndpointFamily, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ISettingsEditorSearchService } from '../../../platform/settingsEditor/common/settingsEditorSearchService';
+import { CallTracker } from '../../../util/common/telemetryCorrelationId';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { SettingsEditorSearchResultsSelector } from '../node/settingsEditorSearchResultsSelector';
 
@@ -34,7 +35,7 @@ export class SettingsEditorSearchServiceImpl implements ISettingsEditorSearchSer
 			settings: []
 		};
 
-		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [query], {}, token);
+		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [query], {}, new CallTracker('SettingsEditorSearchServiceImpl::provideSettingsSearchResults'), token);
 		if (token.isCancellationRequested) {
 			progress.report(canceledBundle);
 			return;

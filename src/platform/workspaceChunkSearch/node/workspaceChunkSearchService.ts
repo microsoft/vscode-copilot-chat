@@ -8,7 +8,7 @@ import type * as vscode from 'vscode';
 import { createFencedCodeBlock, getLanguageId } from '../../../util/common/markdown';
 import { Result } from '../../../util/common/result';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
+import { CallTracker, TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { CancelablePromise, createCancelablePromise, raceCancellationError, raceTimeout } from '../../../util/vs/base/common/async';
@@ -637,7 +637,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		})));
 	}
 
-	@LogExecTime(self => self._logService, 'WorkspaceChunkSearch.rerankResultIfNeeded')
+	@LogExecTime(self => self._logService, 'WorkspaceChunkSearch::rerankResultIfNeeded')
 	private async rerankResultIfNeeded(query: WorkspaceChunkQueryWithEmbeddings, result: StrategySearchOk, maxResults: number, telemetryInfo: TelemetryCorrelationId, progress: vscode.Progress<vscode.ChatResponsePart> | undefined, token: CancellationToken): Promise<WorkspaceChunkSearchResult> {
 		// If we have full workspace results, use those directly without re-ranking
 		if (result.strategy === WorkspaceChunkSearchStrategyId.FullWorkspace) {
@@ -660,7 +660,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		};
 	}
 
-	@LogExecTime(self => self._logService, 'WorkspaceChunkSearch.rerankChunks')
+	@LogExecTime(self => self._logService, 'WorkspaceChunkSearch::rerankChunks')
 	private async rerankChunks(query: WorkspaceChunkQueryWithEmbeddings, inChunks: readonly FileChunkAndScore[], maxResults: number, telemetryInfo: TelemetryCorrelationId, progress: vscode.Progress<vscode.ChatResponsePart> | undefined, token: CancellationToken): Promise<FileChunkAndScore[]> {
 		if (!inChunks.length) {
 			return [];
@@ -776,7 +776,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 	}
 
 	private async computeEmbeddings(inputType: 'query' | 'document', strings: readonly string[], token: CancellationToken): Promise<Embeddings> {
-		const embeddings = await this._embeddingsComputer.computeEmbeddings(this._embeddingType, strings, { inputType }, token);
+		const embeddings = await this._embeddingsComputer.computeEmbeddings(this._embeddingType, strings, { inputType }, new CallTracker('WorkspaceChunkSearchService::computeEmbeddings'), token);
 		if (!embeddings) {
 			throw new Error('Timeout computing embeddings');
 		}

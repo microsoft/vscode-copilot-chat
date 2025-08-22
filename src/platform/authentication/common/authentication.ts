@@ -286,7 +286,7 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 		}
 
 		if (anyAdoSessionBefore?.accessToken !== this._anyAdoSession?.accessToken) {
-			this._logService.debug('Ado auth state changed, firing event.');
+			this._logService.debug(`Ado auth state changed, firing event. Had token before: ${!!anyAdoSessionBefore?.accessToken}. Has token now: ${!!this._anyAdoSession?.accessToken}.`);
 			this._onDidAdoAuthenticationChange.fire();
 			return;
 		}

@@ -4,14 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatRequestHandleOptions, Progress } from 'vscode';
-import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
+import { IChatModelInformation, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotLanguageModelWrapper } from '../../conversation/vscode-node/languageModelAccess';
 import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, LMResponsePart, resolveModelInfo } from '../common/byokProvider';
 import { OpenAIEndpoint } from '../node/openAIEndpoint';
-import { OpenAIResponsesEndpoint } from '../node/openAIResponsesEndpoint';
 import { IBYOKStorageService } from './byokStorageService';
 import { promptForAPIKey } from './byokUIService';
 
@@ -86,7 +85,7 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 	}
 	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: LanguageModelChatRequestHandleOptions, progress: Progress<LMResponsePart>, token: CancellationToken): Promise<any> {
 		const openAIChatEndpoint = await this.getEndpointImpl(model);
-		return this._lmWrapper.provideLanguageModelResponse(openAIChatEndpoint, messages, options, options.extensionId, progress, token);
+		return this._lmWrapper.provideLanguageModelResponse(openAIChatEndpoint, messages, options, options.requestInitiator, progress, token);
 	}
 	async provideTokenCount(model: LanguageModelChatInformation, text: string | LanguageModelChatMessage | LanguageModelChatMessage2, token: CancellationToken): Promise<number> {
 		const openAIChatEndpoint = await this.getEndpointImpl(model);
@@ -95,11 +94,10 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 
 	private async getEndpointImpl(model: LanguageModelChatInformation): Promise<OpenAIEndpoint> {
 		const modelInfo: IChatModelInformation = await this.getModelInfo(model.id, this._apiKey);
-		if (modelInfo.capabilities.supports.statefulResponses) {
-			return this._instantiationService.createInstance(OpenAIResponsesEndpoint, modelInfo, this._apiKey ?? '', `${this._baseUrl}/responses`);
-		} else {
-			return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, this._apiKey ?? '', `${this._baseUrl}/chat/completions`);
-		}
+		const url = modelInfo.supported_endpoints?.includes(ModelSupportedEndpoint.Responses) ?
+			`${this._baseUrl}/responses` :
+			`${this._baseUrl}/chat/completions`;
+		return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, this._apiKey ?? '', url);
 	}
 
 	async updateAPIKey(): Promise<void> {

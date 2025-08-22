@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
+import { IChatModelInformation, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -22,7 +22,7 @@ export class OAIBYOKLMProvider extends BaseOpenAICompatibleLMProvider {
 		@ILogService _logService: ILogService,
 		@IInstantiationService _instantiationService: IInstantiationService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IExperimentationService private readonly _experimentationService: IExperimentationService
+		@IExperimentationService private readonly _expService: IExperimentationService
 	) {
 		super(
 			BYOKAuthType.GlobalApiKey,
@@ -32,13 +32,20 @@ export class OAIBYOKLMProvider extends BaseOpenAICompatibleLMProvider {
 			byokStorageService,
 			_fetcherService,
 			_logService,
-			_instantiationService
+			_instantiationService,
 		);
 	}
 
 	protected override async getModelInfo(modelId: string, apiKey: string | undefined, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
-		const info = await super.getModelInfo(modelId, apiKey, modelCapabilities);
-		info.capabilities.supports.statefulResponses = this._configurationService.getExperimentBasedConfig(ConfigKey.ByokResponsesApi, this._experimentationService);
-		return info;
+		const modelInfo = await super.getModelInfo(modelId, apiKey, modelCapabilities);
+		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseResponsesApi, this._expService);
+		if (enableResponsesApi) {
+			modelInfo.supported_endpoints = [
+				ModelSupportedEndpoint.ChatCompletions,
+				ModelSupportedEndpoint.Responses
+			];
+		}
+
+		return modelInfo;
 	}
 }

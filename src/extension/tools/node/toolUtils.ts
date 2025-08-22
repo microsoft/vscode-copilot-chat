@@ -5,6 +5,7 @@
 
 import { PromptElement, PromptPiece } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
+import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 import { RelativePattern } from '../../../platform/filesystem/common/fileTypes';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
@@ -85,8 +86,9 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI):
 	const tabsAndEditorsService = accessor.get(ITabsAndEditorsService);
 	const ignoreService = accessor.get(IIgnoreService);
 	const promptPathRepresentationService = accessor.get(IPromptPathRepresentationService);
+	const customInstructionsService = accessor.get(ICustomInstructionsService);
 
-	if (!workspaceService.getWorkspaceFolder(normalizePath(uri))) {
+	if (!workspaceService.getWorkspaceFolder(normalizePath(uri)) && !customInstructionsService.isExternalInstructionsFile(uri)) {
 		const fileOpenInSomeTab = tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri));
 		if (!fileOpenInSomeTab) {
 			throw new Error(`File ${promptPathRepresentationService.getFilePath(uri)} is outside of the workspace, and not open in an editor, and can't be read`);

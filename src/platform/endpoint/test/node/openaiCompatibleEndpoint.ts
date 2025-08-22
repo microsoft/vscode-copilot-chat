@@ -8,16 +8,20 @@ import { TokenizerType } from '../../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
+import { IConfigurationService } from '../../../configuration/common/configurationService';
 import { IEnvService } from '../../../env/common/envService';
+import { isOpenAiFunctionTool } from '../../../networking/common/fetch';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { IChatEndpoint, IEndpointBody } from '../../../networking/common/networking';
 import { CAPIChatMessage } from '../../../networking/common/openai';
+import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../../common/capiClient';
 import { IDomainService } from '../../common/domainService';
 import { IChatModelInformation } from '../../common/endpointProvider';
 import { ChatEndpoint } from '../../node/chatEndpoint';
+import { ILogService } from '../../../log/common/logService';
 
 export type IModelConfig = {
 	id: string;
@@ -79,7 +83,10 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 		@IAuthenticationService authService: IAuthenticationService,
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
-		@IInstantiationService private instantiationService: IInstantiationService
+		@IInstantiationService private instantiationService: IInstantiationService,
+		@IConfigurationService configurationService: IConfigurationService,
+		@IExperimentationService experimentationService: IExperimentationService,
+		@ILogService logService: ILogService
 	) {
 		const modelInfo: IChatModelInformation = {
 			id: modelConfig.id,
@@ -117,7 +124,10 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
-			instantiationService
+			instantiationService,
+			configurationService,
+			experimentationService,
+			logService
 		);
 	}
 
@@ -204,6 +214,14 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 			}
 		}
 
+		if (body?.tools) {
+			body.tools = body.tools.map(tool => {
+				if (isOpenAiFunctionTool(tool) && tool.function.parameters === undefined) {
+					tool.function.parameters = { type: "object", properties: {} };
+				}
+				return tool;
+			});
+		}
 
 		if (this.modelConfig.type === 'openai') {
 			if (body) {

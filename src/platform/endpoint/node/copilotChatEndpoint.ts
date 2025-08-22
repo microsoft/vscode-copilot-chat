@@ -19,20 +19,26 @@ import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
 import { IChatModelInformation } from '../common/endpointProvider';
 import { ChatEndpoint } from './chatEndpoint';
+import { IConfigurationService } from '../../configuration/common/configurationService';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
+import { ILogService } from '../../log/common/logService';
 
 export class CopilotChatEndpoint extends ChatEndpoint {
 	constructor(
-		readonly modelMetadata: IChatModelInformation,
-		@IDomainService readonly domainService: IDomainService,
-		@ICAPIClientService readonly capiClientService: ICAPIClientService,
-		@IFetcherService readonly fetcherService: IFetcherService,
-		@IEnvService readonly envService: IEnvService,
-		@ITelemetryService readonly telemetryService: ITelemetryService,
-		@IAuthenticationService readonly authService: IAuthenticationService,
-		@IChatMLFetcher readonly chatMLFetcher: IChatMLFetcher,
-		@ITokenizerProvider readonly tokenizerProvider: ITokenizerProvider,
-		@IInstantiationService readonly instantiationService: IInstantiationService,
-		@IThinkingDataService readonly thinkingDataService: IThinkingDataService,
+		modelMetadata: IChatModelInformation,
+		@IDomainService domainService: IDomainService,
+		@ICAPIClientService capiClientService: ICAPIClientService,
+		@IFetcherService fetcherService: IFetcherService,
+		@IEnvService envService: IEnvService,
+		@ITelemetryService telemetryService: ITelemetryService,
+		@IAuthenticationService authService: IAuthenticationService,
+		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
+		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
+		@IInstantiationService instantiationService: IInstantiationService,
+		@IThinkingDataService private readonly thinkingDataService: IThinkingDataService,
+		@IConfigurationService configurationService: IConfigurationService,
+		@IExperimentationService experimentService: IExperimentationService,
+		@ILogService logService: ILogService
 	) {
 		super(
 			modelMetadata,
@@ -44,7 +50,10 @@ export class CopilotChatEndpoint extends ChatEndpoint {
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
-			instantiationService
+			instantiationService,
+			configurationService,
+			experimentService,
+			logService
 		);
 	}
 

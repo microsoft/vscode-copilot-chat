@@ -217,7 +217,7 @@ export class TfidfChunkSearch extends Disposable implements IWorkspaceChunkSearc
 		});
 	}
 
-	@LogExecTime(self => self._logService)
+	@LogExecTime(self => self._logService, 'TfIdfChunkSearch::initializeWholeWorkspace')
 	private initializeWholeWorkspace(): Promise<void> {
 		this._initializePromise ??= this.initializeWorkspaceFiles();
 		return this._initializePromise;
@@ -294,7 +294,7 @@ export class TfidfChunkSearch extends Disposable implements IWorkspaceChunkSearc
 	/**
 	 * Initialize the index for a subset of files in the workspace.
 	 */
-	@LogExecTime(self => self._logService)
+	@LogExecTime(self => self._logService, 'TfIdfChunkSearch::initializeForSubsetFiles')
 	private async initializeForSubsetFiles(files: readonly URI[]): Promise<void> {
 		await logExecTime(this._logService, 'initialize workspaceIndex', () => this._workspaceIndex.initialize());
 		if (this._isDisposed) {

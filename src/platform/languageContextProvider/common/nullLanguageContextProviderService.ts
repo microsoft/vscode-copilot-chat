@@ -16,6 +16,10 @@ export class NullLanguageContextProviderService implements ILanguageContextProvi
 		return Disposable.None;
 	}
 
+	getAllProviders(): readonly Copilot.ContextProvider<Copilot.SupportedContextItem>[] {
+		return [];
+	}
+
 	getContextProviders(doc: TextDocument): Copilot.ContextProvider<Copilot.SupportedContextItem>[] {
 		return [];
 	}
