@@ -109,7 +109,6 @@ extends:
           popd
           rm src/extension/completions/vscode-node/completionsCoreContribution.ts
           mv src/extension/completions/vscode-node/completionsCoreContribution.ts.txt src/extension/completions/vscode-node/completionsCoreContribution.ts
-          rm src/extension/completions-core/esbuild.ts
         condition: and(succeeded(), eq(${{ parameters.mixinCompletionsCore }}, true))
         displayName: Mixin the completions core repo
 
@@ -189,7 +188,6 @@ extends:
           popd
           rm src/extension/completions/vscode-node/completionsCoreContribution.ts
           mv src/extension/completions/vscode-node/completionsCoreContribution.ts.txt src/extension/completions/vscode-node/completionsCoreContribution.ts
-          rm src/extension/completions-core/esbuild.ts
         condition: and(succeeded(), eq(${{ parameters.mixinCompletionsCore }}, true))
         displayName: Mixin the completions core repo
 
