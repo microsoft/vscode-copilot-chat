@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { commands, LanguageModelChatInformation, lm, window } from 'vscode';
+import { commands, LanguageModelChatInformation, lm } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
@@ -45,57 +45,9 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			const provider = this._providers.get(vendor);
 
 			// Show quick pick for Azure and CustomOAI providers
-			if (vendor === AzureBYOKModelProvider.providerName.toLowerCase() || vendor === CustomOAIBYOKModelProvider.providerName.toLowerCase()) {
-				interface BYOKQuickPickItem {
-					label: string;
-					detail: string;
-					action: 'apiKey' | 'configureModels';
-				}
-
-				const options: BYOKQuickPickItem[] = [
-					{
-						label: '$(key) Manage API Key',
-						detail: 'Update or configure the API key for this provider',
-						action: 'apiKey'
-					},
-					{
-						label: '$(settings-gear) Configure Models',
-						detail: 'Add, edit, or remove model configurations',
-						action: 'configureModels'
-					}
-				];
-
-				const quickPick = window.createQuickPick<BYOKQuickPickItem>();
-				quickPick.title = `Manage ${vendor === AzureBYOKModelProvider.providerName.toLowerCase() ? 'Azure' : 'Custom OpenAI'} Provider`;
-				quickPick.placeholder = 'Choose an action';
-				quickPick.items = options;
-				quickPick.ignoreFocusOut = true;
-
-				const selected = await new Promise<BYOKQuickPickItem | undefined>((resolve) => {
-					quickPick.onDidAccept(() => {
-						const selectedItem = quickPick.selectedItems[0];
-						resolve(selectedItem);
-						quickPick.hide();
-					});
-
-					quickPick.onDidHide(() => {
-						resolve(undefined);
-					});
-
-					quickPick.show();
-				});
-
-				if (selected?.action === 'apiKey' && provider) {
-					await provider.updateAPIKey();
-				} else if (selected?.action === 'configureModels') {
-					if (vendor === AzureBYOKModelProvider.providerName.toLowerCase()) {
-						const configurator = new CustomOAIModelConfigurator(this._configurationService, ConfigKey.AzureModels, true);
-						await configurator.configure();
-					} else if (vendor === CustomOAIBYOKModelProvider.providerName.toLowerCase()) {
-						const configurator = new CustomOAIModelConfigurator(this._configurationService);
-						await configurator.configure();
-					}
-				}
+			if (provider && (vendor === AzureBYOKModelProvider.providerName.toLowerCase() || vendor === CustomOAIBYOKModelProvider.providerName.toLowerCase())) {
+				const configurator = new CustomOAIModelConfigurator(this._configurationService, vendor, provider);
+				await configurator.configureModelOrUpdateAPIKey();
 			} else if (provider) {
 				// For all other providers, directly go to API key management
 				await provider.updateAPIKey();

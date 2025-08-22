@@ -13,6 +13,7 @@ import { BYOKAuthType, BYOKKnownModels, BYOKModelProvider, LMResponsePart, resol
 import { OpenAIEndpoint } from '../node/openAIEndpoint';
 import { IBYOKStorageService } from './byokStorageService';
 import { promptForAPIKey } from './byokUIService';
+import { CustomOAIModelConfigurator } from './customOAIModelConfigurator';
 
 export function resolveCustomOAIUrl(modelId: string, url: string): string {
 	// The fully resolved url was already passed in
@@ -135,7 +136,11 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 
 	async prepareLanguageModelChatInformation(options: { silent: boolean }, token: CancellationToken): Promise<CustomOAIModelInfo[]> {
 		try {
-			const knownModels = await this.getModelsWithAPIKeys(options.silent);
+			let knownModels = await this.getModelsWithAPIKeys(options.silent);
+			if (Object.keys(knownModels).length === 0 && !options.silent) {
+				await new CustomOAIModelConfigurator(this._configurationService, this.providerName.toLowerCase(), this).configure();
+				knownModels = await this.getModelsWithAPIKeys(options.silent);
+			}
 			return Object.entries(knownModels).map(([id, capabilities]) => {
 				return this.createModelInfo(id, capabilities);
 			});
