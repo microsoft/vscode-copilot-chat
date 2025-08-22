@@ -61,8 +61,8 @@ export class ChatReplayIntent implements IIntent {
 	private async processStep(step: ChatStep, replay: ChatReplayResponses, stream: vscode.ChatResponseStream, toolToken: vscode.ChatParticipantToolToken): Promise<void> {
 		switch (step.kind) {
 			case 'userQuery':
-				stream.markdown(`**User Query:**\n\n${step.query}\n\n`);
-				stream.markdown(`**Response:**\n\n`);
+				stream.markdown(`\n\n---\n\n## User Query:\n\n${step.query}\n\n`);
+				stream.markdown(`## Response:\n\n---\n`);
 				break;
 			case 'request':
 				stream.markdown(`\n\n${step.result}`);
