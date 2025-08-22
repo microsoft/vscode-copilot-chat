@@ -5,6 +5,7 @@
 
 import { t } from '@vscode/l10n';
 import * as vscode from 'vscode';
+import { ILogService } from '../../../platform/log/common/logService';
 import { ICodeSearchAuthenticationService } from '../../../platform/remoteCodeSearch/node/codeSearchRepoAuth';
 import { RepoStatus, ResolvedRepoEntry } from '../../../platform/remoteCodeSearch/node/codeSearchRepoTracker';
 import { LocalEmbeddingsIndexStatus } from '../../../platform/workspaceChunkSearch/node/embeddingsChunkSearch';
@@ -78,12 +79,13 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 	private readonly minOutdatedFileCountToShow = 20;
 
 	constructor(
+		@IWorkspaceChunkSearchService workspaceChunkSearch: IWorkspaceChunkSearchService,
 		@ICodeSearchAuthenticationService private readonly _codeSearchAuthService: ICodeSearchAuthenticationService,
-		@IWorkspaceChunkSearchService _workspaceChunkSearch: IWorkspaceChunkSearchService,
+		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
 
-		this._statusReporter = _workspaceChunkSearch;
+		this._statusReporter = workspaceChunkSearch;
 
 		this._statusItem = this._register(vscode.window.createChatStatusItem('copilot.workspaceIndexStatus'));
 		this._statusItem.title = statusTitle;
@@ -110,23 +112,34 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 
 	private async _updateStatusItem(): Promise<void> {
 		const id = ++this.currentUpdateRequestId;
+		this._logService.trace(`ChatStatusWorkspaceIndexingStatus::updateStatusItem(id=${id}): starting`);
 
 		const state = await this._statusReporter.getIndexState();
 
 		// Make sure a new request hasn't come in since we started
 		if (id !== this.currentUpdateRequestId) {
+			this._logService.trace(`ChatStatusWorkspaceIndexingStatus::updateStatusItem(id=${id}): skipping`);
 			return;
 		}
 
-		const remoteIndexMessage = {
+		const remotelyIndexedMessage = Object.freeze({
 			title: t('Remotely indexed'),
 			learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
-		};
+		});
 
 		// If we have remote index info, prioritize showing information related to it
 		switch (state.remoteIndexState.status) {
 			case 'initializing':
-				return this._writeInitializingStatus();
+				return this._writeStatusItem({
+					title: {
+						title: t('Remote index'),
+						learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
+					},
+					details: {
+						message: t('Discovering repos'),
+						busy: true,
+					},
+				});
 
 			case 'loaded': {
 				if (state.remoteIndexState.repos.length > 0) {
@@ -136,18 +149,27 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 
 					if (state.remoteIndexState.repos.every(repo => repo.status === RepoStatus.Ready)) {
 						return this._writeStatusItem({
-							title: remoteIndexMessage,
+							title: remotelyIndexedMessage,
 							details: undefined
 						});
 					}
 
-					if (state.remoteIndexState.repos.some(repo => repo.status === RepoStatus.CheckingStatus || RepoStatus.Initializing)) {
-						return this._writeInitializingStatus();
+					if (state.remoteIndexState.repos.some(repo => repo.status === RepoStatus.CheckingStatus || repo.status === RepoStatus.Initializing)) {
+						return this._writeStatusItem({
+							title: {
+								title: t('Remote index'),
+								learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
+							},
+							details: {
+								message: t('Checking status'),
+								busy: true,
+							},
+						});
 					}
 
 					if (state.remoteIndexState.repos.some(repo => repo.status === RepoStatus.BuildingIndex)) {
 						return this._writeStatusItem({
-							title: remoteIndexMessage,
+							title: remotelyIndexedMessage,
 							details: {
 								message: t('Building'),
 								busy: true,
@@ -212,19 +234,6 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 		this._writeStatusItem(localStatus);
 	}
 
-	private _writeInitializingStatus(): void | PromiseLike<void> {
-		return this._writeStatusItem({
-			title: {
-				title: t('Remote index'),
-				learnMoreLink: 'https://aka.ms/vscode-copilot-workspace-remote-index',
-			},
-			details: {
-				message: t('Checking status'),
-				busy: true,
-			},
-		});
-	}
-
 	private async getLocalIndexStatusItem(state: WorkspaceIndexState): Promise<ChatStatusItemState | undefined> {
 		const getProgress = async () => {
 			const localState = await state.localIndexState.getState();
@@ -276,6 +285,8 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 	}
 
 	private _writeStatusItem(values: ChatStatusItemState | undefined) {
+		this._logService.trace(`ChatStatusWorkspaceIndexingStatus::_writeStatusItem()`);
+
 		if (!values) {
 			this._statusItem.hide();
 			return;

@@ -11,6 +11,7 @@ import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
 import { AbstractReplaceStringTool } from './abstractReplaceStringTool';
 import { IReplaceStringToolParams } from './replaceStringTool';
+import { resolveToolInputPath } from './toolUtils';
 
 export interface IMultiReplaceStringToolParams {
 	explanation: string;
@@ -19,6 +20,10 @@ export interface IMultiReplaceStringToolParams {
 
 export class MultiReplaceStringTool extends AbstractReplaceStringTool<IMultiReplaceStringToolParams> {
 	public static toolName = ToolName.MultiReplaceString;
+
+	protected override urisForInput(input: IMultiReplaceStringToolParams): readonly URI[] {
+		return input.replacements.map(r => resolveToolInputPath(r.filePath, this.promptPathRepresentationService));
+	}
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IMultiReplaceStringToolParams>, token: vscode.CancellationToken) {
 		if (!options.input.replacements || !Array.isArray(options.input.replacements)) {

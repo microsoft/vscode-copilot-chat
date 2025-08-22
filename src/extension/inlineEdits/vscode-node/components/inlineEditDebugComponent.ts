@@ -17,7 +17,7 @@ import { XtabProvider } from '../../../xtab/node/xtabProvider';
 import { defaultNextEditProviderId } from '../../node/createNextEditProvider';
 import { DebugRecorder } from '../../node/debugRecorder';
 
-const reportFeedbackCommandId = 'github.copilot.debug.inlineEdit.reportFeedback';
+export const reportFeedbackCommandId = 'github.copilot.debug.inlineEdit.reportFeedback';
 const pickProviderId = 'github.copilot.debug.inlineEdit.pickProvider';
 
 export type InlineCompletionCommand = { command: Command; icon: ThemeIcon };
@@ -73,7 +73,9 @@ export class InlineEditDebugComponent extends Disposable {
 
 				{
 					const uiRepro = await extractInlineEditRepro();
-					data.appendSection('UI Repro', ['```', uiRepro, '```']);
+					if (uiRepro) {
+						data.appendSection('UI Repro', ['```', uiRepro, '```']);
+					}
 				}
 			}
 
@@ -208,8 +210,8 @@ export function filterLogForSensitiveFiles(log: LogEntry[]): LogEntry[] {
 
 async function extractInlineEditRepro() {
 	const commandId = 'editor.action.inlineSuggest.dev.extractRepro';
-	const result: { reproCase: string } = await commands.executeCommand(commandId);
-	return result.reproCase;
+	const result: { reproCase: string } | undefined = await commands.executeCommand(commandId);
+	return result?.reproCase;
 }
 
 class SimpleMarkdownBuilder {

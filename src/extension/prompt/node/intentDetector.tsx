@@ -215,6 +215,7 @@ export class IntentDetector implements ChatParticipantDetectionProvider {
 			undefined,
 			{
 				stop: [';'],
+				max_tokens: 20
 			}
 		);
 		const intent = this.validateResult(fetchResult, baseUserTelemetry, messageText, location, preferredIntent, thirdPartyParticipants ? thirdPartyParticipants : builtinParticipants, documentContext);

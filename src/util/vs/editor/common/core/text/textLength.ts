@@ -4,9 +4,9 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { LineRange } from '../ranges/lineRange';
 import { Position } from '../position';
 import { Range } from '../range';
-import { LineRange } from '../ranges/lineRange';
 import { OffsetRange } from '../ranges/offsetRange';
 
 /**

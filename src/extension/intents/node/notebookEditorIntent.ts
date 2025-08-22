@@ -33,7 +33,7 @@ import { IToolsService } from '../../tools/common/toolsService';
 import { EditCodeIntent, EditCodeIntentOptions } from './editCodeIntent';
 import { EditCode2IntentInvocation } from './editCodeIntent2';
 import { getRequestedToolCallIterationLimit } from './toolCallingLoop';
-import { modelSupportsReplaceString } from '../../../platform/endpoint/common/chatModelCapabilities';
+import { modelSupportsMultiReplaceString, modelSupportsReplaceString } from '../../../platform/endpoint/common/chatModelCapabilities';
 
 const getTools = (instaService: IInstantiationService, request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> =>
 	instaService.invokeFunction(async accessor => {
@@ -52,7 +52,7 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 
 		if (modelSupportsReplaceString(model)) {
 			lookForTools.add(ToolName.ReplaceString);
-			if (configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
+			if (modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
 				lookForTools.add(ToolName.MultiReplaceString);
 			}
 		}

@@ -5,7 +5,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { observableValueOpts, IObservable, ITransaction } from '../observable';
+import { IObservable, ITransaction } from '../observable';
+import { observableValueOpts } from './observables/observableValueOpts';
+
 
 export class ObservableMap<K, V> implements Map<K, V> {
 	private readonly _data = new Map<K, V>();

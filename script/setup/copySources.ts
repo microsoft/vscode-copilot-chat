@@ -101,9 +101,6 @@ async function doIt(filepaths: string[]) {
 			newSource = newSource.slice(0, edit.pos + 1) + edit.newText + newSource.slice(edit.end + 1);
 		}
 
-		if (filepath.endsWith('src/vs/nls.ts')) {
-			newSource = 'declare var document: any;\n\n' + newSource;
-		}
 		newSource = '//!!! DO NOT modify, this file was COPIED from \'microsoft/vscode\'\n\n' + newSource;
 
 		seen.set(filepath, {
@@ -163,6 +160,13 @@ async function doIt(filepaths: string[]) {
 			'vs/base/node/ports.ts',
 
 			'vs/platform/instantiation/common/instantiationService.ts',
+			'vs/editor/common/core/edits/lineEdit.ts',
+			'vs/editor/common/core/edits/lengthEdit.ts',
+			'vs/editor/common/core/edits/arrayEdit.ts',
+			'vs/editor/common/core/text/positionToOffset.ts',
+
+			'vs/base/common/sseParser.ts',
+			'vs/base/common/errorMessage.ts',
 
 			// SPECIAL IMPLICIT DEPENDENCIES
 			'typings/vscode-globals-nls.d.ts',

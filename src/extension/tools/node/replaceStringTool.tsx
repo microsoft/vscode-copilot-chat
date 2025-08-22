@@ -4,9 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { URI } from '../../../util/vs/base/common/uri';
 import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
 import { AbstractReplaceStringTool } from './abstractReplaceStringTool';
+import { resolveToolInputPath } from './toolUtils';
 
 export interface IReplaceStringToolParams {
 	explanation: string;
@@ -17,6 +19,10 @@ export interface IReplaceStringToolParams {
 
 export class ReplaceStringTool extends AbstractReplaceStringTool<IReplaceStringToolParams> {
 	public static toolName = ToolName.ReplaceString;
+
+	protected override urisForInput(input: IReplaceStringToolParams): readonly URI[] {
+		return [resolveToolInputPath(input.filePath, this.promptPathRepresentationService)];
+	}
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IReplaceStringToolParams>, token: vscode.CancellationToken) {
 		const prepared = await this.prepareEditsForFile(options, options.input, token);

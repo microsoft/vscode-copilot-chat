@@ -68,7 +68,7 @@ export class DocsSearchClient implements IDocsSearchClient {
 
 	search(query: string, scopingQuery: ICodeOrDocsSearchSingleRepoScopingQuery, options?: ICodeOrDocsSearchOptions, token?: CancellationToken): Promise<ICodeOrDocsSearchItem[]>;
 	search(query: string, scopingQuery: ICodeOrDocsSearchMultiRepoScopingQuery, options?: ICodeOrDocsSearchOptions, token?: CancellationToken): Promise<ICodeOrDocsSearchResult>;
-	@LogExecTime(self => self._logService, 'CodeOrDocsSearchClientImpl.search')
+	@LogExecTime(self => self._logService, 'CodeOrDocsSearchClientImpl::search')
 	async search(
 		query: string,
 		scopingQuery: ICodeOrDocsSearchSingleRepoScopingQuery | ICodeOrDocsSearchMultiRepoScopingQuery,

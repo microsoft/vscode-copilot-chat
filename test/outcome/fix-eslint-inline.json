@@ -74,8 +74,8 @@
 	{
 		"name": "fix (eslint) [inline] [typescript] - Issue #7544",
 		"requests": [
-			"1c8f17395233ff30cb839780b955b19f76eccd70752d6f6b9838133bebff58c1",
-			"a7a6de2e401317f1bf5e73f894f5297d335a14e84ea59ada63bc339ded4959fe"
+			"a7a6de2e401317f1bf5e73f894f5297d335a14e84ea59ada63bc339ded4959fe",
+			"e9fdbb27b319d2b03089700b9e51b2951d19bc053b38e36fccb910b28db66499"
 		]
 	},
 	{

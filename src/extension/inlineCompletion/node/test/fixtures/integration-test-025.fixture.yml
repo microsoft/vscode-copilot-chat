@@ -1,0 +1,86 @@
+name: 'small current file, no open files, cursor near beginning, traits context'
+
+state:
+    context-items:
+        traits:
+            - name: 'funny'
+              value: 'joke'
+            - name: 'unfunny'
+              value: 'joke'
+    current-file:
+        uri: file:///dad-jokes/src/dadJoke.ts
+        language: typescript
+        text: |-
+            export class DadJoke {⮑
+
+                id: number;
+                question: string;
+                answer: string;
+                status: DadJokeStatus;
+                rating: DadJokeRating;
+
+                constructor(
+                    id: number,
+                    question: string,
+                    answer: string,
+                    status: DadJokeStatus = DadJokeStatus.Unseen,
+                    rating: DadJokeRating = DadJokeRating.Unrated
+                ) {
+                    this.id = id;
+                    this.question = question;
+                    this.answer = answer;
+                    this.status = status;
+                    this.rating = rating;
+                }
+            }
+
+            export enum DadJokeStatus {
+                Seen,
+                Unseen
+            }
+
+            export enum DadJokeRating {
+                Unrated,
+                Good,
+                Bad
+            }
+
+expected-prompt:
+    prefix: |-
+        // Path: dadJoke.ts
+        // Consider this related information:
+        // funny: joke
+        // unfunny: joke
+        export class DadJoke {
+    suffix: |-
+        id: number;
+            question: string;
+            answer: string;
+            status: DadJokeStatus;
+            rating: DadJokeRating;
+
+            constructor(
+                id: number,
+                question: string,
+                answer: string,
+                status: DadJokeStatus = DadJokeStatus.Unseen,
+                rating: DadJokeRating = DadJokeRating.Unrated
+            ) {
+                this.id = id;
+                this.question = question;
+                this.answer = answer;
+                this.status = status;
+                this.rating = rating;
+            }
+        }
+
+        export enum DadJokeStatus {
+            Seen,
+            Unseen
+        }
+
+        export enum DadJokeRating {
+            Unrated,
+            Good,
+            Bad
+        }

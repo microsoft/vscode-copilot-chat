@@ -91,10 +91,6 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		return false;
 	}
 
-	get supportsStatefulResponses() {
-		return false; // todo@connor4312 ?
-	}
-
 	get policy(): 'enabled' | { terms: string } {
 		return 'enabled';
 	}
@@ -254,7 +250,6 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 						await finishedCb?.(text, 0, { text: '', statefulMarker: decoded.marker });
 					}
 				} else if (chunk instanceof vscode.LanguageModelThinkingPart) {
-					text += chunk.value;
 					// Call finishedCb with the current chunk of thinking text with a specific thinking field
 					if (finishedCb) {
 						await finishedCb(text, 0, {

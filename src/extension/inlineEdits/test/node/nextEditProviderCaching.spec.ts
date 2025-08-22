@@ -76,7 +76,7 @@ describe('NextEditProvider Caching', () => {
 						)
 					]
 				);
-				lineEdit.edits.forEach(edit => pushEdit(Result.ok({ edit })));
+				lineEdit.replacements.forEach(edit => pushEdit(Result.ok({ edit })));
 				pushEdit(Result.error(new NoNextEditReason.NoSuggestions(request.documentBeforeEdits, undefined)));
 				return StatelessNextEditResult.streaming(telemetryBuilder);
 			}

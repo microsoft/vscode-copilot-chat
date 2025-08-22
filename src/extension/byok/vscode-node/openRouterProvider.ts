@@ -25,7 +25,7 @@ export class OpenRouterLMProvider extends BaseOpenAICompatibleLMProvider {
 			byokStorageService,
 			_fetcherService,
 			_logService,
-			_instantiationService
+			_instantiationService,
 		);
 	}
 

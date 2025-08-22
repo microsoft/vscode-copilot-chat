@@ -1,0 +1,96 @@
+name: 'small current file, no open files, cursor near beginning, code snippets in subfolder'
+state:
+    context-items:
+        code-snippets:
+            - uri: file:///dad-jokes/src/path/add.js
+              value: |-
+                  export function add(a: number, b: number): number {
+                      return a + b;
+                  }
+            - uri: file:///dad-jokes/src/path/multiply.js
+              value: |-
+                  export function multiply(a: number, b: number): number {
+                      return a * b;
+                  }
+    current-file:
+        uri: file:///dad-jokes/src/dadJoke.ts
+        language: typescript
+        text: |-
+            export class DadJoke {⮑
+
+                id: number;
+                question: string;
+                answer: string;
+                status: DadJokeStatus;
+                rating: DadJokeRating;
+
+                constructor(
+                    id: number,
+                    question: string,
+                    answer: string,
+                    status: DadJokeStatus = DadJokeStatus.Unseen,
+                    rating: DadJokeRating = DadJokeRating.Unrated
+                ) {
+                    this.id = id;
+                    this.question = question;
+                    this.answer = answer;
+                    this.status = status;
+                    this.rating = rating;
+                }
+            }
+
+            export enum DadJokeStatus {
+                Seen,
+                Unseen
+            }
+
+            export enum DadJokeRating {
+                Unrated,
+                Good,
+                Bad
+            }
+
+expected-prompt:
+    prefix: |-
+        // Path: dadJoke.ts
+        // Compare this snippet from path/multiply.js:
+        // export function multiply(a: number, b: number): number {
+        //     return a * b;
+        // }
+        // Compare this snippet from path/add.js:
+        // export function add(a: number, b: number): number {
+        //     return a + b;
+        // }
+        export class DadJoke {
+    suffix: |-
+        id: number;
+            question: string;
+            answer: string;
+            status: DadJokeStatus;
+            rating: DadJokeRating;
+
+            constructor(
+                id: number,
+                question: string,
+                answer: string,
+                status: DadJokeStatus = DadJokeStatus.Unseen,
+                rating: DadJokeRating = DadJokeRating.Unrated
+            ) {
+                this.id = id;
+                this.question = question;
+                this.answer = answer;
+                this.status = status;
+                this.rating = rating;
+            }
+        }
+
+        export enum DadJokeStatus {
+            Seen,
+            Unseen
+        }
+
+        export enum DadJokeRating {
+            Unrated,
+            Good,
+            Bad
+        }
