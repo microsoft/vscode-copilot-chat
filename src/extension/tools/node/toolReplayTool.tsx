@@ -5,9 +5,9 @@
 
 import type { CancellationToken, LanguageModelTool, LanguageModelToolInvocationOptions, LanguageModelToolInvocationPrepareOptions, PreparedToolInvocation, ProviderResult } from 'vscode';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
-import { getToolResult } from '../../replay/common/responseQueue';
 import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
+import { ChatReplayResponses } from '../../replay/common/chatReplayResponses';
 
 type ToolReplayParams = {
 	toolCallId: string;
@@ -19,8 +19,9 @@ export class ToolReplayTool implements LanguageModelTool<ToolReplayParams> {
 	public static readonly toolName = ToolName.ToolReplay;
 
 	invoke(options: LanguageModelToolInvocationOptions<ToolReplayParams>, token: CancellationToken) {
+		const replay = ChatReplayResponses.getInstance();
 		const { toolCallId } = options.input;
-		const toolResults = getToolResult(toolCallId) ?? [];
+		const toolResults = replay.getToolResult(toolCallId) ?? [];
 
 		return new LanguageModelToolResult(toolResults.map(result => new LanguageModelTextPart(result)));
 	}

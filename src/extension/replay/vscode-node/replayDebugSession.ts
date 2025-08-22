@@ -17,7 +17,7 @@ import type { DebugProtocol } from '@vscode/debugprotocol';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { WorkspaceFolder } from 'vscode';
-import { ChatStep, markDone, replayResponse } from '../common/responseQueue';
+import { ChatReplayResponses, ChatStep } from '../common/chatReplayResponses';
 import { startReplayInChat } from './chatHelper';
 
 export class ChatReplayDebugSession extends LoggingDebugSession {
@@ -30,6 +30,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 	private _currentIndex = -1;
 	private _stopOnEntry = true;
 	private _variableHandles = new Handles<any>();
+	private _replay = ChatReplayResponses.getInstance();
 
 	constructor(workspaceFolder: WorkspaceFolder | undefined) {
 		super();
@@ -75,6 +76,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 			}
 
 			this._currentIndex = 0;
+			this._replay = ChatReplayResponses.create(() => this.sendEvent(new TerminatedEvent()));
 			startReplayInChat();
 
 			if (this._stopOnEntry) {
@@ -86,7 +88,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 	}
 
 	protected override disconnectRequest(response: DebugProtocol.DisconnectResponse): void {
-		markDone();
+		this._replay.markDone();
 		this.sendResponse(response);
 		this.sendEvent(new TerminatedEvent());
 	}
@@ -146,7 +148,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 			this.sendResponse(response);
 		} else {
 			// We're done
-			markDone();
+			this._replay.markDone();
 			this.sendResponse(response);
 			this.sendEvent(new TerminatedEvent());
 		}
@@ -158,14 +160,14 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 			this.replayNextResponse(step);
 			this.sendResponse(response);
 		} else {
-			markDone();
+			this._replay.markDone();
 			this.sendResponse(response);
 			this.sendEvent(new TerminatedEvent());
 		}
 	}
 
 	private replayNextResponse(step: ChatStep): void {
-		replayResponse(step);
+		this._replay.replayResponse(step);
 		this._currentIndex++;
 
 		// Send a stopped event to indicate we are at the next step

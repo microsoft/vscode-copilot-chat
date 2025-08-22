@@ -37,8 +37,6 @@ const byokEnabledContextKey = 'github.copilot.byokEnabled';
 
 const debugContextKey = 'github.copilot.chat.debug';
 
-const replayContextKey = 'github.copilot.chat.replay';
-
 export class ContextKeysContribution extends Disposable {
 
 	private _needsOfflineCheck = false;
@@ -73,9 +71,6 @@ export class ContextKeysContribution extends Disposable {
 		const debugReportFeedback = this._configService.getConfigObservable(ConfigKey.Internal.DebugReportFeedback);
 		this._register(autorun(reader => {
 			commands.executeCommand('setContext', debugReportFeedbackContextKey, debugReportFeedback.read(reader));
-		}));
-		this._register(commands.registerCommand('github.copilot.chat.replay', async () => {
-			await commands.executeCommand('setContext', replayContextKey, true);
 		}));
 	}
 

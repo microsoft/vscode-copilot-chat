@@ -8,6 +8,7 @@ import path from 'node:path';
 import type * as vscode from 'vscode';
 import { ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { raceCancellation } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
 import { Position, Range, Uri, WorkspaceEdit } from '../../../vscodeTypes';
@@ -16,7 +17,7 @@ import { Conversation } from '../../prompt/common/conversation';
 import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
 import { IDocumentContext } from '../../prompt/node/documentContext';
 import { IIntent, IIntentInvocation, IIntentInvocationContext } from '../../prompt/node/intents';
-import { ChatStep, getResponse, setToolResult } from '../../replay/common/responseQueue';
+import { ChatReplayResponses, ChatStep } from '../../replay/common/chatReplayResponses';
 import { ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
 
@@ -41,17 +42,23 @@ export class ChatReplayIntent implements IIntent {
 	}
 
 	async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, agentName: string, location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
+		const replay = ChatReplayResponses.getInstance();
+		let res = await raceCancellation(replay.getResponse(), token);
 
-		let res = await getResponse();
-		while (res !== 'finished') {
-			await this.processStep(res, stream, request.toolInvocationToken);
-			res = await getResponse();
+		while (res && res !== 'finished') {
+			// Stop processing if cancelled
+			await raceCancellation(this.processStep(res, replay, stream, request.toolInvocationToken), token);
+			res = await raceCancellation(replay.getResponse(), token);
+		}
+
+		if (token.isCancellationRequested) {
+			replay.cancelReplay();
 		}
 
 		return {};
 	}
 
-	private async processStep(step: ChatStep, stream: vscode.ChatResponseStream, toolToken: vscode.ChatParticipantToolToken): Promise<void> {
+	private async processStep(step: ChatStep, replay: ChatReplayResponses, stream: vscode.ChatResponseStream, toolToken: vscode.ChatParticipantToolToken): Promise<void> {
 		switch (step.kind) {
 			case 'userQuery':
 				stream.markdown(`**User Query:**\n\n${step.query}\n\n`);
@@ -62,7 +69,7 @@ export class ChatReplayIntent implements IIntent {
 				break;
 			case 'toolCall':
 				{
-					setToolResult(step.id, step.results);
+					replay.setToolResult(step.id, step.results);
 					const result = await this.toolsService.invokeTool(ToolName.ToolReplay,
 						{
 							toolInvocationToken: toolToken,
@@ -75,6 +82,8 @@ export class ChatReplayIntent implements IIntent {
 					if (result.content.length === 0) {
 						stream.markdown(l10n.t('No result from tool'));
 					}
+
+					// file update stucture will change
 					if (step.fileUpdates && step.fileUpdates.length > 0) {
 						step.fileUpdates.forEach(update => {
 							const targetPath = path.join(this.workspaceService.getWorkspaceFolders()[0].fsPath, update.path);
