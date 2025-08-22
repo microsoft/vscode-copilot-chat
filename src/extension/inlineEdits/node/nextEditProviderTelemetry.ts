@@ -146,7 +146,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			activeDocumentEditsCount = activeDoc.recentEdits.edits.length;
 			activeDocumentLanguageId = activeDoc.languageId;
 			activeDocumentOriginalLineCount = activeDoc.documentAfterEditsLines.length;
-			isNotebook = activeDoc.id.toUri().scheme === Schemas.vscodeNotebookCell || this._notebookService.hasSupportedNotebooks(activeDoc.id.toUri());
+			isNotebook = activeDoc.id.toUri().scheme === Schemas.vscodeNotebookCell || this._notebookService?.hasSupportedNotebooks(activeDoc.id.toUri()) || false;
 			notebookType = findNotebook(activeDoc.id.toUri(), this._workspaceService.notebookDocuments)?.notebookType;
 			const git = this._gitExtensionService.getExtensionApi();
 			if (git) {
@@ -274,7 +274,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 
 	constructor(
 		private readonly _gitExtensionService: IGitExtensionService,
-		private readonly _notebookService: INotebookService,
+		private readonly _notebookService: INotebookService | undefined,
 		private readonly _workspaceService: IWorkspaceService,
 		private readonly _providerId: string,
 		private readonly _doc: IObservableDocument,

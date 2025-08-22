@@ -214,7 +214,7 @@ class ChatLibExtractor {
 		let transformed = content;
 
 		// Remove VS Code imports
-		transformed = transformed.replace(/import\s+.*\s+from\s+['"]+vscode['"]+;?\s*\n/g, '');
+		// transformed = transformed.replace(/import\s+.*\s+from\s+['"]+vscode['"]+;?\s*\n/g, '');
 
 		// Rewrite relative imports to work in _internal structure
 		transformed = transformed.replace(
