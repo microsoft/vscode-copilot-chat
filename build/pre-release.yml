@@ -22,6 +22,10 @@ parameters:
     displayName: 🚀 Publish Pre-Release
     type: boolean
     default: false
+  - name: mixinCompletionsCore
+    displayName: Mixin Completions Core
+    type: boolean
+    default: true
 
 extends:
   template: azure-pipelines/extension/pre-release.yml@templates
@@ -105,6 +109,7 @@ extends:
           rm src/extension/completions/vscode-node/completionsCoreContribution.ts
           mv src/extension/completions/vscode-node/completionsCoreContribution.ts.txt src/extension/completions/vscode-node/completionsCoreContribution.ts
           rm src/extension/completions-core/esbuild.ts
+        condition: and(succeeded(), eq(${{ parameters.mixinCompletionsCore }}, true))
         displayName: Mixin the completions core repo
 
       - script: npm run build -- --prerelease
@@ -125,20 +130,6 @@ extends:
       - task: NodeTool@0
         inputs:
           versionSpec: '22.x'
-
-      - pwsh: |
-          # Get the OAuth token from the git config
-          $result = git config --get-regexp .*extraheader ^AUTHORIZATION:
-          $basicToken = $result -split "AUTHORIZATION: basic " | Select-Object -Last 1
-          $oauthToken = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($basicToken)) -split ":" | Select-Object -Last 1
-          git clone -b completions-port https://vscode:$oauthToken@github.com/microsoft/vscode-copilot-completions.git --depth 1 src/extension/completions-core
-          pushd src/extension/completions-core
-          git checkout 561a8428a79a868a33865e5277c61d4bb7e1374c
-          popd
-          rm src/extension/completions/vscode-node/completionsCoreContribution.ts
-          mv src/extension/completions/vscode-node/completionsCoreContribution.ts.txt src/extension/completions/vscode-node/completionsCoreContribution.ts
-          rm src/extension/completions-core/esbuild.ts
-        displayName: Mixin the completions core repo
 
       - task: Cache@2
         inputs:
@@ -184,6 +175,21 @@ extends:
 
       - script: npm run setup:dotnet
         displayName: Install dotnet cli
+
+      - pwsh: |
+          # Get the OAuth token from the git config
+          $result = git config --get-regexp .*extraheader ^AUTHORIZATION:
+          $basicToken = $result -split "AUTHORIZATION: basic " | Select-Object -Last 1
+          $oauthToken = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($basicToken)) -split ":" | Select-Object -Last 1
+          git clone -b completions-port https://vscode:$oauthToken@github.com/microsoft/vscode-copilot-completions.git --depth 1 src/extension/completions-core
+          pushd src/extension/completions-core
+          git checkout 561a8428a79a868a33865e5277c61d4bb7e1374c
+          popd
+          rm src/extension/completions/vscode-node/completionsCoreContribution.ts
+          mv src/extension/completions/vscode-node/completionsCoreContribution.ts.txt src/extension/completions/vscode-node/completionsCoreContribution.ts
+          rm src/extension/completions-core/esbuild.ts
+        condition: and(succeeded(), eq(${{ parameters.mixinCompletionsCore }}, true))
+        displayName: Mixin the completions core repo
 
       - script: npm run typecheck
         displayName: npm run typecheck
