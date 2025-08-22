@@ -1,0 +1,20 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+import { languages } from 'vscode';
+import { GhostTextProvider } from '../../completions-core/extension/src/ghostText/ghostText';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { createContext, setup } from '../../completions-core/completionsServiceBridges';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+
+export class CompletionsCoreContribution extends Disposable {
+	constructor(@IInstantiationService instantiationService: IInstantiationService) {
+		super();
+		const ctx = instantiationService.invokeFunction(createContext);
+		this._register(setup(ctx));
+		const provider = new GhostTextProvider(ctx);
+		this._register(languages.registerInlineCompletionItemProvider({ pattern: '**' }, provider, { debounceDelayMs: 0 }));
+	}
+}
