@@ -18,6 +18,7 @@ import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
+import { ThinkingData } from '../../thinking/common/thinking';
 import { FinishedCallback, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams } from './fetch';
 import { FetchOptions, IAbortController, IFetcherService, Response } from './fetcherService';
 import { ChatCompletion, rawMessageToCAPI } from './openai';
@@ -103,6 +104,7 @@ export interface IEndpointBody {
 	store?: boolean;
 }
 
+export type ReasoningPropertyType = 'CAPI' | 'AzureOpenAI';
 export interface IEndpoint {
 	readonly urlOrRequestMetadata: string | RequestMetadata;
 	getExtraHeaders?(): Record<string, string>;
@@ -143,6 +145,8 @@ export interface IMakeChatRequestOptions {
 	telemetryProperties?: TelemetryProperties;
 	/** Whether this request is retrying a filtered response */
 	isFilterRetry?: boolean;
+	/** `cot_` vs `reasoning_` for CAPI vs AOAI endpoints */
+	reasoningPropertyType?: ReasoningPropertyType;
 }
 
 export interface ICreateEndpointBodyOptions extends IMakeChatRequestOptions {
@@ -225,14 +229,51 @@ export interface IChatEndpoint extends IEndpoint {
 	cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint;
 }
 
+
+
 /** Function to create a standard request body for CAPI completions */
-export function createCapiRequestBody(model: string, options: ICreateEndpointBodyOptions) {
+export function createCapiRequestBody(options: ICreateEndpointBodyOptions, model: string) {
 	// FIXME@ulugbekna: need to investigate why language configs have such stop words, eg
 	// python has `\ndef` and `\nclass` which must be stop words for ghost text
 	// const stops = getLanguageConfig<string[]>(accessor, ConfigKey.Stops);
 
+	const messages = [];
+	for (const message of options.messages) {
+		if (message.role === Raw.ChatRole.Assistant) {
+			let newMessage = rawMessageToCAPI(message);
+			for (const content of message.content) {
+				// opaque type
+				if (content.type === 2) {
+					const data = content.value as {
+						type: string;
+						thinking: ThinkingData;
+					};
+					if (data.type === 'thinking' && data.thinking.id) {
+						if (options.reasoningPropertyType === 'AzureOpenAI') {
+							newMessage = {
+								...newMessage,
+								cot_id: data.thinking.id,
+								cot_summary: data.thinking.text
+							} as any;
+						} else if (options.reasoningPropertyType === 'CAPI' || options.reasoningPropertyType === undefined) {
+							newMessage = {
+								...newMessage,
+								reasoning_opaque: data.thinking.id,
+								reasoning_text: data.thinking.text
+							} as any;
+						}
+					}
+				}
+			}
+
+		} else {
+			messages.push(rawMessageToCAPI(message));
+		}
+	}
+
+
 	const request: IEndpointBody = {
-		messages: rawMessageToCAPI(options.messages),
+		messages,
 		model,
 		// stop: stops,
 	};

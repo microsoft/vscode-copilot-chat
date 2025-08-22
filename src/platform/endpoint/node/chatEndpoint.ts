@@ -279,7 +279,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		if (this.useResponsesApi) {
 			return createResponsesRequestBody(options, this.model, this._modelMetadata);
 		} else {
-			return createCapiRequestBody(this.model, options);
+			return createCapiRequestBody(options, this.model);
 		}
 	}
 

@@ -8,10 +8,13 @@ import { OpenAI } from '@vscode/prompt-tsx';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
+import { IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
+import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { IEndpointBody } from '../../networking/common/networking';
 import { CAPIChatMessage } from '../../networking/common/openai';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { IThinkingDataService } from '../../thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
@@ -19,9 +22,6 @@ import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
 import { IChatModelInformation } from '../common/endpointProvider';
 import { ChatEndpoint } from './chatEndpoint';
-import { IConfigurationService } from '../../configuration/common/configurationService';
-import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { ILogService } from '../../log/common/logService';
 
 export class CopilotChatEndpoint extends ChatEndpoint {
 	constructor(

@@ -3,6 +3,16 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+export interface RawThinkingData {
+	// Azure Open AI fields
+	cot_id?: string;
+	cot_summary?: string;
+
+	// Copilot API fields
+	reasoning_opaque?: string;
+	reasoning_text?: string;
+}
+
 export interface RawThinkingDelta {
 	// Azure Open AI fields
 	cot_id?: string;
@@ -16,6 +26,8 @@ export interface RawThinkingDelta {
 	thinking?: string;
 	signature?: string;
 }
+
+
 
 export type ThinkingDelta = {
 	text?: string;

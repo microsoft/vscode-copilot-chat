@@ -170,10 +170,12 @@ export class OpenAIEndpoint extends ChatEndpoint {
 	}
 
 	public override async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
+		options.reasoningPropertyType = 'AzureOpenAI';
 		let response = await super.makeChatRequest2(options, token);
 		if (response.type === ChatFetchResponseType.InvalidStatefulMarker) {
 			response = await this._makeChatRequest2({ ...options, ignoreStatefulMarker: true }, token);
 		}
 		return hydrateBYOKErrorMessages(response);
 	}
+
 }

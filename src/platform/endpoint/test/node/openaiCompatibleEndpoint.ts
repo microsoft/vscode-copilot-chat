@@ -4,16 +4,18 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { OpenAI } from '@vscode/prompt-tsx';
+import type { CancellationToken } from 'vscode';
 import { TokenizerType } from '../../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
+import { ChatResponse } from '../../../chat/common/commonTypes';
 import { IConfigurationService } from '../../../configuration/common/configurationService';
 import { IEnvService } from '../../../env/common/envService';
 import { ILogService } from '../../../log/common/logService';
 import { isOpenAiFunctionTool } from '../../../networking/common/fetch';
 import { IFetcherService } from '../../../networking/common/fetcherService';
-import { IChatEndpoint, IEndpointBody } from '../../../networking/common/networking';
+import { IChatEndpoint, IEndpointBody, IMakeChatRequestOptions } from '../../../networking/common/networking';
 import { CAPIChatMessage } from '../../../networking/common/openai';
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
@@ -265,5 +267,10 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 
 	override cloneWithTokenOverride(_modelMaxPromptTokens: number): IChatEndpoint {
 		return this.instantiationService.createInstance(OpenAICompatibleTestEndpoint, this.modelConfig);
+	}
+
+	public override async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
+		options.reasoningPropertyType = this.modelConfig.type === 'azureOpenai' ? 'AzureOpenAI' : undefined;
+		return await super.makeChatRequest2(options, token);
 	}
 }

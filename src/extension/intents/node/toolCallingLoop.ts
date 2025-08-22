@@ -15,8 +15,6 @@ import { OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { ThinkingData } from '../../../platform/thinking/common/thinking';
-import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { tryFinalizeResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationError, isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
@@ -115,7 +113,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IAuthenticationChatUpgradeService private readonly _authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
-		@IThinkingDataService private readonly _thinkingDataService: IThinkingDataService,
 	) {
 		super();
 	}
@@ -434,8 +431,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}) : undefined;
 		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
-		let thinking: ThinkingDataItem | undefined;
-		let thinkingId: string | undefined;
+		let thinkingItem: ThinkingDataItem | undefined;
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
 			finishedCb: async (text, index, delta) => {
@@ -446,15 +442,12 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						id: this.createInternalToolCallId(call.id),
 						arguments: call.arguments === '' ? '{}' : call.arguments
 					})));
-					if (toolCalls.length > 0) {
-						this._thinkingDataService.update(index, { id: thinkingId, metadata: delta.copilotToolCalls[0].id });
-					}
 				}
 				if (delta.statefulMarker) {
 					statefulMarker = delta.statefulMarker;
 				}
 				if (delta.thinking) {
-					thinking = ThinkingDataItem.createOrUpdate(thinking, delta.thinking);
+					thinkingItem = ThinkingDataItem.createOrUpdate(thinkingItem, delta.thinking);
 				}
 
 				return stopEarly ? text.length : undefined;
@@ -491,7 +484,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		this.turn.setMetadata(interactionOutcomeComputer.interactionOutcome);
 		const toolInputRetry = isToolInputFailure ? (this.toolCallRounds.at(-1)?.toolInputRetry || 0) + 1 : 0;
 		if (fetchResult.type === ChatFetchResponseType.Success) {
-			thinking?.updateWithFetchResult(fetchResult);
+			thinkingItem?.updateWithFetchResult(fetchResult);
 			return {
 				response: fetchResult,
 				round: ToolCallRound.create({
@@ -499,7 +492,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					toolCalls,
 					toolInputRetry,
 					statefulMarker,
-					thinking: thinking?.isEncrypted ? thinking : undefined
+					thinking: thinkingItem
 				}),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
@@ -635,21 +628,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			this.toolCallResults[metadata.toolCallId] = metadata.result;
 		}
 
-		for (const message of buildPromptResult.messages) {
-			for (const content of message.content) {
-				// opaque type
-				if (content.type === 2) {
-					const data = content.value as {
-						type: string;
-						thinking: ThinkingData;
-					};
-					if (data.type === 'thinking' && data.thinking.id) {
-						this._thinkingDataService.set(data.thinking.id, data.thinking);
-					}
-				}
-			}
-		}
-
 		if (buildPromptResult.metadata.getAll(ToolResultMetadata).some(r => r.isCancelled)) {
 			throw new CancellationError();
 		}
@@ -673,8 +651,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}
 
 		if (originalCall) {
-			const thinking = this._thinkingDataService.get(originalCall.id);
-			this._requestLogger.logToolCall(originalCall.id || generateUuid(), originalCall.name, originalCall.arguments, metadata.result, thinking);
+			this._requestLogger.logToolCall(originalCall.id || generateUuid(), originalCall.name, originalCall.arguments, metadata.result, lastTurn?.thinking);
 		}
 	}
 }
