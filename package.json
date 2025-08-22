@@ -2169,11 +2169,6 @@
 						"default": true,
 						"markdownDescription": "%github.copilot.config.useProjectTemplates%"
 					},
-					"github.copilot.chat.agent.runTasks": {
-						"type": "boolean",
-						"default": true,
-						"description": "%github.copilot.config.agent.runTasks%"
-					},
 					"github.copilot.nextEditSuggestions.enabled": {
 						"type": "boolean",
 						"default": false,

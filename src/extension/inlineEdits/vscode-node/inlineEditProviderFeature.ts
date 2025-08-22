@@ -74,7 +74,6 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 		@IEnvService private readonly _envService: IEnvService,
 		@ILogService private readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
 	) {
 		super();
 
@@ -91,10 +90,10 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 
 			if (
 				this._expService.getTreatmentVariable<boolean>('vscode', 'copilotchat.enableNesInSettings') &&
-				this._extensionContext.globalState.get<boolean | undefined>(hasUpdatedNesSettingKey) !== true &&
+				this._vscodeExtensionContext.globalState.get<boolean | undefined>(hasUpdatedNesSettingKey) !== true &&
 				!copilotToken.isFreeUser
 			) {
-				this._extensionContext.globalState.update(hasUpdatedNesSettingKey, true);
+				this._vscodeExtensionContext.globalState.update(hasUpdatedNesSettingKey, true);
 				if (!this._configurationService.isConfigured(ConfigKey.InlineEditsEnabled)) {
 					this._configurationService.setConfig(ConfigKey.InlineEditsEnabled, true);
 				}

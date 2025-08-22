@@ -323,6 +323,7 @@ async function main() {
 				`**/*.w.json`,
 				'**/*.sqlite',
 				'**/*.sqlite-journal',
+				'test/aml/out/**'
 			]
 		});
 		rebuild();
