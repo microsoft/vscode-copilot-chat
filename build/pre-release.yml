@@ -46,7 +46,7 @@ extends:
           $result = git config --get-regexp .*extraheader ^AUTHORIZATION:
           $basicToken = $result -split "AUTHORIZATION: basic " | Select-Object -Last 1
           $oauthToken = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($basicToken)) -split ":" | Select-Object -Last 1
-          git clone https://vscode:$oauthToken@github.com/github/copilot-client.git --depth 1 src/extension/completions-core
+          git clone https://vscode:$oauthToken@github.com/microsoft/vscode-copilot-completions.git --depth 1 src/extension/completions-core
           pushd src/extension/completions-core
           git checkout 561a8428a79a868a33865e5277c61d4bb7e1374c
           popd
@@ -128,7 +128,7 @@ extends:
           $result = git config --get-regexp .*extraheader ^AUTHORIZATION:
           $basicToken = $result -split "AUTHORIZATION: basic " | Select-Object -Last 1
           $oauthToken = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($basicToken)) -split ":" | Select-Object -Last 1
-          git clone https://vscode:$oauthToken@github.com/github/copilot-client.git --depth 1 src/extension/completions-core
+          git clone https://vscode:$oauthToken@github.com/microsoft/vscode-copilot-completions.git --depth 1 src/extension/completions-core
           pushd src/extension/completions-core
           git checkout 561a8428a79a868a33865e5277c61d4bb7e1374c
           popd
