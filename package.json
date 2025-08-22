@@ -3777,7 +3777,7 @@
 						"stopOnEntry": {
 							"type": "boolean",
 							"default": true,
-							"description": "Break immediately at the first header"
+							"description": "Break immediately to step through manually."
 						}
 					},
 					"required": [

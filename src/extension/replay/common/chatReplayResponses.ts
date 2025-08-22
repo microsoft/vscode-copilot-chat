@@ -112,7 +112,7 @@ export class ChatReplayResponses {
 	}
 
 	public cancelReplay(): void {
-		this.pendingRequests.length = 0;
 		this.onCancel?.();
+		this.markDone();
 	}
 }

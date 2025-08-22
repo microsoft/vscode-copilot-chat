@@ -16,9 +16,8 @@ import {
 import type { DebugProtocol } from '@vscode/debugprotocol';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { WorkspaceFolder } from 'vscode';
+import { commands, type WorkspaceFolder } from 'vscode';
 import { ChatReplayResponses, ChatStep } from '../common/chatReplayResponses';
-import { startReplayInChat } from './chatHelper';
 
 export class ChatReplayDebugSession extends LoggingDebugSession {
 
@@ -249,4 +248,12 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 		});
 		return steps;
 	}
+}
+
+async function startReplayInChat() {
+	await commands.executeCommand('workbench.panel.chat.view.copilot.focus');
+	await commands.executeCommand('type', {
+		text: `\@chatReplay`,
+	});
+	await commands.executeCommand('workbench.action.chat.submit');
 }
