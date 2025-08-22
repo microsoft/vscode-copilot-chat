@@ -9207,23 +9207,23 @@
   {
     "name": "notebookEdits (modification - json) [panel] [python] - code cell insertion",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "notebookEdits (modification - json) [panel] [python] - code cell modification",
     "contentFilterCount": 0,
-    "passCount": 4,
-    "failCount": 6,
-    "score": 0.4
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "notebookEdits (modification - json) [panel] [python] - code cell modification & deletion",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "notebookEdits (modification - json) [panel] [python] - code cell modification & insertion",
@@ -9235,9 +9235,9 @@
   {
     "name": "notebookEdits (modification - json) [panel] [python] - code cell modification with removal of unused imports",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "notebookEdits (modification - json) [panel] [python] - code cell modification, convert Point2D code to Point3D",
