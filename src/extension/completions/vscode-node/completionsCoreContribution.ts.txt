@@ -1,0 +1,33 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+import { languages } from 'vscode';
+import { GhostTextProvider } from '../../completions-core/extension/src/ghostText/ghostText';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { createContext, setup } from '../../completions-core/completionsServiceBridges';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { autorun } from '../../../util/vs/base/common/observableInternal';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+
+export class CompletionsCoreContribution extends Disposable {
+	constructor(
+		@IInstantiationService instantiationService: IInstantiationService,
+		@IConfigurationService configurationService: IConfigurationService,
+		@IExperimentationService experimentationService: IExperimentationService,
+	) {
+		super();
+		this._register(autorun(reader => {
+			if (!configurationService.getExperimentBasedConfigObservable<boolean>(ConfigKey.Internal.InlineEditsEnableGhCompletionsProvider, experimentationService).read(reader)) {
+				return;
+			}
+
+			const ctx = instantiationService.invokeFunction(createContext);
+			reader.store.add(setup(ctx));
+			const provider = new GhostTextProvider(ctx);
+			reader.store.add(languages.registerInlineCompletionItemProvider({ pattern: '**' }, provider, { debounceDelayMs: 0 }));
+		}));
+	}
+}

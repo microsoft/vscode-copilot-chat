@@ -102,9 +102,9 @@ export function chatModelInfoToProviderMetadata(chatModelInfo: IChatModelInforma
 		isUserSelectable: true,
 		capabilities: {
 			toolCalling: chatModelInfo.capabilities.supports.tool_calls,
-			vision: chatModelInfo.capabilities.supports.vision,
+			imageInput: chatModelInfo.capabilities.supports.vision,
 		},
-		auth: true
+		requiresAuthorization: true
 	};
 }
 
@@ -158,7 +158,7 @@ export function byokKnownModelsToAPIInfo(providerName: string, knownModels: BYOK
 			tooltip: `${capabilities.name} is contributed via the ${providerName} provider.`,
 			capabilities: {
 				toolCalling: capabilities.toolCalling,
-				vision: capabilities.vision
+				imageInput: capabilities.vision
 			},
 		} satisfies LanguageModelChatInformation;
 	});

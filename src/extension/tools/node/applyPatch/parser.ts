@@ -394,7 +394,7 @@ export class Parser {
 			this.fuzz += match.fuzz;
 
 			const srcIndentStyle = guessIndentation(
-				nextSection.chunks.flatMap(c => c.insLines),
+				nextSection.chunks.flatMap(c => c.insLines).concat(nextSection.nextChunkContext),
 				targetIndentStyle.tabSize,
 				targetIndentStyle.insertSpaces
 			);

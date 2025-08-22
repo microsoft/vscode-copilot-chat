@@ -39,7 +39,7 @@ suite('CopilotLanguageModelWrapper', () => {
 
 		const runTest = async (messages: vscode.LanguageModelChatMessage[], tools?: vscode.LanguageModelChatTool[], errMsg?: string) => {
 			await assert.rejects(
-				() => wrapper.provideLanguageModelResponse(endpoint, messages, { tools }, vscode.extensions.all[0].id, null!, null!),
+				() => wrapper.provideLanguageModelResponse(endpoint, messages, { tools, requestInitiator: 'unknown' }, vscode.extensions.all[0].id, null!, null!),
 				err => {
 					errMsg ??= 'Invalid request';
 					assert.ok(err instanceof Error, 'expected an Error');
@@ -66,7 +66,7 @@ suite('CopilotLanguageModelWrapper', () => {
 			wrapper = instaService.createInstance(CopilotLanguageModelWrapper);
 		});
 		const runTest = async (messages: vscode.LanguageModelChatMessage[], tools?: vscode.LanguageModelChatTool[]) => {
-			await wrapper.provideLanguageModelResponse(endpoint, messages, { tools }, vscode.extensions.all[0].id, null!, null!);
+			await wrapper.provideLanguageModelResponse(endpoint, messages, { tools, requestInitiator: 'unknown' }, vscode.extensions.all[0].id, null!, null!);
 		};
 
 		test('simple', async () => {

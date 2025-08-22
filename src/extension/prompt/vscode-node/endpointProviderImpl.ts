@@ -127,9 +127,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 			if (experimentModelConfig && model && model.id === experimentModelConfig.id) {
 				endpoint = (await this.getAllChatEndpoints()).find(e => e.model === experimentModelConfig.selected) || await this.getChatEndpoint('gpt-4.1');
 			} else if (model && model.vendor === 'copilot' && model.id === AutoChatEndpoint.id) {
-				// TODO @lramos15 - This may be the ugliest cast I've ever seen but our types seem to be incorrect
-				const conversationdId = ((requestOrFamilyOrModel as ChatRequest).toolInvocationToken as { sessionId: string }).sessionId || 'unknown';
-				return this._autoModeService.getCachedAutoEndpoint(conversationdId) || this._autoModeService.resolveAutoModeEndpoint(conversationdId, await this.getAllChatEndpoints());
+				return this._autoModeService.resolveAutoModeEndpoint(requestOrFamilyOrModel as ChatRequest, Array.from(this._chatEndpoints.values()));
 			} else if (model && model.vendor === 'copilot') {
 				let modelMetadata = await this._modelFetcher.getChatModelFromApiModel(model);
 				if (modelMetadata) {

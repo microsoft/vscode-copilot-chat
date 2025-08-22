@@ -22,6 +22,7 @@ import { DebugRecorder } from '../node/debugRecorder';
 import { NextEditProvider } from '../node/nextEditProvider';
 import { DiagnosticsNextEditProvider } from './features/diagnosticsInlineEditProvider';
 import { VSCodeWorkspace } from './parts/vscodeWorkspace';
+import { isNotebookCell } from '../../../util/common/notebooks';
 
 const TRIGGER_INLINE_EDIT_AFTER_CHANGE_LIMIT = 10000; // 10 seconds
 const TRIGGER_INLINE_EDIT_ON_SAME_LINE_COOLDOWN = 5000; // milliseconds
@@ -85,7 +86,7 @@ class LastChange extends Disposable {
 		this._nConsecutiveSelectionChanges++;
 	}
 
-	constructor() {
+	constructor(public documentTrigger: vscode.TextDocument) {
 		super();
 		this.lastEditedTimestamp = Date.now();
 		this.lineNumberTriggers = new Map();
@@ -143,7 +144,7 @@ class InlineEditTriggerer extends Disposable {
 				return;
 			}
 
-			this.docToLastChangeMap.set(doc.id, new LastChange());
+			this.docToLastChangeMap.set(doc.id, new LastChange(e.document));
 
 			tracer.returns('setting last edited timestamp');
 		})));
@@ -209,10 +210,15 @@ class InlineEditTriggerer extends Disposable {
 			}
 
 			const selectionLine = range.start.line;
-			const lastTriggerTimestampForLine = mostRecentChange.lineNumberTriggers.get(selectionLine);
-			if (lastTriggerTimestampForLine !== undefined && timeSince(lastTriggerTimestampForLine) < TRIGGER_INLINE_EDIT_ON_SAME_LINE_COOLDOWN) {
-				tracer.returns('same line cooldown');
-				return;
+			// If we're in a notebook cell,
+			// Its possible user made changes in one cell and now is moving to another cell
+			// In such cases we should account for the possibility of the user wanting to edit the new cell and trigger suggestions.
+			if (!isNotebookCell(e.textEditor.document.uri) || e.textEditor.document === mostRecentChange.documentTrigger) {
+				const lastTriggerTimestampForLine = mostRecentChange.lineNumberTriggers.get(selectionLine);
+				if (lastTriggerTimestampForLine !== undefined && timeSince(lastTriggerTimestampForLine) < TRIGGER_INLINE_EDIT_ON_SAME_LINE_COOLDOWN) {
+					tracer.returns('same line cooldown');
+					return;
+				}
 			}
 
 			// TODO: Do not trigger if there is an existing valid request now running, ie don't use just last-trigger timestamp
@@ -227,6 +233,7 @@ class InlineEditTriggerer extends Disposable {
 			}
 
 			mostRecentChange.lineNumberTriggers.set(selectionLine, now);
+			mostRecentChange.documentTrigger = e.textEditor.document;
 			tracer.returns('triggering inline edit');
 
 			const debounceOnSelectionChange = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounceOnSelectionChange, this._expService);

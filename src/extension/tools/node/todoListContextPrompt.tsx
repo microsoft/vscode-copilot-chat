@@ -6,6 +6,7 @@
 import { BasePromptElementProps, PromptElement } from '@vscode/prompt-tsx';
 import { ITodoListContextProvider } from '../../prompt/node/todoListContextProvider';
 import { Tag } from '../../prompts/node/base/tag';
+import { ToolName } from '../common/toolNames';
 
 export interface TodoListContextPromptProps extends BasePromptElementProps {
 	sessionId?: string;
@@ -28,12 +29,9 @@ export class TodoListContextPrompt extends PromptElement<TodoListContextPromptPr
 			return null;
 		}
 		const todoContext = await this.todoListContextProvider.getCurrentTodoContext(sessionId);
-		if (!todoContext) {
-			return null;
-		}
 		return (
-			<Tag name="todos">
-				{todoContext}
+			<Tag name="todoList">
+				{todoContext || <>Empty todo list. Call `{ToolName.CoreManageTodoList}` to set todos as needed.</>}
 			</Tag>
 		);
 	}
