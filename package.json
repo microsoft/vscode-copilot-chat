@@ -2940,12 +2940,12 @@
 				{
 					"command": "github.copilot.chat.generateDocs",
 					"when": "!github.copilot.interactiveSession.disabled && !editorReadonly",
-					"group": "copilotAction@4"
+					"group": "copilotGenerate@1"
 				},
 				{
 					"command": "github.copilot.chat.generateTests",
 					"when": "!github.copilot.interactiveSession.disabled && !editorReadonly",
-					"group": "copilotAction@5"
+					"group": "copilotGenerate@2"
 				}
 			],
 			"testing/item/result": [
