@@ -1049,7 +1049,7 @@
 				"name": "copilot_toolReplay",
 				"modelDescription": "Replays a tool call from a previous chat session.",
 				"displayName": "tool replay",
-				"when": "debugType === 'chatReplay'",
+				"when": "false",
 				"inputSchema": {
 					"type": "object",
 					"properties": {
