@@ -53,7 +53,7 @@ export class NotebookSummaryTool implements ICopilotTool<INotebookSummaryToolPar
 		if (notebook) {
 			uri = notebook.uri;
 		} else if (!this.notebookService.hasSupportedNotebooks(uri)) {
-			throw new Error(`Use this tool only with Notebook filles, the file ${uri.toString()} is not a notebook.`);
+			throw new Error(`Use this tool only with Notebook files, the file ${uri.toString()} is not a notebook.`);
 		}
 		try {
 			notebook = notebook || await this.workspaceService.openNotebookDocument(uri);
