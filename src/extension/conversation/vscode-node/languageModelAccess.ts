@@ -29,7 +29,6 @@ import { CallTracker } from '../../../util/common/telemetryCorrelationId';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
 import { isDefined, isNumber, isString, isStringArray } from '../../../util/vs/base/common/types';
-import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ExtensionMode } from '../../../vscodeTypes';
@@ -107,7 +106,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 		const defaultChatEndpoint = chatEndpoints.find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1') ?? chatEndpoints[0];
 		if (isAutoModeEnabled(this._expService, this._envService)) {
-			chatEndpoints.push(await this._automodeService.resolveAutoModeEndpoint(generateUuid(), chatEndpoints));
+			chatEndpoints.push(await this._automodeService.resolveAutoModeEndpoint(undefined, chatEndpoints));
 		}
 		const seenFamilies = new Set<string>();
 
