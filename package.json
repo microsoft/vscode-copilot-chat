@@ -2921,21 +2921,23 @@
 					"group": "navigation@10"
 				}
 			],
-			"editor/context/chat": [
+			"editor/context": [
 				{
 					"command": "github.copilot.chat.explain",
 					"when": "!github.copilot.interactiveSession.disabled",
-					"group": "copilotAction@1"
-				},
+					"group": "1_chat@4"
+				}
+			],
+			"editor/context/chat": [
 				{
 					"command": "github.copilot.chat.fix",
 					"when": "!github.copilot.interactiveSession.disabled && !editorReadonly",
-					"group": "copilotAction@2"
+					"group": "copilotAction@1"
 				},
 				{
 					"command": "github.copilot.chat.review",
 					"when": "github.copilot.chat.reviewSelection.enabled && !github.copilot.interactiveSession.disabled && resourceScheme != 'vscode-chat-code-block'",
-					"group": "copilotAction@3"
+					"group": "copilotAction@2"
 				},
 				{
 					"command": "github.copilot.chat.generateDocs",
