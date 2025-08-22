@@ -2,7 +2,6 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { OpenAI } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
@@ -19,7 +18,6 @@ import { IFetcherService } from '../../../platform/networking/common/fetcherServ
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 
@@ -59,7 +57,6 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService protected instantiationService: IInstantiationService,
-		@IThinkingDataService private thinkingDataService: IThinkingDataService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService expService: IExperimentationService,
 		@ILogService logService: ILogService
@@ -101,24 +98,6 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		// TODO @lramos15 - We should do this for all models and not just here
 		if (body?.tools?.length === 0) {
 			delete body.tools;
-		}
-
-		if (body?.messages) {
-			const newMessages = body.messages.map((message: OpenAI.ChatMessage) => {
-				if (message.role === OpenAI.ChatRole.Assistant && message.tool_calls && message.tool_calls.length > 0) {
-					const id = message.tool_calls[0].id;
-					const thinking = this.thinkingDataService.get(id);
-					if (thinking?.id) {
-						return {
-							...message,
-							cot_id: thinking.id,
-							cot_summary: thinking.text,
-						};
-					}
-				}
-				return message;
-			});
-			body.messages = newMessages;
 		}
 
 		if (body?.tools) {
