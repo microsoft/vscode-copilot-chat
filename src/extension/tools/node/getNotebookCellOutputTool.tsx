@@ -59,7 +59,7 @@ export class GetNotebookCellOutputTool implements ICopilotTool<IGetNotebookCellO
 		} catch (ex) {
 			sendOutcomeTelemetry(this.telemetryService, this.endpointProvider, options, 'failedToOpenNotebook');
 			this.logger.error(`Failed to open notebook: ${uri.toString()}`, ex);
-			throw new Error(`Failed to open the notebook ${uri.toString()}, ${ex.message || ''}. Verify the file exists and is a notebook file`);
+			throw new Error(`Failed to open the notebook ${uri.toString()}, ${ex.message || ''}. Verify the file exists.`);
 		}
 
 		const cell = getCellIdMap(notebook).get(cellId);

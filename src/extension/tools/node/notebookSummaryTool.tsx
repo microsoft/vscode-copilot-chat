@@ -59,7 +59,7 @@ export class NotebookSummaryTool implements ICopilotTool<INotebookSummaryToolPar
 			notebook = notebook || await this.workspaceService.openNotebookDocument(uri);
 		} catch (ex) {
 			this.logger.error(`Failed to open notebook: ${uri.toString()}`, ex);
-			throw new Error(`Failed to open the notebook ${uri.toString()}, ${ex.message || ''}. Verify the file exists and is a notebook file`);
+			throw new Error(`Failed to open the notebook ${uri.toString()}, ${ex.message || ''}. Verify the file exists.`);
 		}
 
 		if (token.isCancellationRequested) {
