@@ -29,18 +29,19 @@ class MyPrompt extends PromptElement<MyPromptProps> {
 ```
 
 ### Async Components
-- Use `prepare` method for async operations before rendering
-- Pass prepared state to `render` method
+- The `render` method can be async for components that need to perform async operations
+- All async work should be done directly in the `render` method
 
 ```tsx
-class FileContextPrompt extends PromptElement<Props, PreparedState> {
-	override async prepare(sizing: PromptSizing): Promise<PreparedState> {
-		// Async preparation logic
-		return state;
-	}
-
-	render(state: PreparedState) {
-		return <>...</>;
+class FileContextPrompt extends PromptElement<FileContextProps> {
+	async render() {
+		const fileContent = await readFileAsync(this.props.filePath);
+		return (
+			<>
+				<SystemMessage priority={1000}>File content:</SystemMessage>
+				<UserMessage priority={900}>{fileContent}</UserMessage>
+			</>
+		);
 	}
 }
 ```
@@ -154,13 +155,13 @@ return (
 - Implement cooperative token usage
 
 ```tsx
-async render(state: void, sizing: PromptSizing): Promise<PromptPiece> {
+async render(sizing: PromptSizing): Promise<PromptPiece> {
 	const content = await this.generateContent(sizing.tokenBudget);
 	return <>{content}</>;
 }
 ```
 
 ### Performance
-- Use `prepare` for expensive async operations
-- Avoid expensive work in `render` methods
-- Cache computations when possible
+- Avoid expensive work in `render` methods when possible
+- Cache computations when appropriate
+- Use async `render` for all async operations
