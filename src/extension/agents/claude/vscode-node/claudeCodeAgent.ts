@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as path from 'path';
 import { Options, query } from '@anthropic-ai/claude-code';
 import type * as vscode from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -41,12 +42,10 @@ export class ClaudeAgentManager extends Disposable {
 	}
 
 	public async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult> {
-		this._permissionMcpServer?.setToolInvocationToken(request.toolInvocationToken);
-
 		const lastMessage = findLast(context.history, msg => msg instanceof ChatResponseTurn) as ChatResponseTurn | undefined;
 		const sessionId = lastMessage?.result?.metadata?.sessionId;
 		try {
-			const result = await this.invokeClaudeWithSDK(request.prompt, sessionId, token, undefined, stream);
+			const result = await this.invokeClaudeWithSDK(request.toolInvocationToken, request.prompt, sessionId, token, undefined, stream);
 
 			return { metadata: { command: request.command || 'default', sessionId: result.sessionId } };
 		} catch (invokeError) {
@@ -63,7 +62,7 @@ export class ClaudeAgentManager extends Disposable {
 	/**
 	 * Internal function to invoke Claude using the Claude Code SDK
 	 */
-	private async invokeClaudeWithSDK(prompt: string, existingSessionId: string | undefined, token: vscode.CancellationToken, allowedTools?: string[], stream?: vscode.ChatResponseStream): Promise<{ sessionId?: string }> {
+	private async invokeClaudeWithSDK(toolInvocationToken: any, prompt: string, existingSessionId: string | undefined, token: vscode.CancellationToken, allowedTools?: string[], stream?: vscode.ChatResponseStream): Promise<{ sessionId?: string }> {
 		const abortController = new AbortController();
 		token.onCancellationRequested(() => {
 			abortController.abort();
@@ -71,21 +70,22 @@ export class ClaudeAgentManager extends Disposable {
 
 		// Build options for the Claude Code SDK
 		const serverConfig = (await this.getLangModelServer()).getConfig();
+		this._permissionMcpServer?.setToolInvocationToken(toolInvocationToken as vscode.ChatParticipantToolToken);
 		const options: Options = {
 			// allowedTools: uniqueTools,
 			cwd: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
 			abortController,
 			executable: process.execPath as 'node',
 			// TODO- have to do this so that the sdk doesn't try to use import.meta.url, which won't work in this commonJS context
-			// pathToClaudeCodeExecutable: path.join(__dirname, '../node_modules/@anthropic-ai/claude-code/cli.js'),
-			pathToClaudeCodeExecutable: '/Users/roblou/code/claude-code/cli.js',
+			pathToClaudeCodeExecutable: path.join(__dirname, '../node_modules/@anthropic-ai/claude-code/cli.js'),
+			// pathToClaudeCodeExecutable: '/Users/roblou/code/claude-code/cli.js',
 			env: {
 				...process.env,
 				DEBUG: '1',
 				ANTHROPIC_BASE_URL: `http://localhost:${serverConfig.port}`,
 				ANTHROPIC_API_KEY: serverConfig.nonce
 			},
-			// permissionMode: 'bypassPermissions',
+			// permissionMode: 'acceptEdits',
 			permissionPromptToolName: 'mcp__permission__get_permission',
 			mcpServers: {
 				permission: {

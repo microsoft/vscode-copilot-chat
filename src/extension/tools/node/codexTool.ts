@@ -18,7 +18,7 @@ export class CodexTool implements ICopilotTool<ReadFileParams> {
 		return new LanguageModelToolResult([]);
 	}
 
-	prepareInvocation2(options: vscode.LanguageModelToolInvocationPrepareOptions<any>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
+	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<any>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
 		// return new PreparedTerminalToolInvocation(options.input.detail,
 		// 	'sh',
 		// 	{

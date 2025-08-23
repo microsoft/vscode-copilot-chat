@@ -92,6 +92,7 @@ class LanguageModelServer {
 						// Verify nonce for authentication
 						const authKey = adapter.extractAuthKey(req.headers);
 						if (authKey !== this.config.nonce) {
+							this.logService.trace(`[LanguageModelServer] Invalid auth key`);
 							res.writeHead(401, { 'Content-Type': 'application/json' });
 							res.end(JSON.stringify({ error: 'Invalid authentication' }));
 							return;
@@ -332,7 +333,7 @@ class LanguageModelServer {
 				if (address && typeof address === 'object') {
 					this.config.port = address.port;
 					this.logService.trace(`Language Model Server started on http://localhost:${this.config.port}`);
-					this.logService.trace(`Server nonce: ${this.config.nonce}`);
+					// this.logService.trace(`Server nonce: ${this.config.nonce}`);
 					resolve();
 				}
 			});

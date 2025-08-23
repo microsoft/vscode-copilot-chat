@@ -7,6 +7,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import * as http from 'node:http';
 import { ChatParticipantToolToken, lm } from 'vscode';
+import { z } from 'zod';
 import { ContributedToolName } from '../../../tools/common/toolNames';
 
 /**
@@ -46,18 +47,20 @@ export class PermissionMcpServer {
 				version: '0.0.1'
 			});
 
-			mcpServer.registerTool(
+			mcpServer.tool(
 				'get_permission',
+				'Simulate a permission check - approve if the input contains "allow", otherwise deny',
 				{
-					title: 'Ping',
-					description: 'Responds with "pong".',
+					tool_name: z.string().describe("The name of the tool requesting permission"),
+					input: z.object({}).passthrough().describe("The input for the tool"),
+					tool_use_id: z.string().optional().describe("The unique tool use request ID"),
 				},
 				async (args, extra) => {
 					try {
-						lm.invokeTool(ContributedToolName.ConfirmationTool, {
+						await lm.invokeTool(ContributedToolName.ConfirmationTool, {
 							input: {
 								message: `Run ${args.tool_name}?`,
-								detail: `With args:\n\n\`\`\`${JSON.stringify(args, null, 2)}\n\`\`\``
+								detail: `\`\`\`\n${JSON.stringify(args.input, null, 2)}\n\`\`\``
 							},
 							toolInvocationToken: this._toolInvocationToken,
 						});
@@ -65,7 +68,7 @@ export class PermissionMcpServer {
 							content: [{
 								type: 'text' as const, text: JSON.stringify({
 									"behavior": "allow",
-									"updatedInput": args
+									"updatedInput": args.input
 								})
 							}],
 						};
