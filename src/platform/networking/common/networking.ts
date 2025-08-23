@@ -265,7 +265,7 @@ export function createCapiRequestBody(options: ICreateEndpointBodyOptions, model
 					}
 				}
 			}
-
+			messages.push(newMessage);
 		} else {
 			messages.push(rawMessageToCAPI(message));
 		}
