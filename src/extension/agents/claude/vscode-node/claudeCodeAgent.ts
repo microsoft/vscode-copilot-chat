@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Options } from '@anthropic-ai/claude-code';
 import * as path from 'path';
-import { Options, query } from '@anthropic-ai/claude-code';
 import type * as vscode from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -67,6 +67,9 @@ export class ClaudeAgentManager extends Disposable {
 		token.onCancellationRequested(() => {
 			abortController.abort();
 		});
+
+		// Dynamically import the ES module at runtime
+		const { query } = await import('@anthropic-ai/claude-code');
 
 		// Build options for the Claude Code SDK
 		const serverConfig = (await this.getLangModelServer()).getConfig();
@@ -156,7 +159,7 @@ export class ClaudeAgentManager extends Disposable {
 				if (error.name === 'AbortError' || error.message.includes('aborted')) {
 					throw new Error('Claude CLI invocation was cancelled');
 				}
-				throw new Error(`Claude CLI SDK error: ${error.message}`);
+				throw new Error(`Claude CLI SDK error: ${error.stack}`);
 			}
 			throw error;
 		}
