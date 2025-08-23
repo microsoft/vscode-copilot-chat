@@ -10,10 +10,10 @@ import { AutoChatEndpoint } from '../../../platform/endpoint/common/autoChatEndp
 import { IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
-import { ChatEndpointFamily, IChatModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CopilotChatEndpoint } from '../../../platform/endpoint/node/copilotChatEndpoint';
 import { IModelMetadataFetcher, ModelMetadataFetcher } from '../../../platform/endpoint/node/modelMetadataFetcher';
-import { applyExperimentModifications, getCustomDefaultModelExperimentConfig, ProxyExperimentEndpoint } from '../../../platform/endpoint/node/proxyExperimentEndpoint';
+import { applyExperimentModifications, ExperimentConfig, getCustomDefaultModelExperimentConfig, ProxyExperimentEndpoint } from '../../../platform/endpoint/node/proxyExperimentEndpoint';
 import { ExtensionContributedChatEndpoint } from '../../../platform/endpoint/vscode-node/extChatEndpoint';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -127,9 +127,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 			if (experimentModelConfig && model && model.id === experimentModelConfig.id) {
 				endpoint = (await this.getAllChatEndpoints()).find(e => e.model === experimentModelConfig.selected) || await this.getChatEndpoint('gpt-4.1');
 			} else if (model && model.vendor === 'copilot' && model.id === AutoChatEndpoint.id) {
-				// TODO @lramos15 - This may be the ugliest cast I've ever seen but our types seem to be incorrect
-				const conversationdId = ((requestOrFamilyOrModel as ChatRequest).toolInvocationToken as { sessionId: string }).sessionId || 'unknown';
-				return this._autoModeService.getCachedAutoEndpoint(conversationdId) || this._autoModeService.resolveAutoModeEndpoint(conversationdId, await this.getAllChatEndpoints());
+				return this._autoModeService.resolveAutoModeEndpoint(requestOrFamilyOrModel as ChatRequest, Array.from(this._chatEndpoints.values()));
 			} else if (model && model.vendor === 'copilot') {
 				let modelMetadata = await this._modelFetcher.getChatModelFromApiModel(model);
 				if (modelMetadata) {
@@ -149,6 +147,9 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		return endpoint;
 	}
 
+	async getAllCompletionModels(forceRefresh?: boolean): Promise<ICompletionModelInformation[]> {
+		return this._modelFetcher.getAllCompletionModels(forceRefresh ?? false);
+	}
 
 	async getAllChatEndpoints(): Promise<IChatEndpoint[]> {
 		const models: IChatModelInformation[] = await this._modelFetcher.getAllChatModels();
@@ -172,7 +173,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 				// The above telemetry is needed for easier filtering.
 			}
 
-			model = applyExperimentModifications(model, experimentModelConfig) ?? model;
+			model = this.applyModifications(model, experimentModelConfig);
 			const chatEndpoint = this.getOrCreateChatEndpointInstance(model);
 			chatEndpoints.push(chatEndpoint);
 			if (experimentModelConfig && chatEndpoint.model === experimentModelConfig.selected) {
@@ -181,5 +182,11 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		}
 
 		return chatEndpoints;
+	}
+
+	private applyModifications(modelMetadata: IChatModelInformation, experimentModelConfig: ExperimentConfig | undefined): IChatModelInformation {
+		modelMetadata = applyExperimentModifications(modelMetadata, experimentModelConfig);
+
+		return modelMetadata;
 	}
 }

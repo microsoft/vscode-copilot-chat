@@ -24,6 +24,8 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "id": "static-id",
       "response": "response number 0",
       "statefulMarker": undefined,
+      "summary": undefined,
+      "thinking": undefined,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -37,6 +39,8 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "id": "static-id",
       "response": "response number 1",
       "statefulMarker": undefined,
+      "summary": undefined,
+      "thinking": undefined,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -50,6 +54,8 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "id": "static-id",
       "response": "response number 2",
       "statefulMarker": undefined,
+      "summary": undefined,
+      "thinking": undefined,
       "toolCalls": [],
       "toolInputRetry": 0,
     },
@@ -81,6 +87,8 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "id": "static-id",
       "response": "response number 3",
       "statefulMarker": undefined,
+      "summary": undefined,
+      "thinking": undefined,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -94,6 +102,8 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "id": "static-id",
       "response": "response number 4",
       "statefulMarker": undefined,
+      "summary": undefined,
+      "thinking": undefined,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -107,6 +117,8 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
       "id": "static-id",
       "response": "response number 5",
       "statefulMarker": undefined,
+      "summary": undefined,
+      "thinking": undefined,
       "toolCalls": [],
       "toolInputRetry": 0,
     },
@@ -180,6 +192,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "id": "static-id",
         "response": "response number 0",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -193,6 +207,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "id": "static-id",
         "response": "response number 1",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -206,6 +222,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "id": "static-id",
         "response": "response number 2",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -219,6 +237,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "id": "static-id",
         "response": "response number 3",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -273,6 +293,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "id": "static-id",
         "response": "response number 4",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -286,6 +308,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "id": "static-id",
         "response": "response number 5",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -299,6 +323,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "id": "static-id",
         "response": "response number 6",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -312,6 +338,8 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "id": "static-id",
         "response": "response number 7",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -2533,6 +2561,8 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "id": "static-id",
         "response": "some response here :)",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
         "toolCalls": [],
         "toolInputRetry": 0,
       },
@@ -2850,6 +2880,8 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
         "id": "static-id",
         "response": "some response here :)",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -2863,6 +2895,8 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
         "id": "static-id",
         "response": "response to tool call",
         "statefulMarker": undefined,
+        "summary": undefined,
+        "thinking": undefined,
         "toolCalls": [],
         "toolInputRetry": 0,
       },

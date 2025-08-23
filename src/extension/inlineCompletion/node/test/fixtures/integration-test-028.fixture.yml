@@ -1,0 +1,79 @@
+name: 'small current file, open files, cursor at end, code snippets and traits context'
+
+state:
+    context-items:
+        code-snippets:
+            - uri: file:///dad-jokes/src/add.js
+              value: |-
+                  export function add(a: number, b: number): number {
+                      return a + b;
+                  }
+            - uri: file:///dad-jokes/src/multiply.js
+              value: |-
+                  export function multiply(a: number, b: number): number {
+                      return a * b;
+                  }
+        traits:
+            - name: 'funny'
+              value: 'joke'
+            - name: 'unfunny'
+              value: 'joke'
+    current-file:
+        uri: file:///dad-jokes/src/main.ts
+        language: typescript
+        text: |-
+            const dj = new DadJoke {⮑
+    # The open file is ignored, since code snippets are present
+    open-files:
+        - uri: file:///dad-jokes/src/dadJoke.ts
+          language: typescript
+          text: |-
+              export class DadJoke {
+                  id: number;
+                  question: string;
+                  answer: string;
+                  status: DadJokeStatus;
+                  rating: DadJokeRating;
+
+                  constructor(
+                      id: number,
+                      question: string,
+                      answer: string,
+                      status: DadJokeStatus = DadJokeStatus.Unseen,
+                      rating: DadJokeRating = DadJokeRating.Unrated
+                  ) {
+                      this.id = id;
+                      this.question = question;
+                      this.answer = answer;
+                      this.status = status;
+                      this.rating = rating;
+                  }
+              }
+
+              export enum DadJokeStatus {
+                  Seen,
+                  Unseen
+              }
+
+              export enum DadJokeRating {
+                  Unrated,
+                  Good,
+                  Bad
+              }
+
+expected-prompt:
+    prefix: |-
+        // Path: main.ts
+        // Consider this related information:
+        // funny: joke
+        // unfunny: joke
+        // Compare this snippet from multiply.js:
+        // export function multiply(a: number, b: number): number {
+        //     return a * b;
+        // }
+        // Compare this snippet from add.js:
+        // export function add(a: number, b: number): number {
+        //     return a + b;
+        // }
+        const dj = new DadJoke {
+    suffix: ''

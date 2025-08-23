@@ -65,6 +65,8 @@ function dataToPropsAndMeasurements(data: Record<string, unknown>): { properties
 	for (const [key, value] of Object.entries(data)) {
 		if (typeof value === 'number') {
 			measurements[key] = value;
+		} else if (typeof value === 'boolean') {
+			measurements[key] = value ? 1 : 0;
 		} else if (typeof value === 'string') {
 			properties[key] = value;
 		}

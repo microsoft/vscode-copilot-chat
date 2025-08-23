@@ -37,7 +37,7 @@ export interface APIUsage {
 	/**
 	 * Breakdown of tokens used in the prompt.
 	 */
-	prompt_tokens_details: {
+	prompt_tokens_details?: {
 		cached_tokens: number;
 	};
 	/**

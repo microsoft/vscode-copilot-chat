@@ -22,7 +22,7 @@ import { IExperimentationService } from '../../../telemetry/common/nullExperimen
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../../common/capiClient';
 import { IDomainService } from '../../common/domainService';
-import { ChatEndpointFamily, IChatModelInformation, IEndpointProvider } from '../../common/endpointProvider';
+import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEndpointProvider } from '../../common/endpointProvider';
 import { ModelMetadataFetcher } from '../../node/modelMetadataFetcher';
 import { AzureTestEndpoint } from './azureEndpoint';
 import { CAPITestEndpoint } from './capiEndpoint';
@@ -163,6 +163,10 @@ export class TestEndpointProvider implements IEndpointProvider {
 			this._chatEndpoints.set(model, chatEndpoint);
 		}
 		return chatEndpoint;
+	}
+
+	async getAllCompletionModels(forceRefresh?: boolean): Promise<ICompletionModelInformation[]> {
+		throw new Error('getAllCompletionModels is not implemented in TestEndpointProvider');
 	}
 
 	async getAllChatEndpoints(): Promise<IChatEndpoint[]> {

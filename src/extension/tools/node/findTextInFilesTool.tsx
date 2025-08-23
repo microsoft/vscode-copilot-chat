@@ -93,6 +93,9 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 			results.push(item);
 		}
 
+		// Necessary in case it was rejected
+		await searchResult.complete;
+
 		return results;
 	}
 

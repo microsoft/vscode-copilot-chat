@@ -8,7 +8,7 @@ import { TokenizerType } from '../../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
-import { CHAT_MODEL } from '../../../configuration/common/configurationService';
+import { CHAT_MODEL, IConfigurationService } from '../../../configuration/common/configurationService';
 import { IEnvService } from '../../../env/common/envService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { IChatEndpoint, IEndpointBody } from '../../../networking/common/networking';
@@ -19,6 +19,8 @@ import { ICAPIClientService } from '../../common/capiClient';
 import { IDomainService } from '../../common/domainService';
 import { IChatModelInformation } from '../../common/endpointProvider';
 import { ChatEndpoint } from '../../node/chatEndpoint';
+import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
+import { ILogService } from '../../../log/common/logService';
 
 export class AzureTestEndpoint extends ChatEndpoint {
 	private readonly isThinkingModel: boolean;
@@ -33,7 +35,10 @@ export class AzureTestEndpoint extends ChatEndpoint {
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService private instantiationService: IInstantiationService,
-		@IThinkingDataService private thinkingDataService: IThinkingDataService
+		@IThinkingDataService private thinkingDataService: IThinkingDataService,
+		@IConfigurationService configurationService: IConfigurationService,
+		@IExperimentationService experimentationService: IExperimentationService,
+		@ILogService logService: ILogService
 	) {
 		const modelInfo: IChatModelInformation = {
 			id: _azureModel,
@@ -63,7 +68,10 @@ export class AzureTestEndpoint extends ChatEndpoint {
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
-			instantiationService
+			instantiationService,
+			configurationService,
+			experimentationService,
+			logService
 		);
 		this.isThinkingModel = false; // Set to true if testing a thinking model
 	}

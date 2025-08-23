@@ -5,16 +5,16 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { autorun } from '../reactions/autorun';
 import { IObservable, IObservableWithChange, IObserver, IReader, ITransaction } from '../base';
-import { DisposableStore, Event, IDisposable, toDisposable } from '../commonFacade/deps';
+import { transaction } from '../transaction';
+import { observableValue } from '../observables/observableValue';
 import { DebugOwner } from '../debugName';
-import { _setKeepObserved, _setRecomputeInitiallyAndOnChange } from '../observables/baseObservable';
+import { DisposableStore, Event, IDisposable, toDisposable } from '../commonFacade/deps';
 import { derived, derivedOpts } from '../observables/derived';
 import { observableFromEvent } from '../observables/observableFromEvent';
 import { observableSignal } from '../observables/observableSignal';
-import { observableValue } from '../observables/observableValue';
-import { autorun } from '../reactions/autorun';
-import { transaction } from '../transaction';
+import { _setKeepObserved, _setRecomputeInitiallyAndOnChange } from '../observables/baseObservable';
 
 export function observableFromPromise<T>(promise: Promise<T>): IObservable<{ value?: T }> {
 	const observable = observableValue<{ value?: T }>('promiseValue', {});
@@ -39,7 +39,7 @@ export function signalFromObservable<T>(owner: DebugOwner | undefined, observabl
 export function debouncedObservableDeprecated<T>(observable: IObservable<T>, debounceMs: number, disposableStore: DisposableStore): IObservable<T | undefined> {
 	const debouncedObservable = observableValue<T | undefined>('debounced', undefined);
 
-	let timeout: any | undefined = undefined;
+	let timeout: Timeout | undefined = undefined;
 
 	disposableStore.add(autorun(reader => {
 		/** @description debounce */
@@ -66,7 +66,7 @@ export function debouncedObservable<T>(observable: IObservable<T>, debounceMs: n
 	let hasValue = false;
 	let lastValue: T | undefined;
 
-	let timeout: any | undefined = undefined;
+	let timeout: Timeout | undefined = undefined;
 
 	return observableFromEvent<T, void>(cb => {
 		const d = autorun(reader => {
@@ -104,7 +104,7 @@ export function debouncedObservable<T>(observable: IObservable<T>, debounceMs: n
 export function wasEventTriggeredRecently(event: Event<any>, timeoutMs: number, disposableStore: DisposableStore): IObservable<boolean> {
 	const observable = observableValue('triggeredRecently', false);
 
-	let timeout: any | undefined = undefined;
+	let timeout: Timeout | undefined = undefined;
 
 	disposableStore.add(event(() => {
 		observable.set(true, undefined);

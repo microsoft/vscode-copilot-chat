@@ -15,7 +15,8 @@ import { IAuthenticationService } from '../../../platform/authentication/common/
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
-import { IEnvService } from '../../../platform/env/common/envService';
+import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
+import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { collectErrorMessages, ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
@@ -23,17 +24,16 @@ import { getRequest, IFetcher } from '../../../platform/networking/common/networ
 import { NodeFetcher } from '../../../platform/networking/node/nodeFetcher';
 import { NodeFetchFetcher } from '../../../platform/networking/node/nodeFetchFetcher';
 import { ElectronFetcher } from '../../../platform/networking/vscode-node/electronFetcher';
+import { FetcherService } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { createRequestHMAC } from '../../../util/common/crypto';
+import { shuffle } from '../../../util/vs/base/common/arrays';
 import { timeout } from '../../../util/vs/base/common/async';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../util/vs/platform/instantiation/common/serviceCollection';
-import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
-import { FetcherService } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
-import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
-import { shuffle } from '../../../util/vs/base/common/arrays';
 import { EXTENSION_ID } from '../../common/constants';
 
 export interface ProxyAgentLog {
@@ -51,6 +51,7 @@ export class LoggingActionsContrib {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IAuthenticationService private readonly authService: IAuthenticationService,
 		@ICAPIClientService private readonly capiClientService: ICAPIClientService,
+		@IFetcherService private readonly fetcherService: IFetcherService,
 		@ILogService private logService: ILogService,
 	) {
 		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.collectDiagnostics', async () => {
@@ -83,6 +84,7 @@ User Settings:
 			const nodeCurrent = !electronCurrent && this.configurationService.getConfig<boolean>(ConfigKey.Shared.DebugUseNodeFetcher);
 			const nodeFetchCurrent = !electronCurrent && !nodeCurrent && this.configurationService.getConfig<boolean>(ConfigKey.Shared.DebugUseNodeFetchFetcher);
 			const nodeCurrentFallback = !electronCurrent && !nodeFetchCurrent;
+			const activeFetcher = this.fetcherService.getUserAgentLibrary();
 			const fetchers = {
 				['Electron fetch']: {
 					fetcher: electronFetcher,
@@ -188,7 +190,7 @@ User Settings:
 					}
 				}
 				for (const [name, fetcher] of Object.entries(fetchers)) {
-					await appendText(editor, `- ${name}${fetcher.current ? ' (configured)' : ''}: `);
+					await appendText(editor, `- ${name}${fetcher.current ? ' (configured)' : fetcher.fetcher?.getUserAgentLibrary() === activeFetcher ? ' (active)' : ''}: `);
 					if (fetcher.fetcher) {
 						const start = Date.now();
 						try {
@@ -360,7 +362,7 @@ export function collectFetcherTelemetry(accessor: ServicesAccessor, error: any):
 	const expService = accessor.get(IExperimentationService);
 	const capiClientService = accessor.get(ICAPIClientService);
 	const instantiationService = accessor.get(IInstantiationService);
-	if (extensionContext.extensionMode === vscode.ExtensionMode.Test) {
+	if (extensionContext.extensionMode === vscode.ExtensionMode.Test || isScenarioAutomation) {
 		return;
 	}
 

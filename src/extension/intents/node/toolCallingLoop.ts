@@ -29,7 +29,7 @@ import { InteractionOutcomeComputer } from '../../inlineChat/node/promptCrafting
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
 import { Conversation, IResultMetadata, ResponseStreamParticipant, TurnStatus } from '../../prompt/common/conversation';
 import { IBuildPromptContext, InternalToolReference, IToolCall, IToolCallRound } from '../../prompt/common/intents';
-import { ToolCallRound } from '../../prompt/common/toolCallRound';
+import { ThinkingDataItem, ToolCallRound } from '../../prompt/common/toolCallRound';
 import { IBuildPromptResult, IResponseProcessor } from '../../prompt/node/intents';
 import { PseudoStopStartResponseProcessor } from '../../prompt/node/pseudoStartStopConversationCallback';
 import { ResponseProcessorContext } from '../../prompt/node/responseProcessorContext';
@@ -296,7 +296,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				*/
 				this._telemetryService.sendMSFTTelemetryEvent('readFileTrajectory',
 					{
-						model: this.options.request.model.id,
+						// model will be undefined in the simulator
+						model: this.options.request.model?.id,
 					},
 					{
 						rounds: seqArgs.length,
@@ -432,6 +433,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}) : undefined;
 		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
+		let thinking: ThinkingDataItem | undefined;
 		const fetchResult = await this.fetch({
 			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
 			finishedCb: async (text, _, delta) => {
@@ -445,6 +447,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				}
 				if (delta.statefulMarker) {
 					statefulMarker = delta.statefulMarker;
+				}
+				if (delta.thinking) {
+					thinking = ThinkingDataItem.createOrUpdate(thinking, delta.thinking);
 				}
 
 				return stopEarly ? text.length : undefined;
@@ -481,15 +486,16 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		this.turn.setMetadata(interactionOutcomeComputer.interactionOutcome);
 		const toolInputRetry = isToolInputFailure ? (this.toolCallRounds.at(-1)?.toolInputRetry || 0) + 1 : 0;
 		if (fetchResult.type === ChatFetchResponseType.Success) {
+			thinking?.updateWithFetchResult(fetchResult);
 			return {
 				response: fetchResult,
-				round: new ToolCallRound(
-					fetchResult.value,
+				round: ToolCallRound.create({
+					response: fetchResult.value,
 					toolCalls,
 					toolInputRetry,
-					undefined,
-					statefulMarker
-				),
+					statefulMarker,
+					thinking: thinking?.isEncrypted ? thinking : undefined
+				}),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
 				lastRequestMessages: buildPromptResult.messages,
@@ -502,7 +508,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
 			lastRequestMessages: buildPromptResult.messages,
 			availableTools,
-			round: new ToolCallRound('', toolCalls, toolInputRetry, undefined)
+			round: new ToolCallRound('', toolCalls, toolInputRetry)
 		};
 	}
 

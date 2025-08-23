@@ -8,6 +8,7 @@ import { BYOKContrib } from '../../byok/vscode-node/byokContribution';
 import { ChatQuotaContribution } from '../../chat/vscode-node/chatQuota.contribution';
 import * as chatBlockLanguageContribution from '../../codeBlocks/vscode-node/chatBlockLanguageFeatures.contribution';
 import { IExtensionContributionFactory, asContributionFactory } from '../../common/contributions';
+import { CompletionsCoreContribution } from '../../completions/vscode-node/completionsCoreContribution';
 import { ConfigurationMigrationContribution } from '../../configuration/vscode-node/configurationMigration';
 import { ContextKeysContribution } from '../../contextKeys/vscode-node/contextKeys.contribution';
 import { AiMappedEditsContrib } from '../../conversation/vscode-node/aiMappedEditsContrib';
@@ -74,6 +75,7 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(ChatQuotaContribution),
 	asContributionFactory(NotebookFollowCommands),
 	asContributionFactory(PromptFileContextContribution),
+	asContributionFactory(CompletionsCoreContribution),
 	workspaceIndexingContribution,
 ];
 

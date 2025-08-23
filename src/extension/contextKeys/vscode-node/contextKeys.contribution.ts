@@ -7,7 +7,6 @@ import { IAuthenticationService } from '../../../platform/authentication/common/
 import { ChatDisabledError, ContactSupportError, EnterpriseManagedError, NotSignedUpError, SubscriptionExpiredError } from '../../../platform/authentication/vscode-node/copilotTokenManager';
 import { SESSION_LOGIN_MESSAGE } from '../../../platform/authentication/vscode-node/session';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
@@ -15,7 +14,6 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observableInternal';
-import { isBYOKEnabled } from '../../byok/common/byokProvider';
 
 const welcomeViewContextKeys = {
 	Activated: 'github.copilot-chat.activated',
@@ -33,14 +31,13 @@ const showLogViewContextKey = `github.copilot.chat.showLogView`;
 const debugReportFeedbackContextKey = 'github.copilot.debugReportFeedback';
 
 const previewFeaturesDisabledContextKey = 'github.copilot.previewFeaturesDisabled';
-const byokEnabledContextKey = 'github.copilot.byokEnabled';
 
 const debugContextKey = 'github.copilot.chat.debug';
 
 export class ContextKeysContribution extends Disposable {
 
 	private _needsOfflineCheck = false;
-	private _scheduledOfflineCheck: NodeJS.Timeout | undefined;
+	private _scheduledOfflineCheck: TimeoutHandle | undefined;
 	private _showLogView = false;
 
 	constructor(
@@ -49,7 +46,6 @@ export class ContextKeysContribution extends Disposable {
 		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@ILogService private readonly _logService: ILogService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
-		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IEnvService private readonly _envService: IEnvService
 	) {
 		super();
@@ -173,16 +169,6 @@ export class ContextKeysContribution extends Disposable {
 		}
 	}
 
-	private async _updateBYOKEnabled() {
-		try {
-			const copilotToken = await this._authenticationService.getCopilotToken();
-			const byokAllowed = isBYOKEnabled(copilotToken, this._capiClientService);
-			commands.executeCommand('setContext', byokEnabledContextKey, byokAllowed);
-		} catch (e) {
-			commands.executeCommand('setContext', byokEnabledContextKey, false);
-		}
-	}
-
 	private _updateShowLogViewContext() {
 		if (this._showLogView) {
 			return;
@@ -202,7 +188,6 @@ export class ContextKeysContribution extends Disposable {
 		this._inspectContext();
 		this._updateQuotaExceededContext();
 		this._updatePreviewFeaturesDisabledContext();
-		this._updateBYOKEnabled();
 		this._updateShowLogViewContext();
 	}
 }

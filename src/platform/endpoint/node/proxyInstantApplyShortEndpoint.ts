@@ -18,6 +18,7 @@ import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
 import { IChatModelInformation } from '../common/endpointProvider';
 import { ChatEndpoint } from './chatEndpoint';
+import { ILogService } from '../../log/common/logService';
 
 export class ProxyInstantApplyShortEndpoint extends ChatEndpoint {
 
@@ -33,6 +34,7 @@ export class ProxyInstantApplyShortEndpoint extends ChatEndpoint {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
+		@ILogService logService: ILogService,
 	) {
 		const model = configurationService.getExperimentBasedConfig<string>(ConfigKey.Internal.InstantApplyShortModelName, experimentationService) ?? CHAT_MODEL.SHORT_INSTANT_APPLY;
 		const modelInfo: IChatModelInformation = {
@@ -63,7 +65,10 @@ export class ProxyInstantApplyShortEndpoint extends ChatEndpoint {
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
-			instantiationService
+			instantiationService,
+			configurationService,
+			experimentationService,
+			logService
 		);
 	}
 

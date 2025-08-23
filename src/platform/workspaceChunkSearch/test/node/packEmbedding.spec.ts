@@ -58,4 +58,19 @@ suite('Pack Embedding', () => {
 		assert.deepStrictEqual(deserialized.value.length, embedding.value.length);
 		assert.deepStrictEqual(deserialized.value, embedding.value);
 	});
+
+	test('Unpack should work with old style metis data', () => {
+		const embedding: Embedding = {
+			type: EmbeddingType.metis_1024_I16_Binary,
+			value: Array.from({ length: 1024 }, () => Math.random() < 0.5 ? 0.03125 : -0.03125)
+		};
+
+		// Don't use pack
+		const float32Buf = Float32Array.from(embedding.value);
+		const serialized = new Uint8Array(float32Buf.buffer, float32Buf.byteOffset, float32Buf.byteLength);
+
+		const deserialized = unpackEmbedding(EmbeddingType.metis_1024_I16_Binary, serialized);
+		assert.deepStrictEqual(deserialized.value.length, embedding.value.length);
+		assert.deepStrictEqual(deserialized.value, embedding.value);
+	});
 });

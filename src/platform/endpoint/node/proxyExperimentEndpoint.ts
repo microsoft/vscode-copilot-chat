@@ -106,10 +106,6 @@ export class ProxyExperimentEndpoint implements IChatEndpoint {
 		return this.selectedEndpoint.tokenizer;
 	}
 
-	get supportsStatefulResponses() {
-		return this.selectedEndpoint.supportsStatefulResponses;
-	}
-
 	processResponseFromChatEndpoint(telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData, cancellationToken?: CancellationToken): Promise<AsyncIterableObject<ChatCompletion>> {
 		return this.selectedEndpoint.processResponseFromChatEndpoint(telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData, cancellationToken);
 	}
@@ -140,7 +136,7 @@ export class ProxyExperimentEndpoint implements IChatEndpoint {
 }
 
 
-interface ExperimentConfig {
+export interface ExperimentConfig {
 	selected: string;
 	name: string;
 	id: string;

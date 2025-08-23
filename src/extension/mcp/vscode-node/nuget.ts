@@ -7,10 +7,11 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import path from 'path';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { randomPath } from '../../../util/vs/base/common/extpath';
 import { localize } from '../../../util/vs/nls';
 import { ValidatePackageErrorType, ValidatePackageResult } from './commands';
-import { executeWithTimeout } from './util';
+import { CommandExecutor, ICommandExecutor } from './util';
 
 interface NuGetServiceIndexResponse {
 	resources?: Array<{ "@id": string; "@type": string }>;
@@ -39,6 +40,9 @@ interface DotnetCli {
 export class NuGetMcpSetup {
 	constructor(
 		public readonly logService: ILogService,
+		public readonly fetcherService: IFetcherService,
+
+		public readonly commandExecutor: ICommandExecutor = new CommandExecutor(),
 
 		public readonly dotnet: DotnetCli = { command: 'dotnet', args: [] },
 
@@ -149,7 +153,7 @@ Error: ${e}`);
 
 	async getDotnetVersion(cwd: string): Promise<string> {
 		const args = this.dotnet.args.concat(['--version']);
-		const result = await executeWithTimeout(this.dotnet.command, args, cwd);
+		const result = await this.commandExecutor.executeWithTimeout(this.dotnet.command, args, cwd);
 		const version = result.stdout.trim();
 		if (result.exitCode !== 0 || !version) {
 			this.logService.warn(`Failed to check for .NET version while checking if a NuGet MCP server exists.
@@ -164,7 +168,7 @@ stderr: ${result.stderr}`);
 	async getLatestPackageVersion(cwd: string, id: string): Promise<{ id: string; version: string; owners?: string } | undefined> {
 		// we don't use --exact-match here because it does not return owner information on NuGet.org
 		const args = this.dotnet.args.concat(['package', 'search', id, '--source', this.source, '--prerelease', '--format', 'json']);
-		const searchResult = await executeWithTimeout(this.dotnet.command, args, cwd);
+		const searchResult = await this.commandExecutor.executeWithTimeout(this.dotnet.command, args, cwd);
 		const searchData: DotnetPackageSearchOutput = JSON.parse(searchResult.stdout.trim());
 		for (const result of searchData.searchResult ?? []) {
 			for (const pkg of result.packages ?? []) {
@@ -178,14 +182,14 @@ stderr: ${result.stderr}`);
 	async getPackageReadmeFromNuGetOrgAsync(id: string, version: string): Promise<string | undefined> {
 		try {
 			const sourceUrl = URL.parse(this.source);
-			if (sourceUrl?.protocol !== 'https' || !sourceUrl.pathname.endsWith('.json')) {
+			if (sourceUrl?.protocol !== 'https:' || !sourceUrl.pathname.endsWith('.json')) {
 				this.logService.warn(`NuGet package source is not an HTTPS V3 source URL. Cannot fetch a readme for ${id}@${version}.`);
 				return;
 			}
 
 			// download the service index to locate services
 			// https://learn.microsoft.com/en-us/nuget/api/service-index
-			const serviceIndexResponse = await fetch(this.source);
+			const serviceIndexResponse = await this.fetcherService.fetch(this.source, { method: 'GET' });
 			if (serviceIndexResponse.status !== 200) {
 				this.logService.warn(`Unable to read the service index for NuGet.org while fetching readme for ${id}@${version}.
 HTTP status: ${serviceIndexResponse.status}`);
@@ -205,7 +209,7 @@ HTTP status: ${serviceIndexResponse.status}`);
 			const readmeUrl = readmeTemplate
 				.replace('{lower_id}', encodeURIComponent(id.toLowerCase()))
 				.replace('{lower_version}', encodeURIComponent(version.toLowerCase()));
-			const readmeResponse = await fetch(readmeUrl);
+			const readmeResponse = await this.fetcherService.fetch(readmeUrl, { method: 'GET' });
 			if (readmeResponse.status === 200) {
 				return readmeResponse.text();
 			} else if (readmeResponse.status === 404) {
@@ -222,7 +226,7 @@ Error: ${error}`);
 
 	async getGlobalPackagesPath(id: string, version: string, cwd: string): Promise<string | undefined> {
 		const args = this.dotnet.args.concat(['nuget', 'locals', 'global-packages', '--list', '--force-english-output']);
-		const globalPackagesResult = await executeWithTimeout(this.dotnet.command, args, cwd);
+		const globalPackagesResult = await this.commandExecutor.executeWithTimeout(this.dotnet.command, args, cwd);
 
 		if (globalPackagesResult.exitCode !== 0) {
 			this.logService.warn(`Failed to discover the NuGet global packages folder. Proceeding without server.json for ${id}@${version}.
@@ -238,7 +242,7 @@ stderr: ${globalPackagesResult.stderr}`);
 
 	async createToolManifest(id: string, version: string, cwd: string): Promise<boolean> {
 		const args = this.dotnet.args.concat(['new', 'tool-manifest']);
-		const result = await executeWithTimeout(this.dotnet.command, args, cwd);
+		const result = await this.commandExecutor.executeWithTimeout(this.dotnet.command, args, cwd);
 
 		if (result.exitCode !== 0) {
 			this.logService.warn(`Failed to create tool manifest.Proceeding without server.json for ${id}@${version}.
@@ -252,7 +256,7 @@ stderr: ${result.stderr}`);
 
 	async installLocalTool(id: string, version: string, cwd: string): Promise<boolean> {
 		const args = this.dotnet.args.concat(["tool", "install", `${id}@${version}`, "--source", this.source, "--local", "--create-manifest-if-needed"]);
-		const installResult = await executeWithTimeout(this.dotnet.command, args, cwd);
+		const installResult = await this.commandExecutor.executeWithTimeout(this.dotnet.command, args, cwd);
 
 		if (installResult.exitCode !== 0) {
 			this.logService.warn(`Failed to install local tool ${id} @${version}. Proceeding without server.json for ${id}@${version}.

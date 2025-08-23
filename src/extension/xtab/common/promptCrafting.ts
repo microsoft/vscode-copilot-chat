@@ -9,7 +9,7 @@ import { LanguageContextResponse } from '../../../platform/inlineEdits/common/da
 import { CurrentFileOptions, DiffHistoryOptions, PromptingStrategy, PromptOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { StatelessNextEditRequest } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { IXtabHistoryEditEntry, IXtabHistoryEntry } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
-import { ContextKind } from '../../../platform/languageServer/common/languageContextService';
+import { ContextKind, TraitContext } from '../../../platform/languageServer/common/languageContextService';
 import { range } from '../../../util/vs/base/common/arrays';
 import { illegalArgument } from '../../../util/vs/base/common/errors';
 import { Schemas } from '../../../util/vs/base/common/network';
@@ -141,6 +141,8 @@ export function getUserPrompt(request: StatelessNextEditRequest, currentFileCont
 
 	const editDiffHistory = getEditDiffHistory(request, docsInPrompt, computeTokens, opts.diffHistory);
 
+	const relatedInformation = getRelatedInformation(langCtx);
+
 	const currentFilePath = toUniquePath(activeDoc.id, activeDoc.workspaceRoot?.path);
 
 	const postScript = getPostScript(opts.promptingStrategy, currentFilePath);
@@ -162,7 +164,7 @@ ${areaAroundCodeToEdit}`;
 
 	const includeBackticks = opts.promptingStrategy !== PromptingStrategy.Nes41Miniv3 && opts.promptingStrategy !== PromptingStrategy.Codexv21NesUnified;
 
-	const prompt = (includeBackticks ? wrapInBackticks(mainPrompt) : mainPrompt) + postScript;
+	const prompt = relatedInformation + (includeBackticks ? wrapInBackticks(mainPrompt) : mainPrompt) + postScript;
 
 	const trimmedPrompt = prompt.trim();
 
@@ -201,6 +203,28 @@ they would have made next. Provide the revised code that was between the \`${COD
 
 	const formattedPostScript = postScript === undefined ? '' : `\n\n${postScript}`;
 	return formattedPostScript;
+}
+
+function getRelatedInformation(langCtx: LanguageContextResponse | undefined): string {
+	if (langCtx === undefined) {
+		return '';
+	}
+
+	const traits = langCtx.items
+		.filter(ctx => ctx.context.kind === ContextKind.Trait)
+		.filter(t => !t.onTimeout)
+		.map(t => t.context) as TraitContext[];
+
+	if (traits.length === 0) {
+		return '';
+	}
+
+	const relatedInformation: string[] = [];
+	for (const trait of traits) {
+		relatedInformation.push(`${trait.name}: ${trait.value}`);
+	}
+
+	return `Consider this related information:\n${relatedInformation.join('\n')}\n\n`;
 }
 
 function getEditDiffHistory(
@@ -262,7 +286,7 @@ function generateDocDiff(entry: IXtabHistoryEditEntry, workspacePath: string | u
 
 	const lineEdit = RootedEdit.toLineEdit(entry.edit);
 
-	for (const singleLineEdit of lineEdit.edits) {
+	for (const singleLineEdit of lineEdit.replacements) {
 		const oldLines = entry.edit.base.getLines().slice(singleLineEdit.lineRange.startLineNumber - 1, singleLineEdit.lineRange.endLineNumberExclusive - 1);
 		const newLines = singleLineEdit.newLines;
 

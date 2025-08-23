@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import minimist from 'minimist';
-import { LEGACY_EMBEDDING_MODEL_ID } from '../../src/platform/embeddings/common/embeddingsComputer';
+import { EmbeddingType } from '../../src/platform/embeddings/common/embeddingsComputer';
 import { CacheMode } from './simulationContext';
 
 /** Number of runs that are stored in baseline.json */
@@ -32,7 +32,7 @@ export class SimulationOptions {
 	public readonly fastRewriteModel: string | undefined;
 	public readonly summarizeHistory: boolean;
 	public readonly swebenchPrompt: boolean;
-	public readonly embeddingModel: LEGACY_EMBEDDING_MODEL_ID | undefined;
+	public readonly embeddingType: EmbeddingType | undefined;
 	public readonly boost: boolean;
 	public readonly parallelism: number;
 	public readonly lmCacheMode: CacheMode;
@@ -48,6 +48,7 @@ export class SimulationOptions {
 	public readonly stageCacheEntries: boolean;
 	public readonly ci: boolean;
 	public readonly gc: boolean;
+	public readonly externalCacheLayersPath: string | undefined;
 	public readonly verbose: number | boolean | undefined;
 	public readonly grep: string[] | string | undefined;
 	public readonly omitGrep: string | undefined;
@@ -109,7 +110,7 @@ export class SimulationOptions {
 		this.fastRewriteModel = this.argv['fast-rewrite-model'];
 		this.summarizeHistory = boolean(argv['summarize-history'], true);
 		this.swebenchPrompt = boolean(argv['swebench-prompt'], false);
-		this.embeddingModel = cliOptionsToEmbeddingsModel(this.argv['embedding-model']);
+		this.embeddingType = cliOptionsToWellKnownEmbeddingsType(this.argv['embedding-model']);
 		this.parallelism = this.argv['parallelism'] ?? this.argv['p'] ?? 20;
 		this.modelCacheMode = this.argv['skip-model-cache'] ? CacheMode.Disable : CacheMode.Default;
 		this.lmCacheMode = (
@@ -130,6 +131,7 @@ export class SimulationOptions {
 		this.stageCacheEntries = boolean(this.argv['stage-cache-entries'], false);
 		this.ci = boolean(this.argv['ci'], false);
 		this.gc = boolean(this.argv['gc'], false);
+		this.externalCacheLayersPath = argv['external-cache-layers-path'];
 		this.verbose = this.argv['verbose'];
 		this.grep = argv['grep'];
 		this.omitGrep = argv['omit-grep'];
@@ -180,6 +182,7 @@ export class SimulationOptions {
 			`  --n                                Run each scenario N times`,
 			`  --ci                               Equivalent to --n=${BASELINE_RUN_COUNT} but throws if the baseline is not up-to-date`,
 			`  --gc                               Used with --require-cache to compact cache layers into the baseline cache`,
+			`  --external-cache-layers-path       Used to specify the path to the external cache layers`,
 			`  --grep                             Run a test which contains the passed-in string`,
 			`  --omit-grep                        Run a test which does not contain the passed-in string`,
 			`  --embedding-model                  Specify the model to use for the embedding endpoint (default: ada)`,
@@ -252,21 +255,22 @@ export class SimulationOptions {
 	}
 }
 
-export function cliOptionsToEmbeddingsModel(model: string | undefined): LEGACY_EMBEDDING_MODEL_ID | undefined {
-	let embeddingModel: LEGACY_EMBEDDING_MODEL_ID | undefined;
+function cliOptionsToWellKnownEmbeddingsType(model: string | undefined): EmbeddingType | undefined {
 	switch (model) {
 		case 'text3small':
-			embeddingModel = LEGACY_EMBEDDING_MODEL_ID.TEXT3SMALL;
-			break;
+		case EmbeddingType.text3small_512.id:
+			return EmbeddingType.text3small_512;
+
+		case 'metis':
+		case EmbeddingType.metis_1024_I16_Binary.id:
+			return EmbeddingType.metis_1024_I16_Binary;
+
 		case undefined:
-			embeddingModel = undefined;
-			break;
+			return undefined;
+
 		default:
 			throw new Error(`Unknown embedding model: ${model}`);
 	}
-
-	return embeddingModel;
-
 }
 
 function boolean(value: any, defaultValue: boolean): boolean {

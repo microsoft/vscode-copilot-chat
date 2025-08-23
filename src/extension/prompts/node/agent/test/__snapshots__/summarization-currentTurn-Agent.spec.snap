@@ -15,7 +15,7 @@ This is the state of the context at this point in the conversation. The view of 
 </workspace_info>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -26,5 +26,5 @@ summarized!
 </conversation-summary>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
