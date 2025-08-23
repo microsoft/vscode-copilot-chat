@@ -133,7 +133,8 @@
 		"resolvers",
 		"taskExecutionTerminal",
 		"dataChannels",
-		"languageModelThinkingPart"
+		"languageModelThinkingPart",
+		"chatSessionsProvider"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -1610,19 +1611,6 @@
 				"id": "github.copilot.codex",
 				"name": "codex",
 				"fullName": "Codex",
-				"locations": [
-					"panel"
-				],
-				"modes": [
-					"agent"
-				],
-				"isEngine": true,
-				"isSticky": true
-			},
-			{
-				"id": "github.copilot.claude",
-				"name": "claude",
-				"fullName": "Claude",
 				"locations": [
 					"panel"
 				],
@@ -3749,6 +3737,15 @@
 			{
 				"name": "@vscode/copilot-typescript-server-plugin",
 				"enableForWorkspaceTypeScriptVersions": true
+			}
+		],
+		"chatSessions": [
+			{
+				"type": "claude-code",
+				"name": "claude",
+				"displayName": "Claude Code",
+				"description": "The Claude Code agent",
+				"when": "config.github.copilot.chat.advanced.claudeCode.enabled"
 			}
 		]
 	},
