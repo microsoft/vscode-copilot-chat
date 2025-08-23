@@ -27,8 +27,6 @@ export interface RawThinkingDelta {
 	signature?: string;
 }
 
-
-
 export type ThinkingDelta = {
 	text?: string;
 	id: string;

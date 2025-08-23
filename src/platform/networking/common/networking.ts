@@ -229,8 +229,6 @@ export interface IChatEndpoint extends IEndpoint {
 	cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint;
 }
 
-
-
 /** Function to create a standard request body for CAPI completions */
 export function createCapiRequestBody(options: ICreateEndpointBodyOptions, model: string) {
 	// FIXME@ulugbekna: need to investigate why language configs have such stop words, eg

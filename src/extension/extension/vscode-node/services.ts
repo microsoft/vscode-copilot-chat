@@ -202,7 +202,6 @@ function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, 
 	} else {
 		builder.define(IExperimentationService, new NullExperimentationService());
 	}
-
 }
 
 function setupTelemetry(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext, internalAIKey: string, internalLargeEventAIKey: string, externalAIKey: string) {
