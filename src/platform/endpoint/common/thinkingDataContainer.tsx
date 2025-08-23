@@ -23,7 +23,7 @@ export class ThinkingDataContainer extends PromptElement<IThinkingDataContainerP
 	render() {
 		const { thinking } = this.props;
 		const container: IThinkingDataOpaque = { type: CustomDataPartMimeTypes.ThinkingData, thinking };
-		return <opaque value={container} />;
+		return <opaque value={container} tokenUsage={thinking.tokens} />;
 	}
 }
 

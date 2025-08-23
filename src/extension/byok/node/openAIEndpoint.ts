@@ -13,6 +13,7 @@ import { IDomainService } from '../../../platform/endpoint/common/domainService'
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { IEnvService } from '../../../platform/env/common/envService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
@@ -21,7 +22,6 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ILogService } from '../../../platform/log/common/logService';
 
 function hydrateBYOKErrorMessages(response: ChatResponse): ChatResponse {
 	if (response.type === ChatFetchResponseType.Failed && response.streamError) {
@@ -82,6 +82,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 	}
 
 	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		options.ignoreStatefulMarker = false;
 		const body = super.createRequestBody(options);
 		if (this.useResponsesApi) {
 			body.store = true;
@@ -137,7 +138,9 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			}
 			// Removing max tokens defaults to the maximum which is what we want for BYOK
 			delete body.max_tokens;
-			body['stream_options'] = { 'include_usage': true };
+			if (!this.useResponsesApi) {
+				body['stream_options'] = { 'include_usage': true };
+			}
 		}
 	}
 
@@ -167,7 +170,10 @@ export class OpenAIEndpoint extends ChatEndpoint {
 	}
 
 	public override async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
-		const response = await super.makeChatRequest2(options, token);
+		let response = await super.makeChatRequest2(options, token);
+		if (response.type === ChatFetchResponseType.InvalidStatefulMarker) {
+			response = await this._makeChatRequest2({ ...options, ignoreStatefulMarker: true }, token);
+		}
 		return hydrateBYOKErrorMessages(response);
 	}
 }

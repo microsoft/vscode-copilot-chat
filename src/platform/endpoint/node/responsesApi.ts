@@ -69,7 +69,7 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 					input.push({
 						role: 'assistant',
 						content: message.content.map(rawContentToResponsesOutputContent).filter(isDefined),
-						// I don't know what this does. These seem optional but are required in the types
+						// I don't think this needs to be round-tripped.
 						id: 'msg_123',
 						status: 'completed',
 						type: 'message',
@@ -179,6 +179,7 @@ export async function processResponseFromChatEndpoint(instantiationService: IIns
 
 class OpenAIResponsesProcessor {
 	private textAccumulator: string = '';
+	private hasReceivedReasoningSummary = false;
 
 	constructor(
 		private readonly telemetryData: TelemetryData,
@@ -224,12 +225,33 @@ class OpenAIResponsesProcessor {
 						text: '',
 						thinking: {
 							id: chunk.item.id,
+							// CAPI models don't stream the reasoning summary for some reason, byok do, so don't duplicate it
+							text: this.hasReceivedReasoningSummary ?
+								undefined :
+								chunk.item.summary.map(s => s.text).join('\n\n'),
 							metadata: chunk.item.encrypted_content ?? undefined,
-							isEncrypted: !!chunk.item.encrypted_content
+							isEncrypted: !!chunk.item.encrypted_content,
 						}
 					});
 				}
 				return;
+			case 'response.reasoning_summary_text.delta':
+				this.hasReceivedReasoningSummary = true;
+				return onProgress({
+					text: '',
+					thinking: {
+						id: chunk.item_id,
+						text: chunk.delta,
+					}
+				});
+			case 'response.reasoning_summary_part.done':
+				this.hasReceivedReasoningSummary = true;
+				return onProgress({
+					text: '',
+					thinking: {
+						id: chunk.item_id
+					}
+				});
 			case 'response.completed':
 				onProgress({ text: '', statefulMarker: chunk.response.id });
 				return {
