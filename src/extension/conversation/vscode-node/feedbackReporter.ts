@@ -121,7 +121,7 @@ export class FeedbackReporter extends Disposable implements IFeedbackReporter {
 						return `🛠️ ${c.function.name} (${c.id}) ${argsStr}`;
 					}).join('\n');
 				} else if (message.role === Raw.ChatRole.Tool) {
-					content = `🛠️ ${message.toolCallId}\n${message.content}`;
+					content = `🛠️ ${message.toolCallId}\n${content}`;
 				}
 
 				return this._embedCodeblock(roleToString(message.role).toUpperCase(), content);
