@@ -3,11 +3,16 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Raw } from '@vscode/prompt-tsx';
 import * as http from 'http';
 import * as vscode from 'vscode';
+import { ChatLocation } from '../../../platform/chat/common/commonTypes';
+import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
+import { OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
+import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { AnthropicAdapter, OpenAIAdapter, ProtocolAdapter, StreamingContext } from './adapters';
+import { AnthropicAdapter, IProtocolAdapter, IStreamingContext, OpenAIAdapter } from './adapters';
 
 export interface ServerTextLineResponse {
 	type: 'text';
@@ -28,11 +33,12 @@ interface ServerConfig {
 class LanguageModelServer {
 	private server: http.Server;
 	private config: ServerConfig;
-	private adapters: Map<string, ProtocolAdapter>;
+	private adapters: Map<string, IProtocolAdapter>;
 	private pathHandlers: Map<string, (req: http.IncomingMessage, res: http.ServerResponse, body: string) => Promise<void>>;
 
 	constructor(
-		@ILogService private readonly logService: ILogService
+		@ILogService private readonly logService: ILogService,
+		@IEndpointProvider private readonly endpointProvider: IEndpointProvider
 	) {
 		this.config = {
 			port: 0, // Will be set to random available port
@@ -133,7 +139,7 @@ class LanguageModelServer {
 		}
 	}
 
-	private getAdapterForPath(url: string): ProtocolAdapter | undefined {
+	private getAdapterForPath(url: string): IProtocolAdapter | undefined {
 		const pathname = this.parseUrlPathname(url);
 
 		// Direct lookup in the adapters map
@@ -153,34 +159,27 @@ class LanguageModelServer {
 		});
 	}
 
-	private async handleChatRequest(adapter: ProtocolAdapter, body: string, res: http.ServerResponse): Promise<void> {
+	private async handleChatRequest(adapter: IProtocolAdapter, body: string, res: http.ServerResponse): Promise<void> {
 		try {
 			// Parse request using the adapter
 			const parsedRequest = adapter.parseRequest(body);
 
 			// Get available language models
-			const models = await vscode.lm.selectChatModels();
+			const endpoints = await this.endpointProvider.getAllChatEndpoints();
 
-			if (models.length === 0) {
+			if (endpoints.length === 0) {
 				res.writeHead(404, { 'Content-Type': 'application/json' });
 				res.end(JSON.stringify({ error: 'No language models available' }));
 				return;
 			}
 
 			// Select model based on request criteria
-			const selectedModel = this.selectModel(models, parsedRequest.model);
+			const selectedEndpoint = this.selectEndpoint(endpoints, parsedRequest.model);
 
-			if (!selectedModel) {
+			if (!selectedEndpoint) {
 				res.writeHead(404, { 'Content-Type': 'application/json' });
 				res.end(JSON.stringify({
-					error: 'No model found matching criteria',
-					availableModels: models.map(m => ({
-						id: m.id,
-						name: m.name,
-						vendor: m.vendor,
-						family: m.family,
-						version: m.version
-					}))
+					error: 'No model found matching criteria'
 				}));
 				return;
 			}
@@ -203,9 +202,9 @@ class LanguageModelServer {
 
 			try {
 				// Create streaming context
-				const context: StreamingContext = {
+				const context: IStreamingContext = {
 					requestId: `req_${Math.random().toString(36).substr(2, 20)}`,
-					modelId: selectedModel.id,
+					modelId: selectedEndpoint.model,
 					currentBlockIndex: 0,
 					hasTextBlock: false,
 					hadToolCalls: false,
@@ -220,26 +219,50 @@ class LanguageModelServer {
 					}
 				}
 
-				// Make the chat request
-				const chatResponse = await selectedModel.sendRequest(
-					parsedRequest.messages,
-					parsedRequest.options || {},
-					tokenSource.token
-				);
-
-				// Stream the response using the adapter
-				for await (const part of chatResponse.stream) {
-					if (tokenSource.token.isCancellationRequested) {
-						break;
+				// Make the chat request using IChatEndpoint; stream via finishedCb
+				// Stream chunks via finishedCb; no need to track a response flag.
+				// Map any provided tools (from adapter) into OpenAI-style function tools for endpoints
+				const openAiTools: OpenAiFunctionTool[] | undefined = parsedRequest.options?.tools?.map(t => ({
+					type: 'function',
+					function: {
+						name: t.name,
+						description: t.description,
+						parameters: t.inputSchema ?? {}
 					}
+				}));
 
-					if (part instanceof vscode.LanguageModelTextPart || part instanceof vscode.LanguageModelToolCallPart) {
-						const events = adapter.formatStreamResponse(part, context);
-						for (const event of events) {
-							res.write(`event: ${event.event}\ndata: ${event.data}\n\n`);
+				const userInitiatedRequest = parsedRequest.messages.at(-1)?.role === Raw.ChatRole.User;
+				await selectedEndpoint.makeChatRequest2({
+					debugName: 'agentLanguageModelService',
+					messages: parsedRequest.messages,
+					finishedCb: async (_fullText, _index, delta) => {
+						if (tokenSource.token.isCancellationRequested) {
+							return 0; // stop
 						}
-					}
-				}
+						// Emit text deltas
+						if (delta.text) {
+							const textPart = new vscode.LanguageModelTextPart(delta.text);
+							for (const event of adapter.formatStreamResponse(textPart, context)) {
+								res.write(`event: ${event.event}\ndata: ${event.data}\n\n`);
+							}
+						}
+						// Emit tool calls if present
+						if (delta.copilotToolCalls && delta.copilotToolCalls.length > 0) {
+							for (const call of delta.copilotToolCalls) {
+								let input: object = {};
+								try { input = call.arguments ? JSON.parse(call.arguments) : {}; } catch { input = {}; }
+								const toolPart = new vscode.LanguageModelToolCallPart(call.id, call.name, input);
+								for (const event of adapter.formatStreamResponse(toolPart, context)) {
+									res.write(`event: ${event.event}\ndata: ${event.data}\n\n`);
+								}
+							}
+						}
+						return undefined;
+					},
+					location: ChatLocation.Agent,
+					requestOptions: openAiTools && openAiTools.length ? { tools: openAiTools } : undefined,
+					userInitiatedRequest
+				}, tokenSource.token);
 
 				// Send final events
 				const finalEvents = adapter.generateFinalEvents(context);
@@ -276,7 +299,7 @@ class LanguageModelServer {
 		}
 	}
 
-	private selectModel(models: readonly vscode.LanguageModelChat[], requestedModel?: string): vscode.LanguageModelChat | undefined {
+	private selectEndpoint(endpoints: readonly IChatEndpoint[], requestedModel?: string): IChatEndpoint | undefined {
 		if (requestedModel) {
 			// Handle model mapping
 			let mappedModel = requestedModel;
@@ -288,20 +311,20 @@ class LanguageModelServer {
 			}
 
 			// Try to find exact match first
-			let selectedModel = models.find(m => m.id === mappedModel);
+			let selectedEndpoint = endpoints.find(e => e.family === mappedModel || e.model === mappedModel);
 
 			// If not found, try to find by partial match for Anthropic models
-			if (!selectedModel && requestedModel.startsWith('claude-3-5-haiku')) {
-				selectedModel = models.find(m => m.id.includes('gpt-4o-mini')) || models.find(m => m.vendor === 'copilot');
-			} else if (!selectedModel && requestedModel.startsWith('claude-sonnet-4')) {
-				selectedModel = models.find(m => m.id.includes('claude-sonnet-4')) || models.find(m => m.vendor === 'copilot');
+			if (!selectedEndpoint && requestedModel.startsWith('claude-3-5-haiku')) {
+				selectedEndpoint = endpoints.find(e => e.model.includes('gpt-4o-mini')) ?? endpoints.find(e => e.model.includes('mini'));
+			} else if (!selectedEndpoint && requestedModel.startsWith('claude-sonnet-4')) {
+				selectedEndpoint = endpoints.find(e => e.model.includes('claude-sonnet-4')) ?? endpoints.find(e => e.model.includes('claude'));
 			}
 
-			return selectedModel;
+			return selectedEndpoint;
 		}
 
 		// Use first available model if no criteria specified
-		return models[0];
+		return endpoints[0];
 	}
 
 	private async handleModelsRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {

@@ -9,7 +9,7 @@ import * as vscode from 'vscode';
 import { convertToApiChatMessage } from '../../../../platform/endpoint/vscode-node/extChatEndpoint';
 import { OpenAiFunctionTool } from '../../../../platform/networking/common/fetch';
 import { ChatRole } from '../../../../platform/networking/common/openai';
-import { ParsedRequest, ProtocolAdapter, StreamEventData, StreamingContext } from './types';
+import { IParsedRequest, IProtocolAdapter, IStreamEventData, IStreamingContext } from './types';
 
 interface OpenAIServerRequest {
 	model?: string;
@@ -17,8 +17,8 @@ interface OpenAIServerRequest {
 	tools?: OpenAiFunctionTool[];
 }
 
-export class OpenAIAdapter implements ProtocolAdapter {
-	parseRequest(body: string): ParsedRequest {
+export class OpenAIAdapter implements IProtocolAdapter {
+	parseRequest(body: string): IParsedRequest {
 		const request: OpenAIServerRequest = JSON.parse(body);
 
 		// Apply model mapping
@@ -79,8 +79,8 @@ export class OpenAIAdapter implements ProtocolAdapter {
 
 	formatStreamResponse(
 		part: vscode.LanguageModelTextPart | vscode.LanguageModelToolCallPart,
-		context: StreamingContext
-	): StreamEventData[] {
+		context: IStreamingContext
+	): IStreamEventData[] {
 		if (part instanceof vscode.LanguageModelTextPart) {
 			const data = JSON.stringify({
 				id: context.requestId,
@@ -120,7 +120,7 @@ export class OpenAIAdapter implements ProtocolAdapter {
 		return [];
 	}
 
-	generateFinalEvents(context: StreamingContext): StreamEventData[] {
+	generateFinalEvents(context: IStreamingContext): IStreamEventData[] {
 		const data = JSON.stringify({
 			id: context.requestId,
 			object: 'chat.completion.chunk',

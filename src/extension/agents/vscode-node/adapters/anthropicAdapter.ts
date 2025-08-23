@@ -6,66 +6,59 @@
 import Anthropic from '@anthropic-ai/sdk';
 import * as http from 'http';
 import * as vscode from 'vscode';
-import { LanguageModelChatMessageRole } from 'vscode';
-import { coalesce } from '../../../../util/vs/base/common/arrays';
-import { anthropicMessageParamsToApiMessages } from '../../../byok/vscode-node/anthropicMessageConverter';
-import { ParsedRequest, ProtocolAdapter, StreamEventData, StreamingContext } from './types';
+import { anthropicMessagesToRawMessages } from '../../../byok/vscode-node/anthropicMessageConverter';
+import { IParsedRequest, IProtocolAdapter, IStreamEventData, IStreamingContext } from './types';
 
-export class AnthropicAdapter implements ProtocolAdapter {
-	parseRequest(body: string): ParsedRequest {
+export class AnthropicAdapter implements IProtocolAdapter {
+	parseRequest(body: string): IParsedRequest {
 		const requestBody: Anthropic.MessageStreamParams = JSON.parse(body);
 
-		// Convert Anthropic messages to VS Code format
-		const vscodeMessages: vscode.LanguageModelChatMessage[] = [];
-
-		// Add system messages first
+		// Build a single system text block from "system" if provided
+		let systemText = '';
 		if (typeof requestBody.system === 'string') {
-			vscodeMessages.push(new vscode.LanguageModelChatMessage(LanguageModelChatMessageRole.System, requestBody.system));
+			systemText = requestBody.system;
 		} else if (Array.isArray(requestBody.system) && requestBody.system.length > 0) {
-			const systemContent = requestBody.system.map(s => s.text).join('\n');
-			vscodeMessages.push(new vscode.LanguageModelChatMessage(LanguageModelChatMessageRole.System, systemContent));
+			systemText = requestBody.system.map(s => s.text).join('\n');
 		}
 
-		// Add conversation messages
-		requestBody.messages.forEach(msg => {
-			vscodeMessages.push(...anthropicMessageParamsToApiMessages(msg));
-		});
+		// Convert Anthropic messages to Raw (TSX) messages
+		const rawMessages = anthropicMessagesToRawMessages(requestBody.messages, { type: 'text', text: systemText });
 
 		const options: vscode.LanguageModelChatRequestOptions = {
 			justification: 'Anthropic-compatible chat request',
-			modelOptions: {
-				temperature: 0
-			}
+			modelOptions: { temperature: 0 }
 		};
 
 		if (requestBody.tools && requestBody.tools.length > 0) {
-			// Convert Anthropic tools to VS Code tools
-			options.tools = coalesce(requestBody.tools.map(tool => {
+			// Map Anthropic tools to VS Code chat tools. Provide a no-op invoke since this server doesn't run tools.
+			const tools = requestBody.tools.map(tool => {
 				if ('input_schema' in tool) {
-					return {
+					const chatTool: vscode.LanguageModelChatTool = {
 						name: tool.name,
 						description: tool.description || '',
 						inputSchema: tool.input_schema || {},
 					};
-				} else {
-					// unsupported tool
-					return undefined;
+					return chatTool;
 				}
-			}));
+				return undefined;
+			}).filter((t): t is vscode.LanguageModelChatTool => !!t);
+			if (tools.length) {
+				options.tools = tools;
+			}
 		}
 
 		return {
 			model: requestBody.model,
-			messages: vscodeMessages,
+			messages: rawMessages,
 			options
 		};
 	}
 
 	formatStreamResponse(
 		part: vscode.LanguageModelTextPart | vscode.LanguageModelToolCallPart,
-		context: StreamingContext
-	): StreamEventData[] {
-		const events: StreamEventData[] = [];
+		context: IStreamingContext
+	): IStreamEventData[] {
+		const events: IStreamEventData[] = [];
 
 		if (part instanceof vscode.LanguageModelTextPart) {
 			if (!context.hasTextBlock) {
@@ -165,8 +158,8 @@ export class AnthropicAdapter implements ProtocolAdapter {
 		return events;
 	}
 
-	generateFinalEvents(context: StreamingContext): StreamEventData[] {
-		const events: StreamEventData[] = [];
+	generateFinalEvents(context: IStreamingContext): IStreamEventData[] {
+		const events: IStreamEventData[] = [];
 
 		// Send final events
 		if (context.hasTextBlock) {
@@ -210,7 +203,7 @@ export class AnthropicAdapter implements ProtocolAdapter {
 		return events;
 	}
 
-	generateInitialEvents(context: StreamingContext): StreamEventData[] {
+	generateInitialEvents(context: IStreamingContext): IStreamEventData[] {
 		// Calculate input tokens (rough estimate)
 		const inputTokens = 100; // Placeholder - would need proper tokenization
 

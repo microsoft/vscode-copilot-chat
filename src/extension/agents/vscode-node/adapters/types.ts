@@ -3,44 +3,45 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Raw } from '@vscode/prompt-tsx';
 import * as http from 'http';
 import * as vscode from 'vscode';
 
-export interface ParsedRequest {
+export interface IParsedRequest {
 	model?: string;
-	messages: vscode.LanguageModelChatMessage[];
+	messages: Raw.ChatMessage[];
 	tools?: vscode.LanguageModelTool<any>[];
 	options?: vscode.LanguageModelChatRequestOptions;
 }
 
-export interface StreamEventData {
+export interface IStreamEventData {
 	event: string;
 	data: string;
 }
 
-export interface ProtocolAdapter {
+export interface IProtocolAdapter {
 	/**
 	 * Parse the incoming request body and convert to VS Code format
 	 */
-	parseRequest(body: string): ParsedRequest;
+	parseRequest(body: string): IParsedRequest;
 
 	/**
 	 * Convert VS Code streaming response parts to protocol-specific events
 	 */
 	formatStreamResponse(
 		part: vscode.LanguageModelTextPart | vscode.LanguageModelToolCallPart,
-		context: StreamingContext
-	): StreamEventData[];
+		context: IStreamingContext
+	): IStreamEventData[];
 
 	/**
 	 * Generate the final events to close the stream
 	 */
-	generateFinalEvents(context: StreamingContext): StreamEventData[];
+	generateFinalEvents(context: IStreamingContext): IStreamEventData[];
 
 	/**
 	 * Generate initial events to start the stream (optional, protocol-specific)
 	 */
-	generateInitialEvents?(context: StreamingContext): StreamEventData[];
+	generateInitialEvents?(context: IStreamingContext): IStreamEventData[];
 
 	/**
 	 * Get the content type for responses
@@ -53,7 +54,7 @@ export interface ProtocolAdapter {
 	extractAuthKey(headers: http.IncomingHttpHeaders): string | undefined;
 }
 
-export interface StreamingContext {
+export interface IStreamingContext {
 	requestId: string;
 	modelId: string;
 	currentBlockIndex: number;

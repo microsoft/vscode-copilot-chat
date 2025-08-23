@@ -5,4 +5,4 @@
 
 export { AnthropicAdapter } from './anthropicAdapter';
 export { OpenAIAdapter } from './openaiAdapter';
-export { ParsedRequest, ProtocolAdapter, StreamEventData, StreamingContext } from './types';
+export { IParsedRequest, IProtocolAdapter, IStreamEventData, IStreamingContext } from './types';
