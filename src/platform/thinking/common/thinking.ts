@@ -43,6 +43,7 @@ export type ThinkingDelta = {
 
 export type EncryptedThinkingDelta = {
 	id: string;
+	text?: string;
 	encrypted: string;
 }
 
