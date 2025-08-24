@@ -15,7 +15,7 @@ import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
-import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { RawMessageConversionCallback } from '../../../platform/networking/common/openai';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -79,27 +79,28 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		);
 	}
 
-	protected override preprocessOptions(options: ICreateEndpointBodyOptions): ICreateEndpointBodyOptions {
-		return { ...options, ignoreStatefulMarker: false };
-	}
-
-	protected override getCapiCallback(): RawMessageConversionCallback | undefined {
-		return (out, data) => {
-			if (data && data.id) {
-				out.cot_id = data.id;
-				out.cot_summary = data.text;
+	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		if (this.useResponsesApi) {
+			// Handle Responses API: customize the body directly
+			const body = super.createRequestBody(options);
+			body.store = true;
+			body.n = undefined;
+			body.stream_options = undefined;
+			if (!this.modelMetadata.capabilities.supports.thinking) {
+				body.reasoning = undefined;
 			}
-		};
-	}
-
-	protected override customizeResponsesBody(body: IEndpointBody): IEndpointBody {
-		body.store = true;
-		body.n = undefined;
-		body.stream_options = undefined;
-		if (!this.modelMetadata.capabilities.supports.thinking) {
-			body.reasoning = undefined;
+			return body;
+		} else {
+			// Handle CAPI: provide callback for thinking data processing
+			const callback: RawMessageConversionCallback = (out, data) => {
+				if (data && data.id) {
+					out.cot_id = data.id;
+					out.cot_summary = data.text;
+				}
+			};
+			const body = createCapiRequestBody(options, this.model, callback);
+			return body;
 		}
-		return body;
 	}
 
 	override interceptBody(body: IEndpointBody | undefined): void {
@@ -158,7 +159,9 @@ export class OpenAIEndpoint extends ChatEndpoint {
 	}
 
 	public override async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
-		let response = await super.makeChatRequest2(options, token);
+		// Apply ignoreStatefulMarker: false for initial request
+		const modifiedOptions = { ...options, ignoreStatefulMarker: false };
+		let response = await super.makeChatRequest2(modifiedOptions, token);
 		if (response.type === ChatFetchResponseType.InvalidStatefulMarker) {
 			response = await this._makeChatRequest2({ ...options, ignoreStatefulMarker: true }, token);
 		}
