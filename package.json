@@ -139,24 +139,6 @@
 	"contributes": {
 		"languageModelTools": [
 			{
-				"name": "copilot_codexTool",
-				"displayName": "Codex Tool",
-				"modelDescription": "Do not use this tool.",
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"message": {
-							"type": "string",
-							"description": ""
-						},
-						"detail": {
-							"type": "string",
-							"description": ""
-						}
-					}
-				}
-			},
-			{
 				"name": "copilot_searchCodebase",
 				"toolReferenceName": "codebase",
 				"displayName": "%copilot.tools.searchCodebase.name%",
