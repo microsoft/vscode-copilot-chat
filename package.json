@@ -3856,7 +3856,6 @@
 		"@anthropic-ai/sdk": "^0.56.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
-		"@modelcontextprotocol/sdk": "^1.17.3",
 		"@vscode/copilot-api": "^0.1.5",
 		"@vscode/extension-telemetry": "^1.0.0",
 		"@vscode/l10n": "^0.0.18",

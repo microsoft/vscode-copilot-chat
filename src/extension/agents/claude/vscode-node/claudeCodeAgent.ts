@@ -3,35 +3,27 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Options, query } from '@anthropic-ai/claude-code';
+import { Options, SDKUserMessage } from '@anthropic-ai/claude-code';
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { IEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { findLast } from '../../../../util/vs/base/common/arraysFind';
+import { DeferredPromise } from '../../../../util/vs/base/common/async';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
+import { isWindows } from '../../../../util/vs/base/common/platform';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseTurn } from '../../../../vscodeTypes';
 import { LanguageModelServer } from '../../vscode-node/langModelServer';
-import { PermissionMcpServer } from './permissionMcp';
-import { IEnvService } from '../../../../platform/env/common/envService';
-import { isWindows } from '../../../../util/vs/base/common/platform';
 
 export class ClaudeAgentManager extends Disposable {
 	private _langModelServer: LanguageModelServer | undefined;
-	private _permissionMcpServer: PermissionMcpServer | undefined;
 
-	private async getLangModelServer(toolInvocationToken: vscode.ChatParticipantToolToken): Promise<LanguageModelServer> {
+	private async getLangModelServer(): Promise<LanguageModelServer> {
 		if (!this._langModelServer) {
 			this._langModelServer = this.instantiationService.createInstance(LanguageModelServer);
 			await this._langModelServer.start();
-		}
-
-		if (!this._permissionMcpServer) {
-			const serverConfig = this._langModelServer.getConfig();
-			this._permissionMcpServer = this.instantiationService.createInstance(PermissionMcpServer, serverConfig.port);
-			this._permissionMcpServer.setToolInvocationToken(toolInvocationToken);
-			this._langModelServer.registerHandler('/mcp', (req, res, body) => this._permissionMcpServer!.handleMcp(req, res, body));
 		}
 
 		return this._langModelServer;
@@ -82,7 +74,7 @@ export class ClaudeAgentManager extends Disposable {
 		});
 
 		// Get server config, start server if needed
-		const serverConfig = (await this.getLangModelServer(toolInvocationToken)).getConfig();
+		const serverConfig = (await this.getLangModelServer()).getConfig();
 
 		// Build options for the Claude Code SDK
 		// process.env.DEBUG = '1'; // debug messages from sdk.mjs
@@ -104,16 +96,9 @@ export class ClaudeAgentManager extends Disposable {
 				PATH: `${this.envService.appRoot}/node_modules/@vscode/ripgrep/bin${pathSep}${process.env.PATH}`
 			},
 			// permissionMode: 'acceptEdits',
-			permissionPromptToolName: 'mcp__permission__get_permission',
 			// pathToClaudeCodeExecutable: '/Users/roblou/code/claude-code/cli.js',
-			mcpServers: {
-				permission: {
-					type: 'http',
-					url: `http://localhost:${serverConfig.port}/mcp`,
-					headers: {
-						vscode_nonce: serverConfig.nonce
-					}
-				}
+			canUseTool: async (name, input, opts) => {
+				return this.canUseTool(name, input, toolInvocationToken);
 			}
 		};
 
@@ -125,8 +110,25 @@ export class ClaudeAgentManager extends Disposable {
 		let sessionId: string | undefined;
 
 		this.logService.trace(`Claude CLI SDK: Starting query with options: ${JSON.stringify(options)}`);
+		const { query } = await import('@anthropic-ai/claude-code');
+		const def = new DeferredPromise<void>();
+		async function* createPromptIterable(promptText: string, sessionId?: string): AsyncIterable<SDKUserMessage> {
+			yield {
+				type: 'user',
+				message: {
+					role: 'user',
+					content: promptText
+				},
+				parent_tool_use_id: null,
+				session_id: sessionId ?? ''
+			};
+
+			// Workaround https://github.com/anthropics/claude-code/issues/4775
+			await def.p;
+		}
+
 		for await (const message of query({
-			prompt,
+			prompt: createPromptIterable(prompt, existingSessionId),
 			options
 		})) {
 			this.logService.trace(`Claude CLI SDK Message: ${JSON.stringify(message, null, 2)}`);
@@ -154,6 +156,7 @@ export class ClaudeAgentManager extends Disposable {
 					}
 				}
 			} else if (message.type === 'result') {
+				def.complete();
 				if (message.subtype === 'error_max_turns') {
 					stream.progress(`⚠️ Maximum turns reached (${message.num_turns})`);
 				} else if (message.subtype === 'error_during_execution') {
@@ -163,6 +166,31 @@ export class ClaudeAgentManager extends Disposable {
 		}
 
 		return { sessionId };
+	}
+
+	/**
+	 * Handles tool permission requests by showing a confirmation dialog to the user
+	 */
+	private async canUseTool(toolName: string, input: Record<string, unknown>, toolInvocationToken: vscode.ChatParticipantToolToken): Promise<{ behavior: 'allow'; updatedInput: Record<string, unknown> } | { behavior: 'deny'; message: string }> {
+		this.logService.trace(`Claude CLI SDK: canUseTool: ${toolName}`);
+		try {
+			await vscode.lm.invokeTool('vscode_get_confirmation', {
+				input: {
+					title: `Use ${toolName}?`,
+					message: `\`\`\`\n${JSON.stringify(input, null, 2)}\n\`\`\``
+				},
+				toolInvocationToken,
+			});
+			return {
+				behavior: 'allow',
+				updatedInput: input
+			};
+		} catch {
+			return {
+				behavior: 'deny',
+				message: 'The user declined to run the tool'
+			};
+		}
 	}
 }
 
