@@ -156,5 +156,4 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		}
 		return hydrateBYOKErrorMessages(response);
 	}
-
 }
