@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-export interface RawThinkingData {
+export interface ThinkingDataInMessage {
 	// Azure Open AI fields
 	cot_id?: string;
 	cot_summary?: string;

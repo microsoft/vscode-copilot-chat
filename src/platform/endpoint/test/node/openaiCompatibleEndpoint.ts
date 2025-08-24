@@ -4,18 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { OpenAI } from '@vscode/prompt-tsx';
-import type { CancellationToken } from 'vscode';
 import { TokenizerType } from '../../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
-import { ChatResponse } from '../../../chat/common/commonTypes';
 import { IConfigurationService } from '../../../configuration/common/configurationService';
 import { IEnvService } from '../../../env/common/envService';
 import { ILogService } from '../../../log/common/logService';
 import { isOpenAiFunctionTool } from '../../../networking/common/fetch';
 import { IFetcherService } from '../../../networking/common/fetcherService';
-import { IChatEndpoint, IEndpointBody, IMakeChatRequestOptions } from '../../../networking/common/networking';
+import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../../networking/common/networking';
 import { CAPIChatMessage } from '../../../networking/common/openai';
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
@@ -24,6 +22,7 @@ import { ICAPIClientService } from '../../common/capiClient';
 import { IDomainService } from '../../common/domainService';
 import { IChatModelInformation } from '../../common/endpointProvider';
 import { ChatEndpoint } from '../../node/chatEndpoint';
+import { createResponsesRequestBody } from '../../node/responsesApi';
 
 export type IModelConfig = {
 	id: string;
@@ -75,6 +74,7 @@ export type IModelConfig = {
 }
 
 export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
+	private readonly modelInfo: IChatModelInformation;
 	constructor(
 		private readonly modelConfig: IModelConfig,
 		@IDomainService domainService: IDomainService,
@@ -131,6 +131,7 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 			experimentationService,
 			logService
 		);
+		this.modelInfo = modelInfo;
 	}
 
 	override get urlOrRequestMetadata(): string {
@@ -269,8 +270,16 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 		return this.instantiationService.createInstance(OpenAICompatibleTestEndpoint, this.modelConfig);
 	}
 
-	public override async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
-		options.reasoningPropertyType = this.modelConfig.type === 'azureOpenai' ? 'AzureOpenAI' : undefined;
-		return await super.makeChatRequest2(options, token);
+	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		if (this.useResponsesApi) {
+			return createResponsesRequestBody(options, this.model, this.modelInfo);
+		} else {
+			return createCapiRequestBody(options, this.model, (out, data) => {
+				if (data && data.id) {
+					out.cot_id = data.id;
+					out.cot_summary = data.text;
+				}
+			});
+		}
 	}
 }

@@ -11,11 +11,12 @@ import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
+import { createResponsesRequestBody } from '../../../platform/endpoint/node/responsesApi';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
-import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
@@ -45,7 +46,7 @@ function hydrateBYOKErrorMessages(response: ChatResponse): ChatResponse {
 
 export class OpenAIEndpoint extends ChatEndpoint {
 	constructor(
-		protected readonly _modelInfo: IChatModelInformation,
+		protected readonly modelMetadata: IChatModelInformation,
 		protected readonly _apiKey: string,
 		protected readonly _modelUrl: string,
 		@IFetcherService fetcherService: IFetcherService,
@@ -62,7 +63,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		@ILogService logService: ILogService
 	) {
 		super(
-			_modelInfo,
+			modelMetadata,
 			domainService,
 			capiClientService,
 			fetcherService,
@@ -80,12 +81,18 @@ export class OpenAIEndpoint extends ChatEndpoint {
 
 	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
 		options.ignoreStatefulMarker = false;
-		const body = super.createRequestBody(options);
+		const body = this.useResponsesApi ? createResponsesRequestBody(options, this.model, this.modelMetadata) : createCapiRequestBody(options, this.model, (out, data) => {
+			if (data && data.id) {
+				out.cot_id = data.id;
+				out.cot_summary = data.text;
+			}
+		});
+
 		if (this.useResponsesApi) {
 			body.store = true;
 			body.n = undefined;
 			body.stream_options = undefined;
-			if (!this._modelInfo.capabilities.supports.thinking) {
+			if (!this.modelMetadata.capabilities.supports.thinking) {
 				body.reasoning = undefined;
 			}
 		}
@@ -110,7 +117,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		}
 
 		if (body) {
-			if (this._modelInfo.capabilities.supports.thinking) {
+			if (this.modelMetadata.capabilities.supports.thinking) {
 				delete body.temperature;
 				body['max_completion_tokens'] = body.max_tokens;
 				delete body.max_tokens;
@@ -144,12 +151,11 @@ export class OpenAIEndpoint extends ChatEndpoint {
 	}
 
 	override cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {
-		const newModelInfo = { ...this._modelInfo, maxInputTokens: modelMaxPromptTokens };
+		const newModelInfo = { ...this.modelMetadata, maxInputTokens: modelMaxPromptTokens };
 		return this.instantiationService.createInstance(OpenAIEndpoint, newModelInfo, this._apiKey, this._modelUrl);
 	}
 
 	public override async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
-		options.reasoningPropertyType = 'AzureOpenAI';
 		let response = await super.makeChatRequest2(options, token);
 		if (response.type === ChatFetchResponseType.InvalidStatefulMarker) {
 			response = await this._makeChatRequest2({ ...options, ignoreStatefulMarker: true }, token);
