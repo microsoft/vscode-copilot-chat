@@ -3,17 +3,16 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { CancellationToken } from 'vscode';
 import { TokenizerType } from '../../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
-import { ChatResponse } from '../../../chat/common/commonTypes';
 import { CHAT_MODEL, IConfigurationService } from '../../../configuration/common/configurationService';
 import { IEnvService } from '../../../env/common/envService';
 import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
-import { IChatEndpoint, IEndpointBody, IMakeChatRequestOptions } from '../../../networking/common/networking';
+import { IChatEndpoint, IEndpointBody } from '../../../networking/common/networking';
+import { RawMessageConversionCallback } from '../../../networking/common/openai';
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../tokenizer/node/tokenizer';
@@ -135,8 +134,12 @@ export class AzureTestEndpoint extends ChatEndpoint {
 		return this.instantiationService.createInstance(AzureTestEndpoint, this._azureModel);
 	}
 
-	override async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
-		options.reasoningPropertyType = 'AzureOpenAI';
-		return await super.makeChatRequest2(options, token);
+	protected override getCapiCallback(): RawMessageConversionCallback | undefined {
+		return (out, data) => {
+			if (data && data.id) {
+				out.cot_id = data.id;
+				out.cot_summary = data.text;
+			}
+		};
 	}
 }

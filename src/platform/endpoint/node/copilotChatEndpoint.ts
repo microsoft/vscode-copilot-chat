@@ -10,7 +10,7 @@ import { IConfigurationService } from '../../configuration/common/configurationS
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
-import { createCapiRequestBody, ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
+import { RawMessageConversionCallback } from '../../networking/common/openai';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
@@ -18,11 +18,10 @@ import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
 import { IChatModelInformation } from '../common/endpointProvider';
 import { ChatEndpoint } from './chatEndpoint';
-import { createResponsesRequestBody } from './responsesApi';
 
 export class CopilotChatEndpoint extends ChatEndpoint {
 	constructor(
-		private readonly modelMetadata: IChatModelInformation,
+		modelMetadata: IChatModelInformation,
 		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IFetcherService fetcherService: IFetcherService,
@@ -53,16 +52,12 @@ export class CopilotChatEndpoint extends ChatEndpoint {
 		);
 	}
 
-	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
-		if (this.useResponsesApi) {
-			return createResponsesRequestBody(options, this.model, this.modelMetadata);
-		} else {
-			return createCapiRequestBody(options, this.model, (out, data) => {
-				if (data && data.id) {
-					out.reasoning_opaque = data.id;
-					out.reasoning_text = data.text;
-				}
-			});
-		}
+	protected override getCapiCallback(): RawMessageConversionCallback | undefined {
+		return (out, data) => {
+			if (data && data.id) {
+				out.reasoning_opaque = data.id;
+				out.reasoning_text = data.text;
+			}
+		};
 	}
 }

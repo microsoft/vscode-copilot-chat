@@ -11,12 +11,12 @@ import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
-import { createResponsesRequestBody } from '../../../platform/endpoint/node/responsesApi';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
-import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { RawMessageConversionCallback } from '../../../platform/networking/common/openai';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
@@ -79,24 +79,26 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		);
 	}
 
-	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
-		options.ignoreStatefulMarker = false;
-		const body = this.useResponsesApi ? createResponsesRequestBody(options, this.model, this.modelMetadata) : createCapiRequestBody(options, this.model, (out, data) => {
+	protected override preprocessOptions(options: ICreateEndpointBodyOptions): ICreateEndpointBodyOptions {
+		return { ...options, ignoreStatefulMarker: false };
+	}
+
+	protected override getCapiCallback(): RawMessageConversionCallback | undefined {
+		return (out, data) => {
 			if (data && data.id) {
 				out.cot_id = data.id;
 				out.cot_summary = data.text;
 			}
-		});
+		};
+	}
 
-		if (this.useResponsesApi) {
-			body.store = true;
-			body.n = undefined;
-			body.stream_options = undefined;
-			if (!this.modelMetadata.capabilities.supports.thinking) {
-				body.reasoning = undefined;
-			}
+	protected override customizeResponsesBody(body: IEndpointBody): IEndpointBody {
+		body.store = true;
+		body.n = undefined;
+		body.stream_options = undefined;
+		if (!this.modelMetadata.capabilities.supports.thinking) {
+			body.reasoning = undefined;
 		}
-
 		return body;
 	}
 

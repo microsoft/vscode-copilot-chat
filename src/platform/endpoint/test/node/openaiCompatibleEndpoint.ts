@@ -13,8 +13,8 @@ import { IEnvService } from '../../../env/common/envService';
 import { ILogService } from '../../../log/common/logService';
 import { isOpenAiFunctionTool } from '../../../networking/common/fetch';
 import { IFetcherService } from '../../../networking/common/fetcherService';
-import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../../networking/common/networking';
-import { CAPIChatMessage } from '../../../networking/common/openai';
+import { IChatEndpoint, IEndpointBody } from '../../../networking/common/networking';
+import { CAPIChatMessage, RawMessageConversionCallback } from '../../../networking/common/openai';
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../tokenizer/node/tokenizer';
@@ -22,7 +22,6 @@ import { ICAPIClientService } from '../../common/capiClient';
 import { IDomainService } from '../../common/domainService';
 import { IChatModelInformation } from '../../common/endpointProvider';
 import { ChatEndpoint } from '../../node/chatEndpoint';
-import { createResponsesRequestBody } from '../../node/responsesApi';
 
 export type IModelConfig = {
 	id: string;
@@ -74,7 +73,6 @@ export type IModelConfig = {
 }
 
 export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
-	private readonly modelInfo: IChatModelInformation;
 	constructor(
 		private readonly modelConfig: IModelConfig,
 		@IDomainService domainService: IDomainService,
@@ -131,7 +129,6 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 			experimentationService,
 			logService
 		);
-		this.modelInfo = modelInfo;
 	}
 
 	override get urlOrRequestMetadata(): string {
@@ -270,16 +267,12 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 		return this.instantiationService.createInstance(OpenAICompatibleTestEndpoint, this.modelConfig);
 	}
 
-	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
-		if (this.useResponsesApi) {
-			return createResponsesRequestBody(options, this.model, this.modelInfo);
-		} else {
-			return createCapiRequestBody(options, this.model, (out, data) => {
-				if (data && data.id) {
-					out.cot_id = data.id;
-					out.cot_summary = data.text;
-				}
-			});
-		}
+	protected override getCapiCallback(): RawMessageConversionCallback | undefined {
+		return (out, data) => {
+			if (data && data.id) {
+				out.cot_id = data.id;
+				out.cot_summary = data.text;
+			}
+		};
 	}
 }

@@ -21,7 +21,7 @@ import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, ICopilotToolCall, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
 import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions, postRequest } from '../../networking/common/networking';
-import { CAPIChatMessage, ChatCompletion, FinishedCompletionReason } from '../../networking/common/openai';
+import { CAPIChatMessage, ChatCompletion, FinishedCompletionReason, RawMessageConversionCallback } from '../../networking/common/openai';
 import { prepareChatCompletionForReturn } from '../../networking/node/chatStream';
 import { SSEProcessor } from '../../networking/node/stream';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
@@ -277,11 +277,48 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		// Allow subclasses to preprocess options
+		const modifiedOptions = this.preprocessOptions(options);
+
 		if (this.useResponsesApi) {
-			return createResponsesRequestBody(options, this.model, this._modelMetadata);
+			const body = createResponsesRequestBody(modifiedOptions, this.model, this._modelMetadata);
+			return this.customizeResponsesBody(body);
 		} else {
-			return createCapiRequestBody(options, this.model);
+			const body = createCapiRequestBody(modifiedOptions, this.model, this.getCapiCallback());
+			return this.customizeCapiBody(body);
 		}
+	}
+
+	/**
+	 * Template method: allows subclasses to preprocess request options before creating the request body.
+	 * Default implementation returns options unchanged.
+	 */
+	protected preprocessOptions(options: ICreateEndpointBodyOptions): ICreateEndpointBodyOptions {
+		return options;
+	}
+
+	/**
+	 * Template method: allows subclasses to provide a callback for processing thinking data in CAPI requests.
+	 * Default implementation returns undefined (no callback).
+	 */
+	protected getCapiCallback(): RawMessageConversionCallback | undefined {
+		return undefined;
+	}
+
+	/**
+	 * Template method: allows subclasses to customize the request body for Responses API requests.
+	 * Default implementation returns body unchanged.
+	 */
+	protected customizeResponsesBody(body: IEndpointBody): IEndpointBody {
+		return body;
+	}
+
+	/**
+	 * Template method: allows subclasses to customize the request body for CAPI requests.
+	 * Default implementation returns body unchanged.
+	 */
+	protected customizeCapiBody(body: IEndpointBody): IEndpointBody {
+		return body;
 	}
 
 	public async processResponseFromChatEndpoint(
