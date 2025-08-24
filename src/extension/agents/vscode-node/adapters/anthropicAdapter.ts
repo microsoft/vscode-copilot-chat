@@ -6,7 +6,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import * as http from 'http';
 import * as vscode from 'vscode';
-import { anthropicMessagesToRawMessages } from '../../../byok/vscode-node/anthropicMessageConverter';
+import { anthropicMessagesToRawMessages } from '../../../byok/common/anthropicMessageConverter';
 import { IParsedRequest, IProtocolAdapter, IStreamEventData, IStreamingContext } from './types';
 
 export class AnthropicAdapter implements IProtocolAdapter {

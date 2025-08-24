@@ -95,6 +95,7 @@ export class ClaudeAgentManager extends Disposable {
 				USE_BUILTIN_RIPGREP: '0',
 				PATH: `${this.envService.appRoot}/node_modules/@vscode/ripgrep/bin${pathSep}${process.env.PATH}`
 			},
+			resume: existingSessionId, // doesn't work https://github.com/microsoft/vscode/issues/263111
 			// permissionMode: 'acceptEdits',
 			// pathToClaudeCodeExecutable: '/Users/roblou/code/claude-code/cli.js',
 			canUseTool: async (name, input, opts) => {
