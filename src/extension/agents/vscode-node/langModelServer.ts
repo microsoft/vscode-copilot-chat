@@ -12,7 +12,8 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { AnthropicAdapter, IProtocolAdapter, IStreamingContext, OpenAIAdapter } from './adapters';
+import { AnthropicAdapter } from './adapters/anthropicAdapter';
+import { IAgentStreamBlock, IProtocolAdapter, IStreamingContext } from './adapters/types';
 
 export interface IServerConfig {
 	port: number;
@@ -33,7 +34,6 @@ export class LanguageModelServer {
 			nonce: 'vscode-lm-' + generateUuid()
 		};
 		this.adapters = new Map();
-		this.adapters.set('/v1/chat/completions', new OpenAIAdapter());
 		this.adapters.set('/v1/messages', new AnthropicAdapter());
 
 		this.server = this.createServer();
@@ -202,8 +202,11 @@ export class LanguageModelServer {
 						}
 						// Emit text deltas
 						if (delta.text) {
-							const textPart = new vscode.LanguageModelTextPart(delta.text);
-							for (const event of adapter.formatStreamResponse(textPart, context)) {
+							const textData: IAgentStreamBlock = {
+								type: 'text',
+								content: delta.text
+							};
+							for (const event of adapter.formatStreamResponse(textData, context)) {
 								res.write(`event: ${event.event}\ndata: ${event.data}\n\n`);
 							}
 						}
@@ -212,8 +215,13 @@ export class LanguageModelServer {
 							for (const call of delta.copilotToolCalls) {
 								let input: object = {};
 								try { input = call.arguments ? JSON.parse(call.arguments) : {}; } catch { input = {}; }
-								const toolPart = new vscode.LanguageModelToolCallPart(call.id, call.name, input);
-								for (const event of adapter.formatStreamResponse(toolPart, context)) {
+								const toolData: IAgentStreamBlock = {
+									type: 'tool_call',
+									callId: call.id,
+									name: call.name,
+									input
+								};
+								for (const event of adapter.formatStreamResponse(toolData, context)) {
 									res.write(`event: ${event.event}\ndata: ${event.data}\n\n`);
 								}
 							}

@@ -7,7 +7,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import * as http from 'http';
 import * as vscode from 'vscode';
 import { anthropicMessagesToRawMessages } from '../../../byok/common/anthropicMessageConverter';
-import { IParsedRequest, IProtocolAdapter, IStreamEventData, IStreamingContext } from './types';
+import { IAgentStreamBlock, IParsedRequest, IProtocolAdapter, IStreamEventData, IStreamingContext } from './types';
 
 export class AnthropicAdapter implements IProtocolAdapter {
 	parseRequest(body: string): IParsedRequest {
@@ -55,12 +55,12 @@ export class AnthropicAdapter implements IProtocolAdapter {
 	}
 
 	formatStreamResponse(
-		part: vscode.LanguageModelTextPart | vscode.LanguageModelToolCallPart,
+		streamData: IAgentStreamBlock,
 		context: IStreamingContext
 	): IStreamEventData[] {
 		const events: IStreamEventData[] = [];
 
-		if (part instanceof vscode.LanguageModelTextPart) {
+		if (streamData.type === 'text') {
 			if (!context.hasTextBlock) {
 				// Send content_block_start for text
 				const contentBlockStart: Anthropic.RawContentBlockStartEvent = {
@@ -85,7 +85,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
 				index: context.currentBlockIndex,
 				delta: {
 					type: 'text_delta',
-					text: part.value
+					text: streamData.content
 				}
 			};
 			events.push({
@@ -94,9 +94,9 @@ export class AnthropicAdapter implements IProtocolAdapter {
 			});
 
 			// Count tokens
-			context.outputTokens += part.value.split(/\s+/).filter(Boolean).length;
+			context.outputTokens += streamData.content.split(/\s+/).filter(Boolean).length;
 
-		} else if (part instanceof vscode.LanguageModelToolCallPart) {
+		} else if (streamData.type === 'tool_call') {
 			// End current text block if it exists
 			if (context.hasTextBlock) {
 				const contentBlockStop: Anthropic.RawContentBlockStopEvent = {
@@ -119,8 +119,8 @@ export class AnthropicAdapter implements IProtocolAdapter {
 				index: context.currentBlockIndex,
 				content_block: {
 					type: 'tool_use',
-					id: part.callId,
-					name: part.name,
+					id: streamData.callId,
+					name: streamData.name,
 					input: {},
 				}
 			};
@@ -135,7 +135,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
 				index: context.currentBlockIndex,
 				delta: {
 					type: "input_json_delta",
-					partial_json: JSON.stringify(part.input || {})
+					partial_json: JSON.stringify(streamData.input || {})
 				}
 			};
 			events.push({
