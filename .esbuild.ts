@@ -115,7 +115,7 @@ const importMetaPlugin: esbuild.Plugin = {
 	name: 'claudeCodeImportMetaPlugin',
 	setup(build) {
 		// Handle import.meta.url in @anthropic-ai/claude-code package
-		build.onLoad({ filter: /node_modules\/@anthropic-ai\/claude-code\/.*\.mjs$/ }, async (args) => {
+		build.onLoad({ filter: /node_modules[\/\\]@anthropic-ai[\/\\]claude-code[\/\\].*\.mjs$/ }, async (args) => {
 			const contents = await fs.promises.readFile(args.path, 'utf8');
 			return {
 				contents: contents.replace(
