@@ -21,14 +21,6 @@ export class OpenAIAdapter implements IProtocolAdapter {
 	parseRequest(body: string): IParsedRequest {
 		const request: OpenAIServerRequest = JSON.parse(body);
 
-		// Apply model mapping
-		if (request.model?.startsWith('claude-3-5-haiku')) {
-			request.model = 'gpt-4o-mini';
-		}
-		if (request.model?.startsWith('claude-sonnet-4')) {
-			request.model = 'claude-sonnet-4';
-		}
-
 		// Convert messages to VS Code format
 		const rawMessages: Raw.ChatMessage[] = request.messages.map(msg => {
 			const contentStr = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);

@@ -14,25 +14,14 @@ import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { AnthropicAdapter, IProtocolAdapter, IStreamingContext, OpenAIAdapter } from './adapters';
 
-export interface ServerTextLineResponse {
-	type: 'text';
-	content: string;
-}
-export interface ServerToolCallResponse {
-	type: 'tool_call';
-	callId: string;
-	name: string;
-	input: object;
-}
-
-interface ServerConfig {
+export interface IServerConfig {
 	port: number;
 	nonce: string;
 }
 
-class LanguageModelServer {
+export class LanguageModelServer {
 	private server: http.Server;
-	private config: ServerConfig;
+	private config: IServerConfig;
 	private adapters: Map<string, IProtocolAdapter>;
 
 	constructor(
@@ -339,7 +328,7 @@ class LanguageModelServer {
 		this.server.close();
 	}
 
-	public getConfig(): ServerConfig {
+	public getConfig(): IServerConfig {
 		return { ...this.config };
 	}
 
@@ -367,5 +356,3 @@ class LanguageModelServer {
 		}
 	}
 }
-
-export { LanguageModelServer, ServerConfig };

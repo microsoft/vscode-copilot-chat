@@ -74,7 +74,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
 				};
 				events.push({
 					event: contentBlockStart.type,
-					data: JSON.stringify(contentBlockStart).replace(/\n/g, '\\n')
+					data: this.formatEventData(contentBlockStart)
 				});
 				context.hasTextBlock = true;
 			}
@@ -90,7 +90,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
 			};
 			events.push({
 				event: contentDelta.type,
-				data: JSON.stringify(contentDelta).replace(/\n/g, '\\n')
+				data: this.formatEventData(contentDelta)
 			});
 
 			// Count tokens
@@ -105,7 +105,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
 				};
 				events.push({
 					event: contentBlockStop.type,
-					data: JSON.stringify(contentBlockStop).replace(/\n/g, '\\n')
+					data: this.formatEventData(contentBlockStop)
 				});
 				context.currentBlockIndex++;
 				context.hasTextBlock = false;
@@ -126,7 +126,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
 			};
 			events.push({
 				event: toolBlockStart.type,
-				data: JSON.stringify(toolBlockStart).replace(/\n/g, '\\n')
+				data: this.formatEventData(toolBlockStart)
 			});
 
 			// Send tool use content
@@ -140,7 +140,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
 			};
 			events.push({
 				event: toolBlockContent.type,
-				data: JSON.stringify(toolBlockContent).replace(/\n/g, '\\n')
+				data: this.formatEventData(toolBlockContent)
 			});
 
 			const toolBlockStop: Anthropic.RawContentBlockStopEvent = {
@@ -149,7 +149,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
 			};
 			events.push({
 				event: toolBlockStop.type,
-				data: JSON.stringify(toolBlockStop).replace(/\n/g, '\\n')
+				data: this.formatEventData(toolBlockStop)
 			});
 
 			context.currentBlockIndex++;
@@ -169,7 +169,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
 			};
 			events.push({
 				event: contentBlockStop.type,
-				data: JSON.stringify(contentBlockStop).replace(/\n/g, '\\n')
+				data: this.formatEventData(contentBlockStop)
 			});
 		}
 
@@ -189,7 +189,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
 		};
 		events.push({
 			event: messageDelta.type,
-			data: JSON.stringify(messageDelta).replace(/\n/g, '\\n')
+			data: this.formatEventData(messageDelta)
 		});
 
 		const messageStop: Anthropic.RawMessageStopEvent = {
@@ -197,7 +197,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
 		};
 		events.push({
 			event: messageStop.type,
-			data: JSON.stringify(messageStop).replace(/\n/g, '\\n')
+			data: this.formatEventData(messageStop)
 		});
 
 		return events;
@@ -231,7 +231,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
 
 		return [{
 			event: messageStart.type,
-			data: JSON.stringify(messageStart).replace(/\n/g, '\\n')
+			data: this.formatEventData(messageStart)
 		}];
 	}
 
@@ -241,5 +241,9 @@ export class AnthropicAdapter implements IProtocolAdapter {
 
 	extractAuthKey(headers: http.IncomingHttpHeaders): string | undefined {
 		return headers['x-api-key'] as string | undefined;
+	}
+
+	private formatEventData(data: any): string {
+		return JSON.stringify(data).replace(/\n/g, '\\n');
 	}
 }
