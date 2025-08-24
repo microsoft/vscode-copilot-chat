@@ -12,8 +12,8 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { AnthropicAdapter } from './adapters/anthropicAdapter';
-import { IAgentStreamBlock, IProtocolAdapter, IStreamingContext } from './adapters/types';
+import { AnthropicAdapterFactory } from './adapters/anthropicAdapter';
+import { IAgentStreamBlock, IProtocolAdapter, IProtocolAdapterFactory, IStreamingContext } from './adapters/types';
 
 export interface IServerConfig {
 	port: number;
@@ -23,7 +23,7 @@ export interface IServerConfig {
 export class LanguageModelServer {
 	private server: http.Server;
 	private config: IServerConfig;
-	private adapters: Map<string, IProtocolAdapter>;
+	private adapterFactories: Map<string, IProtocolAdapterFactory>;
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
@@ -33,8 +33,8 @@ export class LanguageModelServer {
 			port: 0, // Will be set to random available port
 			nonce: 'vscode-lm-' + generateUuid()
 		};
-		this.adapters = new Map();
-		this.adapters.set('/v1/messages', new AnthropicAdapter());
+		this.adapterFactories = new Map();
+		this.adapterFactories.set('/v1/messages', new AnthropicAdapterFactory());
 
 		this.server = this.createServer();
 	}
@@ -60,10 +60,13 @@ export class LanguageModelServer {
 			}
 
 			if (req.method === 'POST') {
-				const adapter = this.getAdapterForPath(req.url || '');
-				if (adapter) {
+				const adapterFactory = this.getAdapterFactoryForPath(req.url || '');
+				if (adapterFactory) {
 					try {
 						const body = await this.readRequestBody(req);
+
+						// Create new adapter instance for this request
+						const adapter = adapterFactory.createAdapter();
 
 						// Verify nonce for authentication
 						const authKey = adapter.extractAuthKey(req.headers);
@@ -106,9 +109,9 @@ export class LanguageModelServer {
 		}
 	}
 
-	private getAdapterForPath(url: string): IProtocolAdapter | undefined {
+	private getAdapterFactoryForPath(url: string): IProtocolAdapterFactory | undefined {
 		const pathname = this.parseUrlPathname(url);
-		return this.adapters.get(pathname);
+		return this.adapterFactories.get(pathname);
 	}
 
 	private async readRequestBody(req: http.IncomingMessage): Promise<string> {
@@ -162,14 +165,10 @@ export class LanguageModelServer {
 			});
 
 			try {
-				// Create streaming context
+				// Create streaming context with only essential shared data
 				const context: IStreamingContext = {
 					requestId: `req_${Math.random().toString(36).substr(2, 20)}`,
-					modelId: selectedEndpoint.model,
-					currentBlockIndex: 0,
-					hasTextBlock: false,
-					hadToolCalls: false,
-					outputTokens: 0
+					modelId: selectedEndpoint.model
 				};
 
 				// Send initial events if adapter supports them

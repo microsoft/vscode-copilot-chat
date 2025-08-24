@@ -68,11 +68,14 @@ export interface IProtocolAdapter {
 	extractAuthKey(headers: http.IncomingHttpHeaders): string | undefined;
 }
 
+export interface IProtocolAdapterFactory {
+	/**
+	 * Create a new adapter instance for a request
+	 */
+	createAdapter(): IProtocolAdapter;
+}
+
 export interface IStreamingContext {
 	requestId: string;
 	modelId: string;
-	currentBlockIndex: number;
-	hasTextBlock: boolean;
-	hadToolCalls: boolean;
-	outputTokens: number;
 }

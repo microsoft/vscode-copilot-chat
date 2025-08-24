@@ -7,9 +7,19 @@ import Anthropic from '@anthropic-ai/sdk';
 import * as http from 'http';
 import * as vscode from 'vscode';
 import { anthropicMessagesToRawMessages } from '../../../byok/common/anthropicMessageConverter';
-import { IAgentStreamBlock, IParsedRequest, IProtocolAdapter, IStreamEventData, IStreamingContext } from './types';
+import { IAgentStreamBlock, IParsedRequest, IProtocolAdapter, IProtocolAdapterFactory, IStreamEventData, IStreamingContext } from './types';
 
-export class AnthropicAdapter implements IProtocolAdapter {
+export class AnthropicAdapterFactory implements IProtocolAdapterFactory {
+	createAdapter(): IProtocolAdapter {
+		return new AnthropicAdapter();
+	}
+}
+
+class AnthropicAdapter implements IProtocolAdapter {
+	// Per-request state
+	private currentBlockIndex = 0;
+	private hasTextBlock = false;
+	private hadToolCalls = false;
 	parseRequest(body: string): IParsedRequest {
 		const requestBody: Anthropic.MessageStreamParams = JSON.parse(body);
 
@@ -61,11 +71,11 @@ export class AnthropicAdapter implements IProtocolAdapter {
 		const events: IStreamEventData[] = [];
 
 		if (streamData.type === 'text') {
-			if (!context.hasTextBlock) {
+			if (!this.hasTextBlock) {
 				// Send content_block_start for text
 				const contentBlockStart: Anthropic.RawContentBlockStartEvent = {
 					type: 'content_block_start',
-					index: context.currentBlockIndex,
+					index: this.currentBlockIndex,
 					content_block: {
 						type: 'text',
 						text: '',
@@ -76,13 +86,13 @@ export class AnthropicAdapter implements IProtocolAdapter {
 					event: contentBlockStart.type,
 					data: this.formatEventData(contentBlockStart)
 				});
-				context.hasTextBlock = true;
+				this.hasTextBlock = true;
 			}
 
 			// Send content_block_delta for text
 			const contentDelta: Anthropic.RawContentBlockDeltaEvent = {
 				type: 'content_block_delta',
-				index: context.currentBlockIndex,
+				index: this.currentBlockIndex,
 				delta: {
 					type: 'text_delta',
 					text: streamData.content
@@ -93,30 +103,27 @@ export class AnthropicAdapter implements IProtocolAdapter {
 				data: this.formatEventData(contentDelta)
 			});
 
-			// Count tokens
-			context.outputTokens += streamData.content.split(/\s+/).filter(Boolean).length;
-
 		} else if (streamData.type === 'tool_call') {
 			// End current text block if it exists
-			if (context.hasTextBlock) {
+			if (this.hasTextBlock) {
 				const contentBlockStop: Anthropic.RawContentBlockStopEvent = {
 					type: 'content_block_stop',
-					index: context.currentBlockIndex
+					index: this.currentBlockIndex
 				};
 				events.push({
 					event: contentBlockStop.type,
 					data: this.formatEventData(contentBlockStop)
 				});
-				context.currentBlockIndex++;
-				context.hasTextBlock = false;
+				this.currentBlockIndex++;
+				this.hasTextBlock = false;
 			}
 
-			context.hadToolCalls = true;
+			this.hadToolCalls = true;
 
 			// Send tool use block
 			const toolBlockStart: Anthropic.RawContentBlockStartEvent = {
 				type: 'content_block_start',
-				index: context.currentBlockIndex,
+				index: this.currentBlockIndex,
 				content_block: {
 					type: 'tool_use',
 					id: streamData.callId,
@@ -132,7 +139,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
 			// Send tool use content
 			const toolBlockContent: Anthropic.RawContentBlockDeltaEvent = {
 				type: 'content_block_delta',
-				index: context.currentBlockIndex,
+				index: this.currentBlockIndex,
 				delta: {
 					type: "input_json_delta",
 					partial_json: JSON.stringify(streamData.input || {})
@@ -145,14 +152,14 @@ export class AnthropicAdapter implements IProtocolAdapter {
 
 			const toolBlockStop: Anthropic.RawContentBlockStopEvent = {
 				type: 'content_block_stop',
-				index: context.currentBlockIndex
+				index: this.currentBlockIndex
 			};
 			events.push({
 				event: toolBlockStop.type,
 				data: this.formatEventData(toolBlockStop)
 			});
 
-			context.currentBlockIndex++;
+			this.currentBlockIndex++;
 		}
 
 		return events;
@@ -162,10 +169,10 @@ export class AnthropicAdapter implements IProtocolAdapter {
 		const events: IStreamEventData[] = [];
 
 		// Send final events
-		if (context.hasTextBlock) {
+		if (this.hasTextBlock) {
 			const contentBlockStop: Anthropic.RawContentBlockStopEvent = {
 				type: 'content_block_stop',
-				index: context.currentBlockIndex
+				index: this.currentBlockIndex
 			};
 			events.push({
 				event: contentBlockStop.type,
@@ -176,7 +183,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
 		const messageDelta: Anthropic.RawMessageDeltaEvent = {
 			type: 'message_delta',
 			delta: {
-				stop_reason: context.hadToolCalls ? 'tool_use' : 'end_turn',
+				stop_reason: this.hadToolCalls ? 'tool_use' : 'end_turn',
 				stop_sequence: null
 			},
 			usage: {
