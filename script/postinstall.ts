@@ -81,6 +81,12 @@ async function main() {
 	if (!fs.existsSync(baseCachePath)) {
 		throw new Error(`Base cache file does not exist at ${baseCachePath}. Please ensure that you have git lfs installed and initialized before the repository is cloned.`);
 	}
+
+	await copyStaticAssets([
+		`node_modules/@anthropic-ai/claude-code/cli.js`,
+		`node_modules/@anthropic-ai/claude-code/yoga.wasm`,
+		// `node_modules/@anthropic-ai/claude-code/vendor/ripgrep/${process.arch}-${process.platform}/ripgrep`,
+	], 'dist');
 }
 
 main();

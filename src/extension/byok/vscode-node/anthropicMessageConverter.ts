@@ -178,12 +178,18 @@ export function anthropicMessagesToRawMessages(messages: MessageParam[], system:
 		let toolCalls: Raw.ChatMessageToolCall[] | undefined;
 		let toolCallId: string | undefined;
 
-		const pushImage = (img: ImageBlockParam) => {
+		const toRawImage = (img: ImageBlockParam): Raw.ChatCompletionContentPartImage | undefined => {
 			if (img.source.type === 'base64') {
-				const dataUrl = `data:${img.source.media_type};base64,${img.source.data}`;
-				content.push({ type: Raw.ChatCompletionContentPartKind.Image, imageUrl: { url: dataUrl } });
+				return { type: Raw.ChatCompletionContentPartKind.Image, imageUrl: { url: `data:${img.source.media_type};base64,${img.source.data}` } };
 			} else if (img.source.type === 'url') {
-				content.push({ type: Raw.ChatCompletionContentPartKind.Image, imageUrl: { url: img.source.url } });
+				return { type: Raw.ChatCompletionContentPartKind.Image, imageUrl: { url: img.source.url } };
+			}
+		};
+
+		const pushImage = (img: ImageBlockParam) => {
+			const imagePart = toRawImage(img);
+			if (imagePart) {
+				content.push(imagePart);
 			}
 		};
 
@@ -216,17 +222,18 @@ export function anthropicMessagesToRawMessages(messages: MessageParam[], system:
 					toolCallId = block.tool_use_id;
 					// Translate tool result content to raw parts
 					const toolContent: Raw.ChatCompletionContentPart[] = [];
-					for (const c of block.content ?? []) {
-						if (typeof c === 'string') {
-							if (c !== '') {
-								toolContent.push({ type: Raw.ChatCompletionContentPartKind.Text, text: c });
-							}
-						} else if (c.type === 'text') {
-							if (c.text !== '') {
+					if (typeof block.content === 'string') {
+						toolContent.push({ type: Raw.ChatCompletionContentPartKind.Text, text: block.content });
+					} else {
+						for (const c of block.content ?? []) {
+							if (c.type === 'text') {
 								toolContent.push({ type: Raw.ChatCompletionContentPartKind.Text, text: c.text });
+							} else if (c.type === 'image') {
+								const imagePart = toRawImage(c);
+								if (imagePart) {
+									toolContent.push(imagePart);
+								}
 							}
-						} else if (c.type === 'image') {
-							pushImage(c);
 						}
 					}
 					// Emit the tool result message now and continue to next message

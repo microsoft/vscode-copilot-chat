@@ -78,6 +78,7 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(PromptFileContextContribution),
 	asContributionFactory(CompletionsCoreContribution),
 	workspaceIndexingContribution,
+	asContributionFactory(ChatSessionsContrib)
 ];
 
 /**
@@ -104,5 +105,4 @@ export const vscodeNodeChatContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(BYOKContrib),
 	asContributionFactory(McpSetupCommands),
 	newWorkspaceContribution,
-	asContributionFactory(ChatSessionsContrib)
 ];

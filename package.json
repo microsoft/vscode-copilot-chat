@@ -1606,19 +1606,6 @@
 						]
 					}
 				]
-			},
-			{
-				"id": "github.copilot.codex",
-				"name": "codex",
-				"fullName": "Codex",
-				"locations": [
-					"panel"
-				],
-				"modes": [
-					"agent"
-				],
-				"isEngine": true,
-				"isSticky": true
 			}
 		],
 		"languageModels": [

@@ -8,7 +8,6 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import * as http from 'node:http';
 import { ChatParticipantToolToken, lm } from 'vscode';
 import { z } from 'zod';
-import { ContributedToolName } from '../../../tools/common/toolNames';
 
 /**
  * Stateless MCP handler that creates fresh server instances per request.
@@ -57,18 +56,18 @@ export class PermissionMcpServer {
 				},
 				async (args, extra) => {
 					try {
-						await lm.invokeTool(ContributedToolName.ConfirmationTool, {
+						await lm.invokeTool('vscode_get_confirmation', {
 							input: {
-								message: `Run ${args.tool_name}?`,
-								detail: `\`\`\`\n${JSON.stringify(args.input, null, 2)}\n\`\`\``
+								title: `Use ${args.tool_name}?`,
+								message: `\`\`\`\n${JSON.stringify(args.input, null, 2)}\n\`\`\``
 							},
 							toolInvocationToken: this._toolInvocationToken,
 						});
 						return {
 							content: [{
 								type: 'text' as const, text: JSON.stringify({
-									"behavior": "allow",
-									"updatedInput": args.input
+									behavior: 'allow',
+									updatedInput: args.input
 								})
 							}],
 						};
@@ -77,8 +76,8 @@ export class PermissionMcpServer {
 					return {
 						content: [{
 							type: 'text' as const, text: JSON.stringify({
-								"behavior": "deny",
-								"message": "because I don't want you to"
+								behavior: 'deny',
+								message: 'The user declined to run the tool'
 							})
 						}],
 					};

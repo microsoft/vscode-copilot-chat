@@ -42,7 +42,7 @@ class LanguageModelServer {
 	) {
 		this.config = {
 			port: 0, // Will be set to random available port
-			nonce: generateUuid()
+			nonce: 'vscode-lm-' + generateUuid()
 		};
 		this.adapters = new Map();
 		this.adapters.set('/v1/chat/completions', new OpenAIAdapter());
@@ -128,21 +128,16 @@ class LanguageModelServer {
 	}
 
 	private parseUrlPathname(url: string): string {
-		// Parse URL safely to get just the pathname, ignoring query parameters
 		try {
-			// Create a URL object with a dummy base to handle relative URLs
 			const parsedUrl = new URL(url, 'http://localhost');
 			return parsedUrl.pathname;
 		} catch {
-			// Fallback: if URL parsing fails, use simple string split
 			return url.split('?')[0];
 		}
 	}
 
 	private getAdapterForPath(url: string): IProtocolAdapter | undefined {
 		const pathname = this.parseUrlPathname(url);
-
-		// Direct lookup in the adapters map
 		return this.adapters.get(pathname);
 	}
 
@@ -161,10 +156,8 @@ class LanguageModelServer {
 
 	private async handleChatRequest(adapter: IProtocolAdapter, body: string, res: http.ServerResponse): Promise<void> {
 		try {
-			// Parse request using the adapter
 			const parsedRequest = adapter.parseRequest(body);
 
-			// Get available language models
 			const endpoints = await this.endpointProvider.getAllChatEndpoints();
 
 			if (endpoints.length === 0) {
@@ -173,9 +166,7 @@ class LanguageModelServer {
 				return;
 			}
 
-			// Select model based on request criteria
 			const selectedEndpoint = this.selectEndpoint(endpoints, parsedRequest.model);
-
 			if (!selectedEndpoint) {
 				res.writeHead(404, { 'Content-Type': 'application/json' });
 				res.end(JSON.stringify({
