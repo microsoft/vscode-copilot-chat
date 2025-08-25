@@ -62,7 +62,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	public readonly ID = this._statelessNextEditProvider.ID;
 
-	private readonly _rejectionCollector = new RejectionCollector(this._workspace, s => this._logService.trace(s));
+	private readonly _rejectionCollector = this._register(new RejectionCollector(this._workspace, s => this._logService.trace(s)));
 	private readonly _nextEditCache: NextEditCache;
 	private readonly _recentlyShownCache = new RecentlyShownCache();
 
@@ -268,7 +268,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		tracer.trace('returning next edit result');
 		telemetryBuilder.setHasNextEdit(true);
-
+		telemetryBuilder.setContainsNotebookCellMarker((nextEditResult.result?.edit.newText || '').includes('%% vscode.cell [id='));
 		return nextEditResult;
 	}
 

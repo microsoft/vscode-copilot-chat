@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.104.0-20250822",
+		"vscode": "^1.104.0-20250824",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -133,7 +133,8 @@
 		"resolvers",
 		"taskExecutionTerminal",
 		"dataChannels",
-		"languageModelThinkingPart"
+		"languageModelThinkingPart",
+		"chatSessionsProvider"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -1249,6 +1250,7 @@
 				"modes": [
 					"agent"
 				],
+				"isEngine": true,
 				"isDefault": true,
 				"isAgent": true,
 				"when": "config.chat.agent.enabled",
@@ -3759,6 +3761,15 @@
 				"enableForWorkspaceTypeScriptVersions": true
 			}
 		],
+		"chatSessions": [
+			{
+				"type": "claude-code",
+				"name": "claude",
+				"displayName": "Claude Code",
+				"description": "The Claude Code agent",
+				"when": "config.github.copilot.chat.advanced.claudeCode.enabled"
+			}
+		],
 		"debuggers": [
 			{
 				"type": "vscode-chat-replay",
@@ -3857,6 +3868,7 @@
 		"@stylistic/eslint-plugin": "^3.0.1",
 		"@types/eslint": "^9.0.0",
 		"@types/google-protobuf": "^3.15.12",
+		"@types/js-yaml": "^4.0.9",
 		"@types/markdown-it": "^14.0.0",
 		"@types/minimist": "^1.2.5",
 		"@types/mocha": "^10.0.10",
@@ -3896,6 +3908,7 @@
 		"fastq": "^1.19.1",
 		"glob": "^11.0.3",
 		"husky": "^9.1.7",
+		"js-yaml": "^4.1.0",
 		"keyv": "^5.3.2",
 		"lint-staged": "15.2.9",
 		"minimist": "^1.2.8",
@@ -3928,11 +3941,10 @@
 		"vscode-languageserver-textdocument": "^1.0.12",
 		"vscode-languageserver-types": "^3.17.5",
 		"yaml": "^2.8.0",
-		"zeromq": "github:rebornix/zeromq.js#a19e8e373b3abc677f91b936d3f00d49b1b61792",
-		"js-yaml": "^4.1.0",
-		"@types/js-yaml": "^4.0.9"
+		"zeromq": "github:rebornix/zeromq.js#a19e8e373b3abc677f91b936d3f00d49b1b61792"
 	},
 	"dependencies": {
+		"@anthropic-ai/claude-code": "^1.0.89",
 		"@anthropic-ai/sdk": "^0.56.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
@@ -3944,6 +3956,7 @@
 		"@xterm/headless": "^5.5.0",
 		"ajv": "^8.17.1",
 		"applicationinsights": "^2.9.7",
+		"diff": "^8.0.2",
 		"ignore": "^7.0.5",
 		"isbinaryfile": "^5.0.4",
 		"jsonc-parser": "^3.3.1",
@@ -3952,8 +3965,7 @@
 		"minimatch": "^10.0.3",
 		"undici": "^7.11.0",
 		"vscode-tas-client": "^0.1.84",
-		"web-tree-sitter": "^0.23.0",
-		"diff": "^8.0.2"
+		"web-tree-sitter": "^0.23.0"
 	},
 	"overrides": {
 		"@aminya/node-gyp-build": "npm:node-gyp-build@4.8.1",

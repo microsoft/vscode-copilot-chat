@@ -5,7 +5,7 @@
 	"github.copilot.badge.twitter": "Follow GitHub on Twitter",
 	"github.copilot.icon": "GitHub Copilot icon",
 	"github.copilot.command.explainThis": "Explain",
-	"github.copilot.command.reviewAndComment": "Code Review",
+	"github.copilot.command.reviewAndComment": "Review",
 	"github.copilot.command.applyReviewSuggestion": "Apply",
 	"github.copilot.command.applyReviewSuggestionAndNext": "Apply and Go to Next",
 	"github.copilot.command.discardReviewSuggestion": "Discard",

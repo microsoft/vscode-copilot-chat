@@ -37,6 +37,7 @@ import { InlineEditLogger } from './parts/inlineEditLogger';
 import { toExternalRange } from './utils/translations';
 import { IVSCodeObservableDocument } from './parts/vscodeWorkspace';
 import { findNotebook, isNotebookCell } from '../../../util/common/notebooks';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 
 const learnMoreAction: Command = {
 	title: l10n.t('Learn More'),
@@ -115,6 +116,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
 		@INotebookService private readonly _notebookService: INotebookService,
+		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 	) {
 		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
 	}
@@ -160,7 +162,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		const logContext = new InlineEditRequestLogContext(doc.id.uri, documentVersion, context);
 		logContext.recordingBookmark = this.model.debugRecorder.createBookmark();
 
-		const telemetryBuilder = new NextEditProviderTelemetryBuilder(this._gitExtensionService, this._notebookService, this.model.nextEditProvider.ID, doc, this.model.debugRecorder, logContext.recordingBookmark);
+		const telemetryBuilder = new NextEditProviderTelemetryBuilder(this._gitExtensionService, this._notebookService, this._workspaceService, this.model.nextEditProvider.ID, doc, this.model.debugRecorder, logContext.recordingBookmark);
 		telemetryBuilder.setOpportunityId(context.requestUuid);
 		telemetryBuilder.setConfigIsDiagnosticsNESEnabled(!!this.model.diagnosticsBasedProvider);
 		telemetryBuilder.setIsNaturalLanguageDominated(LineCheck.isNaturalLanguageDominated(document, position));
@@ -242,6 +244,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 					this.createCompletionItem(doc, document, position, range, result);
 			} else {
 				// nes is for a different document.
+				telemetryBuilder.setIsNESForOtherEditor();
 				range = documents[0][1];
 				completionItem = serveAsCompletionsProvider ?
 					undefined :
@@ -261,6 +264,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			if (this.inlineEditDebugComponent) {
 				menuCommands.push(...this.inlineEditDebugComponent.getCommands(logContext));
 			}
+
 
 			// telemetry
 			telemetryBuilder.setPickedNESType(suggestionInfo.source === 'diagnostics' ? 'diagnostics' : 'llm');

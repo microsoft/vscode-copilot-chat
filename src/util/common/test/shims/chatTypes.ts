@@ -373,3 +373,46 @@ export class LanguageModelToolExtensionSource implements vscode.LanguageModelToo
 export class LanguageModelToolMCPSource implements vscode.LanguageModelToolMCPSource {
 	constructor(public readonly label: string, public readonly name: string, public readonly instructions: string | undefined) { }
 }
+
+export class LanguageModelToolCallPart implements vscode.LanguageModelToolCallPart {
+	callId: string;
+	name: string;
+	input: any;
+
+	constructor(callId: string, name: string, input: any) {
+		this.callId = callId;
+		this.name = name;
+
+		this.input = input;
+	}
+}
+
+export class LanguageModelToolResultPart implements vscode.LanguageModelToolResultPart {
+	callId: string;
+	content: (LanguageModelTextPart | LanguageModelPromptTsxPart | unknown)[];
+	isError: boolean;
+
+	constructor(callId: string, content: (LanguageModelTextPart | LanguageModelPromptTsxPart | unknown)[], isError?: boolean) {
+		this.callId = callId;
+		this.content = content;
+		this.isError = isError ?? false;
+	}
+}
+
+export class LanguageModelToolResultPart2 implements vscode.LanguageModelToolResultPart2 {
+	callId: string;
+	content: (LanguageModelTextPart | LanguageModelPromptTsxPart | LanguageModelDataPart | unknown)[];
+	isError: boolean;
+
+	constructor(callId: string, content: (LanguageModelTextPart | LanguageModelPromptTsxPart | LanguageModelDataPart | unknown)[], isError?: boolean) {
+		this.callId = callId;
+		this.content = content;
+		this.isError = isError ?? false;
+	}
+}
+
+export enum LanguageModelChatMessageRole {
+	User = 1,
+	Assistant = 2,
+	System = 3
+}

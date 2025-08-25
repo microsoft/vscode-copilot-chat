@@ -111,6 +111,23 @@ const sanityTestBundlePlugin: esbuild.Plugin = {
 	}
 };
 
+const importMetaPlugin: esbuild.Plugin = {
+	name: 'claudeCodeImportMetaPlugin',
+	setup(build) {
+		// Handle import.meta.url in @anthropic-ai/claude-code package
+		build.onLoad({ filter: /node_modules[\/\\]@anthropic-ai[\/\\]claude-code[\/\\].*\.mjs$/ }, async (args) => {
+			const contents = await fs.promises.readFile(args.path, 'utf8');
+			return {
+				contents: contents.replace(
+					/import\.meta\.url/g,
+					'require("url").pathToFileURL(__filename).href'
+				),
+				loader: 'js'
+			};
+		});
+	}
+};
+
 const shimVsCodeTypesPlugin: esbuild.Plugin = {
 	name: 'shimVsCodeTypesPlugin',
 	setup(build) {
@@ -157,7 +174,7 @@ const nodeExtHostBuildOptions = {
 		{ in: './src/sanity-test-extension.ts', out: 'sanity-test-extension' },
 	],
 	loader: { '.ps1': 'text' },
-	plugins: [testBundlePlugin, sanityTestBundlePlugin],
+	plugins: [testBundlePlugin, sanityTestBundlePlugin, importMetaPlugin],
 	external: [
 		...baseNodeBuildOptions.external,
 		'vscode'

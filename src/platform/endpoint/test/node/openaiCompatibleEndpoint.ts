@@ -10,6 +10,7 @@ import { IAuthenticationService } from '../../../authentication/common/authentic
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
 import { IConfigurationService } from '../../../configuration/common/configurationService';
 import { IEnvService } from '../../../env/common/envService';
+import { ILogService } from '../../../log/common/logService';
 import { isOpenAiFunctionTool } from '../../../networking/common/fetch';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { IChatEndpoint, IEndpointBody } from '../../../networking/common/networking';
@@ -21,7 +22,6 @@ import { ICAPIClientService } from '../../common/capiClient';
 import { IDomainService } from '../../common/domainService';
 import { IChatModelInformation } from '../../common/endpointProvider';
 import { ChatEndpoint } from '../../node/chatEndpoint';
-import { ILogService } from '../../../log/common/logService';
 
 export type IModelConfig = {
 	id: string;
@@ -225,8 +225,10 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 
 		if (this.modelConfig.type === 'openai') {
 			if (body) {
-				// we need to set this to unsure usage stats are logged
-				body['stream_options'] = { 'include_usage': true };
+				if (!this.useResponsesApi) {
+					// we need to set this to unsure usage stats are logged
+					body['stream_options'] = { 'include_usage': true };
+				}
 				// OpenAI requires the model name to be set in the body
 				body.model = this.modelConfig.name;
 

@@ -6,6 +6,7 @@
 import { AuthenticationContrib } from '../../authentication/vscode-node/authentication.contribution';
 import { BYOKContrib } from '../../byok/vscode-node/byokContribution';
 import { ChatQuotaContribution } from '../../chat/vscode-node/chatQuota.contribution';
+import { ChatSessionsContrib } from '../../chatSessions/vscode-node/chatSessions';
 import * as chatBlockLanguageContribution from '../../codeBlocks/vscode-node/chatBlockLanguageFeatures.contribution';
 import { IExtensionContributionFactory, asContributionFactory } from '../../common/contributions';
 import { CompletionsCoreContribution } from '../../completions/vscode-node/completionsCoreContribution';
@@ -79,6 +80,7 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(ChatReplayContribution),
 	asContributionFactory(CompletionsCoreContribution),
 	workspaceIndexingContribution,
+	asContributionFactory(ChatSessionsContrib)
 ];
 
 /**
