@@ -47,7 +47,7 @@ export function getMaxPromptTokens(configService: IConfigurationService, expServ
 
 	let experimentalOverrides: Record<string, number> = {};
 	try {
-		const expValue = expService.getTreatmentVariable<string>('vscode', 'copilotchat.contextWindows');
+		const expValue = expService.getTreatmentVariable<string>('copilotchat.contextWindows');
 		experimentalOverrides = JSON.parse(expValue ?? '{}');
 	} catch {
 		// If the experiment service either is not available or returns a bad value we ignore the overrides

@@ -7,6 +7,17 @@ import { Emitter, Event } from '../../../util/vs/base/common/event';
 
 
 /**
+ * An event describing the change in treatments.
+ */
+export interface TreatmentsChangeEvent {
+
+	/**
+	 * List of changed treatments
+	 */
+	affectedTreatmentVariables: string[];
+}
+
+/**
  * Experimentation service provides A/B experimentation functionality.
  * Currently it's per design to be able to only allow querying one flight at the time.
  * This is in order for us to control events and telemetry whenever these methods are called.
@@ -17,7 +28,7 @@ export interface IExperimentationService {
 	/**
 	 * Emitted whenever a treatment values have changes based on user account information or refresh.
 	 */
-	onDidTreatmentsChange: Event<void>;
+	onDidTreatmentsChange: Event<TreatmentsChangeEvent>;
 
 
 	/**
@@ -32,10 +43,9 @@ export interface IExperimentationService {
 	 * Returns the value of the treatment variable, or undefined if not found.
 	 * It uses the values currently in memory, so the experimentation service
 	 * must be initialized before calling.
-	 * @param config name of the config to check.
 	 * @param name name of the treatment variable.
 	 */
-	getTreatmentVariable<T extends boolean | number | string>(configId: string, name: string): T | undefined;
+	getTreatmentVariable<T extends boolean | number | string>(name: string): T | undefined;
 }
 
 export const IExperimentationService = createServiceIdentifier<IExperimentationService>('IExperimentationService');
@@ -43,12 +53,12 @@ export const IExperimentationService = createServiceIdentifier<IExperimentationS
 
 export class NullExperimentationService implements IExperimentationService {
 	declare readonly _serviceBrand: undefined;
-	private readonly _onDidTreatmentsChange = new Emitter<void>();
+	private readonly _onDidTreatmentsChange = new Emitter<TreatmentsChangeEvent>();
 	readonly onDidTreatmentsChange = this._onDidTreatmentsChange.event;
 
 	async hasTreatments(): Promise<void> { return Promise.resolve(); }
 	async hasAccountBasedTreatments(): Promise<void> { return Promise.resolve(); }
-	getTreatmentVariable<T extends boolean | number | string>(_configId: string, _name: string): T | undefined {
+	getTreatmentVariable<T extends boolean | number | string>(_name: string): T | undefined {
 		return undefined;
 	}
 }

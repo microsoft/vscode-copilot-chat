@@ -14,8 +14,8 @@ import { createPlatformServices, ITestingServicesAccessor } from '../../../test/
 import { BaseExperimentationService, TASClientDelegateFn, UserInfoStore } from '../../node/baseExperimentationService';
 
 
-function toExpectedTreatment(configId: string, name: string, org: string | undefined, sku: string | undefined): string | undefined {
-	return `${configId}.${name}.${org}.${sku}`;
+function toExpectedTreatment(name: string, org: string | undefined, sku: string | undefined): string | undefined {
+	return `${name}.${org}.${sku}`;
 }
 
 class TestExperimentationService extends BaseExperimentationService {
@@ -108,7 +108,7 @@ class MockTASExperimentationService implements ITASExperimentationService {
 		// Track requests for testing
 		this.treatmentRequests.push({ configId, name, org, sku });
 
-		return toExpectedTreatment(configId, name, org, sku) as T | undefined;
+		return toExpectedTreatment(name, org, sku) as T | undefined;
 	}
 
 	getTreatmentVariableAsync<T extends boolean | number | string>(configId: string, name: string, checkCache?: boolean): Promise<T | undefined> {
@@ -162,8 +162,8 @@ describe('ExP Service Tests', () => {
 
 	it('should return treatments based on copilot token', async () => {
 		await expService.hasTreatments();
-		let expectedTreatment = toExpectedTreatment('vscode', 'a', undefined, undefined);
-		let treatment = expService.getTreatmentVariable<string>('vscode', 'a');
+		let expectedTreatment = toExpectedTreatment('a', undefined, undefined);
+		let treatment = expService.getTreatmentVariable<string>('a');
 		expect(treatment).toBe(expectedTreatment);
 
 		let treatmentsChangePromise = GetNewTreatmentsChangedPromise();
@@ -172,8 +172,8 @@ describe('ExP Service Tests', () => {
 		copilotTokenService.copilotToken = GitHubProToken;
 		await treatmentsChangePromise;
 
-		expectedTreatment = toExpectedTreatment('vscode', 'a', 'github', 'pro');
-		treatment = expService.getTreatmentVariable<string>('vscode', 'a');
+		expectedTreatment = toExpectedTreatment('a', 'github', 'pro');
+		treatment = expService.getTreatmentVariable<string>('a');
 		expect(treatment).toBe(expectedTreatment);
 
 		treatmentsChangePromise = GetNewTreatmentsChangedPromise();
@@ -182,8 +182,8 @@ describe('ExP Service Tests', () => {
 		copilotTokenService.copilotToken = GitHubAndMicrosoftEnterpriseToken;
 		await treatmentsChangePromise;
 
-		expectedTreatment = toExpectedTreatment('vscode', 'a', 'github', 'enterprise');
-		treatment = expService.getTreatmentVariable<string>('vscode', 'a');
+		expectedTreatment = toExpectedTreatment('a', 'github', 'enterprise');
+		treatment = expService.getTreatmentVariable<string>('a');
 		expect(treatment).toBe(expectedTreatment);
 
 		treatmentsChangePromise = GetNewTreatmentsChangedPromise();
@@ -192,8 +192,8 @@ describe('ExP Service Tests', () => {
 		copilotTokenService.copilotToken = MicrosoftEnterpriseToken;
 		await treatmentsChangePromise;
 
-		expectedTreatment = toExpectedTreatment('vscode', 'a', 'microsoft', 'enterprise');
-		treatment = expService.getTreatmentVariable<string>('vscode', 'a');
+		expectedTreatment = toExpectedTreatment('a', 'microsoft', 'enterprise');
+		treatment = expService.getTreatmentVariable<string>('a');
 		expect(treatment).toBe(expectedTreatment);
 
 		treatmentsChangePromise = GetNewTreatmentsChangedPromise();
@@ -202,8 +202,8 @@ describe('ExP Service Tests', () => {
 		copilotTokenService.copilotToken = NoOrgFreeToken;
 		await treatmentsChangePromise;
 
-		expectedTreatment = toExpectedTreatment('vscode', 'a', undefined, 'free');
-		treatment = expService.getTreatmentVariable<string>('vscode', 'a');
+		expectedTreatment = toExpectedTreatment('a', undefined, 'free');
+		treatment = expService.getTreatmentVariable<string>('a');
 		expect(treatment).toBe(expectedTreatment);
 
 		treatmentsChangePromise = GetNewTreatmentsChangedPromise();
@@ -212,8 +212,8 @@ describe('ExP Service Tests', () => {
 		copilotTokenService.copilotToken = undefined;
 		await treatmentsChangePromise;
 
-		expectedTreatment = toExpectedTreatment('vscode', 'a', undefined, undefined);
-		treatment = expService.getTreatmentVariable<string>('vscode', 'a');
+		expectedTreatment = toExpectedTreatment('a', undefined, undefined);
+		treatment = expService.getTreatmentVariable<string>('a');
 		expect(treatment).toBe(expectedTreatment);
 	});
 
@@ -242,8 +242,8 @@ describe('ExP Service Tests', () => {
 		await newExpService.hasTreatments();
 
 		// Should use cached values initially
-		const treatment = newExpService.getTreatmentVariable<string>('vscode', 'test');
-		expect(treatment).toBe('vscode.test.github.pro');
+		const treatment = newExpService.getTreatmentVariable<string>('test');
+		expect(treatment).toBe(toExpectedTreatment('test', 'github', 'pro'));
 
 		// Clean up
 		await extensionContext.globalState.update(UserInfoStore.INTERNAL_ORG_STORAGE_KEY, undefined);
@@ -259,17 +259,17 @@ describe('ExP Service Tests', () => {
 		await treatmentsChangePromise;
 
 		// Test string treatment
-		const stringTreatment = expService.getTreatmentVariable<string>('config1', 'stringVar');
-		expect(stringTreatment).toBe('config1.stringVar.github.pro');
+		const stringTreatment = expService.getTreatmentVariable<string>('stringVar');
+		expect(stringTreatment).toBe(toExpectedTreatment('stringVar', 'github', 'pro'));
 
 		// Test different config and variable names
-		const anotherTreatment = expService.getTreatmentVariable<string>('config2', 'featureFlag');
-		expect(anotherTreatment).toBe('config2.featureFlag.github.pro');
+		const anotherTreatment = expService.getTreatmentVariable<string>('featureFlag');
+		expect(anotherTreatment).toBe(toExpectedTreatment('featureFlag', 'github', 'pro'));
 
 		// Verify all requests were tracked
 		const requests = expService.mockTasService.treatmentRequests;
-		expect(requests.some(r => r.configId === 'config1' && r.name === 'stringVar')).toBe(true);
-		expect(requests.some(r => r.configId === 'config2' && r.name === 'featureFlag')).toBe(true);
+		expect(requests.some(r => r.name === 'stringVar')).toBe(true);
+		expect(requests.some(r => r.name === 'featureFlag')).toBe(true);
 	});
 
 	it('should not fire events when relevant user info does not change', async () => {
@@ -310,8 +310,19 @@ describe('ExP Service Tests', () => {
 		copilotTokenService.copilotToken = GitHubProToken;
 		await treatmentsChangePromise;
 
-		const treatment = expService.getTreatmentVariable<string>('vscode', 'orgTest');
-		expect(treatment).toBe('vscode.orgTest.github.pro');
+		const treatment = expService.getTreatmentVariable<string>('orgTest');
+		expect(treatment).toBe(toExpectedTreatment('orgTest', 'github', 'pro'));
+	});
+
+	it('should detect GitHub and Microsoft organization correctly', async () => {
+		await expService.hasTreatments();
+
+		const treatmentsChangePromise = GetNewTreatmentsChangedPromise();
+		copilotTokenService.copilotToken = GitHubAndMicrosoftEnterpriseToken;
+		await treatmentsChangePromise;
+
+		const treatment = expService.getTreatmentVariable<string>('orgTest');
+		expect(treatment).toBe(toExpectedTreatment('orgTest', 'github', 'enterprise'));
 	});
 
 	it('should detect Microsoft organization correctly', async () => {
@@ -321,8 +332,8 @@ describe('ExP Service Tests', () => {
 		copilotTokenService.copilotToken = MicrosoftEnterpriseToken;
 		await treatmentsChangePromise;
 
-		const treatment = expService.getTreatmentVariable<string>('vscode', 'orgTest');
-		expect(treatment).toBe('vscode.orgTest.microsoft.enterprise');
+		const treatment = expService.getTreatmentVariable<string>('orgTest');
+		expect(treatment).toBe(toExpectedTreatment('orgTest', 'microsoft', 'enterprise'));
 	});
 
 	it('should handle no organization correctly', async () => {
@@ -332,8 +343,8 @@ describe('ExP Service Tests', () => {
 		copilotTokenService.copilotToken = NoOrgFreeToken;
 		await treatmentsChangePromise;
 
-		const treatment = expService.getTreatmentVariable<string>('vscode', 'orgTest');
-		expect(treatment).toBe('vscode.orgTest.undefined.free');
+		const treatment = expService.getTreatmentVariable<string>('orgTest');
+		expect(treatment).toBe(toExpectedTreatment('orgTest', undefined, 'free'));
 	});
 
 	it('should return undefined before initialization completes', async () => {
@@ -341,12 +352,12 @@ describe('ExP Service Tests', () => {
 		const newExpService = accessor.get(IInstantiationService).createInstance(TestExperimentationService);
 
 		// Should return undefined before initialization
-		const treatmentBeforeInit = newExpService.getTreatmentVariable<string>('vscode', 'test');
+		const treatmentBeforeInit = newExpService.getTreatmentVariable<string>('test');
 		expect(treatmentBeforeInit).toBeUndefined();
 
 		// Initialize and verify it works
 		await newExpService.hasTreatments();
-		const treatmentAfterInit = newExpService.getTreatmentVariable<string>('vscode', 'test');
+		const treatmentAfterInit = newExpService.getTreatmentVariable<string>('test');
 		expect(treatmentAfterInit).toBeDefined();
 	});
 

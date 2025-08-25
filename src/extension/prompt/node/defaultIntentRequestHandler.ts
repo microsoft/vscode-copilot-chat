@@ -580,7 +580,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		}
 
 		this._didParallelToolCallLoop = true;
-		if (this._experimentationService.getTreatmentVariable<boolean>('vscode', 'copilotchat.noParallelToolLoop')) {
+		if (this._experimentationService.getTreatmentVariable<boolean>('copilotchat.noParallelToolLoop')) {
 			return;
 		}
 

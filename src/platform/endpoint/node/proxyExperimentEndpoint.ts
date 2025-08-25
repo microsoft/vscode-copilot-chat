@@ -143,9 +143,9 @@ export interface ExperimentConfig {
 }
 
 export function getCustomDefaultModelExperimentConfig(expService: IExperimentationService): ExperimentConfig | undefined {
-	const selected = expService.getTreatmentVariable<string>('vscode', 'custommodel1');
-	const id = expService.getTreatmentVariable<string>('vscode', 'custommodel1.id');
-	const name = expService.getTreatmentVariable<string>('vscode', 'custommodel1.name');
+	const selected = expService.getTreatmentVariable<string>('custommodel1');
+	const id = expService.getTreatmentVariable<string>('custommodel1.id');
+	const name = expService.getTreatmentVariable<string>('custommodel1.name');
 	if (selected && id && name) {
 		return { selected, id, name };
 	}

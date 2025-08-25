@@ -99,5 +99,5 @@ export class AutoChatEndpoint implements IChatEndpoint {
  * @returns True if the auto mode is enabled, false otherwise
  */
 export function isAutoModeEnabled(expService: IExperimentationService, envService: IEnvService): boolean {
-	return !!expService.getTreatmentVariable<boolean>('vscode', 'copilotchatcapiautomode') || envService.isPreRelease();
+	return !!expService.getTreatmentVariable<boolean>('copilotchatcapiautomode') || envService.isPreRelease();
 }

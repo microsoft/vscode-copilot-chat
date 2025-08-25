@@ -348,17 +348,17 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 
 	private async getAutoIndexFileCap() {
 		if (await this.getExpandedClientSideIndexingStatus() === 'enabled') {
-			return this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.expandedEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultExpandedAutomaticIndexingFileCap;
+			return this._experimentationService.getTreatmentVariable<number>('workspace.expandedEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultExpandedAutomaticIndexingFileCap;
 		}
 
-		return this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.embeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultAutomaticIndexingFileCap;
+		return this._experimentationService.getTreatmentVariable<number>('workspace.embeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultAutomaticIndexingFileCap;
 	}
 
 	private async getManualIndexFileCap() {
-		let manualCap = this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.manualEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultManualIndexingFileCap;
+		let manualCap = this._experimentationService.getTreatmentVariable<number>('workspace.manualEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultManualIndexingFileCap;
 
 		if (await this.getExpandedClientSideIndexingStatus() === 'available') {
-			manualCap = this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.expandedEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultExpandedAutomaticIndexingFileCap;
+			manualCap = this._experimentationService.getTreatmentVariable<number>('workspace.expandedEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultExpandedAutomaticIndexingFileCap;
 		}
 
 		// The manual cap should never be lower than the auto cap
@@ -390,7 +390,7 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 			return;
 		}
 
-		const defaultDelay = this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.embeddingIndex.automaticReindexingDelay') ?? 60000;
+		const defaultDelay = this._experimentationService.getTreatmentVariable<number>('workspace.embeddingIndex.automaticReindexingDelay') ?? 60000;
 		for (const uri of uris) {
 			let delayer = this._reindexRequests.get(uri);
 			if (!delayer) {
