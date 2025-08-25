@@ -9,9 +9,10 @@ import { RemoteEmbeddingsComputer } from '../../src/platform/embeddings/common/r
 import { ICAPIClientService } from '../../src/platform/endpoint/common/capiClient';
 import { IDomainService } from '../../src/platform/endpoint/common/domainService';
 import { IEnvService } from '../../src/platform/env/common/envService';
+import { ILogService } from '../../src/platform/log/common/logService';
 import { IFetcherService } from '../../src/platform/networking/common/fetcherService';
 import { ITelemetryService } from '../../src/platform/telemetry/common/telemetry';
-import { CallTracker } from '../../src/util/common/telemetryCorrelationId';
+import { TelemetryCorrelationId } from '../../src/util/common/telemetryCorrelationId';
 import { computeSHA256 } from './hash';
 
 export class CacheableEmbeddingRequest {
@@ -45,19 +46,21 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 	constructor(
 		private readonly cache: IEmbeddingsCache,
 		@IAuthenticationService authService: IAuthenticationService,
-		@ITelemetryService telemetryService: ITelemetryService,
-		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
+		@IDomainService domainService: IDomainService,
 		@IEnvService envService: IEnvService,
-		@IFetcherService fetcherService: IFetcherService
+		@IFetcherService fetcherService: IFetcherService,
+		@ILogService logService: ILogService,
+		@ITelemetryService telemetryService: ITelemetryService,
 	) {
 		super(
 			authService,
-			telemetryService,
-			domainService,
 			capiClientService,
+			domainService,
 			envService,
-			fetcherService
+			fetcherService,
+			logService,
+			telemetryService,
 		);
 	}
 
@@ -65,8 +68,8 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 		type: EmbeddingType,
 		inputs: string[],
 		options: ComputeEmbeddingsOptions,
-		telemetryInfo: CallTracker,
-		token: CancellationToken | undefined,
+		telemetryInfo?: TelemetryCorrelationId,
+		token?: CancellationToken,
 	): Promise<Embeddings | undefined> {
 		const embeddingEntries = new Map<string, Embedding>();
 		const nonCached: string[] = [];

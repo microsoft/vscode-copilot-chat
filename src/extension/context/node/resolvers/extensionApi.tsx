@@ -9,7 +9,7 @@ import { EmbeddingCacheType, IEmbeddingsCache, LocalEmbeddingsCache, RemoteCache
 import { IEnvService } from '../../../../platform/env/common/envService';
 import { Progress } from '../../../../platform/notification/common/notificationService';
 import { createFencedCodeBlock } from '../../../../util/common/markdown';
-import { CallTracker } from '../../../../util/common/telemetryCorrelationId';
+import { TelemetryCorrelationId } from '../../../../util/common/telemetryCorrelationId';
 import { sanitizeVSCodeVersion } from '../../../../util/common/vscodeVersion';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { createDecorator, IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -92,7 +92,7 @@ export class VSCodeAPIContextElement extends PromptElement<VSCodeAPIContextProps
 	private async getSnippets(token: CancellationToken | undefined): Promise<string[]> {
 		await this.apiEmbeddingsIndex.updateIndex();
 
-		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [this.props.query], {}, new CallTracker('VSCodeAPIContextElement::getSnippets'), token);
+		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [this.props.query], {}, new TelemetryCorrelationId('VSCodeAPIContextElement::getSnippets'), token);
 		if (embeddingResult && embeddingResult.values.length > 0) {
 			return this.apiEmbeddingsIndex.nClosestValues(embeddingResult.values[0], 5);
 		}

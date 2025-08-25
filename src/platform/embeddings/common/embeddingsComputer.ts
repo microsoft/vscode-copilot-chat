@@ -5,7 +5,7 @@
 
 import type { CancellationToken } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { CallTracker } from '../../../util/common/telemetryCorrelationId';
+import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 
 /**
  * Fully qualified type of the embedding.
@@ -109,7 +109,7 @@ export interface IEmbeddingsComputer {
 		type: EmbeddingType,
 		inputs: readonly string[],
 		options?: ComputeEmbeddingsOptions,
-		telemetryInfo?: CallTracker,
+		telemetryInfo?: TelemetryCorrelationId,
 		token?: CancellationToken,
 	): Promise<Embeddings | undefined>;
 }
