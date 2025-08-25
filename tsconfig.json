@@ -4,6 +4,7 @@
 		"jsx": "react",
 		"jsxFactory": "vscpp",
 		"jsxFragmentFactory": "vscppf",
+		"resolveJsonModule": true,
 		"rootDir": ".",
 		"types": [
 			"minimist",
