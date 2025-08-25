@@ -1030,7 +1030,7 @@ class TodoListToolInstructions extends PromptElement<DefaultAgentPromptProps> {
 			4. Mark completed IMMEDIATELY<br />
 			5. Update the user with a very short evidence note<br />
 			6. Move to next todo<br />
-			7. Before wrapping up, ensure every todo is marked correctly('completed', 'in-progress' or 'not-started') - never leave items in an ambiguous state<br />
+			7. Before wrapping up, ensure every todo item is properly updated and marked with the correct status ('completed', 'in-progress' or 'not-started') - never leave todo items in an ambiguous state<br />
 		</Tag>;
 	}
 }
