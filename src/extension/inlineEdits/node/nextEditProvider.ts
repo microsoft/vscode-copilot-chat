@@ -296,6 +296,17 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			}
 		}
 
+		const fetchLatency = Date.now() - triggerTime;
+		const delay = Math.max(0, minimumResponseDelay - fetchLatency);
+		if (delay > 0) {
+			await timeout(delay);
+			if (cancellationToken.isCancellationRequested) {
+				tracer.returns('cancelled');
+				telemetryBuilder.setStatus(`noEdit:gotCancelled`);
+				return emptyResult;
+			}
+		}
+
 		return nextEditResult;
 	}
 
