@@ -77,7 +77,9 @@ export class WorkspaceChunks extends PromptElement<ChunksToolProps, WorkspaceChu
 			return raceCancellationError(
 				this.workspaceChunkSearch.searchFileChunks({
 					endpoint: this.promptEndpoint,
-					tokenBudget: Math.min(Math.floor(sizing.tokenBudget * 0.7), this.props.isToolCall ? MAX_TOOL_CHUNK_TOKEN_COUNT : MAX_CHUNK_TOKEN_COUNT),
+					tokenBudget: this.props.isToolCall ? MAX_TOOL_CHUNK_TOKEN_COUNT : MAX_CHUNK_TOKEN_COUNT,
+					// For full workspace, always use the full workspace token budget since it can be included quickly
+					fullWorkspaceTokenBudget: MAX_CHUNK_TOKEN_COUNT,
 					maxResults: this.props.maxResults ?? MAX_CHUNKS_RESULTS,
 				}, this.props.query, {
 					globPatterns: this.props.globPatterns,
