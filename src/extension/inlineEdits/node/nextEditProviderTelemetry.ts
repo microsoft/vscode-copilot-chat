@@ -512,8 +512,8 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 	}
 
 	private _isNESForAnotherDoc: boolean = false;
-	public setIsNESForOtherEditor(isNESForAnotherDoc: boolean): this {
-		this._isNESForAnotherDoc = isNESForAnotherDoc;
+	public setIsNESForOtherEditor(): this {
+		this._isNESForAnotherDoc = true;
 		return this;
 	}
 

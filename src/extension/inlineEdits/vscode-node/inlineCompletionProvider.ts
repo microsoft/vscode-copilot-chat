@@ -244,7 +244,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 					this.createCompletionItem(doc, document, position, range, result);
 			} else {
 				// nes is for a different document.
-				telemetryBuilder.setIsNESForOtherEditor(true);
+				telemetryBuilder.setIsNESForOtherEditor();
 				range = documents[0][1];
 				completionItem = serveAsCompletionsProvider ?
 					undefined :
