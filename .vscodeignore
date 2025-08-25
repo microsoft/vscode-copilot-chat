@@ -15,6 +15,7 @@ assets/walkthroughs/**
 !dist/diffWorker.js
 !dist/webview.js
 !dist/copilotDebugCommand.js
+!dist/cli.js
 !node_modules/@vscode/copilot-typescript-server-plugin/package.json
 !node_modules/@vscode/copilot-typescript-server-plugin/dist/*.js
 !CHANGELOG.md
