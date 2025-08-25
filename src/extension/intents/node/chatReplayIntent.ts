@@ -31,6 +31,8 @@ export class ChatReplayIntent implements IIntent {
 
 	readonly locations = [ChatLocation.Panel];
 
+	isListedCapability = false;
+
 	constructor(
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IToolsService private readonly toolsService: IToolsService
