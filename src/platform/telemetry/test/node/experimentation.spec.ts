@@ -11,6 +11,7 @@ import { ICopilotTokenStore } from '../../../authentication/common/copilotTokenS
 import { IVSCodeExtensionContext } from '../../../extContext/common/extensionContext';
 import { ILogService } from '../../../log/common/logService';
 import { createPlatformServices, ITestingServicesAccessor } from '../../../test/node/services';
+import { TreatmentsChangeEvent } from '../../common/nullExperimentationService';
 import { BaseExperimentationService, TASClientDelegateFn, UserInfoStore } from '../../node/baseExperimentationService';
 
 
@@ -153,9 +154,9 @@ describe('ExP Service Tests', () => {
 	});
 
 	const GetNewTreatmentsChangedPromise = () => {
-		return new Promise<void>((resolve) => {
-			expService.onDidTreatmentsChange(() => {
-				resolve();
+		return new Promise<TreatmentsChangeEvent>((resolve) => {
+			expService.onDidTreatmentsChange((event) => {
+				resolve(event);
 			});
 		});
 	};
@@ -378,5 +379,53 @@ describe('ExP Service Tests', () => {
 		const cachedSku = extensionContext.globalState.get<string>(UserInfoStore.SKU_STORAGE_KEY);
 		expect(cachedOrg).toBe('github');
 		expect(cachedSku).toBe('pro');
+	});
+
+	it('should only include previously queried treatments in change events', async () => {
+		await expService.hasTreatments();
+
+		// Query one treatment before sign-in
+		const queriedTreatment = expService.getTreatmentVariable<string>('queriedTreatment');
+		expect(queriedTreatment).toBe(toExpectedTreatment('queriedTreatment', undefined, undefined));
+
+		// Don't query another treatment (notQueriedTreatment)
+
+		// Set up promise for treatment changes
+		let treatmentChangePromise = GetNewTreatmentsChangedPromise();
+
+		// Sign in - this should trigger treatment changes
+		copilotTokenService.copilotToken = GitHubProToken;
+		let treatmentChangeEvent = await treatmentChangePromise;
+
+		// Verify only the previously queried treatment is in the affected list
+		expect(treatmentChangeEvent).toBeDefined();
+		expect(treatmentChangeEvent.affectedTreatmentVariables).toContain('queriedTreatment');
+		expect(treatmentChangeEvent.affectedTreatmentVariables).not.toContain('notQueriedTreatment');
+
+		// Now query the treatment that wasn't queried before to verify it has the new value
+		const notQueriedTreatment = expService.getTreatmentVariable<string>('notQueriedTreatment');
+		expect(notQueriedTreatment).toBe(toExpectedTreatment('notQueriedTreatment', 'github', 'pro'));
+
+		// And verify the previously queried treatment has the updated value
+		const updatedQueriedTreatment = expService.getTreatmentVariable<string>('queriedTreatment');
+		expect(updatedQueriedTreatment).toBe(toExpectedTreatment('queriedTreatment', 'github', 'pro'));
+
+		// Set up promise for treatment changes
+		treatmentChangePromise = GetNewTreatmentsChangedPromise();
+
+		// Sign out - this should trigger another treatment change event
+		copilotTokenService.copilotToken = undefined;
+		treatmentChangeEvent = await treatmentChangePromise;
+
+		// Verify both queried treatments are in the affected list now
+		expect(treatmentChangeEvent).toBeDefined();
+		expect(treatmentChangeEvent.affectedTreatmentVariables).toContain('queriedTreatment');
+		expect(treatmentChangeEvent.affectedTreatmentVariables).toContain('notQueriedTreatment');
+
+		// Verify both treatments have the signed-out value
+		const signedOutQueriedTreatment = expService.getTreatmentVariable<string>('queriedTreatment');
+		expect(signedOutQueriedTreatment).toBe(toExpectedTreatment('queriedTreatment', undefined, undefined));
+		const signedOutNotQueriedTreatment = expService.getTreatmentVariable<string>('notQueriedTreatment');
+		expect(signedOutNotQueriedTreatment).toBe(toExpectedTreatment('notQueriedTreatment', undefined, undefined));
 	});
 });
