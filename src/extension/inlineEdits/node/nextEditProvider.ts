@@ -176,6 +176,9 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		const cacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheDelay, this._expService);
 		const minimumResponseDelay = cacheDelay;
 
+		let isRebasedCachedEdit = false;
+		let isSubsequentCachedEdit = false;
+
 		if (recentlyShownCachedEdit) {
 			tracer.trace('using recently shown cached edit');
 			edit = recentlyShownCachedEdit[0];
@@ -192,6 +195,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		} else if (cachedEdit) {
 			tracer.trace('using cached edit');
 			edit = cachedEdit.rebasedEdit || cachedEdit.edit;
+			isRebasedCachedEdit = !!cachedEdit.rebasedEdit;
+			isSubsequentCachedEdit = cachedEdit.subsequentN !== undefined && cachedEdit.subsequentN > 0;
 			req = cachedEdit.source;
 			logContext.setIsCachedResult(cachedEdit.source.log);
 			currentDocument = documentAtInvocationTime;
@@ -281,21 +286,26 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			this._recentlyShownCache.add(targetDocumentId, currentDocument, [edit, req]);
 		}
 
-		tracer.trace('returning next edit result');
 		telemetryBuilder.setHasNextEdit(true);
 		telemetryBuilder.setContainsNotebookCellMarker((nextEditResult.result?.edit.newText || '').includes('%% vscode.cell [id='));
 
-		const fetchLatency = Date.now() - triggerTime;
-		const delay = Math.max(0, minimumResponseDelay - fetchLatency);
-		if (delay > 0) {
-			await timeout(delay);
-			if (cancellationToken.isCancellationRequested) {
-				tracer.returns('cancelled');
-				telemetryBuilder.setStatus(`noEdit:gotCancelled`);
-				return emptyResult;
+		if (isRebasedCachedEdit || isSubsequentCachedEdit) {
+			tracer.trace(`minimum response delay: NOT enforced. isRebasedCachedEdit: ${isRebasedCachedEdit}, isSubsequentCachedEdit: ${isSubsequentCachedEdit}`);
+		} else {
+			tracer.trace(`minimum response delay: enforced. isRebasedCachedEdit: ${isRebasedCachedEdit}, isSubsequentCachedEdit: ${isSubsequentCachedEdit}`);
+			const fetchLatency = Date.now() - triggerTime;
+			const delay = Math.max(0, minimumResponseDelay - fetchLatency);
+			if (delay > 0) {
+				await timeout(delay);
+				if (cancellationToken.isCancellationRequested) {
+					tracer.returns('cancelled');
+					telemetryBuilder.setStatus(`noEdit:gotCancelled`);
+					return emptyResult;
+				}
 			}
 		}
 
+		tracer.returns('returning next edit result');
 		return nextEditResult;
 	}
 
