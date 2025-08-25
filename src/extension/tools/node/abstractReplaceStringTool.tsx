@@ -290,7 +290,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 				throw e;
 			}
 
-			if (this.experimentationService.getTreatmentVariable<boolean>('vscode', 'copilotchat.disableReplaceStringHealing') === true) {
+			if (this.experimentationService.getTreatmentVariable<boolean>('copilotchat.disableReplaceStringHealing') === true) {
 				throw e; // failsafe for next release.
 			}
 

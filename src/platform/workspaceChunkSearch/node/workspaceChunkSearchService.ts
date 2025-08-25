@@ -255,7 +255,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 
 		if (
 			this._extensionContext.workspaceState.get(this.shouldEagerlyIndexKey, false)
-			&& (this._experimentationService.getTreatmentVariable<boolean>('vscode', 'copilotchat.workspaceChunkSearch.shouldEagerlyInitLocalIndex') ?? true)
+			&& (this._experimentationService.getTreatmentVariable<boolean>('copilotchat.workspaceChunkSearch.shouldEagerlyInitLocalIndex') ?? true)
 		) {
 			this._codeSearchChunkSearch.isAvailable().then(async hasCodeSearch => {
 				if (!hasCodeSearch && !this._isDisposed) {
@@ -269,7 +269,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		}
 
 		this._register(this._authUpgradeService.onDidGrantAuthUpgrade(() => {
-			if (this._experimentationService.getTreatmentVariable<boolean>('vscode', 'copilotchat.workspaceChunkSearch.shouldRemoteIndexOnAuthUpgrade') ?? true) {
+			if (this._experimentationService.getTreatmentVariable<boolean>('copilotchat.workspaceChunkSearch.shouldRemoteIndexOnAuthUpgrade') ?? true) {
 				void this.triggerRemoteIndexing('auto', new TelemetryCorrelationId('onDidGrantAuthUpgrade')).catch(e => {
 					// noop
 				});
@@ -291,7 +291,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 	}
 
 	async hasFastSearch(sizing: StrategySearchSizing): Promise<boolean> {
-		if (this._experimentationService.getTreatmentVariable<boolean>('vscode', 'copilotchat.workspaceChunkSearch.markAllSearchesSlow')) {
+		if (this._experimentationService.getTreatmentVariable<boolean>('copilotchat.workspaceChunkSearch.markAllSearchesSlow')) {
 			return false;
 		}
 

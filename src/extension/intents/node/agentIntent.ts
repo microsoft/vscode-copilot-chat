@@ -69,7 +69,7 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 		}
 
 		if (await isHiddenModelB(model)) {
-			const treatment = experimentationService.getTreatmentVariable<string>('vscode', 'copilotchat.hiddenModelBEditTool');
+			const treatment = experimentationService.getTreatmentVariable<string>('copilotchat.hiddenModelBEditTool');
 			switch (treatment) {
 				case 'with_replace_string':
 					allowTools[ToolName.ReplaceString] = true;

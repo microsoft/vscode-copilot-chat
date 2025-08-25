@@ -81,7 +81,7 @@ class RequestRateLimiter extends Disposable {
 	) {
 		super();
 
-		this._maxParallelChunksRequests = experimentationService.getTreatmentVariable<number>('vscode', 'workspace.embeddingIndex.maxParallelChunksRequests') ?? 8;
+		this._maxParallelChunksRequests = experimentationService.getTreatmentVariable<number>('workspace.embeddingIndex.maxParallelChunksRequests') ?? 8;
 	}
 
 	public enqueue(task: RequestTask, token: CancellationToken): Promise<Response> {
