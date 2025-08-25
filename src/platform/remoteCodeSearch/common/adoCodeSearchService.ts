@@ -23,6 +23,7 @@ import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
 import { AdoRepoId } from '../../git/common/gitService';
 import { IIgnoreService } from '../../ignore/common/ignoreService';
+import { measureExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { getRequest, postRequest } from '../../networking/common/networking';
@@ -147,6 +148,28 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 	}
 
 	async getRemoteIndexState(auth: { readonly silent: boolean }, repoId: AdoRepoId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
+		return measureExecTime(() => this.getRemoteIndexStateImpl(auth, repoId, token), (execTime, status, result) => {
+			/* __GDPR__
+				"adoCodeSearch.getRemoteIndexState" : {
+					"owner": "mjbvz",
+					"comment": "Information about failed remote index state requests",
+					"status": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the call succeeded or failed" },
+					"ok": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Details on successful calls" },
+					"err": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Details on failed calls" },
+					"execTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Time in milliseconds that the call took" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('adoCodeSearch.getRemoteIndexState', {
+				status,
+				ok: result?.isOk() ? result.val.status : undefined,
+				error: result?.isError() ? result.err.type : undefined,
+			}, {
+				execTime
+			});
+		});
+	}
+
+	private async getRemoteIndexStateImpl(auth: { readonly silent: boolean }, repoId: AdoRepoId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
 		if (!this.isEnabled()) {
 			return Result.ok<RemoteCodeSearchIndexState>({
 				status: RemoteCodeSearchIndexStatus.NotIndexable,
@@ -186,6 +209,17 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 			token);
 
 		if (!result.ok) {
+			/* __GDPR__
+				"adoCodeSearch.getRemoteIndexState.requestError" : {
+					"owner": "mjbvz",
+					"comment": "Information about failed remote index state requests",
+					"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('adoCodeSearch.getRemoteIndexState.requestError', {}, {
+				statusCode: result.status,
+			});
+
 			// TODO: how can we tell the difference between no access to repo and semantic search not being enabled?
 			return Result.error<RemoteCodeSearchError>({ type: 'generic-error', error: new Error(`ADO code search index status request failed with status: ${result.status}`) });
 		}
