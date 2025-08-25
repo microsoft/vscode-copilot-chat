@@ -13,7 +13,7 @@ import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/co
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 
 export class RejectionCollector extends Disposable {
-	private readonly _garbageCollector = new LRUGarbageCollector(20);
+	private readonly _garbageCollector = this._register(new LRUGarbageCollector(20));
 	private readonly _documentCaches = new Map<DocumentId, DocumentRejectionTracker>();
 	private readonly _tracer: ITracer;
 
