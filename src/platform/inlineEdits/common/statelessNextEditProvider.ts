@@ -57,6 +57,7 @@ export class StatelessNextEditRequest<TFirstEdit = any> {
 
 	constructor(
 		public readonly id: string,
+		public readonly opportunityId: string,
 		public readonly documentBeforeEdits: StringText,
 		public readonly documents: readonly StatelessNextEditDocument[],
 		public readonly activeDocumentIdx: number,
