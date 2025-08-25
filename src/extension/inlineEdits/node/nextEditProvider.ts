@@ -117,11 +117,25 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	}
 
 	public async getNextEdit(docId: DocumentId, context: vscode.InlineCompletionContext, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, telemetryBuilder: LlmNESTelemetryBuilder): Promise<NextEditResult> {
-		const tracer = this._tracer.sub('getNextEdit');
-
 		this._lastTriggerTime = Date.now();
 
 		logContext.setStatelessNextEditProviderId(this._statelessNextEditProvider.ID);
+
+		let result: NextEditResult;
+		try {
+			result = await this._getNextEdit(docId, context, this._lastTriggerTime, logContext, cancellationToken, telemetryBuilder);
+		} catch (error) {
+			logContext.setError(error);
+			throw error;
+		} finally {
+			telemetryBuilder.markEndTime();
+		}
+
+		return result;
+	}
+
+	public async _getNextEdit(docId: DocumentId, context: vscode.InlineCompletionContext, triggerTime: number, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, telemetryBuilder: LlmNESTelemetryBuilder): Promise<NextEditResult> {
+		const tracer = this._tracer.sub('_getNextEdit');
 
 		const doc = this._workspace.getDocument(docId);
 		if (!doc) {
@@ -230,29 +244,30 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			}
 		}
 
-		const fetchLatency = Date.now() - this._lastTriggerTime;
-		await timeout(minimumResponseDelay - fetchLatency);
-
-		telemetryBuilder.markEndTime();
-
 		if (throwingError) {
 			tracer.throws('has throwing error', throwingError);
-			logContext.setError(throwingError);
 			throw throwingError;
 		}
 
-		if (!edit || cancellationToken.isCancellationRequested) {
-			tracer.trace(edit ? 'cancelled' : 'had no edit');
-			const nextEditResult = new NextEditResult(logContext.requestId, req, undefined);
-			return nextEditResult;
+		const emptyResult = new NextEditResult(logContext.requestId, req, undefined);
+
+		if (!edit) {
+			tracer.returns('had no edit');
+			// telemetry builder status must've been set earlier
+			return emptyResult;
+		}
+
+		if (cancellationToken.isCancellationRequested) {
+			tracer.returns('cancelled');
+			telemetryBuilder.setStatus(`noEdit:gotCancelled`);
+			return emptyResult;
 		}
 
 		if (this._rejectionCollector.isRejected(targetDocumentId, edit) || currentDocument && this._nextEditCache.isRejectedNextEdit(targetDocumentId, currentDocument, edit, nesConfigs)) {
-			tracer.trace('edit was previously rejected');
+			tracer.returns('edit was previously rejected');
 			telemetryBuilder.setStatus('previouslyRejected');
 			telemetryBuilder.setWasPreviouslyRejected();
-			const nextEditResult = new NextEditResult(logContext.requestId, req, undefined);
-			return nextEditResult;
+			return emptyResult;
 		}
 
 		assert(currentDocument !== undefined, 'should be defined if edit is defined');
@@ -269,6 +284,18 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		tracer.trace('returning next edit result');
 		telemetryBuilder.setHasNextEdit(true);
 		telemetryBuilder.setContainsNotebookCellMarker((nextEditResult.result?.edit.newText || '').includes('%% vscode.cell [id='));
+
+		const fetchLatency = Date.now() - triggerTime;
+		const delay = Math.max(0, minimumResponseDelay - fetchLatency);
+		if (delay > 0) {
+			await timeout(delay);
+			if (cancellationToken.isCancellationRequested) {
+				tracer.returns('cancelled');
+				telemetryBuilder.setStatus(`noEdit:gotCancelled`);
+				return emptyResult;
+			}
+		}
+
 		return nextEditResult;
 	}
 
