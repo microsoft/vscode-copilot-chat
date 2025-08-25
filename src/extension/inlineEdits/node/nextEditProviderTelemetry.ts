@@ -13,7 +13,9 @@ import { autorunWithChanges } from '../../../platform/inlineEdits/common/utils/o
 import { APIUsage } from '../../../platform/networking/common/openai';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { ITelemetryService, multiplexProperties, TelemetryEventMeasurements, TelemetryEventProperties } from '../../../platform/telemetry/common/telemetry';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { LogEntry } from '../../../platform/workspaceRecorder/common/workspaceLog';
+import { findNotebook } from '../../../util/common/notebooks';
 import { Disposable, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
@@ -79,6 +81,7 @@ export interface ILlmNESTelemetry extends Partial<IStatelessNextEditTelemetry> {
 	readonly documentsCount: number | undefined;
 	readonly editsCount: number | undefined;
 	readonly isNotebook: boolean;
+	readonly notebookType: string | undefined;
 	readonly alternativeAction: IAlternativeAction | undefined;
 }
 
@@ -107,6 +110,7 @@ export interface INextEditProviderTelemetry extends ILlmNESTelemetry, IDiagnosti
 	readonly repositoryUrls: string[] | undefined;
 	readonly alternativeAction: IAlternativeAction | undefined;
 	readonly postProcessingOutcome: string | undefined;
+	readonly isNESForAnotherDoc: boolean;
 	readonly isNaturalLanguageDominated: boolean;
 
 	readonly hadLlmNES: boolean;
@@ -124,6 +128,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 		let activeDocumentLanguageId: string | undefined = undefined;
 		let activeDocumentOriginalLineCount: number | undefined = undefined;
 		let isNotebook: boolean = false;
+		let notebookType: string | undefined = undefined;
 		let activeDocumentRepository: string | undefined = undefined;
 		let repositoryUrls: string[] | undefined = undefined;
 
@@ -135,6 +140,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			activeDocumentLanguageId = activeDoc.languageId;
 			activeDocumentOriginalLineCount = activeDoc.documentAfterEditsLines.length;
 			isNotebook = activeDoc.id.toUri().scheme === Schemas.vscodeNotebookCell || this._notebookService.hasSupportedNotebooks(activeDoc.id.toUri());
+			notebookType = findNotebook(activeDoc.id.toUri(), this._workspaceService.notebookDocuments)?.notebookType;
 			const git = this._gitExtensionService.getExtensionApi();
 			if (git) {
 				const activeDocRepository = git.getRepository(Uri.parse(activeDoc.id.uri));
@@ -241,6 +247,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			hasNextEdit: this._hasNextEdit,
 			wasPreviouslyRejected: this._wasPreviouslyRejected,
 			isNotebook: isNotebook,
+			notebookType,
 			status: this._status,
 			alternativeAction,
 
@@ -261,6 +268,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 	constructor(
 		private readonly _gitExtensionService: IGitExtensionService,
 		private readonly _notebookService: INotebookService,
+		private readonly _workspaceService: IWorkspaceService,
 		private readonly _providerId: string,
 		private readonly _doc: IObservableDocument,
 		private readonly _debugRecorder?: DebugRecorder,
@@ -432,6 +440,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 			supersededByOpportunityId: this._supersededByOpportunityId,
 			pickedNES: this._nesTypePicked,
 			hadLlmNES: this._hadLlmNES,
+			isNESForAnotherDoc: this._isNESForAnotherDoc,
 			hadDiagnosticsNES: this._hadDiagnosticsNES,
 			configIsDiagnosticsNESEnabled: this._configIsDiagnosticsNESEnabled,
 			isNaturalLanguageDominated: this._isNaturalLanguageDominated,
@@ -453,6 +462,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 	constructor(
 		gitExtensionService: IGitExtensionService,
 		notebookService: INotebookService,
+		workspaceService: IWorkspaceService,
 		providerId: string,
 		doc: IObservableDocument,
 		debugRecorder?: DebugRecorder,
@@ -461,7 +471,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 		super();
 		this._requestN = ++NextEditProviderTelemetryBuilder.requestN;
 
-		this._nesBuilder = this._register(new LlmNESTelemetryBuilder(gitExtensionService, notebookService, providerId, doc, debugRecorder, requestBookmark));
+		this._nesBuilder = this._register(new LlmNESTelemetryBuilder(gitExtensionService, notebookService, workspaceService, providerId, doc, debugRecorder, requestBookmark));
 		this._diagnosticsBuilder = new DiagnosticsTelemetryBuilder();
 	}
 
@@ -498,6 +508,12 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 	private _nesTypePicked: 'llm' | 'diagnostics' | undefined;
 	public setPickedNESType(nesTypePicked: 'llm' | 'diagnostics'): this {
 		this._nesTypePicked = nesTypePicked;
+		return this;
+	}
+
+	private _isNESForAnotherDoc: boolean = false;
+	public setIsNESForOtherEditor(isNESForAnotherDoc: boolean): this {
+		this._isNESForAnotherDoc = isNESForAnotherDoc;
 		return this;
 	}
 
@@ -623,6 +639,8 @@ export class TelemetrySender implements IDisposable {
 			wasPreviouslyRejected,
 			isShown,
 			isNotebook,
+			notebookType,
+			isNESForAnotherDoc,
 			acceptance,
 			disposalReason,
 			logProbThreshold,
@@ -704,6 +722,8 @@ export class TelemetrySender implements IDisposable {
 		"wasPreviouslyRejected": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit was previously rejected", "isMeasurement": true },
 		"isShown": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit was shown", "isMeasurement": true },
 		"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the document is a notebook", "isMeasurement": true },
+		"isNESForAnotherDoc": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the NES if for another document", "isMeasurement": true },
+		"notebookType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Type of notebook, if any" },
 		"logProbThreshold": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Log probability threshold for the edit", "isMeasurement": true },
 		"documentsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of documents", "isMeasurement": true },
 		"editsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of edits", "isMeasurement": true },
@@ -754,6 +774,7 @@ export class TelemetrySender implements IDisposable {
 				diagnosticType,
 				diagnosticDroppedReasons,
 				pickedNES,
+				notebookType,
 			},
 			{
 				requestN,
@@ -767,6 +788,7 @@ export class TelemetrySender implements IDisposable {
 				wasPreviouslyRejected: this._boolToNum(wasPreviouslyRejected),
 				isShown: this._boolToNum(isShown),
 				isNotebook: this._boolToNum(isNotebook),
+				isNESForAnotherDoc: this._boolToNum(isNESForAnotherDoc),
 				logProbThreshold,
 				documentsCount,
 				editsCount,
