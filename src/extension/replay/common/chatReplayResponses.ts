@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { DeferredPromise } from '../../../util/vs/base/common/async';
+
 type FileUpdate = {
 	path: string;
 	newContentPath?: string;
@@ -35,24 +37,8 @@ type Request = {
 
 export type ChatStep = UserQuery | Request | ToolStep;
 
-type Deferred<T> = {
-	promise: Promise<T>;
-	resolve: (value: T | PromiseLike<T>) => void;
-	reject: (reason?: any) => void;
-};
-
-function createDeferred<T>(): Deferred<T> {
-	let resolve!: (value: T | PromiseLike<T>) => void;
-	let reject!: (reason?: any) => void;
-	const promise = new Promise<T>((res, rej) => {
-		resolve = res;
-		reject = rej;
-	});
-	return { promise, resolve, reject };
-}
-
 export class ChatReplayResponses {
-	private pendingRequests: Deferred<ChatStep | 'finished'>[] = [];
+	private pendingRequests: DeferredPromise<ChatStep | 'finished'>[] = [];
 	private responses: (ChatStep | 'finished')[] = [];
 	private toolResults: Map<string, string[]> = new Map();
 
@@ -77,7 +63,7 @@ export class ChatReplayResponses {
 	public replayResponse(response: ChatStep): void {
 		const waiter = this.pendingRequests.shift();
 		if (waiter) {
-			waiter.resolve(response);
+			waiter.settleWith(Promise.resolve(response));
 		} else {
 			this.responses.push(response);
 		}
@@ -88,9 +74,9 @@ export class ChatReplayResponses {
 		if (next) {
 			return Promise.resolve(next);
 		}
-		const deferred = createDeferred<ChatStep | 'finished'>();
+		const deferred = new DeferredPromise<ChatStep | 'finished'>();
 		this.pendingRequests.push(deferred);
-		return deferred.promise;
+		return deferred.p;
 	}
 
 	public setToolResult(id: string, result: string[]): void {
@@ -105,7 +91,7 @@ export class ChatReplayResponses {
 		while (this.pendingRequests.length > 0) {
 			const waiter = this.pendingRequests.shift();
 			if (waiter) {
-				waiter.resolve('finished');
+				waiter.settleWith(Promise.resolve('finished'));
 			}
 		}
 		this.responses.push('finished');
