@@ -22,6 +22,7 @@ import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { CustomDataPartMimeTypes } from '../common/endpointTypes';
 import { decodeStatefulMarker, encodeStatefulMarker, rawPartAsStatefulMarker } from '../common/statefulMarkerContainer';
+import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
 
 export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	private readonly _maxTokens: number;
@@ -266,6 +267,10 @@ export function convertToApiChatMessage(messages: Raw.ChatMessage[]): Array<vsco
 				const statefulMarker = rawPartAsStatefulMarker(contentPart);
 				if (statefulMarker) {
 					apiContent.push(new vscode.LanguageModelDataPart(encodeStatefulMarker(statefulMarker.modelId, statefulMarker.marker), CustomDataPartMimeTypes.StatefulMarker));
+				}
+				const thinkingData = rawPartAsThinkingData(contentPart);
+				if (thinkingData) {
+					apiContent.push(new vscode.LanguageModelThinkingPart(thinkingData.text, thinkingData.id, thinkingData.metadata));
 				}
 			}
 		}

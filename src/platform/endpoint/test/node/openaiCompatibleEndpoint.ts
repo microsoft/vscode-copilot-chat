@@ -14,7 +14,7 @@ import { ILogService } from '../../../log/common/logService';
 import { isOpenAiFunctionTool } from '../../../networking/common/fetch';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { IChatEndpoint, IEndpointBody } from '../../../networking/common/networking';
-import { CAPIChatMessage } from '../../../networking/common/openai';
+import { CAPIChatMessage, RawMessageConversionCallback } from '../../../networking/common/openai';
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../tokenizer/node/tokenizer';
@@ -265,5 +265,14 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 
 	override cloneWithTokenOverride(_modelMaxPromptTokens: number): IChatEndpoint {
 		return this.instantiationService.createInstance(OpenAICompatibleTestEndpoint, this.modelConfig);
+	}
+
+	protected override getCapiCallback(): RawMessageConversionCallback | undefined {
+		return (out, data) => {
+			if (data && data.id) {
+				out.cot_id = data.id;
+				out.cot_summary = data.text;
+			}
+		};
 	}
 }

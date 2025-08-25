@@ -21,7 +21,7 @@ import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, ICopilotToolCall, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
 import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions, postRequest } from '../../networking/common/networking';
-import { CAPIChatMessage, ChatCompletion, FinishedCompletionReason } from '../../networking/common/openai';
+import { CAPIChatMessage, ChatCompletion, FinishedCompletionReason, RawMessageConversionCallback } from '../../networking/common/openai';
 import { prepareChatCompletionForReturn } from '../../networking/node/chatStream';
 import { SSEProcessor } from '../../networking/node/stream';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
@@ -156,6 +156,7 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly isPremium?: boolean | undefined;
 	public readonly multiplier?: number | undefined;
 	public readonly restrictedToSkus?: string[] | undefined;
+
 	private readonly _supportsStreaming: boolean;
 	private _policyDetails: ModelPolicy | undefined;
 
@@ -172,7 +173,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		@IInstantiationService protected readonly _instantiationService: IInstantiationService,
 		@IConfigurationService protected readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
-		@ILogService private readonly _logService: ILogService
+		@ILogService private readonly _logService: ILogService,
 	) {
 		this._urlOrRequestMetadata = _modelMetadata.urlOrRequestMetadata ?? (this.useResponsesApi ? { type: RequestType.ChatResponses } : { type: RequestType.ChatCompletions });
 		// This metadata should always be present, but if not we will default to 8192 tokens
@@ -277,10 +278,24 @@ export class ChatEndpoint implements IChatEndpoint {
 
 	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
 		if (this.useResponsesApi) {
-			return createResponsesRequestBody(options, this.model, this._modelMetadata);
+			const body = createResponsesRequestBody(options, this.model, this._modelMetadata);
+			return this.customizeResponsesBody(body);
 		} else {
-			return createCapiRequestBody(this.model, options);
+			const body = createCapiRequestBody(options, this.model, this.getCapiCallback());
+			return this.customizeCapiBody(body);
 		}
+	}
+
+	protected getCapiCallback(): RawMessageConversionCallback | undefined {
+		return undefined;
+	}
+
+	protected customizeResponsesBody(body: IEndpointBody): IEndpointBody {
+		return body;
+	}
+
+	protected customizeCapiBody(body: IEndpointBody): IEndpointBody {
+		return body;
 	}
 
 	public async processResponseFromChatEndpoint(

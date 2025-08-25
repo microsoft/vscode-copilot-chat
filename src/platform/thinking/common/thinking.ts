@@ -3,6 +3,16 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+export interface ThinkingDataInMessage {
+	// Azure Open AI fields
+	cot_id?: string;
+	cot_summary?: string;
+
+	// Copilot API fields
+	reasoning_opaque?: string;
+	reasoning_text?: string;
+}
+
 export interface RawThinkingDelta {
 	// Azure Open AI fields
 	cot_id?: string;
@@ -21,24 +31,30 @@ export type ThinkingDelta = {
 	text?: string;
 	id: string;
 	metadata?: string;
-	isEncrypted?: boolean;
 } | {
 	text?: string;
 	id?: string;
 	metadata: string;
-	isEncrypted?: boolean;
-} |
-{
+} | {
 	text: string;
 	id?: string;
 	metadata?: string;
-	isEncrypted?: boolean;
 };
+
+export type EncryptedThinkingDelta = {
+	id: string;
+	text?: string;
+	encrypted: string;
+}
+
+export function isEncryptedThinkingDelta(delta: ThinkingDelta | EncryptedThinkingDelta): delta is EncryptedThinkingDelta {
+	return (delta as EncryptedThinkingDelta).encrypted !== undefined;
+}
 
 export interface ThinkingData {
 	id: string;
 	text: string;
 	metadata?: string;
-	type?: 'encrypted';
 	tokens?: number;
+	encrypted?: string;
 }

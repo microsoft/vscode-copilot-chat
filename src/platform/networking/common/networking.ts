@@ -20,7 +20,7 @@ import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/t
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { FinishedCallback, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams } from './fetch';
 import { FetchOptions, IAbortController, IFetcherService, Response } from './fetcherService';
-import { ChatCompletion, rawMessageToCAPI } from './openai';
+import { ChatCompletion, RawMessageConversionCallback, rawMessageToCAPI } from './openai';
 
 /**
  * Encapsulates all the functionality related to making GET/POST requests using
@@ -226,13 +226,13 @@ export interface IChatEndpoint extends IEndpoint {
 }
 
 /** Function to create a standard request body for CAPI completions */
-export function createCapiRequestBody(model: string, options: ICreateEndpointBodyOptions) {
+export function createCapiRequestBody(options: ICreateEndpointBodyOptions, model: string, callback?: RawMessageConversionCallback) {
 	// FIXME@ulugbekna: need to investigate why language configs have such stop words, eg
 	// python has `\ndef` and `\nclass` which must be stop words for ghost text
 	// const stops = getLanguageConfig<string[]>(accessor, ConfigKey.Stops);
 
 	const request: IEndpointBody = {
-		messages: rawMessageToCAPI(options.messages),
+		messages: rawMessageToCAPI(options.messages, callback),
 		model,
 		// stop: stops,
 	};

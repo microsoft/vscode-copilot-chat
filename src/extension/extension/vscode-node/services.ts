@@ -61,7 +61,6 @@ import { TelemetryService } from '../../../platform/telemetry/vscode-node/teleme
 import { IWorkspaceMutationManager } from '../../../platform/testing/common/workspaceMutationManager';
 import { ISetupTestsDetector, SetupTestsDetector } from '../../../platform/testing/node/setupTestDetector';
 import { ITestDepsResolver, TestDepsResolver } from '../../../platform/testing/node/testDepsResolver';
-import { IThinkingDataService, ThinkingDataImpl } from '../../../platform/thinking/node/thinkingDataService';
 import { ITokenizerProvider, TokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { IWorkspaceChunkSearchService, WorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { IWorkspaceFileIndex, WorkspaceFileIndex } from '../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
@@ -193,7 +192,6 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ILanguageContextProviderService, new SyncDescriptor(LanguageContextProviderService));
 	builder.define(IWorkspaceListenerService, new SyncDescriptor(WorkspacListenerService));
 	builder.define(ICodeSearchAuthenticationService, new SyncDescriptor(VsCodeCodeSearchAuthenticationService));
-	builder.define(IThinkingDataService, new SyncDescriptor(ThinkingDataImpl));
 	builder.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
 }
 

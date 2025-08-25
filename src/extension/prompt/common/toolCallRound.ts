@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { FetchSuccess } from '../../../platform/chat/common/commonTypes';
-import { ThinkingData, ThinkingDelta } from '../../../platform/thinking/common/thinking';
+import { isEncryptedThinkingDelta, ThinkingData, ThinkingDelta } from '../../../platform/thinking/common/thinking';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IToolCall, IToolCallRound } from './intents';
 
@@ -56,9 +56,9 @@ export class ToolCallRound implements IToolCallRound {
 
 export class ThinkingDataItem implements ThinkingData {
 	public text: string = '';
-	public isEncrypted?: boolean;
-	public metadata?: string | undefined;
-	public tokens?: number | undefined;
+	public metadata?: string;
+	public tokens?: number;
+	public encrypted?: string;
 
 	static createOrUpdate(item: ThinkingDataItem | undefined, delta: ThinkingDelta) {
 		if (!item) {
@@ -70,16 +70,20 @@ export class ThinkingDataItem implements ThinkingData {
 	}
 
 	constructor(
-		public readonly id: string
+		public id: string
 	) { }
 
 	public update(delta: ThinkingDelta): void {
-		this.text += delta.text;
-		if (delta.isEncrypted !== undefined) {
-			this.isEncrypted = delta.isEncrypted;
+		if (delta.id && this.id !== delta.id) {
+			this.id = delta.id;
 		}
-
-		if (delta.metadata !== undefined) {
+		if (isEncryptedThinkingDelta(delta)) {
+			this.encrypted = delta.encrypted;
+		}
+		if (delta.text) {
+			this.text += delta.text;
+		}
+		if (delta.metadata) {
 			this.metadata = delta.metadata;
 		}
 	}

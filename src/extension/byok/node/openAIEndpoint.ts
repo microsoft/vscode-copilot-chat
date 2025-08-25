@@ -2,7 +2,6 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { OpenAI } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
@@ -16,10 +15,10 @@ import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
-import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { RawMessageConversionCallback } from '../../../platform/networking/common/openai';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 
@@ -47,7 +46,7 @@ function hydrateBYOKErrorMessages(response: ChatResponse): ChatResponse {
 
 export class OpenAIEndpoint extends ChatEndpoint {
 	constructor(
-		protected readonly _modelInfo: IChatModelInformation,
+		protected readonly modelMetadata: IChatModelInformation,
 		protected readonly _apiKey: string,
 		protected readonly _modelUrl: string,
 		@IFetcherService fetcherService: IFetcherService,
@@ -59,13 +58,12 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService protected instantiationService: IInstantiationService,
-		@IThinkingDataService private thinkingDataService: IThinkingDataService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService expService: IExperimentationService,
 		@ILogService logService: ILogService
 	) {
 		super(
-			_modelInfo,
+			modelMetadata,
 			domainService,
 			capiClientService,
 			fetcherService,
@@ -82,18 +80,27 @@ export class OpenAIEndpoint extends ChatEndpoint {
 	}
 
 	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
-		options.ignoreStatefulMarker = false;
-		const body = super.createRequestBody(options);
 		if (this.useResponsesApi) {
+			// Handle Responses API: customize the body directly
+			const body = super.createRequestBody(options);
 			body.store = true;
 			body.n = undefined;
 			body.stream_options = undefined;
-			if (!this._modelInfo.capabilities.supports.thinking) {
+			if (!this.modelMetadata.capabilities.supports.thinking) {
 				body.reasoning = undefined;
 			}
+			return body;
+		} else {
+			// Handle CAPI: provide callback for thinking data processing
+			const callback: RawMessageConversionCallback = (out, data) => {
+				if (data && data.id) {
+					out.cot_id = data.id;
+					out.cot_summary = data.text;
+				}
+			};
+			const body = createCapiRequestBody(options, this.model, callback);
+			return body;
 		}
-
-		return body;
 	}
 
 	override interceptBody(body: IEndpointBody | undefined): void {
@@ -101,24 +108,6 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		// TODO @lramos15 - We should do this for all models and not just here
 		if (body?.tools?.length === 0) {
 			delete body.tools;
-		}
-
-		if (body?.messages) {
-			const newMessages = body.messages.map((message: OpenAI.ChatMessage) => {
-				if (message.role === OpenAI.ChatRole.Assistant && message.tool_calls && message.tool_calls.length > 0) {
-					const id = message.tool_calls[0].id;
-					const thinking = this.thinkingDataService.get(id);
-					if (thinking?.id) {
-						return {
-							...message,
-							cot_id: thinking.id,
-							cot_summary: thinking.text,
-						};
-					}
-				}
-				return message;
-			});
-			body.messages = newMessages;
 		}
 
 		if (body?.tools) {
@@ -131,7 +120,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		}
 
 		if (body) {
-			if (this._modelInfo.capabilities.supports.thinking) {
+			if (this.modelMetadata.capabilities.supports.thinking) {
 				delete body.temperature;
 				body['max_completion_tokens'] = body.max_tokens;
 				delete body.max_tokens;
@@ -165,12 +154,14 @@ export class OpenAIEndpoint extends ChatEndpoint {
 	}
 
 	override cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {
-		const newModelInfo = { ...this._modelInfo, maxInputTokens: modelMaxPromptTokens };
+		const newModelInfo = { ...this.modelMetadata, maxInputTokens: modelMaxPromptTokens };
 		return this.instantiationService.createInstance(OpenAIEndpoint, newModelInfo, this._apiKey, this._modelUrl);
 	}
 
 	public override async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
-		let response = await super.makeChatRequest2(options, token);
+		// Apply ignoreStatefulMarker: false for initial request
+		const modifiedOptions = { ...options, ignoreStatefulMarker: false };
+		let response = await super.makeChatRequest2(modifiedOptions, token);
 		if (response.type === ChatFetchResponseType.InvalidStatefulMarker) {
 			response = await this._makeChatRequest2({ ...options, ignoreStatefulMarker: true }, token);
 		}
