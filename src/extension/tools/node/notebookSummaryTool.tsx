@@ -20,6 +20,8 @@ import { NotebookVariables } from '../../prompts/node/panel/notebookVariables';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { AlternativeNotebookDocument } from '../../../platform/notebook/common/alternativeNotebookDocument';
+import { INotebookService } from '../../../platform/notebook/common/notebookService';
+import { ILogService } from '../../../platform/log/common/logService';
 
 
 export interface INotebookSummaryToolParams {
@@ -36,6 +38,8 @@ export class NotebookSummaryTool implements ICopilotTool<INotebookSummaryToolPar
 		@IWorkspaceService protected readonly workspaceService: IWorkspaceService,
 		@IAlternativeNotebookContentService protected readonly alternativeNotebookContent: IAlternativeNotebookContentService,
 		@INotebookSummaryTracker protected readonly notebookStructureTracker: INotebookSummaryTracker,
+		@INotebookService private readonly notebookService: INotebookService,
+		@ILogService private readonly logger: ILogService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<INotebookSummaryToolParams>, token: vscode.CancellationToken) {
@@ -45,10 +49,19 @@ export class NotebookSummaryTool implements ICopilotTool<INotebookSummaryToolPar
 		}
 		// Sometimes we get the notebook cell Uri in the resource.
 		// Resolve this to notebook.
-		uri = findNotebook(uri, this.workspaceService.notebookDocuments)?.uri || uri;
+		let notebook = findNotebook(uri, this.workspaceService.notebookDocuments);
+		if (notebook) {
+			uri = notebook.uri;
+		} else if (!this.notebookService.hasSupportedNotebooks(uri)) {
+			throw new Error(`Use this tool only with Notebook files, the file ${uri.toString()} is not a notebook.`);
+		}
+		try {
+			notebook = notebook || await this.workspaceService.openNotebookDocument(uri);
+		} catch (ex) {
+			this.logger.error(`Failed to open notebook: ${uri.toString()}`, ex);
+			throw new Error(`Failed to open the notebook ${uri.toString()}, ${ex.message || ''}. Verify the file exists.`);
+		}
 
-
-		const notebook = await this.workspaceService.openNotebookDocument(uri);
 		if (token.isCancellationRequested) {
 			return;
 		}

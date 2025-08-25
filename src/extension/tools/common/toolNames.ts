@@ -42,7 +42,6 @@ export enum ToolName {
 	SimpleBrowser = 'open_simple_browser',
 	CreateDirectory = 'create_directory',
 	RunVscodeCmd = 'run_vscode_command',
-	GetTaskOutput = 'get_task_output',
 	CoreManageTodoList = 'manage_todo_list',
 	CoreRunInTerminal = 'run_in_terminal',
 	CoreGetTerminalOutput = 'get_terminal_output',

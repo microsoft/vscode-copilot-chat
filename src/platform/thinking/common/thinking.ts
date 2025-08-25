@@ -40,4 +40,5 @@ export interface ThinkingData {
 	text: string;
 	metadata?: string;
 	type?: 'encrypted';
+	tokens?: number;
 }

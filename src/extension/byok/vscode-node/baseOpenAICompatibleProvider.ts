@@ -85,7 +85,7 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 	}
 	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: LanguageModelChatRequestHandleOptions, progress: Progress<LMResponsePart>, token: CancellationToken): Promise<any> {
 		const openAIChatEndpoint = await this.getEndpointImpl(model);
-		return this._lmWrapper.provideLanguageModelResponse(openAIChatEndpoint, messages, options, options.extensionId, progress, token);
+		return this._lmWrapper.provideLanguageModelResponse(openAIChatEndpoint, messages, options, options.requestInitiator, progress, token);
 	}
 	async provideTokenCount(model: LanguageModelChatInformation, text: string | LanguageModelChatMessage | LanguageModelChatMessage2, token: CancellationToken): Promise<number> {
 		const openAIChatEndpoint = await this.getEndpointImpl(model);

@@ -25,7 +25,7 @@ import { Iterable } from '../../../util/vs/base/common/iterator';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseTextEditPart, EndOfLine, LanguageModelPromptTsxPart, LanguageModelToolResult } from '../../../vscodeTypes';
+import { ChatResponseTextEditPart, EndOfLine, Position as ExtPosition, LanguageModelPromptTsxPart, LanguageModelToolResult, TextEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { CellOrNotebookEdit, processFullRewriteNotebookEdits } from '../../prompts/node/codeMapper/codeMapper';
@@ -46,7 +46,7 @@ export interface IAbstractReplaceStringInput {
 }
 
 export interface IPrepareEdit {
-	document: NotebookDocumentSnapshot | TextDocumentSnapshot;
+	document: NotebookDocumentSnapshot | TextDocumentSnapshot | undefined;
 	uri: URI;
 	didHeal: boolean;
 	input: IAbstractReplaceStringInput;
@@ -93,6 +93,20 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		if (!input.filePath || input.oldString === undefined || input.newString === undefined || !this._promptContext) {
 			this.sendReplaceTelemetry('invalidStrings', options, input, undefined, undefined, undefined);
 			throw new Error('Invalid input');
+		}
+
+		// Sometimes the model replaces an empty string in a new file to create it. Allow that pattern.
+		const exists = await this.fileSystemService.stat(uri).then(() => true, () => false);
+		if (!exists) {
+			return {
+				uri,
+				didHeal: false,
+				document: undefined,
+				generatedEdit: input.oldString
+					? { success: false, errorMessage: `File does not exist: ${input.filePath}. Use the ${ToolName.CreateFile} tool to create it, or correct your filepath.` }
+					: { success: true, textEdits: [TextEdit.insert(new ExtPosition(0, 0), input.newString)] },
+				input,
+			};
 		}
 
 		const isNotebook = this.notebookService.hasSupportedNotebooks(uri);
@@ -158,10 +172,10 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		const existingDiagnosticMap = new ResourceMap<vscode.Diagnostic[]>();
 
 		for (const { document, uri, generatedEdit } of edits) {
-			if (!existingDiagnosticMap.has(document.uri)) {
+			if (document && !existingDiagnosticMap.has(document.uri)) {
 				existingDiagnosticMap.set(document.uri, this.languageDiagnosticsService.getDiagnostics(document.uri));
 			}
-			const existingDiagnostics = existingDiagnosticMap.get(document.uri)!;
+			const existingDiagnostics = document ? existingDiagnosticMap.get(document.uri)! : [];
 			const isNotebook = this.notebookService.hasSupportedNotebooks(uri);
 
 			if (!generatedEdit.success) {
@@ -184,15 +198,16 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 			this._promptContext.stream.codeblockUri(uri, true);
 
 			if (generatedEdit.notebookEdits) {
-				this._promptContext.stream.notebookEdit(document.uri, []);
+				const uriToEdit = document?.uri ?? uri;
+				this._promptContext.stream.notebookEdit(uriToEdit, []);
 				for (const edit of generatedEdit.notebookEdits) {
 					if (edit instanceof Array) {
 						this._promptContext.stream.textEdit(edit[0], edit[1]);
 					} else {
-						this._promptContext.stream.notebookEdit(document.uri, edit);
+						this._promptContext.stream.notebookEdit(uriToEdit, edit);
 					}
 				}
-				this._promptContext.stream.notebookEdit(document.uri, true);
+				this._promptContext.stream.notebookEdit(uriToEdit, true);
 			} else {
 				for (const edit of generatedEdit.textEdits) {
 					responseStream.textEdit(uri, edit);

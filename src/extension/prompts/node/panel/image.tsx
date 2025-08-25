@@ -14,6 +14,7 @@ import { IExperimentationService } from '../../../../platform/telemetry/common/n
 import { getMimeType } from '../../../../util/common/imageUtils';
 import { Uri } from '../../../../vscodeTypes';
 import { IPromptEndpoint } from '../base/promptRenderer';
+import { modelCanUseImageURL } from '../../../../platform/endpoint/common/chatModelCapabilities';
 
 export interface ImageProps extends BasePromptElementProps {
 	variableName: string;
@@ -56,7 +57,7 @@ export class Image extends PromptElement<ImageProps, unknown> {
 			let imageSource = Buffer.from(variable).toString('base64');
 			const isChatCompletions = typeof this.promptEndpoint.urlOrRequestMetadata !== 'string' && this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatCompletions;
 			const enabled = this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.EnableChatImageUpload, this.experimentationService);
-			if (isChatCompletions && enabled) {
+			if (isChatCompletions && enabled && modelCanUseImageURL(this.promptEndpoint)) {
 				try {
 					const githubToken = (await this.authService.getAnyGitHubSession())?.accessToken;
 					const uri = await this.imageService.uploadChatImageAttachment(variable, this.props.variableName, getMimeType(imageSource) ?? 'image/png', githubToken);

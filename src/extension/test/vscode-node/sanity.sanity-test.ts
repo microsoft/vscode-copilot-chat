@@ -166,7 +166,7 @@ suite.skip('Copilot Chat Sanity Test', function () {
 						version: '0.0.0',
 						maxInputTokens: 1000,
 						maxOutputTokens: 1000,
-						auth: true
+						requiresAuthorization: true
 					}];
 				}
 				async provideLanguageModelChatResponse(model: vscode.LanguageModelChatInformation, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.LanguageModelChatRequestHandleOptions, progress: vscode.Progress<LMResponsePart>, token: vscode.CancellationToken): Promise<any> {

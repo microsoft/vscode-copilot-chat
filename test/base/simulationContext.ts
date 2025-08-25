@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import path from 'path';
-import type { Memento } from 'vscode';
 import { ApiEmbeddingsIndex, IApiEmbeddingsIndex } from '../../src/extension/context/node/resolvers/extensionApi';
 import { ConversationStore, IConversationStore } from '../../src/extension/conversationStore/node/conversationStore';
 import { IIntentService, IntentService } from '../../src/extension/intents/node/intentService';
@@ -48,7 +47,6 @@ import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/
 import { IJSONOutputPrinter, NoopJSONOutputPrinter } from '../jsonOutputPrinter';
 import { SIMULATION_FOLDER_NAME } from '../simulation/shared/sharedTypes';
 import { ITestInformation, TestInformation } from '../simulation/testInformation';
-import { SQLiteCache } from './cache';
 import { CachedTestInfo, CachingChatMLFetcher, IChatMLCache } from './cachingChatMLFetcher';
 import { CachingChunkingEndpointClient, ChunkingEndpointClientSQLiteCache } from './cachingChunksEndpointClient';
 import { CachingCodeOrDocSearchClient, CodeOrDocSearchSQLiteCache } from './cachingCodeSearchClient';
@@ -167,29 +165,6 @@ export interface CurrentTestRunInfo {
 	 * Whether we're working in a real workspace and extension host.
 	 */
 	isInRealExtensionHost: boolean;
-}
-
-export class RedisMemento implements Memento {
-
-	constructor(
-		private vscodeVersion: string,
-		private state: Record<string, any>,
-		private cache: SQLiteCache<{ hash: string }, string>
-	) { }
-
-	get(key: string, defaultValue?: any): any {
-		return this.state[key] ?? defaultValue;
-	}
-
-	keys(): string[] {
-		return Object.keys(this.state);
-	}
-
-	async update(key: string, value: any): Promise<void> {
-		this.state[key] = value;
-		this.cache.set({ hash: this.vscodeVersion }, JSON.stringify(this.state));
-		return Promise.resolve();
-	}
 }
 
 /**

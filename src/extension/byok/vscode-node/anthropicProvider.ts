@@ -13,8 +13,8 @@ import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogg
 import { RecordedProgress } from '../../../util/common/progressRecorder';
 import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { anthropicMessagesToRawMessagesForLogging, apiMessageToAnthropicMessage } from '../common/anthropicMessageConverter';
 import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, LMResponsePart } from '../common/byokProvider';
-import { anthropicMessagesToRawMessagesForLogging, apiMessageToAnthropicMessage } from './anthropicMessageConverter';
 import { IBYOKStorageService } from './byokStorageService';
 import { promptForAPIKey } from './byokUIService';
 

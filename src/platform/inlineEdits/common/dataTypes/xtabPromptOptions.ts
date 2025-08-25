@@ -9,6 +9,8 @@ export type RecentlyViewedDocumentsOptions = {
 	readonly includeViewedFiles: boolean;
 }
 
+export type LanguageContextLanguages = { [languageId: string]: boolean };
+
 export type LanguageContextOptions = {
 	readonly enabled: boolean;
 	readonly maxTokens: number;
@@ -77,4 +79,11 @@ export const DEFAULT_OPTIONS: PromptOptions = {
 		onlyForDocsInPrompt: false,
 		useRelativePaths: false,
 	},
+};
+
+// TODO: consider a better per language setting/experiment approach
+export const LANGUAGE_CONTEXT_ENABLED_LANGUAGES: LanguageContextLanguages = {
+	'prompt': true,
+	'instructions': true,
+	'chatmode': true,
 };

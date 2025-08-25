@@ -15,6 +15,7 @@ import * as types from '../../../util/vs/base/common/types';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { isPreRelease, packageJson } from '../../env/common/packagejson';
 import * as xtabPromptOptions from '../../inlineEdits/common/dataTypes/xtabPromptOptions';
+import { LANGUAGE_CONTEXT_ENABLED_LANGUAGES, LanguageContextLanguages } from '../../inlineEdits/common/dataTypes/xtabPromptOptions';
 import { ResponseProcessor } from '../../inlineEdits/common/responseProcessor';
 import { AlternativeNotebookFormat } from '../../notebook/common/alternativeContentFormat';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
@@ -627,6 +628,7 @@ export namespace ConfigKey {
 		export const InlineEditsDebounceUseCoreRequestTime = defineExpSetting<boolean>('chat.advanced.inlineEdits.debounceUseCoreRequestTime', false, INTERNAL_RESTRICTED);
 		export const InlineEditsYieldToCopilot = defineExpSetting<boolean>('chat.advanced.inlineEdits.yieldToCopilot', false, INTERNAL_RESTRICTED);
 		export const InlineEditsEnableCompletionsProvider = defineExpSetting<boolean>('chat.advanced.inlineEdits.completionsProvider.enabled', false, INTERNAL_RESTRICTED);
+		export const InlineEditsEnableGhCompletionsProvider = defineExpSetting<boolean>('chat.advanced.inlineEdits.githubCompletionsProvider.enabled', false, INTERNAL_RESTRICTED);
 		export const InlineEditsCompletionsUrl = defineExpSetting<string | undefined>('chat.advanced.inlineEdits.completionsProvider.url', undefined, INTERNAL_RESTRICTED);
 		export const InlineEditsLogContextRecorderEnabled = defineSetting('chat.advanced.inlineEdits.logContextRecorder.enabled', false, INTERNAL_RESTRICTED);
 		export const InlineEditsDebounce = defineExpSetting<number>('chat.advanced.inlineEdits.debounce', 200, INTERNAL_RESTRICTED);
@@ -647,11 +649,12 @@ export namespace ConfigKey {
 		export const InlineEditsXtabProviderNLinesAbove = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.xtabProvider.nLinesAbove', undefined, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabProviderNLinesBelow = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.xtabProvider.nLinesBelow', undefined, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabProviderRetryWithNMoreLinesBelow = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.xtabProvider.retryWithNMoreLinesBelow', undefined, INTERNAL_RESTRICTED);
+		export const InlineEditsAutoExpandEditWindowLines = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.autoExpandEditWindowLines', undefined, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabNRecentlyViewedDocuments = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.nRecentlyViewedDocuments', xtabPromptOptions.DEFAULT_OPTIONS.recentlyViewedDocuments.nDocuments, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabRecentlyViewedDocumentsMaxTokens = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.recentlyViewedDocuments.maxTokens', xtabPromptOptions.DEFAULT_OPTIONS.recentlyViewedDocuments.maxTokens, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabDiffNEntries = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.diffNEntries', xtabPromptOptions.DEFAULT_OPTIONS.diffHistory.nEntries, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabDiffMaxTokens = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.diffMaxTokens', xtabPromptOptions.DEFAULT_OPTIONS.diffHistory.maxTokens, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabProviderEmitFastCursorLineChange = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.emitFastCursorLineChange', false, INTERNAL_RESTRICTED);
+		export const InlineEditsXtabProviderEmitFastCursorLineChange = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.emitFastCursorLineChange', true, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabIncludeViewedFiles = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.includeViewedFiles', xtabPromptOptions.DEFAULT_OPTIONS.recentlyViewedDocuments.includeViewedFiles, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabPageSize = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.pageSize', xtabPromptOptions.DEFAULT_OPTIONS.pagedClipping.pageSize, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabIncludeTagsInCurrentFile = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.includeTagsInCurrentFile', xtabPromptOptions.DEFAULT_OPTIONS.currentFile.includeTags, INTERNAL_RESTRICTED);
@@ -662,6 +665,7 @@ export namespace ConfigKey {
 		export const InlineEditsXtabNNonSignificantLinesToConverge = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.nNonSignificantLinesToConverge', ResponseProcessor.DEFAULT_DIFF_PARAMS.nLinesToConverge, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabNSignificantLinesToConverge = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.nSignificantLinesToConverge', ResponseProcessor.DEFAULT_DIFF_PARAMS.nSignificantLinesToConverge, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabLanguageContextEnabled = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.languageContext.enabled', xtabPromptOptions.DEFAULT_OPTIONS.languageContext.enabled, INTERNAL_RESTRICTED);
+		export const InlineEditsXtabLanguageContextEnabledLanguages = defineSetting<LanguageContextLanguages>('chat.advanced.inlineEdits.xtabProvider.languageContext.enabledLanguages', LANGUAGE_CONTEXT_ENABLED_LANGUAGES, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabLanguageContextMaxTokens = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.languageContext.maxTokens', xtabPromptOptions.DEFAULT_OPTIONS.languageContext.maxTokens, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabUseUnifiedModel = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.useUnifiedModel', false, INTERNAL_RESTRICTED);
 		export const InlineEditsXtabProviderUseSimplifiedPrompt = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.simplifiedPrompt', false, INTERNAL_RESTRICTED);
@@ -710,6 +714,9 @@ export namespace ConfigKey {
 		export const PromptFileContext = defineExpSetting<boolean>('chat.advanced.promptFileContextProvider.enabled', true);
 		export const MultiReplaceString = defineExpSetting<boolean>('chat.advanced.multiReplaceString.enabled', false, INTERNAL);
 		export const Gpt5ApplyPatchExclusively = defineExpSetting<boolean>('chat.advanced.gpt5ApplyPatchExclusively.enabled', false, INTERNAL);
+
+		export const EnableClaudeCodeAgent = defineSetting<boolean | string | undefined>('chat.advanced.claudeCode.enabled', false, INTERNAL);
+		export const ClaudeCodeDebugEnabled = defineSetting<boolean>('chat.advanced.claudeCode.debug', false, INTERNAL);
 	}
 
 	export const AgentThinkingTool = defineSetting<boolean>('chat.agent.thinkingTool', false);

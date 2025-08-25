@@ -126,7 +126,7 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 			tooltip: `${capabilities.name} is contributed via the ${this.providerName} provider.`,
 			capabilities: {
 				toolCalling: capabilities.toolCalling,
-				vision: capabilities.vision
+				imageInput: capabilities.vision
 			},
 			thinking: capabilities.thinking || false,
 		};
@@ -158,13 +158,13 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 			maxInputTokens: model.maxInputTokens,
 			maxOutputTokens: model.maxOutputTokens,
 			toolCalling: !!model.capabilities?.toolCalling || false,
-			vision: !!model.capabilities?.vision || false,
+			vision: !!model.capabilities?.imageInput || false,
 			name: model.name,
 			url: model.url,
 			thinking: model.thinking
 		});
 		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey ?? '', model.url);
-		return this._lmWrapper.provideLanguageModelResponse(openAIChatEndpoint, messages, options, options.extensionId, progress, token);
+		return this._lmWrapper.provideLanguageModelResponse(openAIChatEndpoint, messages, options, options.requestInitiator, progress, token);
 	}
 
 	async provideTokenCount(model: CustomOAIModelInfo, text: string | LanguageModelChatMessage | LanguageModelChatMessage2, token: CancellationToken): Promise<number> {
@@ -182,7 +182,7 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 			maxInputTokens: model.maxInputTokens,
 			maxOutputTokens: model.maxOutputTokens,
 			toolCalling: !!model.capabilities?.toolCalling || false,
-			vision: !!model.capabilities?.vision || false,
+			vision: !!model.capabilities?.imageInput || false,
 			name: model.name,
 			url: model.url,
 			thinking: model.thinking

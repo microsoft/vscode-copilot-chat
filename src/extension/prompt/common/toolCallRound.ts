@@ -2,7 +2,8 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { ThinkingData } from '../../../platform/thinking/common/thinking';
+import { FetchSuccess } from '../../../platform/chat/common/commonTypes';
+import { ThinkingData, ThinkingDelta } from '../../../platform/thinking/common/thinking';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IToolCall, IToolCallRound } from './intents';
 
@@ -50,5 +51,40 @@ export class ToolCallRound implements IToolCallRound {
 
 	private static generateID(): string {
 		return generateUuid();
+	}
+}
+
+export class ThinkingDataItem implements ThinkingData {
+	public text: string = '';
+	public isEncrypted?: boolean;
+	public metadata?: string | undefined;
+	public tokens?: number | undefined;
+
+	static createOrUpdate(item: ThinkingDataItem | undefined, delta: ThinkingDelta) {
+		if (!item) {
+			item = new ThinkingDataItem(delta.id ?? generateUuid());
+		}
+
+		item.update(delta);
+		return item;
+	}
+
+	constructor(
+		public readonly id: string
+	) { }
+
+	public update(delta: ThinkingDelta): void {
+		this.text += delta.text;
+		if (delta.isEncrypted !== undefined) {
+			this.isEncrypted = delta.isEncrypted;
+		}
+
+		if (delta.metadata !== undefined) {
+			this.metadata = delta.metadata;
+		}
+	}
+
+	public updateWithFetchResult(fetchResult: FetchSuccess<unknown>): void {
+		this.tokens = fetchResult.usage?.completion_tokens_details?.reasoning_tokens;
 	}
 }

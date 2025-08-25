@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { outdent } from 'outdent';
-import { assert, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest';
 import type { InlineCompletionContext } from 'vscode';
 import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { DefaultsOnlyConfigurationService } from '../../../../platform/configuration/test/common/defaultsOnlyConfigurationService';
@@ -32,6 +32,9 @@ import { LineRange } from '../../../../util/vs/editor/common/core/ranges/lineRan
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
 import { NextEditProvider } from '../../node/nextEditProvider';
 import { NextEditProviderTelemetryBuilder } from '../../node/nextEditProviderTelemetry';
+import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 
 describe('NextEditProvider Caching', () => {
 
@@ -40,15 +43,20 @@ describe('NextEditProvider Caching', () => {
 	let gitExtensionService: IGitExtensionService;
 	let logService: ILogService;
 	let expService: IExperimentationService;
-
+	let disposableStore: DisposableStore;
+	let workspaceService: IWorkspaceService;
 	beforeAll(() => {
+		disposableStore = new DisposableStore();
+		workspaceService = disposableStore.add(new TestWorkspaceService());
 		configService = new DefaultsOnlyConfigurationService();
 		snippyService = new NullSnippyService();
 		gitExtensionService = new NullGitExtensionService();
 		logService = new LogServiceImpl([], new NulSimulationTestContext(), new MockExtensionContext() as any);
 		expService = new NullExperimentationService();
 	});
-
+	afterAll(() => {
+		disposableStore.dispose();
+	});
 	it('caches a response with multiple edits and reuses them correctly with rebasing', async () => {
 		const obsWorkspace = new MutableObservableWorkspace();
 		const obsGit = new ObservableGit(gitExtensionService);
@@ -106,7 +114,7 @@ describe('NextEditProvider Caching', () => {
 		const context: InlineCompletionContext = { triggerKind: 1, selectedCompletionInfo: undefined, requestUuid: generateUuid(), requestIssuedDateTime: Date.now() };
 		const logContext = new InlineEditRequestLogContext(doc.id.toString(), 1, context);
 		const cancellationToken = CancellationToken.None;
-		const tb1 = new NextEditProviderTelemetryBuilder(gitExtensionService, mockNotebookService, nextEditProvider.ID, doc);
+		const tb1 = new NextEditProviderTelemetryBuilder(gitExtensionService, mockNotebookService, workspaceService, nextEditProvider.ID, doc);
 
 		let result = await nextEditProvider.getNextEdit(doc.id, context, logContext, cancellationToken, tb1.nesBuilder);
 
@@ -131,7 +139,7 @@ describe('NextEditProvider Caching', () => {
 			const myPoint = new Point(0, 1);"
 		`);
 
-		const tb2 = new NextEditProviderTelemetryBuilder(gitExtensionService, mockNotebookService, nextEditProvider.ID, doc);
+		const tb2 = new NextEditProviderTelemetryBuilder(gitExtensionService, mockNotebookService, workspaceService, nextEditProvider.ID, doc);
 
 		result = await nextEditProvider.getNextEdit(doc.id, context, logContext, cancellationToken, tb2.nesBuilder);
 
@@ -156,7 +164,7 @@ describe('NextEditProvider Caching', () => {
 			const myPoint = new Point(0, 1);"
 		`);
 
-		const tb3 = new NextEditProviderTelemetryBuilder(gitExtensionService, mockNotebookService, nextEditProvider.ID, doc);
+		const tb3 = new NextEditProviderTelemetryBuilder(gitExtensionService, mockNotebookService, workspaceService, nextEditProvider.ID, doc);
 
 		result = await nextEditProvider.getNextEdit(doc.id, context, logContext, cancellationToken, tb3.nesBuilder);
 
