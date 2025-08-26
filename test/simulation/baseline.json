@@ -9172,23 +9172,23 @@
   {
     "name": "notebookEdits (bug reports - json) [panel] - Issue #13868",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "notebookEdits (bug reports - text) [panel] - Issue #13868",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "notebookEdits (bug reports - xml) [panel] - Issue #13868",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "notebookEdits (modification - json) [panel] [julia] - new julia code cells in empty notebook",
