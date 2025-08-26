@@ -225,6 +225,10 @@ export class ChatEndpoint implements IChatEndpoint {
 		return { terms: this._policyDetails.terms ?? 'Unknown policy terms' };
 	}
 
+	public get apiType(): string {
+		return this.useResponsesApi ? 'responses' : 'chatCompletions';
+	}
+
 	interceptBody(body: IEndpointBody | undefined): void {
 		// Remove tool calls from requests that don't support them
 		// We really shouldn't make requests to models that don't support tool calls with tools though
