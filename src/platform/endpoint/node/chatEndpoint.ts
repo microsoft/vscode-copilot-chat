@@ -173,7 +173,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		@IInstantiationService protected readonly _instantiationService: IInstantiationService,
 		@IConfigurationService protected readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
-		@ILogService private readonly _logService: ILogService,
+		@ILogService _logService: ILogService,
 	) {
 		this._urlOrRequestMetadata = _modelMetadata.urlOrRequestMetadata ?? (this.useResponsesApi ? { type: RequestType.ChatResponses } : { type: RequestType.ChatCompletions });
 		// This metadata should always be present, but if not we will default to 8192 tokens
@@ -252,33 +252,11 @@ export class ChatEndpoint implements IChatEndpoint {
 			// Add the messages & model back
 			body['messages'] = newMessages;
 		}
-
-		if (body && this.useResponsesApi) {
-			delete body.temperature;
-			body.truncation = this._configurationService.getConfig(ConfigKey.Internal.UseResponsesApiTruncation) ?
-				'auto' :
-				'disabled';
-			const reasoning = this._configurationService.getConfig(ConfigKey.Internal.ResponsesApiReasoning);
-			if (reasoning === true) {
-				body.reasoning = {
-					'effort': 'high',
-					'summary': 'detailed'
-				};
-			} else if (typeof reasoning === 'string') {
-				try {
-					body.reasoning = JSON.parse(reasoning);
-				} catch (e) {
-					this._logService.error(e, 'Failed to parse responses reasoning setting');
-				}
-			}
-
-			body.include = ['reasoning.encrypted_content'];
-		}
 	}
 
 	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
 		if (this.useResponsesApi) {
-			const body = createResponsesRequestBody(options, this.model, this._modelMetadata);
+			const body = this._instantiationService.invokeFunction(createResponsesRequestBody, options, this.model, this._modelMetadata);
 			return this.customizeResponsesBody(body);
 		} else {
 			const body = createCapiRequestBody(options, this.model, this.getCapiCallback());
