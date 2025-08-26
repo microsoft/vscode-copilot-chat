@@ -4,21 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
-import { beforeEach, describe, expect, it } from 'vitest';
-import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
-import { IChatMLFetcher } from '../../../../platform/chat/common/chatMLFetcher';
-import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { ICAPIClientService } from '../../../../platform/endpoint/common/capiClient';
-import { IDomainService } from '../../../../platform/endpoint/common/domainService';
+import { beforeEach, afterEach, describe, expect, it } from 'vitest';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IChatModelInformation, ModelSupportedEndpoint } from '../../../../platform/endpoint/common/endpointProvider';
-import { IEnvService } from '../../../../platform/env/common/envService';
-import { ILogService } from '../../../../platform/log/common/logService';
-import { IFetcherService } from '../../../../platform/networking/common/fetcherService';
 import { ICreateEndpointBodyOptions } from '../../../../platform/networking/common/networking';
-import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
-import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
-import { ITokenizerProvider } from '../../../../platform/tokenizer/node/tokenizer';
+import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
+import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { OpenAIEndpoint } from '../openAIEndpoint';
 
 // Test fixtures for thinking content
@@ -47,28 +40,11 @@ const createTestOptions = (messages: Raw.ChatMessage[]): ICreateEndpointBodyOpti
 	location: undefined as any
 });
 
-// Mock implementations
-const createMockServices = (useResponsesApi = false) => ({
-	fetcherService: {} as IFetcherService,
-	domainService: {} as IDomainService,
-	capiClientService: {} as ICAPIClientService,
-	envService: {} as IEnvService,
-	telemetryService: {} as ITelemetryService,
-	authService: {} as IAuthenticationService,
-	chatMLFetcher: {} as IChatMLFetcher,
-	tokenizerProvider: {} as ITokenizerProvider,
-	instantiationService: {
-		createInstance: (ctor: any, ...args: any[]) => new ctor(...args)
-	} as IInstantiationService,
-	configurationService: {
-		getExperimentBasedConfig: () => useResponsesApi
-	} as unknown as IConfigurationService,
-	expService: {} as IExperimentationService,
-	logService: {} as ILogService
-});
-
 describe('OpenAIEndpoint - Reasoning Properties', () => {
 	let modelMetadata: IChatModelInformation;
+	const disposables = new DisposableStore();
+	let accessor: ITestingServicesAccessor;
+	let instaService: IInstantiationService;
 
 	beforeEach(() => {
 		modelMetadata = {
@@ -98,28 +74,22 @@ describe('OpenAIEndpoint - Reasoning Properties', () => {
 				}
 			}
 		};
+
+		const testingServiceCollection = createExtensionUnitTestingServices();
+		accessor = disposables.add(testingServiceCollection.createTestingAccessor());
+		instaService = accessor.get(IInstantiationService);
+	});
+
+	afterEach(() => {
+		disposables.clear();
 	});
 
 	describe('CAPI mode (useResponsesApi = false)', () => {
 		it('should set cot_id and cot_summary properties when processing thinking content', () => {
-			const mockServices = createMockServices(false); // CAPI mode
-			const endpoint = new OpenAIEndpoint(
+			const endpoint = instaService.createInstance(OpenAIEndpoint,
 				modelMetadata,
 				'test-api-key',
-				'https://api.openai.com/v1/chat/completions',
-				mockServices.fetcherService,
-				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.envService,
-				mockServices.telemetryService,
-				mockServices.authService,
-				mockServices.chatMLFetcher,
-				mockServices.tokenizerProvider,
-				mockServices.instantiationService,
-				mockServices.configurationService,
-				mockServices.expService,
-				mockServices.logService
-			);
+				'https://api.openai.com/v1/chat/completions');
 
 			const thinkingMessage = createThinkingMessage('test-thinking-123', 'this is my reasoning');
 			const options = createTestOptions([thinkingMessage]);
@@ -134,24 +104,10 @@ describe('OpenAIEndpoint - Reasoning Properties', () => {
 		});
 
 		it('should handle multiple messages with thinking content', () => {
-			const mockServices = createMockServices(false); // CAPI mode
-			const endpoint = new OpenAIEndpoint(
+			const endpoint = instaService.createInstance(OpenAIEndpoint,
 				modelMetadata,
 				'test-api-key',
-				'https://api.openai.com/v1/chat/completions',
-				mockServices.fetcherService,
-				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.envService,
-				mockServices.telemetryService,
-				mockServices.authService,
-				mockServices.chatMLFetcher,
-				mockServices.tokenizerProvider,
-				mockServices.instantiationService,
-				mockServices.configurationService,
-				mockServices.expService,
-				mockServices.logService
-			);
+				'https://api.openai.com/v1/chat/completions');
 
 			const userMessage: Raw.ChatMessage = {
 				role: Raw.ChatRole.User,
@@ -178,24 +134,12 @@ describe('OpenAIEndpoint - Reasoning Properties', () => {
 
 	describe('Responses API mode (useResponsesApi = true)', () => {
 		it('should preserve reasoning object when thinking is supported', () => {
-			const mockServices = createMockServices(true); // Responses API mode
-			const endpoint = new OpenAIEndpoint(
+			accessor.get(IConfigurationService).setConfig(ConfigKey.Internal.UseResponsesApi, true);
+			accessor.get(IConfigurationService).setConfig(ConfigKey.Internal.ResponsesApiReasoning, true);
+			const endpoint = instaService.createInstance(OpenAIEndpoint,
 				modelMetadata,
 				'test-api-key',
-				'https://api.openai.com/v1/chat/completions',
-				mockServices.fetcherService,
-				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.envService,
-				mockServices.telemetryService,
-				mockServices.authService,
-				mockServices.chatMLFetcher,
-				mockServices.tokenizerProvider,
-				mockServices.instantiationService,
-				mockServices.configurationService,
-				mockServices.expService,
-				mockServices.logService
-			);
+				'https://api.openai.com/v1/chat/completions');
 
 			const thinkingMessage = createThinkingMessage('resp-api-789', 'responses api reasoning');
 			const options = createTestOptions([thinkingMessage]);
@@ -220,24 +164,12 @@ describe('OpenAIEndpoint - Reasoning Properties', () => {
 				}
 			};
 
-			const mockServices = createMockServices(true); // Responses API mode
-			const endpoint = new OpenAIEndpoint(
+			accessor.get(IConfigurationService).setConfig(ConfigKey.Internal.UseResponsesApi, true);
+			accessor.get(IConfigurationService).setConfig(ConfigKey.Internal.ResponsesApiReasoning, true);
+			const endpoint = instaService.createInstance(OpenAIEndpoint,
 				modelWithoutThinking,
 				'test-api-key',
-				'https://api.openai.com/v1/chat/completions',
-				mockServices.fetcherService,
-				mockServices.domainService,
-				mockServices.capiClientService,
-				mockServices.envService,
-				mockServices.telemetryService,
-				mockServices.authService,
-				mockServices.chatMLFetcher,
-				mockServices.tokenizerProvider,
-				mockServices.instantiationService,
-				mockServices.configurationService,
-				mockServices.expService,
-				mockServices.logService
-			);
+				'https://api.openai.com/v1/chat/completions');
 
 			const thinkingMessage = createThinkingMessage('no-thinking-999', 'should be removed');
 			const options = createTestOptions([thinkingMessage]);
