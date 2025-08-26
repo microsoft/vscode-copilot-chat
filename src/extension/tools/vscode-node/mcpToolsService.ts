@@ -283,7 +283,7 @@ export class McpToolsService extends BaseToolsService {
 				return true;
 			}
 
-			return true;
+			return false;
 		});
 	}
 
