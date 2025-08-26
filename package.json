@@ -844,7 +844,8 @@
 					},
 					"required": [
 						"filePath",
-						"editType"
+						"editType",
+						"cellId"
 					]
 				}
 			},
