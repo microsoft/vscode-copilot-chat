@@ -37,7 +37,7 @@ export interface APIUsage {
 	/**
 	 * Breakdown of tokens used in the prompt.
 	 */
-	prompt_tokens_details: {
+	prompt_tokens_details?: {
 		cached_tokens: number;
 	};
 	/**
@@ -250,7 +250,7 @@ export interface ChoiceLogProbs {
 	content: ChoiceLogProbsContent[];
 }
 
-interface TokenLogProb {
+export interface TokenLogProb {
 	bytes: number[];
 	token: string;
 	logprob: number;

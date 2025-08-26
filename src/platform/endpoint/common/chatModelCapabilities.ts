@@ -36,7 +36,7 @@ export function modelPrefersInstructionsAfterHistory(modelFamily: string) {
  * Model supports apply_patch as an edit tool.
  */
 export async function modelSupportsApplyPatch(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	if (model.family === 'gpt-4.1' || model.family === 'o4-mini') {
+	if (model.family === 'gpt-4.1' || model.family === 'o4-mini' || model.family.startsWith('gpt-5')) {
 		return true;
 	}
 	return await getSha256Hash(model.family) === 'a99dd17dfee04155d863268596b7f6dd36d0a6531cd326348dbe7416142a21a3';
@@ -46,14 +46,21 @@ export async function modelSupportsApplyPatch(model: LanguageModelChat | IChatEn
  * Model prefers JSON notebook representation.
  */
 export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family === 'gpt-4.1' || model.family === 'o4-mini';
+	return model.family === 'gpt-4.1' || model.family === 'o4-mini' || model.family.startsWith('gpt-5');
 }
 
 /**
  * Model supports replace_string_in_file as an edit tool.
  */
 export function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic');
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || model.family.includes('gemini');
+}
+
+/**
+ * Model supports multi_replace_string_in_file as an edit tool.
+ */
+export function modelSupportsMultiReplaceString(model: LanguageModelChat | IChatEndpoint): boolean {
+	return modelSupportsReplaceString(model) && !model.family.includes('gemini');
 }
 
 /**
@@ -62,6 +69,21 @@ export function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpo
  */
 export function modelCanUseReplaceStringExclusively(model: LanguageModelChat | IChatEndpoint): boolean {
 	return model.family.startsWith('claude') || model.family.startsWith('Anthropic');
+}
+
+/**
+ * The model can accept image urls as the `image_url` parameter in requests.
+ */
+export function modelCanUseImageURL(model: LanguageModelChat | IChatEndpoint): boolean {
+	return !model.family.startsWith('claude') && !model.family.startsWith('Anthropic');
+}
+
+/**
+ * The model is capable of using apply_patch as an edit tool exclusively,
+ * without needing insert_edit_into_file.
+ */
+export function modelCanUseApplyPatchExclusively(model: LanguageModelChat | IChatEndpoint): boolean {
+	return model.family.startsWith('gpt-5');
 }
 
 /**

@@ -97,6 +97,21 @@ declare module 'vscode' {
 		constructor(value: string, task?: (progress: Progress<ChatResponseWarningPart | ChatResponseReferencePart>) => Thenable<string | void>);
 	}
 
+	/**
+ * A specialized progress part for displaying thinking/reasoning steps.
+ */
+	export class ChatResponseThinkingProgressPart extends ChatResponseProgressPart {
+		value: string;
+		id?: string;
+		metadata?: string;
+
+		/**
+		 * Creates a new thinking progress part.
+		 * @param value An initial progress message
+		 * @param task A task that will emit thinking parts during its execution
+		 */
+		constructor(value: string, id?: string, metadata?: string)
+	}
 	export class ChatResponseReferencePart2 {
 		/**
 		 * The reference target.
@@ -193,6 +208,8 @@ declare module 'vscode' {
 		*/
 		progress(value: string, task?: (progress: Progress<ChatResponseWarningPart | ChatResponseReferencePart>) => Thenable<string | void>): void;
 
+		thinkingProgress(thinkingDelta: ThinkingDelta): void;
+
 		textEdit(target: Uri, edits: TextEdit | TextEdit[]): void;
 
 		textEdit(target: Uri, isDone: true): void;
@@ -235,6 +252,8 @@ declare module 'vscode' {
 		prepareToolInvocation(toolName: string): void;
 
 		push(part: ExtendedChatResponsePart): void;
+
+		clearToPreviousToolInvocation(reason: ChatResponseClearToPreviousToolInvocationReason): void;
 	}
 
 	export enum ChatResponseReferencePartStatusKind {
@@ -243,6 +262,26 @@ declare module 'vscode' {
 		Omitted = 3
 	}
 
+	export enum ChatResponseClearToPreviousToolInvocationReason {
+		NoReason = 0,
+		FilteredContentRetry = 1,
+		CopyrightContentRetry = 2,
+	}
+
+	export type ThinkingDelta = {
+		text?: string;
+		id: string;
+		metadata?: string;
+	} | {
+		text?: string;
+		id?: string;
+		metadata: string;
+	} |
+	{
+		text: string;
+		id?: string;
+		metadata?: string;
+	};
 
 	/**
 	 * Does this piggy-back on the existing ChatRequest, or is it a different type of request entirely?
@@ -456,6 +495,17 @@ declare module 'vscode' {
 		outcome: ChatEditingSessionActionOutcome;
 	}
 
+	export interface ChatEditingHunkAction {
+		// eslint-disable-next-line local/vscode-dts-string-type-literals
+		kind: 'chatEditingHunkAction';
+		uri: Uri;
+		hasRemainingEdits: boolean;
+		outcome: ChatEditingHunkActionOutcome;
+		lineCount: number;
+		linesAdded: number;
+		linesRemoved: number;
+	}
+
 	export enum ChatEditingSessionActionOutcome {
 		Accepted = 1,
 		Rejected = 2,
@@ -464,7 +514,7 @@ declare module 'vscode' {
 
 	export interface ChatUserActionEvent {
 		readonly result: ChatResult;
-		readonly action: ChatCopyAction | ChatInsertAction | ChatApplyAction | ChatTerminalAction | ChatCommandAction | ChatFollowupAction | ChatBugReportAction | ChatEditorAction | ChatEditingSessionAction;
+		readonly action: ChatCopyAction | ChatInsertAction | ChatApplyAction | ChatTerminalAction | ChatCommandAction | ChatFollowupAction | ChatBugReportAction | ChatEditorAction | ChatEditingSessionAction | ChatEditingHunkAction;
 	}
 
 	export interface ChatPromptReference {

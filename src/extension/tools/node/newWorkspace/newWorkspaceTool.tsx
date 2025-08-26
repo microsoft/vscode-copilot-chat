@@ -91,7 +91,7 @@ export class GetNewWorkspaceTool implements ICopilotTool<INewWorkspaceToolParams
 				}, this._extensionContext);
 
 				workspaceUri = newWorkspaceUri;
-
+				this.commandService.executeCommand('setContext', 'chatSkipRequestInProgressMessage', true);
 				this.interactiveSession.transferActiveChat(newWorkspaceUri);
 				this.commandService.executeCommand('vscode.openFolder', newWorkspaceUri, { forceReuseWindow: true });
 
@@ -122,6 +122,7 @@ export class NewWorkspaceCreationResult extends PromptElement<NewWorkspaceElemen
 	constructor(
 		props: PromptElementProps<NewWorkspaceElementProps>,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IRunCommandExecutionService private readonly commandService: IRunCommandExecutionService,
 	) {
 		super(props);
 	}
@@ -136,14 +137,17 @@ export class NewWorkspaceCreationResult extends PromptElement<NewWorkspaceElemen
 			</TextChunk>;
 		}
 
+		// For https://github.com/microsoft/vscode/issues/258252
+		this.commandService.executeCommand('workbench.action.terminal.focus');
+
 		return <>
 			<TextChunk>
-				Create or update the file `.github/copilot-instructions.md` with the exact content shown below.<br />
+				Create or update the copilot-instructions.md file in the .github directory with the exact content shown below.<br />
 				<br />
 			</TextChunk>
 			<UnsafeCodeBlock code={`
 <!-- Use this file to provide workspace-specific custom instructions to Copilot. For more details, visit https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->
-- [ ] Verify that .github/copilot-instructions.md is created.
+- [ ] Verify that the copilot-instructions.md file in the .github directory is created.
 
 - [ ] Clarify Project Requirements
 	<!-- Ask for project type, language, and frameworks if not specified. Skip if already provided. -->
@@ -193,8 +197,8 @@ export class NewWorkspaceCreationResult extends PromptElement<NewWorkspaceElemen
 - [ ] Ensure Documentation is Complete
 	<!--
 	Verify that all previous steps have been completed.
-	Verify that README.md and .github/copilot-instructions.md exists and contains current project information.
-	Clean up .github/copilot-instructions.md by removing all HTML comments.
+	Verify that README.md and the copilot-instructions.md file in the .github directory exists and contains current project information.
+	Clean up the copilot-instructions.md file in the .github directory by removing all HTML comments.
 	 -->
 
 <!--
@@ -239,7 +243,7 @@ PROJECT CONTENT RULES:
 TASK COMPLETION RULES:
 - Your task is complete when:
   - Project is successfully scaffolded and compiled without errors
-  - .github/copilot-instructions.md exists in the project
+  - copilot-instructions.md file in the .github directory exists in the project
   - README.md file exists and is up to date
   - User is provided with clear instructions to debug/launch the project
 
@@ -251,8 +255,8 @@ Before starting a new task in the above plan, update progress in the plan.
 `} languageId='markdown'></UnsafeCodeBlock>
 			<TextChunk>
 				<br />
-				Verify that a .github/copilot-instructions.md file exists and systematically work through each item in the task list.<br />
-				Update the .github/copilot-instructions.md file directly as you complete each step.<br />
+				Verify that a copilot-instructions.md file in the .github directory exists and systematically work through each item in the task list.<br />
+				Update the copilot-instructions.md file in the .github directory directly as you complete each step.<br />
 				<br />
 				If the user asks to "continue," refer to the previous steps and proceed accordingly.
 			</TextChunk>

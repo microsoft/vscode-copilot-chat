@@ -22,6 +22,7 @@ import { IExtensionContribution } from '../../common/contributions';
 const showHtmlCommand = 'vscode.copilot.chat.showRequestHtmlItem';
 const exportLogItemCommand = 'github.copilot.chat.debug.exportLogItem';
 const exportPromptArchiveCommand = 'github.copilot.chat.debug.exportPromptArchive';
+const saveCurrentMarkdownCommand = 'github.copilot.chat.debug.saveCurrentMarkdown';
 
 export class RequestLogTree extends Disposable implements IExtensionContribution {
 	readonly id = 'requestLogTree';
@@ -130,6 +131,71 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 				}
 			} catch (error) {
 				vscode.window.showErrorMessage(`Failed to export log entry: ${error}`);
+			}
+		}));
+
+		// Save the currently opened chat log (ccreq:*.copilotmd) to a file
+		this._register(vscode.commands.registerCommand(saveCurrentMarkdownCommand, async (...args: any[]) => {
+			// Accept resource from menu invocation (editor/title passes the resource)
+			let resource: vscode.Uri | undefined;
+			const first = args?.[0];
+			if (first instanceof vscode.Uri) {
+				resource = first;
+			} else if (first && typeof first === 'object') {
+				// Some menu invocations pass { resource: Uri }
+				const candidate = (first as { resource?: vscode.Uri }).resource;
+				if (candidate instanceof vscode.Uri) {
+					resource = candidate;
+				}
+			}
+
+			// Fallback to the active editor's document
+			resource ??= vscode.window.activeTextEditor?.document.uri;
+			if (!resource) {
+				vscode.window.showWarningMessage('No document is active to save.');
+				return;
+			}
+
+			if (resource.scheme !== ChatRequestScheme.chatRequestScheme) {
+				vscode.window.showWarningMessage('This command only works for Copilot request documents.');
+				return;
+			}
+
+			// Determine a default filename from the virtual URI
+			const parsed = ChatRequestScheme.parseUri(resource.toString());
+			const defaultBase = parsed && parsed.kind === 'request' ? parsed.id : 'latestrequest';
+			const defaultFilename = `${defaultBase}.md`;
+
+			const saveUri = await vscode.window.showSaveDialog({
+				defaultUri: vscode.Uri.file(path.join(os.homedir(), defaultFilename)),
+				filters: {
+					'Markdown': ['md'],
+					'Copilot Markdown': ['copilotmd'],
+					'All Files': ['*']
+				},
+				title: 'Save Markdown As'
+			});
+
+			if (!saveUri) {
+				return; // User cancelled
+			}
+
+			try {
+				// Read the text from the virtual document URI explicitly
+				const doc = await vscode.workspace.openTextDocument(resource);
+				await vscode.workspace.fs.writeFile(saveUri, Buffer.from(doc.getText(), 'utf8'));
+
+				const openAction = 'Open File';
+				const result = await vscode.window.showInformationMessage(
+					`Successfully saved to ${saveUri.fsPath}`,
+					openAction
+				);
+
+				if (result === openAction) {
+					await vscode.commands.executeCommand('vscode.open', saveUri);
+				}
+			} catch (error) {
+				vscode.window.showErrorMessage(`Failed to save markdown: ${error}`);
 			}
 		}));
 
@@ -486,6 +552,7 @@ class ChatRequestItem extends vscode.TreeItem {
 class LogTreeFilters extends Disposable {
 	private _elementsShown = true;
 	private _toolsShown = true;
+	private _nesRequestsShown = true;
 
 	private readonly _onDidChangeFilters = new vscode.EventEmitter<void>();
 	readonly onDidChangeFilters = this._onDidChangeFilters.event;
@@ -497,6 +564,7 @@ class LogTreeFilters extends Disposable {
 
 		this.setElementsShown(!vscodeExtensionContext.workspaceState.get(this.getStorageKey('elements')));
 		this.setToolsShown(!vscodeExtensionContext.workspaceState.get(this.getStorageKey('tools')));
+		this.setNesRequestsShown(!vscodeExtensionContext.workspaceState.get(this.getStorageKey('nesRequests')));
 	}
 
 	private getStorageKey(name: string): string {
@@ -513,6 +581,11 @@ class LogTreeFilters extends Disposable {
 		this.setShown('tools', this._toolsShown);
 	}
 
+	setNesRequestsShown(value: boolean) {
+		this._nesRequestsShown = value;
+		this.setShown('nesRequests', this._nesRequestsShown);
+	}
+
 	itemIncluded(item: TreeItem): boolean {
 		if (item instanceof ChatPromptItem) {
 			return true; // Always show chat prompt items
@@ -520,9 +593,19 @@ class LogTreeFilters extends Disposable {
 			return this._elementsShown;
 		} else if (item instanceof ToolCallItem) {
 			return this._toolsShown;
+		} else if (item instanceof ChatRequestItem) {
+			// Check if this is a NES request
+			if (this.isNesRequest(item)) {
+				return this._nesRequestsShown;
+			}
 		}
 
 		return true;
+	}
+
+	private isNesRequest(item: ChatRequestItem): boolean {
+		const debugName = item.info.entry.debugName.toLowerCase();
+		return debugName.startsWith('nes |') || debugName === 'xtabprovider';
 	}
 
 	private setShown(name: string, value: boolean): void {
@@ -540,5 +623,7 @@ class LogTreeFilterCommands extends Disposable {
 		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.hideElements', () => filters.setElementsShown(false)));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.showTools', () => filters.setToolsShown(true)));
 		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.hideTools', () => filters.setToolsShown(false)));
+		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.showNesRequests', () => filters.setNesRequestsShown(true)));
+		this._register(vscode.commands.registerCommand('github.copilot.chat.debug.hideNesRequests', () => filters.setNesRequestsShown(false)));
 	}
 }

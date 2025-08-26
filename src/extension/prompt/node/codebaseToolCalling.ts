@@ -3,20 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Raw } from '@vscode/prompt-tsx';
 import { randomUUID } from 'crypto';
 import type { CancellationToken, ChatRequest, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
-import { FinishedCallback, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart, ChatResponseReferencePart } from '../../../vscodeTypes';
-import { IToolCallingLoopOptions, ToolCallingLoop } from '../../intents/node/toolCallingLoop';
+import { IToolCallingLoopOptions, ToolCallingLoop, ToolCallingLoopFetchOptions } from '../../intents/node/toolCallingLoop';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { CodebaseAgentPrompt } from '../../prompts/node/panel/codebaseAgentPrompt';
 import { IToolsService } from '../../tools/common/toolsService';
@@ -71,7 +69,7 @@ export class CodebaseToolCallingLoop extends ToolCallingLoop<ICodebaseToolCallin
 		return this.toolsService.getEnabledTools(this.options.request, tool => tool.tags.includes('vscode_codesearch'));
 	}
 
-	protected async fetch(messages: Raw.ChatMessage[], finishedCb: FinishedCallback, requestOptions: OptionalChatRequestParams, firstFetchCall: boolean, token: CancellationToken): Promise<ChatResponse> {
+	protected async fetch({ messages, finishedCb, requestOptions }: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
 		const endpoint = await this.getEndpoint(this.options.request);
 		return endpoint.makeChatRequest(
 			CodebaseToolCallingLoop.ID,
@@ -90,7 +88,6 @@ export class CodebaseToolCallingLoop extends ToolCallingLoop<ICodebaseToolCallin
 				messageId: randomUUID(), // @TODO@joyceerhl
 				messageSource: CodebaseToolCallingLoop.ID
 			},
-			{ intent: true }
 		);
 	}
 }

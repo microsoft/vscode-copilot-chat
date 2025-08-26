@@ -162,7 +162,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		this._isDisposed = true;
 	}
 
-	@LogExecTime(self => self._logService, 'CodeSearchChunkSearch.isAvailable')
+	@LogExecTime(self => self._logService, 'CodeSearchChunkSearch::isAvailable')
 	async isAvailable(searchTelemetryInfo?: TelemetryCorrelationId, canPrompt = false, token = CancellationToken.None): Promise<boolean> {
 		const sw = new StopWatch();
 		const checkResult = await this.doIsAvailableCheck(canPrompt, token);
@@ -480,7 +480,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		});
 	}
 
-	@LogExecTime(self => self._logService, 'CodeSearchChunkSearch.getLocalDiff')
+	@LogExecTime(self => self._logService, 'CodeSearchChunkSearch::getLocalDiff')
 	private async getLocalDiff(): Promise<readonly URI[] | 'unknown' | 'tooLarge'> {
 		await this._workspaceDiffTracker.value.initialized;
 
@@ -543,7 +543,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.WorkspaceUseCodeSearchInstantIndexing, this._experimentationService);
 	}
 
-	@LogExecTime(self => self._logService, 'CodeSearchChunkSearch.doCodeSearch', function (execTime, status) {
+	@LogExecTime(self => self._logService, 'CodeSearchChunkSearch::doCodeSearch', function (execTime, status) {
 		// Old name used for backwards compatibility with old telemetry
 		/* __GDPR__
 			"codeSearchChunkSearch.perf.doCodeSearchWithRetry" : {
@@ -615,7 +615,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 				let attemptsRemaining = 5;
 				const delayBetweenAttempts = 1000;
 
-				while (attemptsRemaining--) {
+				while (attemptsRemaining-- > 0) {
 					const currentStatus = (await raceCancellationError(this._repoTracker.updateRepoStateFromEndpoint(repo.repo, repo.remoteInfo, false, token), token)).status;
 					if (currentStatus === RepoStatus.Ready) {
 						// We're good to start searching

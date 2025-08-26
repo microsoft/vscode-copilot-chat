@@ -12,6 +12,7 @@ import { IChatModelInformation } from '../../../platform/endpoint/common/endpoin
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
@@ -49,6 +50,7 @@ export class XtabEndpoint extends ChatEndpoint {
 	constructor(
 		private readonly _url: string,
 		private readonly _apiKey: string,
+		_configuredModelName: string | undefined,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IDomainService _domainService: IDomainService,
 		@IFetcherService _fetcherService: IFetcherService,
@@ -59,10 +61,12 @@ export class XtabEndpoint extends ChatEndpoint {
 		@IChatMLFetcher _chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider _tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService _instantiationService: IInstantiationService,
-		@IThinkingDataService _thinkingDataService: IThinkingDataService
+		@IThinkingDataService _thinkingDataService: IThinkingDataService,
+		@IExperimentationService _experimentationService: IExperimentationService
 	) {
+		const chatModelInfo = _configuredModelName ? { ...XtabEndpoint.chatModelInfo, id: _configuredModelName } : XtabEndpoint.chatModelInfo;
 		super(
-			XtabEndpoint.chatModelInfo,
+			chatModelInfo,
 			_domainService,
 			_capiClientService,
 			_fetcherService,
@@ -71,7 +75,9 @@ export class XtabEndpoint extends ChatEndpoint {
 			_authService,
 			_chatMLFetcher,
 			_tokenizerProvider,
-			_instantiationService
+			_instantiationService,
+			_configService,
+			_experimentationService
 		);
 	}
 

@@ -6,17 +6,15 @@ import fs from 'fs';
 import { IDisposable } from 'monaco-editor';
 import sql from 'node:sqlite';
 import path from 'path';
-import { CancelablePromise, ThrottledDelayer, createCancelablePromise, raceTimeout } from '../../../util/vs/base/common/async';
+import { CancelablePromise, createCancelablePromise } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IRange, Range } from '../../../util/vs/editor/common/core/range';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { FileChunk, FileChunkWithEmbedding } from '../../chunking/common/chunk';
-import { stripChunkTextMetadata } from '../../chunking/common/chunkingStringUtils';
-import { EmbeddingType, EmbeddingVector } from '../../embeddings/common/embeddingsComputer';
+import { FileChunkWithEmbedding } from '../../chunking/common/chunk';
+import { Embedding, EmbeddingType, EmbeddingVector, getWellKnownEmbeddingTypeInfo } from '../../embeddings/common/embeddingsComputer';
 import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { ILogService } from '../../log/common/logService';
 import { FileRepresentation, IWorkspaceFileIndex } from './workspaceFileIndex';
@@ -78,23 +76,12 @@ export async function createWorkspaceChunkAndEmbeddingCache(
 	workspaceIndex: IWorkspaceFileIndex
 ): Promise<IWorkspaceChunkAndEmbeddingCache> {
 	const instantiationService = accessor.get(IInstantiationService);
-	if (cacheRoot) {
-		const db = await instantiationService.invokeFunction(accessor => DbCache.create(accessor, embeddingType, cacheRoot, workspaceIndex));
-		if (db) {
-			return db;
-		}
-	}
-	return instantiationService.invokeFunction(accessor => DiskCache.load(accessor, embeddingType, cacheRoot, workspaceIndex));
+	return instantiationService.invokeFunction(accessor => DbCache.create(accessor, embeddingType, cacheRoot ?? ':memory:', workspaceIndex));
 }
 
-class DiskCache extends Disposable implements IWorkspaceChunkAndEmbeddingCache {
+class OldDiskCache {
 	private static readonly version = '1.0.0';
 	private static cacheFileName = 'workspace-chunks.json';
-
-	private static encodeEmbedding(embedding: EmbeddingVector): string {
-		const floatArray = Float32Array.from(embedding);
-		return Buffer.from(floatArray.buffer).toString('base64');
-	}
 
 	public static decodeEmbedding(base64Str: string): EmbeddingVector {
 		const decoded = Buffer.from(base64Str, 'base64');
@@ -105,7 +92,7 @@ class DiskCache extends Disposable implements IWorkspaceChunkAndEmbeddingCache {
 	public static async readDiskCache(accessor: ServicesAccessor, embeddingType: EmbeddingType, cacheRoot: URI, logService: ILogService): Promise<Iterable<[string, PersistedCacheEntry]> | undefined> {
 		const fileSystem = accessor.get(IFileSystemService);
 
-		const cachePath = URI.joinPath(cacheRoot, DiskCache.cacheFileName);
+		const cachePath = URI.joinPath(cacheRoot, OldDiskCache.cacheFileName);
 		try {
 			let file: Uint8Array | undefined;
 			try {
@@ -116,8 +103,8 @@ class DiskCache extends Disposable implements IWorkspaceChunkAndEmbeddingCache {
 			}
 
 			const data: PersistedCache = JSON.parse(new TextDecoder().decode(file));
-			if (data.version !== DiskCache.version) {
-				logService.debug(`WorkspaceChunkAndEmbeddingCache: invalidating cache due to version mismatch. Expected ${DiskCache.version} but found ${data.version}`);
+			if (data.version !== OldDiskCache.version) {
+				logService.debug(`WorkspaceChunkAndEmbeddingCache: invalidating cache due to version mismatch. Expected ${OldDiskCache.version} but found ${data.version}`);
 				return undefined;
 			}
 
@@ -139,7 +126,7 @@ class DiskCache extends Disposable implements IWorkspaceChunkAndEmbeddingCache {
 
 	static async deleteDiskCache(accessor: ServicesAccessor, cacheRoot: URI) {
 		const fileSystem = accessor.get(IFileSystemService);
-		const cachePath = URI.joinPath(cacheRoot, DiskCache.cacheFileName);
+		const cachePath = URI.joinPath(cacheRoot, OldDiskCache.cacheFileName);
 		try {
 			await fileSystem.delete(cachePath);
 		} catch {
@@ -147,207 +134,7 @@ class DiskCache extends Disposable implements IWorkspaceChunkAndEmbeddingCache {
 		}
 	}
 
-	static async load(
-		accessor: ServicesAccessor,
-		embeddingType: EmbeddingType,
-		cacheRoot: URI | undefined,
-		workspaceIndex: IWorkspaceFileIndex
-	): Promise<DiskCache> {
-		const fileSystem = accessor.get(IFileSystemService);
-		const instantiationService = accessor.get(IInstantiationService);
-		const logService = accessor.get(ILogService);
-
-		const cachePath = cacheRoot ? URI.joinPath(cacheRoot, DiskCache.cacheFileName) : undefined;
-		const cache = new DiskCache(embeddingType, cachePath, workspaceIndex, fileSystem, logService);
-
-		if (cacheRoot && cachePath) {
-			await workspaceIndex.initialize();
-
-			const cacheValues = await instantiationService.invokeFunction(accessor => DiskCache.readDiskCache(accessor, embeddingType, cacheRoot, logService));
-			if (cacheValues) {
-				logService.debug(`Restoring workspace chunk + embeddings cache from ${cachePath.fsPath}`);
-
-				for (const [uriStr, entry] of cacheValues) {
-					const docUri = URI.parse(uriStr);
-					if (!workspaceIndex.get(docUri)) {
-						continue;
-					}
-
-					cache._cache.set(docUri, {
-						contentVersionId: entry.contentVersionId,
-						fileHash: entry.hash,
-						state: 'resolved',
-						value: entry.entries.map((x): FileChunkWithEmbedding => ({
-							embedding: {
-								value: typeof x.embedding === 'string' ? DiskCache.decodeEmbedding(x.embedding) : x.embedding,
-								type: embeddingType,
-							},
-							chunkHash: x.chunkHash,
-							chunk: {
-								file: docUri,
-								text: stripChunkTextMetadata(x.text),
-								rawText: undefined,
-								range: Range.lift(x.range),
-							} satisfies FileChunk
-						}))
-					});
-				}
-			}
-		}
-
-		return cache;
-	}
-
-	private readonly _cache = new ResourceMap<CacheEntry>();
-
-	private _isDisposed = false;
-
-	private readonly _writeDelayer = this._register(new ThrottledDelayer<void>(5000));
-
-	private constructor(
-		private readonly embeddingType: EmbeddingType,
-		private readonly cachePath: URI | undefined,
-		@IWorkspaceFileIndex private readonly _workspaceIndex: IWorkspaceFileIndex,
-		@IFileSystemService private readonly fileSystem: IFileSystemService,
-		@ILogService private readonly logService: ILogService
-	) {
-		super();
-
-		this._register(this._workspaceIndex.onDidDeleteFiles(uris => {
-			for (const uri of uris) {
-				this._cache.delete(uri);
-			}
-		}));
-	}
-
-	public override dispose(): void {
-		this._isDisposed = true;
-		super.dispose();
-	}
-
-	/**
-	 * Checks if {@linkcode file} is currently indexed. Does not wait for any current indexing operation to complete.
-	 */
-	async isIndexed(file: FileRepresentation): Promise<boolean> {
-		const entry = await this.getEntry(file);
-		return entry?.state === 'resolved';
-	}
-
-	async get(file: FileRepresentation): Promise<readonly FileChunkWithEmbedding[] | undefined> {
-		return (await this.getEntry(file))?.value;
-	}
-
-	getCurrentChunksForUri(uri: URI): ReadonlyMap<string, FileChunkWithEmbedding> | undefined {
-		const entry = this._cache.get(uri);
-		if (entry?.state === 'resolved' || entry?.state === 'rejected') {
-			if (entry.value) {
-				const out = new Map<string, FileChunkWithEmbedding>();
-				for (const x of entry.value) {
-					if (x.chunkHash) {
-						out.set(x.chunkHash, x);
-					}
-				}
-				return out;
-			}
-		}
-		return undefined;
-	}
-
-	private async getEntry(file: FileRepresentation): Promise<CacheEntry | undefined> {
-		const entry = this._cache.get(file.uri);
-		if (!entry) {
-			return undefined;
-		}
-
-		if (entry.contentVersionId === await file.getFastContentVersionId()) {
-			return entry;
-		}
-
-		return undefined;
-	}
-
-	async update(file: FileRepresentation, compute: (token: CancellationToken) => Promise<readonly FileChunkWithEmbedding[] | undefined>): Promise<readonly FileChunkWithEmbedding[] | undefined> {
-		const existing = this._cache.get(file.uri);
-		const inContentVersionId = await file.getFastContentVersionId();
-		if (existing?.contentVersionId === inContentVersionId) {
-			// Already up to date
-			return existing.value;
-		}
-
-		// Overwrite
-		if (existing?.state === 'pending') {
-			existing.value.cancel();
-		}
-		const chunks = createCancelablePromise(compute);
-		const entry: CacheEntry = {
-			contentVersionId: inContentVersionId,
-			fileHash: undefined,
-			state: 'pending',
-			value: chunks
-		};
-		this._cache.set(file.uri, entry);
-
-		chunks
-			.then((result): CacheEntry => {
-				return { contentVersionId: inContentVersionId, fileHash: undefined, state: Array.isArray(result) ? 'resolved' : 'rejected', value: result };
-			}, (): CacheEntry => {
-				return { contentVersionId: inContentVersionId, fileHash: undefined, state: 'rejected', value: undefined };
-			})
-			.then(newEntry => {
-				const current = this._cache.get(file.uri);
-				if (entry === current) {
-					this._cache.set(file.uri, newEntry);
-					return this._writeDelayer.trigger(() => this.save());
-				}
-			});
-
-		return chunks;
-	}
-
-	private async save() {
-		if (!this.cachePath || this._isDisposed) {
-			return;
-		}
-
-		const entries: Record<string, PersistedCacheEntry> = {};
-		await Promise.all(Array.from(this._cache.entries(), async ([uri, entry]) => {
-			let chunkAndEmbeddings: readonly FileChunkWithEmbedding[] | undefined;
-			try {
-				// Don't block saving on entries that are still resolving
-				chunkAndEmbeddings = entry.state === 'pending' ? await raceTimeout(entry.value, 1000) : entry.value;
-			} catch {
-				// noop
-			}
-
-			if (!chunkAndEmbeddings) {
-				return;
-			}
-
-			entries[uri.toString()] = {
-				contentVersionId: entry.contentVersionId,
-				hash: undefined,
-				entries: chunkAndEmbeddings.map(x => ({
-					text: x.chunk.text,
-					range: x.chunk.range.toJSON(),
-					embedding: DiskCache.encodeEmbedding(x.embedding.value),
-					chunkHash: x.chunkHash,
-				})),
-			};
-		}));
-
-		if (this._isDisposed) {
-			return;
-		}
-
-		const data: PersistedCache = {
-			version: DiskCache.version,
-			embeddingModel: this.embeddingType.id,
-			entries: entries,
-		};
-		await this.fileSystem.writeFile(this.cachePath, new TextEncoder().encode(JSON.stringify(data)));
-
-		this.logService.debug(`Wrote workspace chunk + embeddings cache to ${this.cachePath.fsPath}`);
-	}
+	private constructor() { }
 }
 
 
@@ -358,29 +145,33 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 	public static async create(
 		accessor: ServicesAccessor,
 		embeddingType: EmbeddingType,
-		cacheRoot: URI,
+		cacheRoot: URI | ':memory:',
 		workspaceIndex: IWorkspaceFileIndex,
-	): Promise<DbCache | undefined> {
+	): Promise<DbCache> {
 		const instantiationService = accessor.get(IInstantiationService);
+		const logService = accessor.get(ILogService);
 
 		const syncOptions: sql.DatabaseSyncOptions = {
 			open: true,
 			enableForeignKeyConstraints: true
 		};
 
-		const dbPath = URI.joinPath(cacheRoot, `workspace-chunks.db`);
 
 		let db: sql.DatabaseSync | undefined;
-		if (dbPath.scheme === Schemas.file) {
+		if (cacheRoot !== ':memory:' && cacheRoot.scheme === Schemas.file) {
+			const dbPath = URI.joinPath(cacheRoot, `workspace-chunks.db`);
 			try {
 				await fs.promises.mkdir(path.dirname(dbPath.fsPath), { recursive: true });
 				db = new sql.DatabaseSync(dbPath.fsPath, syncOptions);
+				logService.trace(`DbWorkspaceChunkAndEmbeddingCache: Opened SQLite database on disk at ${dbPath.fsPath}`);
 			} catch (e) {
 				console.error('Failed to open SQLite database on disk', e);
 			}
 		}
+
 		if (!db) {
-			return;
+			db = new sql.DatabaseSync(':memory:', syncOptions);
+			logService.trace(`DbWorkspaceChunkAndEmbeddingCache: Using in memory database`);
 		}
 
 		db.exec(`
@@ -430,14 +221,15 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 		db.exec('DELETE FROM CacheMeta;');
 		db.prepare('INSERT INTO CacheMeta (version, embeddingModel) VALUES (?, ?)').run(this.version, embeddingType.id);
 
-
 		// Load existing disk db if it exists
-		const diskCache = await instantiationService.invokeFunction(accessor => DiskCache.readDiskCache(
-			accessor,
-			embeddingType,
-			cacheRoot,
-			accessor.get(ILogService)
-		));
+		const diskCache = cacheRoot !== ':memory:' ?
+			await instantiationService.invokeFunction(accessor => OldDiskCache.readDiskCache(
+				accessor,
+				embeddingType,
+				cacheRoot,
+				accessor.get(ILogService)
+			))
+			: undefined;
 		if (diskCache) {
 			try {
 				const insertFileStatement = db.prepare('INSERT OR REPLACE INTO Files (uri, contentVersionId) VALUES (?, ?)');
@@ -456,7 +248,10 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 							chunk.range.startColumn,
 							chunk.range.endLineNumber,
 							chunk.range.endColumn,
-							Float32Array.from(typeof chunk.embedding === 'string' ? DiskCache.decodeEmbedding(chunk.embedding) : chunk.embedding),
+							packEmbedding({
+								type: embeddingType,
+								value: typeof chunk.embedding === 'string' ? OldDiskCache.decodeEmbedding(chunk.embedding) : chunk.embedding,
+							}),
 							chunk.chunkHash ?? ''
 						);
 					}
@@ -465,7 +260,9 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 				db.exec('COMMIT');
 			}
 
-			void instantiationService.invokeFunction(accessor => DiskCache.deleteDiskCache(accessor, cacheRoot));
+			if (cacheRoot !== ':memory:') {
+				void instantiationService.invokeFunction(accessor => OldDiskCache.deleteDiskCache(accessor, cacheRoot));
+			}
 		}
 
 		// Validate all files in the database against the workspace index and remove any that are no longer present
@@ -532,8 +329,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 		if (all.length > 0) {
 			const out = new Map<string, FileChunkWithEmbedding>();
 			for (const row of all) {
-				const embeddingData = row.embedding as Uint8Array;
-				const embedding = Array.from(new Float32Array(embeddingData.buffer, embeddingData.byteOffset, embeddingData.byteLength / Float32Array.BYTES_PER_ELEMENT));
+				const embedding = unpackEmbedding(this.embeddingType, row.embedding as Uint8Array);
 
 				const chunk: FileChunkWithEmbedding = {
 					chunk: {
@@ -542,10 +338,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 						rawText: undefined,
 						range: new Range(row.range_startLineNumber as number, row.range_startColumn as number, row.range_endLineNumber as number, row.range_endColumn as number),
 					},
-					embedding: {
-						type: this.embeddingType,
-						value: embedding,
-					},
+					embedding,
 					chunkHash: row.chunkHash as string,
 				};
 				if (chunk.chunkHash) {
@@ -576,7 +369,6 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 			contentVersionId: fileIdResult.contentVersionId as string | undefined,
 			fileHash: undefined,
 			value: chunks.map((row): FileChunkWithEmbedding => {
-				const embeddingData = row.embedding as Uint8Array;
 				return {
 					chunk: {
 						file: file.uri,
@@ -584,10 +376,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 						rawText: undefined,
 						range: new Range(row.range_startLineNumber as number, row.range_startColumn as number, row.range_endLineNumber as number, row.range_endColumn as number),
 					},
-					embedding: {
-						type: this.embeddingType,
-						value: Array.from(new Float32Array(embeddingData.buffer, embeddingData.byteOffset, embeddingData.byteLength / Float32Array.BYTES_PER_ELEMENT)),
-					},
+					embedding: unpackEmbedding(this.embeddingType, row.embedding as Uint8Array),
 					chunkHash: row.chunkHash as string | undefined,
 				};
 			}),
@@ -643,8 +432,6 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 
 							this.db.exec('BEGIN TRANSACTION');
 							for (const chunk of newEntry.value ?? []) {
-								const float32Array = Float32Array.from(chunk.embedding.value);
-								const embeddingData = new Uint8Array(float32Array.buffer, float32Array.byteOffset, float32Array.byteLength);
 								insertStatement.run(
 									fileResult.lastInsertRowid as number,
 									chunk.chunk.text,
@@ -652,7 +439,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 									chunk.chunk.range.startColumn,
 									chunk.chunk.range.endLineNumber,
 									chunk.chunk.range.endColumn,
-									embeddingData,
+									packEmbedding(chunk.embedding),
 									chunk.chunkHash ?? '',
 								);
 							}
@@ -665,4 +452,54 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 
 		return chunks;
 	}
+}
+
+/**
+ * Packs the embedding into a binary value for efficient storage.
+ */
+export function packEmbedding(embedding: Embedding): Uint8Array {
+	const embeddingMetadata = getWellKnownEmbeddingTypeInfo(embedding.type);
+	if (embeddingMetadata?.quantization.document === 'binary') {
+		// Generate packed binary
+		if (embedding.value.length % 8 !== 0) {
+			throw new Error(`Embedding value length must be a multiple of 8 for ${embedding.type.id}, got ${embedding.value.length}`);
+		}
+
+		const data = new Uint8Array(embedding.value.length / 8);
+		for (let i = 0; i < embedding.value.length; i += 8) {
+			let value = 0;
+			for (let j = 0; j < 8; j++) {
+				value |= (embedding.value[i + j] >= 0 ? 1 : 0) << j;
+			}
+			data[i / 8] = value;
+		}
+		return data;
+	}
+
+	// All other formats default to float32 for now
+	const data = Float32Array.from(embedding.value);
+	return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+}
+
+/**
+ * Unpacks an embedding from a binary value packed with {@link packEmbedding}.
+ */
+export function unpackEmbedding(type: EmbeddingType, data: Uint8Array): Embedding {
+	const embeddingMetadata = getWellKnownEmbeddingTypeInfo(type);
+	if (embeddingMetadata?.quantization.document === 'binary') {
+		// Old metis versions may have stored the values as a float32
+		if (!(type.equals(EmbeddingType.metis_1024_I16_Binary) && data.length >= 1024)) {
+			const values = new Array(data.length * 8);
+			for (let i = 0; i < data.length; i++) {
+				const byte = data[i];
+				for (let j = 0; j < 8; j++) {
+					values[i * 8 + j] = (byte & (1 << j)) > 0 ? 0.03125 : -0.03125;
+				}
+			}
+			return { type, value: values };
+		}
+	}
+
+	const float32Array = new Float32Array(data.buffer, data.byteOffset, data.byteLength / 4);
+	return { type, value: Array.from(float32Array) };
 }

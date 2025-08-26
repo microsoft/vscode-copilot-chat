@@ -44,15 +44,17 @@ export function createFilepathRegexp(languageId?: string): RegExp {
  * Create a markdown code block with an optional language id and an optional file path.
  * @param filePath The file path to include in the code block. To create the file path use the {@link IPromptPathRepresentationService}
  */
-export function createFencedCodeBlock(languageId: string, code: string, shouldTrim = true, filePath?: string, minNumberOfBackticks = 3): string {
-	const fence = getFenceForCodeBlock(code, minNumberOfBackticks);
+export function createFencedCodeBlock(languageId: string, code: string, shouldTrim = true, filePath?: string, minNumberOfBackticksOrStyle: string | number = 3): string {
+	const fence = typeof minNumberOfBackticksOrStyle === 'number'
+		? getFenceForCodeBlock(code, minNumberOfBackticksOrStyle)
+		: minNumberOfBackticksOrStyle;
 
 	let filepathComment = '';
 	if (filePath) {
 		filepathComment = getFilepathComment(languageId, filePath);
 	}
 
-	return `${fence}${languageIdToMDCodeBlockLang(languageId)}\n${filepathComment}${shouldTrim ? code.trim() : code}\n${fence}`;
+	return `${fence}${fence && (languageIdToMDCodeBlockLang(languageId) + '\n')}${filepathComment}${shouldTrim ? code.trim() : code}${fence && ('\n' + fence)}`;
 }
 
 export function getFilepathComment(languageId: string, filePath: string): string {

@@ -5,6 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
+import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
@@ -20,9 +21,9 @@ import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { ActionType } from './applyPatch/parser';
 import { EditFileResult } from './editFileToolResult';
+import { createEditConfirmation } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileOkForTool } from './toolUtils';
-import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 
 export interface IEditFileParams {
 	explanation: string;
@@ -95,9 +96,12 @@ export class EditFileTool implements ICopilotTool<IEditFileParams> {
 	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IEditFileParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
-		return {
-			presentation: 'hidden'
-		};
+		const uri = this.promptPathRepresentationService.resolveFilePath(options.input.filePath);
+		return this.instantiationService.invokeFunction(
+			createEditConfirmation,
+			uri ? [uri] : [],
+			() => '```\n' + options.input.code + '\n```',
+		);
 	}
 
 	async resolveInput(input: IEditFileParams, promptContext: IBuildPromptContext): Promise<IEditFileParams> {

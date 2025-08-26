@@ -13,7 +13,9 @@ I am working in a workspace that has the following structure:
 ```
 This is the state of the context at this point in the conversation. The view of the workspace structure may be truncated. You can use tools to collect more context if needed.
 </workspace_info>
-copilot_cache_control: {"type":"ephemeral"}
+
+
+copilot_cache_control: { type: 'ephemeral' }
 ~~~
 
 
@@ -22,6 +24,7 @@ copilot_cache_control: {"type":"ephemeral"}
 <conversation-summary>
 summarized 2!
 </conversation-summary>
+
 ~~~
 
 
@@ -40,7 +43,8 @@ console.log('hi')"
 ~~~md
 🛠️ tooluse_4
 success
-copilot_cache_control: {"type":"ephemeral"}
+
+copilot_cache_control: { type: 'ephemeral' }
 ~~~
 
 
@@ -48,13 +52,11 @@ copilot_cache_control: {"type":"ephemeral"}
 ~~~md
 <attachments>
 <attachment id="file" filePath="/workspace/file.ts">
-```ts
 line 1
 line 2
 
 line 4
 line 5
-```
 </attachment>
 
 </attachments>
@@ -67,7 +69,9 @@ line 5
 <userRequest>
 edit this file
 </userRequest>
-copilot_cache_control: {"type":"ephemeral"}
+
+
+copilot_cache_control: { type: 'ephemeral' }
 ~~~
 
 
@@ -86,5 +90,6 @@ console.log('hi')"
 ~~~md
 🛠️ tooluse_5
 success
-copilot_cache_control: {"type":"ephemeral"}
+
+copilot_cache_control: { type: 'ephemeral' }
 ~~~

@@ -10,23 +10,28 @@ export const VIRTUAL_TOOL_NAME_PREFIX = 'activate_';
 
 export interface IVirtualToolMetadata {
 	toolsetKey: string;
+	possiblePrefix?: string;
 	groups: ISummarizedToolCategory[];
 	preExpanded?: boolean;
 }
 
 export class VirtualTool {
 	public isExpanded = false;
-	public contents: (LanguageModelToolInformation | VirtualTool)[] = [];
 
 	constructor(
 		public readonly name: string,
 		public readonly description: string,
 		public lastUsedOnTurn: number,
 		public readonly metadata: IVirtualToolMetadata,
+		public contents: (LanguageModelToolInformation | VirtualTool)[] = [],
 	) {
 		if (!name.startsWith(VIRTUAL_TOOL_NAME_PREFIX)) {
 			throw new Error(`Virtual tool name must start with '${VIRTUAL_TOOL_NAME_PREFIX}'`);
 		}
+	}
+
+	public cloneWithPrefix(prefix: string) {
+		return new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX + prefix + this.name.slice(VIRTUAL_TOOL_NAME_PREFIX.length), this.description, this.lastUsedOnTurn, { ...this.metadata, possiblePrefix: undefined }, this.contents);
 	}
 
 	/**

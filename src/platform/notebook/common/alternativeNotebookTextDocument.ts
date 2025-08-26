@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { Diagnostic, DiagnosticRelatedInformation, NotebookCell, NotebookDocument, NotebookDocumentContentChange, TextDocument, TextDocumentContentChangeEvent } from 'vscode';
+import type { NotebookCell, NotebookDocument, NotebookDocumentContentChange, TextDocument, TextDocumentContentChangeEvent } from 'vscode';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { findLastIdxMonotonous } from '../../../util/vs/base/common/arraysFind';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
@@ -14,14 +14,16 @@ import { PositionOffsetTransformer } from '../../editing/common/positionOffsetTr
 import { generateCellTextMarker, getBlockComment, getLineCommentStart } from './alternativeContentProvider.text';
 import { EOL, summarize } from './helpers';
 import { CrLfOffsetTranslator } from './offsetTranslator';
-import { ResourceMap } from '../../../util/vs/base/common/map';
-import { isEqual } from '../../../util/vs/base/common/resources';
 
 
 class AlternativeNotebookCellSnapshot {
 	private readonly positionTransformer: PositionOffsetTransformer;
 	private readonly crlfTranslator: CrLfOffsetTranslator;
 	public readonly lineCount: number;
+	/** Range of the alternative cell code */
+	public readonly altRange: Range;
+	/** Last line in the actual cell code */
+	private readonly lastLineLength: number;
 	public static fromNotebookCell(cell: NotebookCell, blockComment: [string, string], lineCommentStart: string): AlternativeNotebookCellSnapshot {
 		const summary = summarize(cell);
 		const cellMarker = generateCellTextMarker(summary, lineCommentStart);
@@ -40,7 +42,10 @@ class AlternativeNotebookCellSnapshot {
 	) {
 		this.crlfTranslator = new CrLfOffsetTranslator(cell.document.getText(), cell.document.eol);
 		this.positionTransformer = new PositionOffsetTransformer(`${prefix}${code}${suffix}`);
-		this.lineCount = this.positionTransformer.getLineCount();
+		const lastPosition = this.positionTransformer.getPosition(this.positionTransformer.getText().length);
+		this.altRange = new Range(0, 0, lastPosition.line, lastPosition.character);
+		this.lineCount = this.altRange.end.line + 1;
+		this.lastLineLength = this.suffix.length === 0 ? this.altRange.end.character : this.positionTransformer.getPosition(this.positionTransformer.getText().length - this.suffix.length).character;
 	}
 
 	public normalizeEdits(edits: readonly TextDocumentContentChangeEvent[]): TextDocumentContentChangeEvent[] {
@@ -91,27 +96,41 @@ class AlternativeNotebookCellSnapshot {
 		const endPosition = this.positionTransformer.getPosition(endOffset);
 
 		// Remove the lines we've added for the cell marker and block comments
-		const extraLinesAdded = this.cell.kind === NotebookCellKind.Markup ? 2 : 1;
+		const extraLinesAddedAtStart = this.cell.kind === NotebookCellKind.Markup ? 2 : 1;
+		const extraLinesAddedAtEnd = this.cell.kind === NotebookCellKind.Markup ? 1 : 0;
 
-		const startLine = Math.max(startPosition.line - extraLinesAdded, 0);
-		const endLine = Math.max(endPosition.line - extraLinesAdded, 0);
+		const startLine = Math.max(startPosition.line - extraLinesAddedAtStart, 0);
+		const lastLineIndex = (this.lineCount - extraLinesAddedAtEnd) - 1;
+		let endLine = endPosition.line;
 		let endLineEndColumn = endPosition.character;
-		if (endLine === (this.lineCount - extraLinesAdded)) {
-			const lastPosition = this.positionTransformer.getPosition(this.positionTransformer.getText().length); // Ensure the transformer has the correct line count
-			const lastLineLength = lastPosition.character;
-			if (lastLineLength < endLineEndColumn) {
-				endLineEndColumn = lastLineLength;
+		if (endLine > lastLineIndex) {
+			endLineEndColumn = endLineEndColumn === 0 ? endLineEndColumn : -1;
+			endLine = lastLineIndex - extraLinesAddedAtStart;
+		} else {
+			endLine = Math.max(endPosition.line - extraLinesAddedAtStart, 0);
+		}
+		if (endLine === (lastLineIndex - extraLinesAddedAtStart)) {
+			if (endLineEndColumn !== 0 && endLineEndColumn === -1 || this.lastLineLength < endLineEndColumn) {
+				endLineEndColumn = this.lastLineLength;
 			}
 		}
-		return new Range(startLine, startPosition.character, endLine, endLineEndColumn);
+		// If the original start was in a line that part of the prefix, then we need to start from line 0, character 0.
+		const startCharacter = startPosition.line - extraLinesAddedAtStart >= 0 ? startPosition.character : 0;
+		return new Range(startLine, startCharacter, endLine, endLineEndColumn);
 	}
 	public fromAltRange(range: Range): Range {
 		// Remove the lines we've added for the cell marker and block comments
 		const extraLinesAdded = this.cell.kind === NotebookCellKind.Markup ? 2 : 1;
+		const extraLinesAddedAtEnd = this.cell.kind === NotebookCellKind.Markup ? 1 : 0;
 
 		const startLine = Math.max(range.start.line - extraLinesAdded, 0);
-		const endLine = Math.max(range.end.line - extraLinesAdded, 0);
-		return new Range(startLine, range.start.character, endLine, range.end.character);
+		const isInvalidStartLine = extraLinesAdded ? (range.start.line + 1) <= extraLinesAdded : false;
+		const startCharacter = isInvalidStartLine ? 0 : range.start.character;
+		const isEndLineInvalid = extraLinesAddedAtEnd > 0 && (range.end.line === this.lineCount - 1);
+		const endLine = isEndLineInvalid ? (this.lineCount - extraLinesAdded - extraLinesAddedAtEnd - 1) : Math.max(range.end.line - extraLinesAdded, 0);
+		const lastLineIndex = (this.lineCount - extraLinesAdded - extraLinesAddedAtEnd) - 1;
+		const endLineCharacter = isEndLineInvalid ? this.lastLineLength : (endLine === lastLineIndex) ? Math.min(range.end.character, this.lastLineLength) : range.end.character;
+		return new Range(startLine, startCharacter, endLine, endLineCharacter);
 	}
 }
 
@@ -178,14 +197,12 @@ abstract class AbstractAlternativeNotebookDocument {
 				const cellEnd = cellEndLine <= (altCell.lineCount - 1) ? cellEndLine : altCell.lineCount - 1;
 				let cellEndChar = range.end.character;
 				if (cellEnd !== cellEndLine) {
-					const offset = altCell.toAltRange(altCell.fromAltOffsetRange(new OffsetRange(altCell.altText.length, altCell.altText.length)));
-					cellEndChar = offset.end.character;
+					cellEndChar = altCell.altRange.end.character;
 				}
 				const cellRange = new Range(cellStartLine, range.start.character, cellEnd, cellEndChar);
 				cells.push([altCell.cell, altCell.fromAltRange(cellRange)]);
 			} else if (startLine + altCell.lineCount <= range.end.line) {
-				const endPos = altCell.toAltRange(altCell.fromAltOffsetRange(new OffsetRange(altCell.altText.length, altCell.altText.length)));
-				const cellRange = new Range(0, 0, endPos.end.line, endPos.end.character);
+				const cellRange = new Range(0, 0, altCell.altRange.end.line, altCell.altRange.end.character);
 				cells.push([altCell.cell, altCell.fromAltRange(cellRange)]);
 			} else if (startLine < range.end.line) {
 				const cellRange = new Range(0, 0, range.end.line - startLine, range.end.character);
@@ -451,40 +468,4 @@ function toAltCellTextDocumentContentChangeEvents(notebook: AbstractAlternativeN
 			text: e.text.replace(/\r\n|\n/g, EOL), // Normalize line endings to EOL
 		} as typeof e;
 	}));
-}
-
-export function toAltDiagnostics(notebook: AbstractAlternativeNotebookDocument, cell: NotebookCell, diagnostics: readonly Diagnostic[]): Diagnostic[] {
-	const cellUris = new ResourceMap(notebook.cells.map(cell => [cell.altCell.cell.document.uri, cell.altCell.cell] as const));
-	if (!cellUris.get(cell.document.uri)) {
-		return [];
-	}
-	return coalesce(diagnostics.map(diagnostic => toAltDiagnostic(notebook, cell, diagnostic)));
-}
-
-function toAltDiagnostic(notebook: AbstractAlternativeNotebookDocument, cell: NotebookCell, diagnostic: Diagnostic): Diagnostic | undefined {
-	const altDiagnostic = { ...diagnostic };
-	const altRanges = notebook.toAltRange(cell, [diagnostic.range]);
-	if (!altRanges.length) {
-		return;
-	}
-	altDiagnostic.range = altRanges[0];
-	if (altDiagnostic.relatedInformation) {
-		altDiagnostic.relatedInformation = coalesce(altDiagnostic.relatedInformation.map(info => {
-			if (!isEqual(info.location.uri, cell.document.uri)) {
-				return info;
-			}
-			const altRange = notebook.toAltRange(cell, [info.location.range]);
-			if (!altRange.length) {
-				return;
-			}
-			return {
-				...info,
-				location: {
-					uri: notebook.notebook.uri,
-					range: altRange[0],
-				},
-			} satisfies DiagnosticRelatedInformation;
-		}));
-	}
-	return altDiagnostic;
 }

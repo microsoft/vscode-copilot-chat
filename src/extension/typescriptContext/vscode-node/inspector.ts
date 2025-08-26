@@ -392,7 +392,7 @@ class TreeContextRequest {
 		this.summary = event.summary;
 		const start = new Date(Date.now() - this.summary.totalTime);
 		const timeString = `${start.getMinutes().toString().padStart(2, '0')}:${start.getSeconds().toString().padStart(2, '0')}.${start.getMilliseconds().toString().padStart(3, '0')}`;
-		this.label = `[${timeString}] - [${this.position.line + 1}:${this.position.character + 1}] ${label} - ${this.summary.stats.yielded} items`;
+		this.label = `[${timeString}] - [${this.position.line + 1}:${this.position.character + 1}] ${event.source ?? label} - ${this.summary.stats.yielded} items`;
 		if (this.summary.serverComputed && this.summary.serverComputed.size > 0) {
 			this.label += ` - ⏳ ${this.summary.totalTime}ms`;
 		} else {

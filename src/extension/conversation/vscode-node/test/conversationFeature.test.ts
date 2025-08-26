@@ -15,7 +15,7 @@ import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/
 import { IGitCommitMessageService, NoopGitCommitMessageService } from '../../../../platform/git/common/gitCommitMessageService';
 import { ISettingsEditorSearchService, NoopSettingsEditorSearchService } from '../../../../platform/settingsEditor/common/settingsEditorSearchService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
-import { setCopilotToken } from '../../../../platform/test/node/testAuthenticationService';
+import { setCopilotToken } from '../../../../platform/authentication/common/staticGitHubAuthenticationService';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IIntentService, IntentService } from '../../../intents/node/intentService';
@@ -28,7 +28,7 @@ suite('Conversation feature test suite', function () {
 	let instaService: IInstantiationService;
 	let sandbox: sinon.SinonSandbox;
 
-	function createAccessor(vscodeExtensionContext?: IVSCodeExtensionContext) {
+	function createAccessor() {
 		const testingServiceCollection = createExtensionTestingServices();
 		testingServiceCollection.define(ICombinedEmbeddingIndex, new SyncDescriptor(VSCodeCombinedIndexImpl, [/*useRemoteCache*/ false]));
 		testingServiceCollection.define(INewWorkspacePreviewContentManager, new SyncDescriptor(NewWorkspacePreviewContentManagerImpl));
@@ -36,9 +36,6 @@ suite('Conversation feature test suite', function () {
 		testingServiceCollection.define(IDevContainerConfigurationService, new FailingDevContainerConfigurationService());
 		testingServiceCollection.define(IIntentService, new SyncDescriptor(IntentService));
 		testingServiceCollection.define(ISettingsEditorSearchService, new SyncDescriptor(NoopSettingsEditorSearchService));
-		if (vscodeExtensionContext) {
-			testingServiceCollection.define(IVSCodeExtensionContext, vscodeExtensionContext);
-		}
 
 		accessor = testingServiceCollection.createTestingAccessor();
 		instaService = accessor.get(IInstantiationService);
@@ -81,13 +78,6 @@ suite('Conversation feature test suite', function () {
 	});
 
 	test('The feature is enabled and activated in test mode', function () {
-		createAccessor({
-			_serviceBrand: undefined,
-			extension: { id: 'GitHub.copilot-chat' },
-			extensionMode: vscode.ExtensionMode.Test,
-			subscriptions: [],
-		} as unknown as IVSCodeExtensionContext);
-
 		const conversationFeature = instaService.createInstance(ConversationFeature);
 		try {
 			const copilotToken = new CopilotToken({ token: 'token', expires_at: 0, refresh_in: 0, username: 'fake', isVscodeTeamMember: false, chat_enabled: true, copilot_plan: 'unknown' });

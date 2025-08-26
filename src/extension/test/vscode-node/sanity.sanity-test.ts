@@ -11,6 +11,7 @@ import { timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import type { LMResponsePart } from '../../byok/common/byokProvider';
 import { Intent } from '../../common/constants';
 import { ConversationFeature } from '../../conversation/vscode-node/conversationFeature';
 import { IConversationStore } from '../../conversationStore/node/conversationStore';
@@ -156,8 +157,8 @@ suite.skip('Copilot Chat Sanity Test', function () {
 
 		await realInstaAccessor.invokeFunction(async (accessor) => {
 
-			const r = vscode.lm.registerChatModelProvider('test', new class implements vscode.LanguageModelChatProvider2 {
-				async prepareLanguageModelChat(options: { silent: boolean }, token: vscode.CancellationToken): Promise<vscode.LanguageModelChatInformation[]> {
+			const r = vscode.lm.registerLanguageModelChatProvider('test', new class implements vscode.LanguageModelChatProvider {
+				async prepareLanguageModelChatInformation(options: { silent: boolean }, token: vscode.CancellationToken): Promise<vscode.LanguageModelChatInformation[]> {
 					return [{
 						id: 'test',
 						name: 'test',
@@ -168,7 +169,7 @@ suite.skip('Copilot Chat Sanity Test', function () {
 						auth: true
 					}];
 				}
-				async provideLanguageModelChatResponse(model: vscode.LanguageModelChatInformation, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.LanguageModelChatRequestHandleOptions, progress: vscode.Progress<vscode.ChatResponseFragment2>, token: vscode.CancellationToken): Promise<any> {
+				async provideLanguageModelChatResponse(model: vscode.LanguageModelChatInformation, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.LanguageModelChatRequestHandleOptions, progress: vscode.Progress<LMResponsePart>, token: vscode.CancellationToken): Promise<any> {
 					throw new Error('Method not implemented.');
 				}
 				async provideTokenCount(model: vscode.LanguageModelChatInformation, text: string | vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2, token: vscode.CancellationToken): Promise<number> {

@@ -160,6 +160,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		let targetDocumentId = docId;
 
 		const cacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheDelay, this._expService);
+		const minimumResponseDelay = cacheDelay;
 
 		if (recentlyShownCachedEdit) {
 			tracer.trace('using recently shown cached edit');
@@ -174,8 +175,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			// back-date the recording bookmark of the cached edit to the bookmark of the original request.
 			logContext.recordingBookmark = req.log.recordingBookmark;
 
-			await timeout(cacheDelay);
-
 		} else if (cachedEdit) {
 			tracer.trace('using cached edit');
 			edit = cachedEdit.rebasedEdit || cachedEdit.edit;
@@ -187,8 +186,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			telemetryBuilder.setSubsequentEditOrder(cachedEdit.rebasedEditIndex ?? cachedEdit.subsequentN);
 			// back-date the recording bookmark of the cached edit to the bookmark of the original request.
 			logContext.recordingBookmark = req.log.recordingBookmark;
-
-			await timeout(cacheDelay);
 
 		} else {
 			tracer.trace('fetching next edit');
@@ -233,6 +230,9 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			}
 		}
 
+		const fetchLatency = Date.now() - this._lastTriggerTime;
+		await timeout(minimumResponseDelay - fetchLatency);
+
 		telemetryBuilder.markEndTime();
 
 		if (throwingError) {
@@ -247,7 +247,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			return nextEditResult;
 		}
 
-		if (this._rejectionCollector.isRejected(docId, edit) || currentDocument && this._nextEditCache.isRejectedNextEdit(docId, currentDocument, edit, nesConfigs)) {
+		if (this._rejectionCollector.isRejected(targetDocumentId, edit) || currentDocument && this._nextEditCache.isRejectedNextEdit(targetDocumentId, currentDocument, edit, nesConfigs)) {
 			tracer.trace('edit was previously rejected');
 			telemetryBuilder.setStatus('previouslyRejected');
 			telemetryBuilder.setWasPreviouslyRejected();
@@ -263,7 +263,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		if (nesConfigs.isRecentlyShownCacheEnabled && !edit.isEmpty) {
 			tracer.trace('edit is not neutral');
-			this._recentlyShownCache.add(docId, currentDocument, [edit, req]);
+			this._recentlyShownCache.add(targetDocumentId, currentDocument, [edit, req]);
 		}
 
 		tracer.trace('returning next edit result');

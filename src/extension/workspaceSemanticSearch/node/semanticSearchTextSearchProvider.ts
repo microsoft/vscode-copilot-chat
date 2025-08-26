@@ -232,7 +232,6 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 						messageId: generateUuid(),
 						messageSource: 'search.workspace'
 					},
-					{ intent: true }
 				);
 				SemanticSearchTextSearchProvider.feedBackTelemetry.llmFilteringDuration = Date.now() - llmFilteringDuration;
 				searchResult = fetchResult.type === 'success' ? fetchResult.value : (fetchResult.type === 'length' ? fetchResult.truncatedValue : '');
@@ -481,7 +480,6 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 					messageId: generateUuid(),
 					messageSource: 'search.keywords'
 				},
-				{ intent: true }
 			);
 			const keywordResult = fetchResult.type === 'success' ? fetchResult.value : (fetchResult.type === 'length' ? fetchResult.truncatedValue : '');
 			const usedResults = [];

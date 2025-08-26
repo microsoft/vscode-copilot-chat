@@ -2,7 +2,7 @@
 	{
 		"name": "codeMapper [context] [json] - make changes in package.json",
 		"requests": [
-			"412404678503cceed20ed0d02d73393354b6bf6a35715edee46a37b45d9a84bb"
+			"2220e065be5c2c015214bbf2b5183666de4713ae8d88a04a7b8007e18d06574f"
 		]
 	},
 	{
@@ -24,13 +24,13 @@
 	{
 		"name": "codeMapper [context] [typescript] - add import",
 		"requests": [
-			"1a705e29b4ac217a2304f6a4c2e8bc428040e70ec4fdf22dcf7d9a496560f0b1"
+			"002e35ab9aa44155e2f617da3bdea0e2054867740ad36cbca0b7fd7b6b039339"
 		]
 	},
 	{
 		"name": "codeMapper [context] [typescript] - add new function at location 1",
 		"requests": [
-			"0817d56b44cc6afdfa272237b5acaace2ae7caea923453ff2f3d41d0b3d6f6e3"
+			"1452e6c5032640967ae9837e5c1aac3a11a2fa619ef7e01dda110fac610d6eab"
 		]
 	},
 	{
@@ -48,19 +48,19 @@
 	{
 		"name": "codeMapper [context] [typescript] - does not remove stale imports #11766",
 		"requests": [
-			"b991c4a15c3740cfc8fb2736fb78db82a8978f6d91553f767eca0d7dd3e0d2c1"
+			"2a838769ab5e4f073f52c7dc8884a6295c8c5a3c0522a8b7beb4d5c380c24da2"
 		]
 	},
 	{
 		"name": "codeMapper [context] [typescript] - modify function",
 		"requests": [
-			"9fc5b5d477743076f3800f986cf77222d480f686bd562acff16e51c2203b800a"
+			"668289030f52390e55f98cfefd4ab08b6ae87fcb427886a8f26e7ed22aa1bf04"
 		]
 	},
 	{
 		"name": "codeMapper [context] [typescript] - move to class",
 		"requests": [
-			"0847b3d498b7c545db983085a5bfd562b093521a23de040a7ab56231720eb0ff"
+			"b2aa04fc97bcb1e29939090028761d5931f9ce3caf7d99da66b88d8b8e2bc063"
 		]
 	},
 	{
@@ -72,7 +72,7 @@
 	{
 		"name": "codeMapper [context] [typescript] - replace statement with ident change",
 		"requests": [
-			"b4fab8f28cc320bc7aed4f12373eeaf9a7a1df567c64ced1b1facb8bb83d1762"
+			"f26edaecfd2042095cd8d7cc4a5b5d510c19c01a47bfe189b59538eca8ea4a1a"
 		]
 	},
 	{

@@ -4,8 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ChatResponseReferencePartStatusKind } from '@vscode/prompt-tsx';
-import type { ChatResponseFileTree, ChatResponseStream, ChatVulnerability, Command, ExtendedChatResponsePart, Location, NotebookEdit, Progress, Uri } from 'vscode';
-import { ChatResponseAnchorPart, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseWarningPart, MarkdownString, TextEdit, ChatPrepareToolInvocationPart } from '../../vscodeTypes';
+import type { ChatResponseFileTree, ChatResponseStream, ChatVulnerability, Command, ExtendedChatResponsePart, Location, NotebookEdit, Progress, ThinkingDelta, Uri } from 'vscode';
+import { ChatPrepareToolInvocationPart, ChatResponseAnchorPart, ChatResponseClearToPreviousToolInvocationReason, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseWarningPart, MarkdownString, TextEdit } from '../../vscodeTypes';
 import type { ThemeIcon } from '../vs/base/common/themables';
 
 
@@ -29,8 +29,9 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 			(value) => {
 				callback(value);
 				stream.push(value);
-			},
-			() => {
+			}, (reason) => {
+				stream.clearToPreviousToolInvocation(reason);
+			}, () => {
 				finalize?.();
 				return tryFinalizeResponseStream(stream);
 			}
@@ -42,6 +43,8 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 			if (callback(value)) {
 				stream.push(value);
 			}
+		}, (reason) => {
+			stream.clearToPreviousToolInvocation(reason);
 		}, () => {
 			finalize?.();
 			return tryFinalizeResponseStream(stream);
@@ -50,11 +53,16 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 
 	constructor(
 		private readonly _push: (part: ExtendedChatResponsePart) => void,
-		private readonly _finalize?: () => void | Promise<void>
+		private readonly _clearToPreviousToolInvocation: (reason: ChatResponseClearToPreviousToolInvocationReason) => void,
+		private readonly _finalize?: () => void | Promise<void>,
 	) { }
 
 	async finalize(): Promise<void> {
 		await this._finalize?.();
+	}
+
+	clearToPreviousToolInvocation(reason: ChatResponseClearToPreviousToolInvocationReason): void {
+		this._clearToPreviousToolInvocation(reason);
 	}
 
 	markdown(value: string | MarkdownString): void {
@@ -63,6 +71,10 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 
 	anchor(value: Uri | Location, title?: string | undefined): void {
 		this._push(new ChatResponseAnchorPart(value, title));
+	}
+
+	thinkingProgress(thinkingDelta: ThinkingDelta): void {
+		this._push(new ChatResponseThinkingProgressPart(thinkingDelta.text ?? '', thinkingDelta.id, thinkingDelta.metadata));
 	}
 
 	button(command: Command): void {

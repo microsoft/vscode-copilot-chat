@@ -29,7 +29,7 @@ export class GeminiBYOKLMProvider extends BaseOpenAICompatibleLMProvider {
 			byokStorageService,
 			_fetcherService,
 			_logService,
-			_instantiationService
+			_instantiationService,
 		);
 	}
 }

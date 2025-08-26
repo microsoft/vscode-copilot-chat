@@ -57,7 +57,7 @@ exports[`FileVariable > does include known untitled file 1`] = `
                           {
                             "type": 2,
                             "priority": 9007199254740991,
-                            "text": "\`\`\`python\\ntest!\\n\`\`\`",
+                            "text": "test!",
                             "references": [
                               {
                                 "anchor": {

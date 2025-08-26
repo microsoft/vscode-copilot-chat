@@ -27,7 +27,8 @@ import { EditSurvivalTrackerService, IEditSurvivalTrackerService } from '../../.
 import { IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
 import { RemoteEmbeddingsComputer } from '../../../platform/embeddings/common/remoteEmbeddingsComputer';
 import { ICombinedEmbeddingIndex, VSCodeCombinedIndexImpl } from '../../../platform/embeddings/common/vscodeIndex';
-import { IEnvService } from '../../../platform/env/common/envService';
+import { AutomodeService, IAutomodeService } from '../../../platform/endpoint/common/automodeService';
+import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { EnvServiceImpl } from '../../../platform/env/vscode/envServiceImpl';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IExtensionsService } from '../../../platform/extensions/common/extensionsService';
@@ -107,6 +108,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	const isTestMode = extensionContext.extensionMode === ExtensionMode.Test;
 
 	builder.define(IInteractionService, new SyncDescriptor(InteractionService));
+	builder.define(IAutomodeService, new SyncDescriptor(AutomodeService));
 	builder.define(ICopilotTokenStore, new CopilotTokenStore());
 	builder.define(IDebugOutputService, new DebugOutputServiceImpl());
 	builder.define(IDialogService, new DialogServiceImpl());
@@ -121,8 +123,8 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ITabsAndEditorsService, new TabsAndEditorsServiceImpl());
 	builder.define(ITerminalService, new SyncDescriptor(TerminalServiceImpl));
 	builder.define(ITestProvider, new SyncDescriptor(TestProvider));
-	builder.define(IUrlOpener, isTestMode ? new NullUrlOpener() : new RealUrlOpener());
-	builder.define(INotificationService, isTestMode ? new NullNotificationService() : new NotificationService());
+	builder.define(IUrlOpener, isTestMode && !isScenarioAutomation ? new NullUrlOpener() : new RealUrlOpener());
+	builder.define(INotificationService, isTestMode && !isScenarioAutomation ? new NullNotificationService() : new NotificationService());
 	builder.define(IVSCodeExtensionContext, <any>/*force _serviceBrand*/extensionContext);
 	builder.define(IWorkbenchService, new WorkbenchServiceImpl());
 	builder.define(IConversationOptions, {

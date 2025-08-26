@@ -17,6 +17,7 @@ import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/commo
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { FindTextInFilesTool } from '../findTextInFilesTool';
+import { MarkdownString } from '../../../../util/vs/base/common/htmlContent';
 
 suite('FindTextInFiles', () => {
 	let accessor: ITestingServicesAccessor;
@@ -71,6 +72,14 @@ suite('FindTextInFiles', () => {
 
 		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
 		await tool.invoke({ input: { query: 'hello', includePattern: workspaceFolder }, toolInvocationToken: null!, }, CancellationToken.None);
+	});
+
+	test('escapes backtick', async () => {
+		setup(new RelativePattern(URI.file(workspaceFolder), ''));
+
+		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
+		const prepared = await tool.prepareInvocation({ input: { query: 'hello `world`' }, }, CancellationToken.None);
+		expect((prepared?.invocationMessage as any as MarkdownString).value).toMatchInlineSnapshot(`"Searching text for \`\` hello \`world\` \`\`"`);
 	});
 });
 

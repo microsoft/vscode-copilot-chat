@@ -308,6 +308,7 @@ export class SSEProcessor {
 			// but is echoing internal function call messages back to us. So don't treat them as real function calls
 			// if we received more data after that
 			let allowCompletingSolution = true;
+			let thinkingFound = false;
 
 			for (const dataLine of dataLines) {
 				// Lines which start with a `:` are SSE Comments per the spec and can be ignored
@@ -316,6 +317,7 @@ export class SSEProcessor {
 				}
 				const lineWithoutData = dataLine.slice('data:'.length).trim();
 				if (lineWithoutData === '[DONE]') {
+					thinkingFound = false;
 					yield* this.finishSolutions();
 					return;
 				}
@@ -396,6 +398,9 @@ export class SSEProcessor {
 
 
 					const thinkingDelta = extractThinkingDeltaFromChoice(choice);
+
+					// Once we observe any thinking text or an id in this batch, keep the flag true
+					thinkingFound ||= !!(thinkingDelta?.text || thinkingDelta?.id);
 
 					if (!(choice.index in this.solutions)) {
 						this.solutions[choice.index] = new APIJsonDataStreaming();
@@ -509,7 +514,7 @@ export class SSEProcessor {
 						this.completedFunctionCallIdxs.set(choice.index, 'tool');
 						const toolId = toolCalls.length > 0 ? toolCalls[0].id : undefined;
 						try {
-							if (await emitSolution({ toolCalls: toolCalls, thinking: { text: '', metadata: toolId } })) {
+							if (await emitSolution({ toolCalls: toolCalls, thinking: (toolId && thinkingFound) ? { metadata: toolId } : undefined })) {
 								continue;
 							}
 						} catch (error) {

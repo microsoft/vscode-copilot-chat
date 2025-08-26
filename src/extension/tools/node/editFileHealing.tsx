@@ -19,6 +19,7 @@
 // eslint-disable-next-line header/header
 import { Raw } from '@vscode/prompt-tsx';
 import * as JSONC from 'jsonc-parser';
+import type { LanguageModelChat } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes.js';
 import { ObjectJsonSchema } from '../../../platform/configuration/common/jsonSchema.js';
 import { IChatEndpoint } from '../../../platform/networking/common/networking.js';
@@ -62,6 +63,7 @@ function matchAndCount(currentContent: string, oldString: string, eol: string) {
  *          EditToolParams (as CorrectedEditParams) and the final occurrences count.
  */
 export async function healReplaceStringParams(
+	model: LanguageModelChat | undefined,
 	currentContent: string,
 	originalParams: IReplaceStringToolParams & { expected_replacements?: number }, // This is the EditToolParams from edit.ts, without \'corrected\'
 	eol: string,
@@ -69,6 +71,7 @@ export async function healReplaceStringParams(
 	token: CancellationToken,
 ): Promise<CorrectedEditResult> {
 	let finalNewString = originalParams.newString!;
+	const unescapeStringForGeminiBug = model?.family.includes('gemini') ? _unescapeStringForGeminiBug : (s: string) => s;
 	const newStringPotentiallyEscaped =
 		unescapeStringForGeminiBug(originalParams.newString!) !==
 		originalParams.newString;
@@ -198,25 +201,6 @@ export async function healReplaceStringParams(
 		occurrences: count(currentContent, finalOldString), // Recalculate occurrences with the final oldString
 	};
 	return result;
-}
-
-export async function ensureCorrectFileContent(
-	content: string,
-	healEndpoint: IChatEndpoint,
-	token: CancellationToken,
-): Promise<string> {
-	const contentPotentiallyEscaped =
-		unescapeStringForGeminiBug(content) !== content;
-	if (!contentPotentiallyEscaped) {
-		return content;
-	}
-
-	const correctedContent = await correctStringEscaping(
-		content,
-		healEndpoint,
-		token,
-	);
-	return correctedContent;
 }
 
 // Define the expected JSON schema for the LLM response for oldString correction
@@ -520,7 +504,7 @@ function trimPairIfPossible(
 /**
  * Unescapes a string that might have been overly escaped by an LLM.
  */
-export function unescapeStringForGeminiBug(inputString: string): string {
+export function _unescapeStringForGeminiBug(inputString: string): string {
 	// Regex explanation:
 	// \\ : Matches exactly one literal backslash character.
 	// (n|t|r|'|"|`|\\|\n) : This is a capturing group. It matches one of the following:
