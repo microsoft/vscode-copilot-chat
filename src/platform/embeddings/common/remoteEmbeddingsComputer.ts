@@ -44,11 +44,11 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 		options?: ComputeEmbeddingsOptions,
 		telemetryInfo?: TelemetryCorrelationId,
 		cancellationToken?: CancellationToken,
-	): Promise<Embeddings | undefined> {
+	): Promise<Embeddings> {
 		return logExecTime(this._logService, 'RemoteEmbeddingsComputer::computeEmbeddings', async () => {
 			const token = (await this._authService.getAnyGitHubSession({ silent: true }))?.accessToken;
 			if (!token) {
-				return undefined;
+				throw new Error('No authentication token available');
 			}
 
 			const embeddingsOut: Embedding[] = [];
@@ -104,7 +104,7 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 						batchInputLength: batch.length,
 						statusCode: response.status,
 					});
-					return undefined;
+					throw new Error(`Error fetching embeddings: ${response.status}`);
 				}
 
 				type EmbeddingResponse = {
@@ -116,6 +116,10 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 				const resolvedType = new EmbeddingType(jsonResponse.embedding_model);
 				if (!resolvedType.equals(embeddingType)) {
 					throw new Error(`Unexpected embedding model. Got: ${resolvedType}. Expected: ${embeddingType}`);
+				}
+
+				if (batch.length !== jsonResponse.embeddings.length) {
+					throw new Error(`Mismatched embedding result count. Expected: ${batch.length}. Got: ${jsonResponse.embeddings.length}`);
 				}
 
 				embeddingsOut.push(...jsonResponse.embeddings.map(embedding => ({

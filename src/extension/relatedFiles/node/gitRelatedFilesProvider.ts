@@ -154,9 +154,6 @@ export class GitRelatedFilesProvider extends Disposable implements vscode.ChatRe
 		const commitMessages = commitsToComputeEmbeddingsFor.map((commit) => commit.commit.message);
 		const text = prompt ? [prompt, ...commitMessages] : commitMessages;
 		const result = await this._embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, text, {}, new TelemetryCorrelationId('GitRelatedFilesProvider::computeCommitMessageEmbeddings'), token);
-		if (!result) {
-			return undefined;
-		}
 
 		const embeddings = result.values;
 		const promptEmbedding = prompt ? embeddings[0] : undefined;

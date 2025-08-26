@@ -110,7 +110,7 @@ abstract class RelatedInformationProviderEmbeddingsIndex<V extends { key: string
 		const startOfEmbeddingRequest = Date.now();
 		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [query], {}, new TelemetryCorrelationId('RelatedInformationProviderEmbeddingsIndex::provideRelatedInformation'), token);
 		this._logService.debug(`Related Information: Remote similarly request took ${Date.now() - startOfEmbeddingRequest}ms`);
-		if (token.isCancellationRequested || !embeddingResult || !embeddingResult.values[0]) {
+		if (token.isCancellationRequested) {
 			// return an array of 0s the same length as comparisons
 			this._logService.debug(`Related Information: Request cancelled or no embeddings computed, returning ${Date.now() - similarityStart}ms`);
 			return [];

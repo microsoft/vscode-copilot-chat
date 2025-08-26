@@ -70,7 +70,7 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 		options: ComputeEmbeddingsOptions,
 		telemetryInfo?: TelemetryCorrelationId,
 		token?: CancellationToken,
-	): Promise<Embeddings | undefined> {
+	): Promise<Embeddings> {
 		const embeddingEntries = new Map<string, Embedding>();
 		const nonCached: string[] = [];
 
@@ -91,9 +91,6 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 
 		if (nonCached.length) {
 			const embeddingsResult = await super.computeEmbeddings(type, nonCached, options, telemetryInfo, token);
-			if (!embeddingsResult) {
-				return undefined;
-			}
 
 			// Update the cache with the newest entries
 			for (let i = 0; i < nonCached.length; i++) {
@@ -108,10 +105,9 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 		const out: Embedding[] = [];
 		for (const input of inputs) {
 			const embedding = embeddingEntries.get(input);
-			if (!embedding) {
-				return undefined;
+			if (embedding) {
+				out.push(embedding);
 			}
-			out.push(embedding);
 		}
 		return { type, values: out };
 	}
