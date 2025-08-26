@@ -7,7 +7,9 @@ import { Command, commands, ThemeIcon, window } from 'vscode';
 import { ConfigKey } from '../../../../platform/configuration/common/configurationService';
 import { InlineEditRequestLogContext } from '../../../../platform/inlineEdits/common/inlineEditLogContext';
 import { TsExpr } from '../../../../platform/inlineEdits/common/utils/tsExpr';
+import { IFetcherService } from '../../../../platform/networking/common/fetcherService';
 import { LogEntry } from '../../../../platform/workspaceRecorder/common/workspaceLog';
+import { Result } from '../../../../util/common/result';
 import { assertNever } from '../../../../util/vs/base/common/assert';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { IObservable, ISettableObservable } from '../../../../util/vs/base/common/observableInternal';
@@ -16,6 +18,7 @@ import { openIssueReporter } from '../../../conversation/vscode-node/feedbackRep
 import { XtabProvider } from '../../../xtab/node/xtabProvider';
 import { defaultNextEditProviderId } from '../../node/createNextEditProvider';
 import { DebugRecorder } from '../../node/debugRecorder';
+import { createPrivateGist, GistResponse } from '../utils/gist';
 
 export const reportFeedbackCommandId = 'github.copilot.debug.inlineEdit.reportFeedback';
 const pickProviderId = 'github.copilot.debug.inlineEdit.pickProvider';
@@ -29,12 +32,15 @@ export class InlineEditDebugComponent extends Disposable {
 		private readonly _inlineEditsEnabled: IObservable<boolean>,
 		private readonly _debugRecorder: DebugRecorder,
 		private readonly _inlineEditsProviderId: ISettableObservable<string | undefined>,
+		private readonly _fetcherService: IFetcherService
 	) {
 		super();
 
 		this._register(commands.registerCommand(reportFeedbackCommandId, async (args: { logContext: InlineEditRequestLogContext }) => {
 			if (!this._inlineEditsEnabled.get()) { return; }
 			const isInternalUser = this._internalActionsEnabled.get();
+
+			let logFilteredForSensitiveFiles: LogEntry[] | undefined;
 
 			const data = new SimpleMarkdownBuilder();
 
@@ -56,7 +62,7 @@ export class InlineEditDebugComponent extends Disposable {
 					if (log === undefined) {
 						sectionContent = ['Could not get recording to generate stest (likely because there was no corresponding workspaceRoot for this file)'];
 					} else {
-						const logFilteredForSensitiveFiles = filterLogForSensitiveFiles(log);
+						logFilteredForSensitiveFiles = filterLogForSensitiveFiles(log);
 						hasRemovedSensitiveFilesFromHistory = log.length !== logFilteredForSensitiveFiles.length;
 						const stest = generateSTest(logFilteredForSensitiveFiles);
 
@@ -79,10 +85,39 @@ export class InlineEditDebugComponent extends Disposable {
 				}
 			}
 
+			const dataString = data.toString();
+
+			const files: Record<string, { content: string }> = {
+				'report.md': {
+					content: dataString,
+				}
+			};
+			if (logFilteredForSensitiveFiles) {
+				files['recording.w.json'] = {
+					content: JSON.stringify(logFilteredForSensitiveFiles)
+				};
+			}
+
+			const gistResult = await this._createPrivateGist('Inline Edits Debug Report', {
+				reportFileContents: dataString,
+				recordingFileContents: logFilteredForSensitiveFiles ? JSON.stringify(logFilteredForSensitiveFiles) : undefined
+			});
+
+			let issueBody = `# Description\n\nPlease describe the expected outcome and attach a screenshot!`;
+
+			if (gistResult.isOk()) {
+				issueBody += `\n## [Report Gist](${gistResult.val.htmlUrl})`;
+				if (gistResult.val.recordingRawUrl) {
+					issueBody += `\n## [Recording](${gistResult.val.recordingRawUrl})`;
+				}
+			} else {
+				console.log(`Failed to create gist: ${gistResult.err.message}`);
+			}
+
 			await openIssueReporter({
 				title: '',
-				data: data.toString(),
-				issueBody: '# Description\nPlease describe the expected outcome and attach a screenshot!',
+				data: dataString,
+				issueBody,
 				public: !isInternalUser
 			});
 		}));
@@ -138,6 +173,27 @@ export class InlineEditDebugComponent extends Disposable {
 		}
 
 		return providers;
+	}
+
+	private async _createPrivateGist(name: string, { reportFileContents, recordingFileContents }: { reportFileContents: string; recordingFileContents: string | undefined }): Promise<Result<{ htmlUrl: string; recordingRawUrl: string | undefined }, Error>> {
+		const REPORT_FILE_NAME = 'report.md';
+		const RECORDING_FILE_NAME = 'recording.w.json';
+
+		const files: Record<string, { content: string }> = {
+			[REPORT_FILE_NAME]: { content: reportFileContents },
+		};
+		if (recordingFileContents) {
+			files[RECORDING_FILE_NAME] = { content: recordingFileContents };
+		}
+
+		const r = await createPrivateGist(this._fetcherService, name, files);
+
+		return r.map((gist: GistResponse.t) => {
+			return {
+				htmlUrl: gist.html_url,
+				recordingRawUrl: gist.files[RECORDING_FILE_NAME]?.raw_url,
+			};
+		});
 	}
 }
 

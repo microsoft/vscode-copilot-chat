@@ -32,6 +32,7 @@ import { InlineEditLogger } from './parts/inlineEditLogger';
 import { LastEditTimeTracker } from './parts/lastEditTimeTracker';
 import { VSCodeWorkspace } from './parts/vscodeWorkspace';
 import { makeSettable } from './utils/observablesUtils';
+import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 
 const TRIGGER_INLINE_EDIT_ON_ACTIVE_EDITOR_CHANGE = false; // otherwise, eg, NES would trigger just when going through search results
 
@@ -74,6 +75,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 		@IEnvService private readonly _envService: IEnvService,
 		@ILogService private readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IFetcherService private readonly _fetcherService: IFetcherService,
 	) {
 		super();
 
@@ -125,7 +127,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 			const recordingDirPath = join(this._vscodeExtensionContext.globalStorageUri.fsPath, 'logContextRecordings');
 			const logContextRecorder = this.inlineEditsLogFileEnabled ? reader.store.add(this._instantiationService.createInstance(LogContextRecorder, recordingDirPath, logger)) : undefined;
 
-			const inlineEditDebugComponent = reader.store.add(new InlineEditDebugComponent(this._internalActionsEnabled, this.inlineEditsEnabled, model.debugRecorder, this._inlineEditsProviderId));
+			const inlineEditDebugComponent = reader.store.add(new InlineEditDebugComponent(this._internalActionsEnabled, this.inlineEditsEnabled, model.debugRecorder, this._inlineEditsProviderId, this._fetcherService));
 
 			const telemetrySender = this._register(this._instantiationService.createInstance(TelemetrySender));
 
