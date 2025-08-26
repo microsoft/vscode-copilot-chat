@@ -604,7 +604,7 @@
 				"displayName": "Create New Jupyter Notebook",
 				"icon": "$(notebook)",
 				"toolReferenceName": "newJupyterNotebook",
-				"modelDescription": "Generates a new Jupyter Notebook (.ipynb) in VS Code. Jupyter Notebooks are interactive documents commonly used for data exploration, analysis, visualization, and combining code with narrative text. This tool should only be called when the user explicitly requests to create a new Jupyter Notebook.",
+				"modelDescription": "Generates a new Jupyter Notebook (.ipynb) in VS Code. Jupyter Notebooks are interactive documents commonly used for data exploration, analysis, visualization, and combining code with narrative text. Prefer creating plain Python files or similar unless a user explicitly requests a creating a new Jupyter Notebook or already has a Jupyter Notebook opened or used in workspace.",
 				"userDescription": "%copilot.tools.newJupyterNotebook.description%",
 				"inputSchema": {
 					"type": "object",
