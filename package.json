@@ -1069,21 +1069,27 @@
 						}
 					}
 				}
+			},
+			{
+				"name": "copilot_editFiles",
+				"modelDescription": "This is a placeholder tool, do not use",
+				"userDescription": "Edit files",
+				"icon": "$(pencil)",
+				"displayName": "Edit Files",
+				"toolReferenceName": "editFiles"
 			}
 		],
 		"languageModelToolSets": [
 			{
-				"name": "editFiles",
+				"name": "edit",
 				"description": "%copilot.toolSet.editing.description%",
 				"icon": "$(pencil)",
 				"tools": [
-					"insertEdit",
-					"replaceString",
-					"applyPatch",
 					"createFile",
 					"createDirectory",
 					"editNotebook",
-					"newJupyterNotebook"
+					"newJupyterNotebook",
+					"editFiles"
 				]
 			},
 			{
