@@ -4,6 +4,8 @@
 	"github.copilot.badge.youtube": "Check out GitHub on Youtube",
 	"github.copilot.badge.twitter": "Follow GitHub on Twitter",
 	"github.copilot.icon": "GitHub Copilot icon",
+	"github.copilot.command.enableEditTracing": "Enable Chat Edit Tracing",
+	"github.copilot.command.disableEditTracing": "Disable Chat Edit Tracing",
 	"github.copilot.command.explainThis": "Explain",
 	"github.copilot.command.reviewAndComment": "Review",
 	"github.copilot.command.applyReviewSuggestion": "Apply",

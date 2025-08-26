@@ -133,7 +133,7 @@ export class RequestLogger extends AbstractRequestLogger {
 
 	private _didRegisterLinkProvider = false;
 	private readonly _entries: LoggedInfo[] = [];
-	private readonly _workspaceEditRecorder: WorkspaceEditRecorder;
+	private _workspaceEditRecorder: WorkspaceEditRecorder | undefined;
 
 	constructor(
 		@ILogService private readonly _logService: ILogService,
@@ -142,7 +142,6 @@ export class RequestLogger extends AbstractRequestLogger {
 	) {
 		super();
 
-		this._workspaceEditRecorder = this._instantiationService.createInstance(WorkspaceEditRecorder);
 
 		this._register(workspace.registerTextDocumentContentProvider(ChatRequestScheme.chatRequestScheme, {
 			onDidChange: Event.map(this.onDidChangeRequests, () => Uri.parse(ChatRequestScheme.buildUri({ kind: 'latest' }))),
@@ -191,7 +190,7 @@ export class RequestLogger extends AbstractRequestLogger {
 	}
 
 	public override logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void {
-		const edits = this._workspaceEditRecorder.getEditsAndReset();
+		const edits = this._workspaceEditRecorder?.getEditsAndReset();
 		this._addEntry(new LoggedToolCall(
 			id,
 			name,
@@ -202,6 +201,20 @@ export class RequestLogger extends AbstractRequestLogger {
 			thinking,
 			edits
 		));
+	}
+
+	/** Start tracking edits made to the workspace for every tool call. */
+	public override enableWorkspaceEditTracing(): void {
+		if (!this._workspaceEditRecorder) {
+			this._workspaceEditRecorder = this._instantiationService.createInstance(WorkspaceEditRecorder);
+		}
+	}
+
+	public override disableWorkspaceEditTracing(): void {
+		if (this._workspaceEditRecorder) {
+			this._workspaceEditRecorder.dispose();
+			this._workspaceEditRecorder = undefined;
+		}
 	}
 
 	public override addPromptTrace(elementName: string, endpoint: IChatEndpointInfo, result: RenderPromptResult, trace: HTMLTracer): void {

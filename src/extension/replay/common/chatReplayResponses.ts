@@ -5,11 +5,20 @@
 
 import { DeferredPromise } from '../../../util/vs/base/common/async';
 
-type FileUpdate = {
-	path: string;
-	newContentPath?: string;
-	newContent?: string;
+export type Replacement = {
+	replaceRange: {
+		start: number;
+		endExclusive: number;
+	};
+	newText: string;
 };
+
+export type FileEdits = {
+	path: string;
+	edits: {
+		replacements: Replacement[];
+	};
+}
 
 type ToolStep = {
 	kind: 'toolCall';
@@ -17,7 +26,7 @@ type ToolStep = {
 	line: number;
 	args: { [key: string]: any };
 	toolName: string;
-	fileUpdates: FileUpdate[];
+	edits: FileEdits[];
 	results: string[];
 };
 

@@ -4,20 +4,19 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
-import path from 'node:path';
 import type * as vscode from 'vscode';
 import { ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { raceCancellation } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
-import { Position, Range, Uri, WorkspaceEdit } from '../../../vscodeTypes';
+import { Range, Uri, WorkspaceEdit } from '../../../vscodeTypes';
 import { Intent } from '../../common/constants';
 import { Conversation } from '../../prompt/common/conversation';
 import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
 import { IDocumentContext } from '../../prompt/node/documentContext';
 import { IIntent, IIntentInvocation, IIntentInvocationContext } from '../../prompt/node/intents';
-import { ChatReplayResponses, ChatStep } from '../../replay/common/chatReplayResponses';
+import { ChatReplayResponses, ChatStep, FileEdits, Replacement } from '../../replay/common/chatReplayResponses';
 import { ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
 
@@ -85,40 +84,54 @@ export class ChatReplayIntent implements IIntent {
 						stream.markdown(l10n.t('No result from tool'));
 					}
 
-					// file update stucture will change
-					if (step.fileUpdates && step.fileUpdates.length > 0) {
-						step.fileUpdates.forEach(update => {
-							const targetPath = path.join(this.workspaceService.getWorkspaceFolders()[0].fsPath, update.path);
-							const newContent = update.newContent!;
-							makeEdit(targetPath, newContent, stream);
-						});
+					if (step.edits) {
+						await Promise.all(step.edits.map(edit => this.makeEdit(edit, stream)));
 					}
 					break;
 				}
 		}
 	}
-}
 
-function makeEdit(path: string, newContent: string, stream: vscode.ChatResponseStream) {
-	const workspaceEdit = new WorkspaceEdit();
-	const uri = Uri.file(path);
-	const lineCount = newContent.split('\n').length;
-	workspaceEdit.replace(uri, new Range(
-		new Position(0, 0),
-		new Position(lineCount, 0)
-	), newContent);
+	private async makeEdit(edits: FileEdits, stream: vscode.ChatResponseStream) {
+		const uri = Uri.file(edits.path);
+		await this.ensureFileExists(uri);
 
-	for (const textEdit of workspaceEdit.entries()) {
 		stream.markdown('\n```\n');
-		stream.codeblockUri(textEdit[0], true);
-
-		const edits = Array.isArray(textEdit[1]) ? textEdit[1] : [textEdit[1]];
-		for (const textEdit of edits) {
-			stream.textEdit(uri, textEdit);
-		}
-
+		stream.codeblockUri(uri, true);
+		await Promise.all(edits.edits.replacements.map(r => this.performReplacement(uri, r, stream)));
 		stream.textEdit(uri, true);
 		stream.markdown('\n' + '```\n');
 	}
+
+	private async ensureFileExists(uri: Uri): Promise<void> {
+		try {
+			await this.workspaceService.fs.stat(uri);
+			return; // Exists
+		} catch {
+			// Create parent directory and empty file
+			const parent = Uri.joinPath(uri, '..');
+			await this.workspaceService.fs.createDirectory(parent);
+			await this.workspaceService.fs.writeFile(uri, new Uint8Array());
+		}
+	}
+
+	private async performReplacement(uri: Uri, replacement: Replacement, stream: vscode.ChatResponseStream) {
+		const doc = await this.workspaceService.openTextDocument(uri);
+		const workspaceEdit = new WorkspaceEdit();
+		const range = new Range(
+			doc.positionAt(replacement.replaceRange.start),
+			doc.positionAt(replacement.replaceRange.endExclusive)
+		);
+
+		workspaceEdit.replace(uri, range, replacement.newText);
+
+		for (const textEdit of workspaceEdit.entries()) {
+			const edits = Array.isArray(textEdit[1]) ? textEdit[1] : [textEdit[1]];
+			for (const textEdit of edits) {
+				stream.textEdit(uri, textEdit);
+			}
+		}
+	}
+
 }
 

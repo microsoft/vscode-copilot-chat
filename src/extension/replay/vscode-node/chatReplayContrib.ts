@@ -3,11 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 import { CancellationToken, commands, debug, DebugAdapterDescriptor, DebugAdapterDescriptorFactory, DebugAdapterInlineImplementation, DebugConfiguration, DebugConfigurationProvider, DebugSession, ProviderResult, window, WorkspaceFolder } from 'vscode';
+import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatReplayDebugSession } from './replayDebugSession';
 
 export class ChatReplayContribution extends Disposable {
-	constructor() {
+	constructor(
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+	) {
 		super();
 
 		const provider = new ChatReplayConfigProvider();
@@ -16,6 +20,10 @@ export class ChatReplayContribution extends Disposable {
 		const factory = new InlineDebugAdapterFactory();
 		this._register(debug.registerDebugAdapterDescriptorFactory('vscode-chat-replay', factory));
 		this.registerStartReplayCommand();
+		this.registerEnableWorkspaceEditTracingCommand();
+		this.registerDisableWorkspaceEditTracingCommand();
+
+		commands.executeCommand('setContext', 'github.copilot.chat.replay.workspaceEditTracing', false);
 	}
 
 	private registerStartReplayCommand() {
@@ -35,6 +43,22 @@ export class ChatReplayContribution extends Disposable {
 			};
 			await debug.startDebugging(undefined, debugConfig);
 
+		}));
+	}
+
+	private registerEnableWorkspaceEditTracingCommand() {
+		this._register(commands.registerCommand('github.copilot.chat.replay.enableWorkspaceEditTracing', async () => {
+			const logger = this._instantiationService.invokeFunction(accessor => accessor.get(IRequestLogger));
+			logger.enableWorkspaceEditTracing();
+			await commands.executeCommand('setContext', 'github.copilot.chat.replay.workspaceEditTracing', true);
+		}));
+	}
+
+	private registerDisableWorkspaceEditTracingCommand() {
+		this._register(commands.registerCommand('github.copilot.chat.replay.disableWorkspaceEditTracing', async () => {
+			const logger = this._instantiationService.invokeFunction(accessor => accessor.get(IRequestLogger));
+			logger.disableWorkspaceEditTracing();
+			await commands.executeCommand('setContext', 'github.copilot.chat.replay.workspaceEditTracing', false);
 		}));
 	}
 }
