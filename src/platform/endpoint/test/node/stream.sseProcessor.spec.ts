@@ -573,9 +573,9 @@ data: [DONE]
 			createFakeStreamResponse(response),
 		);
 
-		let thinkingText: string | undefined = undefined;
+		let thinkingText: string | string[] | undefined = undefined;
 		let thinkingId: string | undefined = undefined;
-		let metadata: string | undefined = undefined;
+		let metadata: { [key: string]: any } | undefined = undefined;
 
 
 		await getAll(processor.processSSE((text: string, index: number, delta: IResponseDelta) => {
@@ -584,7 +584,7 @@ data: [DONE]
 					if (thinkingText === undefined) {
 						thinkingText = '';
 					}
-					thinkingText += delta.thinking.text;
+					thinkingText += Array.isArray(delta.thinking.text) ? delta.thinking.text.join('') : delta.thinking.text;
 				}
 				if (delta.thinking.id) {
 					thinkingId = delta.thinking.id;
@@ -620,9 +620,9 @@ data: [DONE]
 
 		);
 
-		let thinkingText: string | undefined = undefined;
+		let thinkingText: string | string[] | undefined = undefined;
 		let thinkingId: string | undefined = undefined;
-		let metadata: string | undefined = undefined;
+		let metadata: { [key: string]: any } | undefined = undefined;
 
 
 		await getAll(processor.processSSE((text: string, index: number, delta: IResponseDelta) => {
@@ -631,7 +631,7 @@ data: [DONE]
 					if (thinkingText === undefined) {
 						thinkingText = '';
 					}
-					thinkingText += delta.thinking.text;
+					thinkingText += Array.isArray(delta.thinking.text) ? delta.thinking.text.join('') : delta.thinking.text;
 				}
 				if (delta.thinking.id) {
 					thinkingId = delta.thinking.id;

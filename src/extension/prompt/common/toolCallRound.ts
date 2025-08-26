@@ -55,8 +55,8 @@ export class ToolCallRound implements IToolCallRound {
 }
 
 export class ThinkingDataItem implements ThinkingData {
-	public text: string = '';
-	public metadata?: string;
+	public text: string | string[] = '';
+	public metadata?: { [key: string]: any };
 	public tokens?: number;
 	public encrypted?: string;
 
@@ -81,7 +81,7 @@ export class ThinkingDataItem implements ThinkingData {
 			this.encrypted = delta.encrypted;
 		}
 		if (delta.text) {
-			this.text += delta.text;
+			this.text += Array.isArray(delta.text) ? delta.text.join('') : delta.text;
 		}
 		if (delta.metadata) {
 			this.metadata = delta.metadata;

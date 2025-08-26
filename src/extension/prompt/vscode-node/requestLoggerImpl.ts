@@ -347,7 +347,7 @@ export class RequestLogger extends AbstractRequestLogger {
 				result.push(`thinkingId: ${entry.thinking.id}`);
 			}
 			result.push(`~~~`);
-			result.push(entry.thinking.text);
+			result.push(Array.isArray(entry.thinking.text) ? entry.thinking.text.join('\n') : entry.thinking.text);
 			result.push(`~~~`);
 		}
 
