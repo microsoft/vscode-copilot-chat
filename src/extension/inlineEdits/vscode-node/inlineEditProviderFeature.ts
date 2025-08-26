@@ -135,6 +135,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 				displayName: provider.displayName,
 				yieldTo: this._yieldToCopilot.read(reader) ? ['github.copilot'] : undefined,
 				debounceDelayMs: 0, // set 0 debounce to ensure consistent delays/timings
+				groupId: 'nes',
 			}));
 
 			if (TRIGGER_INLINE_EDIT_ON_ACTIVE_EDITOR_CHANGE) {
