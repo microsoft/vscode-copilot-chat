@@ -23,6 +23,7 @@ const entryPoints = [
 	'src/util/common/globals.d.ts',
 	'src/util/common/test/shims/vscodeTypesShim.ts',
 	'src/platform/diff/common/diffWorker.ts',
+	'src/platform/tokenizer/node/tikTokenizerWorker.ts',
 ];
 
 interface FileInfo {
@@ -257,6 +258,9 @@ class ChatLibExtractor {
 
 		// Copy all vscode.proposed.*.d.ts files
 		await this.copyVSCodeProposedTypes();
+
+		// Copy all tiktoken files
+		await this.copyTikTokenFiles();
 	}
 
 	private async validateModule(): Promise<void> {
@@ -296,6 +300,24 @@ class ChatLibExtractor {
 		}
 
 		console.log(`Copied ${proposedTypeFiles.length} VS Code proposed API type files and additional .d.ts files`);
+	}
+
+	private async copyTikTokenFiles(): Promise<void> {
+		console.log('Copying tiktoken files...');
+
+		// Find all .tiktoken files in src/platform/tokenizer/node/
+		const tokenizerDir = path.join(REPO_ROOT, 'src', 'platform', 'tokenizer', 'node');
+		const tikTokenFiles = await glob('*.tiktoken', { cwd: tokenizerDir });
+
+		for (const file of tikTokenFiles) {
+			const srcPath = path.join(tokenizerDir, file);
+			const destPath = path.join(TARGET_DIR, '_internal', 'platform', 'tokenizer', 'node', file);
+
+			await fs.promises.mkdir(path.dirname(destPath), { recursive: true });
+			await fs.promises.copyFile(srcPath, destPath);
+		}
+
+		console.log(`Copied ${tikTokenFiles.length} tiktoken files`);
 	}
 
 	private async copyRootPackageJson(): Promise<void> {

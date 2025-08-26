@@ -3,6 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+// Load env
+import * as dotenv from 'dotenv';
+dotenv.config({ path: '../.env' });
+
 import { outdent } from 'outdent';
 import { assert, describe, expect, it } from 'vitest';
 import { MutableObservableWorkspace } from '../src/_internal/platform/inlineEdits/common/observableWorkspace';
@@ -34,9 +38,10 @@ describe('NESProvider Facade', () => {
 		});
 		doc.setSelection([new OffsetRange(1, 1)], undefined);
 
+		const nextEditProvider = createNESProvider(obsWorkspace);
+
 		doc.applyEdit(StringEdit.insert(11, '3D'));
 
-		const nextEditProvider = createNESProvider(obsWorkspace);
 		const result = await nextEditProvider.getNextEdit(doc.id.toUri(), CancellationToken.None);
 
 		assert(result.result?.edit);

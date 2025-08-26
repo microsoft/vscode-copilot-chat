@@ -8,11 +8,29 @@ import { DebugRecorder } from '../../extension/inlineEdits/node/debugRecorder';
 import { NextEditProvider } from '../../extension/inlineEdits/node/nextEditProvider';
 import { LlmNESTelemetryBuilder } from '../../extension/inlineEdits/node/nextEditProviderTelemetry';
 import { INextEditResult } from '../../extension/inlineEdits/node/nextEditResult';
+import { ChatMLFetcherImpl } from '../../extension/prompt/node/chatMLFetcher';
 import { XtabProvider } from '../../extension/xtab/node/xtabProvider';
+import { IAuthenticationService } from '../../platform/authentication/common/authentication';
+import { ICopilotTokenManager } from '../../platform/authentication/common/copilotTokenManager';
+import { CopilotTokenStore, ICopilotTokenStore } from '../../platform/authentication/common/copilotTokenStore';
+import { StaticGitHubAuthenticationService } from '../../platform/authentication/common/staticGitHubAuthenticationService';
+import { getStaticGitHubToken } from '../../platform/authentication/node/copilotTokenManager';
+// import { SimulationTestCopilotTokenManager } from '../../platform/authentication/test/node/simulationTestCopilotTokenManager';
+import { IChatMLFetcher } from '../../platform/chat/common/chatMLFetcher';
+import { IChatQuotaService } from '../../platform/chat/common/chatQuotaService';
+import { ChatQuotaService } from '../../platform/chat/common/chatQuotaServiceImpl';
+import { IConversationOptions } from '../../platform/chat/common/conversationOptions';
+import { IInteractionService, InteractionService } from '../../platform/chat/common/interactionService';
 import { ConfigKey, IConfigurationService } from '../../platform/configuration/common/configurationService';
 import { DefaultsOnlyConfigurationService } from '../../platform/configuration/common/defaultsOnlyConfigurationService';
 import { IDiffService } from '../../platform/diff/common/diffService';
 import { DiffServiceImpl } from '../../platform/diff/node/diffServiceImpl';
+import { ICAPIClientService } from '../../platform/endpoint/common/capiClient';
+import { IDomainService } from '../../platform/endpoint/common/domainService';
+import { CAPIClientImpl } from '../../platform/endpoint/node/capiClientImpl';
+import { DomainService } from '../../platform/endpoint/node/domainServiceImpl';
+import { IEnvService } from '../../platform/env/common/envService';
+import { NullEnvService } from '../../platform/env/common/nullEnvService';
 import { IGitExtensionService } from '../../platform/git/common/gitExtensionService';
 import { NullGitExtensionService } from '../../platform/git/common/nullGitExtensionService';
 import { IIgnoreService, NullIgnoreService } from '../../platform/ignore/common/ignoreService';
@@ -27,10 +45,17 @@ import { NullLanguageContextProviderService } from '../../platform/languageConte
 import { ILanguageDiagnosticsService } from '../../platform/languages/common/languageDiagnosticsService';
 import { TestLanguageDiagnosticsService } from '../../platform/languages/common/testLanguageDiagnosticsService';
 import { ConsoleLog, ILogService, LogLevel, LogServiceImpl } from '../../platform/log/common/logService';
+import { FetchOptions, IAbortController, IFetcherService } from '../../platform/networking/common/fetcherService';
+import { IFetcher } from '../../platform/networking/common/networking';
+import { NullRequestLogger } from '../../platform/requestLogger/node/nullRequestLogger';
+import { IRequestLogger } from '../../platform/requestLogger/node/requestLogger';
 import { ISimulationTestContext, NulSimulationTestContext } from '../../platform/simulationTestContext/common/simulationTestContext';
 import { ISnippyService, NullSnippyService } from '../../platform/snippy/common/snippyService';
 import { IExperimentationService, NullExperimentationService } from '../../platform/telemetry/common/nullExperimentationService';
+import { NullTelemetryService } from '../../platform/telemetry/common/nullTelemetryService';
+import { ITelemetryService } from '../../platform/telemetry/common/telemetry';
 // import { TestWorkspaceService } from '../../platform/test/node/testWorkspaceService';
+import { ITokenizerProvider, TokenizerProvider } from '../../platform/tokenizer/node/tokenizer';
 import { IWorkspaceService } from '../../platform/workspace/common/workspaceService';
 import { InstantiationServiceBuilder } from '../../util/common/services';
 import { CancellationToken } from '../../util/vs/base/common/cancellation';
@@ -40,9 +65,8 @@ import { SyncDescriptor } from '../../util/vs/platform/instantiation/common/desc
 import { IInstantiationService } from '../../util/vs/platform/instantiation/common/instantiation';
 
 
-
-export function createNESProvider(workspace: ObservableWorkspace): INESProvider {
-	const instantiationService = setupServices();
+export function createNESProvider(workspace: ObservableWorkspace, fetcher: IFetcher): INESProvider {
+	const instantiationService = setupServices(fetcher);
 	return instantiationService.createInstance(NESProvider, workspace);
 }
 
@@ -55,6 +79,7 @@ class NESProvider extends Disposable implements INESProvider {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 	) {
 		super();
 		const statelessNextEditProvider = instantiationService.createInstance(XtabProvider);
@@ -94,6 +119,7 @@ class NESProvider extends Disposable implements INESProvider {
 		const telemetryBuilder = new LlmNESTelemetryBuilder(
 			new NullGitExtensionService(), // IGitExtensionService
 			undefined, // INotebookService
+			this._workspaceService, // IWorkspaceService
 			this._nextEditProvider.ID, // providerId
 			document, // doc
 			this._debugRecorder, // debugRecorder
@@ -110,18 +136,73 @@ export interface INESProvider {
 	dispose(): void;
 }
 
-function setupServices() {
+function setupServices(fetcher: IFetcher) {
 	const builder = new InstantiationServiceBuilder();
 	builder.define(IConfigurationService, new SyncDescriptor(DefaultsOnlyConfigurationService));
 	builder.define(IExperimentationService, new SyncDescriptor(NullExperimentationService));
 	builder.define(ISimulationTestContext, new SyncDescriptor(NulSimulationTestContext));
 	builder.define(IWorkspaceService, new SyncDescriptor(TestWorkspaceService));
-	builder.define(IDiffService, new SyncDescriptor(DiffServiceImpl));
+	builder.define(IDiffService, new SyncDescriptor(DiffServiceImpl, [false]));
 	builder.define(ILogService, new SyncDescriptor(LogServiceImpl, [[new ConsoleLog(undefined, LogLevel.Trace)]]));
 	builder.define(IGitExtensionService, new SyncDescriptor(NullGitExtensionService));
 	builder.define(ILanguageContextProviderService, new SyncDescriptor(NullLanguageContextProviderService));
 	builder.define(ILanguageDiagnosticsService, new SyncDescriptor(TestLanguageDiagnosticsService));
 	builder.define(IIgnoreService, new SyncDescriptor(NullIgnoreService));
 	builder.define(ISnippyService, new SyncDescriptor(NullSnippyService));
+	builder.define(IDomainService, new SyncDescriptor(DomainService));
+	builder.define(ICAPIClientService, new SyncDescriptor(CAPIClientImpl));
+	builder.define(ICopilotTokenStore, new SyncDescriptor(CopilotTokenStore));
+	builder.define(IEnvService, new SyncDescriptor(NullEnvService));
+	builder.define(IFetcherService, new SyncDescriptor(SingleFetcherService, [fetcher]));
+	builder.define(ITelemetryService, new SyncDescriptor(NullTelemetryService));
+	builder.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [getStaticGitHubToken]));
+	builder.define(ICopilotTokenManager, new SyncDescriptor(SimulationTestCopilotTokenManager));
+	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
+	builder.define(IChatQuotaService, new SyncDescriptor(ChatQuotaService));
+	builder.define(IInteractionService, new SyncDescriptor(InteractionService));
+	builder.define(IRequestLogger, new SyncDescriptor(NullRequestLogger));
+	builder.define(ITokenizerProvider, new SyncDescriptor(TokenizerProvider, [false]));
+	builder.define(IConversationOptions, {
+		_serviceBrand: undefined,
+		maxResponseTokens: undefined,
+		temperature: 0.1,
+		topP: 1,
+		rejectionMessage: 'Sorry, but I can only assist with programming related questions.',
+	});
 	return builder.seal();
+}
+
+class SingleFetcherService implements IFetcherService {
+
+	declare readonly _serviceBrand: undefined;
+
+	constructor(
+		private readonly _fetcher: IFetcher,
+	) { }
+
+	getUserAgentLibrary(): string {
+		return this._fetcher.getUserAgentLibrary();
+	}
+
+	fetch(url: string, options: FetchOptions) {
+		return this._fetcher.fetch(url, options);
+	}
+	disconnectAll(): Promise<unknown> {
+		return this._fetcher.disconnectAll();
+	}
+	makeAbortController(): IAbortController {
+		return this._fetcher.makeAbortController();
+	}
+	isAbortError(e: any): boolean {
+		return this._fetcher.isAbortError(e);
+	}
+	isInternetDisconnectedError(e: any): boolean {
+		return this._fetcher.isInternetDisconnectedError(e);
+	}
+	isFetcherError(e: any): boolean {
+		return this._fetcher.isFetcherError(e);
+	}
+	getUserMessageForFetcherError(err: any): string {
+		return this._fetcher.getUserMessageForFetcherError(err);
+	}
 }
