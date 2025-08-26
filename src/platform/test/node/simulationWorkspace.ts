@@ -382,7 +382,7 @@ export class SimulationWorkspace {
 		this._notebooks.set(notebook.uri, notebook);
 	}
 
-	public getNotebook(filePathOrUri: string | vscode.Uri): ExtHostNotebookDocumentData {
+	public tryGetNotebook(filePathOrUri: string | vscode.Uri): ExtHostNotebookDocumentData | undefined {
 		const queryUri = typeof filePathOrUri === 'string' ? this.getUriFromFilePath(filePathOrUri) : filePathOrUri;
 		if (queryUri.scheme === Schemas.vscodeNotebookCell) {
 			// loop through notebooks to find the one matching the path
@@ -394,7 +394,11 @@ export class SimulationWorkspace {
 			}
 		}
 
-		const candidateFile = this._notebooks.get(queryUri);
+		return this._notebooks.get(queryUri);
+	}
+
+	public getNotebook(filePathOrUri: string | vscode.Uri): ExtHostNotebookDocumentData {
+		const candidateFile = this.tryGetNotebook(filePathOrUri);
 		if (!candidateFile) {
 			throw new Error(`Missing file ${JSON.stringify(filePathOrUri, null, '\t')}\n\nHave ${Array.from(this._docs.keys()).map(k => k.toString()).join('\n')}`);
 		}

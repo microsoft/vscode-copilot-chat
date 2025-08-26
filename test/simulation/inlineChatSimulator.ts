@@ -518,13 +518,13 @@ export async function simulateEditingScenario(
 						outcomeFiles.push({
 							kind: 'relativeFile',
 							fileName: path.basename(uri.fsPath),
-							fileContents: workspace.getDocument(uri).getText()
+							fileContents: workspace.tryGetNotebook(uri)?.getText() ?? workspace.getDocument(uri).getText()
 						});
 					} else {
 						outcomeFiles.push({
 							kind: 'qualifiedFile',
 							uri: uri,
-							fileContents: workspace.getDocument(uri).getText()
+							fileContents: workspace.tryGetNotebook(uri)?.getText() ?? workspace.getDocument(uri).getText()
 						});
 					}
 					const offsetEdits = workingCopyDoc.appliedEdits;
