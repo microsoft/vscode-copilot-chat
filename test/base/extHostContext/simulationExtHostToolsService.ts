@@ -142,22 +142,31 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 	getEnabledTools(request: ChatRequest, filter?: (tool: LanguageModelToolInformation) => boolean | undefined): LanguageModelToolInformation[] {
 		const packageJsonTools = getPackagejsonToolsForTest();
 
-		let javaUpgradeToolsFromFile: string[] = [];
+		const allowedToolsSet = new Set<string>();
 		if (process.env.JAVA_UPGRADE_TOOLS) {
 			try {
 				const config = fs.readFileSync(process.env.JAVA_UPGRADE_TOOLS, 'utf8');
-				javaUpgradeToolsFromFile = config
+				const javaUpgradeToolsFromFile = config
 					.split('\n')
 					.map(line => line.trim())
 					.filter(line => line && !line.startsWith('#')); // Filter out empty lines and comments
+				javaUpgradeToolsFromFile.forEach(tool => allowedToolsSet.add(tool));
 				logger.debug('Loaded Java upgrade tools from file:', javaUpgradeToolsFromFile);
 			} catch (error) {
 				logger.warn('Failed to read Java upgrade tools file:', error);
 			}
 		}
 
-		const javaUpgradeToolsSet = new Set(javaUpgradeToolsFromFile);
-		const tools = this.tools.filter(tool => filter?.(tool) ?? (!this._disabledTools.has(getToolName(tool.name)) && (tool.name.startsWith("appmod") || packageJsonTools.has(tool.name) || javaUpgradeToolsSet.has(tool.name))));
+		const tools = this.tools.filter(
+			tool => filter?.(tool) ?? (
+				!this._disabledTools.has(getToolName(tool.name))
+				&& (
+					(process.env.JAVA_UPGRADE_TOOLS && tool.name.startsWith("appmod"))
+					|| packageJsonTools.has(tool.name)
+					|| allowedToolsSet.has(tool.name)
+				)
+			)
+		);
 
 		this._mcpToolService.getEnabledTools(request, filter);
 

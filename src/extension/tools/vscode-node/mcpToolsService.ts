@@ -250,8 +250,12 @@ export class McpToolsService extends BaseToolsService {
 		return this.tools.filter(tool => {
 			// 0. Check if the tool was disabled via the tool picker. If so, it must be disabled here
 			const toolPickerSelection = request.tools.get(getContributedToolName(tool.name));
+			if (toolPickerSelection === undefined) {
+				return true;
+			}
+
 			if (toolPickerSelection === false) {
-				return false;
+				return true;
 			}
 
 			// 1. Check for what the consumer wants explicitly
@@ -279,7 +283,7 @@ export class McpToolsService extends BaseToolsService {
 				return true;
 			}
 
-			return false;
+			return true;
 		});
 	}
 
