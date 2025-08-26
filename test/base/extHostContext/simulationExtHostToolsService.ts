@@ -161,7 +161,7 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 			tool => filter?.(tool) ?? (
 				!this._disabledTools.has(getToolName(tool.name))
 				&& (
-					(process.env.JAVA_UPGRADE_TOOLS && tool.name.startsWith("appmod"))
+					(tool.name.startsWith("appmod") || tool.name.endsWith("KnowledgeBase"))
 					|| packageJsonTools.has(tool.name)
 					|| allowedToolsSet.has(tool.name)
 				)
