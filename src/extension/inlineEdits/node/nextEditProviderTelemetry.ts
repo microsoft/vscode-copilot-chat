@@ -112,6 +112,7 @@ export interface INextEditProviderTelemetry extends ILlmNESTelemetry, IDiagnosti
 	readonly alternativeAction: IAlternativeAction | undefined;
 	readonly postProcessingOutcome: string | undefined;
 	readonly isNESForAnotherDoc: boolean;
+	readonly isActiveDocument?: boolean;
 	readonly isNaturalLanguageDominated: boolean;
 
 	readonly hadLlmNES: boolean;
@@ -448,6 +449,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 			supersededByOpportunityId: this._supersededByOpportunityId,
 			pickedNES: this._nesTypePicked,
 			hadLlmNES: this._hadLlmNES,
+			isActiveDocument: this._isActiveDocument,
 			isNESForAnotherDoc: this._isNESForAnotherDoc,
 			hadDiagnosticsNES: this._hadDiagnosticsNES,
 			configIsDiagnosticsNESEnabled: this._configIsDiagnosticsNESEnabled,
@@ -516,6 +518,12 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 	private _nesTypePicked: 'llm' | 'diagnostics' | undefined;
 	public setPickedNESType(nesTypePicked: 'llm' | 'diagnostics'): this {
 		this._nesTypePicked = nesTypePicked;
+		return this;
+	}
+
+	private _isActiveDocument?: boolean;
+	public setIsActiveDocument(isActive: boolean): this {
+		this._isActiveDocument = isActive;
 		return this;
 	}
 
@@ -649,6 +657,7 @@ export class TelemetrySender implements IDisposable {
 			isNotebook,
 			notebookType,
 			isNESForAnotherDoc,
+			isActiveDocument,
 			acceptance,
 			disposalReason,
 			logProbThreshold,
@@ -732,6 +741,7 @@ export class TelemetrySender implements IDisposable {
 		"isShown": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit was shown", "isMeasurement": true },
 		"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the document is a notebook", "isMeasurement": true },
 		"isNESForAnotherDoc": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the NES if for another document", "isMeasurement": true },
+		"isActiveDocument": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the document is the active document", "isMeasurement": true },
 		"hasNotebookCellMarker": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit has a notebook cell marker", "isMeasurement": true },
 		"notebookType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Type of notebook, if any" },
 		"logProbThreshold": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Log probability threshold for the edit", "isMeasurement": true },
@@ -799,6 +809,7 @@ export class TelemetrySender implements IDisposable {
 				isShown: this._boolToNum(isShown),
 				isNotebook: this._boolToNum(isNotebook),
 				isNESForAnotherDoc: this._boolToNum(isNESForAnotherDoc),
+				isActiveDocument: this._boolToNum(isActiveDocument),
 				hasNotebookCellMarker: this._boolToNum(hasNotebookCellMarker),
 				logProbThreshold,
 				documentsCount,

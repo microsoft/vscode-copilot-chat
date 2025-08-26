@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, Command, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, Position, Range, TextDocument, TextDocumentShowOptions, l10n, Event as vscodeEvent, workspace } from 'vscode';
+import { CancellationToken, Command, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, Position, Range, TextDocument, TextDocumentShowOptions, l10n, Event as vscodeEvent, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
@@ -236,6 +236,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 				tracer.trace('no next edit suggestion');
 			} else if (documents[0][0] === document) {
 				// nes is for this same document.
+				telemetryBuilder.setIsActiveDocument(window.activeTextEditor?.document === documents[0][0]);
 				range = documents[0][1];
 				const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
 				isInlineCompletion = allowInlineCompletions && isInlineSuggestion(position, document, range, result.edit.newText);
@@ -245,6 +246,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			} else {
 				// nes is for a different document.
 				telemetryBuilder.setIsNESForOtherEditor();
+				telemetryBuilder.setIsActiveDocument(window.activeTextEditor?.document === documents[0][0]);
 				range = documents[0][1];
 				completionItem = serveAsCompletionsProvider ?
 					undefined :
