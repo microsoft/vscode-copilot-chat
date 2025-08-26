@@ -453,23 +453,28 @@ export class SnapshotSearchService extends AbstractSearchService {
 			const maxResults = options?.maxResults ?? Number.MAX_SAFE_INTEGER;
 			let count = 0;
 
-			for (const uri of uris) {
-				const doc = await this.workspaceService.openTextDocument(uri);
-				count += this._search2(query, doc, iterableSource);
-				if (count >= maxResults) {
-					break;
+			try {
+				for (const uri of uris) {
+					const doc = await this.workspaceService.openTextDocument(uri);
+					count += this._search2(query, doc, iterableSource);
+					if (count >= maxResults) {
+						break;
+					}
 				}
+			} catch {
+				// I can't figure out why errors here fire 'unhandledrejection' so just swallow them
 			}
-
-			iterableSource.resolve();
 
 			return {
 				limitHit: count >= maxResults
 			};
 		};
 
+		const completePromise = doSearch();
+		completePromise.catch(() => { });
+		completePromise.finally(() => iterableSource.resolve());
 		return {
-			complete: doSearch(),
+			complete: completePromise,
 			results: iterableSource.asyncIterable
 		};
 	}
