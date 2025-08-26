@@ -222,6 +222,25 @@
 			"internalConsoleOptions": "neverOpen"
 		},
 		{
+			"type": "node",
+			"request": "launch",
+			"name": "Debug Chat-Lib Vitest",
+			"cwd": "${workspaceFolder}/chat-lib",
+			"runtimeExecutable": "${workspaceFolder}/chat-lib/node_modules/.bin/vitest",
+			"runtimeArgs": [
+				"run",
+				"--reporter=verbose"
+			],
+			"console": "integratedTerminal",
+			"internalConsoleOptions": "neverOpen",
+			"skipFiles": [
+				"<node_internals>/**"
+			],
+			"presentation": {
+				"group": "1_launch"
+			}
+		},
+		{
 			"type": "extensionHost",
 			"request": "launch",
 			"name": "Launch Copilot Extension - TS Server in Debug Mode",

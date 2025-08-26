@@ -16,11 +16,13 @@ const execAsync = promisify(exec);
 
 // Entry point - follow imports from the main chat-lib file
 const entryPoints = [
-	'src/lib/node/chat-lib-main.ts',
+	'src/lib/node/chatLibMain.ts',
 	'src/util/vs/base-common.d.ts',
 	'src/util/vs/vscode-globals-nls.d.ts',
 	'src/util/vs/vscode-globals-product.d.ts',
 	'src/util/common/globals.d.ts',
+	'src/util/common/test/shims/vscodeTypesShim.ts',
+	'src/platform/diff/common/diffWorker.ts',
 ];
 
 interface FileInfo {
@@ -194,17 +196,18 @@ class ChatLibExtractor {
 
 		for (const [, fileInfo] of this.allFiles) {
 			// Skip the main entry point file since it becomes top-level main.ts
-			if (fileInfo.relativePath === 'src/lib/node/chat-lib-main.ts') {
+			if (fileInfo.relativePath === 'src/lib/node/chatLibMain.ts') {
 				continue;
 			}
 
-			await fs.promises.mkdir(path.dirname(fileInfo.destPath), { recursive: true });
-
-			// Read source file
+			await fs.promises.mkdir(path.dirname(fileInfo.destPath), { recursive: true });			// Read source file
 			const content = await fs.promises.readFile(fileInfo.srcPath, 'utf-8');
 
+			// Transform content to replace vscode imports and fix relative paths
+			const transformedContent = this.transformFileContent(content, fileInfo.relativePath);
+
 			// Write to destination
-			await fs.promises.writeFile(fileInfo.destPath, content);
+			await fs.promises.writeFile(fileInfo.destPath, transformedContent);
 		}
 	}
 
@@ -213,24 +216,23 @@ class ChatLibExtractor {
 	private transformFileContent(content: string, filePath: string): string {
 		let transformed = content;
 
-		// Remove VS Code imports
-		// transformed = transformed.replace(/import\s+.*\s+from\s+['"]+vscode['"]+;?\s*\n/g, '');
-
-		// Rewrite relative imports to work in _internal structure
-		transformed = transformed.replace(
-			/import\s+([^'"]*)\s+from\s+['"](\.\/[^'"]*|\.\.\/[^'"]*)['"]/g,
-			(match, importClause, importPath) => {
-				const rewrittenPath = this.rewriteImportPath(filePath, importPath);
-				return `import ${importClause} from '${rewrittenPath}'`;
-			}
-		);
+		// Only rewrite relative imports for main.ts (chatLibMain.ts)
+		if (filePath === 'src/lib/node/chatLibMain.ts') {
+			transformed = transformed.replace(
+				/import\s+([^'"]*)\s+from\s+['"](\.\/[^'"]*|\.\.\/[^'"]*)['"]/g,
+				(match, importClause, importPath) => {
+					const rewrittenPath = this.rewriteImportPath(filePath, importPath);
+					return `import ${importClause} from '${rewrittenPath}'`;
+				}
+			);
+		}
 
 		return transformed;
 	}
 
 	private rewriteImportPath(fromFile: string, importPath: string): string {
 		// For main.ts, rewrite relative imports to use ./_internal structure
-		if (fromFile === 'src/lib/node/chat-lib-main.ts') {
+		if (fromFile === 'src/lib/node/chatLibMain.ts') {
 			// Convert ../../extension/... to ./_internal/extension/...
 			// Convert ../../platform/... to ./_internal/platform/...
 			// Convert ../../util/... to ./_internal/util/...
@@ -244,11 +246,14 @@ class ChatLibExtractor {
 	private async generateModuleFiles(): Promise<void> {
 		console.log('Using static module files already present in chat-lib directory...');
 
-		// Copy main.ts from src/lib/node/chat-lib-main.ts
-		const mainTsPath = path.join(REPO_ROOT, 'src', 'lib', 'node', 'chat-lib-main.ts');
+		// Copy main.ts from src/lib/node/chatLibMain.ts
+		const mainTsPath = path.join(REPO_ROOT, 'src', 'lib', 'node', 'chatLibMain.ts');
 		const mainTsContent = await fs.promises.readFile(mainTsPath, 'utf-8');
-		const transformedMainTs = this.transformFileContent(mainTsContent, 'src/lib/node/chat-lib-main.ts');
+		const transformedMainTs = this.transformFileContent(mainTsContent, 'src/lib/node/chatLibMain.ts');
 		await fs.promises.writeFile(path.join(TARGET_DIR, 'main.ts'), transformedMainTs);
+
+		// Copy root package.json to chat-lib/src
+		await this.copyRootPackageJson();
 
 		// Copy all vscode.proposed.*.d.ts files
 		await this.copyVSCodeProposedTypes();
@@ -291,6 +296,16 @@ class ChatLibExtractor {
 		}
 
 		console.log(`Copied ${proposedTypeFiles.length} VS Code proposed API type files and additional .d.ts files`);
+	}
+
+	private async copyRootPackageJson(): Promise<void> {
+		console.log('Copying root package.json to chat-lib/src...');
+
+		const srcPath = path.join(REPO_ROOT, 'package.json');
+		const destPath = path.join(TARGET_DIR, 'package.json');
+
+		await fs.promises.copyFile(srcPath, destPath);
+		console.log('Root package.json copied successfully!');
 	}
 
 	private async compileTypeScript(): Promise<void> {

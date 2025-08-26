@@ -5,15 +5,9 @@
 		"jsxFactory": "vscpp",
 		"jsxFragmentFactory": "vscppf",
 		"rootDir": ".",
-		"types": [
-			"minimist",
-			"mocha",
-			"node",
-			"picomatch",
-			"sinon",
-			"tar",
-			"vscode"
-		],
+		"paths": {
+			"vscode": ["./src/util/common/test/shims/vscodeTypesShim.ts"]
+		},
 		"noEmit": true
 	},
 	"include": ["src/**/*.ts", "src/**/*.tsx"],
