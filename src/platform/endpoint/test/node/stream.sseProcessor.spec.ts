@@ -599,7 +599,7 @@ data: [DONE]
 		expect(thinkingText).toBeDefined();
 		expect(thinkingText).toBe(' Analyzing');
 		expect(thinkingId).toBe('cot_a3074ac0-a8e8-4a55-bb5b-65cbb1648dcf');
-		expect(metadata).toBe('call_bNK0HIaqlEFyZK6wEz8bXDXJ');
+		expect(metadata).toBeUndefined();
 	});
 
 	test('stream containing only cot_id', async function () {
