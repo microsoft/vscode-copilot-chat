@@ -329,7 +329,7 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	public async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
-		return this._makeChatRequest2({ ...options, ignoreStatefulMarker: true }, token);
+		return this._makeChatRequest2({ ...options, ignoreStatefulMarker: options.ignoreStatefulMarker ?? true }, token);
 
 		// Stateful responses API not supported for now
 		// const response = await this._makeChatRequest2(options, token);
