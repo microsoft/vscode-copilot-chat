@@ -280,12 +280,13 @@
 	"copilot.tools.findTestFiles.name": "Find Test Files",
 	"copilot.tools.getDocInfo.name": "Doc Info",
 	"copilot.tools.createDirectory.name": "Create Directory",
+	"copilot.tools.createDirectory.description": "Create new directories in your workspace",
 	"github.copilot.config.agent.currentEditorContext.enabled": "When enabled, Copilot will include the name of the current active editor in the context for agent mode.",
 	"github.copilot.config.customInstructionsInSystemMessage": "When enabled, custom instructions and mode instructions will be appended to the system message instead of a user message.",
 	"copilot.toolSet.editing.description": "Edit files in your workspace",
 	"copilot.toolSet.runCommand.description": "Run commands in the terminal",
-	"copilot.toolSet.runNotebook.description": "Run notebook cells",
+	"copilot.toolSet.notebooks.description": "Work with notebooks",
 	"copilot.toolSet.search.description": "Search and read files in your workspace",
-	"copilot.toolSet.new.description": "Scaffold a new workspace with VS Code specific configurations to compile, debug and run new projects.",
+	"copilot.toolSet.new.description": "Scaffold a new workspace with VS Code-specific configurations to compile, debug and run new projects.",
 	"copilot.toolSet.runTasks.description": "Run tasks in your workspace"
 }

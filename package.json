@@ -143,7 +143,6 @@
 				"toolReferenceName": "codebase",
 				"displayName": "%copilot.tools.searchCodebase.name%",
 				"icon": "$(folder)",
-				"canBeReferencedInPrompt": true,
 				"userDescription": "%copilot.codebase.tool.description%",
 				"modelDescription": "Run a natural language search for relevant code or documentation comments from the user's current workspace. Returns relevant code snippets from the user's current workspace if it is large, or the full contents of the workspace if it is small.",
 				"tags": [
@@ -677,6 +676,7 @@
 				"name": "copilot_createDirectory",
 				"toolReferenceName": "createDirectory",
 				"displayName": "%copilot.tools.createDirectory.name%",
+				"userDescription": "%copilot.tools.createDirectory.description%",
 				"modelDescription": "Create a new directory structure in the workspace. Will recursively create all directories in the path, like mkdir -p. You do not need to use this tool before using create_file, that tool will automatically create the needed directories.",
 				"tags": [],
 				"inputSchema": {
@@ -908,7 +908,6 @@
 				"name": "copilot_readNotebookCellOutput",
 				"displayName": "%copilot.tools.getNotebookCellOutput.name%",
 				"toolReferenceName": "readNotebookCellOutput",
-				"canBeReferencedInPrompt": true,
 				"icon": "$(notebook-render-output)",
 				"modelDescription": "This tool will retrieve the output for a notebook cell from its most recent execution or restored from disk. The cell may have output even when it has not been run in the current kernel session. This tool has a higher token limit for output length than the runNotebookCell tool.",
 				"userDescription": "%copilot.tools.getNotebookCellOutput.description%",
@@ -1018,8 +1017,7 @@
 				"displayName": "%github.copilot.tools.searchResults.name%",
 				"icon": "$(search)",
 				"userDescription": "%github.copilot.tools.searchResults.description%",
-				"modelDescription": "The results from the search view",
-				"canBeReferencedInPrompt": true
+				"modelDescription": "The results from the search view"
 			},
 			{
 				"name": "copilot_githubRepo",
@@ -1087,16 +1085,16 @@
 				"tools": [
 					"createFile",
 					"createDirectory",
-					"editNotebook",
-					"newJupyterNotebook",
 					"editFiles"
 				]
 			},
 			{
-				"name": "runNotebooks",
-				"description": "%copilot.toolSet.runNotebook.description%",
+				"name": "notebooks",
+				"description": "%copilot.toolSet.notebooks.description%",
 				"icon": "$(notebook)",
 				"tools": [
+					"newJupyterNotebook",
+					"editNotebook",
 					"runCell",
 					"getNotebookSummary",
 					"readNotebookCellOutput"
@@ -1110,7 +1108,9 @@
 					"fileSearch",
 					"textSearch",
 					"listDirectory",
-					"readFile"
+					"readFile",
+					"codebase",
+					"searchResults"
 				]
 			},
 			{
