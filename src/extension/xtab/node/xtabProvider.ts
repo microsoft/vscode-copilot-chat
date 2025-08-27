@@ -735,7 +735,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		const allowRetryWithExpandedWindow = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderRetryWithNMoreLinesBelow, this.expService);
 
 		// if allowed to retry and not retrying already, flip the retry state and try again
-		if (allowRetryWithExpandedWindow && retryState === RetryState.NotRetrying) {
+		if (allowRetryWithExpandedWindow && retryState === RetryState.NotRetrying && request.expandedEditWindowNLines === undefined) {
 			this.doGetNextEdit(request, pushEdit, delaySession, logContext, cancellationToken, telemetryBuilder, RetryState.RetryingWithExpandedWindow);
 			return;
 		}
