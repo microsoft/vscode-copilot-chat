@@ -242,7 +242,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 export function convertToApiChatMessage(messages: Raw.ChatMessage[]): Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2> {
 	const apiMessages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2> = [];
 	for (const message of messages) {
-		const apiContent: Array<vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart2 | vscode.LanguageModelToolCallPart | vscode.LanguageModelDataPart> = [];
+		const apiContent: Array<vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart2 | vscode.LanguageModelToolCallPart | vscode.LanguageModelDataPart | vscode.LanguageModelThinkingPart> = [];
 		// Easier to work with arrays everywhere, rather than string in some cases. So convert to a single text content part
 		for (const contentPart of message.content) {
 			if (contentPart.type === Raw.ChatCompletionContentPartKind.Text) {

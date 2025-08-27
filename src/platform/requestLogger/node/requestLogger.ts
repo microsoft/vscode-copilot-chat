@@ -150,6 +150,9 @@ export interface IRequestLogger {
 
 	onDidChangeRequests: Event<void>;
 	getRequests(): LoggedInfo[];
+
+	enableWorkspaceEditTracing(): void;
+	disableWorkspaceEditTracing(): void;
 }
 
 export const enum LoggedRequestKind {
@@ -254,6 +257,14 @@ export abstract class AbstractRequestLogger extends Disposable implements IReque
 	public abstract addEntry(entry: LoggedRequest): void;
 	public abstract getRequests(): LoggedInfo[];
 	abstract onDidChangeRequests: Event<void>;
+
+	public enableWorkspaceEditTracing(): void {
+		// no-op by default; concrete implementations can override
+	}
+
+	public disableWorkspaceEditTracing(): void {
+		// no-op by default; concrete implementations can override
+	}
 
 	/** Current request being made to the LM. */
 	protected get currentRequest() {

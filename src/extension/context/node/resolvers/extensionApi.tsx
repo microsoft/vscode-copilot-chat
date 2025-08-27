@@ -91,13 +91,12 @@ export class VSCodeAPIContextElement extends PromptElement<VSCodeAPIContextProps
 
 	private async getSnippets(token: CancellationToken | undefined): Promise<string[]> {
 		await this.apiEmbeddingsIndex.updateIndex();
-
-		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [this.props.query], {}, new TelemetryCorrelationId('VSCodeAPIContextElement::getSnippets'), token);
-		if (embeddingResult && embeddingResult.values.length > 0) {
-			return this.apiEmbeddingsIndex.nClosestValues(embeddingResult.values[0], 5);
+		if (token?.isCancellationRequested) {
+			return [];
 		}
 
-		return [];
+		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [this.props.query], {}, new TelemetryCorrelationId('VSCodeAPIContextElement::getSnippets'), token);
+		return this.apiEmbeddingsIndex.nClosestValues(embeddingResult.values[0], 5);
 	}
 
 	override async render(state: undefined, sizing: PromptSizing, progress?: Progress<ChatResponsePart>, token?: CancellationToken): Promise<PromptPiece<any, any> | undefined> {

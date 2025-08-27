@@ -189,40 +189,49 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 		return undefined;
 	}
 
-	private parseReplay(content: string): ChatStep[] {
-		const prompts = JSON.parse(content).prompts as { [key: string]: any }[];
-		if (!Array.isArray(prompts)) {
-			throw new Error('Invalid replay content: expected an array of prompts in the base JSON structure.');
+	private parsePrompt(prompt: { [key: string]: any }) {
+		const steps: ChatStep[] = [];
+		steps.push({
+			kind: 'userQuery',
+			query: prompt.prompt,
+			line: 0,
+		});
+
+		for (const log of prompt.logs) {
+			if (log.kind === 'toolCall') {
+				steps.push({
+					kind: 'toolCall',
+					id: log.id,
+					line: 0,
+					toolName: log.name,
+					args: JSON.parse(log.args),
+					edits: log.edits,
+					results: log.response
+				});
+			} else if (log.kind === 'request') {
+				steps.push({
+					kind: 'request',
+					id: log.id,
+					line: 0,
+					prompt: log.messages,
+					result: log.result.value
+				});
+			}
 		}
+
+		return steps;
+	}
+
+	private parseReplay(content: string): ChatStep[] {
+		const parsed = JSON.parse(content);
+		const prompts = (parsed.prompts && Array.isArray(parsed.prompts) ? parsed.prompts : [parsed]) as { [key: string]: any }[];
+		if (prompts.filter(p => !p.prompt).length) {
+			throw new Error('Invalid replay content: expected a prompt object or an array of prompts in the base JSON structure.');
+		}
+
 		const steps: ChatStep[] = [];
 		for (const prompt of prompts) {
-			steps.push({
-				kind: 'userQuery',
-				query: prompt.prompt,
-				line: 0,
-			});
-
-			for (const log of prompt.logs) {
-				if (log.kind === 'toolCall') {
-					steps.push({
-						kind: 'toolCall',
-						id: log.id,
-						line: 0,
-						toolName: log.name,
-						args: JSON.parse(log.args),
-						fileUpdates: log.fileUpdates,
-						results: log.response
-					});
-				} else if (log.kind === 'request') {
-					steps.push({
-						kind: 'request',
-						id: log.id,
-						line: 0,
-						prompt: log.messages,
-						result: log.result.value
-					});
-				}
-			}
+			steps.push(...this.parsePrompt(prompt));
 		}
 
 		let stepIx = 0;
@@ -231,7 +240,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 			if (stepIx < steps.length) {
 				const step = steps[stepIx];
 				if (step.kind === 'userQuery') {
-					const match = line.match(`"prompt": "${step.query}"`);
+					const match = line.match(`"prompt": "${step.query.trim()}`);
 					if (match) {
 						step.line = index + 1;
 						stepIx++;

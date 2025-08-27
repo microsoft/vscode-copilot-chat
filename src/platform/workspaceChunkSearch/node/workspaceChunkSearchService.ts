@@ -779,13 +779,8 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 		});
 	}
 
-	private async computeEmbeddings(inputType: 'query' | 'document', strings: readonly string[], token: CancellationToken): Promise<Embeddings> {
-		const embeddings = await this._embeddingsComputer.computeEmbeddings(this._embeddingType, strings, { inputType }, new TelemetryCorrelationId('WorkspaceChunkSearchService::computeEmbeddings'), token);
-		if (!embeddings) {
-			throw new Error('Timeout computing embeddings');
-		}
-
-		return embeddings;
+	private computeEmbeddings(inputType: 'query' | 'document', strings: readonly string[], token: CancellationToken): Promise<Embeddings> {
+		return this._embeddingsComputer.computeEmbeddings(this._embeddingType, strings, { inputType }, new TelemetryCorrelationId('WorkspaceChunkSearchService::computeEmbeddings'), token);
 	}
 
 	/**

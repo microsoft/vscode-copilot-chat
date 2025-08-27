@@ -86,6 +86,18 @@ export class WorkspaceDocumentEditHistory extends Disposable {
 		}
 		return state.getNRecentEdits(n);
 	}
+
+	public resetEditHistory(): void {
+		this._documentState.forEach(d => d.resetEditHistory());
+	}
+
+	public getLastDocuments(): readonly DocumentEditHistory[] {
+		return this._lastDocuments.getItemsReversed();
+	}
+
+	public hasDocument(docId: DocumentId): boolean {
+		return this._documentState.has(docId);
+	}
 }
 
 class DocumentEdit implements IEditData<DocumentEdit> {

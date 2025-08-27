@@ -111,7 +111,7 @@ describe('NextEditProvider Caching', () => {
 
 		doc.applyEdit(StringEdit.insert(11, '3D'));
 
-		const context: InlineCompletionContext = { triggerKind: 1, selectedCompletionInfo: undefined, requestUuid: generateUuid(), requestIssuedDateTime: Date.now() };
+		const context: InlineCompletionContext = { triggerKind: 1, selectedCompletionInfo: undefined, requestUuid: generateUuid(), requestIssuedDateTime: Date.now(), earliestShownDateTime: Date.now() + 200 };
 		const logContext = new InlineEditRequestLogContext(doc.id.toString(), 1, context);
 		const cancellationToken = CancellationToken.None;
 		const tb1 = new NextEditProviderTelemetryBuilder(gitExtensionService, mockNotebookService, workspaceService, nextEditProvider.ID, doc);

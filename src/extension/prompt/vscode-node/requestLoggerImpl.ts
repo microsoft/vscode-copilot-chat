@@ -22,8 +22,10 @@ import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Iterable } from '../../../util/vs/base/common/iterator';
 import { safeStringify } from '../../../util/vs/base/common/objects';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequest } from '../../../vscodeTypes';
 import { renderDataPartToString, renderToolResultToStringNoBudget } from './requestLoggerToolResult';
+import { WorkspaceEditRecorder } from './workspaceEditRecorder';
 
 // Implementation classes with toJson methods
 class LoggedElementInfo implements ILoggedElementInfo {
@@ -98,7 +100,8 @@ class LoggedToolCall implements ILoggedToolCall {
 		public readonly response: LanguageModelToolResult2,
 		public readonly chatRequest: any | undefined,
 		public readonly time: number,
-		public readonly thinking?: ThinkingData
+		public readonly thinking?: ThinkingData,
+		public readonly edits?: { path: string; edits: string }[],
 	) { }
 
 	async toJSON(): Promise<object> {
@@ -120,7 +123,8 @@ class LoggedToolCall implements ILoggedToolCall {
 			args: this.args,
 			response: result,
 			time: new Date(this.time).toISOString(),
-			thinking: this.thinking || {}
+			thinking: this.thinking || {},
+			edits: this.edits ? this.edits.map(edit => ({ path: edit.path, edits: JSON.parse(edit.edits) })) : undefined
 		};
 	}
 }
@@ -129,12 +133,15 @@ export class RequestLogger extends AbstractRequestLogger {
 
 	private _didRegisterLinkProvider = false;
 	private readonly _entries: LoggedInfo[] = [];
+	private _workspaceEditRecorder: WorkspaceEditRecorder | undefined;
 
 	constructor(
 		@ILogService private readonly _logService: ILogService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
 		super();
+
 
 		this._register(workspace.registerTextDocumentContentProvider(ChatRequestScheme.chatRequestScheme, {
 			onDidChange: Event.map(this.onDidChangeRequests, () => Uri.parse(ChatRequestScheme.buildUri({ kind: 'latest' }))),
@@ -183,6 +190,7 @@ export class RequestLogger extends AbstractRequestLogger {
 	}
 
 	public override logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void {
+		const edits = this._workspaceEditRecorder?.getEditsAndReset();
 		this._addEntry(new LoggedToolCall(
 			id,
 			name,
@@ -190,8 +198,23 @@ export class RequestLogger extends AbstractRequestLogger {
 			response,
 			this.currentRequest,
 			Date.now(),
-			thinking
+			thinking,
+			edits
 		));
+	}
+
+	/** Start tracking edits made to the workspace for every tool call. */
+	public override enableWorkspaceEditTracing(): void {
+		if (!this._workspaceEditRecorder) {
+			this._workspaceEditRecorder = this._instantiationService.createInstance(WorkspaceEditRecorder);
+		}
+	}
+
+	public override disableWorkspaceEditTracing(): void {
+		if (this._workspaceEditRecorder) {
+			this._workspaceEditRecorder.dispose();
+			this._workspaceEditRecorder = undefined;
+		}
 	}
 
 	public override addPromptTrace(elementName: string, endpoint: IChatEndpointInfo, result: RenderPromptResult, trace: HTMLTracer): void {
@@ -347,7 +370,7 @@ export class RequestLogger extends AbstractRequestLogger {
 				result.push(`thinkingId: ${entry.thinking.id}`);
 			}
 			result.push(`~~~`);
-			result.push(entry.thinking.text);
+			result.push(Array.isArray(entry.thinking.text) ? entry.thinking.text.join('\n') : entry.thinking.text);
 			result.push(`~~~`);
 		}
 

@@ -14,7 +14,8 @@ import { Lazy } from '../../../util/vs/base/common/lazy';
 import { SSEParser } from '../../../util/vs/base/common/sseParser';
 import { isDefined } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../networking/common/fetch';
 import { ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
@@ -25,11 +26,12 @@ import { IChatModelInformation } from '../common/endpointProvider';
 import { getStatefulMarkerAndIndex } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
 
-export function createResponsesRequestBody(options: ICreateEndpointBodyOptions, model: string, modelInfo: IChatModelInformation): IEndpointBody {
-	return {
+export function createResponsesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, modelInfo: IChatModelInformation): IEndpointBody {
+	const configService = accessor.get(IConfigurationService);
+	const logService = accessor.get(ILogService);
+	const body: IEndpointBody = {
 		model,
 		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
-		reasoning: modelInfo.capabilities.supports.thinking ? { summary: 'concise' } : undefined,
 		stream: true,
 		tools: options.requestOptions?.tools?.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
 			...tool.function,
@@ -39,17 +41,35 @@ export function createResponsesRequestBody(options: ICreateEndpointBodyOptions, 
 		})),
 		// Only a subset of completion post options are supported, and some
 		// are renamed. Handle them manually:
-		temperature: options.postOptions.temperature,
 		top_p: options.postOptions.top_p,
 		max_output_tokens: options.postOptions.max_tokens,
 		tool_choice: typeof options.postOptions.tool_choice === 'object'
 			? { type: 'function', name: options.postOptions.tool_choice.function.name }
 			: options.postOptions.tool_choice,
-		// top_logprobs is documented but not in the API types yet
-		//@ts-expect-error
 		top_logprobs: options.postOptions.logprobs ? 3 : undefined,
 		store: false
-	} satisfies OpenAI.Responses.ResponseCreateParamsStreaming;
+	};
+
+	body.truncation = configService.getConfig(ConfigKey.Internal.UseResponsesApiTruncation) ?
+		'auto' :
+		'disabled';
+	const reasoningConfig = configService.getConfig(ConfigKey.Internal.ResponsesApiReasoning);
+	if (reasoningConfig === true) {
+		body.reasoning = {
+			'effort': 'high',
+			'summary': 'detailed'
+		};
+	} else if (typeof reasoningConfig === 'string') {
+		try {
+			body.reasoning = JSON.parse(reasoningConfig);
+		} catch (e) {
+			logService.error(e, 'Failed to parse responses reasoning setting');
+		}
+	}
+
+	body.include = ['reasoning.encrypted_content'];
+
+	return body;
 }
 
 function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMessage[], ignoreStatefulMarker: boolean): { input: OpenAI.Responses.ResponseInputItem[]; previous_response_id?: string } {

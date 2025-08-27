@@ -82,6 +82,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
 		if (this.useResponsesApi) {
 			// Handle Responses API: customize the body directly
+			options.ignoreStatefulMarker = false;
 			const body = super.createRequestBody(options);
 			body.store = true;
 			body.n = undefined;
@@ -160,7 +161,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 
 	public override async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
 		// Apply ignoreStatefulMarker: false for initial request
-		const modifiedOptions = { ...options, ignoreStatefulMarker: false };
+		const modifiedOptions: IMakeChatRequestOptions = { ...options, ignoreStatefulMarker: false };
 		let response = await super.makeChatRequest2(modifiedOptions, token);
 		if (response.type === ChatFetchResponseType.InvalidStatefulMarker) {
 			response = await this._makeChatRequest2({ ...options, ignoreStatefulMarker: true }, token);

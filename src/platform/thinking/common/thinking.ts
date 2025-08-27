@@ -6,11 +6,11 @@
 export interface ThinkingDataInMessage {
 	// Azure Open AI fields
 	cot_id?: string;
-	cot_summary?: string;
+	cot_summary?: string | string[];
 
 	// Copilot API fields
 	reasoning_opaque?: string;
-	reasoning_text?: string;
+	reasoning_text?: string | string[];
 }
 
 export interface RawThinkingDelta {
@@ -28,17 +28,18 @@ export interface RawThinkingDelta {
 }
 
 export type ThinkingDelta = {
-	text?: string;
+	text?: string | string[];
 	id: string;
-	metadata?: string;
+	metadata?: { readonly [key: string]: any };
 } | {
-	text?: string;
+	text?: string | string[];
 	id?: string;
-	metadata: string;
-} | {
-	text: string;
+	metadata: { readonly [key: string]: any };
+} |
+{
+	text: string | string[];
 	id?: string;
-	metadata?: string;
+	metadata?: { readonly [key: string]: any };
 };
 
 export type EncryptedThinkingDelta = {
@@ -53,8 +54,8 @@ export function isEncryptedThinkingDelta(delta: ThinkingDelta | EncryptedThinkin
 
 export interface ThinkingData {
 	id: string;
-	text: string;
-	metadata?: string;
+	text: string | string[];
+	metadata?: { [key: string]: any };
 	tokens?: number;
 	encrypted?: string;
 }

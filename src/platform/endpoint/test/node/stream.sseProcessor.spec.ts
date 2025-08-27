@@ -573,9 +573,9 @@ data: [DONE]
 			createFakeStreamResponse(response),
 		);
 
-		let thinkingText: string | undefined = undefined;
+		let thinkingText: string | string[] | undefined = undefined;
 		let thinkingId: string | undefined = undefined;
-		let metadata: string | undefined = undefined;
+		let metadata: { [key: string]: any } | undefined = undefined;
 
 
 		await getAll(processor.processSSE((text: string, index: number, delta: IResponseDelta) => {
@@ -584,7 +584,7 @@ data: [DONE]
 					if (thinkingText === undefined) {
 						thinkingText = '';
 					}
-					thinkingText += delta.thinking.text;
+					thinkingText += Array.isArray(delta.thinking.text) ? delta.thinking.text.join('') : delta.thinking.text;
 				}
 				if (delta.thinking.id) {
 					thinkingId = delta.thinking.id;
@@ -599,7 +599,7 @@ data: [DONE]
 		expect(thinkingText).toBeDefined();
 		expect(thinkingText).toBe(' Analyzing');
 		expect(thinkingId).toBe('cot_a3074ac0-a8e8-4a55-bb5b-65cbb1648dcf');
-		expect(metadata).toBe('call_bNK0HIaqlEFyZK6wEz8bXDXJ');
+		expect(metadata).toBeUndefined();
 	});
 
 	test('stream containing only cot_id', async function () {
@@ -620,9 +620,9 @@ data: [DONE]
 
 		);
 
-		let thinkingText: string | undefined = undefined;
+		let thinkingText: string | string[] | undefined = undefined;
 		let thinkingId: string | undefined = undefined;
-		let metadata: string | undefined = undefined;
+		let metadata: { [key: string]: any } | undefined = undefined;
 
 
 		await getAll(processor.processSSE((text: string, index: number, delta: IResponseDelta) => {
@@ -631,7 +631,7 @@ data: [DONE]
 					if (thinkingText === undefined) {
 						thinkingText = '';
 					}
-					thinkingText += delta.thinking.text;
+					thinkingText += Array.isArray(delta.thinking.text) ? delta.thinking.text.join('') : delta.thinking.text;
 				}
 				if (delta.thinking.id) {
 					thinkingId = delta.thinking.id;

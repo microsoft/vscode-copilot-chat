@@ -111,7 +111,7 @@ export interface IEmbeddingsComputer {
 		options?: ComputeEmbeddingsOptions,
 		telemetryInfo?: TelemetryCorrelationId,
 		token?: CancellationToken,
-	): Promise<Embeddings | undefined>;
+	): Promise<Embeddings>;
 }
 
 function dotProduct(a: EmbeddingVector, b: EmbeddingVector): number {

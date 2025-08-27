@@ -70,10 +70,6 @@ export class UrlChunkEmbeddingsIndex extends Disposable {
 
 	private async computeEmbeddings(str: string, token: CancellationToken): Promise<Embedding> {
 		const embeddings = await this._embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [str], {}, new TelemetryCorrelationId('UrlChunkEmbeddingsIndex::computeEmbeddings'), token);
-		if (!embeddings?.values.length) {
-			throw new Error('Timeout computing embeddings');
-		}
-
 		return embeddings.values[0];
 	}
 
