@@ -5,13 +5,15 @@
 		"jsxFactory": "vscpp",
 		"jsxFragmentFactory": "vscppf",
 		"rootDir": ".",
+		"outDir": "dist",
+		"declaration": true,
+		"declarationMap": true,
 		"types": [
 			"node"
 		],
 		"paths": {
 			"vscode": ["./src/util/common/test/shims/vscodeTypesShim.ts"]
-		},
-		"noEmit": true
+		}
 	},
 	"include": [
 		"src",

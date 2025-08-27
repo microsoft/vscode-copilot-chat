@@ -1,2 +1,4 @@
 # Generated source files
-src/
+/src/
+/dist/
+/*.tgz

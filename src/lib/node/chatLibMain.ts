@@ -104,7 +104,8 @@ class NESProvider extends Disposable implements INESProvider {
 			triggerKind: 1, // Invoke
 			selectedCompletionInfo: undefined,
 			requestUuid: generateUuid(),
-			requestIssuedDateTime: Date.now()
+			requestIssuedDateTime: Date.now(),
+			earliestShownDateTime: Date.now() + 200,
 		};
 
 		// Create log context

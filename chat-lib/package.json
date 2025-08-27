@@ -1,8 +1,15 @@
 {
 	"name": "@vscode/chat-lib",
-	"version": "0.1.0",
+	"version": "0.0.1",
 	"description": "Chat and inline editing SDK extracted from VS Code Copilot Chat",
-	"main": "src/main.ts",
+	"main": "dist/src/main.js",
+	"types": "dist/src/main.d.ts",
+	"author": "Microsoft Corporation",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/microsoft/vscode-remote-containers.git"
+	},
+	"license": "SEE LICENSE IN LICENSE.txt",
 	"engines": {
 		"node": ">=22.14.0"
 	},
@@ -20,6 +27,7 @@
 		"@types/node": "^22.16.3",
 		"@types/vscode": "^1.102.0",
 		"outdent": "^0.8.0",
+		"rimraf": "^6.0.1",
 		"vitest": "^2.0.0",
 		"typescript": "^5.0.0"
 	},
@@ -30,14 +38,17 @@
 		"vscode",
 		"copilot"
 	],
-	"license": "MIT",
 	"files": [
-		"src/**/*.ts",
+		"dist/src",
+		"src",
 		"README.md",
 		"LICENSE.txt"
 	],
 	"scripts": {
-		"build": "tsc --noEmit",
+		"clean": "rimraf dist",
+		"build": "tsc",
+		"package": "npm pack",
+		"publish": "npm publish",
 		"test": "vitest run",
 		"test:watch": "vitest"
 	}
