@@ -232,7 +232,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			let completionItem: Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined;
 
 			const documents = doc.fromOffsetRange(result.edit.replaceRange);
-			const cellMarkerTelemetry = getNotebookCellMarkerTelemetryInfo(result.edit.newText);
+			const cellMarkerTelemetry = getNotebookCellMarkerTelemetry(result.edit.newText);
 			if (!documents.length) {
 				tracer.trace('no next edit suggestion');
 			} else if (cellMarkerTelemetry) {
@@ -589,14 +589,10 @@ function shortOpportunityId(oppId: string): string {
 	return oppId.substring(4, 8);
 }
 
-function getNotebookCellMarkerTelemetryInfo(newText: string): { cellMarkerIndex: number; cellMarkerCount: number } | undefined {
-	if (!newText) {
-		return undefined;
-	}
-	const indexOfCellMarker = newText.indexOf('#%% vscode.cell [id=');
+function getNotebookCellMarkerTelemetry(newText: string): { cellMarkerIndex: number; cellMarkerCount: number } | undefined {
 	const cellMarkerCount = newText.match(/%% vscode.cell \[id=/g)?.length || 0;
-	if (indexOfCellMarker === -1 || cellMarkerCount === 0) {
+	if (!newText || cellMarkerCount === 0) {
 		return undefined;
 	}
-	return { cellMarkerIndex: indexOfCellMarker, cellMarkerCount };
+	return { cellMarkerIndex: newText.indexOf('#%% vscode.cell [id='), cellMarkerCount };
 }
