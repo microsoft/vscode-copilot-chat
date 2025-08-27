@@ -74,7 +74,6 @@ export interface ILlmNESTelemetry extends Partial<IStatelessNextEditTelemetry> {
 	readonly activeDocumentLanguageId: string | undefined;
 	readonly activeDocumentRepository: string | undefined;
 	readonly hasNextEdit: boolean;
-	readonly hasNotebookCellMarker: boolean;
 	readonly wasPreviouslyRejected: boolean;
 	readonly status: NextEditTelemetryStatus;
 	readonly nesConfigs: INesConfigs | undefined;
@@ -112,6 +111,7 @@ export interface INextEditProviderTelemetry extends ILlmNESTelemetry, IDiagnosti
 	readonly alternativeAction: IAlternativeAction | undefined;
 	readonly postProcessingOutcome: string | undefined;
 	readonly isNESForAnotherDoc: boolean;
+	readonly hasNotebookCellMarker: boolean;
 	readonly isActiveDocument?: boolean;
 	readonly isNaturalLanguageDominated: boolean;
 
@@ -250,7 +250,6 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			wasPreviouslyRejected: this._wasPreviouslyRejected,
 			isNotebook: isNotebook,
 			notebookType,
-			hasNotebookCellMarker: this._hasNotebookCellMarker,
 			status: this._status,
 			alternativeAction,
 
@@ -335,12 +334,6 @@ export class LlmNESTelemetryBuilder extends Disposable {
 	private _hasNextEdit: boolean = false;
 	public setHasNextEdit(hasNextEdit: boolean): this {
 		this._hasNextEdit = hasNextEdit;
-		return this;
-	}
-
-	private _hasNotebookCellMarker: boolean = false;
-	public setContainsNotebookCellMarker(hasNotebookCellMarker: boolean): this {
-		this._hasNotebookCellMarker = hasNotebookCellMarker;
 		return this;
 	}
 
@@ -451,6 +444,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 			hadLlmNES: this._hadLlmNES,
 			isActiveDocument: this._isActiveDocument,
 			isNESForAnotherDoc: this._isNESForAnotherDoc,
+			hasNotebookCellMarker: this._hasNotebookCellMarker,
 			hadDiagnosticsNES: this._hadDiagnosticsNES,
 			configIsDiagnosticsNESEnabled: this._configIsDiagnosticsNESEnabled,
 			isNaturalLanguageDominated: this._isNaturalLanguageDominated,
@@ -524,6 +518,12 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 	private _isActiveDocument?: boolean;
 	public setIsActiveDocument(isActive: boolean): this {
 		this._isActiveDocument = isActive;
+		return this;
+	}
+
+	private _hasNotebookCellMarker: boolean = false;
+	public setContainsNotebookCellMarker(hasNotebookCellMarker: boolean): this {
+		this._hasNotebookCellMarker = hasNotebookCellMarker;
 		return this;
 	}
 

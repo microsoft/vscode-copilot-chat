@@ -295,7 +295,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		}
 
 		telemetryBuilder.setHasNextEdit(true);
-		telemetryBuilder.setContainsNotebookCellMarker((nextEditResult.result?.edit.newText || '').includes('%% vscode.cell [id='));
 
 		if (isRebasedCachedEdit || isSubsequentCachedEdit) {
 			tracer.trace(`minimum response delay: NOT enforced. isRebasedCachedEdit: ${isRebasedCachedEdit}, isSubsequentCachedEdit: ${isSubsequentCachedEdit}`);

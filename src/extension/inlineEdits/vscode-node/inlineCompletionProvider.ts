@@ -17,6 +17,8 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { findNotebook, isNotebookCell } from '../../../util/common/notebooks';
 import { ITracer, createTracer } from '../../../util/common/tracing';
 import { softAssert } from '../../../util/vs/base/common/assert';
 import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
@@ -34,10 +36,8 @@ import { InlineEditModel } from './inlineEditModel';
 import { learnMoreCommandId, learnMoreLink } from './inlineEditProviderFeature';
 import { isInlineSuggestion } from './isInlineSuggestion';
 import { InlineEditLogger } from './parts/inlineEditLogger';
-import { toExternalRange } from './utils/translations';
 import { IVSCodeObservableDocument } from './parts/vscodeWorkspace';
-import { findNotebook, isNotebookCell } from '../../../util/common/notebooks';
-import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { toExternalRange } from './utils/translations';
 
 const learnMoreAction: Command = {
 	title: l10n.t('Learn More'),
@@ -236,6 +236,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 				tracer.trace('no next edit suggestion');
 			} else if (documents[0][0] === document) {
 				// nes is for this same document.
+				telemetryBuilder.setContainsNotebookCellMarker((result.edit.newText || '').includes('%% vscode.cell [id='));
 				telemetryBuilder.setIsActiveDocument(window.activeTextEditor?.document === documents[0][0]);
 				range = documents[0][1];
 				const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
@@ -245,6 +246,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 					this.createCompletionItem(doc, document, position, range, result);
 			} else {
 				// nes is for a different document.
+				telemetryBuilder.setContainsNotebookCellMarker((result.edit.newText || '').includes('%% vscode.cell [id='));
 				telemetryBuilder.setIsNESForOtherEditor();
 				telemetryBuilder.setIsActiveDocument(window.activeTextEditor?.document === documents[0][0]);
 				range = documents[0][1];
