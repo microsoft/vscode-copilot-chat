@@ -140,26 +140,10 @@ class LoggedRequestInfo implements ILoggedRequestInfo {
 		let errorInfo;
 
 		if (this.entry.type === LoggedRequestKind.ChatMLSuccess) {
-			if (this.entry.deltas?.length) {
-				responseData = {
-					type: 'deltas',
-					message: processDeltasToMessage(this.entry.deltas)
-				};
-			} else {
-				const messages = this.entry.result.value;
-				let message: string = '';
-				if (Array.isArray(messages)) {
-					if (messages.length === 1) {
-						message = messages[0];
-					} else {
-						message = `${messages.map(v => `<<${v}>>`).join(', ')}`;
-					}
-				}
-				responseData = {
-					type: 'message',
-					message: message
-				};
-			}
+			responseData = {
+				type: 'success',
+				message: this.entry.result.value
+			};
 		} else if (this.entry.type === LoggedRequestKind.CompletionSuccess) {
 			responseData = {
 				type: 'completion',
