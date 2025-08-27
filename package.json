@@ -967,7 +967,7 @@
 				"name": "copilot_findTestFiles",
 				"displayName": "%copilot.tools.findTestFiles.name%",
 				"icon": "$(beaker)",
-				"canBeReferencedInPrompt": true,
+				"canBeReferencedInPrompt": false,
 				"toolReferenceName": "findTestFiles",
 				"userDescription": "%copilot.tools.findTestFiles.description%",
 				"modelDescription": "For a source code file, find the file that contains the tests. For a test file find the file that contains the code under test.",
