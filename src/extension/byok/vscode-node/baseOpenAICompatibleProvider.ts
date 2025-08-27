@@ -3,13 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatRequestHandleOptions, Progress } from 'vscode';
+import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatRequestHandleOptions, LanguageModelResponsePart2, Progress } from 'vscode';
 import { IChatModelInformation, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotLanguageModelWrapper } from '../../conversation/vscode-node/languageModelAccess';
-import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, LMResponsePart, resolveModelInfo } from '../common/byokProvider';
+import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, resolveModelInfo } from '../common/byokProvider';
 import { OpenAIEndpoint } from '../node/openAIEndpoint';
 import { IBYOKStorageService } from './byokStorageService';
 import { promptForAPIKey } from './byokUIService';
@@ -83,7 +83,7 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 			return [];
 		}
 	}
-	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: LanguageModelChatRequestHandleOptions, progress: Progress<LMResponsePart>, token: CancellationToken): Promise<any> {
+	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: LanguageModelChatRequestHandleOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<any> {
 		const openAIChatEndpoint = await this.getEndpointImpl(model);
 		return this._lmWrapper.provideLanguageModelResponse(openAIChatEndpoint, messages, options, options.requestInitiator, progress, token);
 	}

@@ -11,7 +11,6 @@ import { timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import type { LMResponsePart } from '../../byok/common/byokProvider';
 import { Intent } from '../../common/constants';
 import { ConversationFeature } from '../../conversation/vscode-node/conversationFeature';
 import { IConversationStore } from '../../conversationStore/node/conversationStore';
@@ -166,10 +165,11 @@ suite.skip('Copilot Chat Sanity Test', function () {
 						version: '0.0.0',
 						maxInputTokens: 1000,
 						maxOutputTokens: 1000,
-						requiresAuthorization: true
+						requiresAuthorization: true,
+						capabilities: {}
 					}];
 				}
-				async provideLanguageModelChatResponse(model: vscode.LanguageModelChatInformation, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.LanguageModelChatRequestHandleOptions, progress: vscode.Progress<LMResponsePart>, token: vscode.CancellationToken): Promise<any> {
+				async provideLanguageModelChatResponse(model: vscode.LanguageModelChatInformation, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.LanguageModelChatRequestHandleOptions, progress: vscode.Progress<vscode.LanguageModelResponsePart2>, token: vscode.CancellationToken): Promise<any> {
 					throw new Error('Method not implemented.');
 				}
 				async provideTokenCount(model: vscode.LanguageModelChatInformation, text: string | vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2, token: vscode.CancellationToken): Promise<number> {
