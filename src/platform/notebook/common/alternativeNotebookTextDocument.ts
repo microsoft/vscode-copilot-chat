@@ -30,7 +30,7 @@ class AlternativeNotebookCellSnapshot {
 		const code = cell.document.getText().replace(/\r\n|\n/g, EOL);
 		const prefix = cell.kind === NotebookCellKind.Markup ? `${cellMarker}${EOL}${blockComment[0]}${EOL}` : `${cellMarker}${EOL}`;
 		const suffix = cell.kind === NotebookCellKind.Markup ? `${EOL}${blockComment[1]}` : '';
-		return new AlternativeNotebookCellSnapshot(cell, blockComment, lineCommentStart, code, prefix, suffix);
+		return new AlternativeNotebookCellSnapshot(cell, blockComment, lineCommentStart, code, prefix, suffix, cellMarker);
 	}
 	constructor(
 		public readonly cell: NotebookCell,
@@ -38,7 +38,8 @@ class AlternativeNotebookCellSnapshot {
 		private readonly lineCommentStart: string,
 		private readonly code: string,
 		private readonly prefix: string,
-		private readonly suffix: string
+		private readonly suffix: string,
+		public readonly cellMarker: string
 	) {
 		this.crlfTranslator = new CrLfOffsetTranslator(cell.document.getText(), cell.document.eol);
 		this.positionTransformer = new PositionOffsetTransformer(`${prefix}${code}${suffix}`);
@@ -64,7 +65,7 @@ class AlternativeNotebookCellSnapshot {
 
 	public withTextEdit(edit: StringEdit): AlternativeNotebookCellSnapshot {
 		const newCode = edit.apply(this.code);
-		return new AlternativeNotebookCellSnapshot(this.cell, this.blockComment, this.lineCommentStart, newCode, this.prefix, this.suffix);
+		return new AlternativeNotebookCellSnapshot(this.cell, this.blockComment, this.lineCommentStart, newCode, this.prefix, this.suffix, this.cellMarker);
 	}
 
 	public get altText(): string {
@@ -175,6 +176,11 @@ abstract class AbstractAlternativeNotebookDocument {
 	 */
 	public getCell(textDocument: TextDocument): NotebookCell | undefined {
 		return this.cellTextDocuments.get(textDocument);
+	}
+
+	public getCellMarker(cell: NotebookCell) {
+		const altCell = this.cells.find(c => c.altCell.cell === cell);
+		return altCell?.altCell.cellMarker;
 	}
 
 	public getText(range?: OffsetRange): string {
