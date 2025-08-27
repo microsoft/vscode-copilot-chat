@@ -270,6 +270,7 @@
 	"copilot.tools.updateUserPreferences.name": "Update User Preferences",
 	"copilot.tools.openSimpleBrowser.name": "Open Simple Browser",
 	"copilot.tools.createFile.name": "Create File",
+	"copilot.tools.createFile.description": "Create New Files",
 	"copilot.tools.insertEdit.name": "Edit File",
 	"copilot.tools.replaceString.name": "Replace String in File",
 	"copilot.tools.multiReplaceString.name": "Multi-Replace String in Files",

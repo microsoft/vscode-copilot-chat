@@ -652,6 +652,7 @@
 				"name": "copilot_createFile",
 				"toolReferenceName": "createFile",
 				"displayName": "%copilot.tools.createFile.name%",
+				"userDescription": "%copilot.tools.createFile.description%",
 				"modelDescription": "This is a tool for creating a new file in the workspace. The file will be created with the specified content. The directory will be created if it does not already exist. Never use this tool to edit a file that already exists.",
 				"tags": [],
 				"inputSchema": {
