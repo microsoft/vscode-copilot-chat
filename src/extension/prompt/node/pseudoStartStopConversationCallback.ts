@@ -61,8 +61,8 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 		}
 
 		if (delta.thinking) {
-			// Show thinking progress for unencrypted thinking deltas
-			if (!isEncryptedThinkingDelta(delta.thinking)) {
+			// Don't send parts that are only encrypted content
+			if (!isEncryptedThinkingDelta(delta.thinking) || delta.thinking.text) {
 				progress.thinkingProgress(delta.thinking);
 			}
 		}
