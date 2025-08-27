@@ -22,15 +22,19 @@ class MockFsService implements Partial<IFileSystemService> {
 	private mockDirs = new Map<string, [string, FileType][]>();
 	private mockFiles = new Map<string, string>();
 	private mockErrors = new Map<string, Error>();
+	private mockMtimes = new Map<string, number>();
 
 	mockDirectory(uri: URI | string, entries: [string, FileType][]) {
 		const uriString = typeof uri === 'string' ? uri : uri.toString();
 		this.mockDirs.set(uriString, entries);
 	}
 
-	mockFile(uri: URI | string, contents: string) {
+	mockFile(uri: URI | string, contents: string, mtime?: number) {
 		const uriString = typeof uri === 'string' ? uri : uri.toString();
 		this.mockFiles.set(uriString, contents);
+		if (mtime !== undefined) {
+			this.mockMtimes.set(uriString, mtime);
+		}
 	}
 
 	mockError(uri: URI | string, error: Error) {
@@ -65,7 +69,8 @@ class MockFsService implements Partial<IFileSystemService> {
 		}
 		if (this.mockFiles.has(uriString)) {
 			const contents = this.mockFiles.get(uriString)!;
-			return { type: FileType.File as unknown as vscode.FileType, ctime: Date.now() - 1000, mtime: Date.now(), size: contents.length };
+			const mtime = this.mockMtimes.get(uriString) ?? Date.now();
+			return { type: FileType.File as unknown as vscode.FileType, ctime: Date.now() - 1000, mtime, size: contents.length };
 		}
 		throw new Error('ENOENT');
 	}
@@ -167,8 +172,9 @@ describe('ClaudeChatSessionItemProvider', () => {
 			[fileName1, FileType.File],
 			[fileName2, FileType.File]
 		]);
-		mockFs.mockFile(URI.joinPath(dirUri, fileName1), fileContents1);
-		mockFs.mockFile(URI.joinPath(dirUri, fileName2), fileContents2);
+		// Make fileName1 newer (higher mtime) so it appears first in the sorted results
+		mockFs.mockFile(URI.joinPath(dirUri, fileName1), fileContents1, 2000);
+		mockFs.mockFile(URI.joinPath(dirUri, fileName2), fileContents2, 1000);
 
 		const items = await provider.provideChatSessionItems(CancellationToken.None);
 
