@@ -13,7 +13,7 @@ import { LanguageId } from '../../../../platform/inlineEdits/common/dataTypes/la
 import { EditReason } from '../../../../platform/inlineEdits/common/editReason';
 import { IObservableDocument, ObservableWorkspace, StringEditWithReason } from '../../../../platform/inlineEdits/common/observableWorkspace';
 import { createAlternativeNotebookDocument, IAlternativeNotebookDocument, toAltNotebookCellChangeEdit, toAltNotebookChangeEdit } from '../../../../platform/notebook/common/alternativeNotebookTextDocument';
-import { getDefaultLanguage } from '../../../../platform/notebook/common/helpers';
+import { EOL, getDefaultLanguage } from '../../../../platform/notebook/common/helpers';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -430,6 +430,16 @@ export interface IVSCodeObservableDocument extends IObservableDocument {
 	 * @param itemResolveCount Number of code actions to resolve (too large numbers slow down code actions)
 	 */
 	getCodeActions(range: OffsetRange, itemResolveCount: number, token: CancellationToken): Promise<CodeActionData[] | undefined>;
+	/**
+	 * This only applies to Notebook documents.
+	 * For text documents, the same value is returned.
+	 *
+	 * With notebook documents, cells are concatenated and seprated using special cell markers.
+	 * If the cell markers appear in the suggestions, then those end up being turned into text edits
+	 * that include the cell markers. This confuses users as they did not type those cell markers.
+	 * This method allows adjusting the text edit to remove those cell markers.
+	 */
+	adjustTextEdit(textDocument: TextDocument, newText: string, notebookTelemetry: { cellMarkerOutcome: string }): string;
 }
 
 export interface IVSCodeObservableTextDocument extends IObservableDocument, IVSCodeObservableDocument {
@@ -546,6 +556,9 @@ class VSCodeObservableTextDocument extends AbstractVSCodeObservableDocument impl
 
 		return actions?.map(action => toCodeActionData(action, this, range => this.toOffsetRange(this.textDocument, range)));
 	}
+	adjustTextEdit(_textDocument: TextDocument, newText: string): string {
+		return newText;
+	}
 }
 
 class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument implements IVSCodeObservableDocument {
@@ -636,6 +649,78 @@ class VSCodeObservableNotebookDocument extends AbstractVSCodeObservableDocument 
 				return offsetRanges.length ? offsetRanges[0] : undefined;
 			}));
 		})).then(results => coalesce(results.flat()));
+	}
+	adjustTextEdit(textDocument: TextDocument, newText: string, notebookTelemetry: { cellMarkerOutcome: string }): string {
+		if (!newText.includes('%% vscode.cell [id=')) {
+			return newText;
+		}
+
+		const cell = this.altNotebook.getCell(textDocument);
+		if (!cell) {
+			// Unlikely scenario, but just in case, return the text as is.
+			notebookTelemetry.cellMarkerOutcome = 'cellNotFound';
+			return newText;
+		}
+
+		// Assume we have a notebook as follows
+		/**
+		 * #%% vscode.cell [id=111] [language=python]
+		 * print("Hello World")
+		 * #%% vscode.cell [id=222] [language=python]
+		 * print("foo")
+		 */
+		// Now assume user triggers completions in first cell after `print`.
+		// & lets assume the LLM returns a completion of `("Hello World!")\n#%% vscode.cell [id=222] [language=python]\nprint("foo bar baz")`
+		// Basically llm has returned edits to the current cell as well as the next cell.
+		// We want to trim off the cell markers and the content of other cells.
+		// So that the user only sees `("Hello World!")` as the completion text.
+		const cellMarker = this.altNotebook.getCellMarker(cell);
+		if (!cellMarker) {
+			notebookTelemetry.cellMarkerOutcome = 'noCellMarker';
+			return newText;
+		}
+
+		let numberOfMarkersRemoved = 0;
+		let updatedText = newText;
+		// If the new text starts with the cell marker, this means the entire cell is being replaced.
+		if (newText.startsWith(cellMarker)) {
+			updatedText = newText.substring(cellMarker.length + EOL.length);
+			numberOfMarkersRemoved++;
+			if (updatedText.length === 0) {
+				// If the entire cell is being replaced with empty text, this isn't possible.
+				notebookTelemetry.cellMarkerOutcome = 'emptyEditAfterRemovingFirstMarker';
+				return newText;
+			}
+		} else if (newText.includes(cellMarker)) {
+			// This is weird, possible there's some white space before the cell marker.
+			updatedText = newText.substring(newText.indexOf(cellMarker) + cellMarker.length + EOL.length);
+			numberOfMarkersRemoved++;
+			if (updatedText.length === 0) {
+				// If the entire cell is being replaced with empty text, this isn't possible.
+				notebookTelemetry.cellMarkerOutcome = 'emptyEditAfterRemovingFirstMarkerWithPrefix';
+				return newText;
+			}
+		}
+
+		// Possible we have the cell marker for the next cell in the edit (see above example).
+		const nextCell = this.notebook.cellCount > cell.index + 1 ? this.notebook.cellAt(cell.index + 1) : undefined;
+		const nextCellMarker = nextCell ? this.altNotebook.getCellMarker(nextCell) : undefined;
+		if (nextCellMarker) {
+			const idx = updatedText.indexOf(nextCellMarker);
+			if (idx !== -1) {
+				numberOfMarkersRemoved++;
+				updatedText = updatedText.substring(0, idx - EOL.length).trimEnd();
+				if (updatedText.length === 0) {
+					// This means we've got just empty text (i.e. removing all text).
+					// This isn't possible.
+					notebookTelemetry.cellMarkerOutcome = 'emptyEditAfterRemovingNextMarker';
+					return newText;
+				}
+			}
+		}
+
+		notebookTelemetry.cellMarkerOutcome = updatedText.includes('%% vscode.cell [id=') ? `stillHasCellMarker:removed${numberOfMarkersRemoved}` : `removedCellMarker${numberOfMarkersRemoved}`;
+		return updatedText;
 	}
 }
 

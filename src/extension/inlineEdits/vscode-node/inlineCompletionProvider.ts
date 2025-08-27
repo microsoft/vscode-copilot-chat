@@ -244,7 +244,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 				isInlineCompletion = allowInlineCompletions && isInlineSuggestion(position, document, range, result.edit.newText);
 				completionItem = serveAsCompletionsProvider && !isInlineCompletion ?
 					undefined :
-					this.createCompletionItem(doc, document, position, range, result);
+					this.createCompletionItem(doc, document, position, range, result, telemetryBuilder);
 			} else {
 				// nes is for a different document.
 				telemetryBuilder.setNotebookCellMarkerIndex((result.edit.newText || '').indexOf('#%% vscode.cell [id='));
@@ -351,6 +351,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		position: Position,
 		range: Range,
 		result: NonNullable<(NextEditResult | DiagnosticsNextEditResult)['result']>,
+		telemetryBuilder: NextEditProviderTelemetryBuilder
 	): Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined {
 
 		// Only show edit when the cursor is max 4 lines away from the edit
@@ -370,9 +371,13 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		} : undefined;
 
 
+		const telemetryInfo = { cellMarkerOutcome: '' };
+		const insertText = doc.adjustTextEdit(document, result.edit.newText, telemetryInfo);
+		telemetryBuilder.setNotebookCellMarkerOutcome(telemetryInfo.cellMarkerOutcome);
+
 		return {
 			range,
-			insertText: result.edit.newText,
+			insertText,
 			showRange,
 			displayLocation,
 		};

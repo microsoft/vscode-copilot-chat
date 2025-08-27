@@ -112,6 +112,7 @@ export interface INextEditProviderTelemetry extends ILlmNESTelemetry, IDiagnosti
 	readonly postProcessingOutcome: string | undefined;
 	readonly isNESForAnotherDoc: boolean;
 	readonly notebookCellMarkerCount: number;
+	readonly notebookCellMarkerOutcome: string | undefined;
 	readonly notebookCellMarkerIndex: number;
 	readonly isActiveDocument?: boolean;
 	readonly isNaturalLanguageDominated: boolean;
@@ -443,6 +444,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 			supersededByOpportunityId: this._supersededByOpportunityId,
 			pickedNES: this._nesTypePicked,
 			hadLlmNES: this._hadLlmNES,
+			notebookCellMarkerOutcome: this._notebookCellMarkerOutcome,
 			isActiveDocument: this._isActiveDocument,
 			isNESForAnotherDoc: this._isNESForAnotherDoc,
 			notebookCellMarkerCount: this._notebookCellMarkerCount,
@@ -526,6 +528,12 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 	private _notebookCellMarkerCount: number = 0;
 	public setNotebookCellMarkerCount(count: number): this {
 		this._notebookCellMarkerCount = count;
+		return this;
+	}
+
+	private _notebookCellMarkerOutcome?: string;
+	public setNotebookCellMarkerOutcome(outcome: string): this {
+		this._notebookCellMarkerOutcome = outcome;
 		return this;
 	}
 
@@ -649,6 +657,7 @@ export class TelemetrySender implements IDisposable {
 		const {
 			opportunityId,
 			headerRequestId,
+			notebookCellMarkerOutcome,
 			requestN,
 			providerId,
 			modelName,
@@ -737,6 +746,7 @@ export class TelemetrySender implements IDisposable {
 		"fetchError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Fetch error message" },
 		"pickedNES": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request had picked NES" },
 		"diagnosticType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Type of diagnostics" },
+		"notebookCellMarkerOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Outcome of the notebook cell marker processing" },
 		"diagnosticDroppedReasons": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Reasons for dropping diagnostics NES suggestions" },
 		"requestN": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Request number", "isMeasurement": true },
 		"hadStatelessNextEditProviderCall": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request had a stateless next edit provider call", "isMeasurement": true },
@@ -806,6 +816,7 @@ export class TelemetrySender implements IDisposable {
 				diagnosticDroppedReasons,
 				pickedNES,
 				notebookType,
+				notebookCellMarkerOutcome
 			},
 			{
 				requestN,
