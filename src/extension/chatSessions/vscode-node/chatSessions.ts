@@ -4,12 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ClaudeAgentManager } from '../../agents/claude/vscode-node/claudeCodeAgent';
 import { IExtensionContribution } from '../../common/contributions';
-import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { ClaudeChatSessionItemProvider } from './claudeChatSessionItemProvider';
 
 export class ChatSessionsContrib extends Disposable implements IExtensionContribution {
 	readonly id = 'chatSessions';
@@ -20,23 +19,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 	) {
 		super();
 
-		this._register(vscode.chat.registerChatSessionItemProvider('claude-code', {
-			onDidChangeChatSessionItems: Event.None,
-			provideChatSessionItems: async (token) => {
-				// TODO
-				return [];
-			},
-
-			provideNewChatSessionItem: async (token) => {
-				return {
-					id: generateUuid(),
-					label: 'Claude Code',
-					description: 'Start a new session',
-					tooltip: 'Claude Code new chat session',
-					iconPath: new vscode.ThemeIcon('chat-sparkle')
-				};
-			}
-		}));
+		this._register(vscode.chat.registerChatSessionItemProvider('claude-code', instantiationService.createInstance(ClaudeChatSessionItemProvider)));
 
 		const claudeAgentManager = instantiationService.createInstance(ClaudeAgentManager);
 		this._register(vscode.chat.registerChatSessionContentProvider('claude-code', {
