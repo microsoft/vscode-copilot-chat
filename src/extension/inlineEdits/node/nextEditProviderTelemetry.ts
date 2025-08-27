@@ -111,7 +111,8 @@ export interface INextEditProviderTelemetry extends ILlmNESTelemetry, IDiagnosti
 	readonly alternativeAction: IAlternativeAction | undefined;
 	readonly postProcessingOutcome: string | undefined;
 	readonly isNESForAnotherDoc: boolean;
-	readonly hasNotebookCellMarker: boolean;
+	readonly notebookCellMarkerCount: number;
+	readonly notebookCellMarkerIndex: number;
 	readonly isActiveDocument?: boolean;
 	readonly isNaturalLanguageDominated: boolean;
 
@@ -444,7 +445,8 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 			hadLlmNES: this._hadLlmNES,
 			isActiveDocument: this._isActiveDocument,
 			isNESForAnotherDoc: this._isNESForAnotherDoc,
-			hasNotebookCellMarker: this._hasNotebookCellMarker,
+			notebookCellMarkerCount: this._notebookCellMarkerCount,
+			notebookCellMarkerIndex: this._notebookCellMarkerIndex,
 			hadDiagnosticsNES: this._hadDiagnosticsNES,
 			configIsDiagnosticsNESEnabled: this._configIsDiagnosticsNESEnabled,
 			isNaturalLanguageDominated: this._isNaturalLanguageDominated,
@@ -521,9 +523,15 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 		return this;
 	}
 
-	private _hasNotebookCellMarker: boolean = false;
-	public setContainsNotebookCellMarker(hasNotebookCellMarker: boolean): this {
-		this._hasNotebookCellMarker = hasNotebookCellMarker;
+	private _notebookCellMarkerCount: number = 0;
+	public setNotebookCellMarkerCount(count: number): this {
+		this._notebookCellMarkerCount = count;
+		return this;
+	}
+
+	private _notebookCellMarkerIndex: number = -1;
+	public setNotebookCellMarkerIndex(index: number): this {
+		this._notebookCellMarkerIndex = index;
 		return this;
 	}
 
@@ -673,7 +681,8 @@ export class TelemetrySender implements IDisposable {
 			debounceTime,
 			artificialDelay,
 			hasNextEdit,
-			hasNotebookCellMarker,
+			notebookCellMarkerCount,
+			notebookCellMarkerIndex,
 			nextEditLogprob,
 			supersededByOpportunityId,
 			noNextEditReasonKind,
@@ -741,8 +750,10 @@ export class TelemetrySender implements IDisposable {
 		"isShown": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit was shown", "isMeasurement": true },
 		"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the document is a notebook", "isMeasurement": true },
 		"isNESForAnotherDoc": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the NES if for another document", "isMeasurement": true },
+		"notebookCellMarkerIndex": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Index of the notebook cell marker in the edit", "isMeasurement": true },
 		"isActiveDocument": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the document is the active document", "isMeasurement": true },
 		"hasNotebookCellMarker": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit has a notebook cell marker", "isMeasurement": true },
+		"notebookCellMarkerCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Count of notebook cell markers in the edit", "isMeasurement": true },
 		"notebookType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Type of notebook, if any" },
 		"logProbThreshold": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Log probability threshold for the edit", "isMeasurement": true },
 		"documentsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of documents", "isMeasurement": true },
@@ -810,7 +821,9 @@ export class TelemetrySender implements IDisposable {
 				isNotebook: this._boolToNum(isNotebook),
 				isNESForAnotherDoc: this._boolToNum(isNESForAnotherDoc),
 				isActiveDocument: this._boolToNum(isActiveDocument),
-				hasNotebookCellMarker: this._boolToNum(hasNotebookCellMarker),
+				hasNotebookCellMarker: notebookCellMarkerCount > 0 ? 1 : 0,
+				notebookCellMarkerCount,
+				notebookCellMarkerIndex,
 				logProbThreshold,
 				documentsCount,
 				editsCount,

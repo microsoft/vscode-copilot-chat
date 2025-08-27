@@ -236,7 +236,8 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 				tracer.trace('no next edit suggestion');
 			} else if (documents[0][0] === document) {
 				// nes is for this same document.
-				telemetryBuilder.setContainsNotebookCellMarker((result.edit.newText || '').includes('%% vscode.cell [id='));
+				telemetryBuilder.setNotebookCellMarkerIndex((result.edit.newText || '').indexOf('#%% vscode.cell [id='));
+				telemetryBuilder.setNotebookCellMarkerCount((result.edit.newText || '').match(/%% vscode.cell \[id=/g)?.length || 0);
 				telemetryBuilder.setIsActiveDocument(window.activeTextEditor?.document === documents[0][0]);
 				range = documents[0][1];
 				const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
@@ -246,7 +247,8 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 					this.createCompletionItem(doc, document, position, range, result);
 			} else {
 				// nes is for a different document.
-				telemetryBuilder.setContainsNotebookCellMarker((result.edit.newText || '').includes('%% vscode.cell [id='));
+				telemetryBuilder.setNotebookCellMarkerIndex((result.edit.newText || '').indexOf('#%% vscode.cell [id='));
+				telemetryBuilder.setNotebookCellMarkerCount((result.edit.newText || '').match(/%% vscode.cell \[id=/g)?.length || 0);
 				telemetryBuilder.setIsNESForOtherEditor();
 				telemetryBuilder.setIsActiveDocument(window.activeTextEditor?.document === documents[0][0]);
 				range = documents[0][1];
