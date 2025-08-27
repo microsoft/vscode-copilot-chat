@@ -232,12 +232,19 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			let completionItem: Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined;
 
 			const documents = doc.fromOffsetRange(result.edit.replaceRange);
+			const cellMarkerTelemetry = getNotebookCellMarkerTelemetryInfo(result.edit.newText);
 			if (!documents.length) {
 				tracer.trace('no next edit suggestion');
+			} else if (cellMarkerTelemetry) {
+				telemetryBuilder.setNotebookCellMarkerIndex(cellMarkerTelemetry.cellMarkerIndex);
+				telemetryBuilder.setNotebookCellMarkerCount(cellMarkerTelemetry.cellMarkerCount);
+				telemetryBuilder.setIsActiveDocument(window.activeTextEditor?.document === documents[0][0]);
+				if (documents[0][0] !== document) {
+					telemetryBuilder.setIsNESForOtherEditor();
+				}
+				tracer.trace('no next edit suggestion, edits contain Notebook Cell Markers');
 			} else if (documents[0][0] === document) {
 				// nes is for this same document.
-				telemetryBuilder.setNotebookCellMarkerIndex((result.edit.newText || '').indexOf('#%% vscode.cell [id='));
-				telemetryBuilder.setNotebookCellMarkerCount((result.edit.newText || '').match(/%% vscode.cell \[id=/g)?.length || 0);
 				telemetryBuilder.setIsActiveDocument(window.activeTextEditor?.document === documents[0][0]);
 				range = documents[0][1];
 				const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
@@ -247,8 +254,6 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 					this.createCompletionItem(doc, document, position, range, result);
 			} else {
 				// nes is for a different document.
-				telemetryBuilder.setNotebookCellMarkerIndex((result.edit.newText || '').indexOf('#%% vscode.cell [id='));
-				telemetryBuilder.setNotebookCellMarkerCount((result.edit.newText || '').match(/%% vscode.cell \[id=/g)?.length || 0);
 				telemetryBuilder.setIsNESForOtherEditor();
 				telemetryBuilder.setIsActiveDocument(window.activeTextEditor?.document === documents[0][0]);
 				range = documents[0][1];
@@ -582,4 +587,16 @@ export function raceAndAll<T extends readonly unknown[]>(
 
 function shortOpportunityId(oppId: string): string {
 	return oppId.substring(4, 8);
+}
+
+function getNotebookCellMarkerTelemetryInfo(newText: string): { cellMarkerIndex: number; cellMarkerCount: number } | undefined {
+	if (!newText) {
+		return undefined;
+	}
+	const indexOfCellMarker = newText.indexOf('#%% vscode.cell [id=');
+	const cellMarkerCount = newText.match(/%% vscode.cell \[id=/g)?.length || 0;
+	if (indexOfCellMarker === -1 || cellMarkerCount === 0) {
+		return undefined;
+	}
+	return { cellMarkerIndex: indexOfCellMarker, cellMarkerCount };
 }
