@@ -9,7 +9,7 @@ import { compareBy, groupAdjacentBy, numberComparator } from '../../../../base/c
 import { assert, checkAdjacentItems } from '../../../../base/common/assert';
 import { splitLines } from '../../../../base/common/strings';
 import { LineRange } from '../ranges/lineRange';
-import { StringEdit, StringReplacement } from './stringEdit';
+import { BaseStringEdit, StringEdit, StringReplacement } from './stringEdit';
 import { Position } from '../position';
 import { Range } from '../range';
 import { TextReplacement, TextEdit } from './textEdit';
@@ -22,7 +22,7 @@ export class LineEdit {
 		return new LineEdit(data.map(e => LineReplacement.deserialize(e)));
 	}
 
-	public static fromEdit(edit: StringEdit, initialValue: AbstractText): LineEdit {
+	public static fromEdit(edit: BaseStringEdit, initialValue: AbstractText): LineEdit {
 		const textEdit = TextEdit.fromStringEdit(edit, initialValue);
 		return LineEdit.fromTextEdit(textEdit, initialValue);
 	}

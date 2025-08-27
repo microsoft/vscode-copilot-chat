@@ -4,17 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
 
-// Here we add an artifical `__vscodeBrand` to types with names which appear both
-// in the vscode API and in this project. This helps ensure that we depend
-// on the correct types in the code which interacts with the vscode API.
-declare module 'vscode' {
-	export interface MarkdownString { __vscodeBrand: undefined }
-	export interface Position { __vscodeBrand: undefined }
-	export interface Range { __vscodeBrand: undefined }
-	export interface Selection { __vscodeBrand: undefined }
-	export interface TextEdit { __vscodeBrand: undefined }
-}
-
 export import Position = vscode.Position;
 export import Range = vscode.Range;
 export import Selection = vscode.Selection;

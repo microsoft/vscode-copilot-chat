@@ -5,8 +5,8 @@
 
 import type * as vscode from 'vscode';
 import { URI } from '../../../vs/base/common/uri';
-import { Location } from './diagnostics';
-import { Range } from './range';
+import { Location } from '../../../vs/workbench/api/common/extHostTypes/location';
+import { Range } from '../../../vs/workbench/api/common/extHostTypes/range';
 
 export class SymbolInformation {
 

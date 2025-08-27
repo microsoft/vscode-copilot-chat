@@ -4,11 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
-import { illegalArgument } from '../../../vs/base/common/errors';
 import { StringSHA1 } from '../../../vs/base/common/hash';
 import { Schemas } from '../../../vs/base/common/network';
 import { URI as Uri } from '../../../vs/base/common/uri';
 import { generateUuid } from '../../../vs/base/common/uuid';
+import { NotebookCellKind, NotebookData } from '../../../vs/workbench/api/common/extHostTypes/notebooks';
 import { ExtHostDocumentData } from './textDocument';
 
 interface ISimulationWorkspace {
@@ -16,184 +16,8 @@ interface ISimulationWorkspace {
 	addNotebookDocument(notebook: ExtHostNotebookDocumentData): void;
 }
 
-export enum NotebookCellKind {
-	Markup = 1,
-	Code = 2
-}
 export interface NotebookCellExecutionSummary {
 }
-
-interface INotebookRange {
-	readonly start: number;
-	readonly end: number;
-	readonly isEmpty: boolean;
-	with(change: { start?: number; end?: number }): INotebookRange;
-}
-
-export class NotebookRange {
-	static isNotebookRange(thing: any): thing is vscode.NotebookRange {
-		if (thing instanceof NotebookRange) {
-			return true;
-		}
-		if (!thing) {
-			return false;
-		}
-		return typeof (<INotebookRange>thing).start === 'number'
-			&& typeof (<INotebookRange>thing).end === 'number';
-	}
-
-	private _start: number;
-	private _end: number;
-
-	get start() {
-		return this._start;
-	}
-
-	get end() {
-		return this._end;
-	}
-
-	get isEmpty(): boolean {
-		return this._start === this._end;
-	}
-
-	constructor(start: number, end: number) {
-		if (start < 0) {
-			throw illegalArgument('start must be positive');
-		}
-		if (end < 0) {
-			throw illegalArgument('end must be positive');
-		}
-		if (start <= end) {
-			this._start = start;
-			this._end = end;
-		} else {
-			this._start = end;
-			this._end = start;
-		}
-	}
-
-	with(change: { start?: number; end?: number }): INotebookRange {
-		let start = this._start;
-		let end = this._end;
-
-		if (change.start !== undefined) {
-			start = change.start;
-		}
-		if (change.end !== undefined) {
-			end = change.end;
-		}
-		if (start === this._start && end === this._end) {
-			return this;
-		}
-		return new NotebookRange(start, end);
-	}
-}
-
-export class NotebookEdit implements vscode.NotebookEdit {
-
-	static isNotebookCellEdit(thing: any): thing is NotebookEdit {
-		if (thing instanceof NotebookEdit) {
-			return true;
-		}
-		if (!thing) {
-			return false;
-		}
-		return NotebookRange.isNotebookRange((<NotebookEdit>thing))
-			&& Array.isArray((<NotebookEdit>thing).newCells);
-	}
-
-	static replaceCells(range: NotebookRange, newCells: vscode.NotebookCellData[]): NotebookEdit {
-		return new NotebookEdit(range, newCells);
-	}
-
-	static insertCells(index: number, newCells: vscode.NotebookCellData[]): vscode.NotebookEdit {
-		return new NotebookEdit(new NotebookRange(index, index), newCells);
-	}
-
-	static deleteCells(range: NotebookRange): NotebookEdit {
-		return new NotebookEdit(range, []);
-	}
-
-	static updateCellMetadata(index: number, newMetadata: { [key: string]: any }): NotebookEdit {
-		const edit = new NotebookEdit(new NotebookRange(index, index), []);
-		edit.newCellMetadata = newMetadata;
-		return edit;
-	}
-
-	static updateNotebookMetadata(newMetadata: { [key: string]: any }): NotebookEdit {
-		const edit = new NotebookEdit(new NotebookRange(0, 0), []);
-		edit.newNotebookMetadata = newMetadata;
-		return edit;
-	}
-
-	range: NotebookRange;
-	newCells: vscode.NotebookCellData[];
-	newCellMetadata?: { [key: string]: any };
-	newNotebookMetadata?: { [key: string]: any };
-
-	constructor(range: NotebookRange, newCells: vscode.NotebookCellData[]) {
-		this.range = range;
-		this.newCells = newCells;
-	}
-}
-
-
-export class NotebookCellData {
-
-	static validate(data: NotebookCellData): void {
-		if (typeof data.kind !== 'number') {
-			throw new Error('NotebookCellData MUST have \'kind\' property');
-		}
-		if (typeof data.value !== 'string') {
-			throw new Error('NotebookCellData MUST have \'value\' property');
-		}
-		if (typeof data.languageId !== 'string') {
-			throw new Error('NotebookCellData MUST have \'languageId\' property');
-		}
-	}
-
-	static isNotebookCellDataArray(value: unknown): value is vscode.NotebookCellData[] {
-		return Array.isArray(value) && (<unknown[]>value).every(elem => NotebookCellData.isNotebookCellData(elem));
-	}
-
-	static isNotebookCellData(value: unknown): value is vscode.NotebookCellData {
-		// return value instanceof NotebookCellData;
-		return true;
-	}
-
-	kind: NotebookCellKind;
-	value: string;
-	languageId: string;
-	mime?: string;
-	outputs?: vscode.NotebookCellOutput[];
-	metadata?: Record<string, any>;
-	executionSummary?: vscode.NotebookCellExecutionSummary;
-
-	constructor(kind: NotebookCellKind, value: string, languageId: string, mime?: string, outputs?: vscode.NotebookCellOutput[], metadata?: Record<string, any>, executionSummary?: vscode.NotebookCellExecutionSummary) {
-		this.kind = kind;
-		this.value = value;
-		this.languageId = languageId;
-		this.mime = mime;
-		this.outputs = outputs ?? [];
-		this.metadata = metadata;
-		this.executionSummary = executionSummary;
-
-		NotebookCellData.validate(this);
-	}
-}
-
-
-export class NotebookData {
-
-	cells: NotebookCellData[];
-	metadata?: { [key: string]: any };
-
-	constructor(cells: NotebookCellData[]) {
-		this.cells = cells;
-	}
-}
-
 
 export const Mimes = Object.freeze({
 	text: 'text/plain',
