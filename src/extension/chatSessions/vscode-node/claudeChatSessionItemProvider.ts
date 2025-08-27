@@ -44,18 +44,16 @@ export class ClaudeChatSessionItemProvider implements vscode.ChatSessionItemProv
 			try {
 				entries = await this._fileSystem.readDirectory(projectDirUri as any);
 			} catch (e) {
-				// Directory may not exist; skip this folder
 				this._logService.error(e, `[ClaudeChatSessionItemProvider] Failed to read directory: ${projectDirUri}`);
 				continue;
 			}
 
-			// Build parallel tasks for file processing (stat + optional first line read)
 			const fileTasks: Promise<{ item: vscode.ChatSessionItem; mtime: number } | undefined>[] = [];
 			for (const [name, type] of entries) {
 				if ((type & FileType.File) === 0) {
 					continue;
 				}
-				const sessionId = name; // file name is the session id (GUID)
+				const sessionId = name;
 				if (!sessionId) {
 					continue;
 				}
@@ -65,7 +63,6 @@ export class ClaudeChatSessionItemProvider implements vscode.ChatSessionItemProv
 						if (token.isCancellationRequested) {
 							return undefined;
 						}
-						// Kick off reads in parallel; we only use stat.mtime for sorting today
 						const [stat, firstLine] = await Promise.all([
 							this._fileSystem.stat(fileUri as any),
 							this._readFirstLine(fileUri as any, token),
@@ -126,7 +123,6 @@ export class ClaudeChatSessionItemProvider implements vscode.ChatSessionItemProv
 	// }
 
 	private _computeFolderSlug(folderUri: URI): string {
-		// Replace all path separators with '-' per spec, operating on URI paths
 		return folderUri.path.replace(/\//g, '-');
 	}
 
@@ -134,7 +130,7 @@ export class ClaudeChatSessionItemProvider implements vscode.ChatSessionItemProv
 		if (token.isCancellationRequested) {
 			return undefined;
 		}
-		// Note: IFileSystemService doesn't expose streaming reads; we read the file and take the first line.
+
 		const data = await this._fileSystem.readFile(fileUri as any);
 		const text = new TextDecoder('utf-8').decode(data);
 		const idx = text.indexOf('\n');
@@ -149,7 +145,6 @@ export class ClaudeChatSessionItemProvider implements vscode.ChatSessionItemProv
 		try {
 			if (firstLine.startsWith('{')) {
 				const obj = JSON.parse(firstLine);
-				// Prefer summary records
 				if (obj && obj.type === 'summary' && typeof obj.summary === 'string' && obj.summary.trim()) {
 					return obj.summary.trim();
 				}
@@ -162,8 +157,9 @@ export class ClaudeChatSessionItemProvider implements vscode.ChatSessionItemProv
 				}
 			}
 		} catch {
-			// fall through, use raw line
+			return 'Claude Code';
 		}
+
 		return firstLine;
 	}
 }
