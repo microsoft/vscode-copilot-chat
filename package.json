@@ -1661,7 +1661,7 @@
 			},
 			{
 				"vendor": "gemini",
-				"displayName": "Gemini",
+				"displayName": "Google",
 				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
