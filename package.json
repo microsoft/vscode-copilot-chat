@@ -2769,15 +2769,6 @@
 						],
 						"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
 					},
-					"github.copilot.chat.edits.newNotebook.enabled": {
-						"type": "boolean",
-						"default": true,
-						"tags": [
-							"experimental",
-							"onExp"
-						],
-						"description": "%github.copilot.config.editsNewNotebook.enabled%"
-					},
 					"github.copilot.chat.notebook.followCellExecution.enabled": {
 						"type": "boolean",
 						"default": false,

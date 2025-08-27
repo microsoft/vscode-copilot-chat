@@ -38,13 +38,12 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 		const endpointProvider = accessor.get<IEndpointProvider>(IEndpointProvider);
 		const notebookService = accessor.get<INotebookService>(INotebookService);
 		const configurationService = accessor.get<IConfigurationService>(IConfigurationService);
-		const experimentalService = accessor.get<IExperimentationService>(IExperimentationService);
 		const experimentationService = accessor.get<IExperimentationService>(IExperimentationService);
 		const model = await endpointProvider.getChatEndpoint(request);
 		const lookForTools = new Set<string>([ToolName.EditFile]);
 
 
-		if (configurationService.getExperimentBasedConfig(ConfigKey.EditsCodeNewNotebookAgentEnabled, experimentalService) !== false && requestHasNotebookRefs(request, notebookService, { checkPromptAsWell: true })) {
+		if (requestHasNotebookRefs(request, notebookService, { checkPromptAsWell: true })) {
 			lookForTools.add(ToolName.CreateNewJupyterNotebook);
 		}
 
