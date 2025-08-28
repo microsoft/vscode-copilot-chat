@@ -39,7 +39,7 @@ import { IExperimentationService } from '../../../platform/telemetry/common/null
 
 export interface IEditNotebookToolParams {
 	filePath: string;
-	cellId?: string;
+	cellId: string;
 	newCode?: string | string[];
 	language?: string;
 	editType: 'insert' | 'delete' | 'edit';
@@ -218,8 +218,8 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 					notebookCellIndex = cells.filter(item => item.type !== 'delete').length;
 				} else {
 					const cell = cellId ? cellMap.get(cellId) : undefined;
-					if (cellId && !cell) {
-						throw new ErrorWithTelemetrySafeReason(`Invalid cell id: ${cellId}, notebook may have been modified, try reading the file again`, 'invalid_cell_id_insert_after', cellId);
+					if (!cell) {
+						throw new ErrorWithTelemetrySafeReason(getInvalidCellErrorMessage(cellId), 'invalid_cell_id_insert_after', cellId);
 					}
 					const entry = cells.find(item => item.cell === cell)!;
 					cellsCellIndex = cells.indexOf(entry) + 1;
@@ -246,11 +246,11 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 			} else {
 				const cell = cellId ? cellMap.get(cellId) : undefined;
 				if (!cell) {
-					throw new ErrorWithTelemetrySafeReason(`Invalid cell id: ${cellId}, notebook may have been modified, try reading the file again`, 'invalid_cell_id_empty', cellId);
+					throw new ErrorWithTelemetrySafeReason(getInvalidCellErrorMessage(cellId), 'invalid_cell_id_empty', cellId);
 				}
 				const cellIndex = cells.find(i => i.cell === cell)!.index;
 				if (cellIndex === -1) {
-					throw new ErrorWithTelemetrySafeReason(`Invalid cell id: ${cellId}, notebook may have been modified, try reading the file again`, 'invalid_cell_id_edit_or_delete');
+					throw new ErrorWithTelemetrySafeReason(getInvalidCellErrorMessage(cellId), 'invalid_cell_id_edit_or_delete');
 				}
 
 				if (editType === 'delete') {
@@ -376,7 +376,7 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 		const cellMap = getCellIdMap(notebook);
 		const cell = (id && id !== 'top' && id !== 'bottom') ? cellMap.get(id) : undefined;
 		if (id && id !== 'top' && id !== 'bottom' && !cell) {
-			throw new ErrorWithTelemetrySafeReason(`None of the edits were applied as cell id: ${id} is invalid. Notebook may have been modified, try reading the file again`, 'invalidCellId', cellId);
+			throw new ErrorWithTelemetrySafeReason(getInvalidCellErrorMessage(id), `invalidCellId${editType}`, cellId);
 		}
 		switch (editType) {
 			case 'insert':
@@ -386,12 +386,12 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 				break;
 			case 'delete':
 				if (!id) {
-					throw new ErrorWithTelemetrySafeReason('None of the edits were applied as cellId is required for delete operation', 'missingCellId', id);
+					throw new ErrorWithTelemetrySafeReason(getInvalidCellErrorMessage(id), 'missingCellId', id);
 				}
 				break;
 			case 'edit':
 				if (!id) {
-					throw new ErrorWithTelemetrySafeReason('None of the edits were applied as cellId is required for edit operation', 'missingCellId', id);
+					throw new ErrorWithTelemetrySafeReason(getInvalidCellErrorMessage(id), 'missingCellId', id);
 				}
 				if (newCode === undefined) {
 					throw new ErrorWithTelemetrySafeReason('None of the edits were applied as newCode is required for edit operation', 'missingNewCode');
@@ -522,6 +522,13 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 			}));
 		}).finally(() => store.dispose());
 	}
+}
+
+function getInvalidCellErrorMessage(cellId: string) {
+	if (cellId) {
+		return `None of the edits were applied as provided cell id: '${cellId}' is invalid. Notebook may have been modified, try reading the Notebook file again or use the ${ToolName.GetNotebookSummary} to get a list of the notebook cells, types and Cell Ids`;
+	}
+	return `None of the edits were applied as the cell id was not provided or was empty`;
 }
 
 function getCellEOL(cellId: string | undefined, language: string, notebook: vscode.NotebookDocument) {

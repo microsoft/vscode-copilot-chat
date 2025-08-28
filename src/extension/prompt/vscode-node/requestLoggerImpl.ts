@@ -22,8 +22,40 @@ import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Iterable } from '../../../util/vs/base/common/iterator';
 import { safeStringify } from '../../../util/vs/base/common/objects';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequest } from '../../../vscodeTypes';
 import { renderDataPartToString, renderToolResultToStringNoBudget } from './requestLoggerToolResult';
+import { WorkspaceEditRecorder } from './workspaceEditRecorder';
+
+// Utility function to process deltas into a message string
+function processDeltasToMessage(deltas: IResponseDelta[]): string {
+	return deltas.map((d, i) => {
+		let text: string = '';
+		if (d.text) {
+			text += d.text;
+		}
+
+		// Can include other parts as needed
+		if (d.copilotToolCalls) {
+			if (i > 0) {
+				text += '\n';
+			}
+
+			text += d.copilotToolCalls.map(c => {
+				let argsStr = c.arguments;
+				try {
+					const parsedArgs = JSON.parse(c.arguments);
+					argsStr = JSON.stringify(parsedArgs, undefined, 2)
+						.replace(/(?<!\\)\\n/g, '\n')
+						.replace(/(?<!\\)\\t/g, '\t');
+				} catch (e) { }
+				return `🛠️ ${c.name} (${c.id}) ${argsStr}`;
+			}).join('\n');
+		}
+
+		return text;
+	}).join('');
+}
 
 // Implementation classes with toJson methods
 class LoggedElementInfo implements ILoggedElementInfo {
@@ -69,22 +101,119 @@ class LoggedRequestInfo implements ILoggedRequestInfo {
 		if (this.entry.type === LoggedRequestKind.MarkdownContentRequest) {
 			return {
 				...baseInfo,
-				startTime: new Date(this.entry.startTimeMs).toISOString()
-			};
-		} else {
-			return {
-				...baseInfo,
-				startTime: this.entry.startTime?.toISOString(),
-				endTime: this.entry.endTime?.toISOString(),
-				duration: this.entry.endTime && this.entry.startTime ?
-					this.entry.endTime.getTime() - this.entry.startTime.getTime() : undefined,
-				model: 'model' in this.entry.chatParams ? this.entry.chatParams.model : undefined,
-				messages: 'messages' in this.entry.chatParams ? this.entry.chatParams.messages : undefined,
-				usage: this.entry.type === LoggedRequestKind.ChatMLSuccess ? this.entry.usage : undefined,
-				timeToFirstToken: this.entry.type !== LoggedRequestKind.ChatMLCancelation ? this.entry.timeToFirstToken : undefined,
-				result: this.entry.type !== LoggedRequestKind.ChatMLCancelation ? this.entry.result : undefined,
+				startTime: new Date(this.entry.startTimeMs).toISOString(),
+				content: this.entry.markdownContent
 			};
 		}
+
+		// Extract prediction and tools like _renderRequestToMarkdown does
+		let prediction: string | undefined;
+		let tools;
+		const postOptions = this.entry.chatParams.postOptions && { ...this.entry.chatParams.postOptions };
+		if (postOptions && 'prediction' in postOptions && typeof postOptions.prediction?.content === 'string') {
+			prediction = postOptions.prediction.content;
+			postOptions.prediction = undefined;
+		}
+		if (postOptions && 'tools' in postOptions) {
+			tools = postOptions.tools;
+			postOptions.tools = undefined;
+		}
+
+		// Handle stateful marker like _renderRequestToMarkdown does
+		const ignoreStatefulMarker = 'ignoreStatefulMarker' in this.entry.chatParams && this.entry.chatParams.ignoreStatefulMarker;
+		let lastResponseId: { marker: string; modelId: string } | undefined;
+		if (!ignoreStatefulMarker) {
+			let statefulMarker: { statefulMarker: { modelId: string; marker: string }; index: number } | undefined;
+			if ('messages' in this.entry.chatParams) {
+				statefulMarker = Iterable.first(getAllStatefulMarkersAndIndicies(this.entry.chatParams.messages));
+			}
+			if (statefulMarker) {
+				lastResponseId = {
+					marker: statefulMarker.statefulMarker.marker,
+					modelId: statefulMarker.statefulMarker.modelId
+				};
+			}
+		}
+
+		// Build response data based on entry type
+		let responseData;
+		let errorInfo;
+
+		if (this.entry.type === LoggedRequestKind.ChatMLSuccess) {
+			responseData = {
+				type: 'success',
+				message: this.entry.result.value
+			};
+		} else if (this.entry.type === LoggedRequestKind.CompletionSuccess) {
+			responseData = {
+				type: 'completion',
+				message: this.entry.result.value
+			};
+		} else if (this.entry.type === LoggedRequestKind.ChatMLFailure) {
+			if (this.entry.result.type === ChatFetchResponseType.Length) {
+				responseData = {
+					type: 'truncated',
+					message: this.entry.result.truncatedValue
+				};
+			} else {
+				errorInfo = {
+					type: 'failure',
+					reason: this.entry.result.reason
+				};
+			}
+		} else if (this.entry.type === LoggedRequestKind.ChatMLCancelation) {
+			errorInfo = {
+				type: 'canceled'
+			};
+		} else if (this.entry.type === LoggedRequestKind.CompletionFailure) {
+			const error = this.entry.result.type;
+			errorInfo = {
+				type: 'completion_failure',
+				error: error instanceof Error ? error.stack : safeStringify(error)
+			};
+		}
+
+		const metadata = {
+			url: typeof this.entry.chatEndpoint.urlOrRequestMetadata === 'string' ?
+				this.entry.chatEndpoint.urlOrRequestMetadata : undefined,
+			requestType: typeof this.entry.chatEndpoint.urlOrRequestMetadata === 'object' ?
+				this.entry.chatEndpoint.urlOrRequestMetadata?.type : undefined,
+			model: this.entry.chatParams.model,
+			maxPromptTokens: this.entry.chatEndpoint.modelMaxPromptTokens,
+			maxResponseTokens: this.entry.chatParams.postOptions?.max_tokens,
+			location: this.entry.chatParams.location,
+			postOptions: postOptions,
+			reasoning: 'body' in this.entry.chatParams && this.entry.chatParams.body?.reasoning,
+			intent: this.entry.chatParams.intent,
+			startTime: this.entry.startTime?.toISOString(),
+			endTime: this.entry.endTime?.toISOString(),
+			duration: this.entry.endTime && this.entry.startTime ?
+				this.entry.endTime.getTime() - this.entry.startTime.getTime() : undefined,
+			ourRequestId: this.entry.chatParams.ourRequestId,
+			lastResponseId: lastResponseId,
+			requestId: this.entry.type === LoggedRequestKind.ChatMLSuccess || this.entry.type === LoggedRequestKind.ChatMLFailure ? this.entry.result.requestId : undefined,
+			serverRequestId: this.entry.type === LoggedRequestKind.ChatMLSuccess || this.entry.type === LoggedRequestKind.ChatMLFailure ? this.entry.result.serverRequestId : undefined,
+			timeToFirstToken: this.entry.type === LoggedRequestKind.ChatMLSuccess ? this.entry.timeToFirstToken : undefined,
+			usage: this.entry.type === LoggedRequestKind.ChatMLSuccess ? this.entry.usage : undefined,
+			tools: tools,
+		};
+
+		const requestMessages = 'messages' in this.entry.chatParams ? {
+			messages: this.entry.chatParams.messages,
+			prediction: prediction
+		} : undefined;
+
+		const response = responseData || errorInfo ? {
+			...responseData,
+			...errorInfo
+		} : undefined;
+
+		return {
+			...baseInfo,
+			metadata: metadata,
+			requestMessages: requestMessages,
+			response: response
+		};
 	}
 }
 
@@ -98,29 +227,36 @@ class LoggedToolCall implements ILoggedToolCall {
 		public readonly response: LanguageModelToolResult2,
 		public readonly chatRequest: any | undefined,
 		public readonly time: number,
-		public readonly thinking?: ThinkingData
+		public readonly thinking?: ThinkingData,
+		public readonly edits?: { path: string; edits: string }[],
 	) { }
 
 	async toJSON(): Promise<object> {
-		const result: string[] = [];
+		const responseData: string[] = [];
 		for (const content of this.response.content as (LanguageModelTextPart | LanguageModelPromptTsxPart | LanguageModelDataPart)[]) {
 			if (content && 'value' in content && typeof content.value === 'string') {
-				result.push(content.value);
+				responseData.push(content.value);
 			} else if (content && 'data' in content && 'mimeType' in content) {
-				result.push(renderDataPartToString(content));
+				responseData.push(renderDataPartToString(content));
 			} else if (content) {
-				result.push(await renderToolResultToStringNoBudget(content));
+				responseData.push(await renderToolResultToStringNoBudget(content));
 			}
 		}
+
+		const thinking = this.thinking?.text ? {
+			id: this.thinking.id,
+			text: Array.isArray(this.thinking.text) ? this.thinking.text.join('\n') : this.thinking.text
+		} : undefined;
 
 		return {
 			id: this.id,
 			kind: 'toolCall',
-			name: this.name,
+			tool: this.name,
 			args: this.args,
-			response: result,
 			time: new Date(this.time).toISOString(),
-			thinking: this.thinking || {}
+			response: responseData,
+			thinking: thinking,
+			edits: this.edits ? this.edits.map(edit => ({ path: edit.path, edits: JSON.parse(edit.edits) })) : undefined
 		};
 	}
 }
@@ -129,12 +265,15 @@ export class RequestLogger extends AbstractRequestLogger {
 
 	private _didRegisterLinkProvider = false;
 	private readonly _entries: LoggedInfo[] = [];
+	private _workspaceEditRecorder: WorkspaceEditRecorder | undefined;
 
 	constructor(
 		@ILogService private readonly _logService: ILogService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
 		super();
+
 
 		this._register(workspace.registerTextDocumentContentProvider(ChatRequestScheme.chatRequestScheme, {
 			onDidChange: Event.map(this.onDidChangeRequests, () => Uri.parse(ChatRequestScheme.buildUri({ kind: 'latest' }))),
@@ -183,6 +322,7 @@ export class RequestLogger extends AbstractRequestLogger {
 	}
 
 	public override logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void {
+		const edits = this._workspaceEditRecorder?.getEditsAndReset();
 		this._addEntry(new LoggedToolCall(
 			id,
 			name,
@@ -190,8 +330,23 @@ export class RequestLogger extends AbstractRequestLogger {
 			response,
 			this.currentRequest,
 			Date.now(),
-			thinking
+			thinking,
+			edits
 		));
+	}
+
+	/** Start tracking edits made to the workspace for every tool call. */
+	public override enableWorkspaceEditTracing(): void {
+		if (!this._workspaceEditRecorder) {
+			this._workspaceEditRecorder = this._instantiationService.createInstance(WorkspaceEditRecorder);
+		}
+	}
+
+	public override disableWorkspaceEditTracing(): void {
+		if (this._workspaceEditRecorder) {
+			this._workspaceEditRecorder.dispose();
+			this._workspaceEditRecorder = undefined;
+		}
 	}
 
 	public override addPromptTrace(elementName: string, endpoint: IChatEndpointInfo, result: RenderPromptResult, trace: HTMLTracer): void {
@@ -347,7 +502,7 @@ export class RequestLogger extends AbstractRequestLogger {
 				result.push(`thinkingId: ${entry.thinking.id}`);
 			}
 			result.push(`~~~`);
-			result.push(entry.thinking.text);
+			result.push(Array.isArray(entry.thinking.text) ? entry.thinking.text.join('\n') : entry.thinking.text);
 			result.push(`~~~`);
 		}
 
@@ -485,34 +640,7 @@ export class RequestLogger extends AbstractRequestLogger {
 
 	private _renderDeltasToMarkdown(role: string, deltas: IResponseDelta[]): string {
 		const capitalizedRole = role.charAt(0).toUpperCase() + role.slice(1);
-
-		const message = deltas.map((d, i) => {
-			let text: string = '';
-			if (d.text) {
-				text += d.text;
-			}
-
-			// Can include other parts as needed
-			if (d.copilotToolCalls) {
-				if (i > 0) {
-					text += '\n';
-				}
-
-				text += d.copilotToolCalls.map(c => {
-					let argsStr = c.arguments;
-					try {
-						const parsedArgs = JSON.parse(c.arguments);
-						argsStr = JSON.stringify(parsedArgs, undefined, 2)
-							.replace(/(?<!\\)\\n/g, '\n')
-							.replace(/(?<!\\)\\t/g, '\t');
-					} catch (e) { }
-					return `🛠️ ${c.name} (${c.id}) ${argsStr}`;
-				}).join('\n');
-			}
-
-			return text;
-		}).join('');
-
+		const message = processDeltasToMessage(deltas);
 		return `### ${capitalizedRole}\n~~~md\n${message}\n~~~\n`;
 	}
 

@@ -13,7 +13,9 @@ import { autorunWithChanges } from '../../../platform/inlineEdits/common/utils/o
 import { APIUsage } from '../../../platform/networking/common/openai';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { ITelemetryService, multiplexProperties, TelemetryEventMeasurements, TelemetryEventProperties } from '../../../platform/telemetry/common/telemetry';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { LogEntry } from '../../../platform/workspaceRecorder/common/workspaceLog';
+import { findNotebook } from '../../../util/common/notebooks';
 import { Disposable, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/core/edits/stringEdit';
@@ -79,6 +81,7 @@ export interface ILlmNESTelemetry extends Partial<IStatelessNextEditTelemetry> {
 	readonly documentsCount: number | undefined;
 	readonly editsCount: number | undefined;
 	readonly isNotebook: boolean;
+	readonly notebookType: string | undefined;
 	readonly alternativeAction: IAlternativeAction | undefined;
 }
 
@@ -107,6 +110,14 @@ export interface INextEditProviderTelemetry extends ILlmNESTelemetry, IDiagnosti
 	readonly repositoryUrls: string[] | undefined;
 	readonly alternativeAction: IAlternativeAction | undefined;
 	readonly postProcessingOutcome: string | undefined;
+	readonly isNESForAnotherDoc: boolean;
+	readonly notebookCellMarkerCount: number;
+	readonly notebookCellMarkerIndex: number;
+	readonly isActiveDocument?: boolean;
+	readonly isMultilineEdit?: boolean;
+	readonly isEolDifferent?: boolean;
+	readonly isNextEditorVisible?: boolean;
+	readonly isNextEditorRangeVisible?: boolean;
 	readonly isNaturalLanguageDominated: boolean;
 
 	readonly hadLlmNES: boolean;
@@ -124,6 +135,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 		let activeDocumentLanguageId: string | undefined = undefined;
 		let activeDocumentOriginalLineCount: number | undefined = undefined;
 		let isNotebook: boolean = false;
+		let notebookType: string | undefined = undefined;
 		let activeDocumentRepository: string | undefined = undefined;
 		let repositoryUrls: string[] | undefined = undefined;
 
@@ -135,6 +147,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			activeDocumentLanguageId = activeDoc.languageId;
 			activeDocumentOriginalLineCount = activeDoc.documentAfterEditsLines.length;
 			isNotebook = activeDoc.id.toUri().scheme === Schemas.vscodeNotebookCell || this._notebookService.hasSupportedNotebooks(activeDoc.id.toUri());
+			notebookType = findNotebook(activeDoc.id.toUri(), this._workspaceService.notebookDocuments)?.notebookType;
 			const git = this._gitExtensionService.getExtensionApi();
 			if (git) {
 				const activeDocRepository = git.getRepository(Uri.parse(activeDoc.id.uri));
@@ -241,6 +254,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			hasNextEdit: this._hasNextEdit,
 			wasPreviouslyRejected: this._wasPreviouslyRejected,
 			isNotebook: isNotebook,
+			notebookType,
 			status: this._status,
 			alternativeAction,
 
@@ -261,6 +275,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 	constructor(
 		private readonly _gitExtensionService: IGitExtensionService,
 		private readonly _notebookService: INotebookService,
+		private readonly _workspaceService: IWorkspaceService,
 		private readonly _providerId: string,
 		private readonly _doc: IObservableDocument,
 		private readonly _debugRecorder?: DebugRecorder,
@@ -432,6 +447,14 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 			supersededByOpportunityId: this._supersededByOpportunityId,
 			pickedNES: this._nesTypePicked,
 			hadLlmNES: this._hadLlmNES,
+			isMultilineEdit: this._isMultilineEdit,
+			isEolDifferent: this._isEolDifferent,
+			isActiveDocument: this._isActiveDocument,
+			isNextEditorVisible: this._isNextEditorVisible,
+			isNextEditorRangeVisible: this._isNextEditorRangeVisible,
+			isNESForAnotherDoc: this._isNESForAnotherDoc,
+			notebookCellMarkerCount: this._notebookCellMarkerCount,
+			notebookCellMarkerIndex: this._notebookCellMarkerIndex,
 			hadDiagnosticsNES: this._hadDiagnosticsNES,
 			configIsDiagnosticsNESEnabled: this._configIsDiagnosticsNESEnabled,
 			isNaturalLanguageDominated: this._isNaturalLanguageDominated,
@@ -453,6 +476,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 	constructor(
 		gitExtensionService: IGitExtensionService,
 		notebookService: INotebookService,
+		workspaceService: IWorkspaceService,
 		providerId: string,
 		doc: IObservableDocument,
 		debugRecorder?: DebugRecorder,
@@ -461,7 +485,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 		super();
 		this._requestN = ++NextEditProviderTelemetryBuilder.requestN;
 
-		this._nesBuilder = this._register(new LlmNESTelemetryBuilder(gitExtensionService, notebookService, providerId, doc, debugRecorder, requestBookmark));
+		this._nesBuilder = this._register(new LlmNESTelemetryBuilder(gitExtensionService, notebookService, workspaceService, providerId, doc, debugRecorder, requestBookmark));
 		this._diagnosticsBuilder = new DiagnosticsTelemetryBuilder();
 	}
 
@@ -498,6 +522,54 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 	private _nesTypePicked: 'llm' | 'diagnostics' | undefined;
 	public setPickedNESType(nesTypePicked: 'llm' | 'diagnostics'): this {
 		this._nesTypePicked = nesTypePicked;
+		return this;
+	}
+
+	private _isActiveDocument?: boolean;
+	public setIsActiveDocument(isActive: boolean): this {
+		this._isActiveDocument = isActive;
+		return this;
+	}
+
+	private _notebookCellMarkerCount: number = 0;
+	public setNotebookCellMarkerCount(count: number): this {
+		this._notebookCellMarkerCount = count;
+		return this;
+	}
+
+	private _isMultilineEdit?: boolean;
+	public setIsMultilineEdit(isMultiLine: boolean): this {
+		this._isMultilineEdit = isMultiLine;
+		return this;
+	}
+
+	private _isEolDifferent?: boolean;
+	public setIsEolDifferent(isEolDifferent: boolean): this {
+		this._isEolDifferent = isEolDifferent;
+		return this;
+	}
+
+	private _isNextEditorVisible?: boolean;
+	public setIsNextEditorVisible(isVisible: boolean): this {
+		this._isNextEditorVisible = isVisible;
+		return this;
+	}
+
+	private _isNextEditorRangeVisible?: boolean;
+	public setIsNextEditorRangeVisible(isVisible: boolean): this {
+		this._isNextEditorRangeVisible = isVisible;
+		return this;
+	}
+
+	private _notebookCellMarkerIndex: number = -1;
+	public setNotebookCellMarkerIndex(index: number): this {
+		this._notebookCellMarkerIndex = index;
+		return this;
+	}
+
+	private _isNESForAnotherDoc: boolean = false;
+	public setIsNESForOtherEditor(isForAnotherDoc: boolean): this {
+		this._isNESForAnotherDoc = isForAnotherDoc;
 		return this;
 	}
 
@@ -623,6 +695,13 @@ export class TelemetrySender implements IDisposable {
 			wasPreviouslyRejected,
 			isShown,
 			isNotebook,
+			notebookType,
+			isNESForAnotherDoc,
+			isActiveDocument,
+			isEolDifferent,
+			isMultilineEdit,
+			isNextEditorRangeVisible,
+			isNextEditorVisible,
 			acceptance,
 			disposalReason,
 			logProbThreshold,
@@ -638,6 +717,8 @@ export class TelemetrySender implements IDisposable {
 			debounceTime,
 			artificialDelay,
 			hasNextEdit,
+			notebookCellMarkerCount,
+			notebookCellMarkerIndex,
 			nextEditLogprob,
 			supersededByOpportunityId,
 			noNextEditReasonKind,
@@ -704,6 +785,16 @@ export class TelemetrySender implements IDisposable {
 		"wasPreviouslyRejected": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit was previously rejected", "isMeasurement": true },
 		"isShown": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit was shown", "isMeasurement": true },
 		"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the document is a notebook", "isMeasurement": true },
+		"isNESForAnotherDoc": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the NES if for another document", "isMeasurement": true },
+		"isMultilineEdit": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the NES is for a multiline edit", "isMeasurement": true },
+		"isEolDifferent": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the NES edit and original text have different end of lines", "isMeasurement": true },
+		"isNextEditorVisible": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the next editor is visible", "isMeasurement": true },
+		"isNextEditorRangeVisible": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the next editor range is visible", "isMeasurement": true },
+		"notebookCellMarkerIndex": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Index of the notebook cell marker in the edit", "isMeasurement": true },
+		"isActiveDocument": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the document is the active document", "isMeasurement": true },
+		"hasNotebookCellMarker": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit has a notebook cell marker", "isMeasurement": true },
+		"notebookCellMarkerCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Count of notebook cell markers in the edit", "isMeasurement": true },
+		"notebookType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Type of notebook, if any" },
 		"logProbThreshold": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Log probability threshold for the edit", "isMeasurement": true },
 		"documentsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of documents", "isMeasurement": true },
 		"editsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of edits", "isMeasurement": true },
@@ -754,6 +845,7 @@ export class TelemetrySender implements IDisposable {
 				diagnosticType,
 				diagnosticDroppedReasons,
 				pickedNES,
+				notebookType,
 			},
 			{
 				requestN,
@@ -767,6 +859,15 @@ export class TelemetrySender implements IDisposable {
 				wasPreviouslyRejected: this._boolToNum(wasPreviouslyRejected),
 				isShown: this._boolToNum(isShown),
 				isNotebook: this._boolToNum(isNotebook),
+				isNESForAnotherDoc: this._boolToNum(isNESForAnotherDoc),
+				isActiveDocument: this._boolToNum(isActiveDocument),
+				isEolDifferent: this._boolToNum(isEolDifferent),
+				isMultilineEdit: this._boolToNum(isMultilineEdit),
+				isNextEditorRangeVisible: this._boolToNum(isNextEditorRangeVisible),
+				isNextEditorVisible: this._boolToNum(isNextEditorVisible),
+				hasNotebookCellMarker: notebookCellMarkerCount > 0 ? 1 : 0,
+				notebookCellMarkerCount,
+				notebookCellMarkerIndex,
 				logProbThreshold,
 				documentsCount,
 				editsCount,

@@ -11,13 +11,36 @@ import { CopilotUserQuotaInfo } from '../../chat/common/chatQuotaService';
  * Whether or not it contains an internal org
  */
 export function containsInternalOrg(orgList: string[]): boolean {
-	// Certain feature right now is limited to a set of allowed organization only (i.e. internal telemetry)
-	// These IDs map to ['Github', 'Microsoft', 'ms-copilot', 'gh-msft-innersource', 'microsoft']
-	const ALLOWED_ORGANIZATIONS = ['4535c7beffc844b46bb1ed4aa04d759a', 'a5db0bcaae94032fe715fb34a5e4bce2', '7184f66dfcee98cb5f08a1cb936d5225',
-		'1cb18ac6eedd49b43d74a1c5beb0b955', 'ea9395b9a9248c05ee6847cbd24355ed'];
+	return containsGitHubOrg(orgList) || containsMicrosoftOrg(orgList);
+}
+
+/**
+ * A function used to determine if the org list contains a GitHub organization
+ * @param orgList The list of organizations the user is a member of
+ * Whether or not it contains a GitHub org
+ */
+function containsGitHubOrg(orgList: string[]): boolean {
+	const GITHUB_ORGANIZATIONS = ['4535c7beffc844b46bb1ed4aa04d759a'];
 	// Check if the user is part of an allowed organization.
 	for (const org of orgList) {
-		if (ALLOWED_ORGANIZATIONS.includes(org)) {
+		if (GITHUB_ORGANIZATIONS.includes(org)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * A function used to determine if the org list contains a Microsoft organization
+ * @param orgList The list of organizations the user is a member of
+ * Whether or not it contains a Microsoft org
+ */
+function containsMicrosoftOrg(orgList: string[]): boolean {
+	const MICROSOFT_ORGANIZATIONS = ['a5db0bcaae94032fe715fb34a5e4bce2', '7184f66dfcee98cb5f08a1cb936d5225',
+		'1cb18ac6eedd49b43d74a1c5beb0b955', 'ea9395b9a9248c05ee6847cbd24355ed'];
+	// Check if the user is part of a Microsoft organization.
+	for (const org of orgList) {
+		if (MICROSOFT_ORGANIZATIONS.includes(org)) {
 			return true;
 		}
 	}
@@ -72,6 +95,14 @@ export class CopilotToken {
 
 	get isInternal() {
 		return containsInternalOrg(this.organizationList);
+	}
+
+	get isMicrosoftInternal(): boolean {
+		return containsMicrosoftOrg(this.organizationList);
+	}
+
+	get isGitHubInternal(): boolean {
+		return containsGitHubOrg(this.organizationList);
 	}
 
 	get isFreeUser(): boolean {

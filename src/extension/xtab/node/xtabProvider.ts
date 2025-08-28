@@ -187,7 +187,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 
 		const areaAroundEditWindowLinesRange = this.computeAreaAroundEditWindowLinesRange(currentFileContentLines, cursorLineIdx);
 
-		const editWindowLinesRange = this.computeEditWindowLinesRange(currentFileContentLines, cursorLineIdx, retryState);
+		const editWindowLinesRange = this.computeEditWindowLinesRange(currentFileContentLines, cursorLineIdx, request, retryState);
 
 		const cursorOriginalLinesOffset = Math.max(0, cursorLineIdx - editWindowLinesRange.start);
 		const editWindowLastLineLength = activeDocument.documentAfterEdits.getTransformer().getLineLength(editWindowLinesRange.endExclusive);
@@ -367,6 +367,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 			const cursorPositionVscode = new VscodePosition(cursorPosition.lineNumber - 1, cursorPosition.column - 1);
 
 			const ctxRequest: Copilot.ResolveRequest = {
+				opportunityId: request.opportunityId,
 				completionId: request.id,
 				documentContext: {
 					uri: textDoc.uri.toString(),
@@ -735,7 +736,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		const allowRetryWithExpandedWindow = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderRetryWithNMoreLinesBelow, this.expService);
 
 		// if allowed to retry and not retrying already, flip the retry state and try again
-		if (allowRetryWithExpandedWindow && retryState === RetryState.NotRetrying) {
+		if (allowRetryWithExpandedWindow && retryState === RetryState.NotRetrying && request.expandedEditWindowNLines === undefined) {
 			this.doGetNextEdit(request, pushEdit, delaySession, logContext, cancellationToken, telemetryBuilder, RetryState.RetryingWithExpandedWindow);
 			return;
 		}
@@ -751,7 +752,7 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		return new OffsetRange(areaAroundStart, areaAroundEndExcl);
 	}
 
-	private computeEditWindowLinesRange(currentDocLines: string[], cursorLine: number, retryState: RetryState): OffsetRange {
+	private computeEditWindowLinesRange(currentDocLines: string[], cursorLine: number, request: StatelessNextEditRequest, retryState: RetryState): OffsetRange {
 		let nLinesAbove: number;
 		{
 			const useVaryingLinesAbove = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseVaryingLinesAbove, this.expService);
@@ -775,8 +776,21 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 			}
 		}
 
-		let nLinesBelow = (this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderNLinesBelow, this.expService)
-			?? N_LINES_BELOW);
+		let nLinesBelow;
+
+		if (request.expandedEditWindowNLines !== undefined) {
+			this.tracer.trace(`Using expanded nLinesBelow: ${request.expandedEditWindowNLines}`);
+			nLinesBelow = request.expandedEditWindowNLines;
+		} else {
+			const overriddenNLinesBelow = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderNLinesBelow, this.expService);
+			if (overriddenNLinesBelow !== undefined) {
+				this.tracer.trace(`Using overridden nLinesBelow: ${overriddenNLinesBelow}`);
+				nLinesBelow = overriddenNLinesBelow;
+			} else {
+				this.tracer.trace(`Using default nLinesBelow: ${N_LINES_BELOW}`);
+				nLinesBelow = N_LINES_BELOW; // default
+			}
+		}
 
 		if (retryState === RetryState.RetryingWithExpandedWindow) {
 			nLinesBelow += this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderRetryWithNMoreLinesBelow, this.expService) ?? 0;

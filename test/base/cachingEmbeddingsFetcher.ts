@@ -9,9 +9,10 @@ import { RemoteEmbeddingsComputer } from '../../src/platform/embeddings/common/r
 import { ICAPIClientService } from '../../src/platform/endpoint/common/capiClient';
 import { IDomainService } from '../../src/platform/endpoint/common/domainService';
 import { IEnvService } from '../../src/platform/env/common/envService';
+import { ILogService } from '../../src/platform/log/common/logService';
 import { IFetcherService } from '../../src/platform/networking/common/fetcherService';
 import { ITelemetryService } from '../../src/platform/telemetry/common/telemetry';
-import { CallTracker } from '../../src/util/common/telemetryCorrelationId';
+import { TelemetryCorrelationId } from '../../src/util/common/telemetryCorrelationId';
 import { computeSHA256 } from './hash';
 
 export class CacheableEmbeddingRequest {
@@ -45,19 +46,21 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 	constructor(
 		private readonly cache: IEmbeddingsCache,
 		@IAuthenticationService authService: IAuthenticationService,
-		@ITelemetryService telemetryService: ITelemetryService,
-		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
+		@IDomainService domainService: IDomainService,
 		@IEnvService envService: IEnvService,
-		@IFetcherService fetcherService: IFetcherService
+		@IFetcherService fetcherService: IFetcherService,
+		@ILogService logService: ILogService,
+		@ITelemetryService telemetryService: ITelemetryService,
 	) {
 		super(
 			authService,
-			telemetryService,
-			domainService,
 			capiClientService,
+			domainService,
 			envService,
-			fetcherService
+			fetcherService,
+			logService,
+			telemetryService,
 		);
 	}
 
@@ -65,9 +68,9 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 		type: EmbeddingType,
 		inputs: string[],
 		options: ComputeEmbeddingsOptions,
-		telemetryInfo: CallTracker,
-		token: CancellationToken | undefined,
-	): Promise<Embeddings | undefined> {
+		telemetryInfo?: TelemetryCorrelationId,
+		token?: CancellationToken,
+	): Promise<Embeddings> {
 		const embeddingEntries = new Map<string, Embedding>();
 		const nonCached: string[] = [];
 
@@ -88,9 +91,6 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 
 		if (nonCached.length) {
 			const embeddingsResult = await super.computeEmbeddings(type, nonCached, options, telemetryInfo, token);
-			if (!embeddingsResult) {
-				return undefined;
-			}
 
 			// Update the cache with the newest entries
 			for (let i = 0; i < nonCached.length; i++) {
@@ -105,10 +105,9 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 		const out: Embedding[] = [];
 		for (const input of inputs) {
 			const embedding = embeddingEntries.get(input);
-			if (!embedding) {
-				return undefined;
+			if (embedding) {
+				out.push(embedding);
 			}
-			out.push(embedding);
 		}
 		return { type, values: out };
 	}

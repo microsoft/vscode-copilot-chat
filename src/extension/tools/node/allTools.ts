@@ -37,4 +37,5 @@ import './usagesTool';
 import './userPreferencesTool';
 import './vscodeAPITool';
 import './vscodeCmdTool';
+import './toolReplayTool';
 

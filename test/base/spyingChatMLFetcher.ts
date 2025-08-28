@@ -19,6 +19,7 @@ import { IInstantiationService } from '../../src/util/vs/platform/instantiation/
 import { InterceptedRequest, ISerialisedChatResponse } from '../simulation/shared/sharedTypes';
 import { CacheInfo, TestRunCacheInfo } from '../testExecutor';
 import { ResponseWithMeta } from './cachingChatMLFetcher';
+import { StopWatch } from '../../src/util/vs/base/common/stopwatch';
 
 export class FetchRequestCollector {
 	public readonly _interceptedRequests: InterceptedRequest[] = [];
@@ -125,6 +126,7 @@ export class SpyingChatMLFetcher extends AbstractChatMLFetcher {
 
 		const respPromise = this.fetcher.fetchMany({ ...opts, finishedCb: captureToolCallsCb }, token);
 
+		const sw = new StopWatch(false);
 		this.requestCollector.addInterceptedRequest(respPromise.then(resp => {
 			let cacheKey: string | undefined;
 			if (typeof (resp as ResponseWithMeta).cacheKey === 'string') {
@@ -139,7 +141,7 @@ export class SpyingChatMLFetcher extends AbstractChatMLFetcher {
 					tool_calls: message.role === Raw.ChatRole.Assistant ? message.toolCalls : undefined,
 					name: message.name,
 				};
-			}), opts.requestOptions, resp, cacheKey, opts.endpoint.model);
+			}), opts.requestOptions, resp, cacheKey, opts.endpoint.model, sw.elapsed());
 		}));
 
 		return await respPromise;

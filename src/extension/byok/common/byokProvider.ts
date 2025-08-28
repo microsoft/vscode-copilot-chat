@@ -122,7 +122,7 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 		version: '1.0.0',
 		capabilities: {
 			type: 'chat',
-			family: providerName,
+			family: modelId,
 			supports: {
 				streaming: true,
 				tool_calls: !!knownModelInfo?.toolCalling,

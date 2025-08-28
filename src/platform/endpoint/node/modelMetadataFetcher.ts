@@ -322,7 +322,7 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 	private async _findExpOverride(resolvedModel: IModelAPIResponse): Promise<IModelAPIResponse | undefined> {
 		// This is a mapping of model id to model id. Allowing us to override the request for any model with a different model
 		let modelExpOverrides: { [key: string]: string } = {};
-		const expResult = this._expService.getTreatmentVariable<string>('vscode', 'copilotchat.modelOverrides');
+		const expResult = this._expService.getTreatmentVariable<string>('copilotchat.modelOverrides');
 		try {
 			modelExpOverrides = JSON.parse(expResult || '{}');
 		} catch {

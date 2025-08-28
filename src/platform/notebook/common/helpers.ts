@@ -118,6 +118,12 @@ export function normalizeCellId(cellId: string): string {
 	if (cellId.startsWith('VSC-')) {
 		return `#${cellId}`;
 	}
+	if (cellId.startsWith('#V-') && cellId.length === (CELL_ID_HASH_LENGTH + 3)) {
+		return `${CELL_ID_PREFIX}${cellId.substring(3)}`;
+	}
+	if (cellId.toLowerCase().startsWith('vscode-') && cellId.length === (CELL_ID_HASH_LENGTH + 7)) {
+		return `${CELL_ID_PREFIX}${cellId.substring(7)}`;
+	}
 	if (cellId.startsWith('-')) {
 		return `#VSC${cellId}`;
 	}

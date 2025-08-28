@@ -101,6 +101,7 @@ export class SimulationCodeSearchChunkSearchService extends Disposable implement
 		const fullResults = await this._fullworkspaceChunkSearch.searchWorkspace({
 			endpoint: sizing.endpoint,
 			tokenBudget: sizing.tokenBudget,
+			fullWorkspaceTokenBudget: sizing.fullWorkspaceTokenBudget,
 			maxResultCountHint: sizing.maxResults ?? 128
 		}, query, options, telemetryInfo, token);
 		if (fullResults) {

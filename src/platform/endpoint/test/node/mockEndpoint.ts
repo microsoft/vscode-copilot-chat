@@ -67,7 +67,7 @@ export class MockEndpoint implements IChatEndpoint {
 	}
 
 	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
-		return createCapiRequestBody(this.model, options);
+		return createCapiRequestBody(options, this.model);
 	}
 
 	public async makeChatRequest(

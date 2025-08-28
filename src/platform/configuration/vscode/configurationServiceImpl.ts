@@ -171,21 +171,21 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 		}
 
 		if (key.experimentName) {
-			const expValue = experimentationService.getTreatmentVariable<Exclude<T, undefined>>('vscode', key.experimentName);
+			const expValue = experimentationService.getTreatmentVariable<Exclude<T, undefined>>(key.experimentName);
 			if (expValue !== undefined) {
 				return expValue;
 			}
 		}
 
 		// This is the pattern we've been using for a while now. We need to maintain it for older experiments.
-		const expValue = experimentationService.getTreatmentVariable<Exclude<T, undefined>>('vscode', `copilotchat.config.${key.id}`);
+		const expValue = experimentationService.getTreatmentVariable<Exclude<T, undefined>>(`copilotchat.config.${key.id}`);
 		if (expValue !== undefined) {
 			return expValue;
 		}
 
 		// This is the pattern vscode uses for settings using the `onExp` tag. But vscode only supports it for
 		// settings defined in package.json, so this is why we're also reading the value from exp here.
-		const expValue2 = experimentationService.getTreatmentVariable<Exclude<T, undefined>>('vscode', `config.${key.fullyQualifiedId}`);
+		const expValue2 = experimentationService.getTreatmentVariable<Exclude<T, undefined>>(`config.${key.fullyQualifiedId}`);
 		if (expValue2 !== undefined) {
 			return expValue2;
 		}

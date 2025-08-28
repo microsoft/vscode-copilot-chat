@@ -319,3 +319,7 @@ The extension uses numerous proposed VS Code APIs for advanced functionality:
 - **Configuration**: Modify `package.json` contributions for VS Code integration
 
 This extension is a complex, multi-layered system that provides comprehensive AI assistance within VS Code. Understanding the service architecture, contribution system, and separation between platform and extension layers is crucial for making effective changes.
+
+## Best Practices
+- Use services and dependency injection whenever possible instead of using node or vscode APIs directly. For example, use `IFileService` instead of node's `fs`.
+- Always use the URI type instead of using string file paths. There are many helpers available for working with URIs.

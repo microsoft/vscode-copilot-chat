@@ -137,7 +137,7 @@ describe('Notebook Prompt Rendering', function () {
 
 		});
 		testingServiceCollection.define(IExperimentationService, new class extends NullExperimentationService {
-			override getTreatmentVariable<T extends string | number | boolean>(_configId: string, _name: string): T | undefined {
+			override getTreatmentVariable<T extends string | number | boolean>(_name: string): T | undefined {
 				if (_name === 'copilotchat.notebookPackages' || _name === 'copilotchat.notebookPriorities') {
 					return treatmeants[_name] as T;
 				}

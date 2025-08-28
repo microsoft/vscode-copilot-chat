@@ -2,7 +2,8 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { ThinkingData } from '../../../platform/thinking/common/thinking';
+import { FetchSuccess } from '../../../platform/chat/common/commonTypes';
+import { isEncryptedThinkingDelta, ThinkingData, ThinkingDelta } from '../../../platform/thinking/common/thinking';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IToolCall, IToolCallRound } from './intents';
 
@@ -50,5 +51,44 @@ export class ToolCallRound implements IToolCallRound {
 
 	private static generateID(): string {
 		return generateUuid();
+	}
+}
+
+export class ThinkingDataItem implements ThinkingData {
+	public text: string | string[] = '';
+	public metadata?: { [key: string]: any };
+	public tokens?: number;
+	public encrypted?: string;
+
+	static createOrUpdate(item: ThinkingDataItem | undefined, delta: ThinkingDelta) {
+		if (!item) {
+			item = new ThinkingDataItem(delta.id ?? generateUuid());
+		}
+
+		item.update(delta);
+		return item;
+	}
+
+	constructor(
+		public id: string
+	) { }
+
+	public update(delta: ThinkingDelta): void {
+		if (delta.id && this.id !== delta.id) {
+			this.id = delta.id;
+		}
+		if (isEncryptedThinkingDelta(delta)) {
+			this.encrypted = delta.encrypted;
+		}
+		if (delta.text) {
+			this.text += Array.isArray(delta.text) ? delta.text.join('') : delta.text;
+		}
+		if (delta.metadata) {
+			this.metadata = delta.metadata;
+		}
+	}
+
+	public updateWithFetchResult(fetchResult: FetchSuccess<unknown>): void {
+		this.tokens = fetchResult.usage?.completion_tokens_details?.reasoning_tokens;
 	}
 }

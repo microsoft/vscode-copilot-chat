@@ -4,10 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 import { ContentBlockParam, ImageBlockParam, MessageParam, RedactedThinkingBlockParam, TextBlockParam, ThinkingBlockParam } from '@anthropic-ai/sdk/resources';
 import { Raw } from '@vscode/prompt-tsx';
-import { LanguageModelChatMessage, LanguageModelChatMessageRole, LanguageModelDataPart, LanguageModelTextPart, LanguageModelToolCallPart, LanguageModelToolResultPart, LanguageModelToolResultPart2 } from 'vscode';
+import { LanguageModelChatMessageRole, LanguageModelDataPart, LanguageModelTextPart, LanguageModelToolCallPart, LanguageModelToolResultPart, LanguageModelToolResultPart2 } from '../../../vscodeTypes';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
-import { coalesce } from '../../../util/vs/base/common/arrays';
 import { isDefined } from '../../../util/vs/base/common/types';
+import type { LanguageModelChatMessage } from 'vscode';
 
 function apiContentToAnthropicContent(content: (LanguageModelTextPart | LanguageModelToolResultPart | LanguageModelToolCallPart | LanguageModelDataPart)[]): ContentBlockParam[] {
 	const convertedContent: ContentBlockParam[] = [];
@@ -123,79 +123,129 @@ function contentBlockSupportsCacheControl(block: ContentBlockParam): block is Ex
 }
 
 export function anthropicMessagesToRawMessagesForLogging(messages: MessageParam[], system: TextBlockParam): Raw.ChatMessage[] {
+	// Start with full-fidelity conversion, then sanitize for logging
+	const fullMessages = anthropicMessagesToRawMessages(messages, system);
+
+	// Replace bulky content with placeholders
+	return fullMessages.map(message => {
+		const content = message.content.map(part => {
+			if (part.type === Raw.ChatCompletionContentPartKind.Image) {
+				// Replace actual image URLs with placeholder for logging
+				return {
+					...part,
+					imageUrl: { url: '(image)' }
+				};
+			}
+			return part;
+		});
+
+		if (message.role === Raw.ChatRole.Tool) {
+			// Replace tool result content with placeholder for logging
+			return {
+				...message,
+				content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: '(tool result)' }]
+			};
+		}
+
+		return {
+			...message,
+			content
+		};
+	});
+}
+
+/**
+ * Full-fidelity conversion of Anthropic MessageParam[] + system to Raw.ChatMessage[] suitable for sending to endpoints.
+ * Compared to the logging variant, this preserves tool_result content and image data (as data URLs when possible).
+ */
+export function anthropicMessagesToRawMessages(messages: MessageParam[], system: TextBlockParam): Raw.ChatMessage[] {
 	const rawMessages: Raw.ChatMessage[] = [];
 
 	if (system) {
-		const systemContent: Raw.ChatCompletionContentPart[] = [{
-			type: Raw.ChatCompletionContentPartKind.Text,
-			text: system.text,
-		}];
-		if (system.cache_control) {
-			systemContent.push({
-				type: Raw.ChatCompletionContentPartKind.CacheBreakpoint,
-				cacheType: system.cache_control.type
-			});
+		const systemContent: Raw.ChatCompletionContentPart[] = [];
+		if (system.text) {
+			systemContent.push({ type: Raw.ChatCompletionContentPartKind.Text, text: system.text });
 		}
-		rawMessages.push({
-			role: Raw.ChatRole.System,
-			content: systemContent,
-		});
+		if (system.cache_control) {
+			systemContent.push({ type: Raw.ChatCompletionContentPartKind.CacheBreakpoint, cacheType: system.cache_control.type });
+		}
+		if (systemContent.length) {
+			rawMessages.push({ role: Raw.ChatRole.System, content: systemContent });
+		}
 	}
 
 	for (const message of messages) {
-		let content: Raw.ChatCompletionContentPart[] = [];
+		const content: Raw.ChatCompletionContentPart[] = [];
 		let toolCalls: Raw.ChatMessageToolCall[] | undefined;
 		let toolCallId: string | undefined;
 
-		if (Array.isArray(message.content)) {
-			content = coalesce(message.content.flatMap(block => {
-				let cachePart: Raw.ChatCompletionContentPartCacheBreakpoint | undefined;
-				if (contentBlockSupportsCacheControl(block) && block.cache_control) {
-					cachePart = {
-						type: Raw.ChatCompletionContentPartKind.CacheBreakpoint,
-						cacheType: block.cache_control.type
-					};
-				}
+		const toRawImage = (img: ImageBlockParam): Raw.ChatCompletionContentPartImage | undefined => {
+			if (img.source.type === 'base64') {
+				return { type: Raw.ChatCompletionContentPartKind.Image, imageUrl: { url: `data:${img.source.media_type};base64,${img.source.data}` } };
+			} else if (img.source.type === 'url') {
+				return { type: Raw.ChatCompletionContentPartKind.Image, imageUrl: { url: img.source.url } };
+			}
+		};
 
-				let contentPart: Raw.ChatCompletionContentPart | undefined;
+		const pushImage = (img: ImageBlockParam) => {
+			const imagePart = toRawImage(img);
+			if (imagePart) {
+				content.push(imagePart);
+			}
+		};
+
+		const pushCache = (block?: ContentBlockParam) => {
+			if (block && contentBlockSupportsCacheControl(block) && block.cache_control) {
+				content.push({ type: Raw.ChatCompletionContentPartKind.CacheBreakpoint, cacheType: block.cache_control.type });
+			}
+		};
+
+		if (Array.isArray(message.content)) {
+			for (const block of message.content) {
 				if (block.type === 'text') {
-					contentPart = {
-						type: Raw.ChatCompletionContentPartKind.Text,
-						text: block.text
-					};
+					content.push({ type: Raw.ChatCompletionContentPartKind.Text, text: block.text });
+					pushCache(block);
 				} else if (block.type === 'image') {
-					contentPart = {
-						type: Raw.ChatCompletionContentPartKind.Image,
-						imageUrl: {
-							url: '(image)'
-						}
-					};
+					pushImage(block);
+					pushCache(block);
 				} else if (block.type === 'tool_use') {
-					if (!toolCalls) {
-						toolCalls = [];
-					}
+					// tool_use appears in assistant messages; represent as toolCalls on assistant message
+					toolCalls ??= [];
 					toolCalls.push({
 						id: block.id,
 						type: 'function',
-						function: {
-							name: block.name,
-							arguments: JSON.stringify(block.input)
-						}
+						function: { name: block.name, arguments: JSON.stringify(block.input ?? {}) }
 					});
-					return undefined;
+					// no content part, tool call is separate
+					pushCache(block);
 				} else if (block.type === 'tool_result') {
+					// tool_result appears in user role; we'll emit a Raw.Tool message later with this toolCallId and content
 					toolCallId = block.tool_use_id;
-					// TODO Convert block.content
-					return undefined;
+					// Translate tool result content to raw parts
+					const toolContent: Raw.ChatCompletionContentPart[] = [];
+					if (typeof block.content === 'string') {
+						toolContent.push({ type: Raw.ChatCompletionContentPartKind.Text, text: block.content });
+					} else {
+						for (const c of block.content ?? []) {
+							if (c.type === 'text') {
+								toolContent.push({ type: Raw.ChatCompletionContentPartKind.Text, text: c.text });
+							} else if (c.type === 'image') {
+								const imagePart = toRawImage(c);
+								if (imagePart) {
+									toolContent.push(imagePart);
+								}
+							}
+						}
+					}
+					// Emit the tool result message now and continue to next message
+					rawMessages.push({ role: Raw.ChatRole.Tool, content: toolContent.length ? toolContent : [{ type: Raw.ChatCompletionContentPartKind.Text, text: '' }], toolCallId });
+					toolCallId = undefined;
+				} else {
+					// thinking or unsupported types are ignored
 				}
-
-				return [contentPart, cachePart];
-			}));
+			}
 		} else if (typeof message.content === 'string') {
-			content = [{
-				type: Raw.ChatCompletionContentPartKind.Text,
-				text: message.content
-			}];
+			content.push({ type: Raw.ChatCompletionContentPartKind.Text, text: message.content });
 		}
 
 		if (message.role === 'assistant') {
@@ -205,9 +255,8 @@ export function anthropicMessagesToRawMessagesForLogging(messages: MessageParam[
 			}
 			rawMessages.push(msg);
 		} else if (message.role === 'user') {
-			if (toolCallId) {
-				rawMessages.push({ role: Raw.ChatRole.Tool, content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: '(tool result)' }], toolCallId });
-			} else {
+			// note: tool_result handled earlier; here we push standard user content if any
+			if (content.length) {
 				rawMessages.push({ role: Raw.ChatRole.User, content });
 			}
 		}

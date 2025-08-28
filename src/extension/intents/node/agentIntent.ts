@@ -41,7 +41,7 @@ import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperServ
 import { TemporalContextStats } from '../../prompts/node/inline/temporalContext';
 import { EditCodePrompt2 } from '../../prompts/node/panel/editCodePrompt2';
 import { ToolResultMetadata } from '../../prompts/node/panel/toolCalling';
-import { ToolName } from '../../tools/common/toolNames';
+import { ContributedToolName, ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
 import { VirtualTool } from '../../tools/common/virtualTools/virtualTool';
 import { IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
@@ -69,7 +69,7 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 		}
 
 		if (await isHiddenModelB(model)) {
-			const treatment = experimentationService.getTreatmentVariable<string>('vscode', 'copilotchat.hiddenModelBEditTool');
+			const treatment = experimentationService.getTreatmentVariable<string>('copilotchat.hiddenModelBEditTool');
 			switch (treatment) {
 				case 'with_replace_string':
 					allowTools[ToolName.ReplaceString] = true;
@@ -99,6 +99,12 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 
 		allowTools[ToolName.RunTests] = await testService.hasAnyTests();
 		allowTools[ToolName.CoreRunTask] = tasksService.getTasks().length > 0;
+
+		if (request.tools.get(ContributedToolName.EditFilesPlaceholder) === false) {
+			allowTools[ToolName.ApplyPatch] = false;
+			allowTools[ToolName.EditFile] = false;
+			allowTools[ToolName.ReplaceString] = false;
+		}
 
 		return toolsService.getEnabledTools(request, tool => {
 			if (typeof allowTools[tool.name] === 'boolean') {

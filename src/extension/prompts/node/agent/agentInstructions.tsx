@@ -169,7 +169,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 			</Tag>}
 			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
-			{isGpt5 && tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
+			{tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
@@ -697,7 +697,7 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 			</Tag>}
 			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
-			{isGpt5 && tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
+			{tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
@@ -1030,6 +1030,7 @@ class TodoListToolInstructions extends PromptElement<DefaultAgentPromptProps> {
 			4. Mark completed IMMEDIATELY<br />
 			5. Update the user with a very short evidence note<br />
 			6. Move to next todo<br />
+			7. Before wrapping up, ensure every todo item is properly updated and marked with the correct status ('completed', 'in-progress' or 'not-started') - never leave todo items in an ambiguous state<br />
 		</Tag>;
 	}
 }

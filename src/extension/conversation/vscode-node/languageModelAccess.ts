@@ -23,13 +23,12 @@ import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from 
 import { IChatEndpoint, IEndpoint } from '../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
+import { isEncryptedThinkingDelta } from '../../../platform/thinking/common/thinking';
 import { BaseTokensPerCompletion } from '../../../platform/tokenizer/node/tokenizer';
-import { CallTracker } from '../../../util/common/telemetryCorrelationId';
+import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
 import { isDefined, isNumber, isString, isStringArray } from '../../../util/vs/base/common/types';
-import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ExtensionMode } from '../../../vscodeTypes';
@@ -107,7 +106,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 		const defaultChatEndpoint = chatEndpoints.find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1') ?? chatEndpoints[0];
 		if (isAutoModeEnabled(this._expService, this._envService)) {
-			chatEndpoints.push(await this._automodeService.resolveAutoModeEndpoint(generateUuid(), chatEndpoints));
+			chatEndpoints.push(await this._automodeService.resolveAutoModeEndpoint(undefined, chatEndpoints));
 		}
 		const seenFamilies = new Set<string>();
 
@@ -177,7 +176,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		model: vscode.LanguageModelChatInformation,
 		messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>,
 		options: vscode.LanguageModelChatRequestHandleOptions,
-		progress: vscode.Progress<LMResponsePart>,
+		progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
 		token: vscode.CancellationToken
 	): Promise<any> {
 		const endpoint = this._chatEndpoints.find(e => e.model === model.id);
@@ -226,10 +225,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			dispo.clear();
 			dispo.value = vscode.lm.registerEmbeddingsProvider(`copilot.${model}`, new class implements vscode.EmbeddingsProvider {
 				async provideEmbeddings(input: string[], token: vscode.CancellationToken): Promise<vscode.Embedding[]> {
-					const result = await embeddingsComputer.computeEmbeddings(embeddingType, input, { parallelism: 2 }, new CallTracker('EmbeddingsProvider::provideEmbeddings'), token);
-					if (!result) {
-						throw new Error('Failed to compute embeddings');
-					}
+					const result = await embeddingsComputer.computeEmbeddings(embeddingType, input, { parallelism: 2 }, new TelemetryCorrelationId('EmbeddingsProvider::provideEmbeddings'), token);
 					return result.values.map(embedding => ({ values: embedding.value.slice(0) }));
 				}
 			});
@@ -271,15 +267,14 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ILogService private readonly _logService: ILogService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
-		@IEnvService private readonly _envService: IEnvService,
-		@IThinkingDataService private readonly _thinkingDataService: IThinkingDataService
+		@IEnvService private readonly _envService: IEnvService
 	) {
 		super();
 	}
 
 	private async _provideLanguageModelResponse(_endpoint: IChatEndpoint, _messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, _options: vscode.LanguageModelChatRequestHandleOptions, extensionId: string, callback: FinishedCallback, token: vscode.CancellationToken): Promise<any> {
 
-		const extensionInfo = vscode.extensions.getExtension(extensionId, true);
+		const extensionInfo = extensionId === 'core' ? { packageJSON: { version: this._envService.vscodeVersion } } : vscode.extensions.getExtension(extensionId, true);
 		if (!extensionInfo || typeof extensionInfo.packageJSON.version !== 'string') {
 			throw new Error('Invalid extension information');
 		}
@@ -342,6 +337,9 @@ export class CopilotLanguageModelWrapper extends Disposable {
 				if (prop === 'getExtraHeaders') {
 					return function () {
 						const extraHeaders = target.getExtraHeaders?.() ?? {};
+						if (extensionId === 'core') {
+							return extraHeaders;
+						}
 						return {
 							...extraHeaders,
 							'x-onbehalf-extension-id': `${extensionId}/${extensionVersion}`,
@@ -377,7 +375,7 @@ export class CopilotLanguageModelWrapper extends Disposable {
 			{ type: 'function', function: { name: _options.tools[0].name } } :
 			undefined;
 
-		const result = await endpoint.makeChatRequest('copilotLanguageModelWrapper', messages, callback, token, ChatLocation.Other, { extensionId }, options, true, telemetryProperties);
+		const result = await endpoint.makeChatRequest('copilotLanguageModelWrapper', messages, callback, token, ChatLocation.Other, { extensionId }, options, extensionId !== 'core', telemetryProperties);
 
 		if (result.type !== ChatFetchResponseType.Success) {
 			if (result.type === ChatFetchResponseType.ExtensionBlocked) {
@@ -426,11 +424,11 @@ export class CopilotLanguageModelWrapper extends Disposable {
 				}
 			}
 			if (delta.thinking) {
-				const text = delta.thinking.text ?? '';
-				progress.report(new vscode.LanguageModelThinkingPart(text, delta.thinking.id, delta.thinking.metadata));
-
-				// @karthiknadig: remove this when LM API becomes available
-				this._thinkingDataService.update(index, delta.thinking);
+				// Show thinking progress for unencrypted thinking deltas
+				if (!isEncryptedThinkingDelta(delta.thinking)) {
+					const text = delta.thinking.text ?? '';
+					progress.report(new vscode.LanguageModelThinkingPart(text, delta.thinking.id, delta.thinking.metadata));
+				}
 			}
 
 			if (delta.statefulMarker) {

@@ -4,11 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 import { CancellationToken, Progress, SettingsSearchProviderOptions, SettingsSearchResult, SettingsSearchResultKind } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { EmbeddingType, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
+import { Embeddings, EmbeddingType, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
 import { ICombinedEmbeddingIndex, SettingListItem } from '../../../platform/embeddings/common/vscodeIndex';
 import { ChatEndpointFamily, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ISettingsEditorSearchService } from '../../../platform/settingsEditor/common/settingsEditorSearchService';
-import { CallTracker } from '../../../util/common/telemetryCorrelationId';
+import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { SettingsEditorSearchResultsSelector } from '../node/settingsEditorSearchResultsSelector';
 
@@ -35,12 +35,15 @@ export class SettingsEditorSearchServiceImpl implements ISettingsEditorSearchSer
 			settings: []
 		};
 
-		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [query], {}, new CallTracker('SettingsEditorSearchServiceImpl::provideSettingsSearchResults'), token);
-		if (token.isCancellationRequested) {
-			progress.report(canceledBundle);
-			return;
-		}
-		if (!embeddingResult || embeddingResult.values.length === 0) {
+		let embeddingResult: Embeddings;
+		try {
+			embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [query], {}, new TelemetryCorrelationId('SettingsEditorSearchServiceImpl::provideSettingsSearchResults'), token);
+		} catch {
+			if (token.isCancellationRequested) {
+				progress.report(canceledBundle);
+				return;
+			}
+
 			progress.report({
 				query,
 				kind: SettingsSearchResultKind.EMBEDDED,
@@ -53,6 +56,11 @@ export class SettingsEditorSearchServiceImpl implements ISettingsEditorSearchSer
 					settings: []
 				});
 			}
+			return;
+		}
+
+		if (token.isCancellationRequested) {
+			progress.report(canceledBundle);
 			return;
 		}
 
