@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as vscode from 'vscode';
-import { TextDocumentChangeReason, window } from 'vscode';
+import type * as vscode from 'vscode';
+import { TextDocumentChangeReason } from '../../../vscodeTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { IStatelessNextEditProvider } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
@@ -13,7 +13,7 @@ import { NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/work
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITracer, createTracer } from '../../../util/common/tracing';
-import { Disposable, DisposableMap, toDisposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableMap, IDisposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
 import { IObservableSignal, observableSignal } from '../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CompletionsProvider } from '../../completions/vscode-node/completionsProvider';
@@ -23,6 +23,8 @@ import { NextEditProvider } from '../node/nextEditProvider';
 import { DiagnosticsNextEditProvider } from './features/diagnosticsInlineEditProvider';
 import { VSCodeWorkspace } from './parts/vscodeWorkspace';
 import { isNotebookCell } from '../../../util/common/notebooks';
+import { createTimeout } from '../common/common';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 
 const TRIGGER_INLINE_EDIT_AFTER_CHANGE_LIMIT = 10000; // 10 seconds
 const TRIGGER_INLINE_EDIT_ON_SAME_LINE_COOLDOWN = 5000; // milliseconds
@@ -46,8 +48,7 @@ export class InlineEditModel extends Disposable {
 		public readonly completionsProvider: CompletionsProvider | undefined,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@ILogService private readonly _logService: ILogService,
-		@IExperimentationService private readonly _expService: IExperimentationService
+		@IExperimentationService private readonly _expService: IExperimentationService,
 	) {
 		super();
 
@@ -57,7 +58,7 @@ export class InlineEditModel extends Disposable {
 		this.nextEditProvider = this._instantiationService.createInstance(NextEditProvider, this.workspace, this._predictor, historyContextProvider, xtabHistoryTracker, this.debugRecorder);
 
 		if (this._predictor.dependsOnSelection) {
-			this._register(new InlineEditTriggerer(this.workspace, this.nextEditProvider, this.onChange, this._logService, this._configurationService, this._expService));
+			this._register(this._instantiationService.createInstance(InlineEditTriggerer, this.workspace, this.nextEditProvider, this.onChange));
 		}
 	}
 }
@@ -66,17 +67,7 @@ class LastChange extends Disposable {
 	public lastEditedTimestamp: number;
 	public lineNumberTriggers: Map<number /* lineNumber */, number /* timestamp */>;
 
-	private _timeout: TimeoutHandle | undefined;
-	public set timeout(value: TimeoutHandle | undefined) {
-		if (value !== undefined) {
-			// TODO: we can end up collecting multiple timeouts, but also they could be cleared as debouncing happens
-			this._register(toDisposable(() => clearTimeout(value)));
-		}
-		this._timeout = value;
-	}
-	public get timeout(): TimeoutHandle | undefined {
-		return this._timeout;
-	}
+	public readonly timeout = this._register(new MutableDisposable<IDisposable>());
 
 	private _nConsecutiveSelectionChanges = 0;
 	public get nConsequtiveSelectionChanges(): number {
@@ -90,7 +81,6 @@ class LastChange extends Disposable {
 		super();
 		this.lastEditedTimestamp = Date.now();
 		this.lineNumberTriggers = new Map();
-		this.timeout = undefined;
 	}
 }
 
@@ -107,6 +97,7 @@ class InlineEditTriggerer extends Disposable {
 		@ILogService private readonly _logService: ILogService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
+		@IWorkspaceService private readonly _workspaceService: IWorkspaceService
 	) {
 		super();
 
@@ -125,7 +116,7 @@ class InlineEditTriggerer extends Disposable {
 	}
 
 	private _registerDocumentChangeListener() {
-		this._store.add(this._register(vscode.workspace.onDidChangeTextDocument(e => {
+		this._register(this._workspaceService.onDidChangeTextDocument(e => {
 			if (this._shouldIgnoreDoc(e.document)) {
 				return;
 			}
@@ -147,11 +138,11 @@ class InlineEditTriggerer extends Disposable {
 			this.docToLastChangeMap.set(doc.id, new LastChange(e.document));
 
 			tracer.returns('setting last edited timestamp');
-		})));
+		}));
 	}
 
 	private _registerSelectionChangeListener() {
-		this._store.add(this._register(window.onDidChangeTextEditorSelection((e) => {
+		this._register(this._workspaceService.onDidChangeTextEditorSelection((e) => {
 			if (this._shouldIgnoreDoc(e.textEditor.document)) {
 				return;
 			}
@@ -246,17 +237,11 @@ class InlineEditTriggerer extends Disposable {
 				if (mostRecentChange.nConsequtiveSelectionChanges < N_ALLOWED_IMMEDIATE_SELECTION_CHANGE_EVENTS) {
 					this._triggerInlineEdit();
 				} else {
-					if (mostRecentChange.timeout) {
-						clearTimeout(mostRecentChange.timeout);
-					}
-					mostRecentChange.timeout = setTimeout(() => {
-						mostRecentChange.timeout = undefined;
-						this._triggerInlineEdit();
-					}, debounceOnSelectionChange);
+					mostRecentChange.timeout.value = createTimeout(debounceOnSelectionChange, () => this._triggerInlineEdit());
 				}
 				mostRecentChange.incrementSelectionChangeEventCount();
 			}
-		})));
+		}));
 	}
 
 	private _triggerInlineEdit() {
