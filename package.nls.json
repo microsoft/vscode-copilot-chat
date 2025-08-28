@@ -124,6 +124,7 @@
 	"github.copilot.config.pullRequestDescriptionGeneration.instruction.file": "A path to a file with instructions that will be added to Copilot requests that generate pull request titles and descriptions.",
 	"github.copilot.config.generateTests.codeLens": "Show 'Generate tests' code lens for symbols that are not covered by current test coverage information.",
 	"github.copilot.config.notebook.followCellExecution": "Controls whether the currently executing cell is revealed into the viewport upon execution from Copilot.",
+	"github.copilot.config.notebook.enhancedNextEditSuggestions": "Controls whether to use an enhanced approach for generating next edit suggestions in notebook cells.",
 	"github.copilot.chat.editor.temporalContext.enabled": "When making inline chat request whether to include recently viewed and edited files with Copilot requests.",
 	"github.copilot.chat.edits.temporalContext.enabled": "When making edits request whether to include recently viewed and edited files with Copilot requests.",
 	"github.copilot.config.startDebugging.enabled": "Enables the `/startDebugging` intent in panel chat. Generates or finds launch config to match the query (if any), project structure, and more.",

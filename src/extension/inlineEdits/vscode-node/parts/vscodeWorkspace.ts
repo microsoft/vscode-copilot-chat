@@ -52,7 +52,7 @@ export class VSCodeWorkspace extends ObservableWorkspace implements IDisposable 
 	private readonly _store = new DisposableStore();
 	private readonly _filter: DocumentFilter;
 	private get useAlternativeNotebookFormat(): boolean {
-		return this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, this._experimentationService);
+		return this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, this._experimentationService) || this._configurationService.getExperimentBasedConfig(ConfigKey.UseAlternativeNESNotebookFormat, this._experimentationService);
 	}
 	private readonly markdownNotebookCells = new Lazy<ResourceSet>(() => {
 		const markdownCellUris = new ResourceSet();

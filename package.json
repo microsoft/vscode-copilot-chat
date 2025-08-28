@@ -2777,6 +2777,15 @@
 						],
 						"description": "%github.copilot.config.notebook.followCellExecution%"
 					},
+					"github.copilot.chat.notebook.enhancedNextEditSuggestions.enabled": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental",
+							"onExp"
+						],
+						"description": "%github.copilot.config.notebook.enhancedNextEditSuggestions%"
+					},
 					"github.copilot.chat.summarizeAgentConversationHistory.enabled": {
 						"type": "boolean",
 						"default": true,
