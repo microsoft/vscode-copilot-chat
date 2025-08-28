@@ -21,8 +21,6 @@ import { createExtensionUnitTestingServices } from '../../../test/node/services'
 import { EditNotebookTool, IEditNotebookToolParams } from '../editNotebookTool';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
-import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 
 describe('Edit Notebook Tool', () => {
 	const disposables = new DisposableStore();
@@ -41,8 +39,6 @@ describe('Edit Notebook Tool', () => {
 			accessor.get(ITelemetryService),
 			accessor.get(IEndpointProvider),
 			accessor.get(IFileSystemService),
-			accessor.get(IConfigurationService),
-			accessor.get(IExperimentationService),
 		);
 		return [editTool, workspaceService] as const;
 	}
