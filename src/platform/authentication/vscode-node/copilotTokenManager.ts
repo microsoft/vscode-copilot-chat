@@ -39,7 +39,7 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 		@IEnvService envService: IEnvService,
 		@IConfigurationService protected readonly configurationService: IConfigurationService
 	) {
-		super(new BaseOctoKitService(capiClientService, fetcherService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
+		super(new BaseOctoKitService(capiClientService, fetcherService, logService, telemetryService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
 	}
 
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {

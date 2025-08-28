@@ -5,7 +5,10 @@
 
 import { createServiceIdentifier } from '../../../util/common/services';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
+import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
+import { ITelemetryService } from '../../telemetry/common/telemetry';
+import { makeGitHubAPIRequest } from './githubAPI';
 
 export const IGithubRepositoryService = createServiceIdentifier<IGithubRepositoryService>('IGithubRepositoryService');
 export const IOctoKitService = createServiceIdentifier<IOctoKitService>('IOctoKitService');
@@ -65,7 +68,9 @@ export interface IOctoKitService {
 export class BaseOctoKitService {
 	constructor(
 		private readonly _capiClientService: ICAPIClientService,
-		private readonly _fetcherService: IFetcherService
+		private readonly _fetcherService: IFetcherService,
+		private readonly _logService: ILogService,
+		private readonly _telemetryService: ITelemetryService
 	) { }
 
 	async getCurrentAuthedUserWithToken(token: string): Promise<IOctoKitUser | undefined> {
@@ -77,19 +82,6 @@ export class BaseOctoKitService {
 	}
 
 	protected async _makeGHAPIRequest(routeSlug: string, method: 'GET' | 'POST', token: string, body?: { [key: string]: any }) {
-		const response = await this._fetcherService.fetch(`${this._capiClientService.dotcomAPIURL}/${routeSlug}`, {
-			method,
-			headers: { 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Authorization': `Bearer ${token}` },
-			body: body ? JSON.stringify(body) : undefined
-		});
-		if (!response.ok) {
-			return undefined;
-		}
-
-		try {
-			return await response.json();
-		} catch {
-			return undefined;
-		}
+		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, routeSlug, method, token, body);
 	}
 }
