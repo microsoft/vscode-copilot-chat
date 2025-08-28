@@ -84,7 +84,7 @@ class LastChange extends Disposable {
 	}
 }
 
-class InlineEditTriggerer extends Disposable {
+export class InlineEditTriggerer extends Disposable {
 
 	private readonly docToLastChangeMap = this._register(new DisposableMap<DocumentId, LastChange>());
 
@@ -106,7 +106,7 @@ class InlineEditTriggerer extends Disposable {
 		this.registerListeners();
 	}
 
-	public registerListeners() {
+	private registerListeners() {
 		this._registerDocumentChangeListener();
 		this._registerSelectionChangeListener();
 	}
