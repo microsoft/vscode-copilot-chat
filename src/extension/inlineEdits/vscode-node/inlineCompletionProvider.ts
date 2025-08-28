@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, Command, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, Position, Range, TextDocument, TextDocumentShowOptions, l10n, Event as vscodeEvent, window, workspace } from 'vscode';
+import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, Position, Range, TextDocument, TextDocumentShowOptions, l10n, Event as vscodeEvent, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
@@ -227,26 +227,21 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			}
 
 			tracer.trace(`using next edit suggestion from ${suggestionInfo.source}`);
-			let range: Range | undefined;
 			let isInlineCompletion: boolean = false;
 			let completionItem: Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined;
 
 			const documents = doc.fromOffsetRange(result.edit.replaceRange);
-			const cellMarkerTelemetry = getNotebookCellMarkerTelemetry(result.edit.newText);
-			if (!documents.length) {
+			const [targetDocument, range] = documents.length ? documents[0] : [undefined, undefined];
+
+			addNotebookTelemetry(document, result.edit.newText, documents, telemetryBuilder);
+			telemetryBuilder.setIsActiveDocument(window.activeTextEditor?.document === targetDocument);
+
+			if (!targetDocument) {
 				tracer.trace('no next edit suggestion');
-			} else if (cellMarkerTelemetry) {
-				telemetryBuilder.setNotebookCellMarkerIndex(cellMarkerTelemetry.cellMarkerIndex);
-				telemetryBuilder.setNotebookCellMarkerCount(cellMarkerTelemetry.cellMarkerCount);
-				telemetryBuilder.setIsActiveDocument(window.activeTextEditor?.document === documents[0][0]);
-				if (documents[0][0] !== document) {
-					telemetryBuilder.setIsNESForOtherEditor();
-				}
+			} else if (hasNotebookCellMarker(document, result.edit.newText)) {
 				tracer.trace('no next edit suggestion, edits contain Notebook Cell Markers');
-			} else if (documents[0][0] === document) {
+			} else if (targetDocument === document) {
 				// nes is for this same document.
-				telemetryBuilder.setIsActiveDocument(window.activeTextEditor?.document === documents[0][0]);
-				range = documents[0][1];
 				const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
 				isInlineCompletion = allowInlineCompletions && isInlineSuggestion(position, document, range, result.edit.newText);
 				completionItem = serveAsCompletionsProvider && !isInlineCompletion ?
@@ -254,13 +249,10 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 					this.createCompletionItem(doc, document, position, range, result);
 			} else {
 				// nes is for a different document.
-				telemetryBuilder.setIsNESForOtherEditor();
-				telemetryBuilder.setIsActiveDocument(window.activeTextEditor?.document === documents[0][0]);
-				range = documents[0][1];
 				completionItem = serveAsCompletionsProvider ?
 					undefined :
 					this.createNextEditorEditCompletionItem(position, {
-						document: documents[0][0],
+						document: targetDocument,
 						insertText: result.edit.newText,
 						range
 					});
@@ -589,10 +581,27 @@ function shortOpportunityId(oppId: string): string {
 	return oppId.substring(4, 8);
 }
 
-function getNotebookCellMarkerTelemetry(newText: string): { cellMarkerIndex: number; cellMarkerCount: number } | undefined {
-	const cellMarkerCount = newText.match(/%% vscode.cell \[id=/g)?.length || 0;
-	if (!newText || cellMarkerCount === 0) {
-		return undefined;
+function hasNotebookCellMarker(document: TextDocument, newText: string) {
+	return isNotebookCell(document.uri) && newText.includes('%% vscode.cell [id=');
+}
+
+function addNotebookTelemetry(document: TextDocument, newText: string, documents: [TextDocument, Range][], telemetryBuilder: NextEditProviderTelemetryBuilder) {
+	if (!isNotebookCell(document.uri) || !documents.length) {
+		return;
 	}
-	return { cellMarkerIndex: newText.indexOf('#%% vscode.cell [id='), cellMarkerCount };
+	const cellMarkerCount = newText.match(/%% vscode.cell \[id=/g)?.length || 0;
+	const cellMarkerIndex = newText.indexOf('#%% vscode.cell [id=');
+	const isMultiline = newText.includes('\n');
+	const targetEol = documents[0][0].eol === EndOfLine.CRLF ? '\r\n' : '\n';
+	const sourceEol = newText.includes('\r\n') ? '\r\n' : (newText.includes('\n') ? '\n' : targetEol);
+	const nextEditor = window.visibleTextEditors.find(editor => editor.document === documents[0][0]);
+	const isNextEditorRangeVisible = nextEditor && nextEditor.visibleRanges.some(range => range.contains(documents[0][1]));
+	telemetryBuilder.
+		setNotebookCellMarkerIndex(cellMarkerIndex)
+		.setNotebookCellMarkerCount(cellMarkerCount)
+		.setIsMultilineEdit(isMultiline)
+		.setIsEolDifferent(targetEol !== sourceEol)
+		.setIsNextEditorVisible(!!nextEditor)
+		.setIsNextEditorRangeVisible(!!isNextEditorRangeVisible)
+		.setIsNESForOtherEditor(documents[0][0] !== document);
 }
