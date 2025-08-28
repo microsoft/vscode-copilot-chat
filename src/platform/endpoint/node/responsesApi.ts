@@ -248,7 +248,7 @@ class OpenAIResponsesProcessor {
 							// CAPI models don't stream the reasoning summary for some reason, byok do, so don't duplicate it
 							text: this.hasReceivedReasoningSummary ?
 								undefined :
-								chunk.item.summary.map(s => s.text).join('\n\n'),
+								chunk.item.summary.map(s => s.text),
 							encrypted: chunk.item.encrypted_content,
 						} : undefined
 					});

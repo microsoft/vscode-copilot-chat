@@ -80,8 +80,24 @@ export class ThinkingDataItem implements ThinkingData {
 		if (isEncryptedThinkingDelta(delta)) {
 			this.encrypted = delta.encrypted;
 		}
-		if (delta.text) {
-			this.text += Array.isArray(delta.text) ? delta.text.join('') : delta.text;
+		if (delta.text !== undefined) {
+
+			// handles all possible text states
+			if (Array.isArray(delta.text)) {
+				if (Array.isArray(this.text)) {
+					this.text.push(...delta.text);
+				} else if (this.text) {
+					this.text = [this.text, ...delta.text];
+				} else {
+					this.text = [...delta.text];
+				}
+			} else {
+				if (Array.isArray(this.text)) {
+					this.text.push(delta.text);
+				} else {
+					this.text += delta.text;
+				}
+			}
 		}
 		if (delta.metadata) {
 			this.metadata = delta.metadata;
