@@ -21,6 +21,8 @@ import { URI } from '../src/_internal/util/vs/base/common/uri';
 import { StringEdit } from '../src/_internal/util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../src/_internal/util/vs/editor/common/core/ranges/offsetRange';
 import { createNESProvider } from '../src/main';
+import { SimulationTestCopilotTokenManager } from '../src/_internal/platform/authentication/test/node/simulationTestCopilotTokenManager';
+import { TestWorkspaceService } from '../src/_internal/platform/test/node/testWorkspaceService';
 
 
 class TestFetcher implements IFetcher {
@@ -98,7 +100,12 @@ describe('NESProvider Facade', () => {
 			const myPoint = new Point(0, 1);`.trimStart()
 		});
 		doc.setSelection([new OffsetRange(1, 1)], undefined);
-		const nextEditProvider = createNESProvider(obsWorkspace, new TestFetcher({ 'https://proxy.enterprise.githubcopilot.com/chat/completions': await fs.readFile(path.join(__dirname, 'nesProvider.reply.txt'), 'utf8') }));
+		const nextEditProvider = createNESProvider(
+			obsWorkspace,
+			new TestWorkspaceService(),
+			new TestFetcher({ 'https://proxy.enterprise.githubcopilot.com/chat/completions': await fs.readFile(path.join(__dirname, 'nesProvider.reply.txt'), 'utf8') }),
+			new SimulationTestCopilotTokenManager(),
+		);
 
 		doc.applyEdit(StringEdit.insert(11, '3D'));
 

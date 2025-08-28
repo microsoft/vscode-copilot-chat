@@ -42,7 +42,8 @@
 		"dist/src",
 		"src",
 		"README.md",
-		"LICENSE.txt"
+		"LICENSE.txt",
+		"!**/test/**"
 	],
 	"scripts": {
 		"clean": "rimraf dist",

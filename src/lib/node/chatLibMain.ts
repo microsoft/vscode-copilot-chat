@@ -15,7 +15,6 @@ import { ICopilotTokenManager } from '../../platform/authentication/common/copil
 import { CopilotTokenStore, ICopilotTokenStore } from '../../platform/authentication/common/copilotTokenStore';
 import { StaticGitHubAuthenticationService } from '../../platform/authentication/common/staticGitHubAuthenticationService';
 import { getStaticGitHubToken } from '../../platform/authentication/node/copilotTokenManager';
-// import { SimulationTestCopilotTokenManager } from '../../platform/authentication/test/node/simulationTestCopilotTokenManager';
 import { IChatMLFetcher } from '../../platform/chat/common/chatMLFetcher';
 import { IChatQuotaService } from '../../platform/chat/common/chatQuotaService';
 import { ChatQuotaService } from '../../platform/chat/common/chatQuotaServiceImpl';
@@ -54,7 +53,6 @@ import { ISnippyService, NullSnippyService } from '../../platform/snippy/common/
 import { IExperimentationService, NullExperimentationService } from '../../platform/telemetry/common/nullExperimentationService';
 import { NullTelemetryService } from '../../platform/telemetry/common/nullTelemetryService';
 import { ITelemetryService } from '../../platform/telemetry/common/telemetry';
-// import { TestWorkspaceService } from '../../platform/test/node/testWorkspaceService';
 import { ITokenizerProvider, TokenizerProvider } from '../../platform/tokenizer/node/tokenizer';
 import { IWorkspaceService } from '../../platform/workspace/common/workspaceService';
 import { InstantiationServiceBuilder } from '../../util/common/services';
@@ -65,8 +63,8 @@ import { SyncDescriptor } from '../../util/vs/platform/instantiation/common/desc
 import { IInstantiationService } from '../../util/vs/platform/instantiation/common/instantiation';
 
 
-export function createNESProvider(workspace: ObservableWorkspace, fetcher: IFetcher): INESProvider {
-	const instantiationService = setupServices(fetcher);
+export function createNESProvider(workspace: ObservableWorkspace, workspaceService: IWorkspaceService, fetcher: IFetcher, copilotTokenManager: ICopilotTokenManager): INESProvider {
+	const instantiationService = setupServices(workspaceService, fetcher, copilotTokenManager);
 	return instantiationService.createInstance(NESProvider, workspace);
 }
 
@@ -137,12 +135,12 @@ export interface INESProvider {
 	dispose(): void;
 }
 
-function setupServices(fetcher: IFetcher) {
+function setupServices(workspaceService: IWorkspaceService, fetcher: IFetcher, copilotTokenManager: ICopilotTokenManager) {
 	const builder = new InstantiationServiceBuilder();
 	builder.define(IConfigurationService, new SyncDescriptor(DefaultsOnlyConfigurationService));
 	builder.define(IExperimentationService, new SyncDescriptor(NullExperimentationService));
 	builder.define(ISimulationTestContext, new SyncDescriptor(NulSimulationTestContext));
-	builder.define(IWorkspaceService, new SyncDescriptor(TestWorkspaceService));
+	builder.define(IWorkspaceService, workspaceService);
 	builder.define(IDiffService, new SyncDescriptor(DiffServiceImpl, [false]));
 	builder.define(ILogService, new SyncDescriptor(LogServiceImpl, [[new ConsoleLog(undefined, LogLevel.Trace)]]));
 	builder.define(IGitExtensionService, new SyncDescriptor(NullGitExtensionService));
@@ -157,7 +155,7 @@ function setupServices(fetcher: IFetcher) {
 	builder.define(IFetcherService, new SyncDescriptor(SingleFetcherService, [fetcher]));
 	builder.define(ITelemetryService, new SyncDescriptor(NullTelemetryService));
 	builder.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [getStaticGitHubToken]));
-	builder.define(ICopilotTokenManager, new SyncDescriptor(SimulationTestCopilotTokenManager));
+	builder.define(ICopilotTokenManager, copilotTokenManager);
 	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
 	builder.define(IChatQuotaService, new SyncDescriptor(ChatQuotaService));
 	builder.define(IInteractionService, new SyncDescriptor(InteractionService));

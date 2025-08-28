@@ -24,6 +24,9 @@ const entryPoints = [
 	'src/util/common/test/shims/vscodeTypesShim.ts',
 	'src/platform/diff/common/diffWorker.ts',
 	'src/platform/tokenizer/node/tikTokenizerWorker.ts',
+	// For tests:
+	'src/platform/authentication/test/node/simulationTestCopilotTokenManager.ts',
+	'src/platform/test/node/testWorkspaceService.ts',
 ];
 
 interface FileInfo {
