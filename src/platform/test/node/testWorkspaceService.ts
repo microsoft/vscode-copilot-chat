@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { FileSystem, NotebookData, NotebookDocument, NotebookDocumentChangeEvent, TextDocument, TextDocumentChangeEvent, Uri, WorkspaceFoldersChangeEvent } from 'vscode';
+import type { FileSystem, NotebookData, NotebookDocument, NotebookDocumentChangeEvent, TextDocument, TextDocumentChangeEvent, TextEditorSelectionChangeEvent, Uri, WorkspaceFoldersChangeEvent } from 'vscode';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -20,6 +20,7 @@ export class TestWorkspaceService extends AbstractWorkspaceService implements ID
 	public readonly didChangeTextDocumentEmitter = this.disposables.add(new Emitter<TextDocumentChangeEvent>());
 	public readonly didChangeWorkspaceFoldersEmitter = this.disposables.add(new Emitter<WorkspaceFoldersChangeEvent>());
 	public readonly didChangeNotebookDocumentEmitter = this.disposables.add(new Emitter<NotebookDocumentChangeEvent>());
+	public readonly didChangeTextEditorSelectionEmitter = this.disposables.add(new Emitter<TextEditorSelectionChangeEvent>());
 
 	public override readonly onDidChangeTextDocument = this.didChangeTextDocumentEmitter.event;
 	public override readonly onDidCloseTextDocument = this.didCloseTextDocumentEmitter.event;
@@ -28,6 +29,7 @@ export class TestWorkspaceService extends AbstractWorkspaceService implements ID
 	public override readonly onDidOpenTextDocument = this.didOpenTextDocumentEmitter.event;
 	public override readonly onDidChangeWorkspaceFolders = this.didChangeWorkspaceFoldersEmitter.event;
 	public override readonly onDidChangeNotebookDocument = this.didChangeNotebookDocumentEmitter.event;
+	public override readonly onDidChangeTextEditorSelection = this.didChangeTextEditorSelectionEmitter.event;
 
 	private readonly workspaceFolder: URI[];
 	private readonly _textDocuments: TextDocument[] = [];

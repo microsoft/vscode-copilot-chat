@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { Event, FileSystem, NotebookData, NotebookDocument, NotebookDocumentChangeEvent, TextDocument, TextDocumentChangeEvent, Uri, WorkspaceEdit, WorkspaceFolder, WorkspaceFoldersChangeEvent } from 'vscode';
+import type { Event, FileSystem, NotebookData, NotebookDocument, NotebookDocumentChangeEvent, TextDocument, TextDocumentChangeEvent, TextEditorSelectionChangeEvent, Uri, WorkspaceEdit, WorkspaceFolder, WorkspaceFoldersChangeEvent } from 'vscode';
 import { findNotebook } from '../../../util/common/notebooks';
 import { createServiceIdentifier } from '../../../util/common/services';
 import * as path from '../../../util/vs/base/common/path';
@@ -25,6 +25,7 @@ export interface IWorkspaceService {
 	readonly onDidChangeTextDocument: Event<TextDocumentChangeEvent>;
 	readonly onDidChangeNotebookDocument: Event<NotebookDocumentChangeEvent>;
 	readonly onDidChangeWorkspaceFolders: Event<WorkspaceFoldersChangeEvent>;
+	readonly onDidChangeTextEditorSelection: Event<TextEditorSelectionChangeEvent>;
 	openTextDocument(uri: Uri): Promise<TextDocument>;
 	fs: FileSystem;
 	showTextDocument(document: TextDocument): Promise<void>;
@@ -59,6 +60,7 @@ export abstract class AbstractWorkspaceService implements IWorkspaceService {
 	abstract readonly onDidChangeTextDocument: Event<TextDocumentChangeEvent>;
 	abstract readonly onDidChangeWorkspaceFolders: Event<WorkspaceFoldersChangeEvent>;
 	abstract readonly onDidChangeNotebookDocument: Event<NotebookDocumentChangeEvent>;
+	abstract readonly onDidChangeTextEditorSelection: Event<TextEditorSelectionChangeEvent>;
 	abstract openTextDocument(uri: Uri): Promise<TextDocument>;
 	abstract fs: FileSystem;
 	abstract showTextDocument(document: TextDocument): Promise<void>;
