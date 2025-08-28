@@ -22,7 +22,6 @@ import { StringEdit } from '../src/_internal/util/vs/editor/common/core/edits/st
 import { OffsetRange } from '../src/_internal/util/vs/editor/common/core/ranges/offsetRange';
 import { createNESProvider } from '../src/main';
 import { SimulationTestCopilotTokenManager } from '../src/_internal/platform/authentication/test/node/simulationTestCopilotTokenManager';
-import { TestWorkspaceService } from '../src/_internal/platform/test/node/testWorkspaceService';
 
 
 class TestFetcher implements IFetcher {
@@ -102,7 +101,6 @@ describe('NESProvider Facade', () => {
 		doc.setSelection([new OffsetRange(1, 1)], undefined);
 		const nextEditProvider = createNESProvider(
 			obsWorkspace,
-			new TestWorkspaceService(),
 			new TestFetcher({ 'https://proxy.enterprise.githubcopilot.com/chat/completions': await fs.readFile(path.join(__dirname, 'nesProvider.reply.txt'), 'utf8') }),
 			new SimulationTestCopilotTokenManager(),
 		);

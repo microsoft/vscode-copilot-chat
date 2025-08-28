@@ -54,7 +54,7 @@ import { IExperimentationService, NullExperimentationService } from '../../platf
 import { NullTelemetryService } from '../../platform/telemetry/common/nullTelemetryService';
 import { ITelemetryService } from '../../platform/telemetry/common/telemetry';
 import { ITokenizerProvider, TokenizerProvider } from '../../platform/tokenizer/node/tokenizer';
-import { IWorkspaceService } from '../../platform/workspace/common/workspaceService';
+import { IWorkspaceService, NullWorkspaceService } from '../../platform/workspace/common/workspaceService';
 import { InstantiationServiceBuilder } from '../../util/common/services';
 import { CancellationToken } from '../../util/vs/base/common/cancellation';
 import { Disposable } from '../../util/vs/base/common/lifecycle';
@@ -63,8 +63,8 @@ import { SyncDescriptor } from '../../util/vs/platform/instantiation/common/desc
 import { IInstantiationService } from '../../util/vs/platform/instantiation/common/instantiation';
 
 
-export function createNESProvider(workspace: ObservableWorkspace, workspaceService: IWorkspaceService, fetcher: IFetcher, copilotTokenManager: ICopilotTokenManager): INESProvider {
-	const instantiationService = setupServices(workspaceService, fetcher, copilotTokenManager);
+export function createNESProvider(workspace: ObservableWorkspace, fetcher: IFetcher, copilotTokenManager: ICopilotTokenManager): INESProvider {
+	const instantiationService = setupServices(fetcher, copilotTokenManager);
 	return instantiationService.createInstance(NESProvider, workspace);
 }
 
@@ -135,12 +135,12 @@ export interface INESProvider {
 	dispose(): void;
 }
 
-function setupServices(workspaceService: IWorkspaceService, fetcher: IFetcher, copilotTokenManager: ICopilotTokenManager) {
+function setupServices(fetcher: IFetcher, copilotTokenManager: ICopilotTokenManager) {
 	const builder = new InstantiationServiceBuilder();
 	builder.define(IConfigurationService, new SyncDescriptor(DefaultsOnlyConfigurationService));
 	builder.define(IExperimentationService, new SyncDescriptor(NullExperimentationService));
 	builder.define(ISimulationTestContext, new SyncDescriptor(NulSimulationTestContext));
-	builder.define(IWorkspaceService, workspaceService);
+	builder.define(IWorkspaceService, new SyncDescriptor(NullWorkspaceService));
 	builder.define(IDiffService, new SyncDescriptor(DiffServiceImpl, [false]));
 	builder.define(ILogService, new SyncDescriptor(LogServiceImpl, [[new ConsoleLog(undefined, LogLevel.Trace)]]));
 	builder.define(IGitExtensionService, new SyncDescriptor(NullGitExtensionService));
