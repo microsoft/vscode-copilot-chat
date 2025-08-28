@@ -407,3 +407,33 @@ export class WorkspaceEdit {
 		return this.entries();
 	}
 }
+
+
+/**
+ * Represents sources that can cause {@link window.onDidChangeTextEditorSelection selection change events}.
+ */
+export enum TextEditorSelectionChangeKind {
+	/**
+	 * Selection changed due to typing in the editor.
+	 */
+	Keyboard = 1,
+	/**
+	 * Selection change due to clicking in the editor.
+	 */
+	Mouse = 2,
+	/**
+	 * Selection changed because a command ran.
+	 */
+	Command = 3
+}
+
+/**
+ * Reasons for why a text document has changed.
+ */
+export enum TextDocumentChangeReason {
+	/** The text change is caused by an undo operation. */
+	Undo = 1,
+
+	/** The text change is caused by an redo operation. */
+	Redo = 2,
+}
