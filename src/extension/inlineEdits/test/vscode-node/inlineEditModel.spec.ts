@@ -43,9 +43,6 @@ suite('InlineEditModel', () => {
 			const accessor = disposables.add(services.createTestingAccessor());
 
 			disposables.add(new InlineEditTriggerer(vscWorkspace as any, nextEditProvider as any as NextEditProvider, signal, accessor.get(ILogService), accessor.get(IConfigurationService), accessor.get(IExperimentationService), workspaceService));
-
-			nextEditProvider.lastTriggerTime = Date.now();
-			nextEditProvider.lastRejectionTime = Date.now();
 		});
 
 		afterEach(() => {
@@ -66,8 +63,9 @@ suite('InlineEditModel', () => {
 
 			assert.strictEqual(signalFiredCount, 0, 'Signal should not have been fired');
 		});
-		test('Signal when there were changes over 10s ago2', () => {
+		test('Signal when last rejection was over 10s ago', () => {
 			const { document, textEditor, selection } = createTextDocument();
+			nextEditProvider.lastRejectionTime = Date.now() - (10 * 1000);
 
 			triggerTextChange(document);
 			triggerTextSelectionChange(textEditor, selection);
@@ -108,8 +106,6 @@ suite('InlineEditModel', () => {
 		function createTextDocument(selection: Selection = new Selection(0, 0, 0, 0), uri: Uri = Uri.file('sample.py'), content = 'print("Hello World")') {
 			const doc = ExtHostDocumentData.create(Uri.file('sample.py'), 'print("Hello World")', 'python');
 			const textEditor = new ExtHostTextEditor(doc.document, [selection], {}, [], undefined);
-			nextEditProvider.lastTriggerTime = Date.now();
-			nextEditProvider.lastRejectionTime = Date.now() - (10 * 1000);
 			vscWorkspace.addDoc(doc.document, createObservableTextDoc(doc.document.uri));
 			return {
 				document: doc.document,
