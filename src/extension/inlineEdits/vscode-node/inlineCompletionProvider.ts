@@ -101,6 +101,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	private readonly _tracer: ITracer;
 
 	public readonly onDidChange: vscodeEvent<void> | undefined = Event.fromObservableLight(this.model.onChange);
+	private readonly _displayNextEditorNES: boolean;
 
 	constructor(
 		private readonly model: InlineEditModel,
@@ -119,6 +120,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 	) {
 		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
+		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, this._expService);
 	}
 
 	// copied from `vscodeWorkspace.ts` `DocumentFilter#_enabledLanguages`
@@ -247,7 +249,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 				completionItem = serveAsCompletionsProvider && !isInlineCompletion ?
 					undefined :
 					this.createCompletionItem(doc, document, position, range, result);
-			} else {
+			} else if (this._displayNextEditorNES) {
 				// nes is for a different document.
 				completionItem = serveAsCompletionsProvider ?
 					undefined :
