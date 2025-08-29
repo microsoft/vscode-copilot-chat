@@ -448,7 +448,7 @@ function toBaseConfig<T>(key: string, defaultValue: T | DefaultValueWithTeamValu
 		ConfigValueValidators.isDefaultValueWithTeamAndInternalValue(defaultValue)
 		|| ConfigValueValidators.isDefaultValueWithTeamValue(defaultValue)
 	) {
-		const rolloutRatio = defaultValue.teamDefaultValueRollout;
+		const rolloutRatio = defaultValue?.teamDefaultValueRollout;
 		if (rolloutRatio !== undefined && (rolloutRatio < 0 || rolloutRatio > 1)) {
 			throw new BugIndicatingError(`The rollout ratio for setting ${key} is invalid`);
 		}
