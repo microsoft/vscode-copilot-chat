@@ -96,7 +96,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			const callback: RawMessageConversionCallback = (out, data) => {
 				if (data && data.id) {
 					out.cot_id = data.id;
-					out.cot_summary = data.text;
+					out.cot_summary = Array.isArray(data.text) ? data.text.join('') : data.text;
 				}
 			};
 			const body = createCapiRequestBody(options, this.model, callback);
