@@ -7,9 +7,9 @@ import type * as vscode from 'vscode';
 import { StringSHA1 } from '../../../vs/base/common/hash';
 import { Schemas } from '../../../vs/base/common/network';
 import { URI as Uri } from '../../../vs/base/common/uri';
-import { generateUuid } from '../../../vs/base/common/uuid';
-import { NotebookCellKind, NotebookData } from '../../../vs/workbench/api/common/extHostTypes/notebooks';
-import { ExtHostDocumentData } from './textDocument';
+import { ExtHostDocumentData } from '../../../vs/workbench/api/common/extHostDocumentData';
+import { NotebookCellKind, NotebookCellOutput, NotebookCellOutputItem, NotebookData } from '../../../vs/workbench/api/common/extHostTypes/notebooks';
+import { createTextDocumentData } from './textDocument';
 
 interface ISimulationWorkspace {
 	addDocument(doc: ExtHostDocumentData): void;
@@ -17,150 +17,6 @@ interface ISimulationWorkspace {
 }
 
 export interface NotebookCellExecutionSummary {
-}
-
-export const Mimes = Object.freeze({
-	text: 'text/plain',
-	binary: 'application/octet-stream',
-	unknown: 'application/unknown',
-	markdown: 'text/markdown',
-	latex: 'text/latex',
-	uriList: 'text/uri-list',
-});
-
-const _simplePattern = /^(.+)\/(.+?)(;.+)?$/;
-
-export function normalizeMimeType(mimeType: string): string;
-export function normalizeMimeType(mimeType: string, strict: true): string | undefined;
-export function normalizeMimeType(mimeType: string, strict?: true): string | undefined {
-
-	const match = _simplePattern.exec(mimeType);
-	if (!match) {
-		return strict
-			? undefined
-			: mimeType;
-	}
-	// https://datatracker.ietf.org/doc/html/rfc2045#section-5.1
-	// media and subtype must ALWAYS be lowercase, parameter not
-	return `${match[1].toLowerCase()}/${match[2].toLowerCase()}${match[3] ?? ''}`;
-}
-
-
-export class NotebookCellOutputItem {
-
-	static isNotebookCellOutputItem(obj: unknown): obj is vscode.NotebookCellOutputItem {
-		if (obj instanceof NotebookCellOutputItem) {
-			return true;
-		}
-		if (!obj) {
-			return false;
-		}
-		return typeof (<vscode.NotebookCellOutputItem>obj).mime === 'string'
-			&& (<vscode.NotebookCellOutputItem>obj).data instanceof Uint8Array;
-	}
-
-	static error(err: Error | { name: string; message?: string; stack?: string }): NotebookCellOutputItem {
-		const obj = {
-			name: err.name,
-			message: err.message,
-			stack: err.stack
-		};
-		return NotebookCellOutputItem.json(obj, 'application/vnd.code.notebook.error');
-	}
-
-	static stdout(value: string): NotebookCellOutputItem {
-		return NotebookCellOutputItem.text(value, 'application/vnd.code.notebook.stdout');
-	}
-
-	static stderr(value: string): NotebookCellOutputItem {
-		return NotebookCellOutputItem.text(value, 'application/vnd.code.notebook.stderr');
-	}
-
-	static bytes(value: Uint8Array, mime: string = 'application/octet-stream'): NotebookCellOutputItem {
-		return new NotebookCellOutputItem(value, mime);
-	}
-
-	static #encoder = new TextEncoder();
-
-	static text(value: string, mime: string = Mimes.text): NotebookCellOutputItem {
-		const bytes = NotebookCellOutputItem.#encoder.encode(String(value));
-		return new NotebookCellOutputItem(bytes, mime);
-	}
-
-	static json(value: any, mime: string = 'text/x-json'): NotebookCellOutputItem {
-		const rawStr = JSON.stringify(value, undefined, '\t');
-		return NotebookCellOutputItem.text(rawStr, mime);
-	}
-
-	constructor(
-		public data: Uint8Array,
-		public mime: string,
-	) {
-		const mimeNormalized = normalizeMimeType(mime, true);
-		if (!mimeNormalized) {
-			throw new Error(`INVALID mime type: ${mime}. Must be in the format "type/subtype[;optionalparameter]"`);
-		}
-		this.mime = mimeNormalized;
-	}
-}
-
-export function isTextStreamMime(mimeType: string) {
-	return ['application/vnd.code.notebook.stdout', 'application/vnd.code.notebook.stderr'].includes(mimeType);
-}
-
-export class NotebookCellOutput {
-
-	static isNotebookCellOutput(candidate: any): candidate is vscode.NotebookCellOutput {
-		if (candidate instanceof NotebookCellOutput) {
-			return true;
-		}
-		if (!candidate || typeof candidate !== 'object') {
-			return false;
-		}
-		return typeof (<NotebookCellOutput>candidate).id === 'string' && Array.isArray((<NotebookCellOutput>candidate).items);
-	}
-
-	static ensureUniqueMimeTypes(items: NotebookCellOutputItem[], warn: boolean = false): NotebookCellOutputItem[] {
-		const seen = new Set<string>();
-		const removeIdx = new Set<number>();
-		for (let i = 0; i < items.length; i++) {
-			const item = items[i];
-			const normalMime = normalizeMimeType(item.mime);
-			// We can have multiple text stream mime types in the same output.
-			if (!seen.has(normalMime) || isTextStreamMime(normalMime)) {
-				seen.add(normalMime);
-				continue;
-			}
-			// duplicated mime types... first has won
-			removeIdx.add(i);
-			if (warn) {
-				console.warn(`DUPLICATED mime type '${item.mime}' will be dropped`);
-			}
-		}
-		if (removeIdx.size === 0) {
-			return items;
-		}
-		return items.filter((_item, index) => !removeIdx.has(index));
-	}
-
-	id: string;
-	items: NotebookCellOutputItem[];
-	metadata?: Record<string, any>;
-
-	constructor(
-		items: NotebookCellOutputItem[],
-		idOrMetadata?: string | Record<string, any>,
-		metadata?: Record<string, any>
-	) {
-		this.items = NotebookCellOutput.ensureUniqueMimeTypes(items, true);
-		if (typeof idOrMetadata === 'string') {
-			this.id = idOrMetadata;
-			this.metadata = metadata;
-		} else {
-			this.id = generateUuid();
-			this.metadata = idOrMetadata ?? metadata;
-		}
-	}
 }
 
 declare type OutputType = 'execute_result' | 'display_data' | 'stream' | 'error' | 'update_display_data';
@@ -593,7 +449,7 @@ export class ExtHostNotebookDocumentData {
 			const content = cell.source.join('');
 
 			if (cell.cell_type === 'code') {
-				const doc = ExtHostDocumentData.create(uri.with({ scheme: Schemas.vscodeNotebookCell, fragment: generateCellFragment(index) }), content, codeLanguageId);
+				const doc = createTextDocumentData(uri.with({ scheme: Schemas.vscodeNotebookCell, fragment: generateCellFragment(index) }), content, codeLanguageId);
 				if (simulationWorkspace) {
 					simulationWorkspace.addDocument(doc);
 				}
@@ -602,7 +458,7 @@ export class ExtHostNotebookDocumentData {
 
 				cells.push(new ExtHostCell(index, NotebookCellKind.Code, notebookDocument, doc, cell.metadata, outputs, undefined));
 			} else {
-				const doc = ExtHostDocumentData.create(uri.with({ scheme: Schemas.vscodeNotebookCell, fragment: generateCellFragment(index) }), content, 'markdown');
+				const doc = createTextDocumentData(uri.with({ scheme: Schemas.vscodeNotebookCell, fragment: generateCellFragment(index) }), content, 'markdown');
 				if (simulationWorkspace) {
 					simulationWorkspace.addDocument(doc);
 				}
@@ -624,7 +480,7 @@ export class ExtHostNotebookDocumentData {
 		const cells: ExtHostCell[] = [];
 
 		for (const [index, cell] of notebook.entries()) {
-			const doc = ExtHostDocumentData.create(uri.with({ scheme: Schemas.vscodeNotebookCell, fragment: generateCellFragment(index) }), cell.value, cell.language);
+			const doc = createTextDocumentData(uri.with({ scheme: Schemas.vscodeNotebookCell, fragment: generateCellFragment(index) }), cell.value, cell.language);
 			if (simulationWorkspace) {
 				simulationWorkspace.addDocument(doc);
 			}
@@ -643,7 +499,7 @@ export class ExtHostNotebookDocumentData {
 		const cells: ExtHostCell[] = [];
 
 		for (const [index, cell] of data.cells.entries()) {
-			const doc = ExtHostDocumentData.create(uri.with({ scheme: Schemas.vscodeNotebookCell, fragment: generateCellFragment(index) }), cell.value, cell.languageId);
+			const doc = createTextDocumentData(uri.with({ scheme: Schemas.vscodeNotebookCell, fragment: generateCellFragment(index) }), cell.value, cell.languageId);
 			if (cell.outputs?.length) {
 				throw new Error('Not implemented');
 			}
@@ -679,7 +535,7 @@ export class ExtHostNotebookDocumentData {
 	private static replaceCells(notebookDocument: ExtHostNotebookDocumentData, range: vscode.NotebookRange, cells: vscode.NotebookCellData[], simulationWorkspace?: ISimulationWorkspace) {
 		const uri = notebookDocument.uri;
 		const docs = cells.map((cell, index) => {
-			const doc = ExtHostDocumentData.create(uri.with({ scheme: Schemas.vscodeNotebookCell, fragment: generateCellFragment(notebookDocument.cells.length + index + 1) }), cell.value, cell.languageId);
+			const doc = createTextDocumentData(uri.with({ scheme: Schemas.vscodeNotebookCell, fragment: generateCellFragment(notebookDocument.cells.length + index + 1) }), cell.value, cell.languageId);
 			if (simulationWorkspace) {
 				simulationWorkspace.addDocument(doc);
 			}

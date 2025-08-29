@@ -7,7 +7,7 @@ import * as fs from 'fs';
 import type * as vscode from 'vscode';
 import { ExtHostNotebookDocumentData } from '../../../util/common/test/shims/notebookDocument';
 import { ExtHostNotebookEditor } from '../../../util/common/test/shims/notebookEditor';
-import { ExtHostDocumentData } from '../../../util/common/test/shims/textDocument';
+import { createTextDocumentData } from '../../../util/common/test/shims/textDocument';
 import { ExtHostTextEditor } from '../../../util/common/test/shims/textEditor';
 import { Event } from '../../../util/vs/base/common/event';
 import * as path from '../../../util/vs/base/common/path';
@@ -178,7 +178,7 @@ export function deserializeWorkbenchState(scenarioFolderPath: string, stateFileP
 		);
 		visibleRanges.push(mockRange);
 	}
-	const mockTextDocument = ExtHostDocumentData.create(
+	const mockTextDocument = createTextDocumentData(
 		activeEditorFileUri,
 		fileContents,
 		state.activeTextEditor.languageId,
