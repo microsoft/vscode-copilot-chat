@@ -19,7 +19,7 @@ jobs:
     runs-on: [ self-hosted, 1ES.Pool=1es-vscode-ubuntu-22.04-x64 ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           lfs: true
 
@@ -58,7 +58,7 @@ jobs:
     runs-on: [ self-hosted, 1ES.Pool=1es-vscode-ubuntu-22.04-x64 ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           lfs: true
 
@@ -74,7 +74,7 @@ jobs:
     runs-on: [ self-hosted, 1ES.Pool=1es-vscode-ubuntu-22.04-x64 ]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           lfs: true
 
@@ -158,7 +158,7 @@ jobs:
     runs-on: [ self-hosted, 1ES.Pool=1es-vscode-windows-2022-x64 ]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           lfs: true
 
