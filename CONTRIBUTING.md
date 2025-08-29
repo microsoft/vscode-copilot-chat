@@ -73,10 +73,10 @@ Please include the following with each issue:
 - (Windows) Visual Studio Build Tools >=2019 - for building with node-gyp [see node-gyp docs](https://github.com/nodejs/node-gyp?tab=readme-ov-file#on-windows)
 
 ### First-time setup
-- on Windows you need to run `Set-ExecutionPolicy Unrestricted` as admin in Powershell.
+- On Windows you need to run `Set-ExecutionPolicy Unrestricted` as admin in Powershell.
 - `npm install`
 - `npm run get_token`
-- Then you can run the build task with `cmd+shift+B`, or just start the "Launch Copilot Extension - Watch Mode" launch config to start the build then start debugging the extension.
+- Then you can run the build task with `Cmd+Shift+B` (or `Ctrl+Shift+B` if you are on Windows), or just start the "Launch Copilot Extension - Watch Mode" launch config to start the build then start debugging the extension.
 
 **Tip:** If "Launch Copilot Extension - Watch Mode" doesn't work for you, try using the "Launch Copilot Extension" debug configuration instead.
 
