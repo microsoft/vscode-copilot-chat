@@ -1950,6 +1950,13 @@
 				"category": "GitHub Copilot"
 			},
 			{
+				"command": "github.copilot.git.resolveMergeConflict",
+				"title": "%github.copilot.git.resolveMergeConflict%",
+				"icon": "$(sparkle)",
+				"enablement": "!github.copilot.interactiveSession.disabled",
+				"category": "GitHub Copilot"
+			},
+			{
 				"command": "github.copilot.devcontainer.generateDevContainerConfig",
 				"title": "%github.copilot.devcontainer.generateDevContainerConfig%",
 				"category": "GitHub Copilot"
@@ -3061,6 +3068,10 @@
 				},
 				{
 					"command": "github.copilot.git.generateCommitMessage",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.git.resolveMergeConflict",
 					"when": "false"
 				},
 				{
