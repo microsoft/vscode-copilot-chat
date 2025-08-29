@@ -585,7 +585,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		const token = CancellationToken.None;
 		const allTools = await this.options.invocation.getAvailableTools?.() ?? [];
 		const grouping = this.toolGroupingService.create(this.options.conversation.sessionId, allTools);
-		const computed = await grouping.compute(token);
+		const computed = await grouping.compute(delta.text, token);
 
 		const container = grouping.getContainerFor(candidateCall.name);
 
@@ -696,7 +696,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		}, token);
 	}
 
-	protected override async getAvailableTools(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<LanguageModelToolInformation[]> {
+	protected override async getAvailableTools(query: string, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<LanguageModelToolInformation[]> {
 		const tools = await this.options.invocation.getAvailableTools?.() ?? [];
 		if (this.toolGrouping) {
 			this.toolGrouping.tools = tools;
@@ -711,7 +711,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 			return tools;
 		}
 
-		const computePromise = this.toolGrouping.compute(token);
+		const computePromise = this.toolGrouping.compute(query, token);
 
 		// Show progress if this takes a moment...
 		const timeout = setTimeout(() => {
