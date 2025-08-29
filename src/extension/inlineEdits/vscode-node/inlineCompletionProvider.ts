@@ -29,6 +29,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { LineCheck } from '../../inlineChat/vscode-node/inlineChatHint';
 import { NextEditProviderTelemetryBuilder, TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from '../node/nextEditResult';
+import { InlineCompletionClassifier } from './classifier/inlineCompletionClassifier';
 import { InlineCompletionCommand, InlineEditDebugComponent } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
 import { DiagnosticsNextEditResult } from './features/diagnosticsInlineEditProvider';
@@ -99,6 +100,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	public readonly displayName = 'Next Edit Suggestion';
 
 	private readonly _tracer: ITracer;
+	private readonly _classifier: InlineCompletionClassifier;
 
 	public readonly onDidChange: vscodeEvent<void> | undefined = Event.fromObservableLight(this.model.onChange);
 	private readonly _displayNextEditorNES: boolean;
@@ -121,6 +123,13 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	) {
 		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
 		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, this._expService);
+
+		// Initialize the classifier
+		this._classifier = new InlineCompletionClassifier(this._logService);
+		// Initialize the classifier asynchronously (don't await to avoid blocking constructor)
+		this._classifier.initialize().catch(error => {
+			this._logService.error('[InlineCompletionProvider] Failed to initialize classifier:', error);
+		});
 	}
 
 	// copied from `vscodeWorkspace.ts` `DocumentFilter#_enabledLanguages`
@@ -140,6 +149,15 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		token: CancellationToken
 	): Promise<NesCompletionList | undefined> {
 		const tracer = this._tracer.sub(['provideInlineCompletionItems', shortOpportunityId(context.requestUuid)]);
+
+		// Run classifier first to determine if we should proceed
+		const classificationResult = await this._classifier.classify(document, position);
+		console.log(`[InlineCompletionProvider] Classifier result: shouldProceed=${classificationResult.shouldProceed}, confidence=${classificationResult.confidence.toFixed(3)}, processingTime=${classificationResult.processingTime}ms`);
+
+		if (!classificationResult.shouldProceed) {
+			tracer.returns('classifier determined not to proceed');
+			return undefined;
+		}
 
 		const isCompletionsEnabled = this._isCompletionsEnabled(document);
 
@@ -528,6 +546,10 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		} else {
 			this.model.diagnosticsBasedProvider?.handleIgnored(info.documentId, info.suggestion, supersededBySuggestion);
 		}
+	}
+
+	public dispose(): void {
+		this._classifier.dispose();
 	}
 }
 
