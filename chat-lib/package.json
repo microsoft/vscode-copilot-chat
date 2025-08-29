@@ -43,6 +43,7 @@
 		"src",
 		"README.md",
 		"LICENSE.txt",
+		"!src/**/*.tiktoken",
 		"!**/test/**",
 		"dist/src/_internal/util/common/test/shims",
 		"src/_internal/util/common/test/shims"
@@ -51,7 +52,7 @@
 		"clean": "rimraf dist",
 		"build": "npm-run-all compile copy",
 		"compile": "tsc",
-		"copy": "copyfiles src/package.json dist",
+		"copy": "copyfiles src/package.json \"src/**/*.tiktoken\" dist",
 		"package": "npm pack",
 		"publish": "npm publish",
 		"test": "vitest run",
