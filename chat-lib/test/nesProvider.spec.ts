@@ -21,7 +21,9 @@ import { URI } from '../src/_internal/util/vs/base/common/uri';
 import { StringEdit } from '../src/_internal/util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../src/_internal/util/vs/editor/common/core/ranges/offsetRange';
 import { createNESProvider } from '../src/main';
-import { SimulationTestCopilotTokenManager } from '../src/_internal/platform/authentication/test/node/simulationTestCopilotTokenManager';
+import { ICopilotTokenManager } from '../src/_internal/platform/authentication/common/copilotTokenManager';
+import { Emitter } from '../src/_internal/util/vs/base/common/event';
+import { CopilotToken } from '../src/_internal/platform/authentication/common/copilotToken';
 
 
 class TestFetcher implements IFetcher {
@@ -32,7 +34,8 @@ class TestFetcher implements IFetcher {
 	}
 
 	async fetch(url: string, options: FetchOptions): Promise<Response> {
-		const responseText = this.responses[url];
+		const uri = URI.parse(url);
+		const responseText = this.responses[uri.path];
 
 		const headers = new class implements IHeaders {
 			get(name: string): string | null {
@@ -79,6 +82,20 @@ class TestFetcher implements IFetcher {
 	}
 }
 
+class TestCopilotTokenManager implements ICopilotTokenManager {
+    _serviceBrand: undefined;
+
+    onDidCopilotTokenRefresh = new Emitter<void>().event;
+
+    async getCopilotToken(force?: boolean): Promise<CopilotToken> {
+        return new CopilotToken({ token: 'fixedToken', expires_at: 0, refresh_in: 0, username: 'fixedTokenManager', isVscodeTeamMember: false, copilot_plan: 'unknown' });
+    }
+
+    resetCopilotToken(httpError?: number): void {
+        // nothing
+    }
+}
+
 
 describe('NESProvider Facade', () => {
 	it('should handle getNextEdit call with a document URI', async () => {
@@ -101,8 +118,8 @@ describe('NESProvider Facade', () => {
 		doc.setSelection([new OffsetRange(1, 1)], undefined);
 		const nextEditProvider = createNESProvider(
 			obsWorkspace,
-			new TestFetcher({ 'https://proxy.enterprise.githubcopilot.com/chat/completions': await fs.readFile(path.join(__dirname, 'nesProvider.reply.txt'), 'utf8') }),
-			new SimulationTestCopilotTokenManager(),
+			new TestFetcher({ '/chat/completions': await fs.readFile(path.join(__dirname, 'nesProvider.reply.txt'), 'utf8') }),
+			new TestCopilotTokenManager(),
 		);
 
 		doc.applyEdit(StringEdit.insert(11, '3D'));
