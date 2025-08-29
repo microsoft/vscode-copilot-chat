@@ -68,7 +68,7 @@ export abstract class EditFilterAspect implements IStatelessNextEditProvider {
 	abstract filterEdit(resultDocument: StatelessNextEditDocument, singleEdits: readonly LineReplacement[]): readonly LineReplacement[];
 }
 
-export class IgnoreTriviaWhitespaceChangesAspect extends EditFilterAspect {
+export class IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges extends EditFilterAspect {
 	override filterEdit(resultDocument: StatelessNextEditDocument, singleEdits: readonly LineReplacement[]): readonly LineReplacement[] {
 		const filteredEdits = singleEdits.filter(e => !this._isWhitespaceOnlyChange(e, resultDocument.documentAfterEditsLines));
 		return filteredEdits;
@@ -102,5 +102,20 @@ export class IgnoreTriviaWhitespaceChangesAspect extends EditFilterAspect {
 			}
 		}
 		return true;
+	}
+}
+
+export class IgnoreWhitespaceOnlyChanges extends EditFilterAspect {
+	override filterEdit(resultDocument: StatelessNextEditDocument, singleEdits: readonly LineReplacement[]): readonly LineReplacement[] {
+		return singleEdits.filter(e => !IgnoreWhitespaceOnlyChanges._isFormattingOnlyChange(resultDocument.documentAfterEditsLines, e));
+	}
+
+	/**
+	 * @remarks public only for testing
+	 */
+	public static _isFormattingOnlyChange(baseLines: string[], singleEdit: LineReplacement): boolean {
+		const originalLines = singleEdit.lineRange.toOffsetRange().slice(baseLines).join('').replace(/\s/g, '');
+		const newLines = singleEdit.newLines.join('').replace(/\s/g, '');
+		return originalLines === newLines;
 	}
 }

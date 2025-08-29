@@ -93,6 +93,7 @@
 	"github.copilot.config.codesearch.enabled": "Whether to enable agentic codesearch when using `#codebase`.",
 	"github.copilot.nextEditSuggestions.enabled": "Whether to enable next edit suggestions (NES).\n\nNES can propose a next edit based on your recent changes. [Learn more](https://aka.ms/vscode-nes) about next edit suggestions.",
 	"github.copilot.nextEditSuggestions.fixes": "Whether to offer fixes for diagnostics via next edit suggestions (NES).",
+	"github.copilot.nextEditSuggestions.allowWhitespaceOnlyChanges": "Whether to allow whitespace-only changes be proposed by next edit suggestions (NES).",
 	"github.copilot.chat.copilotDebugCommand.enabled": "Whether the `copilot-debug` command is enabled in the terminal.",
 	"github.copilot.config.terminalChatLocation": "Controls where chat queries from the terminal should be opened.",
 	"github.copilot.config.terminalChatLocation.chatView": "Open the chat view.",
