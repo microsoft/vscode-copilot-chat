@@ -33,7 +33,9 @@ export class InlineEditDebugComponent extends Disposable {
 		super();
 
 		this._register(commands.registerCommand(reportFeedbackCommandId, async (args: { logContext: InlineEditRequestLogContext }) => {
-			if (!this._inlineEditsEnabled.get()) { return; }
+			if (!this._inlineEditsEnabled.get()) {
+				return;
+			}
 			const isInternalUser = this._internalActionsEnabled.get();
 
 			const data = new SimpleMarkdownBuilder();
@@ -47,6 +49,7 @@ export class InlineEditDebugComponent extends Disposable {
 				// Internal users
 				data.appendLine(args.logContext.toLogDocument());
 
+				let logFilteredForSensitiveFiles: LogEntry[] | undefined;
 				{
 					const bookmark = args.logContext.recordingBookmark;
 					const log = this._debugRecorder.getRecentLog(bookmark);
@@ -56,7 +59,7 @@ export class InlineEditDebugComponent extends Disposable {
 					if (log === undefined) {
 						sectionContent = ['Could not get recording to generate stest (likely because there was no corresponding workspaceRoot for this file)'];
 					} else {
-						const logFilteredForSensitiveFiles = filterLogForSensitiveFiles(log);
+						logFilteredForSensitiveFiles = filterLogForSensitiveFiles(log);
 						hasRemovedSensitiveFilesFromHistory = log.length !== logFilteredForSensitiveFiles.length;
 						const stest = generateSTest(logFilteredForSensitiveFiles);
 
@@ -69,6 +72,12 @@ export class InlineEditDebugComponent extends Disposable {
 					const header = hasRemovedSensitiveFilesFromHistory ? 'STest (sensitive files removed)' : 'STest';
 					data.appendSection(header, sectionContent);
 					data.appendLine('');
+				}
+
+				{
+					if (logFilteredForSensitiveFiles !== undefined) {
+						data.appendSection('Recording', ['```json', JSON.stringify(logFilteredForSensitiveFiles, undefined, 2), '```']);
+					}
 				}
 
 				{

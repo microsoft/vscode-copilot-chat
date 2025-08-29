@@ -448,7 +448,7 @@ function toBaseConfig<T>(key: string, defaultValue: T | DefaultValueWithTeamValu
 		ConfigValueValidators.isDefaultValueWithTeamAndInternalValue(defaultValue)
 		|| ConfigValueValidators.isDefaultValueWithTeamValue(defaultValue)
 	) {
-		const rolloutRatio = defaultValue.teamDefaultValueRollout;
+		const rolloutRatio = defaultValue?.teamDefaultValueRollout;
 		if (rolloutRatio !== undefined && (rolloutRatio < 0 || rolloutRatio > 1)) {
 			throw new BugIndicatingError(`The rollout ratio for setting ${key} is invalid`);
 		}
@@ -708,7 +708,6 @@ export namespace ConfigKey {
 		export const AskAgent = defineExpSetting<boolean>('chat.advanced.enableAskAgent', { defaultValue: false, teamDefaultValue: true, internalDefaultValue: true }, INTERNAL_RESTRICTED);
 		export const VerifyTextDocumentChanges = defineExpSetting<boolean>('chat.advanced.inlineEdits.verifyTextDocumentChanges', true, INTERNAL_RESTRICTED);
 		export const EnableApplyPatchForNotebooks = defineExpSetting<boolean>('chat.advanced.enableApplyPatchForNotebooks', false, INTERNAL_RESTRICTED);
-		export const MandatoryCellIdInNotebookEdit = defineExpSetting<boolean>('chat.advanced.notebook.mandatoryCellId', false, INTERNAL_RESTRICTED);
 		export const OmitBaseAgentInstructions = defineSetting<boolean>('chat.advanced.omitBaseAgentInstructions', false, INTERNAL);
 
 		export const PromptFileContext = defineExpSetting<boolean>('chat.advanced.promptFileContextProvider.enabled', true);
@@ -765,14 +764,15 @@ export namespace ConfigKey {
 	export const OllamaEndpoint = defineSetting<string>('chat.byok.ollamaEndpoint', 'http://localhost:11434');
 	export const AzureModels = defineSetting<Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey?: boolean; thinking?: boolean }>>('chat.azureModels', {});
 	export const CustomOAIModels = defineSetting<Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey?: boolean; thinking?: boolean }>>('chat.customOAIModels', {});
-	export const EditsCodeNewNotebookAgentEnabled = defineExpSetting<boolean>('chat.edits.newNotebook.enabled', true);
 	export const AutoFixDiagnostics = defineSetting<boolean>('chat.agent.autoFix', true);
 	export const NotebookFollowCellExecution = defineSetting<boolean>('chat.notebook.followCellExecution.enabled', false);
+	export const UseAlternativeNESNotebookFormat = defineExpSetting<boolean>('chat.notebook.enhancedNextEditSuggestions.enabled', false);
 	export const CustomInstructionsInSystemMessage = defineSetting<boolean>('chat.customInstructionsInSystemMessage', true);
 
 	export const EnableRetryAfterFilteredResponse = defineExpSetting<boolean>('chat.enableRetryAfterFilteredResponse', true);
 	export const EnableAlternateGptPrompt = defineExpSetting<boolean>('chat.alternateGptPrompt.enabled', false);
 	export const Gpt5AlternatePrompt = defineExpSetting<string>('chat.gpt5AlternatePrompt', 'default');
+	export const GrokCodeAlternatePrompt = defineExpSetting<string>('chat.grokCodeAlternatePrompt', 'default');
 }
 
 export function getAllConfigKeys(): string[] {

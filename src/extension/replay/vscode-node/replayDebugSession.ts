@@ -203,7 +203,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 					kind: 'toolCall',
 					id: log.id,
 					line: 0,
-					toolName: log.name,
+					toolName: log.tool,
 					args: JSON.parse(log.args),
 					edits: log.edits,
 					results: log.response
@@ -214,7 +214,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 					id: log.id,
 					line: 0,
 					prompt: log.messages,
-					result: log.result.value
+					result: log.response.message
 				});
 			}
 		}

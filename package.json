@@ -5,7 +5,8 @@
 	"version": "0.31.0",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
-	"completionsCore": "952221f2120a4babb940c51a57af102fe782a37e",
+	"completionsCore": "1861b81c7d0b77b81849dc580b20b0df035b7577",
+	"completionsCoreVersion ": "1.363.1764",
 	"internalLargeStorageAriaKey": "ec712b3202c5462fb6877acae7f1f9d7-c19ad55e-3e3c-4f99-984b-827f6d95bd9e-6917",
 	"ariaKey": "0c6ae279ed8443289764825290e4f9e2-1a736e7c-1324-4338-be46-fc2a58ae4d14-7255",
 	"buildType": "dev",
@@ -23,7 +24,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.104.0-20250824",
+		"vscode": "^1.104.0-20250828",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -117,7 +118,7 @@
 		"testObserver",
 		"aiTextSearchProvider@2",
 		"chatParticipantPrivate@10",
-		"chatProvider@2",
+		"chatProvider@3",
 		"contribDebugCreateConfiguration",
 		"chatReferenceDiagnostic",
 		"textSearchProvider2",
@@ -967,7 +968,7 @@
 				"name": "copilot_findTestFiles",
 				"displayName": "%copilot.tools.findTestFiles.name%",
 				"icon": "$(beaker)",
-				"canBeReferencedInPrompt": true,
+				"canBeReferencedInPrompt": false,
 				"toolReferenceName": "findTestFiles",
 				"userDescription": "%copilot.tools.findTestFiles.description%",
 				"modelDescription": "For a source code file, find the file that contains the tests. For a test file find the file that contains the code under test.",
@@ -1425,6 +1426,7 @@
 				"name": "workspace",
 				"fullName": "Workspace",
 				"description": "%copilot.workspace.description%",
+				"when": "!github.copilot.interactiveSession.disabled",
 				"sampleRequest": "%copilot.workspace.sampleRequest%",
 				"locations": [
 					"panel"
@@ -1539,6 +1541,7 @@
 				"name": "vscode",
 				"fullName": "VS Code",
 				"description": "%copilot.vscode.description%",
+				"when": "!github.copilot.interactiveSession.disabled",
 				"sampleRequest": "%copilot.vscode.sampleRequest%",
 				"locations": [
 					"panel"
@@ -1581,6 +1584,7 @@
 				"name": "terminal",
 				"fullName": "Terminal",
 				"description": "%copilot.terminal.description%",
+				"when": "!github.copilot.interactiveSession.disabled",
 				"sampleRequest": "%copilot.terminal.sampleRequest%",
 				"isDefault": true,
 				"locations": [
@@ -1599,6 +1603,7 @@
 				"name": "terminal",
 				"fullName": "Terminal",
 				"description": "%copilot.terminalPanel.description%",
+				"when": "!github.copilot.interactiveSession.disabled",
 				"sampleRequest": "%copilot.terminal.sampleRequest%",
 				"locations": [
 					"panel"
@@ -1630,7 +1635,7 @@
 				]
 			}
 		],
-		"languageModels": [
+		"languageModelChatProviders": [
 			{
 				"vendor": "copilot",
 				"displayName": "Copilot"
@@ -1661,7 +1666,7 @@
 			},
 			{
 				"vendor": "gemini",
-				"displayName": "Gemini",
+				"displayName": "Google",
 				"managementCommand": "github.copilot.chat.manageBYOK"
 			},
 			{
@@ -2769,15 +2774,6 @@
 						],
 						"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
 					},
-					"github.copilot.chat.edits.newNotebook.enabled": {
-						"type": "boolean",
-						"default": true,
-						"tags": [
-							"experimental",
-							"onExp"
-						],
-						"description": "%github.copilot.config.editsNewNotebook.enabled%"
-					},
 					"github.copilot.chat.notebook.followCellExecution.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -2785,6 +2781,15 @@
 							"experimental"
 						],
 						"description": "%github.copilot.config.notebook.followCellExecution%"
+					},
+					"github.copilot.chat.notebook.enhancedNextEditSuggestions.enabled": {
+						"type": "boolean",
+						"default": false,
+						"tags": [
+							"experimental",
+							"onExp"
+						],
+						"description": "%github.copilot.config.notebook.enhancedNextEditSuggestions%"
 					},
 					"github.copilot.chat.summarizeAgentConversationHistory.enabled": {
 						"type": "boolean",
@@ -2936,6 +2941,14 @@
 							"experimental"
 						],
 						"description": "%github.copilot.config.gpt5AlternatePrompt%"
+					},
+					"github.copilot.chat.grokCodeAlternatePrompt": {
+						"type": "string",
+						"default": "default",
+						"tags": [
+							"experimental"
+						],
+						"description": "%github.copilot.config.grokCodeAlternatePrompt%"
 					}
 				}
 			}

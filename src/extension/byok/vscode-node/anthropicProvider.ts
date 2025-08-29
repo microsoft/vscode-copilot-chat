@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import Anthropic from '@anthropic-ai/sdk';
-import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatRequestHandleOptions, LanguageModelTextPart, LanguageModelToolCallPart, Progress } from 'vscode';
+import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatRequestHandleOptions, LanguageModelResponsePart2, LanguageModelTextPart, LanguageModelToolCallPart, Progress } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
@@ -79,7 +79,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		}
 	}
 
-	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: LanguageModelChatRequestHandleOptions, progress: Progress<LMResponsePart>, token: CancellationToken): Promise<any> {
+	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: LanguageModelChatRequestHandleOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<any> {
 		if (!this._anthropicAPIClient) {
 			return;
 		}

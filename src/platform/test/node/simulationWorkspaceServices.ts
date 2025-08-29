@@ -61,6 +61,7 @@ export class SimulationWorkspaceService extends AbstractWorkspaceService {
 	override onDidChangeTextDocument: vscode.Event<vscode.TextDocumentChangeEvent> = Event.None;
 	override onDidChangeWorkspaceFolders: vscode.Event<vscode.WorkspaceFoldersChangeEvent> = Event.None;
 	override onDidChangeNotebookDocument: vscode.Event<vscode.NotebookDocumentChangeEvent> = Event.None;
+	override onDidChangeTextEditorSelection: vscode.Event<vscode.TextEditorSelectionChangeEvent> = Event.None;
 
 	override showTextDocument(document: vscode.TextDocument): Promise<void> {
 		return Promise.resolve();

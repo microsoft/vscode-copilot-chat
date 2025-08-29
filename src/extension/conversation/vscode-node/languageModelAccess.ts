@@ -176,7 +176,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		model: vscode.LanguageModelChatInformation,
 		messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>,
 		options: vscode.LanguageModelChatRequestHandleOptions,
-		progress: vscode.Progress<LMResponsePart>,
+		progress: vscode.Progress<vscode.LanguageModelResponsePart2>,
 		token: vscode.CancellationToken
 	): Promise<any> {
 		const endpoint = this._chatEndpoints.find(e => e.model === model.id);

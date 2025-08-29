@@ -32,7 +32,7 @@ class RefreshFakeCopilotTokenManager extends BaseCopilotTokenManager {
 		@IFetcherService fetcherService: IFetcherService,
 		@IEnvService envService: IEnvService,
 	) {
-		super(new NullBaseOctoKitService(capiClientService, fetcherService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
+		super(new NullBaseOctoKitService(capiClientService, fetcherService, logService, telemetryService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
 	}
 
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {

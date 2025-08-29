@@ -9,6 +9,7 @@ import { raceCancellationError } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Range } from '../../../util/vs/editor/common/core/range';
 import { createDecorator } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -273,6 +274,8 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 		telemetryInfo: TelemetryCorrelationId,
 		token: CancellationToken
 	): Promise<CodeSearchResult> {
+		const totalSw = new StopWatch();
+
 		if (!this.isEnabled()) {
 			return { chunks: [], outOfSync: false };
 		}
@@ -294,6 +297,7 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 			...getGithubMetadataHeaders(new CallTracker('AdoCodeSearchService::searchRepo'), this._envService)
 		};
 
+		const requestSw = new StopWatch();
 		const response = await raceCancellationError(
 			postRequest(
 				this._fetcherService,
@@ -320,6 +324,8 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 				token),
 			token);
 
+		const requestExecTime = requestSw.elapsed();
+
 		if (!response.ok) {
 			/* __GDPR__
 				"adoCodeSearch.searchRepo.error" : {
@@ -327,7 +333,9 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 					"comment": "Information about failed code ado searches",
 					"workspaceSearchSource": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Caller of the search" },
 					"workspaceSearchCorrelationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Correlation id for the search" },
-					"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" }
+					"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" },
+					"execTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The total time for the search call" },
+					"requestExecTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The request execution time" }
 				}
 			*/
 			this._telemetryService.sendMSFTTelemetryEvent('adoCodeSearch.searchRepo.error', {
@@ -335,7 +343,11 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 				workspaceSearchCorrelationId: telemetryInfo.correlationId,
 			}, {
 				statusCode: response.status,
+				execTime: totalSw.elapsed(),
+				requestExecTime: requestExecTime,
 			});
+
+			this._logService.trace(`AdoCodeSearchService::searchRepo: Failed. Status code: ${response.status}`);
 
 			throw new Error(`Ado code search semantic search failed with status: ${response.status}`);
 		}
@@ -344,6 +356,7 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 		if (!Array.isArray(body.results)) {
 			throw new Error(`Code search semantic search unexpected response json shape`);
 		}
+		const rawResultCount = body.results.length;
 
 		const returnedEmbeddingsType = body.embedding_model ? new EmbeddingType(body.embedding_model) : adoCustomEmbeddingScoreType;
 
@@ -391,8 +404,11 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 				"comment": "Information about successful ado code search searches",
 				"workspaceSearchSource": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Caller of the search" },
 				"workspaceSearchCorrelationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Correlation id for the search" },
-				"resultCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of returned chunks from the search" },
-				"resultOutOfSync": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Tracks if the commit we think code search has indexed matches the commit code search returns results from" }
+				"resultCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of returned chunks from the search after filtering" },
+				"rawResultCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Original number of returned chunks from the search before filtering" },
+				"resultOutOfSync": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Tracks if the commit we think code search has indexed matches the commit code search returns results from" },
+				"execTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The total time for the search call" },
+				"requestExecTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The request execution time" }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('adoCodeSearch.searchRepo.success', {
@@ -400,9 +416,13 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 			workspaceSearchCorrelationId: telemetryInfo.correlationId,
 		}, {
 			resultCount: body.results.length,
+			rawResultCount,
 			resultOutOfSync: outOfSync ? 1 : 0,
+			execTime: totalSw.elapsed(),
+			requestExecTime: requestExecTime,
 		});
 
+		this._logService.trace(`AdoCodeSearchService::searchRepo: Returning ${outChunks.length} chunks. Raw result count: ${rawResultCount}`);
 		return { chunks: outChunks, outOfSync };
 	}
 

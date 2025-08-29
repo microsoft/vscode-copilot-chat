@@ -16,7 +16,7 @@ import { Range } from '../../../vs/workbench/api/common/extHostTypes/range';
 import { Selection } from '../../../vs/workbench/api/common/extHostTypes/selection';
 import { EndOfLine, TextEdit } from '../../../vs/workbench/api/common/extHostTypes/textEdit';
 import { AISearchKeyword, ChatErrorLevel, ChatImageMimeType, ChatPrepareToolInvocationPart, ChatReferenceBinaryData, ChatReferenceDiagnostic, ChatRequestEditedFileEventKind, ChatRequestEditorData, ChatRequestNotebookData, ChatRequestTurn, ChatResponseAnchorPart, ChatResponseClearToPreviousToolInvocationReason, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseExtensionsPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseMovePart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponsePullRequestPart, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn, ChatResponseWarningPart, ExcludeSettingOptions, LanguageModelChatMessageRole, LanguageModelDataPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelTextPart2, LanguageModelToolCallPart, LanguageModelToolExtensionSource, LanguageModelToolMCPSource, LanguageModelToolResult, LanguageModelToolResult2, LanguageModelToolResultPart, LanguageModelToolResultPart2, TextSearchMatch2 } from './chatTypes';
-import { WorkspaceEdit } from './editing';
+import { WorkspaceEdit, TextEditorSelectionChangeKind, TextDocumentChangeReason } from './editing';
 import { ChatLocation, ChatVariableLevel, DiagnosticSeverity, ExtensionMode, TextEditorCursorStyle, TextEditorLineNumbersStyle, TextEditorRevealType } from './enums';
 import { t } from './l10n';
 import { NewSymbolName, NewSymbolNameTag, NewSymbolNameTriggerKind } from './newSymbolName';
@@ -104,7 +104,9 @@ const shim: typeof vscodeTypes = {
 	LanguageModelToolCallPart,
 	LanguageModelToolResultPart,
 	LanguageModelToolResultPart2,
-	LanguageModelChatMessageRole
+	LanguageModelChatMessageRole,
+	TextEditorSelectionChangeKind,
+	TextDocumentChangeReason
 };
 
 export = shim;

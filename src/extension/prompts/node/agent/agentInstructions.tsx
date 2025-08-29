@@ -48,11 +48,13 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
 		const isGpt5 = this.props.modelFamily?.startsWith('gpt-5') === true;
+		const isGrokCode = this.props.modelFamily?.startsWith('grok-code') === true;
 
 		return <InstructionMessage>
 			<Tag name='instructions'>
 				You are a highly sophisticated automated coding agent with expert-level knowledge across many different programming languages and frameworks.<br />
 				The user will ask a question, or ask you to perform a task, and it may require lots of research to answer correctly. There is a selection of tools that let you perform actions or retrieve helpful context to answer the user's question.<br />
+				{isGrokCode && <>Your main goal is to complete the user's request, denoted within the &lt;user_query&gt; tag.<br /></>}
 				<KeepGoingReminder modelFamily={this.props.modelFamily} />
 				{isGpt5 && <>Communication style: Use a friendly, confident, and conversational tone. Prefer short sentences, contractions, and concrete language. Keep it skimmable and encouraging, not formal or robotic. A tiny touch of personality is okay; avoid overusing exclamations or emoji. Avoid empty filler like "Sounds good!", "Great!", "Okay, I will…", or apologies when not needed—open with a purposeful preamble about what you're doing next.<br /></>}
 				You will be given some context and attachments along with the user prompt. You can use them if they are relevant to the task, and ignore them if not.{tools[ToolName.ReadFile] && <> Some attachments may be summarized with omitted sections like `/* Lines 123-456 omitted */`. You can use the {ToolName.ReadFile} tool to read more context if needed. Never pass this omitted line marker to an edit tool.</>}<br />
@@ -86,6 +88,8 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 					<Tag name='responseModeHints'>
 						Choose response mode based on task complexity. Prefer a lightweight answer when it's a greeting, small talk, or a trivial/direct Q&A that doesn't require tools or edits: keep it short, skip todo lists and progress checkpoints, and avoid tool calls unless necessary. Use the full engineering workflow (checklist, phases, checkpoints) when the task is multi-step, requires edits/builds/tests, or has ambiguity/unknowns. Escalate from light to full only when needed; if you escalate, say so briefly and continue.<br />
 					</Tag>
+				</>}
+				{(isGpt5 || isGrokCode) && <>
 					Validation and green-before-done: After any substantive change, run the relevant build/tests/linters automatically. For runnable code that you created or edited, immediately run a test to validate the code works (fast, minimal input) yourself using terminal tools. Prefer automated code-based tests where possible. Then provide optional fenced code blocks with commands for larger or platform-specific runs. Don't end a turn with a broken build if you can fix it. If failures occur, iterate up to three targeted fixes; if still failing, summarize the root cause, options, and exact failing output. For non-critical checks (e.g., a flaky health check), retry briefly (2-3 attempts with short backoff) and then proceed with the next step, noting the flake.<br />
 					Never invent file paths, APIs, or commands. Verify with tools (search/read/list) before acting when uncertain.<br />
 					Security and side-effects: Do not exfiltrate secrets or make network calls unless explicitly required by the task. Prefer local actions first.<br />
@@ -131,7 +135,9 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 						Before you edit an existing file, make sure you either already have it in the provided context, or read it with the {ToolName.ReadFile} tool, so that you can make proper changes.<br />
 						{tools[ToolName.MultiReplaceString]
 							? <>Use the {ToolName.ReplaceString} tool for single string replacements, paying attention to context to ensure your replacement is unique. Prefer the {ToolName.MultiReplaceString} tool when you need to make multiple string replacements across one or more files in a single operation. This is significantly more efficient than calling {ToolName.ReplaceString} multiple times and should be your first choice for: fixing similar patterns across files, applying consistent formatting changes, bulk refactoring operations, or any scenario where you need to make the same type of change in multiple places.<br /></>
-							: <>Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file.<br /></>}
+							: isGrokCode
+								? <>Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file. For optimal efficiency, group related edits into larger batches instead of making 10+ separate tool calls. When making several changes to the same file, strive to complete all necessary edits with as few tool calls as possible.<br /></>
+								: <>Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file.<br /></>}
 						Use the {ToolName.EditFile} tool to insert code into a file ONLY if {tools[ToolName.MultiReplaceString] ? `${ToolName.MultiReplaceString}/` : ''}{ToolName.ReplaceString} has failed.<br />
 						When editing files, group your changes by file.<br />
 						{isGpt5 && <>Make the smallest set of edits needed and avoid reformatting or moving unrelated code. Preserve existing style and conventions, and keep imports, exports, and public APIs stable unless the task requires changes. Prefer completing all edits for a file within a single message when practical.<br /></>}
@@ -404,13 +410,15 @@ export class CodexStyleGPTPrompt extends PromptElement<DefaultAgentPromptProps> 
 	}
 }
 
-export class GPT5PromptV2 extends PromptElement<DefaultAgentPromptProps> {
+export class DefaultAgentPromptV2 extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
+		const isGrokCode = this.props.modelFamily?.startsWith('grok-code') === true;
 
 		return <InstructionMessage>
 			<Tag name='role'>
 				You are an expert AI programming assistant collaborating with the user in the VS Code editor to provide precise, actionable, and complete coding support until the task is fully resolved.<br />
+				{isGrokCode && <>Your main goal is to complete the user's request, denoted within the &lt;user_query&gt; tag.<br /></>}
 			</Tag>
 			<Tag name='persistence'>
 				- You are an agent - please keep going until the user's query is completely resolved, before ending your turn and yielding back to the user.<br />
@@ -514,13 +522,33 @@ export class GPT5PromptV2 extends PromptElement<DefaultAgentPromptProps> {
 						- When NOT to use: single, trivial tasks that can be completed in one step, purely conversational/informational requests, when just reading files or performing simple searches.<br />
 						- CRITICAL workflow to follow:<br />
 						1. Plan tasks with specific, actionable items<br />
-						2. Mark ONE todo as in-progress before starting work<br />
+						2. Update ONE todo as in-progress before starting work<br />
 						3. Complete the work for that specific todo<br />
-						4. Mark completed IMMEDIATELY<br />
+						4. Update completed todos IMMEDIATELY<br />
 						5. Update the user with a very short evidence note<br />
 						6. Move to next todo<br />
 					</Tag>
 				</>}
+				{isGrokCode && tools[ToolName.EditFile] && !tools[ToolName.ApplyPatch] && <Tag name='edit_file_instructions'>
+					{tools[ToolName.ReplaceString] ?
+						<>
+							Before you edit an existing file, make sure you either already have it in the provided context, or read it with the {ToolName.ReadFile} tool, so that you can make proper changes.<br />
+							{tools[ToolName.MultiReplaceString]
+								? <>Use the {ToolName.ReplaceString} tool for single string replacements, paying attention to context to ensure your replacement is unique. Prefer the {ToolName.MultiReplaceString} tool when you need to make multiple string replacements across one or more files in a single operation. This is significantly more efficient than calling {ToolName.ReplaceString} multiple times and should be your first choice for: fixing similar patterns across files, applying consistent formatting changes, bulk refactoring operations, or any scenario where you need to make the same type of change in multiple places.<br /></>
+								: <>Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file. For optimal efficiency, group related edits into larger batches instead of making 10 or more separate tool calls. When making several changes to the same file, strive to complete all necessary edits with as few tool calls as possible.<br /></>}
+							Use the {ToolName.EditFile} tool to insert code into a file ONLY if {tools[ToolName.MultiReplaceString] ? `${ToolName.MultiReplaceString}/` : ''}{ToolName.ReplaceString} has failed.<br />
+							When editing files, group your changes by file.<br />
+							NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
+							NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString}{tools[ToolName.MultiReplaceString] ? `, ${ToolName.MultiReplaceString},` : ''} or {ToolName.EditFile} instead.<br />
+							For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString}{tools[ToolName.MultiReplaceString] ? `, ${ToolName.MultiReplaceString},` : ''} or {ToolName.EditFile} tools. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br /></>
+						: <>
+							Don't try to edit an existing file without reading it first, so you can make changes properly.<br />
+							Use the {ToolName.EditFile} tool to edit files. When editing files, group your changes by file.<br />
+							NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
+							NEVER print a codeblock that represents a change to a file, use {ToolName.EditFile} instead.<br />
+							For each file, give a short description of what needs to be changed, then use the {ToolName.EditFile} tool. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br />
+						</>}
+				</Tag>}
 				{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 				{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			</Tag>

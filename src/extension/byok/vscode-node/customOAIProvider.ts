@@ -3,13 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatRequestHandleOptions, Progress, QuickPickItem, window } from 'vscode';
+import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatRequestHandleOptions, LanguageModelResponsePart2, Progress, QuickPickItem, window } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotLanguageModelWrapper } from '../../conversation/vscode-node/languageModelAccess';
-import { BYOKAuthType, BYOKKnownModels, BYOKModelProvider, LMResponsePart, resolveModelInfo } from '../common/byokProvider';
+import { BYOKAuthType, BYOKKnownModels, BYOKModelProvider, resolveModelInfo } from '../common/byokProvider';
 import { OpenAIEndpoint } from '../node/openAIEndpoint';
 import { IBYOKStorageService } from './byokStorageService';
 import { promptForAPIKey } from './byokUIService';
@@ -144,7 +144,7 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 		}
 	}
 
-	async provideLanguageModelChatResponse(model: CustomOAIModelInfo, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: LanguageModelChatRequestHandleOptions, progress: Progress<LMResponsePart>, token: CancellationToken): Promise<any> {
+	async provideLanguageModelChatResponse(model: CustomOAIModelInfo, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: LanguageModelChatRequestHandleOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<any> {
 		const requireAPIKey = this.requiresAPIKey(model.id);
 		let apiKey: string | undefined;
 		if (requireAPIKey) {

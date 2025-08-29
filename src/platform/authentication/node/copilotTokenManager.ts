@@ -227,7 +227,7 @@ export class FixedCopilotTokenManager extends BaseCopilotTokenManager implements
 		@IFetcherService fetcherService: IFetcherService,
 		@IEnvService envService: IEnvService
 	) {
-		super(new NullBaseOctoKitService(capiClientService, fetcherService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
+		super(new NullBaseOctoKitService(capiClientService, fetcherService, logService, telemetryService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
 		this.copilotToken = { token: _completionsToken, expires_at: 0, refresh_in: 0, username: 'fixedTokenManager', isVscodeTeamMember: false, copilot_plan: 'unknown' };
 	}
 
@@ -270,7 +270,7 @@ export class CopilotTokenManagerFromGitHubToken extends BaseCopilotTokenManager 
 		@IEnvService envService: IEnvService,
 		@IConfigurationService protected readonly configurationService: IConfigurationService
 	) {
-		super(new NullBaseOctoKitService(capiClientService, fetcherService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
+		super(new NullBaseOctoKitService(capiClientService, fetcherService, logService, telemetryService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
 	}
 
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
