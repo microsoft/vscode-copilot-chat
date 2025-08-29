@@ -3,41 +3,53 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { AutoTokenizer } from '@huggingface/transformers';
-import * as fs from 'fs';
+import { PreTrainedTokenizer } from '@huggingface/transformers';
 import * as ort from 'onnxruntime-node';
 import { Position, TextDocument } from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
-import { MockInlineCompletionClassifier } from './mockInlineCompletionClassifier';
 
 export interface ClassificationResult {
-	shouldProceed: boolean;
-	confidence: number;
+	confidence: number | null;
 	processingTime: number;
+}
+
+const onnxOptions = {
+	executionProviders: [
+		{
+			name: 'webgpu',
+		}
+	],
+	logLevel: 'verbose',
+};
+
+async function loadJSON(path: string) {
+	const response = await fetch(path);
+	if (!response.ok) {
+		throw new Error(`HTTP error! status: ${response.status}`);
+	}
+	return await response.json();
 }
 
 /**
  * Classifier for determining whether inline completion should proceed
  */
 export class InlineCompletionClassifier {
-	private session: ort.InferenceSession | null = null;
-	private tokenizer: any = null;
+	static modelPath = "models/google_mobile_bert/model.onnx";
+	static tokenizerPath = "models/google_mobile_bert/tokenizer.json";
+	static tokenizerCfgPath = "models/google_mobile_bert/tokenizer_config.json";
+
 	private isInitialized = false;
-	private modelPath: string;
-	private mockClassifier: MockInlineCompletionClassifier | null = null;
-	private useMockClassifier = false;
+	private session: ort.InferenceSession | null = null;
+	private tokenizer: PreTrainedTokenizer | null = null;
 
 	constructor(
 		private readonly logService: ILogService,
-		modelPath?: string
 	) {
-		// Default model path - you should replace this with your actual .onnx model path
-		this.modelPath = modelPath || './models/inline-completion-classifier.onnx';
-		this.mockClassifier = new MockInlineCompletionClassifier(logService);
+		this.logService = logService;
 	}
 
 	/**
-	 * Initialize the classifier with ONNX model and tokenizer
+	 * The initialization happens asynchronously to avoid blocking the constructor.
 	 */
 	async initialize(): Promise<void> {
 		if (this.isInitialized) {
@@ -45,33 +57,21 @@ export class InlineCompletionClassifier {
 		}
 
 		try {
-			// Check if the ONNX model file exists
-			if (!fs.existsSync(this.modelPath)) {
-				this.logService.warn(`[InlineCompletionClassifier] ONNX model not found at ${this.modelPath}, falling back to mock classifier`);
-				this.useMockClassifier = true;
-				await this.mockClassifier!.initialize();
-				this.isInitialized = true;
-				return;
-			}
-
 			this.logService.trace('[InlineCompletionClassifier] Initializing classifier...');
 
-			// Load the ONNX model
-			this.session = await ort.InferenceSession.create(this.modelPath);
+			this.session = await ort.InferenceSession.create(InlineCompletionClassifier.modelPath, onnxOptions);
 			this.logService.trace('[InlineCompletionClassifier] ONNX model loaded successfully');
 
-			// Load the tokenizer (you might need to specify the model name or path)
-			// This is a placeholder - replace with your actual tokenizer
-			this.tokenizer = await AutoTokenizer.from_pretrained('distilbert-base-uncased');
+			const tok_json = await loadJSON(InlineCompletionClassifier.tokenizerPath);
+			const tok_cfg = await loadJSON(InlineCompletionClassifier.tokenizerCfgPath);
+			this.tokenizer = new PreTrainedTokenizer(tok_json, tok_cfg);
 			this.logService.trace('[InlineCompletionClassifier] Tokenizer loaded successfully');
 
 			this.isInitialized = true;
 			this.logService.info('[InlineCompletionClassifier] Classifier initialized successfully');
 		} catch (error) {
-			this.logService.error('[InlineCompletionClassifier] Failed to initialize ONNX classifier, falling back to mock classifier:', error);
-			this.useMockClassifier = true;
-			await this.mockClassifier!.initialize();
-			this.isInitialized = true;
+			this.logService.error('[InlineCompletionClassifier] Failed to initialize ONNX classifier', error);
+			this.isInitialized = false;
 		}
 	}
 
@@ -84,15 +84,9 @@ export class InlineCompletionClassifier {
 		if (!this.isInitialized) {
 			this.logService.warn('[InlineCompletionClassifier] Classifier not initialized, proceeding by default');
 			return {
-				shouldProceed: true,
-				confidence: 0.5,
+				confidence: null,
 				processingTime: Date.now() - startTime
 			};
-		}
-
-		// Use mock classifier if ONNX model is not available
-		if (this.useMockClassifier) {
-			return await this.mockClassifier!.classify(document, position);
 		}
 
 		try {
@@ -101,45 +95,38 @@ export class InlineCompletionClassifier {
 			this.logService.trace(`[InlineCompletionClassifier] Extracted context: "${context}"`);
 
 			// Tokenize the input
-			const encoded = await this.tokenizer(context, {
+			const tokenizerOpts = {
+				add_special_tokens: false,
 				padding: true,
-				truncation: true,
-				max_length: 512,
-				return_tensors: 'pt'
-			});
-
-			// Prepare input for ONNX model
-			const inputIds = new ort.Tensor('int64', encoded.input_ids.data, encoded.input_ids.dims);
-			const attentionMask = new ort.Tensor('int64', encoded.attention_mask.data, encoded.attention_mask.dims);
+				return_token_type_ids: true,
+			};
+			const feeds = await this.tokenizer!(context, tokenizerOpts);
 
 			// Run inference
-			const results = await this.session!.run({
-				input_ids: inputIds,
-				attention_mask: attentionMask
-			});
+			const results = await this.session!.run(feeds);
 
 			// Process the results (assuming binary classification with sigmoid output)
-			const logits = results.logits as ort.Tensor;
-			const probability = this.sigmoid(logits.data[0] as number);
+			const logits = results.logits.data as Float32Array;
+			const maxLogit = Math.max(...logits);
+			const exps = logits.map(x => Math.exp(x - maxLogit));
+			const sumExps = exps.reduce((a, b) => a + b, 0);
+			const probs = exps.map(x => x / sumExps);
+			console.log("Probabilities:", probs);
 
-			const shouldProceed = probability > 0.5;
+			const shouldProceed = probs[1] > 0.5;
 			const processingTime = Date.now() - startTime;
 
 			this.logService.trace(`[InlineCompletionClassifier] Classification result: shouldProceed=${shouldProceed}, confidence=${probability.toFixed(3)}, time=${processingTime}ms`);
 
 			return {
-				shouldProceed,
-				confidence: probability,
-				processingTime
+				confidence: probs[1],
+				processingTime: Date.now() - startTime
 			};
 
 		} catch (error) {
 			this.logService.error('[InlineCompletionClassifier] Classification failed:', error);
-
-			// Fallback to proceeding when classification fails
 			return {
-				shouldProceed: true,
-				confidence: 0.5,
+				confidence: null,
 				processingTime: Date.now() - startTime
 			};
 		}
@@ -170,23 +157,12 @@ export class InlineCompletionClassifier {
 	}
 
 	/**
-	 * Sigmoid activation function
-	 */
-	private sigmoid(x: number): number {
-		return 1 / (1 + Math.exp(-x));
-	}
-
-	/**
 	 * Dispose of resources
 	 */
 	dispose(): void {
 		if (this.session) {
 			this.session.release();
 			this.session = null;
-		}
-		if (this.mockClassifier) {
-			this.mockClassifier.dispose();
-			this.mockClassifier = null;
 		}
 		this.tokenizer = null;
 		this.isInitialized = false;
