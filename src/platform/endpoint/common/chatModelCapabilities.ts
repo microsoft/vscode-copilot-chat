@@ -27,7 +27,12 @@ export async function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
 }
 
 export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint) {
-	return await getSha256Hash(model.family) === '008ed1bfd28fb7f15ff17f6e308c417635da136603b83b32db4719bd1cd64c09';
+	/** The plain-family string for this hash is "grok-code",
+	 * avoid computing SHA-256 when we already have the plain family available,
+	 * to directly eliminate the unnecessary runtime crypto overhead.
+	 * echo -n grok-code|sha256sum === 008ed1bfd28fb7f15ff17f6e308c417635da136603b83b32db4719bd1cd64c09
+	 */
+	return model.family === 'grok-code';
 }
 
 /**
