@@ -46,7 +46,7 @@ import { UserPreferences } from '../panel/preferences';
 import { ChatToolCalls } from '../panel/toolCalling';
 import { MultirootWorkspaceStructure } from '../panel/workspace/workspaceStructure';
 import { AgentConversationHistory } from './agentConversationHistory';
-import { AlternateGPTPrompt, CodexStyleGPTPrompt, DefaultAgentPrompt, GPT5PromptV2, SweBenchAgentPrompt } from './agentInstructions';
+import { AlternateGPTPrompt, CodexStyleGPTPrompt, DefaultAgentPrompt, DefaultAgentPromptV2, SweBenchAgentPrompt } from './agentInstructions';
 import { SummarizedConversationHistory } from './summarizedConversationHistory';
 
 export interface AgentPromptProps extends GenericBasePromptElementProps {
@@ -154,7 +154,25 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 						codesearchMode={this.props.codesearchMode}
 					/>;
 				case 'v2':
-					return <GPT5PromptV2
+					return <DefaultAgentPromptV2
+						availableTools={this.props.promptContext.tools?.availableTools}
+						modelFamily={this.props.endpoint.family}
+						codesearchMode={this.props.codesearchMode}
+					/>;
+				default:
+					return <DefaultAgentPrompt
+						availableTools={this.props.promptContext.tools?.availableTools}
+						modelFamily={this.props.endpoint.family}
+						codesearchMode={this.props.codesearchMode}
+					/>;
+			}
+		}
+
+		if (this.props.endpoint.family.startsWith('grok-code')) {
+			const promptType = this.configurationService.getExperimentBasedConfig(ConfigKey.GrokCodeAlternatePrompt, this.experimentationService);
+			switch (promptType) {
+				case 'v2':
+					return <DefaultAgentPromptV2
 						availableTools={this.props.promptContext.tools?.availableTools}
 						modelFamily={this.props.endpoint.family}
 						codesearchMode={this.props.codesearchMode}
@@ -336,7 +354,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 			: '';
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;
 		const hasTodoTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreManageTodoList);
-
+		const shouldUseUserQuery = this.props.endpoint.family.startsWith('grok-code');
 		return (
 			<>
 				<UserMessage>
@@ -361,7 +379,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
 						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
 					</Tag>
-					{query && <Tag name='userRequest' priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
+					{query && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 				</UserMessage>
 			</>
