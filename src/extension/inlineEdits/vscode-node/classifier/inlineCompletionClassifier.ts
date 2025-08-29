@@ -7,6 +7,9 @@ import { PreTrainedTokenizer } from '@huggingface/transformers';
 import * as ort from 'onnxruntime-node';
 import { Position, TextDocument } from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
+// TODO(cecagnia): this seems forbidden. Need to find a way to do it in both node and web.
+const path = require('path');
+const fs = require('fs');
 
 export interface ClassificationResult {
 	confidence: number | null;
@@ -21,14 +24,6 @@ const onnxOptions = {
 	],
 	logLevel: 'verbose',
 };
-
-async function loadJSON(path: string) {
-	const response = await fetch(path);
-	if (!response.ok) {
-		throw new Error(`HTTP error! status: ${response.status}`);
-	}
-	return await response.json();
-}
 
 /**
  * Classifier for determining whether inline completion should proceed
@@ -58,14 +53,21 @@ export class InlineCompletionClassifier {
 
 		try {
 			this.logService.trace('[InlineCompletionClassifier] Initializing classifier...');
+			this.logService.info(`[InlineCompletionClassifier] dirname is... ${__dirname}`);
+			const absoluteModelPath = path.join(__dirname, InlineCompletionClassifier.modelPath);
 
-			this.session = await ort.InferenceSession.create(InlineCompletionClassifier.modelPath, onnxOptions);
-			this.logService.trace('[InlineCompletionClassifier] ONNX model loaded successfully');
+			this.session = await ort.InferenceSession.create(absoluteModelPath, onnxOptions);
+			this.logService.info('[InlineCompletionClassifier] ONNX model loaded successfully');
 
-			const tok_json = await loadJSON(InlineCompletionClassifier.tokenizerPath);
-			const tok_cfg = await loadJSON(InlineCompletionClassifier.tokenizerCfgPath);
+			const absoluteTokenizerPath = path.join(__dirname, InlineCompletionClassifier.tokenizerPath);
+			const absoluteTokenizerCfgPath = path.join(__dirname, InlineCompletionClassifier.tokenizerCfgPath);
+
+			// Load and parse the tokenizer files to json
+			const tok_json = JSON.parse(fs.readFileSync(absoluteTokenizerPath, 'utf-8'));
+			const tok_cfg = JSON.parse(fs.readFileSync(absoluteTokenizerCfgPath, 'utf-8'));
+
 			this.tokenizer = new PreTrainedTokenizer(tok_json, tok_cfg);
-			this.logService.trace('[InlineCompletionClassifier] Tokenizer loaded successfully');
+			this.logService.info('[InlineCompletionClassifier] Tokenizer loaded successfully');
 
 			this.isInitialized = true;
 			this.logService.info('[InlineCompletionClassifier] Classifier initialized successfully');
