@@ -499,7 +499,7 @@ export class SnapshotSearchService extends AbstractSearchService {
 
 		let matches = 0;
 
-		const r = createRegExp(query.pattern, query.isRegExp ?? false, {
+		const r: RegExp = createRegExp(query.pattern, query.isRegExp ?? false, {
 			global: true,
 			matchCase: query.isCaseSensitive,
 			wholeWord: query.isWordMatch,

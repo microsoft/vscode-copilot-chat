@@ -81,7 +81,7 @@ export class EditCode2Intent extends EditCodeIntent {
 
 	protected override getIntentHandlerOptions(request: vscode.ChatRequest): IDefaultIntentRequestHandlerOptions | undefined {
 		return {
-			maxToolCallIterations: getRequestedToolCallIterationLimit(request) ?? this.configurationService.getNonExtensionConfig('chat.agent.maxRequests') ?? 15,
+			maxToolCallIterations: getRequestedToolCallIterationLimit(request) ?? this.configurationService.getNonExtensionConfig('chat.agent.maxRequests') ?? 150,
 			temperature: this.configurationService.getConfig(ConfigKey.Internal.AgentTemperature) ?? 0,
 			overrideRequestLocation: ChatLocation.EditingSession,
 		};
