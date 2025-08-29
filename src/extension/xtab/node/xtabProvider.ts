@@ -19,7 +19,7 @@ import { LanguageContextLanguages, LanguageContextOptions } from '../../../platf
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ResponseProcessor } from '../../../platform/inlineEdits/common/responseProcessor';
 import { IStatelessNextEditProvider, NoNextEditReason, PushEdit, ShowNextEditPreference, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult, StatelessNextEditTelemetryBuilder } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
-import { ChainedStatelessNextEditProvider, IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges, IgnoreWhitespaceOnlyChanges } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
+import { IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges, IgnoreWhitespaceOnlyChanges } from '../../../platform/inlineEdits/common/statelessNextEditProviders';
 import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ContextKind, SnippetContext } from '../../../platform/languageServer/common/languageContextService';
@@ -73,9 +73,11 @@ const enum RetryState {
 	RetryingWithExpandedWindow
 }
 
-export class XtabProvider extends ChainedStatelessNextEditProvider {
+export class XtabProvider implements IStatelessNextEditProvider {
 
 	public static readonly ID = XTabProviderId;
+
+	public readonly ID = XtabProvider.ID;
 
 	public readonly dependsOnSelection = true;
 	public readonly showNextEditPreference = ShowNextEditPreference.Always;
@@ -97,15 +99,6 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		@ILanguageDiagnosticsService private readonly langDiagService: ILanguageDiagnosticsService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 	) {
-		const filters: ((base: IStatelessNextEditProvider) => IStatelessNextEditProvider)[] = [
-			base => new IgnoreImportChangesAspect(base),
-			base => new IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges(base),
-		];
-		if (!configService.getExperimentBasedConfig(ConfigKey.InlineEditsAllowWhitespaceOnlyChanges, expService)) {
-			filters.push(base => new IgnoreWhitespaceOnlyChanges(base));
-		}
-		super(XtabProvider.ID, filters);
-
 		this.delayer = new Delayer(this.configService, this.expService);
 		this.tracer = createTracer(['NES', 'XtabProvider'], (s) => this.logService.trace(s));
 	}
@@ -118,7 +111,39 @@ export class XtabProvider extends ChainedStatelessNextEditProvider {
 		this.delayer.handleRejection();
 	}
 
-	public async provideNextEditBase(request: StatelessNextEditRequest, pushEdit: PushEdit, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
+	public provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
+		const filteringPushEdit: PushEdit = (result) => {
+			if (result.isError()) {
+				pushEdit(result);
+				return;
+			}
+			const { edit } = result.val;
+			const filteredEdits = this.filterEdit(request.getActiveDocument(), [edit]);
+			if (filteredEdits.length === 0) { // do not invoke pushEdit
+				return;
+			}
+			pushEdit(result);
+		};
+
+		return this._provideNextEdit(request, filteringPushEdit, logContext, cancellationToken);
+	}
+
+	private filterEdit(activeDoc: StatelessNextEditDocument, edits: readonly LineReplacement[]): readonly LineReplacement[] {
+		type EditFilter = (edits: readonly LineReplacement[]) => readonly LineReplacement[];
+
+		const filters: EditFilter[] = [
+			(edits) => IgnoreImportChangesAspect.filterEdit(activeDoc, edits),
+			(edits) => IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges.filterEdit(activeDoc, edits),
+		];
+
+		if (!this.configService.getExperimentBasedConfig(ConfigKey.InlineEditsAllowWhitespaceOnlyChanges, this.expService)) {
+			filters.push((edits) => IgnoreWhitespaceOnlyChanges.filterEdit(activeDoc, edits));
+		}
+
+		return filters.reduce((acc, filter) => filter(acc), edits);
+	}
+
+	public async _provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
 		const telemetry = new StatelessNextEditTelemetryBuilder(request);
 
 		logContext.setProviderStartTime();

@@ -3,78 +3,16 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { LineReplacement } from '../../../util/vs/editor/common/core/edits/lineEdit';
-import { InlineEditRequestLogContext } from './inlineEditLogContext';
-import { IStatelessNextEditProvider, PushEdit, StatelessNextEditDocument, StatelessNextEditRequest, StatelessNextEditResult } from './statelessNextEditProvider';
+import { StatelessNextEditDocument } from './statelessNextEditProvider';
 
-export function chainStatelessNextEditProviders(base: IStatelessNextEditProvider, ...decorators: ((provider: IStatelessNextEditProvider) => IStatelessNextEditProvider)[]): IStatelessNextEditProvider {
-	let result: IStatelessNextEditProvider = base;
-	for (const decorator of decorators) {
-		result = decorator(result);
-	}
-	return result;
-}
-
-export abstract class ChainedStatelessNextEditProvider implements IStatelessNextEditProvider {
-	private _impl: IStatelessNextEditProvider;
-
-	constructor(
-		public readonly ID: string,
-		private readonly _providers: ((next: IStatelessNextEditProvider) => IStatelessNextEditProvider)[],
-	) {
-		const self: IStatelessNextEditProvider = {
-			ID: this.ID,
-			provideNextEdit: (request: StatelessNextEditRequest, pushEdit: PushEdit, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> => {
-				return this.provideNextEditBase(request, pushEdit, logContext, cancellationToken);
-			}
-		};
-		this._impl = chainStatelessNextEditProviders(self, ...this._providers);
-
-	}
-
-	public provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
-		return this._impl.provideNextEdit(request, pushEdit, logContext, cancellationToken);
-	}
-
-	abstract provideNextEditBase(request: StatelessNextEditRequest, pushEdit: PushEdit, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult>;
-}
-
-export abstract class EditFilterAspect implements IStatelessNextEditProvider {
-	get ID(): string { return this._baseProvider.ID; }
-
-	constructor(
-		private readonly _baseProvider: IStatelessNextEditProvider,
-	) {
-	}
-
-	async provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
-		const filteringPushEdit: PushEdit = (result) => {
-			if (result.isError()) {
-				pushEdit(result);
-				return;
-			}
-			const { edit } = result.val;
-			const filteredEdits = this.filterEdit(request.getActiveDocument(), [edit]);
-			if (filteredEdits.length === 0) { // do not invoke pushEdit
-				return;
-			}
-			pushEdit(result);
-		};
-
-		return this._baseProvider.provideNextEdit(request, filteringPushEdit, logContext, cancellationToken);
-	}
-
-	abstract filterEdit(resultDocument: StatelessNextEditDocument, singleEdits: readonly LineReplacement[]): readonly LineReplacement[];
-}
-
-export class IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges extends EditFilterAspect {
-	override filterEdit(resultDocument: StatelessNextEditDocument, singleEdits: readonly LineReplacement[]): readonly LineReplacement[] {
-		const filteredEdits = singleEdits.filter(e => !this._isWhitespaceOnlyChange(e, resultDocument.documentAfterEditsLines));
+export class IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges {
+	public static filterEdit(resultDocument: StatelessNextEditDocument, singleEdits: readonly LineReplacement[]): readonly LineReplacement[] {
+		const filteredEdits = singleEdits.filter(e => !IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges._isWhitespaceOnlyChange(e, resultDocument.documentAfterEditsLines));
 		return filteredEdits;
 	}
 
-	private _isWhitespaceOnlyChange(edit: LineReplacement, baseLines: string[]): boolean {
+	private static _isWhitespaceOnlyChange(edit: LineReplacement, baseLines: string[]): boolean {
 		const originalLines = edit.lineRange.toOffsetRange().slice(baseLines);
 		const newLines = edit.newLines;
 
@@ -105,8 +43,8 @@ export class IgnoreEmptyLineAndLeadingTrailingWhitespaceChanges extends EditFilt
 	}
 }
 
-export class IgnoreWhitespaceOnlyChanges extends EditFilterAspect {
-	override filterEdit(resultDocument: StatelessNextEditDocument, singleEdits: readonly LineReplacement[]): readonly LineReplacement[] {
+export class IgnoreWhitespaceOnlyChanges {
+	public static filterEdit(resultDocument: StatelessNextEditDocument, singleEdits: readonly LineReplacement[]): readonly LineReplacement[] {
 		return singleEdits.filter(e => !IgnoreWhitespaceOnlyChanges._isFormattingOnlyChange(resultDocument.documentAfterEditsLines, e));
 	}
 
