@@ -47,7 +47,9 @@
 	],
 	"scripts": {
 		"clean": "rimraf dist",
-		"build": "tsc",
+		"build": "npm-run-all compile copy",
+		"compile": "tsc",
+		"copy": "copyfiles src/package.json dist",
 		"package": "npm pack",
 		"publish": "npm publish",
 		"test": "vitest run",
