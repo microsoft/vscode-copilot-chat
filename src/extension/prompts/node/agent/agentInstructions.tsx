@@ -529,25 +529,16 @@ export class DefaultAgentPromptV2 extends PromptElement<DefaultAgentPromptProps>
 						6. Move to next todo<br />
 					</Tag>
 				</>}
-				{isGrokCode && tools[ToolName.EditFile] && !tools[ToolName.ApplyPatch] && <Tag name='edit_file_instructions'>
-					{tools[ToolName.ReplaceString] ?
-						<>
-							Before you edit an existing file, make sure you either already have it in the provided context, or read it with the {ToolName.ReadFile} tool, so that you can make proper changes.<br />
-							{tools[ToolName.MultiReplaceString]
-								? <>Use the {ToolName.ReplaceString} tool for single string replacements, paying attention to context to ensure your replacement is unique. Prefer the {ToolName.MultiReplaceString} tool when you need to make multiple string replacements across one or more files in a single operation. This is significantly more efficient than calling {ToolName.ReplaceString} multiple times and should be your first choice for: fixing similar patterns across files, applying consistent formatting changes, bulk refactoring operations, or any scenario where you need to make the same type of change in multiple places.<br /></>
-								: <>Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file. For optimal efficiency, group related edits into larger batches instead of making 10 or more separate tool calls. When making several changes to the same file, strive to complete all necessary edits with as few tool calls as possible.<br /></>}
-							Use the {ToolName.EditFile} tool to insert code into a file ONLY if {tools[ToolName.MultiReplaceString] ? `${ToolName.MultiReplaceString}/` : ''}{ToolName.ReplaceString} has failed.<br />
-							When editing files, group your changes by file.<br />
-							NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
-							NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString}{tools[ToolName.MultiReplaceString] ? `, ${ToolName.MultiReplaceString},` : ''} or {ToolName.EditFile} instead.<br />
-							For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString}{tools[ToolName.MultiReplaceString] ? `, ${ToolName.MultiReplaceString},` : ''} or {ToolName.EditFile} tools. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br /></>
-						: <>
-							Don't try to edit an existing file without reading it first, so you can make changes properly.<br />
-							Use the {ToolName.EditFile} tool to edit files. When editing files, group your changes by file.<br />
-							NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
-							NEVER print a codeblock that represents a change to a file, use {ToolName.EditFile} instead.<br />
-							For each file, give a short description of what needs to be changed, then use the {ToolName.EditFile} tool. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br />
-						</>}
+				{isGrokCode && tools[ToolName.ReplaceString] && !tools[ToolName.ApplyPatch] && <Tag name='edit_file_instructions'>
+					Before you edit an existing file, make sure you either already have it in the provided context, or read it with the {ToolName.ReadFile} tool, so that you can make proper changes.<br />
+					{tools[ToolName.MultiReplaceString]
+						? <>Use the {ToolName.ReplaceString} tool for single string replacements, paying attention to context to ensure your replacement is unique. Prefer the {ToolName.MultiReplaceString} tool when you need to make multiple string replacements across one or more files in a single operation. This is significantly more efficient than calling {ToolName.ReplaceString} multiple times and should be your first choice for: fixing similar patterns across files, applying consistent formatting changes, bulk refactoring operations, or any scenario where you need to make the same type of change in multiple places.<br /></>
+						: <>Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file. For optimal efficiency, group related edits into larger batches instead of making 10 or more separate tool calls. When making several changes to the same file, strive to complete all necessary edits with as few tool calls as possible.<br /></>}
+					{tools[ToolName.EditFile] && <>Use the {ToolName.EditFile} tool to insert code into a file ONLY if {tools[ToolName.MultiReplaceString] ? `${ToolName.MultiReplaceString}/` : ''}{ToolName.ReplaceString} has failed.<br /></>}
+					When editing files, group your changes by file.<br />
+					NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
+					NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString}{tools[ToolName.MultiReplaceString] ? `, ${ToolName.MultiReplaceString},` : ''} or {ToolName.EditFile} instead.<br />
+					For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString}{tools[ToolName.MultiReplaceString] ? `, ${ToolName.MultiReplaceString},` : ''} or {ToolName.EditFile} tools. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br />
 				</Tag>}
 				{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 				{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
