@@ -28,23 +28,32 @@ extends:
     npmPackages:
       - name: vscode-copilot-chat
         buildSteps:
-          - script: cd .. && npm ci && npm run extract-chat-lib && rm -rf node_modules
+          - script: npm ci && npm run extract-chat-lib && rm -rf node_modules
+
           - script: npm ci
+            workingDirectory: chat-lib
+
           - script: npm run build
-          - script: npm run package
+            workingDirectory: chat-lib
         testPlatforms:
           - name: Linux
-            nodeVersions: [20.x]
+            nodeVersions: [22.x]
           # - name: MacOS
           #   nodeVersions: [20.x]
           # - name: Windows
           #   nodeVersions: [20.x]
         workingDirectory: chat-lib
         testSteps:
-          - script: cd .. && npm ci && npm run extract-chat-lib && rm -rf node_modules
+          - script: npm ci && npm run extract-chat-lib && rm -rf node_modules
+
           - script: npm ci
+            workingDirectory: chat-lib
+
           - script: npm run build
+            workingDirectory: chat-lib
+
           - script: npm test
+            workingDirectory: chat-lib
         # ${{ if or(eq(parameters.nextVersion, 'prerelease'), and(in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI'), eq(variables['Build.SourceBranch'], 'refs/heads/main'))) }}:
         ${{ if eq(parameters.nextVersion, 'prerelease') }}:
           publishPackage: true
