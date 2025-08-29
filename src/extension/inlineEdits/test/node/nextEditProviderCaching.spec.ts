@@ -6,7 +6,7 @@ import { outdent } from 'outdent';
 import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest';
 import type { InlineCompletionContext } from 'vscode';
 import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { DefaultsOnlyConfigurationService } from '../../../../platform/configuration/test/common/defaultsOnlyConfigurationService';
+import { DefaultsOnlyConfigurationService } from '../../../../platform/configuration/common/defaultsOnlyConfigurationService';
 import { IGitExtensionService } from '../../../../platform/git/common/gitExtensionService';
 import { NullGitExtensionService } from '../../../../platform/git/common/nullGitExtensionService';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
@@ -17,11 +17,9 @@ import { IStatelessNextEditProvider, NoNextEditReason, PushEdit, StatelessNextEd
 import { NesHistoryContextProvider } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { NesXtabHistoryTracker } from '../../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ILogService, LogServiceImpl } from '../../../../platform/log/common/logService';
-import { NulSimulationTestContext } from '../../../../platform/simulationTestContext/common/simulationTestContext';
 import { ISnippyService, NullSnippyService } from '../../../../platform/snippy/common/snippyService';
 import { IExperimentationService, NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { mockNotebookService } from '../../../../platform/test/common/testNotebookService';
-import { MockExtensionContext } from '../../../../platform/test/node/extensionContext';
 import { Result } from '../../../../util/common/result';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { URI } from '../../../../util/vs/base/common/uri';
@@ -51,7 +49,7 @@ describe('NextEditProvider Caching', () => {
 		configService = new DefaultsOnlyConfigurationService();
 		snippyService = new NullSnippyService();
 		gitExtensionService = new NullGitExtensionService();
-		logService = new LogServiceImpl([], new NulSimulationTestContext(), new MockExtensionContext() as any);
+		logService = new LogServiceImpl([]);
 		expService = new NullExperimentationService();
 	});
 	afterAll(() => {

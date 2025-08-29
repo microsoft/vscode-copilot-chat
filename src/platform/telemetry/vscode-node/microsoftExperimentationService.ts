@@ -6,6 +6,7 @@
 import * as vscode from 'vscode';
 import { getExperimentationService, IExperimentationFilterProvider, TargetPopulation } from 'vscode-tas-client';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
+import { IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
 import { packageJson } from '../../env/common/packagejson';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
@@ -57,6 +58,7 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 		@IVSCodeExtensionContext context: IVSCodeExtensionContext,
 		@IEnvService envService: IEnvService,
 		@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore,
+		@IConfigurationService configurationService: IConfigurationService,
 		@ILogService logService: ILogService
 	) {
 
@@ -67,6 +69,6 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 			return getExperimentationService(id, version, targetPopulation, telemetryService, globalState, new GithubAccountFilterProvider(userInfoStore, logService), new CopilotExtensionsFilterProvider(logService));
 		};
 
-		super(delegateFn, context, copilotTokenStore, logService);
+		super(delegateFn, context, copilotTokenStore, configurationService, logService);
 	}
 }

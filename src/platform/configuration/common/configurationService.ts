@@ -150,6 +150,14 @@ export interface IConfigurationService {
 	 */
 	onDidChangeConfiguration: Event<ConfigurationChangeEvent>;
 
+
+	/**
+	 * Called by experimentation service to trigger updates to ExP based configurations
+	 *
+	 * @param treatments List of treatments that have been changed
+	 */
+	updateExperimentBasedConfiguration(treatments: string[]): void;
+
 	dumpConfig(): { [key: string]: string };
 }
 
@@ -233,6 +241,12 @@ export abstract class AbstractConfigurationService extends Disposable implements
 	abstract setConfig<T>(key: BaseConfig<T>, value: T): Thenable<void>;
 	abstract getExperimentBasedConfig<T extends ExperimentBasedConfigType>(key: ExperimentBasedConfig<T>, experimentationService: IExperimentationService): T;
 	abstract dumpConfig(): { [key: string]: string };
+	public updateExperimentBasedConfiguration(treatments: string[]): void {
+		if (treatments.length === 0) {
+			return;
+		}
+		this._onDidChangeConfiguration.fire({ affectsConfiguration: () => true });
+	}
 
 	public getConfigObservable<T>(key: Config<T>): IObservable<T> {
 		return this._getObservable_$show2FramesUp(key, () => this.getConfig(key));

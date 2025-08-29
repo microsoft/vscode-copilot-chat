@@ -235,4 +235,21 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 		}
 		return configProperties;
 	}
+
+	override updateExperimentBasedConfiguration(treatments: string[]): void {
+		if (treatments.length === 0) {
+			return;
+		}
+
+		// Refresh cached config, in case of an exp based config change
+		this.config = vscode.workspace.getConfiguration(CopilotConfigPrefix);
+
+		// Fire simulated event which checks if a configuration is affected in the treatments
+		this._onDidChangeConfiguration.fire({
+			affectsConfiguration: (section: string, _scope?: vscode.ConfigurationScope) => {
+				const result = treatments.some(t => t.startsWith(`config.${section}`));
+				return result;
+			}
+		});
+	}
 }

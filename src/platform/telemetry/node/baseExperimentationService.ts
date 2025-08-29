@@ -8,6 +8,7 @@ import { IntervalTimer } from '../../../util/vs/base/common/async';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
+import { IConfigurationService } from '../../configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { ILogService } from '../../log/common/logService';
 import { IExperimentationService, TreatmentsChangeEvent } from '../common/nullExperimentationService';
@@ -91,6 +92,7 @@ export class BaseExperimentationService extends Disposable implements IExperimen
 		delegateFn: TASClientDelegateFn,
 		@IVSCodeExtensionContext context: IVSCodeExtensionContext,
 		@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore,
+		@IConfigurationService configurationService: IConfigurationService,
 		@ILogService logService: ILogService
 	) {
 		super();
@@ -113,6 +115,8 @@ export class BaseExperimentationService extends Disposable implements IExperimen
 				this._onDidTreatmentsChange.fire({
 					affectedTreatmentVariables
 				});
+
+				configurationService.updateExperimentBasedConfiguration(affectedTreatmentVariables);
 			}
 		};
 

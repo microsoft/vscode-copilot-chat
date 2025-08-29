@@ -103,10 +103,14 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 	 * @todo this should be not be public, but it is for now to allow testing.
 	 */
 	async authFromGitHubToken(
-		githubToken: string
+		githubToken: string,
+		ghUsername: string
 	): Promise<TokenInfoOrError & NotGitHubLoginFailed> {
 		this._telemetryService.sendGHTelemetryEvent('auth.new_login');
-		const response = await this.fetchCopilotToken(githubToken);
+		const [response, userInfo] = await Promise.all([
+			this.fetchCopilotToken(githubToken),
+			this.fetchCopilotUserInfo(githubToken)
+		]);
 		if (!response) {
 			this._logService.warn('Failed to get copilot token');
 			this._telemetryService.sendGHTelemetryErrorEvent('auth.request_failed');
@@ -149,12 +153,8 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 		// adjust expires_at to the refresh time + a buffer to avoid expiring the token before the refresh can fire.
 		tokenInfo.expires_at = nowSeconds() + tokenInfo.refresh_in + 60; // extra buffer to allow refresh to happen successfully
 
-
-
 		// extend the token envelope
-		const userInfo = await this.fetchCopilotUserInfo(githubToken);
-		const authedUser = await this._baseOctokitservice.getCurrentAuthedUserWithToken(githubToken);
-		const login = authedUser?.login ?? 'unknown';
+		const login = ghUsername ?? 'unknown';
 		let isVscodeTeamMember = false;
 		// VS Code team members are guaranteed to be a part of an internal org so we can check that first to minimize API calls
 		if (containsInternalOrg(tokenInfo.organization_list ?? [])) {
@@ -262,6 +262,7 @@ export class CopilotTokenManagerFromGitHubToken extends BaseCopilotTokenManager 
 
 	constructor(
 		private readonly githubToken: string,
+		private readonly githubUsername: string,
 		@ILogService logService: ILogService,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IDomainService domainService: IDomainService,
@@ -275,7 +276,7 @@ export class CopilotTokenManagerFromGitHubToken extends BaseCopilotTokenManager 
 
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
 		if (!this.copilotToken || this.copilotToken.expires_at < nowSeconds() - (60 * 5 /* 5min */) || force) {
-			const tokenResult = await this.authFromGitHubToken(this.githubToken);
+			const tokenResult = await this.authFromGitHubToken(this.githubToken, this.githubUsername);
 			if (tokenResult.kind === 'failure') {
 				throw Error(
 					`Failed to get copilot token: ${tokenResult.reason.toString()} ${tokenResult.message ?? ''}`
@@ -288,7 +289,7 @@ export class CopilotTokenManagerFromGitHubToken extends BaseCopilotTokenManager 
 
 	async checkCopilotToken() {
 		if (!this.copilotToken || this.copilotToken.expires_at < nowSeconds()) {
-			const tokenResult = await this.authFromGitHubToken(this.githubToken);
+			const tokenResult = await this.authFromGitHubToken(this.githubToken, this.githubUsername);
 			if (tokenResult.kind === 'failure') {
 				return tokenResult;
 			}
