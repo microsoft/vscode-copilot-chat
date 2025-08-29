@@ -5,7 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { VSBuffer } from '../../../vs/base/common/buffer';
-import { MarkdownString } from './markdownString';
+import { MarkdownString } from '../../../vs/workbench/api/common/extHostTypes/markdownString';
 
 export class ChatResponseMarkdownPart {
 	value: vscode.MarkdownString;

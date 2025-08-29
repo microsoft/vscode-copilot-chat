@@ -1,13 +1,16 @@
+//!!! DO NOT modify, this file was COPIED from 'microsoft/vscode'
+
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { illegalArgument } from '../../../vs/base/common/errors';
+import type * as vscode from 'vscode';
+import { illegalArgument } from '../../../../base/common/errors';
+import { es5ClassCompat } from './es5ClassCompat';
 
+@es5ClassCompat
 export class Position {
-
-	__vscodeBrand: undefined;
 
 	static Min(...positions: Position[]): Position {
 		if (positions.length === 0) {
@@ -16,7 +19,7 @@ export class Position {
 		let result = positions[0];
 		for (let i = 1; i < positions.length; i++) {
 			const p = positions[i];
-			if (p.isBefore(result!)) {
+			if (p.isBefore(result)) {
 				result = p;
 			}
 		}
@@ -30,7 +33,7 @@ export class Position {
 		let result = positions[0];
 		for (let i = 1; i < positions.length; i++) {
 			const p = positions[i];
-			if (p.isAfter(result!)) {
+			if (p.isAfter(result)) {
 				result = p;
 			}
 		}
@@ -51,7 +54,7 @@ export class Position {
 		return false;
 	}
 
-	static of(obj: { line: number; character: number }): Position {
+	static of(obj: vscode.Position): Position {
 		if (obj instanceof Position) {
 			return obj;
 		} else if (this.isPosition(obj)) {
@@ -134,10 +137,8 @@ export class Position {
 
 	translate(change: { lineDelta?: number; characterDelta?: number }): Position;
 	translate(lineDelta?: number, characterDelta?: number): Position;
-	translate(
-		lineDeltaOrChange: number | undefined | { lineDelta?: number; characterDelta?: number },
-		characterDelta = 0
-	): Position {
+	translate(lineDeltaOrChange: number | undefined | { lineDelta?: number; characterDelta?: number }, characterDelta: number = 0): Position {
+
 		if (lineDeltaOrChange === null || characterDelta === null) {
 			throw illegalArgument();
 		}
@@ -149,8 +150,7 @@ export class Position {
 			lineDelta = lineDeltaOrChange;
 		} else {
 			lineDelta = typeof lineDeltaOrChange.lineDelta === 'number' ? lineDeltaOrChange.lineDelta : 0;
-			characterDelta =
-				typeof lineDeltaOrChange.characterDelta === 'number' ? lineDeltaOrChange.characterDelta : 0;
+			characterDelta = typeof lineDeltaOrChange.characterDelta === 'number' ? lineDeltaOrChange.characterDelta : 0;
 		}
 
 		if (lineDelta === 0 && characterDelta === 0) {
@@ -161,10 +161,8 @@ export class Position {
 
 	with(change: { line?: number; character?: number }): Position;
 	with(line?: number, character?: number): Position;
-	with(
-		lineOrChange: number | undefined | { line?: number; character?: number },
-		character: number = this.character
-	): Position {
+	with(lineOrChange: number | undefined | { line?: number; character?: number }, character: number = this.character): Position {
+
 		if (lineOrChange === null || character === null) {
 			throw illegalArgument();
 		}
@@ -172,8 +170,10 @@ export class Position {
 		let line: number;
 		if (typeof lineOrChange === 'undefined') {
 			line = this.line;
+
 		} else if (typeof lineOrChange === 'number') {
 			line = lineOrChange;
+
 		} else {
 			line = typeof lineOrChange.line === 'number' ? lineOrChange.line : this.line;
 			character = typeof lineOrChange.character === 'number' ? lineOrChange.character : this.character;
@@ -189,7 +189,7 @@ export class Position {
 		return { line: this.line, character: this.character };
 	}
 
-	toString() {
-		return `Position<${this.line}:${this.character}>`;
+	[Symbol.for('debug.description')]() {
+		return `(${this.line}:${this.character})`;
 	}
 }

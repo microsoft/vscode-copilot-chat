@@ -1,26 +1,30 @@
+//!!! DO NOT modify, this file was COPIED from 'microsoft/vscode'
+
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { illegalArgument } from '../../../vs/base/common/errors';
+import type * as vscode from 'vscode';
+import { illegalArgument } from '../../../../base/common/errors';
+import { es5ClassCompat } from './es5ClassCompat';
 import { Position } from './position';
 
+@es5ClassCompat
 export class Range {
 
-	__vscodeBrand: undefined;
-
-	static isRange(thing: any): thing is Range {
+	static isRange(thing: any): thing is vscode.Range {
 		if (thing instanceof Range) {
 			return true;
 		}
 		if (!thing) {
 			return false;
 		}
-		return Position.isPosition((<Range>thing).start) && Position.isPosition(<Range>thing.end);
+		return Position.isPosition((<Range>thing).start)
+			&& Position.isPosition((<Range>thing.end));
 	}
 
-	static of(obj: { start: { line: number; character: number }; end: { line: number; character: number } }): Range {
+	static of(obj: vscode.Range): Range {
 		if (obj instanceof Range) {
 			return obj;
 		}
@@ -41,24 +45,14 @@ export class Range {
 		return this._end;
 	}
 
-	constructor(start: Position, end: Position);
+	constructor(start: vscode.Position, end: vscode.Position);
 	constructor(start: Position, end: Position);
 	constructor(startLine: number, startColumn: number, endLine: number, endColumn: number);
-	constructor(
-		startLineOrStart: number | Position | Position,
-		startColumnOrEnd: number | Position | Position,
-		endLine?: number,
-		endColumn?: number
-	) {
+	constructor(startLineOrStart: number | Position | vscode.Position, startColumnOrEnd: number | Position | vscode.Position, endLine?: number, endColumn?: number) {
 		let start: Position | undefined;
 		let end: Position | undefined;
 
-		if (
-			typeof startLineOrStart === 'number' &&
-			typeof startColumnOrEnd === 'number' &&
-			typeof endLine === 'number' &&
-			typeof endColumn === 'number'
-		) {
+		if (typeof startLineOrStart === 'number' && typeof startColumnOrEnd === 'number' && typeof endLine === 'number' && typeof endColumn === 'number') {
 			start = new Position(startLineOrStart, startColumnOrEnd);
 			end = new Position(endLine, endColumn);
 		} else if (Position.isPosition(startLineOrStart) && Position.isPosition(startColumnOrEnd)) {
@@ -81,7 +75,9 @@ export class Range {
 
 	contains(positionOrRange: Position | Range): boolean {
 		if (Range.isRange(positionOrRange)) {
-			return this.contains(positionOrRange.start) && this.contains(positionOrRange.end);
+			return this.contains(positionOrRange.start)
+				&& this.contains(positionOrRange.end);
+
 		} else if (Position.isPosition(positionOrRange)) {
 			if (Position.of(positionOrRange).isBefore(this._start)) {
 				return false;
@@ -132,6 +128,7 @@ export class Range {
 	with(change: { start?: Position; end?: Position }): Range;
 	with(start?: Position, end?: Position): Range;
 	with(startOrChange: Position | undefined | { start?: Position; end?: Position }, end: Position = this.end): Range {
+
 		if (startOrChange === null || end === null) {
 			throw illegalArgument();
 		}
@@ -139,8 +136,10 @@ export class Range {
 		let start: Position;
 		if (!startOrChange) {
 			start = this.start;
+
 		} else if (Position.isPosition(startOrChange)) {
 			start = startOrChange;
+
 		} else {
 			start = startOrChange.start || this.start;
 			end = startOrChange.end || this.end;
@@ -156,7 +155,13 @@ export class Range {
 		return [this.start, this.end];
 	}
 
-	toString() {
-		return `Range<${this.start} -> ${this.end}>`;
+	[Symbol.for('debug.description')]() {
+		return getDebugDescriptionOfRange(this);
 	}
+}
+
+export function getDebugDescriptionOfRange(range: vscode.Range): string {
+	return range.isEmpty
+		? `[${range.start.line}:${range.start.character})`
+		: `[${range.start.line}:${range.start.character} -> ${range.end.line}:${range.end.character})`;
 }

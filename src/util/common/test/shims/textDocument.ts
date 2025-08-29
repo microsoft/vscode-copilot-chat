@@ -6,10 +6,10 @@
 import type * as vscode from 'vscode';
 import { URI as Uri } from '../../../vs/base/common/uri';
 import { ensureValidWordDefinition, getWordAtText } from '../../../vs/editor/common/core/wordHelper';
-import { EndOfLine } from './enums';
-import { Position } from './position';
-import { PrefixSumComputer } from './prefixSumComputer';
-import { Range } from './range';
+import { PrefixSumComputer } from '../../../vs/editor/common/model/prefixSumComputer';
+import { Position } from '../../../vs/workbench/api/common/extHostTypes/position';
+import { Range } from '../../../vs/workbench/api/common/extHostTypes/range';
+import { EndOfLine } from '../../../vs/workbench/api/common/extHostTypes/textEdit';
 
 export interface TextLine {
 	readonly lineNumber: number;

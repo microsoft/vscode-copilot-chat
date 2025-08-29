@@ -5,8 +5,6 @@
 
 import { createServiceIdentifier } from '../../../util/common/services';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
-import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
 
 export const ILogService = createServiceIdentifier<ILogService>('ILogService');
 
@@ -53,7 +51,7 @@ export interface ILogTarget {
 
 // Simple implementation of a log targe used for logging to the console.
 export class ConsoleLog implements ILogTarget {
-	constructor(private readonly prefix?: string) { }
+	constructor(private readonly prefix?: string, private readonly minLogLevel: LogLevel = LogLevel.Warning) { }
 
 	logIt(level: LogLevel, metadataStr: string, ...extra: any[]) {
 		if (this.prefix) {
@@ -66,6 +64,8 @@ export class ConsoleLog implements ILogTarget {
 			console.error(metadataStr, ...extra);
 		} else if (level === LogLevel.Warning) {
 			console.warn(metadataStr, ...extra);
+		} else if (level >= this.minLogLevel) {
+			console.log(metadataStr, ...extra);
 		}
 	}
 }
@@ -100,8 +100,6 @@ export class LogServiceImpl extends Disposable implements ILogService {
 
 	constructor(
 		logTargets: ILogTarget[],
-		@ISimulationTestContext simulationTestContext: ISimulationTestContext,
-		@IVSCodeExtensionContext context: IVSCodeExtensionContext,
 	) {
 		super();
 		this.logger = new LoggerImpl(logTargets);
