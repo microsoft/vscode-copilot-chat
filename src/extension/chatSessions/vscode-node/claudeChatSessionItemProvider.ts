@@ -5,6 +5,7 @@
 
 import * as os from 'os';
 import * as vscode from 'vscode';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -13,6 +14,44 @@ import { Event } from '../../../util/vs/base/common/event';
 import { basename } from '../../../util/vs/base/common/resources';
 import { ThemeIcon } from '../../../util/vs/base/common/themables';
 import { URI } from '../../../util/vs/base/common/uri';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
+
+export class ClaudeSessionStore {
+	private static StorageKey = 'claudeSessionIds';
+	private _internalSessionToInitialPrompt: Map<string, string> = new Map();
+
+	constructor(
+		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext
+	) { }
+
+	/**
+	 * This stuff is hopefully temporary until the chat session API is better aligned with the cli agent use-cases
+	 */
+	public setClaudeSessionId(internalSessionId: string, claudeSessionId: string) {
+		const curMap: Record<string, string> = this.extensionContext.workspaceState.get(ClaudeSessionStore.StorageKey) ?? {};
+		curMap[internalSessionId] = claudeSessionId;
+		curMap[claudeSessionId] = internalSessionId;
+		this.extensionContext.workspaceState.update(ClaudeSessionStore.StorageKey, curMap);
+	}
+
+	public setInitialPrompt(internalSessionId: string, prompt: string) {
+		this._internalSessionToInitialPrompt.set(internalSessionId, prompt);
+	}
+
+	public getAndConsumeInitialPrompt(sessionId: string): string | undefined {
+		const prompt = this._internalSessionToInitialPrompt.get(sessionId);
+		this._internalSessionToInitialPrompt.delete(sessionId);
+		return prompt;
+	}
+
+	/**
+	 * This is bidirectional, takes either an internal or Claude session ID and returns the corresponding one.
+	 */
+	public getSessionId(sessionId: string): string | undefined {
+		const curMap: Record<string, string> = this.extensionContext.workspaceState.get(ClaudeSessionStore.StorageKey) ?? {};
+		return curMap[sessionId];
+	}
+}
 
 /**
  * Chat session item provider for Claude Code.
@@ -22,6 +61,7 @@ export class ClaudeChatSessionItemProvider implements vscode.ChatSessionItemProv
 	public readonly onDidChangeChatSessionItems = Event.None;
 
 	constructor(
+		private readonly sessionStore: ClaudeSessionStore,
 		@IFileSystemService private readonly _fileSystem: IFileSystemService,
 		@ILogService private readonly _logService: ILogService,
 		@IWorkspaceService private readonly _workspace: IWorkspaceService,
@@ -71,8 +111,9 @@ export class ClaudeChatSessionItemProvider implements vscode.ChatSessionItemProv
 							return undefined;
 						}
 						const label = this._buildLabelFromFirstLine(firstLine);
+						const internalSessionId = this.sessionStore.getSessionId(sessionId) ?? sessionId;
 						const item: vscode.ChatSessionItem = {
-							id: sessionId,
+							id: internalSessionId,
 							label,
 							description: basename(folderUri),
 							tooltip: 'Claude Code session',
@@ -112,18 +153,26 @@ export class ClaudeChatSessionItemProvider implements vscode.ChatSessionItemProv
 		return items;
 	}
 
-	// public async provideNewChatSessionItem(): Promise<vscode.ChatSessionItem> {
-	// 	const sessionId = generateUuid();
-	// 	return {
-	// 		id: sessionId,
-	// 		label: 'Claude Code',
-	// 		description: 'Start a new session',
-	// 		tooltip: 'Claude Code new chat session',
-	// 	};
-	// }
+	public async provideNewChatSessionItem(options: {
+		readonly prompt?: string;
+		readonly history?: ReadonlyArray<vscode.ChatRequestTurn | vscode.ChatResponseTurn>;
+		metadata?: any;
+	}, token: vscode.CancellationToken): Promise<vscode.ChatSessionItem> {
+		const internal = generateUuid();
+		if (options.prompt) {
+			this.sessionStore.setInitialPrompt(internal, options.prompt);
+		}
+
+		return {
+			id: internal,
+			label: 'Claude Code',
+			description: 'Start a new session',
+			tooltip: 'Claude Code new chat session',
+		};
+	}
 
 	private _computeFolderSlug(folderUri: URI): string {
-		return folderUri.path.replace(/\//g, '-');
+		return folderUri.path.replace(/[\/\.]/g, '-');
 	}
 
 	private async _readFirstLine(fileUri: URI, token: vscode.CancellationToken): Promise<string | undefined> {

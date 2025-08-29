@@ -8,29 +8,23 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ClaudeAgentManager } from '../../agents/claude/vscode-node/claudeCodeAgent';
 import { IExtensionContribution } from '../../common/contributions';
-import { ClaudeChatSessionItemProvider } from './claudeChatSessionItemProvider';
+import { ChatSessionContentProvider } from './chatSessionContentProvider';
+import { ClaudeChatSessionItemProvider, ClaudeSessionStore } from './claudeChatSessionItemProvider';
 
 export class ChatSessionsContrib extends Disposable implements IExtensionContribution {
 	readonly id = 'chatSessions';
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
-		// @IRequestLogger requestLogger: IRequestLogger,
 	) {
 		super();
 
-		this._register(vscode.chat.registerChatSessionItemProvider('claude-code', instantiationService.createInstance(ClaudeChatSessionItemProvider)));
+		const sessionStore = instantiationService.createInstance(ClaudeSessionStore);
+		const sessionItemProvider = instantiationService.createInstance(ClaudeChatSessionItemProvider, sessionStore);
+		this._register(vscode.chat.registerChatSessionItemProvider('claude-code', sessionItemProvider));
 
 		const claudeAgentManager = instantiationService.createInstance(ClaudeAgentManager);
-		this._register(vscode.chat.registerChatSessionContentProvider('claude-code', {
-			provideChatSessionContent: async (sessionId, token) => {
-				return {
-					history: [],
-					requestHandler: (request, context, response, token) => {
-						return claudeAgentManager.handleRequest(request, context, response, token);
-					}
-				};
-			}
-		}));
+		const chatSessionContentProvider = new ChatSessionContentProvider(claudeAgentManager, sessionStore);
+		this._register(vscode.chat.registerChatSessionContentProvider('claude-code', chatSessionContentProvider));
 	}
 }

@@ -15,14 +15,14 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { AnthropicAdapterFactory } from './adapters/anthropicAdapter';
 import { IAgentStreamBlock, IProtocolAdapter, IProtocolAdapterFactory, IStreamingContext } from './adapters/types';
 
-export interface IServerConfig {
+export interface ILanguageModelServerConfig {
 	port: number;
 	nonce: string;
 }
 
 export class LanguageModelServer {
 	private server: http.Server;
-	private config: IServerConfig;
+	private config: ILanguageModelServerConfig;
 	private adapterFactories: Map<string, IProtocolAdapterFactory>;
 
 	constructor(
@@ -335,7 +335,7 @@ export class LanguageModelServer {
 		this.server.close();
 	}
 
-	public getConfig(): IServerConfig {
+	public getConfig(): ILanguageModelServerConfig {
 		return { ...this.config };
 	}
 

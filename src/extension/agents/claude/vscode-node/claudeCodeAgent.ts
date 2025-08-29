@@ -9,17 +9,14 @@ import { ConfigKey, IConfigurationService } from '../../../../platform/configura
 import { IEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { findLast } from '../../../../util/vs/base/common/arraysFind';
 import { DeferredPromise } from '../../../../util/vs/base/common/async';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseTurn } from '../../../../vscodeTypes';
-import { LanguageModelServer } from '../../vscode-node/langModelServer';
+import { ILanguageModelServerConfig, LanguageModelServer } from '../../vscode-node/langModelServer';
 
 export class ClaudeAgentManager extends Disposable {
 	private _langModelServer: LanguageModelServer | undefined;
-
 	private async getLangModelServer(): Promise<LanguageModelServer> {
 		if (!this._langModelServer) {
 			this._langModelServer = this.instantiationService.createInstance(LanguageModelServer);
@@ -32,49 +29,57 @@ export class ClaudeAgentManager extends Disposable {
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
-		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@IConfigurationService private readonly configService: IConfigurationService,
-		@IEnvService private readonly envService: IEnvService
 	) {
 		super();
 	}
 
-	public async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult> {
-		let sessionId = this.getSessionIdFromHistory(context);
+	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
 		try {
-			const result = await this.invokeClaudeWithSDK(request.toolInvocationToken, request.prompt, sessionId, stream, token);
-			sessionId = result.sessionId;
+			// Get server config, start server if needed
+			const serverConfig = (await this.getLangModelServer()).getConfig();
+			const session = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, claudeSessionId);
+			await session.invoke(
+				request.prompt,
+				request.toolInvocationToken,
+				stream,
+				token
+			);
+
+			return {
+				claudeSessionId: session.sessionId
+			};
 		} catch (invokeError) {
 			this.logService.error(invokeError as Error);
 			const errorMessage = (invokeError instanceof KnownClaudeError) ? invokeError.message : `Claude CLI Error: ${invokeError.message}`;
 			return {
 				errorDetails: { message: errorMessage },
-				metadata: { sessionId }
 			};
 		}
-
-		return {
-			metadata: { sessionId }
-		};
 	}
+}
 
-	private getSessionIdFromHistory(context: vscode.ChatContext): string | undefined {
-		const lastMessage = findLast(context.history, msg => msg instanceof ChatResponseTurn) as ChatResponseTurn | undefined;
-		const sessionId = lastMessage?.result?.metadata?.sessionId;
-		return sessionId;
-	}
+class KnownClaudeError extends Error { }
 
-	/**
-	 * Internal function to invoke Claude using the Claude Code SDK
-	 */
-	private async invokeClaudeWithSDK(toolInvocationToken: vscode.ChatParticipantToolToken, prompt: string, existingSessionId: string | undefined, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<{ sessionId?: string }> {
+class ClaudeCodeSession {
+	constructor(
+		private readonly serverConfig: ILanguageModelServerConfig,
+		public sessionId: string | undefined,
+		@ILogService private readonly logService: ILogService,
+		@IConfigurationService private readonly configService: IConfigurationService,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IEnvService private readonly envService: IEnvService
+	) { }
+
+	public async invoke(
+		prompt: string,
+		toolInvocationToken: vscode.ChatParticipantToolToken,
+		stream: vscode.ChatResponseStream,
+		token: vscode.CancellationToken
+	): Promise<void> {
 		const abortController = new AbortController();
 		token.onCancellationRequested(() => {
 			abortController.abort();
 		});
-
-		// Get server config, start server if needed
-		const serverConfig = (await this.getLangModelServer()).getConfig();
 
 		// Build options for the Claude Code SDK
 		// process.env.DEBUG = '1'; // debug messages from sdk.mjs
@@ -89,26 +94,19 @@ export class ClaudeAgentManager extends Disposable {
 			env: {
 				...process.env,
 				...(isDebugEnabled ? { DEBUG: '1' } : {}),
-				ANTHROPIC_BASE_URL: `http://localhost:${serverConfig.port}`,
-				ANTHROPIC_API_KEY: serverConfig.nonce,
+				ANTHROPIC_BASE_URL: `http://localhost:${this.serverConfig.port}`,
+				ANTHROPIC_API_KEY: this.serverConfig.nonce,
 				CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
 				USE_BUILTIN_RIPGREP: '0',
 				PATH: `${this.envService.appRoot}/node_modules/@vscode/ripgrep/bin${pathSep}${process.env.PATH}`
 			},
-			resume: existingSessionId, // doesn't work https://github.com/microsoft/vscode/issues/263111
+			resume: this.sessionId, // doesn't work https://github.com/microsoft/vscode/issues/263111
 			// permissionMode: 'acceptEdits',
 			// pathToClaudeCodeExecutable: '/Users/roblou/code/claude-code/cli.js',
 			canUseTool: async (name, input, opts) => {
 				return this.canUseTool(name, input, toolInvocationToken);
 			}
 		};
-
-		// Add resume session if provided
-		if (existingSessionId) {
-			options.resume = existingSessionId;
-		}
-
-		let sessionId: string | undefined;
 
 		this.logService.trace(`Claude CLI SDK: Starting query with options: ${JSON.stringify(options)}`);
 		const { query } = await import('@anthropic-ai/claude-code');
@@ -129,12 +127,12 @@ export class ClaudeAgentManager extends Disposable {
 		}
 
 		for await (const message of query({
-			prompt: createPromptIterable(prompt, existingSessionId),
+			prompt: createPromptIterable(prompt, this.sessionId),
 			options
 		})) {
 			this.logService.trace(`Claude CLI SDK Message: ${JSON.stringify(message, null, 2)}`);
 			if (message.session_id) {
-				sessionId = message.session_id;
+				this.sessionId = message.session_id;
 			}
 
 			if (message.type === 'assistant') {
@@ -165,8 +163,6 @@ export class ClaudeAgentManager extends Disposable {
 				}
 			}
 		}
-
-		return { sessionId };
 	}
 
 	/**
@@ -194,5 +190,3 @@ export class ClaudeAgentManager extends Disposable {
 		}
 	}
 }
-
-class KnownClaudeError extends Error { }
