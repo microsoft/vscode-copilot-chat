@@ -39,6 +39,7 @@ const baseNodeBuildOptions = {
 		'zeromq',
 		'electron', // this is for simulation workbench,
 		'sqlite3',
+		'onnxruntime-node',
 		...(isDev ? [] : ['dotenv', 'source-map-support'])
 	],
 	platform: 'node',
@@ -269,12 +270,30 @@ const typeScriptServerPluginBuildOptions = {
 	]
 } satisfies esbuild.BuildOptions;
 
+async function copyNESClassifierModels() {
+	const srcDirPath = path.join(__dirname, './src/extension/inlineEdits/vscode-node/classifier/models');
+	const dstDirPath = path.join(__dirname, './dist/models');
+	const pattern = path.join(srcDirPath, '/**/*.onnx');
+	console.log(`[watch] globbing for model files with pattern: ${pattern}`);
+	const modelFiles = await glob(pattern, { cwd: REPO_ROOT, posix: true });
+	console.log(`[watch] copying files {${modelFiles.join(', ')}}`);
+	await mkdir(dstDirPath, { recursive: true });
+	await Promise.all(modelFiles.map(file => {
+		console.log(`copying ${file} to ${dstDirPath}`);
+		// return copyFile(path.join(source, file), path.join(destination, path.basename(file)));
+	}));
+}
+
 async function main() {
 	if (!isDev) {
 		applyPackageJsonPatch(isPreRelease);
 	}
 
+	console.log("Hello from esbuild script");
+
 	await typeScriptServerPluginPackageJsonInstall();
+
+	await copyNESClassifierModels();
 
 	if (isWatch) {
 

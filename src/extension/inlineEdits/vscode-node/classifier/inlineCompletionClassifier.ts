@@ -113,13 +113,11 @@ export class InlineCompletionClassifier {
 			const probs = exps.map(x => x / sumExps);
 			console.log("Probabilities:", probs);
 
-			const shouldProceed = probs[1] > 0.5;
+			const probability = probs[1];
 			const processingTime = Date.now() - startTime;
-
-			this.logService.trace(`[InlineCompletionClassifier] Classification result: shouldProceed=${shouldProceed}, confidence=${probability.toFixed(3)}, time=${processingTime}ms`);
-
+			this.logService.trace(`[InlineCompletionClassifier] Classification result: confidence=${probability.toFixed(3)}, time=${processingTime}ms`);
 			return {
-				confidence: probs[1],
+				confidence: probability,
 				processingTime: Date.now() - startTime
 			};
 

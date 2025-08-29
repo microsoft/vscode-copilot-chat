@@ -124,9 +124,8 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
 		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, this._expService);
 
-		// Initialize the classifier
-		this._classifier = new InlineCompletionClassifier(this._logService);
 		// Initialize the classifier asynchronously (don't await to avoid blocking constructor)
+		this._classifier = new InlineCompletionClassifier(this._logService);
 		this._classifier.initialize().catch(error => {
 			this._logService.error('[InlineCompletionProvider] Failed to initialize classifier:', error);
 		});
@@ -152,12 +151,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 		// Run classifier first to determine if we should proceed
 		const classificationResult = await this._classifier.classify(document, position);
-		console.log(`[InlineCompletionProvider] Classifier result: shouldProceed=${classificationResult.shouldProceed}, confidence=${classificationResult.confidence.toFixed(3)}, processingTime=${classificationResult.processingTime}ms`);
-
-		if (!classificationResult.shouldProceed) {
-			tracer.returns('classifier determined not to proceed');
-			return undefined;
-		}
+		console.log(`[InlineCompletionProvider] Classifier result: confidence=${classificationResult.confidence?.toFixed(3)}, processingTime=${classificationResult.processingTime}ms`);
 
 		const isCompletionsEnabled = this._isCompletionsEnabled(document);
 
