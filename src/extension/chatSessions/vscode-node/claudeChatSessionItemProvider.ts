@@ -72,6 +72,11 @@ export class ClaudeChatSessionItemProvider implements vscode.ChatSessionItemProv
 		const home = os.homedir();
 		const items: vscode.ChatSessionItem[] = [];
 
+		// The implementation below isn't quite right, disable for now
+		if (1 === 1) {
+			return items;
+		}
+
 		for (const folderUri of folders) {
 			if (token.isCancellationRequested) {
 				return items;
