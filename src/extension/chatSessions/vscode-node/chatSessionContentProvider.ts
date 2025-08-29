@@ -6,13 +6,13 @@
 import * as vscode from 'vscode';
 import { ChatLocation } from 'vscode';
 import { ClaudeAgentManager } from '../../agents/claude/vscode-node/claudeCodeAgent';
-import { ClaudeSessionStore } from './claudeChatSessionItemProvider';
+import { ClaudeSessionDataStore } from './claudeChatSessionItemProvider';
 
 export class ChatSessionContentProvider implements vscode.ChatSessionContentProvider {
 
 	constructor(
 		private readonly claudeAgentManager: ClaudeAgentManager,
-		private readonly sessionStore: ClaudeSessionStore
+		private readonly sessionStore: ClaudeSessionDataStore
 	) { }
 
 	async provideChatSessionContent(internalSessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {

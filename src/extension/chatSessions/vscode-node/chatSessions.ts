@@ -9,7 +9,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ClaudeAgentManager } from '../../agents/claude/vscode-node/claudeCodeAgent';
 import { IExtensionContribution } from '../../common/contributions';
 import { ChatSessionContentProvider } from './claudeChatSessionContentProvider';
-import { ClaudeChatSessionItemProvider, ClaudeSessionStore } from './claudeChatSessionItemProvider';
+import { ClaudeChatSessionItemProvider, ClaudeSessionDataStore } from './claudeChatSessionItemProvider';
 
 export class ChatSessionsContrib extends Disposable implements IExtensionContribution {
 	readonly id = 'chatSessions';
@@ -19,11 +19,11 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 	) {
 		super();
 
-		const sessionStore = instantiationService.createInstance(ClaudeSessionStore);
-		const sessionItemProvider = instantiationService.createInstance(ClaudeChatSessionItemProvider, sessionStore);
+		const sessionStore = instantiationService.createInstance(ClaudeSessionDataStore);
+		const sessionItemProvider = this._register(instantiationService.createInstance(ClaudeChatSessionItemProvider, sessionStore));
 		this._register(vscode.chat.registerChatSessionItemProvider('claude-code', sessionItemProvider));
 
-		const claudeAgentManager = instantiationService.createInstance(ClaudeAgentManager);
+		const claudeAgentManager = this._register(instantiationService.createInstance(ClaudeAgentManager));
 		const chatSessionContentProvider = new ChatSessionContentProvider(claudeAgentManager, sessionStore);
 		this._register(vscode.chat.registerChatSessionContentProvider('claude-code', chatSessionContentProvider));
 	}
