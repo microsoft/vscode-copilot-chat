@@ -271,16 +271,20 @@ const typeScriptServerPluginBuildOptions = {
 } satisfies esbuild.BuildOptions;
 
 async function copyNESClassifierModels() {
-	const srcDirPath = path.join(__dirname, './src/extension/inlineEdits/vscode-node/classifier/models');
-	const dstDirPath = path.join(__dirname, './dist/models');
-	const pattern = path.join(srcDirPath, '/**/*.onnx');
+	const prefix = 'src/extension/inlineEdits/vscode-node/classifier/models/';
+	const pattern = prefix + '**/*';
+	const dstBasePath = path.join(__dirname, './dist/models');
 	console.log(`[watch] globbing for model files with pattern: ${pattern}`);
-	const modelFiles = await glob(pattern, { cwd: REPO_ROOT, posix: true });
+	const modelFiles = await glob(pattern, { cwd: REPO_ROOT, posix: true, nodir: true });
 	console.log(`[watch] copying files {${modelFiles.join(', ')}}`);
-	await mkdir(dstDirPath, { recursive: true });
 	await Promise.all(modelFiles.map(file => {
-		console.log(`copying ${file} to ${dstDirPath}`);
-		// return copyFile(path.join(source, file), path.join(destination, path.basename(file)));
+		const relativePath = path.posix.relative(prefix, file);
+		const dstFilePath = path.join(dstBasePath, relativePath);
+		const dstDirPath = path.dirname(dstFilePath);
+		mkdir(dstDirPath, { recursive: true });
+		console.log(`making directory ${dstDirPath}`);
+		console.log(`copying ${file} to ${dstFilePath}`);
+		return copyFile(file, dstFilePath);
 	}));
 }
 
