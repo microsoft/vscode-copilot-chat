@@ -8,7 +8,7 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ClaudeAgentManager } from '../../agents/claude/vscode-node/claudeCodeAgent';
 import { IExtensionContribution } from '../../common/contributions';
-import { ChatSessionContentProvider } from './chatSessionContentProvider';
+import { ChatSessionContentProvider } from './claudeChatSessionContentProvider';
 import { ClaudeChatSessionItemProvider, ClaudeSessionStore } from './claudeChatSessionItemProvider';
 
 export class ChatSessionsContrib extends Disposable implements IExtensionContribution {
