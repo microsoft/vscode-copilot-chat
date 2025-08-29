@@ -10,10 +10,7 @@
 		"declarationMap": true,
 		"types": [
 			"node"
-		],
-		"paths": {
-			"vscode": ["./src/util/common/test/shims/vscodeTypesShim.ts"]
-		}
+		]
 	},
 	"include": [
 		"src",

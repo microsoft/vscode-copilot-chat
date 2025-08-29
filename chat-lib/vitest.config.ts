@@ -16,11 +16,6 @@ export default defineConfig(({ mode }) => ({
 			'**/.{idea,git,cache,output,temp}/**'
 		],
 		env: loadEnv(mode, process.cwd(), ''),
-		alias: {
-			// similar to aliasing in the esbuild config `.esbuild.ts`
-			// vitest requires aliases to be absolute paths. reference: https://vitejs.dev/config/shared-options#resolve-alias
-			'vscode': path.resolve(__dirname, 'src/_internal/util/common/test/shims/vscodeTypesShim.ts'),
-		},
 		environment: 'node',
 		globals: true
 	}

@@ -16,7 +16,7 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ThemeIcon } from '../../../util/vs/base/common/themables';
 import { assertType } from '../../../util/vs/base/common/types';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
-import { ChatRequest, LanguageModelToolResult2 } from '../../../vscodeTypes';
+import type { ChatRequest, LanguageModelToolResult2 } from '../../../vscodeTypes';
 import type { IModelAPIResponse } from '../../endpoint/common/endpointProvider';
 import { Completion } from '../../nesFetch/common/completionsAPI';
 import { CompletionsFetchFailure, ModelParams } from '../../nesFetch/common/completionsFetchService';

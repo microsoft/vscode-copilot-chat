@@ -219,6 +219,12 @@ class ChatLibExtractor {
 	private transformFileContent(content: string, filePath: string): string {
 		let transformed = content;
 
+		// Rewrite non-type imports of 'vscode' to use vscodeTypesShim
+		transformed = this.rewriteVscodeImports(transformed, filePath);
+
+		// Rewrite imports from local vscodeTypes to use vscodeTypesShim
+		transformed = this.rewriteVscodeTypesImports(transformed, filePath);
+
 		// Only rewrite relative imports for main.ts (chatLibMain.ts)
 		if (filePath === 'src/lib/node/chatLibMain.ts') {
 			transformed = transformed.replace(
@@ -231,6 +237,75 @@ class ChatLibExtractor {
 		}
 
 		return transformed;
+	}
+
+	private rewriteVscodeImports(content: string, filePath: string): string {
+		// Don't rewrite vscode imports in the main vscodeTypes.ts file
+		if (filePath === 'src/vscodeTypes.ts') {
+			return content;
+		}
+
+		// Pattern to match import statements from 'vscode'
+		// This regex captures:
+		// - import * as vscode from 'vscode'
+		// - import { Uri, window } from 'vscode'
+		// - import vscode from 'vscode'
+		// But NOT type-only imports like:
+		// - import type { Uri } from 'vscode'
+		// - import type * as vscode from 'vscode'
+		const vscodeImportRegex = /^(\s*import\s+)(?!type\s+)([^'"]*)\s+from\s+['"]vscode['"];?\s*$/gm;
+
+		return content.replace(vscodeImportRegex, (match, importPrefix, importClause) => {
+			// Calculate the relative path to vscodeTypesShim based on the current file location
+			const shimPath = this.getVscodeTypesShimPath(filePath);
+			return `${importPrefix}${importClause.trim()} from '${shimPath}';`;
+		});
+	}
+
+	private rewriteVscodeTypesImports(content: string, filePath: string): string {
+		// Don't rewrite vscodeTypes imports in the main vscodeTypes.ts file itself
+		if (filePath === 'src/vscodeTypes.ts') {
+			return content;
+		}
+
+		// Don't rewrite in the vscodeTypesShim file itself to avoid circular imports
+		if (filePath === 'src/util/common/test/shims/vscodeTypesShim.ts') {
+			return content;
+		}
+
+		// Pattern to match non-type imports from local vscodeTypes
+		// This regex captures imports like:
+		// - import { ChatErrorLevel } from '../../../vscodeTypes'
+		// - import * as vscodeTypes from '../../../vscodeTypes'
+		// But NOT type-only imports like:
+		// - import type { ChatErrorLevel } from '../../../vscodeTypes'
+		const vscodeTypesImportRegex = /^(\s*import\s+)(?!type\s+)([^'"]*)\s+from\s+['"]([^'"]*\/vscodeTypes)['"];?\s*$/gm;
+
+		return content.replace(vscodeTypesImportRegex, (match, importPrefix, importClause, importPath) => {
+			// Calculate the relative path to vscodeTypesShim based on the current file location
+			const shimPath = this.getVscodeTypesShimPath(filePath);
+			return `${importPrefix}${importClause.trim()} from '${shimPath}';`;
+		});
+	}
+
+	private getVscodeTypesShimPath(filePath: string): string {
+		// For main.ts (chatLibMain.ts), use the _internal structure
+		if (filePath === 'src/lib/node/chatLibMain.ts') {
+			return './_internal/util/common/test/shims/vscodeTypesShim';
+		}
+
+		// For other files, calculate relative path from their location to the shim
+		// The target shim location will be: _internal/util/common/test/shims/vscodeTypesShim
+		// Files are placed in: _internal/<original_path_without_src>
+
+		// Remove 'src/' prefix and calculate depth
+		const relativePath = filePath.replace(/^src\//, '');
+		const pathSegments = relativePath.split('/');
+		const depth = pathSegments.length - 1; // -1 because the last segment is the filename
+
+		// Go up 'depth' levels, then down to the shim
+		const upLevels = '../'.repeat(depth);
+		return `${upLevels}util/common/test/shims/vscodeTypesShim`;
 	}
 
 	private rewriteImportPath(fromFile: string, importPath: string): string {
