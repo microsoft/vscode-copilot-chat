@@ -28,6 +28,11 @@ extends:
     npmPackages:
       - name: vscode-copilot-chat
         buildSteps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: 22.x
+            displayName: 🛠 Install Node.js (22.x)
+
           - script: npm ci && npm run extract-chat-lib && rm -rf node_modules
 
           - script: npm ci
@@ -39,9 +44,9 @@ extends:
           - name: Linux
             nodeVersions: [22.x]
           # - name: MacOS
-          #   nodeVersions: [20.x]
+          #   nodeVersions: [22.x]
           # - name: Windows
-          #   nodeVersions: [20.x]
+          #   nodeVersions: [22.x]
         workingDirectory: chat-lib
         testSteps:
           - script: npm ci && npm run extract-chat-lib && rm -rf node_modules
