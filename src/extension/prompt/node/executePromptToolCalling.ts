@@ -11,7 +11,6 @@ import { IEndpointProvider } from '../../../platform/endpoint/common/endpointPro
 import { ILogService } from '../../../platform/log/common/logService';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart, ChatResponseReferencePart } from '../../../vscodeTypes';
 import { IToolCallingLoopOptions, ToolCallingLoop, ToolCallingLoopFetchOptions } from '../../intents/node/toolCallingLoop';
@@ -41,9 +40,8 @@ export class ExecutePromptToolCallingLoop extends ToolCallingLoop<IExecutePrompt
 		@IToolsService private readonly toolsService: IToolsService,
 		@IAuthenticationChatUpgradeService authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 		@ITelemetryService telemetryService: ITelemetryService,
-		@IThinkingDataService thinkingDataService: IThinkingDataService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, thinkingDataService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService);
 	}
 
 	private async getEndpoint(request: ChatRequest) {

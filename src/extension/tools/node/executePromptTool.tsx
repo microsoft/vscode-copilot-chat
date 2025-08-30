@@ -5,8 +5,8 @@
 
 import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
-import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ExtendedLanguageModelToolResult, LanguageModelTextPart, MarkdownString } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
@@ -25,7 +25,7 @@ class ExecutePromptTool implements ICopilotTool<IExecutePromptParams> {
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
-		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
 	) { }
 
@@ -37,8 +37,7 @@ class ExecutePromptTool implements ICopilotTool<IExecutePromptParams> {
 		// Read the prompt file as text and include a reference
 		const uri = resolveToolInputPath(options.input.filePath, this.promptPathRepresentationService);
 		await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, uri));
-		const doc = await this.workspaceService.openTextDocument(uri);
-		const promptText = doc.getText();
+		const promptText = (await this.fileSystemService.readFile(uri)).toString();
 
 		const loop = this.instantiationService.createInstance(ExecutePromptToolCallingLoop, {
 			toolCallLimit: 5,
