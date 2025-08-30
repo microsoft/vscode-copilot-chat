@@ -15,6 +15,7 @@ import { isWindows } from '../../../../util/vs/base/common/platform';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ILanguageModelServerConfig, LanguageModelServer } from '../../vscode-node/langModelServer';
 
+// Manages Claude Code agent interactions and language model server lifecycle
 export class ClaudeAgentManager extends Disposable {
 	private _langModelServer: LanguageModelServer | undefined;
 	private async getLangModelServer(): Promise<LanguageModelServer> {

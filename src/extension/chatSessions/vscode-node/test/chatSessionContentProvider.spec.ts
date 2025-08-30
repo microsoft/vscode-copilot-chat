@@ -1,0 +1,570 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+import Anthropic from '@anthropic-ai/sdk';
+import { readFile } from 'fs/promises';
+import * as path from 'path';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as vscode from 'vscode';
+import { FileType } from '../../../../platform/filesystem/common/fileTypes';
+import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
+import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
+import { TestLogService } from '../../../../platform/testing/common/testLogService';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { URI } from '../../../../util/vs/base/common/uri';
+import { ChatLocation, ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
+import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../../agents/claude/node/claudeCodeSessionService';
+import { ClaudeAgentManager } from '../../../agents/claude/vscode-node/claudeCodeAgent';
+import { ClaudeChatSessionContentProvider } from '../claudeChatSessionContentProvider';
+import { ClaudeSessionDataStore } from '../claudeChatSessionItemProvider';
+
+// Mock os.homedir to return a test path
+vi.mock('os', async () => {
+	const actual = await vi.importActual('os');
+	return {
+		...actual,
+		homedir: vi.fn(() => '/home/user')
+	};
+});
+
+// Mock types for testing
+interface MockClaudeSession {
+	id: string;
+	messages: Array<{
+		type: 'user' | 'assistant';
+		message: Anthropic.MessageParam | Anthropic.Message;
+	}>;
+}
+
+describe('ChatSessionContentProvider', () => {
+	let mockClaudeAgentManager: ClaudeAgentManager;
+	let mockSessionStore: ClaudeSessionDataStore;
+	let mockSessionService: IClaudeCodeSessionService;
+	let provider: ClaudeChatSessionContentProvider;
+
+	beforeEach(() => {
+		mockClaudeAgentManager = {
+			handleRequest: vi.fn().mockResolvedValue({ claudeSessionId: 'test-claude-session' })
+		} as any;
+
+		mockSessionStore = {
+			getAndConsumeInitialPrompt: vi.fn(),
+			setClaudeSessionId: vi.fn(),
+			getSessionId: vi.fn()
+		} as any;
+
+		mockSessionService = {
+			getSession: vi.fn()
+		} as any;
+
+		provider = new ClaudeChatSessionContentProvider(
+			mockClaudeAgentManager,
+			mockSessionStore,
+			mockSessionService
+		);
+	});
+
+	// Helper function to create simplified objects for snapshot testing
+	function mapHistoryForSnapshot(history: readonly (vscode.ChatRequestTurn | vscode.ChatResponseTurn2)[]) {
+		return history.map(turn => {
+			if (turn instanceof ChatRequestTurn) {
+				return {
+					type: 'request',
+					prompt: turn.prompt
+				};
+			} else if (turn instanceof ChatResponseTurn2) {
+				return {
+					type: 'response',
+					parts: turn.response.map(part => {
+						if (part instanceof ChatResponseMarkdownPart) {
+							return {
+								type: 'markdown',
+								content: part.value.value
+							};
+						} else if (part instanceof ChatToolInvocationPart) {
+							return {
+								type: 'tool',
+								toolName: part.toolName,
+								toolCallId: part.toolCallId,
+								isError: part.isError,
+								invocationMessage: part.invocationMessage
+									? (typeof part.invocationMessage === 'string'
+										? part.invocationMessage
+										: part.invocationMessage.value)
+									: undefined
+							};
+						}
+						return { type: 'unknown' };
+					})
+				};
+			}
+			return { type: 'unknown' };
+		});
+	}
+
+	describe('provideChatSessionContent', () => {
+		it('returns empty history when no existing session', async () => {
+			vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue('test prompt');
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
+
+			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
+
+			expect(result.history).toEqual([]);
+			expect(mockSessionService.getSession).toHaveBeenCalledWith('test-session', CancellationToken.None);
+		});
+
+		it('converts user messages to ChatRequestTurn2', async () => {
+			const mockSession: MockClaudeSession = {
+				id: 'test-session',
+				messages: [
+					{
+						type: 'user',
+						message: {
+							role: 'user',
+							content: 'Hello, how are you?'
+						} as Anthropic.MessageParam
+					}
+				]
+			};
+
+			vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue(undefined);
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
+
+			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
+
+			expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
+				[
+				  {
+				    "prompt": "Hello, how are you?",
+				    "type": "request",
+				  },
+				]
+			`);
+		});
+
+		it('converts assistant messages with text to ChatResponseTurn2', async () => {
+			const mockSession: MockClaudeSession = {
+				id: 'test-session',
+				messages: [
+					{
+						type: 'assistant',
+						message: {
+							id: 'msg-1',
+							type: 'message',
+							role: 'assistant',
+							content: [
+								{
+									type: 'text',
+									text: 'I am doing well, thank you!'
+								}
+							],
+							model: 'claude-3-sonnet',
+							stop_reason: 'end_turn',
+							stop_sequence: null,
+							usage: { input_tokens: 10, output_tokens: 8 }
+						} as Anthropic.Message
+					}
+				]
+			};
+
+			vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue(undefined);
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
+
+			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
+
+			expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
+				[
+				  {
+				    "parts": [
+				      {
+				        "content": "I am doing well, thank you!",
+				        "type": "markdown",
+				      },
+				    ],
+				    "type": "response",
+				  },
+				]
+			`);
+		});
+
+		it('converts assistant messages with tool_use to ChatToolInvocationPart', async () => {
+			const mockSession: MockClaudeSession = {
+				id: 'test-session',
+				messages: [
+					{
+						type: 'assistant',
+						message: {
+							id: 'msg-1',
+							type: 'message',
+							role: 'assistant',
+							content: [
+								{
+									type: 'tool_use',
+									id: 'tool-1',
+									name: 'bash',
+									input: { command: 'ls -la' }
+								}
+							],
+							model: 'claude-3-sonnet',
+							stop_reason: 'tool_use',
+							stop_sequence: null,
+							usage: { input_tokens: 15, output_tokens: 12 }
+						} as Anthropic.Message
+					}
+				]
+			};
+
+			vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue(undefined);
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
+
+			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
+
+			expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
+				[
+				  {
+				    "parts": [
+				      {
+				        "invocationMessage": "**bash**",
+				        "isError": false,
+				        "toolCallId": "tool-1",
+				        "toolName": "bash",
+				        "type": "tool",
+				      },
+				    ],
+				    "type": "response",
+				  },
+				]
+			`);
+		});
+
+		it('creates activeResponseCallback that calls claudeAgentManager', async () => {
+			vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue('initial prompt');
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
+			vi.mocked(mockClaudeAgentManager.handleRequest).mockResolvedValue({ claudeSessionId: 'new-claude-session' });
+
+			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
+
+			// Mock stream and test the callback
+			const mockStream = {} as vscode.ChatResponseStream;
+			if (result.activeResponseCallback) {
+				await result.activeResponseCallback(mockStream, CancellationToken.None);
+			}
+
+			expect(mockClaudeAgentManager.handleRequest).toHaveBeenCalledWith(
+				undefined,
+				expect.objectContaining({
+					prompt: 'initial prompt',
+					location: ChatLocation.Panel
+				}),
+				{ history: [] },
+				mockStream,
+				CancellationToken.None
+			);
+
+			expect(mockSessionStore.setClaudeSessionId).toHaveBeenCalledWith('test-session', 'new-claude-session');
+		});
+
+		it('creates requestHandler that calls claudeAgentManager with session id', async () => {
+			vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue(undefined);
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
+			vi.mocked(mockSessionStore.getSessionId).mockReturnValue('existing-claude-session');
+
+			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
+
+			// Mock request, context, and stream
+			const mockRequest = { prompt: 'test request' } as vscode.ChatRequest;
+			const mockContext = { history: [] } as vscode.ChatContext;
+			const mockStream = {} as vscode.ChatResponseStream;
+
+			if (result.requestHandler) {
+				result.requestHandler(mockRequest, mockContext, mockStream, CancellationToken.None);
+			}
+
+			expect(mockSessionStore.getSessionId).toHaveBeenCalledWith('test-session');
+			expect(mockClaudeAgentManager.handleRequest).toHaveBeenCalledWith(
+				'existing-claude-session',
+				mockRequest,
+				mockContext,
+				mockStream,
+				CancellationToken.None
+			);
+		});
+	});
+
+	it('handles mixed content with text and tool_use', async () => {
+		const mockSession: MockClaudeSession = {
+			id: 'test-session',
+			messages: [
+				{
+					type: 'assistant',
+					message: {
+						id: 'msg-1',
+						type: 'message',
+						role: 'assistant',
+						content: [
+							{
+								type: 'text',
+								text: 'Let me run a command:'
+							},
+							{
+								type: 'tool_use',
+								id: 'tool-1',
+								name: 'bash',
+								input: { command: 'pwd' }
+							}
+						],
+						model: 'claude-3-sonnet',
+						stop_reason: 'tool_use',
+						stop_sequence: null,
+						usage: { input_tokens: 20, output_tokens: 15 }
+					} as Anthropic.Message
+				}
+			]
+		};
+
+		vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue(undefined);
+		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
+
+		const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
+
+		expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
+			[
+			  {
+			    "parts": [
+			      {
+			        "content": "Let me run a command:",
+			        "type": "markdown",
+			      },
+			      {
+			        "invocationMessage": "**bash**",
+			        "isError": false,
+			        "toolCallId": "tool-1",
+			        "toolName": "bash",
+			        "type": "tool",
+			      },
+			    ],
+			    "type": "response",
+			  },
+			]
+		`);
+	});
+
+	it('handles complete tool invocation flow: user → assistant with tool_use → user with tool_result', async () => {
+		const mockSession: MockClaudeSession = {
+			id: 'test-session',
+			messages: [
+				// Initial user message
+				{
+					type: 'user',
+					message: {
+						role: 'user',
+						content: 'Can you list the files in the current directory?'
+					} as Anthropic.MessageParam
+				},
+				// Assistant message with text and tool_use
+				{
+					type: 'assistant',
+					message: {
+						id: 'msg-1',
+						type: 'message',
+						role: 'assistant',
+						content: [
+							{
+								type: 'text',
+								text: 'I\'ll list the files for you.'
+							},
+							{
+								type: 'tool_use',
+								id: 'tool-1',
+								name: 'bash',
+								input: { command: 'ls -la' }
+							}
+						],
+						model: 'claude-3-sonnet',
+						stop_reason: 'tool_use',
+						stop_sequence: null,
+						usage: { input_tokens: 20, output_tokens: 15 }
+					} as Anthropic.Message
+				},
+				// User message with tool_result
+				{
+					type: 'user',
+					message: {
+						role: 'user',
+						content: [
+							{
+								type: 'tool_result',
+								tool_use_id: 'tool-1',
+								content: 'total 8\ndrwxr-xr-x  3 user user 4096 Aug 29 10:00 .\ndrwxr-xr-x  5 user user 4096 Aug 29 09:30 ..\n-rw-r--r--  1 user user  256 Aug 29 10:00 file.txt',
+								is_error: false
+							}
+						]
+					} as Anthropic.MessageParam
+				}
+			]
+		};
+
+		vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue(undefined);
+		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
+
+		const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
+
+		expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
+			[
+			  {
+			    "prompt": "Can you list the files in the current directory?",
+			    "type": "request",
+			  },
+			  {
+			    "parts": [
+			      {
+			        "content": "I'll list the files for you.",
+			        "type": "markdown",
+			      },
+			      {
+			        "invocationMessage": "Used tool: bash",
+			        "isError": false,
+			        "toolCallId": "tool-1",
+			        "toolName": "bash",
+			        "type": "tool",
+			      },
+			    ],
+			    "type": "response",
+			  },
+			]
+		`);
+	}); it('handles user messages with complex content blocks', async () => {
+		const mockSession: MockClaudeSession = {
+			id: 'test-session',
+			messages: [
+				{
+					type: 'user',
+					message: {
+						role: 'user',
+						content: [
+							{
+								type: 'text',
+								text: 'Check this result: '
+							},
+							{
+								type: 'tool_result',
+								tool_use_id: 'tool-1',
+								content: 'Command executed successfully',
+								is_error: false
+							}
+						]
+					} as Anthropic.MessageParam
+				}
+			]
+		};
+
+		vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue(undefined);
+		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
+
+		const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
+
+		expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
+			[
+			  {
+			    "prompt": "Check this result: ",
+			    "type": "request",
+			  },
+			]
+		`);
+	});
+
+	it('creates activeResponseCallback that calls claudeAgentManager', async () => {
+		vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue('initial prompt');
+		vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
+		vi.mocked(mockClaudeAgentManager.handleRequest).mockResolvedValue({ claudeSessionId: 'new-claude-session' });
+
+		const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
+
+		// Mock stream and test the callback
+		const mockStream = {} as vscode.ChatResponseStream;
+		if (result.activeResponseCallback) {
+			await result.activeResponseCallback(mockStream, CancellationToken.None);
+		}
+
+		expect(mockClaudeAgentManager.handleRequest).toHaveBeenCalledWith(
+			undefined,
+			expect.objectContaining({
+				prompt: 'initial prompt',
+				location: ChatLocation.Panel
+			}),
+			{ history: [] },
+			mockStream,
+			CancellationToken.None
+		);
+
+		expect(mockSessionStore.setClaudeSessionId).toHaveBeenCalledWith('test-session', 'new-claude-session');
+	});
+
+	it('creates requestHandler that calls claudeAgentManager with session id', async () => {
+		vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue(undefined);
+		vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
+		vi.mocked(mockSessionStore.getSessionId).mockReturnValue('existing-claude-session');
+
+		const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
+
+		// Mock request, context, and stream
+		const mockRequest = { prompt: 'test request' } as vscode.ChatRequest;
+		const mockContext = { history: [] } as vscode.ChatContext;
+		const mockStream = {} as vscode.ChatResponseStream;
+
+		if (result.requestHandler) {
+			result.requestHandler(mockRequest, mockContext, mockStream, CancellationToken.None);
+		}
+
+		expect(mockSessionStore.getSessionId).toHaveBeenCalledWith('test-session');
+		expect(mockClaudeAgentManager.handleRequest).toHaveBeenCalledWith(
+			'existing-claude-session',
+			mockRequest,
+			mockContext,
+			mockStream,
+			CancellationToken.None
+		);
+	});
+
+	it('loads real fixture file with tool invocation flow and converts to correct chat history', async () => {
+		const fixtureContent = await readFile(path.join(__dirname, 'fixtures', '4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl'), 'utf8');
+
+		const mockFileSystem = new MockFileSystemService();
+		const testWorkspace = new TestWorkspaceService();
+		const testLogService = new TestLogService();
+
+		vi.spyOn(testWorkspace, 'getWorkspaceFolders').mockReturnValue([URI.file('/project')]);
+
+		const folderSlug = '/project'.replace(/[\/\.]/g, '-');
+		const homeDir = '/home/user'; // Test home directory
+		const projectDir = URI.file(`${homeDir}/.claude/projects/${folderSlug}`);
+		const fixtureFile = URI.joinPath(projectDir, '4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl');
+
+		mockFileSystem.mockDirectory(projectDir, [['4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl', FileType.File]]);
+		mockFileSystem.mockFile(fixtureFile, fixtureContent);
+
+		// Mock os.homedir to return test home directory
+		// TODO set up IEnvService to provide this
+		const osMock = await import('os');
+		vi.spyOn(osMock, 'homedir').mockReturnValue(homeDir);
+
+		const realSessionService = new ClaudeCodeSessionService(
+			mockFileSystem as any,
+			testLogService,
+			testWorkspace
+		);
+
+		const provider = new ClaudeChatSessionContentProvider(
+			mockClaudeAgentManager,
+			mockSessionStore,
+			realSessionService
+		);
+
+		vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue(undefined);
+
+		const result = await provider.provideChatSessionContent('4c289ca8-f8bb-4588-8400-88b78beb784d', CancellationToken.None);
+		expect(mapHistoryForSnapshot(result.history)).toMatchSnapshot();
+	});
+});

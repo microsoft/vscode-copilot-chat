@@ -87,6 +87,9 @@ export import LanguageModelToolResultPart2 = vscode.LanguageModelToolResultPart2
 export import LanguageModelChatMessageRole = vscode.LanguageModelChatMessageRole;
 export import TextEditorSelectionChangeKind = vscode.TextEditorSelectionChangeKind;
 export import TextDocumentChangeReason = vscode.TextDocumentChangeReason;
+export import ChatToolInvocationPart = vscode.ChatToolInvocationPart;
+export import ChatResponseTurn2 = vscode.ChatResponseTurn2;
+export import ChatRequestTurn2 = vscode.ChatRequestTurn2;
 
 export const l10n = {
 	/**
