@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, Position, Range, TextDocument, TextDocumentShowOptions, l10n, Event as vscodeEvent, window, workspace } from 'vscode';
+import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, l10n, Event as vscodeEvent, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
@@ -236,7 +236,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			const documents = doc.fromOffsetRange(result.edit.replaceRange);
 			const [targetDocument, range] = documents.length ? documents[0] : [undefined, undefined];
 
-			addNotebookTelemetry(document, result.edit.newText, documents, telemetryBuilder);
+			addNotebookTelemetry(document, position, result.edit.newText, documents, telemetryBuilder);
 			telemetryBuilder.setIsActiveDocument(window.activeTextEditor?.document === targetDocument);
 
 			if (!targetDocument) {
@@ -588,7 +588,7 @@ function hasNotebookCellMarker(document: TextDocument, newText: string) {
 	return isNotebookCell(document.uri) && newText.includes('%% vscode.cell [id=');
 }
 
-function addNotebookTelemetry(document: TextDocument, newText: string, documents: [TextDocument, Range][], telemetryBuilder: NextEditProviderTelemetryBuilder) {
+function addNotebookTelemetry(document: TextDocument, position: Position, newText: string, documents: [TextDocument, Range][], telemetryBuilder: NextEditProviderTelemetryBuilder) {
 	const notebook = isNotebookCell(document.uri) ? findNotebook(document.uri, workspace.notebookDocuments) : undefined;
 	const cell = notebook ? findCell(document.uri, notebook) : undefined;
 	if (!cell || !notebook || !documents.length) {
@@ -602,6 +602,10 @@ function addNotebookTelemetry(document: TextDocument, newText: string, documents
 	const nextEditor = window.visibleTextEditors.find(editor => editor.document === documents[0][0]);
 	const isNextEditorRangeVisible = nextEditor && nextEditor.visibleRanges.some(range => range.contains(documents[0][1]));
 	const notebookId = getNotebookId(notebook);
+	const lineSuffix = `(${position.line}:${position.character})`;
+	const lineCounts = notebook.getCells()
+		.filter(c => c.kind === NotebookCellKind.Code)
+		.map(c => `${c === cell ? '*' : ''}${c.document.lineCount}${c === cell ? lineSuffix : ''}`).join(',');
 	telemetryBuilder.
 		setNotebookCellMarkerIndex(cellMarkerIndex)
 		.setNotebookCellMarkerCount(cellMarkerCount)
@@ -609,7 +613,7 @@ function addNotebookTelemetry(document: TextDocument, newText: string, documents
 		.setIsEolDifferent(targetEol !== sourceEol)
 		.setIsNextEditorVisible(!!nextEditor)
 		.setIsNextEditorRangeVisible(!!isNextEditorRangeVisible)
-		.setNotebookCellIndex(cell.index)
+		.setNotebookCellLines(lineCounts)
 		.setNotebookId(notebookId)
 		.setIsNESForOtherEditor(documents[0][0] !== document);
 }

@@ -114,7 +114,7 @@ export interface INextEditProviderTelemetry extends ILlmNESTelemetry, IDiagnosti
 	readonly notebookCellMarkerCount: number;
 	readonly notebookCellMarkerIndex: number;
 	readonly notebookId: string | undefined;
-	readonly notebookCellIndex: number | undefined;
+	readonly notebookCellLines: string | undefined;
 	readonly isActiveDocument?: boolean;
 	readonly isMultilineEdit?: boolean;
 	readonly isEolDifferent?: boolean;
@@ -456,7 +456,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 			isNextEditorRangeVisible: this._isNextEditorRangeVisible,
 			isNESForAnotherDoc: this._isNESForAnotherDoc,
 			notebookId: this._notebookId,
-			notebookCellIndex: this._notebookCellIndex,
+			notebookCellLines: this._notebookCellLines,
 			notebookCellMarkerCount: this._notebookCellMarkerCount,
 			notebookCellMarkerIndex: this._notebookCellMarkerIndex,
 			hadDiagnosticsNES: this._hadDiagnosticsNES,
@@ -571,9 +571,9 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 		return this;
 	}
 
-	private _notebookCellIndex?: number;
-	public setNotebookCellIndex(notebookCellIndex: number): this {
-		this._notebookCellIndex = notebookCellIndex;
+	private _notebookCellLines?: string;
+	public setNotebookCellLines(notebookCellLines: string): this {
+		this._notebookCellLines = notebookCellLines;
 		return this;
 	}
 
@@ -736,7 +736,7 @@ export class TelemetrySender implements IDisposable {
 			notebookCellMarkerCount,
 			notebookCellMarkerIndex,
 			notebookId,
-			notebookCellIndex,
+			notebookCellLines,
 			nextEditLogprob,
 			supersededByOpportunityId,
 			noNextEditReasonKind,
@@ -802,7 +802,6 @@ export class TelemetrySender implements IDisposable {
 		"activeDocumentNLinesInPrompt": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of lines in the active document included in prompt", "isMeasurement": true },
 		"wasPreviouslyRejected": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit was previously rejected", "isMeasurement": true },
 		"isShown": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit was shown", "isMeasurement": true },
-		"notebookCellIndex": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Index of the notebook cell", "isMeasurement": true },
 		"isNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the document is a notebook", "isMeasurement": true },
 		"isNESForAnotherDoc": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the NES if for another document", "isMeasurement": true },
 		"isMultilineEdit": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the NES is for a multiline edit", "isMeasurement": true },
@@ -814,6 +813,7 @@ export class TelemetrySender implements IDisposable {
 		"hasNotebookCellMarker": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit has a notebook cell marker", "isMeasurement": true },
 		"notebookCellMarkerCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Count of notebook cell markers in the edit", "isMeasurement": true },
 		"notebookId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Id of notebook" },
+		"notebookCellLines": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Line counts of notebook cells" },
 		"notebookType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Type of notebook, if any" },
 		"logProbThreshold": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Log probability threshold for the edit", "isMeasurement": true },
 		"documentsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of documents", "isMeasurement": true },
@@ -867,6 +867,7 @@ export class TelemetrySender implements IDisposable {
 				pickedNES,
 				notebookType,
 				notebookId,
+				notebookCellLines
 			},
 			{
 				requestN,
@@ -886,7 +887,6 @@ export class TelemetrySender implements IDisposable {
 				isMultilineEdit: this._boolToNum(isMultilineEdit),
 				isNextEditorRangeVisible: this._boolToNum(isNextEditorRangeVisible),
 				isNextEditorVisible: this._boolToNum(isNextEditorVisible),
-				notebookCellIndex,
 				hasNotebookCellMarker: notebookCellMarkerCount > 0 ? 1 : 0,
 				notebookCellMarkerCount,
 				notebookCellMarkerIndex,
