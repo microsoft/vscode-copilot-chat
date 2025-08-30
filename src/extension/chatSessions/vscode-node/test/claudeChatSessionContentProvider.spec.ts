@@ -14,7 +14,7 @@ import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspa
 import { TestLogService } from '../../../../platform/testing/common/testLogService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatLocation, ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
+import { ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../../agents/claude/node/claudeCodeSessionService';
 import { ClaudeAgentManager } from '../../../agents/claude/vscode-node/claudeCodeAgent';
 import { ClaudeChatSessionContentProvider } from '../claudeChatSessionContentProvider';
@@ -104,6 +104,7 @@ describe('ChatSessionContentProvider', () => {
 		});
 	}
 
+	const mockInitialRequest: vscode.ChatRequest = { prompt: 'initial prompt' } as Partial<vscode.ChatRequest> as any;
 	describe('provideChatSessionContent', () => {
 		it('returns empty history when no existing session', async () => {
 			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
@@ -240,7 +241,7 @@ describe('ChatSessionContentProvider', () => {
 		});
 
 		it('creates activeResponseCallback that calls claudeAgentManager', async () => {
-			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
+			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(mockInitialRequest);
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
 			vi.mocked(mockClaudeAgentManager.handleRequest).mockResolvedValue({ claudeSessionId: 'new-claude-session' });
 
@@ -248,15 +249,13 @@ describe('ChatSessionContentProvider', () => {
 
 			// Mock stream and test the callback
 			const mockStream = {} as vscode.ChatResponseStream;
-			if (result.activeResponseCallback) {
-				await result.activeResponseCallback(mockStream, CancellationToken.None);
-			}
+			expect(result.activeResponseCallback).toBeDefined();
+			await result.activeResponseCallback!(mockStream, CancellationToken.None);
 
 			expect(mockClaudeAgentManager.handleRequest).toHaveBeenCalledWith(
 				undefined,
 				expect.objectContaining({
-					prompt: 'initial prompt',
-					location: ChatLocation.Panel
+					prompt: 'initial prompt'
 				}),
 				{ history: [] },
 				mockStream,
@@ -264,6 +263,15 @@ describe('ChatSessionContentProvider', () => {
 			);
 
 			expect(mockSessionStore.setClaudeSessionId).toHaveBeenCalledWith('test-session', 'new-claude-session');
+		});
+
+		it('not new session - does not have activeResponseCallback', async () => {
+			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
+			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
+			vi.mocked(mockClaudeAgentManager.handleRequest).mockResolvedValue({ claudeSessionId: 'new-claude-session' });
+
+			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
+			expect(result.activeResponseCallback).toBeUndefined();
 		});
 
 		it('creates requestHandler that calls claudeAgentManager with session id', async () => {
@@ -476,7 +484,7 @@ describe('ChatSessionContentProvider', () => {
 	});
 
 	it('creates activeResponseCallback that calls claudeAgentManager', async () => {
-		vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
+		vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(mockInitialRequest);
 		vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
 		vi.mocked(mockClaudeAgentManager.handleRequest).mockResolvedValue({ claudeSessionId: 'new-claude-session' });
 
@@ -491,8 +499,7 @@ describe('ChatSessionContentProvider', () => {
 		expect(mockClaudeAgentManager.handleRequest).toHaveBeenCalledWith(
 			undefined,
 			expect.objectContaining({
-				prompt: 'initial prompt',
-				location: ChatLocation.Panel
+				prompt: 'initial prompt'
 			}),
 			{ history: [] },
 			mockStream,
