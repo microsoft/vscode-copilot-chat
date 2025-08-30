@@ -18,7 +18,7 @@ import { INotebookService } from '../../../platform/notebook/common/notebookServ
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
-import { findNotebook, isNotebookCell } from '../../../util/common/notebooks';
+import { findCell, findNotebook, isNotebookCell } from '../../../util/common/notebooks';
 import { ITracer, createTracer } from '../../../util/common/tracing';
 import { softAssert } from '../../../util/vs/base/common/assert';
 import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
@@ -38,6 +38,7 @@ import { isInlineSuggestion } from './isInlineSuggestion';
 import { InlineEditLogger } from './parts/inlineEditLogger';
 import { IVSCodeObservableDocument } from './parts/vscodeWorkspace';
 import { toExternalRange } from './utils/translations';
+import { getNotebookId } from '../../../platform/notebook/common/helpers';
 
 const learnMoreAction: Command = {
 	title: l10n.t('Learn More'),
@@ -588,7 +589,9 @@ function hasNotebookCellMarker(document: TextDocument, newText: string) {
 }
 
 function addNotebookTelemetry(document: TextDocument, newText: string, documents: [TextDocument, Range][], telemetryBuilder: NextEditProviderTelemetryBuilder) {
-	if (!isNotebookCell(document.uri) || !documents.length) {
+	const notebook = isNotebookCell(document.uri) ? findNotebook(document.uri, workspace.notebookDocuments) : undefined;
+	const cell = notebook ? findCell(document.uri, notebook) : undefined;
+	if (!cell || !notebook || !documents.length) {
 		return;
 	}
 	const cellMarkerCount = newText.match(/%% vscode.cell \[id=/g)?.length || 0;
@@ -598,6 +601,7 @@ function addNotebookTelemetry(document: TextDocument, newText: string, documents
 	const sourceEol = newText.includes('\r\n') ? '\r\n' : (newText.includes('\n') ? '\n' : targetEol);
 	const nextEditor = window.visibleTextEditors.find(editor => editor.document === documents[0][0]);
 	const isNextEditorRangeVisible = nextEditor && nextEditor.visibleRanges.some(range => range.contains(documents[0][1]));
+	const notebookId = getNotebookId(notebook);
 	telemetryBuilder.
 		setNotebookCellMarkerIndex(cellMarkerIndex)
 		.setNotebookCellMarkerCount(cellMarkerCount)
@@ -605,5 +609,7 @@ function addNotebookTelemetry(document: TextDocument, newText: string, documents
 		.setIsEolDifferent(targetEol !== sourceEol)
 		.setIsNextEditorVisible(!!nextEditor)
 		.setIsNextEditorRangeVisible(!!isNextEditorRangeVisible)
+		.setNotebookCellIndex(cell.index)
+		.setNotebookId(notebookId)
 		.setIsNESForOtherEditor(documents[0][0] !== document);
 }
