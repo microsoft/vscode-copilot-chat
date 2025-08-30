@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { readFileSync } from 'fs';
+import { readFile } from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -23,6 +23,7 @@ class MockFsService implements Partial<IFileSystemService> {
 	private mockFiles = new Map<string, string>();
 	private mockErrors = new Map<string, Error>();
 	private mockMtimes = new Map<string, number>();
+	private statCalls = 0;
 
 	mockDirectory(uri: URI | string, entries: [string, FileType][]) {
 		const uriString = typeof uri === 'string' ? uri : uri.toString();
@@ -40,6 +41,14 @@ class MockFsService implements Partial<IFileSystemService> {
 	mockError(uri: URI | string, error: Error) {
 		const uriString = typeof uri === 'string' ? uri : uri.toString();
 		this.mockErrors.set(uriString, error);
+	}
+
+	getStatCallCount(): number {
+		return this.statCalls;
+	}
+
+	resetStatCallCount(): void {
+		this.statCalls = 0;
 	}
 
 	async readDirectory(uri: URI): Promise<[string, FileType][]> {
@@ -63,6 +72,7 @@ class MockFsService implements Partial<IFileSystemService> {
 	}
 
 	async stat(uri: URI): Promise<vscode.FileStat> {
+		this.statCalls++; // Track stat calls to verify caching
 		const uriString = uri.toString();
 		if (this.mockErrors.has(uriString)) {
 			throw this.mockErrors.get(uriString);
@@ -119,9 +129,9 @@ describe('ClaudeCodeSessionLoader', () => {
 		const fixturePath2 = path.resolve(__dirname, 'fixtures', fileName2);
 		const fixturePath3 = path.resolve(__dirname, 'fixtures', fileName3);
 
-		const fileContents1 = readFileSync(fixturePath1, 'utf8');
-		const fileContents2 = readFileSync(fixturePath2, 'utf8');
-		const fileContents3 = readFileSync(fixturePath3, 'utf8');
+		const fileContents1 = await readFile(fixturePath1, 'utf8');
+		const fileContents2 = await readFile(fixturePath2, 'utf8');
+		const fileContents3 = await readFile(fixturePath3, 'utf8');
 
 		mockFs.mockDirectory(dirUri, [
 			[fileName1, FileType.File],
@@ -171,7 +181,7 @@ describe('ClaudeCodeSessionLoader', () => {
 	it('filters out non-jsonl files', async () => {
 		const fileName = '553dd2b5-8a53-4fbf-9db2-240632522fe5.jsonl';
 		const fixturePath = path.resolve(__dirname, 'fixtures', fileName);
-		const fileContents = readFileSync(fixturePath, 'utf8');
+		const fileContents = await readFile(fixturePath, 'utf8');
 
 		mockFs.mockDirectory(dirUri, [
 			[fileName, FileType.File],
@@ -190,7 +200,7 @@ describe('ClaudeCodeSessionLoader', () => {
 	it('skips files that fail to read', async () => {
 		const fileName = '553dd2b5-8a53-4fbf-9db2-240632522fe5.jsonl';
 		const fixturePath = path.resolve(__dirname, 'fixtures', fileName);
-		const fileContents = readFileSync(fixturePath, 'utf8');
+		const fileContents = await readFile(fixturePath, 'utf8');
 
 		mockFs.mockDirectory(dirUri, [
 			[fileName, FileType.File],
@@ -229,7 +239,7 @@ describe('ClaudeCodeSessionLoader', () => {
 	it('handles cancellation correctly', async () => {
 		const fileName = '553dd2b5-8a53-4fbf-9db2-240632522fe5.jsonl';
 		const fixturePath = path.resolve(__dirname, 'fixtures', fileName);
-		const fileContents = readFileSync(fixturePath, 'utf8');
+		const fileContents = await readFile(fixturePath, 'utf8');
 
 		mockFs.mockDirectory(dirUri, [[fileName, FileType.File]]);
 		mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents);
@@ -240,5 +250,128 @@ describe('ClaudeCodeSessionLoader', () => {
 		const sessions = await loader.getAllSessions(tokenSource.token);
 
 		expect(sessions).toHaveLength(0);
+	});
+
+	describe('caching', () => {
+		it('caches sessions and uses cache when files are unchanged', async () => {
+			// Setup mock with real fixture file
+			const fileName = '553dd2b5-8a53-4fbf-9db2-240632522fe5.jsonl';
+			const fixturePath = path.resolve(__dirname, 'fixtures', fileName);
+			const fileContents = await readFile(fixturePath, 'utf8');
+
+			mockFs.mockDirectory(dirUri, [[fileName, FileType.File]]);
+			mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents, 1000);
+
+			// First call - should read from disk
+			mockFs.resetStatCallCount();
+			const sessions1 = await loader.getAllSessions(CancellationToken.None);
+			const firstCallStatCount = mockFs.getStatCallCount();
+
+			expect(sessions1).toHaveLength(1);
+			expect(sessions1[0].id).toBe('553dd2b5-8a53-4fbf-9db2-240632522fe5');
+			expect(sessions1[0].label).toBe('hello session 2');
+			expect(firstCallStatCount).toBeGreaterThan(0);
+
+			// Second call - should use cache (no file changes)
+			mockFs.resetStatCallCount();
+			const sessions2 = await loader.getAllSessions(CancellationToken.None);
+			const secondCallStatCount = mockFs.getStatCallCount();
+
+			expect(sessions2).toHaveLength(1);
+			expect(sessions2[0].id).toBe(sessions1[0].id);
+			expect(sessions2[0].label).toBe(sessions1[0].label);
+			// Should have made some stat calls to check mtimes for cache validation
+			expect(secondCallStatCount).toBeGreaterThan(0);
+		});
+
+		it('invalidates cache when file is modified', async () => {
+			const fileName = '553dd2b5-8a53-4fbf-9db2-240632522fe5.jsonl';
+			const fixturePath = path.resolve(__dirname, 'fixtures', fileName);
+			const originalContents = await readFile(fixturePath, 'utf8');
+
+			mockFs.mockDirectory(dirUri, [[fileName, FileType.File]]);
+			mockFs.mockFile(URI.joinPath(dirUri, fileName), originalContents, 1000);
+
+			// First call
+			const sessions1 = await loader.getAllSessions(CancellationToken.None);
+			expect(sessions1).toHaveLength(1);
+			expect(sessions1[0].label).toBe('hello session 2');
+
+			// Modify file by changing the user message content (simulate file modification)
+			const modifiedContents = originalContents.replace(
+				'"hello session 2"',
+				'"modified session message"'
+			);
+			mockFs.mockFile(URI.joinPath(dirUri, fileName), modifiedContents, 2000); // Higher mtime
+
+			// Second call - should detect change and reload
+			const sessions2 = await loader.getAllSessions(CancellationToken.None);
+			expect(sessions2).toHaveLength(1);
+			expect(sessions2[0].label).toBe('modified session message');
+			expect(sessions2[0].id).toBe('553dd2b5-8a53-4fbf-9db2-240632522fe5'); // Same session ID
+		});
+
+		it('invalidates cache when file is deleted', async () => {
+			const fileName = '553dd2b5-8a53-4fbf-9db2-240632522fe5.jsonl';
+			const fixturePath = path.resolve(__dirname, 'fixtures', fileName);
+			const fileContents = await readFile(fixturePath, 'utf8');
+
+			mockFs.mockDirectory(dirUri, [[fileName, FileType.File]]);
+			mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents, 1000);
+
+			// First call
+			const sessions1 = await loader.getAllSessions(CancellationToken.None);
+			expect(sessions1).toHaveLength(1);
+
+			// Simulate file deletion by updating directory to be empty
+			mockFs.mockDirectory(dirUri, []); // Empty directory - file is gone
+
+			// Second call - should detect deletion and return empty array
+			const sessions2 = await loader.getAllSessions(CancellationToken.None);
+			expect(sessions2).toHaveLength(0);
+		});
+
+		it('invalidates cache when new file is added', async () => {
+			const fileName1 = 'session1.jsonl';
+			const fileContents1 = JSON.stringify({
+				parentUuid: null,
+				sessionId: 'session1',
+				type: 'user',
+				message: { role: 'user', content: 'first session' },
+				uuid: 'uuid1',
+				timestamp: new Date().toISOString()
+			});
+
+			mockFs.mockDirectory(dirUri, [[fileName1, FileType.File]]);
+			mockFs.mockFile(URI.joinPath(dirUri, fileName1), fileContents1, 1000);
+
+			// First call - one session
+			const sessions1 = await loader.getAllSessions(CancellationToken.None);
+			expect(sessions1).toHaveLength(1);
+
+			// Add a new file
+			const fileName2 = 'session2.jsonl';
+			const fileContents2 = JSON.stringify({
+				parentUuid: null,
+				sessionId: 'session2',
+				type: 'user',
+				message: { role: 'user', content: 'second session' },
+				uuid: 'uuid2',
+				timestamp: new Date().toISOString()
+			});
+
+			mockFs.mockDirectory(dirUri, [
+				[fileName1, FileType.File],
+				[fileName2, FileType.File]
+			]);
+			mockFs.mockFile(URI.joinPath(dirUri, fileName2), fileContents2, 2000);
+
+			// Second call - should detect new file and return both sessions
+			const sessions2 = await loader.getAllSessions(CancellationToken.None);
+			expect(sessions2).toHaveLength(2);
+
+			const sessionIds = sessions2.map(s => s.id).sort();
+			expect(sessionIds).toEqual(['session1', 'session2']);
+		});
 	});
 });

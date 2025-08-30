@@ -11,6 +11,8 @@ import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { URI } from '../../../../util/vs/base/common/uri';
+import { ResourceMap, ResourceSet } from '../../../../util/vs/base/common/map';
+import { isEqualOrParent } from '../../../../util/vs/base/common/resources';
 
 type RawStoredSDKMessage = SDKMessage & {
 	parentUuid: string | null;
@@ -31,6 +33,10 @@ type StoredSDKMessage = SDKMessage & {
 }
 
 export class ClaudeCodeSessionLoader {
+	// Simple mtime-based cache
+	private _sessionCache = new ResourceMap<IClaudeCodeSession[]>(); // folderPath -> sessions
+	private _fileMtimes = new ResourceMap<number>(); // filePath -> mtime
+
 	constructor(
 		@IFileSystemService private readonly _fileSystem: IFileSystemService,
 		@ILogService private readonly _logService: ILogService,
@@ -58,94 +64,182 @@ export class ClaudeCodeSessionLoader {
 			const slug = this._computeFolderSlug(folderUri);
 			const projectDirUri = URI.joinPath(URI.file(home), '.claude', 'projects', slug);
 
-			let entries: [string, FileType][] = [];
-			try {
-				entries = await this._fileSystem.readDirectory(projectDirUri);
-			} catch (e) {
-				this._logService.error(e, `[ClaudeChatSessionItemProvider] Failed to read directory: ${projectDirUri}`);
+			// Check if we can use cached data
+			const cachedSessions = await this._getCachedSessionsIfValid(projectDirUri, token);
+			if (cachedSessions) {
+				items.push(...cachedSessions);
 				continue;
 			}
 
-			const fileTasks: Promise<{ messages: Map<string, StoredSDKMessage>; summaries: Map<string, SummaryEntry> }>[] = [];
+			// Cache miss or invalid - reload from disk
+			const freshSessions = await this._loadSessionsFromDisk(projectDirUri, token);
+			this._sessionCache.set(projectDirUri, freshSessions);
+			items.push(...freshSessions);
+		}
+
+		return items;
+	}
+
+	/**
+	 * Check if cached sessions are still valid by comparing file modification times
+	 */
+	private async _getCachedSessionsIfValid(projectDirUri: URI, token: CancellationToken): Promise<IClaudeCodeSession[] | null> {
+		if (!this._sessionCache.has(projectDirUri)) {
+			return null; // No cache entry
+		}
+
+		try {
+			const entries = await this._fileSystem.readDirectory(projectDirUri);
+			if (token.isCancellationRequested) {
+				return null;
+			}
+
+			const currentFiles = new ResourceSet();
+
+			// Check if any .jsonl files have changed since our last cache
 			for (const [name, type] of entries) {
-				if (type !== FileType.File) {
-					continue;
-				}
-
-				if (!name.endsWith('.jsonl')) {
-					continue;
-				}
-
-				const sessionId = name.slice(0, -6); // Remove .jsonl extension
-				if (!sessionId) {
+				if (type !== FileType.File || !name.endsWith('.jsonl')) {
 					continue;
 				}
 
 				const fileUri = URI.joinPath(projectDirUri, name);
-				fileTasks.push(this._getMessagesFromSession(fileUri, token));
+				currentFiles.add(fileUri);
+
+				try {
+					const stat = await this._fileSystem.stat(fileUri);
+					const cachedMtime = this._fileMtimes.get(fileUri);
+
+					if (!cachedMtime || stat.mtime > cachedMtime) {
+						// File has changed or is new
+						return null;
+					}
+				} catch (e) {
+					// File might have been deleted, invalidate cache
+					return null;
+				}
 			}
 
-			const results = await Promise.allSettled(fileTasks);
-			if (token.isCancellationRequested) {
-				return items;
-			}
-			const leafNodes = new Set<string>();
-			const allMessages = new Map<string, StoredSDKMessage>();
-			const allSummaries = new Map<string, SummaryEntry>();
-			const referencedAsParent = new Set<string>();
-			for (const r of results) {
-				if (r.status === 'fulfilled') {
-					for (const [uuid, message] of r.value.messages.entries()) {
-						allMessages.set(uuid, message);
-						if (message.parentUuid) {
-							referencedAsParent.add(message.parentUuid);
-						}
-					}
-					for (const [uuid, summary] of r.value.summaries.entries()) {
-						allSummaries.set(uuid, summary);
+			// Check if any previously cached files have been deleted
+			for (const cachedFileUri of this._fileMtimes.keys()) {
+				if (isEqualOrParent(cachedFileUri, projectDirUri) && cachedFileUri.path.endsWith('.jsonl')) {
+					if (!currentFiles.has(cachedFileUri)) {
+						// A previously cached file has been deleted
+						return null;
 					}
 				}
 			}
 
-			for (const [uuid] of allMessages) {
-				if (!referencedAsParent.has(uuid)) {
-					leafNodes.add(uuid);
-				}
+			// All files are unchanged, return cached sessions
+			return this._sessionCache.get(projectDirUri) || null;
+		} catch (e) {
+			// Directory read failed, invalidate cache
+			this._logService.error(e, `[ClaudeCodeSessionLoader] Failed to check cache validity for: ${projectDirUri}`);
+			return null;
+		}
+	}
+
+	/**
+	 * Load sessions from disk and update file modification time tracking
+	 */
+	private async _loadSessionsFromDisk(projectDirUri: URI, token: CancellationToken): Promise<IClaudeCodeSession[]> {
+		let entries: [string, FileType][] = [];
+		try {
+			entries = await this._fileSystem.readDirectory(projectDirUri);
+		} catch (e) {
+			this._logService.error(e, `[ClaudeChatSessionItemProvider] Failed to read directory: ${projectDirUri}`);
+			return [];
+		}
+
+		const fileTasks: Promise<{ messages: Map<string, StoredSDKMessage>; summaries: Map<string, SummaryEntry>; fileUri: URI }>[] = [];
+		for (const [name, type] of entries) {
+			if (type !== FileType.File) {
+				continue;
 			}
 
-			for (const leafUuid of leafNodes) {
-				const messages: StoredSDKMessage[] = [];
-				let currentUuid: string | null = leafUuid;
-				let summaryEntry: SummaryEntry | undefined;
+			if (!name.endsWith('.jsonl')) {
+				continue;
+			}
 
-				// Follow parent chain to build complete message history
-				while (currentUuid) {
-					const sdkMessage = allMessages.get(currentUuid);
-					summaryEntry = allSummaries.get(currentUuid) ?? summaryEntry;
-					if (!sdkMessage) {
-						break;
-					}
+			const sessionId = name.slice(0, -6); // Remove .jsonl extension
+			if (!sessionId) {
+				continue;
+			}
 
-					// Add the SDK message directly
-					messages.unshift(sdkMessage);
+			const fileUri = URI.joinPath(projectDirUri, name);
+			fileTasks.push(this._getMessagesFromSessionWithUri(fileUri, token));
+		}
 
-					currentUuid = sdkMessage.parentUuid;
+		const results = await Promise.allSettled(fileTasks);
+		if (token.isCancellationRequested) {
+			return [];
+		}
+
+		const leafNodes = new Set<string>();
+		const allMessages = new Map<string, StoredSDKMessage>();
+		const allSummaries = new Map<string, SummaryEntry>();
+		const referencedAsParent = new Set<string>();
+
+		for (const r of results) {
+			if (r.status === 'fulfilled') {
+				// Update mtime cache for this file
+				try {
+					const stat = await this._fileSystem.stat(r.value.fileUri);
+					this._fileMtimes.set(r.value.fileUri, stat.mtime);
+				} catch (e) {
+					// File might have been deleted during processing
 				}
 
-				// Create session if we have messages
-				if (messages.length > 0) {
-					const session: IClaudeCodeSession = {
-						id: allMessages.get(leafUuid)!.sessionId,
-						label: this._generateSessionLabel(summaryEntry, messages),
-						messages: messages,
-						timestamp: messages[messages.length - 1].timestamp
-					};
-					items.push(session);
+				for (const [uuid, message] of r.value.messages.entries()) {
+					allMessages.set(uuid, message);
+					if (message.parentUuid) {
+						referencedAsParent.add(message.parentUuid);
+					}
+				}
+				for (const [uuid, summary] of r.value.summaries.entries()) {
+					allSummaries.set(uuid, summary);
 				}
 			}
 		}
 
-		return items;
+		for (const [uuid] of allMessages) {
+			if (!referencedAsParent.has(uuid)) {
+				leafNodes.add(uuid);
+			}
+		}
+
+		const sessions: IClaudeCodeSession[] = [];
+		for (const leafUuid of leafNodes) {
+			const messages: StoredSDKMessage[] = [];
+			let currentUuid: string | null = leafUuid;
+			let summaryEntry: SummaryEntry | undefined;
+
+			// Follow parent chain to build complete message history
+			while (currentUuid) {
+				const sdkMessage = allMessages.get(currentUuid);
+				summaryEntry = allSummaries.get(currentUuid) ?? summaryEntry;
+				if (!sdkMessage) {
+					break;
+				}
+
+				// Add the SDK message directly
+				messages.unshift(sdkMessage);
+
+				currentUuid = sdkMessage.parentUuid;
+			}
+
+			// Create session if we have messages
+			if (messages.length > 0) {
+				const session: IClaudeCodeSession = {
+					id: allMessages.get(leafUuid)!.sessionId,
+					label: this._generateSessionLabel(summaryEntry, messages),
+					messages: messages,
+					timestamp: messages[messages.length - 1].timestamp
+				};
+				sessions.push(session);
+			}
+		}
+
+		return sessions;
 	}
 
 	private _reviveStoredSDKMessage(raw: RawStoredSDKMessage): StoredSDKMessage {
@@ -153,6 +247,14 @@ export class ClaudeCodeSessionLoader {
 			...raw,
 			timestamp: new Date(raw.timestamp)
 		};
+	}
+
+	/**
+	 * Wrapper for _getMessagesFromSession that includes the fileUri in the result
+	 */
+	private async _getMessagesFromSessionWithUri(fileUri: URI, token: CancellationToken): Promise<{ messages: Map<string, StoredSDKMessage>; summaries: Map<string, SummaryEntry>; fileUri: URI }> {
+		const result = await this._getMessagesFromSession(fileUri, token);
+		return { ...result, fileUri };
 	}
 
 	private async _getMessagesFromSession(fileUri: URI, token: CancellationToken): Promise<{ messages: Map<string, StoredSDKMessage>; summaries: Map<string, SummaryEntry> }> {
