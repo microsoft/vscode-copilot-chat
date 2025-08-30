@@ -7,8 +7,8 @@ import { SDKMessage } from '@anthropic-ai/claude-code';
 import Anthropic from '@anthropic-ai/sdk';
 import * as vscode from 'vscode';
 import { coalesce } from '../../../util/vs/base/common/arrays';
-import { URI } from '../../../util/vs/base/common/uri';
-import { ChatRequestTurn2, MarkdownString } from '../../../vscodeTypes';
+import { ChatRequestTurn2 } from '../../../vscodeTypes';
+import { createFormattedToolInvocation } from '../../agents/claude/common/toolInvocationFormatter';
 import { IClaudeCodeSession, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
 import { ClaudeAgentManager } from '../../agents/claude/vscode-node/claudeCodeAgent';
 import { ClaudeSessionDataStore } from './claudeChatSessionItemProvider';
@@ -31,7 +31,9 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 		const existingSession = await this.sessionService.getSession(internalSessionId, token);
 		const toolContext = this._createToolContext();
 		const history = this._buildChatHistory(existingSession, toolContext);
-
+		if (initialPrompt) {
+			history.push(new ChatRequestTurn2(initialPrompt, undefined, [], '', [], undefined));
+		}
 		return {
 			history,
 			// This is called to attach to a previous or new session- send a request if it's a new session
@@ -80,22 +82,12 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 	}
 
 	private _finishToolInvocationPart(toolUse: Anthropic.ToolUseBlock, toolResult: Anthropic.ToolResultBlockParam, pendingInvocation: vscode.ChatToolInvocationPart) {
-		pendingInvocation.isError = toolResult.is_error;
-		if (toolUse.name === 'Bash') {
-			this._formatBashInvocation(pendingInvocation, toolUse);
-		} else if (toolUse.name === 'Read') {
-			this._formatReadInvocation(pendingInvocation, toolUse);
-		} else if (toolUse.name === 'Glob') {
-			this._formatGlobInvocation(pendingInvocation, toolUse);
-		} else if (toolUse.name === 'Grep') {
-			this._formatGrepInvocation(pendingInvocation, toolUse);
-		} else if (toolUse.name === 'LS') {
-			this._formatLSInvocation(pendingInvocation, toolUse);
-		} else if (toolUse.name === 'Edit') {
-			this._formatEditInvocation(pendingInvocation, toolUse);
-		} else {
-			this._formatGenericInvocation(pendingInvocation, toolUse);
-		}
+		const formattedInvocation = createFormattedToolInvocation(toolUse, toolResult);
+
+		// Copy formatting from the utility function
+		pendingInvocation.isError = formattedInvocation.isError;
+		pendingInvocation.invocationMessage = formattedInvocation.invocationMessage;
+		pendingInvocation.toolSpecificData = formattedInvocation.toolSpecificData;
 	}
 
 	private _createToolContext(): ToolContext {
@@ -171,44 +163,4 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 		}
 	}
 
-	private _formatBashInvocation(invocation: vscode.ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
-		invocation.invocationMessage = '';
-		invocation.toolSpecificData = {
-			commandLine: {
-				original: (toolUse.input as any)?.command,
-			},
-			language: 'bash'
-		};
-	}
-
-	private _formatReadInvocation(invocation: vscode.ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
-		const filePath = (toolUse.input as any)?.file_path;
-		invocation.invocationMessage = new MarkdownString(vscode.l10n.t(`Read ${filePath ? this._formatUriForMessage(filePath) : 'file'}`));
-	}
-
-	private _formatGlobInvocation(invocation: vscode.ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
-		invocation.invocationMessage = new MarkdownString(vscode.l10n.t(`Searched for files matching \`${(toolUse.input as any)?.pattern}\``));
-	}
-
-	private _formatGrepInvocation(invocation: vscode.ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
-		invocation.invocationMessage = new MarkdownString(vscode.l10n.t(`Searched text for \`${(toolUse.input as any)?.pattern}\``));
-	}
-
-	private _formatLSInvocation(invocation: vscode.ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
-		const path = (toolUse.input as any)?.path;
-		invocation.invocationMessage = new MarkdownString(vscode.l10n.t(`Read ${path ? this._formatUriForMessage(path) : 'dir'}`));
-	}
-
-	private _formatEditInvocation(invocation: vscode.ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
-		const filePath = (toolUse.input as any)?.file_path;
-		invocation.invocationMessage = new MarkdownString(vscode.l10n.t(`Edited ${filePath ? this._formatUriForMessage(filePath) : 'file'}`));
-	}
-
-	private _formatGenericInvocation(invocation: vscode.ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
-		invocation.invocationMessage = vscode.l10n.t(`Used tool: ${toolUse.name}`);
-	}
-
-	private _formatUriForMessage(path: string): string {
-		return `[](${URI.file(path).toString()})`;
-	}
 }

@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import Anthropic from '@anthropic-ai/sdk';
 import { Options, SDKUserMessage } from '@anthropic-ai/claude-code';
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -14,6 +15,7 @@ import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ILanguageModelServerConfig, LanguageModelServer } from '../../vscode-node/langModelServer';
+import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 
 // Manages Claude Code agent interactions and language model server lifecycle
 export class ClaudeAgentManager extends Disposable {
@@ -127,6 +129,7 @@ class ClaudeCodeSession {
 			await def.p;
 		}
 
+		const unprocessedToolCalls = new Map<string, Anthropic.ToolUseBlock>();
 		for await (const message of query({
 			prompt: createPromptIterable(prompt, this.sessionId),
 			options
@@ -141,17 +144,19 @@ class ClaudeCodeSession {
 					if (item.type === 'text' && item.text) {
 						stream.markdown(item.text);
 					} else if (item.type === 'tool_use') {
-						// currentToolTask?.complete();
-						// currentToolTask = new DeferredPromise();
-						stream.markdown(`\n\n🛠️ Using tool: ${item.name}...`);
-						stream.prepareToolInvocation(item.name);
+						stream.progress(`\n\n🛠️ Using tool: ${item.name}...`);
+						unprocessedToolCalls.set(item.id, item);
 					}
 				}
 			} else if (message.type === 'user') {
 				if (Array.isArray(message.message.content)) {
-					for (const item of message.message.content) {
-						if (item.type === 'tool_result') {
-							// currentToolTask?.complete();
+					for (const toolResult of message.message.content) {
+						if (toolResult.type === 'tool_result') {
+							const toolUse = unprocessedToolCalls.get(toolResult.tool_use_id);
+							if (toolUse) {
+								unprocessedToolCalls.delete(toolResult.tool_use_id);
+								stream.push(createFormattedToolInvocation(toolUse, toolResult));
+							}
 						}
 					}
 				}
