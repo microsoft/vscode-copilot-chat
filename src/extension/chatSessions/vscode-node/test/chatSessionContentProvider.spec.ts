@@ -424,12 +424,7 @@ describe('ChatSessionContentProvider', () => {
 			        "type": "markdown",
 			      },
 			      {
-			        "invocationMessage": "\`\`\`bash
-			total 8
-			drwxr-xr-x  3 user user 4096 Aug 29 10:00 .
-			drwxr-xr-x  5 user user 4096 Aug 29 09:30 ..
-			-rw-r--r--  1 user user  256 Aug 29 10:00 file.txt
-			\`\`\`",
+			        "invocationMessage": "Used tool: bash",
 			        "isError": false,
 			        "toolCallId": "tool-1",
 			        "toolName": "bash",

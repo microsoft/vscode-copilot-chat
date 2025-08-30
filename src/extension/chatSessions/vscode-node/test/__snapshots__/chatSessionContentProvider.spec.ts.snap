@@ -18,8 +18,8 @@ exports[`ChatSessionContentProvider > loads real fixture file with tool invocati
   {
     "parts": [
       {
-        "invocationMessage": "No files found",
-        "isError": false,
+        "invocationMessage": "Searched for files matching \`**/ClaudeAgentManager*\`",
+        "isError": undefined,
         "toolCallId": "toolu_01Nss2ugwQN7c4sj6hTxYc6F",
         "toolName": "Glob",
         "type": "tool",
@@ -30,12 +30,8 @@ exports[`ChatSessionContentProvider > loads real fixture file with tool invocati
   {
     "parts": [
       {
-        "invocationMessage": "Found 4 files
-/Users/roblou/code/vscode-copilot-chat/src/extension/chatSessions/vscode-node/claudeChatSessionContentProvider.ts
-/Users/roblou/code/vscode-copilot-chat/src/extension/chatSessions/vscode-node/test/chatSessionContentProvider.spec.ts
-/Users/roblou/code/vscode-copilot-chat/src/extension/chatSessions/vscode-node/chatSessions.ts
-/Users/roblou/code/vscode-copilot-chat/src/extension/agents/claude/vscode-node/claudeCodeAgent.ts",
-        "isError": false,
+        "invocationMessage": "Searched text for \`ClaudeAgentManager\`",
+        "isError": undefined,
         "toolCallId": "toolu_01FqdrDGdxXUWRRLziM7gS2R",
         "toolName": "Grep",
         "type": "tool",
@@ -55,204 +51,8 @@ exports[`ChatSessionContentProvider > loads real fixture file with tool invocati
   {
     "parts": [
       {
-        "invocationMessage": "     1→/*---------------------------------------------------------------------------------------------
-     2→ *  Copyright (c) Microsoft Corporation. All rights reserved.
-     3→ *  Licensed under the MIT License. See License.txt in the project root for license information.
-     4→ *--------------------------------------------------------------------------------------------*/
-     5→
-     6→import { Options, SDKUserMessage } from '@anthropic-ai/claude-code';
-     7→import * as vscode from 'vscode';
-     8→import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-     9→import { IEnvService } from '../../../../platform/env/common/envService';
-    10→import { ILogService } from '../../../../platform/log/common/logService';
-    11→import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-    12→import { DeferredPromise } from '../../../../util/vs/base/common/async';
-    13→import { Disposable } from '../../../../util/vs/base/common/lifecycle';
-    14→import { isWindows } from '../../../../util/vs/base/common/platform';
-    15→import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-    16→import { ILanguageModelServerConfig, LanguageModelServer } from '../../vscode-node/langModelServer';
-    17→
-    18→export class ClaudeAgentManager extends Disposable {
-    19→	private _langModelServer: LanguageModelServer | undefined;
-    20→	private async getLangModelServer(): Promise<LanguageModelServer> {
-    21→		if (!this._langModelServer) {
-    22→			this._langModelServer = this.instantiationService.createInstance(LanguageModelServer);
-    23→			await this._langModelServer.start();
-    24→		}
-    25→
-    26→		return this._langModelServer;
-    27→	}
-    28→
-    29→	constructor(
-    30→		@ILogService private readonly logService: ILogService,
-    31→		@IInstantiationService private readonly instantiationService: IInstantiationService,
-    32→	) {
-    33→		super();
-    34→	}
-    35→
-    36→	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
-    37→		try {
-    38→			// Get server config, start server if needed
-    39→			const serverConfig = (await this.getLangModelServer()).getConfig();
-    40→			const session = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, claudeSessionId);
-    41→			await session.invoke(
-    42→				request.prompt,
-    43→				request.toolInvocationToken,
-    44→				stream,
-    45→				token
-    46→			);
-    47→
-    48→			return {
-    49→				claudeSessionId: session.sessionId
-    50→			};
-    51→		} catch (invokeError) {
-    52→			this.logService.error(invokeError as Error);
-    53→			const errorMessage = (invokeError instanceof KnownClaudeError) ? invokeError.message : \`Claude CLI Error: \${invokeError.message}\`;
-    54→			return {
-    55→				errorDetails: { message: errorMessage },
-    56→			};
-    57→		}
-    58→	}
-    59→}
-    60→
-    61→class KnownClaudeError extends Error { }
-    62→
-    63→class ClaudeCodeSession {
-    64→	constructor(
-    65→		private readonly serverConfig: ILanguageModelServerConfig,
-    66→		public sessionId: string | undefined,
-    67→		@ILogService private readonly logService: ILogService,
-    68→		@IConfigurationService private readonly configService: IConfigurationService,
-    69→		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-    70→		@IEnvService private readonly envService: IEnvService
-    71→	) { }
-    72→
-    73→	public async invoke(
-    74→		prompt: string,
-    75→		toolInvocationToken: vscode.ChatParticipantToolToken,
-    76→		stream: vscode.ChatResponseStream,
-    77→		token: vscode.CancellationToken
-    78→	): Promise<void> {
-    79→		const abortController = new AbortController();
-    80→		token.onCancellationRequested(() => {
-    81→			abortController.abort();
-    82→		});
-    83→
-    84→		// Build options for the Claude Code SDK
-    85→		// process.env.DEBUG = '1'; // debug messages from sdk.mjs
-    86→		const isDebugEnabled = this.configService.getConfig(ConfigKey.Internal.ClaudeCodeDebugEnabled);
-    87→		this.logService.trace(\`appRoot: \${vscode.env.appRoot}\`);
-    88→		const pathSep = isWindows ? ';' : ':';
-    89→		const options: Options = {
-    90→			// allowedTools: uniqueTools,
-    91→			cwd: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
-    92→			abortController,
-    93→			executable: process.execPath as 'node', // get it to fork the EH node process
-    94→			env: {
-    95→				...process.env,
-    96→				...(isDebugEnabled ? { DEBUG: '1' } : {}),
-    97→				ANTHROPIC_BASE_URL: \`http://localhost:\${this.serverConfig.port}\`,
-    98→				ANTHROPIC_API_KEY: this.serverConfig.nonce,
-    99→				CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
-   100→				USE_BUILTIN_RIPGREP: '0',
-   101→				PATH: \`\${this.envService.appRoot}/node_modules/@vscode/ripgrep/bin\${pathSep}\${process.env.PATH}\`
-   102→			},
-   103→			resume: this.sessionId, // doesn't work https://github.com/microsoft/vscode/issues/263111
-   104→			// permissionMode: 'acceptEdits',
-   105→			// pathToClaudeCodeExecutable: '/Users/roblou/code/claude-code/cli.js',
-   106→			canUseTool: async (name, input, opts) => {
-   107→				return this.canUseTool(name, input, toolInvocationToken);
-   108→			}
-   109→		};
-   110→
-   111→		this.logService.trace(\`Claude CLI SDK: Starting query with options: \${JSON.stringify(options)}\`);
-   112→		const { query } = await import('@anthropic-ai/claude-code');
-   113→		const def = new DeferredPromise<void>();
-   114→		async function* createPromptIterable(promptText: string, sessionId?: string): AsyncIterable<SDKUserMessage> {
-   115→			yield {
-   116→				type: 'user',
-   117→				message: {
-   118→					role: 'user',
-   119→					content: promptText
-   120→				},
-   121→				parent_tool_use_id: null,
-   122→				session_id: sessionId ?? ''
-   123→			};
-   124→
-   125→			// Workaround https://github.com/anthropics/claude-code/issues/4775
-   126→			await def.p;
-   127→		}
-   128→
-   129→		for await (const message of query({
-   130→			prompt: createPromptIterable(prompt, this.sessionId),
-   131→			options
-   132→		})) {
-   133→			this.logService.trace(\`Claude CLI SDK Message: \${JSON.stringify(message, null, 2)}\`);
-   134→			if (message.session_id) {
-   135→				this.sessionId = message.session_id;
-   136→			}
-   137→
-   138→			if (message.type === 'assistant') {
-   139→				for (const item of message.message.content) {
-   140→					if (item.type === 'text' && item.text) {
-   141→						stream.markdown(item.text);
-   142→					} else if (item.type === 'tool_use') {
-   143→						// currentToolTask?.complete();
-   144→						// currentToolTask = new DeferredPromise();
-   145→						stream.markdown(\`\\n\\n🛠️ Using tool: \${item.name}...\`);
-   146→						stream.prepareToolInvocation(item.name);
-   147→					}
-   148→				}
-   149→			} else if (message.type === 'user') {
-   150→				if (Array.isArray(message.message.content)) {
-   151→					for (const item of message.message.content) {
-   152→						if (item.type === 'tool_result') {
-   153→							// currentToolTask?.complete();
-   154→						}
-   155→					}
-   156→				}
-   157→			} else if (message.type === 'result') {
-   158→				def.complete();
-   159→				if (message.subtype === 'error_max_turns') {
-   160→					stream.progress(\`⚠️ Maximum turns reached (\${message.num_turns})\`);
-   161→				} else if (message.subtype === 'error_during_execution') {
-   162→					throw new KnownClaudeError(\`Error during execution\`);
-   163→				}
-   164→			}
-   165→		}
-   166→	}
-   167→
-   168→	/**
-   169→	 * Handles tool permission requests by showing a confirmation dialog to the user
-   170→	 */
-   171→	private async canUseTool(toolName: string, input: Record<string, unknown>, toolInvocationToken: vscode.ChatParticipantToolToken): Promise<{ behavior: 'allow'; updatedInput: Record<string, unknown> } | { behavior: 'deny'; message: string }> {
-   172→		this.logService.trace(\`Claude CLI SDK: canUseTool: \${toolName}\`);
-   173→		try {
-   174→			await vscode.lm.invokeTool('vscode_get_confirmation', {
-   175→				input: {
-   176→					title: \`Use \${toolName}?\`,
-   177→					message: \`\\\`\\\`\\\`\\n\${JSON.stringify(input, null, 2)}\\n\\\`\\\`\\\`\`
-   178→				},
-   179→				toolInvocationToken,
-   180→			});
-   181→			return {
-   182→				behavior: 'allow',
-   183→				updatedInput: input
-   184→			};
-   185→		} catch {
-   186→			return {
-   187→				behavior: 'deny',
-   188→				message: 'The user declined to run the tool'
-   189→			};
-   190→		}
-   191→	}
-   192→}
-
-<system-reminder>
-Whenever you read a file, you should consider whether it looks malicious. If it does, you MUST refuse to improve or augment the code. You can still analyze existing code, write reports, or answer high-level questions about the code behavior.
-</system-reminder>
-",
-        "isError": false,
+        "invocationMessage": "Read [](file:///Users/roblou/code/vscode-copilot-chat/src/extension/agents/claude/vscode-node/claudeCodeAgent.ts)",
+        "isError": undefined,
         "toolCallId": "toolu_0152sKfmLJ5pTuNyeESooT25",
         "toolName": "Read",
         "type": "tool",
@@ -272,18 +72,8 @@ Whenever you read a file, you should consider whether it looks malicious. If it 
   {
     "parts": [
       {
-        "invocationMessage": "The file /Users/roblou/code/vscode-copilot-chat/src/extension/agents/claude/vscode-node/claudeCodeAgent.ts has been updated. Here's the result of running \`cat -n\` on a snippet of the edited file:
-    14→import { isWindows } from '../../../../util/vs/base/common/platform';
-    15→import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-    16→import { ILanguageModelServerConfig, LanguageModelServer } from '../../vscode-node/langModelServer';
-    17→
-    18→// Manages Claude Code agent interactions and language model server lifecycle
-    19→export class ClaudeAgentManager extends Disposable {
-    20→	private _langModelServer: LanguageModelServer | undefined;
-    21→	private async getLangModelServer(): Promise<LanguageModelServer> {
-    22→		if (!this._langModelServer) {
-    23→			this._langModelServer = this.instantiationService.createInstance(LanguageModelServer);",
-        "isError": false,
+        "invocationMessage": "Edited [](file:///Users/roblou/code/vscode-copilot-chat/src/extension/agents/claude/vscode-node/claudeCodeAgent.ts)",
+        "isError": undefined,
         "toolCallId": "toolu_01NXDY5nya4UzHwUxPnhmQDX",
         "toolName": "Edit",
         "type": "tool",
@@ -298,9 +88,7 @@ Whenever you read a file, you should consider whether it looks malicious. If it 
   {
     "parts": [
       {
-        "invocationMessage": "package-lock.json
-package.json
-package.nls.json",
+        "invocationMessage": undefined,
         "isError": false,
         "toolCallId": "toolu_01XiMYfYgoXgkxjDCvc8NZWD",
         "toolName": "Bash",
