@@ -5,13 +5,10 @@
 
 import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
-import { ILogService } from '../../../platform/log/common/logService';
-import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { ClaudeCodeSessionLoader } from '../../agents/claude/node/claudeCodeSessionLoader';
+import { IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
 
 export class ClaudeSessionDataStore {
 	private static StorageKey = 'claudeSessionIds';
@@ -72,20 +69,16 @@ export class ClaudeSessionDataStore {
 export class ClaudeChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
 	private readonly _onDidChangeChatSessionItems = this._register(new Emitter<void>());
 	public readonly onDidChangeChatSessionItems = this._onDidChangeChatSessionItems.event;
-	private readonly _sessionLoader: ClaudeCodeSessionLoader;
 
 	constructor(
 		private readonly sessionStore: ClaudeSessionDataStore,
-		@IFileSystemService fileSystemService: IFileSystemService,
-		@ILogService logService: ILogService,
-		@IWorkspaceService workspaceService: IWorkspaceService,
+		@IClaudeCodeSessionService private readonly claudeCodeSessionService: IClaudeCodeSessionService
 	) {
 		super();
-		this._sessionLoader = new ClaudeCodeSessionLoader(fileSystemService, logService, workspaceService);
 	}
 
 	public async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
-		const sessions = await this._sessionLoader.getAllSessions(token);
+		const sessions = await this.claudeCodeSessionService.getAllSessions(token);
 		// const newSessions: vscode.ChatSessionItem[] = Array.from(this.sessionStore.getUnresolvedSessions().values()).map(session => ({
 		// 	id: session.id,
 		// 	label: session.label,

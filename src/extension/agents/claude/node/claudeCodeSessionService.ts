@@ -13,6 +13,7 @@ import { IWorkspaceService } from '../../../../platform/workspace/common/workspa
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ResourceMap, ResourceSet } from '../../../../util/vs/base/common/map';
 import { isEqualOrParent } from '../../../../util/vs/base/common/resources';
+import { createServiceIdentifier } from '../../../../util/common/services';
 
 type RawStoredSDKMessage = SDKMessage & {
 	parentUuid: string | null;
@@ -32,10 +33,20 @@ type StoredSDKMessage = SDKMessage & {
 	timestamp: Date;
 }
 
-export class ClaudeCodeSessionLoader {
+export const IClaudeCodeSessionService = createServiceIdentifier<IClaudeCodeSessionService>('IClaudeCodeSessionService');
+
+export interface IClaudeCodeSessionService {
+	readonly _serviceBrand: undefined;
+	getAllSessions(token: CancellationToken): Promise<IClaudeCodeSession[]>;
+	getSession(sessionId: string, token: CancellationToken): Promise<IClaudeCodeSession | undefined>;
+}
+
+export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
+	declare _serviceBrand: undefined;
+
 	// Simple mtime-based cache
-	private _sessionCache = new ResourceMap<IClaudeCodeSession[]>(); // folderPath -> sessions
-	private _fileMtimes = new ResourceMap<number>(); // filePath -> mtime
+	private _sessionCache = new ResourceMap<IClaudeCodeSession[]>();
+	private _fileMtimes = new ResourceMap<number>();
 
 	constructor(
 		@IFileSystemService private readonly _fileSystem: IFileSystemService,
@@ -78,6 +89,11 @@ export class ClaudeCodeSessionLoader {
 		}
 
 		return items;
+	}
+
+	async getSession(sessionId: string, token: CancellationToken): Promise<IClaudeCodeSession | undefined> {
+		const all = await this.getAllSessions(token);
+		return all.find(session => session.id === sessionId);
 	}
 
 	/**

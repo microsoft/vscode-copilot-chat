@@ -7,106 +7,34 @@ import { readFile } from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type * as vscode from 'vscode';
 import { IFileSystemService } from '../../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../../platform/filesystem/common/fileTypes';
+import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { CancellationToken, CancellationTokenSource } from '../../../../../util/vs/base/common/cancellation';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
-import { ClaudeCodeSessionLoader } from '../claudeCodeSessionLoader';
-
-class MockFsService implements Partial<IFileSystemService> {
-	private mockDirs = new Map<string, [string, FileType][]>();
-	private mockFiles = new Map<string, string>();
-	private mockErrors = new Map<string, Error>();
-	private mockMtimes = new Map<string, number>();
-	private statCalls = 0;
-
-	mockDirectory(uri: URI | string, entries: [string, FileType][]) {
-		const uriString = typeof uri === 'string' ? uri : uri.toString();
-		this.mockDirs.set(uriString, entries);
-	}
-
-	mockFile(uri: URI | string, contents: string, mtime?: number) {
-		const uriString = typeof uri === 'string' ? uri : uri.toString();
-		this.mockFiles.set(uriString, contents);
-		if (mtime !== undefined) {
-			this.mockMtimes.set(uriString, mtime);
-		}
-	}
-
-	mockError(uri: URI | string, error: Error) {
-		const uriString = typeof uri === 'string' ? uri : uri.toString();
-		this.mockErrors.set(uriString, error);
-	}
-
-	getStatCallCount(): number {
-		return this.statCalls;
-	}
-
-	resetStatCallCount(): void {
-		this.statCalls = 0;
-	}
-
-	async readDirectory(uri: URI): Promise<[string, FileType][]> {
-		const uriString = uri.toString();
-		if (this.mockErrors.has(uriString)) {
-			throw this.mockErrors.get(uriString);
-		}
-		return this.mockDirs.get(uriString) || [];
-	}
-
-	async readFile(uri: URI): Promise<Uint8Array> {
-		const uriString = uri.toString();
-		if (this.mockErrors.has(uriString)) {
-			throw this.mockErrors.get(uriString);
-		}
-		const contents = this.mockFiles.get(uriString);
-		if (contents === undefined) {
-			throw new Error('ENOENT');
-		}
-		return new TextEncoder().encode(contents);
-	}
-
-	async stat(uri: URI): Promise<vscode.FileStat> {
-		this.statCalls++; // Track stat calls to verify caching
-		const uriString = uri.toString();
-		if (this.mockErrors.has(uriString)) {
-			throw this.mockErrors.get(uriString);
-		}
-		if (this.mockFiles.has(uriString)) {
-			const contents = this.mockFiles.get(uriString)!;
-			const mtime = this.mockMtimes.get(uriString) ?? Date.now();
-			return { type: FileType.File as unknown as vscode.FileType, ctime: Date.now() - 1000, mtime, size: contents.length };
-		}
-		throw new Error('ENOENT');
-	}
-
-	// Required interface methods
-	isWritableFileSystem(): boolean | undefined { return true; }
-	createFileSystemWatcher(): vscode.FileSystemWatcher { throw new Error('not implemented'); }
-}
+import { ClaudeCodeSessionService } from '../claudeCodeSessionService';
 
 function computeFolderSlug(folderUri: URI): string {
 	return folderUri.path.replace(/\//g, '-');
 }
 
-describe('ClaudeCodeSessionLoader', () => {
+describe('ClaudeCodeSessionService', () => {
 	const workspaceFolderPath = '/project';
 	const folderUri = URI.file(workspaceFolderPath);
 	const slug = computeFolderSlug(folderUri);
 	const home = os.homedir();
 	const dirUri = URI.joinPath(URI.file(home), '.claude', 'projects', slug);
 
-	let mockFs: MockFsService;
+	let mockFs: MockFileSystemService;
 	let testingServiceCollection: ReturnType<typeof createExtensionUnitTestingServices>;
-	let loader: ClaudeCodeSessionLoader;
+	let service: ClaudeCodeSessionService;
 
 	beforeEach(() => {
-		mockFs = new MockFsService();
+		mockFs = new MockFileSystemService();
 		testingServiceCollection = createExtensionUnitTestingServices();
 		testingServiceCollection.set(IFileSystemService, mockFs as any);
 
@@ -116,7 +44,7 @@ describe('ClaudeCodeSessionLoader', () => {
 
 		const accessor = testingServiceCollection.createTestingAccessor();
 		const instaService = accessor.get(IInstantiationService);
-		loader = instaService.createInstance(ClaudeCodeSessionLoader);
+		service = instaService.createInstance(ClaudeCodeSessionService);
 	});
 
 	it('loads 2 sessions from 3 real fixture files', async () => {
@@ -143,7 +71,7 @@ describe('ClaudeCodeSessionLoader', () => {
 		mockFs.mockFile(URI.joinPath(dirUri, fileName2), fileContents2, 2000);
 		mockFs.mockFile(URI.joinPath(dirUri, fileName3), fileContents3, 3000);
 
-		const sessions = await loader.getAllSessions(CancellationToken.None);
+		const sessions = await service.getAllSessions(CancellationToken.None);
 
 		expect(sessions).toHaveLength(2);
 
@@ -173,7 +101,7 @@ describe('ClaudeCodeSessionLoader', () => {
 	it('handles empty directory correctly', async () => {
 		mockFs.mockDirectory(dirUri, []);
 
-		const sessions = await loader.getAllSessions(CancellationToken.None);
+		const sessions = await service.getAllSessions(CancellationToken.None);
 
 		expect(sessions).toHaveLength(0);
 	});
@@ -191,7 +119,7 @@ describe('ClaudeCodeSessionLoader', () => {
 
 		mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents);
 
-		const sessions = await loader.getAllSessions(CancellationToken.None);
+		const sessions = await service.getAllSessions(CancellationToken.None);
 
 		expect(sessions).toHaveLength(1);
 		expect(sessions[0].id).toBe('553dd2b5-8a53-4fbf-9db2-240632522fe5');
@@ -210,7 +138,7 @@ describe('ClaudeCodeSessionLoader', () => {
 		mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents);
 		mockFs.mockError(URI.joinPath(dirUri, 'broken.jsonl'), new Error('File read error'));
 
-		const sessions = await loader.getAllSessions(CancellationToken.None);
+		const sessions = await service.getAllSessions(CancellationToken.None);
 
 		// Should only return the working session
 		expect(sessions).toHaveLength(1);
@@ -230,7 +158,7 @@ describe('ClaudeCodeSessionLoader', () => {
 		mockFs.mockFile(URI.joinPath(dirUri, 'malformed.jsonl'), malformedContent);
 
 		// Should not throw an error, even with malformed content
-		const sessions = await loader.getAllSessions(CancellationToken.None);
+		const sessions = await service.getAllSessions(CancellationToken.None);
 
 		// Should handle partial parsing gracefully - no sessions because no valid SDK messages with UUIDs
 		expect(sessions).toHaveLength(0);
@@ -247,7 +175,7 @@ describe('ClaudeCodeSessionLoader', () => {
 		const tokenSource = new CancellationTokenSource();
 		tokenSource.cancel(); // Cancel the token
 
-		const sessions = await loader.getAllSessions(tokenSource.token);
+		const sessions = await service.getAllSessions(tokenSource.token);
 
 		expect(sessions).toHaveLength(0);
 	});
@@ -264,7 +192,7 @@ describe('ClaudeCodeSessionLoader', () => {
 
 			// First call - should read from disk
 			mockFs.resetStatCallCount();
-			const sessions1 = await loader.getAllSessions(CancellationToken.None);
+			const sessions1 = await service.getAllSessions(CancellationToken.None);
 			const firstCallStatCount = mockFs.getStatCallCount();
 
 			expect(sessions1).toHaveLength(1);
@@ -274,7 +202,7 @@ describe('ClaudeCodeSessionLoader', () => {
 
 			// Second call - should use cache (no file changes)
 			mockFs.resetStatCallCount();
-			const sessions2 = await loader.getAllSessions(CancellationToken.None);
+			const sessions2 = await service.getAllSessions(CancellationToken.None);
 			const secondCallStatCount = mockFs.getStatCallCount();
 
 			expect(sessions2).toHaveLength(1);
@@ -293,7 +221,7 @@ describe('ClaudeCodeSessionLoader', () => {
 			mockFs.mockFile(URI.joinPath(dirUri, fileName), originalContents, 1000);
 
 			// First call
-			const sessions1 = await loader.getAllSessions(CancellationToken.None);
+			const sessions1 = await service.getAllSessions(CancellationToken.None);
 			expect(sessions1).toHaveLength(1);
 			expect(sessions1[0].label).toBe('hello session 2');
 
@@ -305,7 +233,7 @@ describe('ClaudeCodeSessionLoader', () => {
 			mockFs.mockFile(URI.joinPath(dirUri, fileName), modifiedContents, 2000); // Higher mtime
 
 			// Second call - should detect change and reload
-			const sessions2 = await loader.getAllSessions(CancellationToken.None);
+			const sessions2 = await service.getAllSessions(CancellationToken.None);
 			expect(sessions2).toHaveLength(1);
 			expect(sessions2[0].label).toBe('modified session message');
 			expect(sessions2[0].id).toBe('553dd2b5-8a53-4fbf-9db2-240632522fe5'); // Same session ID
@@ -320,14 +248,14 @@ describe('ClaudeCodeSessionLoader', () => {
 			mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents, 1000);
 
 			// First call
-			const sessions1 = await loader.getAllSessions(CancellationToken.None);
+			const sessions1 = await service.getAllSessions(CancellationToken.None);
 			expect(sessions1).toHaveLength(1);
 
 			// Simulate file deletion by updating directory to be empty
 			mockFs.mockDirectory(dirUri, []); // Empty directory - file is gone
 
 			// Second call - should detect deletion and return empty array
-			const sessions2 = await loader.getAllSessions(CancellationToken.None);
+			const sessions2 = await service.getAllSessions(CancellationToken.None);
 			expect(sessions2).toHaveLength(0);
 		});
 
@@ -346,7 +274,7 @@ describe('ClaudeCodeSessionLoader', () => {
 			mockFs.mockFile(URI.joinPath(dirUri, fileName1), fileContents1, 1000);
 
 			// First call - one session
-			const sessions1 = await loader.getAllSessions(CancellationToken.None);
+			const sessions1 = await service.getAllSessions(CancellationToken.None);
 			expect(sessions1).toHaveLength(1);
 
 			// Add a new file
@@ -367,7 +295,7 @@ describe('ClaudeCodeSessionLoader', () => {
 			mockFs.mockFile(URI.joinPath(dirUri, fileName2), fileContents2, 2000);
 
 			// Second call - should detect new file and return both sessions
-			const sessions2 = await loader.getAllSessions(CancellationToken.None);
+			const sessions2 = await service.getAllSessions(CancellationToken.None);
 			expect(sessions2).toHaveLength(2);
 
 			const sessionIds = sessions2.map(s => s.id).sort();
