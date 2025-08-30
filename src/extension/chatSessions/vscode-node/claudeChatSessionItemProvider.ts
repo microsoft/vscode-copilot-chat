@@ -12,7 +12,7 @@ import { IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSe
 
 export class ClaudeSessionDataStore {
 	private static StorageKey = 'claudeSessionIds';
-	private _internalSessionToInitialPrompt: Map<string, string> = new Map();
+	private _internalSessionToInitialRequest: Map<string, vscode.ChatRequest> = new Map();
 	private _unresolvedNewSessions = new Map<string, { id: string; label: string }>();
 
 	constructor(
@@ -43,13 +43,13 @@ export class ClaudeSessionDataStore {
 		return id;
 	}
 
-	public setInitialPrompt(internalSessionId: string, prompt: string) {
-		this._internalSessionToInitialPrompt.set(internalSessionId, prompt);
+	public setInitialRequest(internalSessionId: string, request: vscode.ChatRequest) {
+		this._internalSessionToInitialRequest.set(internalSessionId, request);
 	}
 
-	public getAndConsumeInitialPrompt(sessionId: string): string | undefined {
-		const prompt = this._internalSessionToInitialPrompt.get(sessionId);
-		this._internalSessionToInitialPrompt.delete(sessionId);
+	public getAndConsumeInitialRequest(sessionId: string): vscode.ChatRequest | undefined {
+		const prompt = this._internalSessionToInitialRequest.get(sessionId);
+		this._internalSessionToInitialRequest.delete(sessionId);
 		return prompt;
 	}
 
@@ -103,6 +103,7 @@ export class ClaudeChatSessionItemProvider extends Disposable implements vscode.
 	}
 
 	public async provideNewChatSessionItem(options: {
+		readonly request: vscode.ChatRequest;
 		readonly prompt?: string;
 		readonly history?: ReadonlyArray<vscode.ChatRequestTurn | vscode.ChatResponseTurn>;
 		metadata?: any;
@@ -110,8 +111,8 @@ export class ClaudeChatSessionItemProvider extends Disposable implements vscode.
 		const label = options.prompt ?? 'Claude Code';
 		const internal = this.sessionStore.registerNewSession(label);
 		this._onDidChangeChatSessionItems.fire();
-		if (options.prompt) {
-			this.sessionStore.setInitialPrompt(internal, options.prompt);
+		if (options.request) {
+			this.sessionStore.setInitialRequest(internal, options.request);
 		}
 
 		return {

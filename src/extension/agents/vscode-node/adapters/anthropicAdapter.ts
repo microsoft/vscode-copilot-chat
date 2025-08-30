@@ -231,7 +231,7 @@ class AnthropicAdapter implements IProtocolAdapter {
 					cache_read_input_tokens: 0,
 					output_tokens: 1,
 					service_tier: null,
-					server_tool_use: null
+					server_tool_use: null,
 				}
 			}
 		};

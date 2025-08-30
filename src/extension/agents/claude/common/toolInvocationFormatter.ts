@@ -3,10 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as l10n from '@vscode/l10n';
 import Anthropic from '@anthropic-ai/sdk';
+import * as l10n from '@vscode/l10n';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatToolInvocationPart, MarkdownString } from '../../../../vscodeTypes';
+import { ClaudeToolNames } from './constants';
 
 /**
  * Creates a formatted tool invocation part based on the tool type and input
@@ -16,22 +17,23 @@ export function createFormattedToolInvocation(
 	toolResult?: Anthropic.ToolResultBlockParam
 ): ChatToolInvocationPart {
 	const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false);
+	invocation.isConfirmed = true;
 
 	if (toolResult) {
-		invocation.isError = toolResult.is_error;
+		invocation.isError = toolResult.is_error; // Currently unused!
 	}
 
-	if (toolUse.name === 'Bash') {
+	if (toolUse.name === ClaudeToolNames.Bash) {
 		formatBashInvocation(invocation, toolUse);
-	} else if (toolUse.name === 'Read') {
+	} else if (toolUse.name === ClaudeToolNames.Read) {
 		formatReadInvocation(invocation, toolUse);
-	} else if (toolUse.name === 'Glob') {
+	} else if (toolUse.name === ClaudeToolNames.Glob) {
 		formatGlobInvocation(invocation, toolUse);
-	} else if (toolUse.name === 'Grep') {
+	} else if (toolUse.name === ClaudeToolNames.Grep) {
 		formatGrepInvocation(invocation, toolUse);
-	} else if (toolUse.name === 'LS') {
+	} else if (toolUse.name === ClaudeToolNames.LS) {
 		formatLSInvocation(invocation, toolUse);
-	} else if (toolUse.name === 'Edit') {
+	} else if (toolUse.name === ClaudeToolNames.Edit) {
 		formatEditInvocation(invocation, toolUse);
 	} else {
 		formatGenericInvocation(invocation, toolUse);

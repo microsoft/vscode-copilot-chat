@@ -3802,7 +3802,11 @@
 				"name": "claude",
 				"displayName": "Claude Code",
 				"description": "The Claude Code agent",
-				"when": "config.github.copilot.chat.advanced.claudeCode.enabled"
+				"when": "config.github.copilot.chat.advanced.claudeCode.enabled",
+				"capabilities": {
+					"supportsFileAttachments": true,
+					"supportsToolAttachments": false
+				}
 			}
 		],
 		"debuggers": [
@@ -3981,7 +3985,7 @@
 		"zeromq": "github:rebornix/zeromq.js#a19e8e373b3abc677f91b936d3f00d49b1b61792"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-code": "^1.0.89",
+		"@anthropic-ai/claude-code": "1.0.93",
 		"@anthropic-ai/sdk": "^0.56.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",

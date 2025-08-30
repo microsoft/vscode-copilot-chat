@@ -27,28 +27,32 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 	) { }
 
 	async provideChatSessionContent(internalSessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
-		const initialPrompt = this.sessionStore.getAndConsumeInitialPrompt(internalSessionId);
+		const initialRequest = this.sessionStore.getAndConsumeInitialRequest(internalSessionId);
 		const existingSession = await this.sessionService.getSession(internalSessionId, token);
 		const toolContext = this._createToolContext();
 		const history = this._buildChatHistory(existingSession, toolContext);
-		if (initialPrompt) {
-			history.push(new ChatRequestTurn2(initialPrompt, undefined, [], '', [], undefined));
+		if (initialRequest) {
+			history.push(new ChatRequestTurn2(initialRequest.prompt, undefined, [], '', [], undefined));
 		}
 		return {
 			history,
 			// This is called to attach to a previous or new session- send a request if it's a new session
-			activeResponseCallback: initialPrompt ?
+			activeResponseCallback: initialRequest ?
 				async (stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => {
-					const request = this._createInitialChatRequest(initialPrompt);
+					const request = this._createInitialChatRequest(initialRequest, internalSessionId);
 					const result = await this.claudeAgentManager.handleRequest(undefined, request, { history: [] }, stream, token);
 					if (result.claudeSessionId) {
 						this.sessionStore.setClaudeSessionId(internalSessionId, result.claudeSessionId);
 					}
 				} :
 				undefined,
-			requestHandler: (request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => {
+			requestHandler: async (request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => {
 				const claudeSessionId = this.sessionStore.getSessionId(internalSessionId);
-				return this.claudeAgentManager.handleRequest(claudeSessionId, request, context, stream, token);
+				const result = await this.claudeAgentManager.handleRequest(claudeSessionId, request, context, stream, token);
+				if (result.claudeSessionId) {
+					this.sessionStore.setClaudeSessionId(internalSessionId, result.claudeSessionId);
+				}
+				return result;
 			}
 		};
 	}
@@ -111,23 +115,11 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 		}));
 	}
 
-	private _createInitialChatRequest(initialPrompt: string | undefined): vscode.ChatRequest {
+	private _createInitialChatRequest(initialRequest: vscode.ChatRequest, internalSessionId: string): vscode.ChatRequest {
 		return {
-			attempt: 0,
-			command: undefined,
-			enableCommandDetection: false,
-			id: '',
-			isParticipantDetected: false,
-			location: vscode.ChatLocation.Panel,
-			location2: undefined,
-			model: null!,
-			prompt: initialPrompt ?? '',
-			references: [],
-			toolReferences: [],
-			tools: new Map(),
-			acceptedConfirmationData: undefined,
-			editedFileEvents: undefined,
-			toolInvocationToken: {} as never
+			...initialRequest,
+			// TODO this does not work
+			toolInvocationToken: { sessionId: internalSessionId } as vscode.ChatParticipantToolToken
 		};
 	}
 

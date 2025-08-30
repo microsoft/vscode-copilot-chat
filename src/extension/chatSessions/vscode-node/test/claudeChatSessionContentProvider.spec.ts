@@ -50,7 +50,7 @@ describe('ChatSessionContentProvider', () => {
 		} as any;
 
 		mockSessionStore = {
-			getAndConsumeInitialPrompt: vi.fn(),
+			getAndConsumeInitialRequest: vi.fn(),
 			setClaudeSessionId: vi.fn(),
 			getSessionId: vi.fn()
 		} as any;
@@ -106,7 +106,7 @@ describe('ChatSessionContentProvider', () => {
 
 	describe('provideChatSessionContent', () => {
 		it('returns empty history when no existing session', async () => {
-			vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue('test prompt');
+			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
 
 			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
@@ -129,7 +129,7 @@ describe('ChatSessionContentProvider', () => {
 				]
 			};
 
-			vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue(undefined);
+			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
 
 			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
@@ -169,7 +169,7 @@ describe('ChatSessionContentProvider', () => {
 				]
 			};
 
-			vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue(undefined);
+			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
 
 			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
@@ -216,7 +216,7 @@ describe('ChatSessionContentProvider', () => {
 				]
 			};
 
-			vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue(undefined);
+			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
 
 			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
@@ -240,7 +240,7 @@ describe('ChatSessionContentProvider', () => {
 		});
 
 		it('creates activeResponseCallback that calls claudeAgentManager', async () => {
-			vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue('initial prompt');
+			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
 			vi.mocked(mockClaudeAgentManager.handleRequest).mockResolvedValue({ claudeSessionId: 'new-claude-session' });
 
@@ -267,7 +267,7 @@ describe('ChatSessionContentProvider', () => {
 		});
 
 		it('creates requestHandler that calls claudeAgentManager with session id', async () => {
-			vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue(undefined);
+			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
 			vi.mocked(mockSessionStore.getSessionId).mockReturnValue('existing-claude-session');
 
@@ -324,7 +324,7 @@ describe('ChatSessionContentProvider', () => {
 			]
 		};
 
-		vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue(undefined);
+		vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
 
 		const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
@@ -406,7 +406,7 @@ describe('ChatSessionContentProvider', () => {
 			]
 		};
 
-		vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue(undefined);
+		vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
 
 		const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
@@ -460,7 +460,7 @@ describe('ChatSessionContentProvider', () => {
 			]
 		};
 
-		vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue(undefined);
+		vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
 
 		const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
@@ -476,7 +476,7 @@ describe('ChatSessionContentProvider', () => {
 	});
 
 	it('creates activeResponseCallback that calls claudeAgentManager', async () => {
-		vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue('initial prompt');
+		vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 		vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
 		vi.mocked(mockClaudeAgentManager.handleRequest).mockResolvedValue({ claudeSessionId: 'new-claude-session' });
 
@@ -503,7 +503,7 @@ describe('ChatSessionContentProvider', () => {
 	});
 
 	it('creates requestHandler that calls claudeAgentManager with session id', async () => {
-		vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue(undefined);
+		vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 		vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
 		vi.mocked(mockSessionStore.getSessionId).mockReturnValue('existing-claude-session');
 
@@ -562,7 +562,7 @@ describe('ChatSessionContentProvider', () => {
 			realSessionService
 		);
 
-		vi.mocked(mockSessionStore.getAndConsumeInitialPrompt).mockReturnValue(undefined);
+		vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 
 		const result = await provider.provideChatSessionContent('4c289ca8-f8bb-4588-8400-88b78beb784d', CancellationToken.None);
 		expect(mapHistoryForSnapshot(result.history)).toMatchSnapshot();
