@@ -96,7 +96,7 @@ export enum ContributedToolName {
 	CreateDirectory = 'copilot_createDirectory',
 	RunVscodeCmd = 'copilot_runVscodeCommand',
 	ToolReplay = 'copilot_toolReplay',
-	EditFilesPlaceholder = 'copilot_editFiles'
+	EditFilesPlaceholder = 'copilot_editFiles',
 	// Use non-reserved name for execute_prompt to satisfy schema validation
 	ExecutePrompt = 'execute_prompt',
 }
