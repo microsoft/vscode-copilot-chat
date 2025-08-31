@@ -10,6 +10,7 @@ import { ConfigKey, IConfigurationService } from '../../../../platform/configura
 import { IEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { isLocation } from '../../../../util/common/types';
 import { DeferredPromise } from '../../../../util/vs/base/common/async';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { isWindows } from '../../../../util/vs/base/common/platform';
@@ -45,7 +46,7 @@ export class ClaudeAgentManager extends Disposable {
 			const serverConfig = (await this.getLangModelServer()).getConfig();
 			const session = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, claudeSessionId);
 			await session.invoke(
-				request.prompt,
+				this.resolvePrompt(request),
 				request.toolInvocationToken,
 				stream,
 				token
@@ -61,6 +62,24 @@ export class ClaudeAgentManager extends Disposable {
 				errorDetails: { message: errorMessage },
 			};
 		}
+	}
+
+	private resolvePrompt(request: vscode.ChatRequest): string {
+		let prompt = request.prompt;
+		request.references.forEach(ref => {
+			if (ref.range) {
+				const valueText = URI.isUri(ref.value) ?
+					ref.value.fsPath :
+					isLocation(ref.value) ?
+						`${ref.value.uri.fsPath}:${ref.value.range.start.line + 1}` :
+						undefined;
+
+				if (valueText) {
+					prompt = prompt.slice(0, ref.range[0]) + valueText + prompt.slice(ref.range[1]);
+				}
+			}
+		});
+		return prompt;
 	}
 }
 
@@ -96,7 +115,6 @@ class ClaudeCodeSession {
 		this.logService.trace(`appRoot: ${vscode.env.appRoot}`);
 		const pathSep = isWindows ? ';' : ':';
 		const options: Options = {
-			// allowedTools: uniqueTools,
 			cwd: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
 			abortController,
 			executable: process.execPath as 'node', // get it to fork the EH node process
@@ -109,9 +127,8 @@ class ClaudeCodeSession {
 				USE_BUILTIN_RIPGREP: '0',
 				PATH: `${this.envService.appRoot}/node_modules/@vscode/ripgrep/bin${pathSep}${process.env.PATH}`
 			},
-			resume: this.sessionId, // doesn't work https://github.com/microsoft/vscode/issues/263111
+			resume: this.sessionId,
 			// permissionMode: 'acceptEdits',
-			// pathToClaudeCodeExecutable: '/Users/roblou/code/claude-code/cli.js',
 			canUseTool: async (name, input, opts) => {
 				return this.canUseTool(name, input, toolInvocationToken);
 			}
