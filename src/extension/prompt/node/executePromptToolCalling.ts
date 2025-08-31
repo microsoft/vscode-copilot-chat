@@ -13,11 +13,11 @@ import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogg
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart, ChatResponseReferencePart } from '../../../vscodeTypes';
+import { getAgentTools } from '../../intents/node/agentIntent';
 import { IToolCallingLoopOptions, ToolCallingLoop, ToolCallingLoopFetchOptions } from '../../intents/node/toolCallingLoop';
 import { AgentPrompt } from '../../prompts/node/agent/agentPrompt';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { ToolName } from '../../tools/common/toolNames';
-import { IToolsService } from '../../tools/common/toolsService';
 import { IBuildPromptContext } from '../common/intents';
 import { IBuildPromptResult } from './intents';
 
@@ -37,7 +37,6 @@ export class ExecutePromptToolCallingLoop extends ToolCallingLoop<IExecutePrompt
 		@ILogService logService: ILogService,
 		@IRequestLogger requestLogger: IRequestLogger,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
-		@IToolsService private readonly toolsService: IToolsService,
 		@IAuthenticationChatUpgradeService authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 		@ITelemetryService telemetryService: ITelemetryService,
 	) {
@@ -74,12 +73,11 @@ export class ExecutePromptToolCallingLoop extends ToolCallingLoop<IExecutePrompt
 	}
 
 	protected async getAvailableTools(): Promise<LanguageModelToolInformation[]> {
-		// Reuse the same set of enabled tools as the main agent loop
-		return this.toolsService.getEnabledTools(this.options.request, tool => {
-			if (tool.name === ToolName.ExecutePrompt) {
-				return false;
-			}
-		});
+		const excludedTools = new Set([ToolName.ExecutePrompt, ToolName.ExecuteTask, ToolName.CoreManageTodoList]);
+		return (await getAgentTools(this.instantiationService, this.options.request))
+			.filter(tool => !excludedTools.has(tool.name as ToolName))
+			// TODO can't do virtual tools at this level
+			.slice(0, 128);
 	}
 
 	protected async fetch({ messages, finishedCb, requestOptions }: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {

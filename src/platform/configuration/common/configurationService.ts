@@ -730,6 +730,7 @@ export namespace ConfigKey {
 
 		export const EnableClaudeCodeAgent = defineSetting<boolean | string | undefined>('chat.advanced.claudeCode.enabled', false, INTERNAL);
 		export const ClaudeCodeDebugEnabled = defineSetting<boolean>('chat.advanced.claudeCode.debug', false, INTERNAL);
+		export const TaskToolsEnabled = defineSetting<boolean>('chat.advanced.taskTools.enabled', true);
 	}
 
 	export const AgentThinkingTool = defineSetting<boolean>('chat.agent.thinkingTool', false);

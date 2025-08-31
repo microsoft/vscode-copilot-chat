@@ -164,18 +164,45 @@
 				}
 			},
 			{
+				"name": "execute_task",
+				"toolReferenceName": "executeTask",
+				"displayName": "Execute Task",
+				"when": "config.github.copilot.chat.advanced.taskTools.enabled",
+				"canBeReferencedInPrompt": true,
+				"modelDescription": "Launch a new agent to handle complex, multi-step tasks autonomously. This tool is good at researching complex questions, searching for code, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries, use this agent to perform the search for you.\n\n- When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result.\n - Each agent invocation is stateless. You will not be able to send additional messages to the agent, nor will the agent be able to communicate with you outside of its final report. Therefore, your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.\n - The agent's outputs should generally be trusted\n - Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent",
+				"tags": [],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"prompt": {
+							"type": "string",
+							"description": "A detailed description of the task for the agent to perform"
+						},
+						"description": {
+							"type": "string",
+							"description": "A short (3-5 word) description of the task"
+						}
+					},
+					"required": [
+						"prompt",
+						"description"
+					]
+				}
+			},
+			{
 				"name": "execute_prompt",
 				"toolReferenceName": "executePrompt",
-				"displayName": "Execute Prompt File",
+				"displayName": "Execute Prompt",
+				"when": "config.github.copilot.chat.advanced.taskTools.enabled",
 				"canBeReferencedInPrompt": true,
-				"modelDescription": "Use a separate agent loop to execute a user's chat prompt file. Provide a file path; the file contents will be treated as the user's chat message and run with full tool access and conversation history.",
+				"modelDescription": "This tool can take a path to a user's prompt file as input, and execute it autonomously. If the user's prompt includes multiple references to .prompt.md files, then you should use this tool to execute those prompts in sequence.\n\n- When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result.\n - The agent's outputs should generally be trusted",
 				"tags": [],
 				"inputSchema": {
 					"type": "object",
 					"properties": {
 						"filePath": {
 							"type": "string",
-							"description": "Absolute path to the prompt file to execute."
+							"description": "The absolute path to the prompt file to execute"
 						}
 					},
 					"required": [

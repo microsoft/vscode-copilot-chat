@@ -8,7 +8,6 @@ import { cloneAndChange } from '../../../util/vs/base/common/objects';
 export enum ToolName {
 	ApplyPatch = 'apply_patch',
 	Codebase = 'semantic_search',
-	ExecutePrompt = 'execute_prompt',
 	VSCodeAPI = 'get_vscode_api',
 	TestFailure = 'test_failure',
 	RunTests = 'run_tests',
@@ -53,7 +52,9 @@ export enum ToolName {
 	CoreGetTaskOutput = 'get_task_output',
 	CoreRunTest = 'runTests',
 	ToolReplay = 'tool_replay',
-	EditFilesPlaceholder = 'edit_files'
+	EditFilesPlaceholder = 'edit_files',
+	ExecutePrompt = 'execute_prompt',
+	ExecuteTask = 'execute_task',
 }
 
 export enum ContributedToolName {
@@ -97,8 +98,8 @@ export enum ContributedToolName {
 	RunVscodeCmd = 'copilot_runVscodeCommand',
 	ToolReplay = 'copilot_toolReplay',
 	EditFilesPlaceholder = 'copilot_editFiles',
-	// Use non-reserved name for execute_prompt to satisfy schema validation
 	ExecutePrompt = 'execute_prompt',
+	ExecuteTask = 'execute_task',
 }
 
 const toolNameToContributedToolNames = new Map<ToolName, ContributedToolName>();
