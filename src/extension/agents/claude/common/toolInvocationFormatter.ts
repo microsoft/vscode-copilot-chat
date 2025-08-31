@@ -14,9 +14,10 @@ import { ClaudeToolNames } from './constants';
  */
 export function createFormattedToolInvocation(
 	toolUse: Anthropic.ToolUseBlock,
-	toolResult?: Anthropic.ToolResultBlockParam
+	toolResult?: Anthropic.ToolResultBlockParam,
+	incompleteToolInvocation?: ChatToolInvocationPart
 ): ChatToolInvocationPart {
-	const invocation = new ChatToolInvocationPart(toolUse.name, toolUse.id, false);
+	const invocation = incompleteToolInvocation ?? new ChatToolInvocationPart(toolUse.name, toolUse.id, false);
 	invocation.isConfirmed = true;
 
 	if (toolResult) {
@@ -35,6 +36,8 @@ export function createFormattedToolInvocation(
 		formatLSInvocation(invocation, toolUse);
 	} else if (toolUse.name === ClaudeToolNames.Edit) {
 		formatEditInvocation(invocation, toolUse);
+	} else if (toolUse.name === ClaudeToolNames.Write) {
+		formatWriteInvocation(invocation, toolUse);
 	} else {
 		formatGenericInvocation(invocation, toolUse);
 	}
@@ -73,6 +76,11 @@ function formatLSInvocation(invocation: ChatToolInvocationPart, toolUse: Anthrop
 function formatEditInvocation(invocation: ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
 	const filePath = (toolUse.input as any)?.file_path;
 	invocation.invocationMessage = new MarkdownString(l10n.t(`Edited ${filePath ? formatUriForMessage(filePath) : 'file'}`));
+}
+
+function formatWriteInvocation(invocation: ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
+	const filePath = (toolUse.input as any)?.file_path;
+	invocation.invocationMessage = new MarkdownString(l10n.t(`Wrote ${filePath ? formatUriForMessage(filePath) : 'file'}`));
 }
 
 function formatGenericInvocation(invocation: ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {

@@ -10,4 +10,5 @@ export enum ClaudeToolNames {
 	Grep = 'Grep',
 	LS = 'LS',
 	Edit = 'Edit',
+	Write = 'Write'
 }

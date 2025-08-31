@@ -295,7 +295,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 						if (uuid) {
 							messages.set(uuid, sdkMessage);
 						}
-					} else if ('summary' in entry && entry.summary) {
+					} else if ('summary' in entry && entry.summary && !entry.summary.startsWith('API Error: 401')) {
 						const summaryEntry = entry as SummaryEntry;
 						const uuid = summaryEntry.leafUuid;
 						if (uuid) {

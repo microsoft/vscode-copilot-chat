@@ -250,7 +250,7 @@ class ClaudeCodeSession {
 	}
 
 	private async canAutoApprove(toolName: string, input: Record<string, unknown>): Promise<boolean> {
-		if (toolName === ClaudeToolNames.Edit) {
+		if (toolName === ClaudeToolNames.Edit || toolName === ClaudeToolNames.Write) {
 			return await this.instantiationService.invokeFunction(isFileOkForTool, URI.file(input.file_path as string));
 		}
 

@@ -12,6 +12,7 @@ import { createFormattedToolInvocation } from '../../agents/claude/common/toolIn
 import { IClaudeCodeSession, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
 import { ClaudeAgentManager } from '../../agents/claude/vscode-node/claudeCodeAgent';
 import { ClaudeSessionDataStore } from './claudeChatSessionItemProvider';
+import { ILogService } from '../../../platform/log/common/logService';
 
 interface ToolContext {
 	unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>;
@@ -23,7 +24,8 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 	constructor(
 		private readonly claudeAgentManager: ClaudeAgentManager,
 		private readonly sessionStore: ClaudeSessionDataStore,
-		@IClaudeCodeSessionService private readonly sessionService: IClaudeCodeSessionService
+		@IClaudeCodeSessionService private readonly sessionService: IClaudeCodeSessionService,
+		@ILogService private readonly logService: ILogService
 	) { }
 
 	async provideChatSessionContent(internalSessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
@@ -39,15 +41,18 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 			// This is called to attach to a previous or new session- send a request if it's a new session
 			activeResponseCallback: initialRequest ?
 				async (stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => {
+					this._log(`Starting activeResponseCallback, internalID: ${internalSessionId}`);
 					const request = this._createInitialChatRequest(initialRequest, internalSessionId);
 					const result = await this.claudeAgentManager.handleRequest(undefined, request, { history: [] }, stream, token);
 					if (result.claudeSessionId) {
+						this._log(`activeResponseCallback, setClaudeSessionId: ${internalSessionId} -> ${result.claudeSessionId}`);
 						this.sessionStore.setClaudeSessionId(internalSessionId, result.claudeSessionId);
 					}
 				} :
 				undefined,
 			requestHandler: async (request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => {
 				const claudeSessionId = this.sessionStore.getSessionId(internalSessionId);
+				this._log(`requestHandler, internalID: ${internalSessionId}, claudeID: ${claudeSessionId}`);
 				const result = await this.claudeAgentManager.handleRequest(claudeSessionId, request, context, stream, token);
 				if (result.claudeSessionId) {
 					this.sessionStore.setClaudeSessionId(internalSessionId, result.claudeSessionId);
@@ -55,6 +60,10 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 				return result;
 			}
 		};
+	}
+
+	private _log(message: string): void {
+		this.logService.debug(`[ClaudeChatSessionContentProvider] ${message}`);
 	}
 
 	private _userMessageToRequest(message: Anthropic.MessageParam, toolContext: ToolContext): vscode.ChatRequestTurn2 | undefined {
@@ -75,23 +84,13 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 				return new vscode.ChatResponseMarkdownPart(new vscode.MarkdownString(block.text));
 			} else if (block.type === 'tool_use') {
 				toolContext.unprocessedToolCalls.set(block.id, block);
-				const toolInvocation = new vscode.ChatToolInvocationPart(block.name, block.id, false);
-				toolInvocation.invocationMessage = new vscode.MarkdownString(`**${block.name}**`);
+				const toolInvocation = createFormattedToolInvocation(block);
 				toolContext.pendingToolInvocations.set(block.id, toolInvocation);
 				return toolInvocation;
 			}
 		}));
 
 		return new vscode.ChatResponseTurn2(responseParts, {}, '');
-	}
-
-	private _finishToolInvocationPart(toolUse: Anthropic.ToolUseBlock, toolResult: Anthropic.ToolResultBlockParam, pendingInvocation: vscode.ChatToolInvocationPart) {
-		const formattedInvocation = createFormattedToolInvocation(toolUse, toolResult);
-
-		// Copy formatting from the utility function
-		pendingInvocation.isError = formattedInvocation.isError;
-		pendingInvocation.invocationMessage = formattedInvocation.invocationMessage;
-		pendingInvocation.toolSpecificData = formattedInvocation.toolSpecificData;
 	}
 
 	private _createToolContext(): ToolContext {
@@ -147,7 +146,7 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 					toolContext.unprocessedToolCalls.delete(toolResultBlock.tool_use_id);
 					const pendingInvocation = toolContext.pendingToolInvocations.get(toolResultBlock.tool_use_id);
 					if (pendingInvocation) {
-						this._finishToolInvocationPart(toolUse, toolResultBlock, pendingInvocation);
+						createFormattedToolInvocation(toolUse, toolResultBlock, pendingInvocation);
 						toolContext.pendingToolInvocations.delete(toolResultBlock.tool_use_id);
 					}
 				}
