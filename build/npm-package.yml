@@ -33,7 +33,7 @@ extends:
               versionSpec: 22.x
             displayName: 🛠 Install Node.js (22.x)
 
-          - script: npm ci && npm run extract-chat-lib && rm -rf node_modules
+          - script: npm ci && npm run extract-chat-lib && (rm -rf node_modules 2>/dev/null || rmdir /s /q node_modules)
 
           - script: npm ci
             workingDirectory: chat-lib
@@ -49,7 +49,7 @@ extends:
           #   nodeVersions: [22.x]
         workingDirectory: chat-lib
         testSteps:
-          - script: npm ci && npm run extract-chat-lib && rm -rf node_modules
+          - script: npm ci && npm run extract-chat-lib && (rm -rf node_modules 2>/dev/null || rmdir /s /q node_modules)
 
           - script: npm ci
             workingDirectory: chat-lib
