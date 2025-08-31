@@ -118,7 +118,8 @@ class ChatLibExtractor {
 		// - import ... from './path'
 		// - export ... from './path'
 		// - export { ... } from './path'
-		const importExportRegex = /(?:import|export)\s+(?:(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+)?['"](\.\/[^'"]*|\.\.\/[^'"]*)['"]/g;
+		// Updated regex to match all relative imports (including multiple ../ segments)
+		const importExportRegex = /(?:import|export)\s+(?:(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+)?['"](\.\.?\/[^'"]*)['"]/g;
 		let match;
 
 		while ((match = importExportRegex.exec(content)) !== null) {
@@ -141,56 +142,61 @@ class ChatLibExtractor {
 		if (importPath.endsWith('.js')) {
 			const baseResolved = resolved.slice(0, -3); // Remove .js
 			if (fs.existsSync(baseResolved + '.ts')) {
-				return path.relative(REPO_ROOT, baseResolved + '.ts');
+				return this.normalizePath(path.relative(REPO_ROOT, baseResolved + '.ts'));
 			}
 			if (fs.existsSync(baseResolved + '.tsx')) {
-				return path.relative(REPO_ROOT, baseResolved + '.tsx');
+				return this.normalizePath(path.relative(REPO_ROOT, baseResolved + '.tsx'));
 			}
 		}
 
 		// Try with .ts extension
 		if (fs.existsSync(resolved + '.ts')) {
-			return path.relative(REPO_ROOT, resolved + '.ts');
+			return this.normalizePath(path.relative(REPO_ROOT, resolved + '.ts'));
 		}
 
 		// Try with .tsx extension
 		if (fs.existsSync(resolved + '.tsx')) {
-			return path.relative(REPO_ROOT, resolved + '.tsx');
+			return this.normalizePath(path.relative(REPO_ROOT, resolved + '.tsx'));
 		}
 
 		// Try with .d.ts extension
 		if (fs.existsSync(resolved + '.d.ts')) {
-			return path.relative(REPO_ROOT, resolved + '.d.ts');
+			return this.normalizePath(path.relative(REPO_ROOT, resolved + '.d.ts'));
 		}
 
 		// Try with index.ts
 		if (fs.existsSync(path.join(resolved, 'index.ts'))) {
-			return path.relative(REPO_ROOT, path.join(resolved, 'index.ts'));
+			return this.normalizePath(path.relative(REPO_ROOT, path.join(resolved, 'index.ts')));
 		}
 
 		// Try with index.tsx
 		if (fs.existsSync(path.join(resolved, 'index.tsx'))) {
-			return path.relative(REPO_ROOT, path.join(resolved, 'index.tsx'));
+			return this.normalizePath(path.relative(REPO_ROOT, path.join(resolved, 'index.tsx')));
 		}
 
 		// Try with index.d.ts
 		if (fs.existsSync(path.join(resolved, 'index.d.ts'))) {
-			return path.relative(REPO_ROOT, path.join(resolved, 'index.d.ts'));
+			return this.normalizePath(path.relative(REPO_ROOT, path.join(resolved, 'index.d.ts')));
 		}
 
 		// Try as-is
 		if (fs.existsSync(resolved)) {
-			return path.relative(REPO_ROOT, resolved);
+			return this.normalizePath(path.relative(REPO_ROOT, resolved));
 		}
 
 		// If we get here, the file was not found - throw an error
 		throw new Error(`Import file not found: ${importPath} (resolved to ${resolved}) imported from ${fromFile}`);
 	}
 
+	private normalizePath(filePath: string): string {
+		// Normalize path separators to forward slashes for consistency across platforms
+		return filePath.replace(/\\/g, '/');
+	}
 
 	private getDestinationPath(filePath: string): string {
-		// Convert src/... to _internal/...
-		const relativePath = filePath.replace(/^src\//, '_internal/');
+		// Normalize the input path first, then convert src/... to _internal/...
+		const normalizedPath = this.normalizePath(filePath);
+		const relativePath = normalizedPath.replace(/^src\//, '_internal/');
 		return path.join(TARGET_DIR, relativePath);
 	}
 
