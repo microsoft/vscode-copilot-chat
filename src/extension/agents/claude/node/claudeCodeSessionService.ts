@@ -353,8 +353,8 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	}
 
 	private _stripAttachments(text: string): string {
-		// Remove any <attachments> ... </attachments> blocks, including newlines
-		return text.replace(/<attachments>[\s\S]*?<\/attachments>\s*/g, '').trim();
+		// Remove any <system-reminder> ... </system-reminder> blocks, including newlines
+		return text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, '').trim();
 	}
 }
 

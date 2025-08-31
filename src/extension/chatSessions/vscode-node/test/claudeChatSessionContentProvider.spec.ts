@@ -6,17 +6,23 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { readFile } from 'fs/promises';
 import * as path from 'path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
-import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
-import { TestLogService } from '../../../../platform/testing/common/testLogService';
+import { ILogService } from '../../../../platform/log/common/logService';
+import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
+import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../../agents/claude/node/claudeCodeSessionService';
 import { ClaudeAgentManager } from '../../../agents/claude/vscode-node/claudeCodeAgent';
+import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { ClaudeChatSessionContentProvider } from '../claudeChatSessionContentProvider';
 import { ClaudeSessionDataStore } from '../claudeChatSessionItemProvider';
 
@@ -43,6 +49,8 @@ describe('ChatSessionContentProvider', () => {
 	let mockSessionStore: ClaudeSessionDataStore;
 	let mockSessionService: IClaudeCodeSessionService;
 	let provider: ClaudeChatSessionContentProvider;
+	const store = new DisposableStore();
+	let accessor: ITestingServicesAccessor;
 
 	beforeEach(() => {
 		mockClaudeAgentManager = {
@@ -59,11 +67,18 @@ describe('ChatSessionContentProvider', () => {
 			getSession: vi.fn()
 		} as any;
 
-		provider = new ClaudeChatSessionContentProvider(
+		const serviceCollection = store.add(createExtensionUnitTestingServices());
+		serviceCollection.define(IClaudeCodeSessionService, mockSessionService);
+		accessor = serviceCollection.createTestingAccessor();
+		const instaService = accessor.get(IInstantiationService);
+		provider = instaService.createInstance(ClaudeChatSessionContentProvider,
 			mockClaudeAgentManager,
-			mockSessionStore,
-			mockSessionService
-		);
+			mockSessionStore);
+	});
+
+	afterEach(() => {
+		vi.clearAllMocks();
+		store.clear();
 	});
 
 	// Helper function to create simplified objects for snapshot testing
@@ -227,7 +242,7 @@ describe('ChatSessionContentProvider', () => {
 				  {
 				    "parts": [
 				      {
-				        "invocationMessage": "**bash**",
+				        "invocationMessage": "Used tool: bash",
 				        "isError": false,
 				        "toolCallId": "tool-1",
 				        "toolName": "bash",
@@ -346,7 +361,7 @@ describe('ChatSessionContentProvider', () => {
 			        "type": "markdown",
 			      },
 			      {
-			        "invocationMessage": "**bash**",
+			        "invocationMessage": "Used tool: bash",
 			        "isError": false,
 			        "toolCallId": "tool-1",
 			        "toolName": "bash",
@@ -538,9 +553,9 @@ describe('ChatSessionContentProvider', () => {
 	it('loads real fixture file with tool invocation flow and converts to correct chat history', async () => {
 		const fixtureContent = await readFile(path.join(__dirname, 'fixtures', '4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl'), 'utf8');
 
-		const mockFileSystem = new MockFileSystemService();
-		const testWorkspace = new TestWorkspaceService();
-		const testLogService = new TestLogService();
+		const mockFileSystem = accessor.get(IFileSystemService) as MockFileSystemService;
+		const testWorkspace = accessor.get(IWorkspaceService);
+		const testLogService = accessor.get(ILogService);
 
 		vi.spyOn(testWorkspace, 'getWorkspaceFolders').mockReturnValue([URI.file('/project')]);
 
@@ -563,11 +578,13 @@ describe('ChatSessionContentProvider', () => {
 			testWorkspace
 		);
 
-		const provider = new ClaudeChatSessionContentProvider(
+		const instaService = accessor.get(IInstantiationService);
+		const childInstantiationService = instaService.createChild(new ServiceCollection(
+			[IClaudeCodeSessionService, realSessionService]
+		));
+		const provider = childInstantiationService.createInstance(ClaudeChatSessionContentProvider,
 			mockClaudeAgentManager,
-			mockSessionStore,
-			realSessionService
-		);
+			mockSessionStore);
 
 		vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 

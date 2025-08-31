@@ -47,7 +47,7 @@ import { NullEnvService } from '../../env/common/nullEnvService';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { IExtensionsService } from '../../extensions/common/extensionsService';
 import { IFileSystemService } from '../../filesystem/common/fileSystemService';
-import { NodeFileSystemService } from '../../filesystem/node/fileSystemServiceImpl';
+import { MockFileSystemService } from '../../filesystem/node/test/mockFileSystemService';
 import { IGitService } from '../../git/common/gitService';
 import { NullGitExtensionService } from '../../git/common/nullGitExtensionService';
 import { IGithubRepositoryService, IOctoKitService } from '../../github/common/githubService';
@@ -207,7 +207,7 @@ export function _createBaselineServices(): TestingServiceCollection {
 		rejectionMessage = 'Sorry, but I can only assist with programming related questions.';
 	}));
 	testingServiceCollection.define(IChatAgentService, new SyncDescriptor(TestChatAgentService));
-	testingServiceCollection.define(IFileSystemService, new SyncDescriptor(NodeFileSystemService));
+	testingServiceCollection.define(IFileSystemService, new SyncDescriptor(MockFileSystemService));
 	testingServiceCollection.define(IGithubRepositoryService, new SyncDescriptor(GithubRepositoryService));
 	testingServiceCollection.define(IGitService, new SyncDescriptor(NullGitExtensionService));
 	testingServiceCollection.define(IAuthenticationChatUpgradeService, new SyncDescriptor(AuthenticationChatUpgradeService));

@@ -86,7 +86,7 @@ export class ClaudeAgentManager extends Disposable {
 		});
 
 		if (extraRefsTexts.length > 0) {
-			prompt = `<attachments>\nThe user provided the following references:\n${extraRefsTexts.join('\n')}\n</attachments>\n\n` + prompt;
+			prompt = `<system-reminder>\nThe user provided the following references:\n${extraRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>\n\n` + prompt;
 		}
 
 		return prompt;
