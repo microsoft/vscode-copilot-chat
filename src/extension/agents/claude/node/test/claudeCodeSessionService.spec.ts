@@ -227,8 +227,8 @@ describe('ClaudeCodeSessionService', () => {
 
 			// Modify file by changing the user message content (simulate file modification)
 			const modifiedContents = originalContents.replace(
-				'"hello session 2"',
-				'"modified session message"'
+				'hello session 2',
+				'modified session message'
 			);
 			mockFs.mockFile(URI.joinPath(dirUri, fileName), modifiedContents, 2000); // Higher mtime
 

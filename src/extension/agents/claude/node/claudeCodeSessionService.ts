@@ -10,10 +10,10 @@ import { IFileSystemService } from '../../../../platform/filesystem/common/fileS
 import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { URI } from '../../../../util/vs/base/common/uri';
+import { createServiceIdentifier } from '../../../../util/common/services';
 import { ResourceMap, ResourceSet } from '../../../../util/vs/base/common/map';
 import { isEqualOrParent } from '../../../../util/vs/base/common/resources';
-import { createServiceIdentifier } from '../../../../util/common/services';
+import { URI } from '../../../../util/vs/base/common/uri';
 
 type RawStoredSDKMessage = SDKMessage & {
 	parentUuid: string | null;
@@ -333,22 +333,28 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 
 			// Handle both string content and array content formats
 			if (typeof message.content === 'string') {
-				content = message.content;
+				content = this._stripAttachments(message.content);
 			} else if (Array.isArray(message.content) && message.content.length > 0) {
 				// Extract text from the first text block in the content array
-				const firstTextBlock = message.content.find(block => block.type === 'text' && typeof block.text === 'string');
-				if (firstTextBlock && 'text' in firstTextBlock) {
-					content = firstTextBlock.text;
-				}
+				const firstUsefulText = message.content
+					.filter(block => block.type === 'text' && typeof (block as any).text === 'string')
+					.map(block => this._stripAttachments((block as any).text as string))
+					.find(text => text.trim().length > 0);
+				content = firstUsefulText;
 			}
 
 			if (content) {
 				// Return first line or first 50 characters, whichever is shorter
-				const firstLine = content.split('\n')[0];
+				const firstLine = content.split('\n').find(l => l.trim().length > 0) ?? '';
 				return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine;
 			}
 		}
 		return 'Claude Session';
+	}
+
+	private _stripAttachments(text: string): string {
+		// Remove any <attachments> ... </attachments> blocks, including newlines
+		return text.replace(/<attachments>[\s\S]*?<\/attachments>\s*/g, '').trim();
 	}
 }
 
