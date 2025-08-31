@@ -6,7 +6,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { readFile } from 'fs/promises';
 import * as path from 'path';
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../platform/filesystem/common/fileTypes';
@@ -123,6 +123,7 @@ describe('ChatSessionContentProvider', () => {
 	describe('provideChatSessionContent', () => {
 		it('returns empty history when no existing session', async () => {
 			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
+			vi.mocked(mockSessionStore.getSessionId).mockReturnValue('test-session');
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
 
 			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
@@ -146,6 +147,7 @@ describe('ChatSessionContentProvider', () => {
 			};
 
 			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
+			vi.mocked(mockSessionStore.getSessionId).mockReturnValue('test-session');
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
 
 			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
@@ -187,6 +189,7 @@ describe('ChatSessionContentProvider', () => {
 
 			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
+			vi.mocked(mockSessionStore.getSessionId).mockReturnValue('test-session');
 
 			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
 
@@ -234,6 +237,7 @@ describe('ChatSessionContentProvider', () => {
 
 			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
+			vi.mocked(mockSessionStore.getSessionId).mockReturnValue('test-session');
 
 			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
 
@@ -349,6 +353,7 @@ describe('ChatSessionContentProvider', () => {
 
 		vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
+		vi.mocked(mockSessionStore.getSessionId).mockReturnValue('test-session');
 
 		const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
 
@@ -431,6 +436,7 @@ describe('ChatSessionContentProvider', () => {
 
 		vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
+		vi.mocked(mockSessionStore.getSessionId).mockReturnValue('test-session');
 
 		const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
 
@@ -485,6 +491,7 @@ describe('ChatSessionContentProvider', () => {
 
 		vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
+		vi.mocked(mockSessionStore.getSessionId).mockReturnValue('test-session');
 
 		const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
 
@@ -587,6 +594,7 @@ describe('ChatSessionContentProvider', () => {
 			mockSessionStore);
 
 		vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
+		vi.mocked(mockSessionStore.getSessionId).mockReturnValue('4c289ca8-f8bb-4588-8400-88b78beb784d');
 
 		const result = await provider.provideChatSessionContent('4c289ca8-f8bb-4588-8400-88b78beb784d', CancellationToken.None);
 		expect(mapHistoryForSnapshot(result.history)).toMatchSnapshot();
