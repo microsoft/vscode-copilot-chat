@@ -33,3 +33,9 @@ export interface ITodoWriteInput {
 export interface IExitPlanModeInput {
 	plan: string;
 }
+
+export interface ITaskToolInput {
+	description: string;
+	subagent_type: string;
+	prompt: string;
+}
