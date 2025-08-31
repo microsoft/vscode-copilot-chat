@@ -16,9 +16,10 @@ import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { ToolName } from '../../../tools/common/toolNames';
 import { isFileOkForTool } from '../../../tools/node/toolUtils';
 import { ILanguageModelServerConfig, LanguageModelServer } from '../../vscode-node/langModelServer';
-import { ClaudeToolNames } from '../common/constants';
+import { ClaudeToolNames, IExitPlanModeInput, ITodoWriteInput } from '../common/claudeTools';
 import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 
 // Manages Claude Code agent interactions and language model server lifecycle
@@ -58,27 +59,36 @@ export class ClaudeAgentManager extends Disposable {
 		} catch (invokeError) {
 			this.logService.error(invokeError as Error);
 			const errorMessage = (invokeError instanceof KnownClaudeError) ? invokeError.message : `Claude CLI Error: ${invokeError.message}`;
+			stream.markdown('❌ Error: ' + errorMessage);
 			return {
+				// This currently can't be used by the sessions API https://github.com/microsoft/vscode/issues/263111
 				errorDetails: { message: errorMessage },
 			};
 		}
 	}
 
 	private resolvePrompt(request: vscode.ChatRequest): string {
+		const extraRefsTexts: string[] = [];
 		let prompt = request.prompt;
 		request.references.forEach(ref => {
-			if (ref.range) {
-				const valueText = URI.isUri(ref.value) ?
-					ref.value.fsPath :
-					isLocation(ref.value) ?
-						`${ref.value.uri.fsPath}:${ref.value.range.start.line + 1}` :
-						undefined;
-
-				if (valueText) {
+			const valueText = URI.isUri(ref.value) ?
+				ref.value.fsPath :
+				isLocation(ref.value) ?
+					`${ref.value.uri.fsPath}:${ref.value.range.start.line + 1}` :
+					undefined;
+			if (valueText) {
+				if (ref.range) {
 					prompt = prompt.slice(0, ref.range[0]) + valueText + prompt.slice(ref.range[1]);
+				} else {
+					extraRefsTexts.push(`- ${valueText}`);
 				}
 			}
 		});
+
+		if (extraRefsTexts.length > 0) {
+			prompt = `<attachments>\nThe user provided the following references:\n${extraRefsTexts.join('\n')}\n</attachments>\n\n` + prompt;
+		}
+
 		return prompt;
 	}
 }
@@ -179,11 +189,33 @@ class ClaudeCodeSession {
 							if (toolUse) {
 								unprocessedToolCalls.delete(toolResult.tool_use_id);
 								const invocation = createFormattedToolInvocation(toolUse, toolResult);
-								if (toolResult?.content === ClaudeCodeSession.DenyToolMessage) {
+								if (toolResult?.content === ClaudeCodeSession.DenyToolMessage && invocation) {
 									invocation.isConfirmed = false;
 								}
 
-								stream.push(invocation);
+								if (toolUse.name === ClaudeToolNames.TodoWrite) {
+									const input = toolUse.input as ITodoWriteInput;
+									vscode.lm.invokeTool(ToolName.CoreManageTodoList, {
+										input: {
+											operation: 'write',
+											todoList: input.todos.map((todo, i) => ({
+												id: i,
+												title: todo.content,
+												description: '',
+												status: todo.status === 'pending' ?
+													'not-started' :
+													(todo.status === 'in_progress' ?
+														'in-progress' :
+														'completed')
+											} satisfies IManageTodoListToolInputParams['todoList'][number])),
+										} satisfies IManageTodoListToolInputParams,
+										toolInvocationToken,
+									}, token);
+								}
+
+								if (invocation) {
+									stream.push(invocation);
+								}
 							}
 						}
 					}
@@ -240,6 +272,13 @@ class ClaudeCodeSession {
 				confirmationType: 'terminal',
 				terminalCommand: input.command as string | undefined
 			};
+		} else if (toolName === ClaudeToolNames.ExitPlanMode) {
+			const plan = (input as unknown as IExitPlanModeInput).plan;
+			return {
+				title: `Ready to code?`,
+				message: 'Here is Claude\'s plan:\n\n' + plan,
+				confirmationType: 'basic'
+			};
 		}
 
 		return {
@@ -266,4 +305,14 @@ interface IConfirmationToolParams {
 	message: string;
 	confirmationType?: 'basic' | 'terminal';
 	terminalCommand?: string;
+}
+
+interface IManageTodoListToolInputParams {
+	operation?: 'write' | 'read'; // Optional in write-only mode
+	todoList: Array<{
+		id: number;
+		title: string;
+		description: string;
+		status: 'not-started' | 'in-progress' | 'completed';
+	}>;
 }

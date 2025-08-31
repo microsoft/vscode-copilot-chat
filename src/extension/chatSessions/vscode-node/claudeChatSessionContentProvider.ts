@@ -13,6 +13,7 @@ import { IClaudeCodeSession, IClaudeCodeSessionService } from '../../agents/clau
 import { ClaudeAgentManager } from '../../agents/claude/vscode-node/claudeCodeAgent';
 import { ClaudeSessionDataStore } from './claudeChatSessionItemProvider';
 import { ILogService } from '../../../platform/log/common/logService';
+import { ClaudeToolNames, IExitPlanModeInput } from '../../agents/claude/common/claudeTools';
 
 interface ToolContext {
 	unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>;
@@ -83,9 +84,15 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 			if (block.type === 'text') {
 				return new vscode.ChatResponseMarkdownPart(new vscode.MarkdownString(block.text));
 			} else if (block.type === 'tool_use') {
+				if (block.name === ClaudeToolNames.ExitPlanMode) {
+					return new vscode.ChatResponseMarkdownPart(new vscode.MarkdownString(`\`\`\`\`\n${(block.input as IExitPlanModeInput).plan}\`\`\`\n\n`));
+				}
+
 				toolContext.unprocessedToolCalls.set(block.id, block);
 				const toolInvocation = createFormattedToolInvocation(block);
-				toolContext.pendingToolInvocations.set(block.id, toolInvocation);
+				if (toolInvocation) {
+					toolContext.pendingToolInvocations.set(block.id, toolInvocation);
+				}
 				return toolInvocation;
 			}
 		}));

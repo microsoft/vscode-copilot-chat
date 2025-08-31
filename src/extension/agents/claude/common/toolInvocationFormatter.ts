@@ -7,7 +7,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import * as l10n from '@vscode/l10n';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatToolInvocationPart, MarkdownString } from '../../../../vscodeTypes';
-import { ClaudeToolNames } from './constants';
+import { ClaudeToolNames, IExitPlanModeInput } from './claudeTools';
 
 /**
  * Creates a formatted tool invocation part based on the tool type and input
@@ -16,7 +16,7 @@ export function createFormattedToolInvocation(
 	toolUse: Anthropic.ToolUseBlock,
 	toolResult?: Anthropic.ToolResultBlockParam,
 	incompleteToolInvocation?: ChatToolInvocationPart
-): ChatToolInvocationPart {
+): ChatToolInvocationPart | undefined {
 	const invocation = incompleteToolInvocation ?? new ChatToolInvocationPart(toolUse.name, toolUse.id, false);
 	invocation.isConfirmed = true;
 
@@ -34,10 +34,15 @@ export function createFormattedToolInvocation(
 		formatGrepInvocation(invocation, toolUse);
 	} else if (toolUse.name === ClaudeToolNames.LS) {
 		formatLSInvocation(invocation, toolUse);
-	} else if (toolUse.name === ClaudeToolNames.Edit) {
+	} else if (toolUse.name === ClaudeToolNames.Edit || toolUse.name === ClaudeToolNames.MultiEdit) {
 		formatEditInvocation(invocation, toolUse);
 	} else if (toolUse.name === ClaudeToolNames.Write) {
 		formatWriteInvocation(invocation, toolUse);
+	} else if (toolUse.name === ClaudeToolNames.ExitPlanMode) {
+		formatExitPlanModeInvocation(invocation, toolUse);
+	} else if (toolUse.name === ClaudeToolNames.TodoWrite) {
+		// Suppress this, it's too common
+		return;
 	} else {
 		formatGenericInvocation(invocation, toolUse);
 	}
@@ -81,6 +86,10 @@ function formatEditInvocation(invocation: ChatToolInvocationPart, toolUse: Anthr
 function formatWriteInvocation(invocation: ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
 	const filePath = (toolUse.input as any)?.file_path;
 	invocation.invocationMessage = new MarkdownString(l10n.t(`Wrote ${filePath ? formatUriForMessage(filePath) : 'file'}`));
+}
+
+function formatExitPlanModeInvocation(invocation: ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
+	invocation.invocationMessage = `Here is Claude's plan:\n\n${(toolUse.input as IExitPlanModeInput)?.plan}`;
 }
 
 function formatGenericInvocation(invocation: ChatToolInvocationPart, toolUse: Anthropic.ToolUseBlock): void {
