@@ -10,7 +10,7 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { createContext, setup } from '../../completions-core/completionsServiceBridges';
-import { GhostTextProvider } from '../../completions-core/extension/src/ghostText/ghostText';
+import { CopilotInlineCompletionItemProvider } from '../../completions-core/extension/src/inlineCompletion';
 
 export class CompletionsCoreContribution extends Disposable {
 	constructor(
@@ -26,7 +26,7 @@ export class CompletionsCoreContribution extends Disposable {
 
 			const ctx = instantiationService.invokeFunction(createContext);
 			reader.store.add(setup(ctx));
-			const provider = new GhostTextProvider(ctx);
+			const provider = new CopilotInlineCompletionItemProvider(ctx);
 			reader.store.add(languages.registerInlineCompletionItemProvider({ pattern: '**' }, provider, { debounceDelayMs: 0, excludes: ['github.copilot'], groupId: 'completions' }));
 		}));
 	}
