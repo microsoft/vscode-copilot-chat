@@ -263,12 +263,12 @@ export class ChatEndpoint implements IChatEndpoint {
 			const body = this._instantiationService.invokeFunction(createResponsesRequestBody, options, this.model, this._modelMetadata);
 			return this.customizeResponsesBody(body);
 		} else {
-			const body = createCapiRequestBody(options, this.model, this.getCapiCallback());
+			const body = createCapiRequestBody(options, this.model, this.getCompletionsCallback());
 			return this.customizeCapiBody(body);
 		}
 	}
 
-	protected getCapiCallback(): RawMessageConversionCallback | undefined {
+	protected getCompletionsCallback(): RawMessageConversionCallback | undefined {
 		return undefined;
 	}
 

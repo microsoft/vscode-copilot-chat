@@ -3,163 +3,121 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as os from 'os';
 import * as vscode from 'vscode';
-import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
-import { FileType } from '../../../platform/filesystem/common/fileTypes';
-import { ILogService } from '../../../platform/log/common/logService';
-import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
-import { Event } from '../../../util/vs/base/common/event';
-import { basename } from '../../../util/vs/base/common/resources';
-import { ThemeIcon } from '../../../util/vs/base/common/themables';
-import { URI } from '../../../util/vs/base/common/uri';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { Emitter } from '../../../util/vs/base/common/event';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
+
+export class ClaudeSessionDataStore {
+	private static StorageKey = 'claudeSessionIds';
+	private _internalSessionToInitialRequest: Map<string, vscode.ChatRequest> = new Map();
+	private _unresolvedNewSessions = new Map<string, { id: string; label: string }>();
+
+	constructor(
+		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext
+	) { }
+
+	/**
+	 * This stuff is hopefully temporary until the chat session API is better aligned with the cli agent use-cases
+	 */
+	public setClaudeSessionId(internalSessionId: string, claudeSessionId: string) {
+		this._unresolvedNewSessions.delete(internalSessionId);
+		const curMap: Record<string, string> = this.extensionContext.workspaceState.get(ClaudeSessionDataStore.StorageKey) ?? {};
+		curMap[internalSessionId] = claudeSessionId;
+		curMap[claudeSessionId] = internalSessionId;
+		this.extensionContext.workspaceState.update(ClaudeSessionDataStore.StorageKey, curMap);
+	}
+
+	public getUnresolvedSessions(): Map<string, { id: string; label: string }> {
+		return this._unresolvedNewSessions;
+	}
+
+	/**
+	 * Add a new session to the set of unresolved sessions. Will be resolved when setClaudeSessionId is called.
+	 */
+	public registerNewSession(prompt: string): string {
+		const id = generateUuid();
+		this._unresolvedNewSessions.set(id, { id, label: prompt });
+		return id;
+	}
+
+	public setInitialRequest(internalSessionId: string, request: vscode.ChatRequest) {
+		this._internalSessionToInitialRequest.set(internalSessionId, request);
+	}
+
+	public getAndConsumeInitialRequest(sessionId: string): vscode.ChatRequest | undefined {
+		const prompt = this._internalSessionToInitialRequest.get(sessionId);
+		this._internalSessionToInitialRequest.delete(sessionId);
+		return prompt;
+	}
+
+	/**
+	 * This is bidirectional, takes either an internal or Claude session ID and returns the corresponding one.
+	 */
+	public getSessionId(sessionId: string): string | undefined {
+		const curMap: Record<string, string> = this.extensionContext.workspaceState.get(ClaudeSessionDataStore.StorageKey) ?? {};
+		return curMap[sessionId];
+	}
+}
 
 /**
  * Chat session item provider for Claude Code.
  * Reads sessions from ~/.claude/projects/<folder-slug>/, where each file name is a session id (GUID).
  */
-export class ClaudeChatSessionItemProvider implements vscode.ChatSessionItemProvider {
-	public readonly onDidChangeChatSessionItems = Event.None;
+export class ClaudeChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
+	private readonly _onDidChangeChatSessionItems = this._register(new Emitter<void>());
+	public readonly onDidChangeChatSessionItems = this._onDidChangeChatSessionItems.event;
 
 	constructor(
-		@IFileSystemService private readonly _fileSystem: IFileSystemService,
-		@ILogService private readonly _logService: ILogService,
-		@IWorkspaceService private readonly _workspace: IWorkspaceService,
-	) { }
+		private readonly sessionStore: ClaudeSessionDataStore,
+		@IClaudeCodeSessionService private readonly claudeCodeSessionService: IClaudeCodeSessionService
+	) {
+		super();
+	}
 
 	public async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
-		const folders = this._workspace.getWorkspaceFolders();
-		const home = os.homedir();
-		const items: vscode.ChatSessionItem[] = [];
+		const sessions = await this.claudeCodeSessionService.getAllSessions(token);
+		// const newSessions: vscode.ChatSessionItem[] = Array.from(this.sessionStore.getUnresolvedSessions().values()).map(session => ({
+		// 	id: session.id,
+		// 	label: session.label,
+		// 	timing: {
+		// 		startTime: Date.now()
+		// 	},
+		// 	iconPath: new vscode.ThemeIcon('star-add')
+		// }));
 
-		for (const folderUri of folders) {
-			if (token.isCancellationRequested) {
-				return items;
-			}
+		const diskSessions = sessions.map(session => ({
+			id: this.sessionStore.getSessionId(session.id) ?? session.id,
+			label: session.label,
+			tooltip: `Claude Code session: ${session.label}`,
+			timing: {
+				startTime: session.timestamp.getTime()
+			},
+			iconPath: new vscode.ThemeIcon('star-add')
+		} satisfies vscode.ChatSessionItem));
 
-			const slug = this._computeFolderSlug(folderUri);
-			const projectDirUri = URI.joinPath(URI.file(home), '.claude', 'projects', slug);
-
-			let entries: [string, FileType][] = [];
-			try {
-				entries = await this._fileSystem.readDirectory(projectDirUri as any);
-			} catch (e) {
-				this._logService.error(e, `[ClaudeChatSessionItemProvider] Failed to read directory: ${projectDirUri}`);
-				continue;
-			}
-
-			const fileTasks: Promise<{ item: vscode.ChatSessionItem; mtime: number } | undefined>[] = [];
-			for (const [name, type] of entries) {
-				if ((type & FileType.File) === 0) {
-					continue;
-				}
-				const sessionId = name;
-				if (!sessionId) {
-					continue;
-				}
-				const fileUri = URI.joinPath(projectDirUri, name);
-				fileTasks.push((async () => {
-					try {
-						if (token.isCancellationRequested) {
-							return undefined;
-						}
-						const [stat, firstLine] = await Promise.all([
-							this._fileSystem.stat(fileUri as any),
-							this._readFirstLine(fileUri as any, token),
-						]);
-						if (!stat) {
-							return undefined;
-						}
-						const label = this._buildLabelFromFirstLine(firstLine);
-						const item: vscode.ChatSessionItem = {
-							id: sessionId,
-							label,
-							description: basename(folderUri),
-							tooltip: 'Claude Code session',
-							iconPath: ThemeIcon.fromId('star')
-						};
-						return { item, mtime: stat.mtime ?? 0 };
-					} catch (e) {
-						this._logService.error(e, `[ClaudeChatSessionItemProvider] Failed to load session: ${fileUri}`);
-						return undefined;
-					}
-				})());
-			}
-
-			const results = await Promise.allSettled(fileTasks);
-			if (token.isCancellationRequested) {
-				return items;
-			}
-			const folderItems: { item: vscode.ChatSessionItem; mtime: number }[] = [];
-			let hasAnySuccess = false;
-			for (const r of results) {
-				if (r.status === 'fulfilled' && r.value) {
-					folderItems.push(r.value);
-					hasAnySuccess = true;
-				}
-			}
-
-			if (!hasAnySuccess && entries.length > 0) {
-				throw new Error(`[ClaudeChatSessionItemProvider] All session files failed to load in: ${projectDirUri}`);
-			}
-
-			folderItems.sort((a, b) => b.mtime - a.mtime);
-			for (const fi of folderItems) {
-				items.push(fi.item);
-			}
-		}
-
-		return items;
+		// return [...newSessions, ...diskSessions];
+		return diskSessions;
 	}
 
-	// public async provideNewChatSessionItem(): Promise<vscode.ChatSessionItem> {
-	// 	const sessionId = generateUuid();
-	// 	return {
-	// 		id: sessionId,
-	// 		label: 'Claude Code',
-	// 		description: 'Start a new session',
-	// 		tooltip: 'Claude Code new chat session',
-	// 	};
-	// }
-
-	private _computeFolderSlug(folderUri: URI): string {
-		return folderUri.path.replace(/\//g, '-');
-	}
-
-	private async _readFirstLine(fileUri: URI, token: vscode.CancellationToken): Promise<string | undefined> {
-		if (token.isCancellationRequested) {
-			return undefined;
+	public async provideNewChatSessionItem(options: {
+		readonly request: vscode.ChatRequest;
+		readonly prompt?: string;
+		readonly history?: ReadonlyArray<vscode.ChatRequestTurn | vscode.ChatResponseTurn>;
+		metadata?: any;
+	}, token: vscode.CancellationToken): Promise<vscode.ChatSessionItem> {
+		const label = options.prompt ?? 'Claude Code';
+		const internal = this.sessionStore.registerNewSession(label);
+		this._onDidChangeChatSessionItems.fire();
+		if (options.request) {
+			this.sessionStore.setInitialRequest(internal, options.request);
 		}
 
-		const data = await this._fileSystem.readFile(fileUri as any);
-		const text = new TextDecoder('utf-8').decode(data);
-		const idx = text.indexOf('\n');
-		return (idx === -1 ? text : text.slice(0, idx)).trim() || undefined;
-	}
-
-	private _buildLabelFromFirstLine(firstLine: string | undefined): string {
-		if (!firstLine) {
-			return 'Claude Code';
-		}
-		// Try to parse JSON and extract a summary/title if present
-		try {
-			if (firstLine.startsWith('{')) {
-				const obj = JSON.parse(firstLine);
-				if (obj && obj.type === 'summary' && typeof obj.summary === 'string' && obj.summary.trim()) {
-					return obj.summary.trim();
-				}
-				if (typeof obj?.title === 'string' && obj.title.trim()) {
-					return obj.title.trim();
-				}
-				// Extract content from user messages as fallback
-				if (obj && obj.type === 'user' && obj.message?.content && typeof obj.message.content === 'string' && obj.message.content.trim()) {
-					return obj.message.content.trim();
-				}
-			}
-		} catch {
-			return 'Claude Code';
-		}
-
-		return firstLine;
+		return {
+			id: internal,
+			label: options.prompt ?? 'Claude Code'
+		};
 	}
 }

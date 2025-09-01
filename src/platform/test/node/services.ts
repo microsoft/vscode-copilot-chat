@@ -30,7 +30,7 @@ import { INaiveChunkingService, NaiveChunkingService } from '../../chunking/node
 import { MockRunCommandExecutionService } from '../../commands/common/mockRunCommandExecutionService';
 import { IRunCommandExecutionService } from '../../commands/common/runCommandExecutionService';
 import { IConfigurationService } from '../../configuration/common/configurationService';
-import { DefaultsOnlyConfigurationService } from '../../configuration/test/common/defaultsOnlyConfigurationService';
+import { DefaultsOnlyConfigurationService } from '../../configuration/common/defaultsOnlyConfigurationService';
 import { InMemoryConfigurationService } from '../../configuration/test/common/inMemoryConfigurationService';
 import { CustomInstructionsService, ICustomInstructionsService } from '../../customInstructions/common/customInstructionsService';
 import { IDialogService } from '../../dialog/common/dialogService';
@@ -47,7 +47,7 @@ import { NullEnvService } from '../../env/common/nullEnvService';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { IExtensionsService } from '../../extensions/common/extensionsService';
 import { IFileSystemService } from '../../filesystem/common/fileSystemService';
-import { NodeFileSystemService } from '../../filesystem/node/fileSystemServiceImpl';
+import { MockFileSystemService } from '../../filesystem/node/test/mockFileSystemService';
 import { IGitService } from '../../git/common/gitService';
 import { NullGitExtensionService } from '../../git/common/nullGitExtensionService';
 import { IGithubRepositoryService, IOctoKitService } from '../../github/common/githubService';
@@ -207,7 +207,7 @@ export function _createBaselineServices(): TestingServiceCollection {
 		rejectionMessage = 'Sorry, but I can only assist with programming related questions.';
 	}));
 	testingServiceCollection.define(IChatAgentService, new SyncDescriptor(TestChatAgentService));
-	testingServiceCollection.define(IFileSystemService, new SyncDescriptor(NodeFileSystemService));
+	testingServiceCollection.define(IFileSystemService, new SyncDescriptor(MockFileSystemService));
 	testingServiceCollection.define(IGithubRepositoryService, new SyncDescriptor(GithubRepositoryService));
 	testingServiceCollection.define(IGitService, new SyncDescriptor(NullGitExtensionService));
 	testingServiceCollection.define(IAuthenticationChatUpgradeService, new SyncDescriptor(AuthenticationChatUpgradeService));

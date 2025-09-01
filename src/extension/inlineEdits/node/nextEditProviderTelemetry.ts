@@ -113,6 +113,8 @@ export interface INextEditProviderTelemetry extends ILlmNESTelemetry, IDiagnosti
 	readonly isNESForAnotherDoc: boolean;
 	readonly notebookCellMarkerCount: number;
 	readonly notebookCellMarkerIndex: number;
+	readonly notebookId: string | undefined;
+	readonly notebookCellLines: string | undefined;
 	readonly isActiveDocument?: boolean;
 	readonly isMultilineEdit?: boolean;
 	readonly isEolDifferent?: boolean;
@@ -146,7 +148,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			activeDocumentEditsCount = activeDoc.recentEdits.edits.length;
 			activeDocumentLanguageId = activeDoc.languageId;
 			activeDocumentOriginalLineCount = activeDoc.documentAfterEditsLines.length;
-			isNotebook = activeDoc.id.toUri().scheme === Schemas.vscodeNotebookCell || this._notebookService.hasSupportedNotebooks(activeDoc.id.toUri());
+			isNotebook = activeDoc.id.toUri().scheme === Schemas.vscodeNotebookCell || this._notebookService?.hasSupportedNotebooks(activeDoc.id.toUri()) || false;
 			notebookType = findNotebook(activeDoc.id.toUri(), this._workspaceService.notebookDocuments)?.notebookType;
 			const git = this._gitExtensionService.getExtensionApi();
 			if (git) {
@@ -274,7 +276,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 
 	constructor(
 		private readonly _gitExtensionService: IGitExtensionService,
-		private readonly _notebookService: INotebookService,
+		private readonly _notebookService: INotebookService | undefined,
 		private readonly _workspaceService: IWorkspaceService,
 		private readonly _providerId: string,
 		private readonly _doc: IObservableDocument,
@@ -453,6 +455,8 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 			isNextEditorVisible: this._isNextEditorVisible,
 			isNextEditorRangeVisible: this._isNextEditorRangeVisible,
 			isNESForAnotherDoc: this._isNESForAnotherDoc,
+			notebookId: this._notebookId,
+			notebookCellLines: this._notebookCellLines,
 			notebookCellMarkerCount: this._notebookCellMarkerCount,
 			notebookCellMarkerIndex: this._notebookCellMarkerIndex,
 			hadDiagnosticsNES: this._hadDiagnosticsNES,
@@ -558,6 +562,18 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 	private _isNextEditorRangeVisible?: boolean;
 	public setIsNextEditorRangeVisible(isVisible: boolean): this {
 		this._isNextEditorRangeVisible = isVisible;
+		return this;
+	}
+
+	private _notebookId?: string;
+	public setNotebookId(notebookId: string): this {
+		this._notebookId = notebookId;
+		return this;
+	}
+
+	private _notebookCellLines?: string;
+	public setNotebookCellLines(notebookCellLines: string): this {
+		this._notebookCellLines = notebookCellLines;
 		return this;
 	}
 
@@ -719,6 +735,8 @@ export class TelemetrySender implements IDisposable {
 			hasNextEdit,
 			notebookCellMarkerCount,
 			notebookCellMarkerIndex,
+			notebookId,
+			notebookCellLines,
 			nextEditLogprob,
 			supersededByOpportunityId,
 			noNextEditReasonKind,
@@ -794,6 +812,8 @@ export class TelemetrySender implements IDisposable {
 		"isActiveDocument": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the document is the active document", "isMeasurement": true },
 		"hasNotebookCellMarker": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the edit has a notebook cell marker", "isMeasurement": true },
 		"notebookCellMarkerCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Count of notebook cell markers in the edit", "isMeasurement": true },
+		"notebookId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Id of notebook" },
+		"notebookCellLines": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Line counts of notebook cells" },
 		"notebookType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Type of notebook, if any" },
 		"logProbThreshold": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Log probability threshold for the edit", "isMeasurement": true },
 		"documentsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of documents", "isMeasurement": true },
@@ -846,6 +866,8 @@ export class TelemetrySender implements IDisposable {
 				diagnosticDroppedReasons,
 				pickedNES,
 				notebookType,
+				notebookId,
+				notebookCellLines
 			},
 			{
 				requestN,

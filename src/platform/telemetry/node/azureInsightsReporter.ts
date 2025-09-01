@@ -13,6 +13,17 @@ import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IEnvService } from '../../env/common/envService';
 import { TelemetryProperties } from '../common/telemetry';
 
+export function wrapEventNameForPrefixRemoval(eventName: string): string {
+	return `wrapped-telemetry-event-name-${eventName}-wrapped-telemetry-event-name`;
+}
+function isWrappedEventName(eventName: string): boolean {
+	return eventName.includes('wrapped-telemetry-event-name-') && eventName.endsWith('-wrapped-telemetry-event-name');
+}
+function unwrapEventNameFromPrefix(eventName: string): string {
+	const match = eventName.match(/wrapped-telemetry-event-name-(.*?)-wrapped-telemetry-event-name/);
+	return match ? match[1] : eventName;
+}
+
 export class AzureInsightReporter implements TelemetrySender {
 	private readonly client: appInsights.TelemetryClient;
 	constructor(capiClientService: ICAPIClientService, envService: IEnvService, private readonly namespace: string, key: string) {
@@ -41,7 +52,7 @@ export class AzureInsightReporter implements TelemetrySender {
 	sendEventData(eventName: string, data?: Record<string, any> | undefined): void {
 		const { properties, measurements } = this.separateData(data || {});
 		this.client.trackEvent({
-			name: this.qualifyEventName(eventName),
+			name: this.massageEventName(eventName),
 			properties,
 			measurements,
 		});
@@ -66,7 +77,10 @@ export class AzureInsightReporter implements TelemetrySender {
 		});
 	}
 
-	private qualifyEventName(eventName: string): string {
+	private massageEventName(eventName: string): string {
+		if (isWrappedEventName(eventName)) {
+			return unwrapEventNameFromPrefix(eventName);
+		}
 		return eventName.includes(this.namespace) ? eventName : `${this.namespace}/${eventName}`;
 	}
 }

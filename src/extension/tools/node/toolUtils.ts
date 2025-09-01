@@ -81,6 +81,15 @@ export function resolveToolInputPath(path: string, promptPathRepresentationServi
 	return uri;
 }
 
+export async function isFileOkForTool(accessor: ServicesAccessor, uri: URI): Promise<boolean> {
+	try {
+		await assertFileOkForTool(accessor, uri);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI): Promise<void> {
 	const workspaceService = accessor.get(IWorkspaceService);
 	const tabsAndEditorsService = accessor.get(ITabsAndEditorsService);

@@ -147,9 +147,9 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			const tracker = this._register(instantiationService.createInstance(CodeSearchRepoTracker));
 
 			this._register(Event.any(
-				this._repoTracker.value.onDidFinishInitialization,
-				this._repoTracker.value.onDidRemoveRepo,
-				this._repoTracker.value.onDidAddOrUpdateRepo,
+				tracker.onDidFinishInitialization,
+				tracker.onDidRemoveRepo,
+				tracker.onDidAddOrUpdateRepo,
 			)(() => this._onDidChangeIndexState.fire()));
 
 			return tracker;

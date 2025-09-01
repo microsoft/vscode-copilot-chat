@@ -33,7 +33,7 @@ export class AutoChatEndpoint implements IChatEndpoint {
 	supportsPrediction: boolean = this._wrappedEndpoint.supportsPrediction;
 	showInModelPicker: boolean = true;
 	isPremium?: boolean | undefined = this._wrappedEndpoint.isPremium;
-	multiplier?: number | undefined = this._wrappedEndpoint.multiplier;
+	public readonly multiplier?: number | undefined;
 	restrictedToSkus?: string[] | undefined = this._wrappedEndpoint.restrictedToSkus;
 	isDefault: boolean = this._wrappedEndpoint.isDefault;
 	isFallback: boolean = this._wrappedEndpoint.isFallback;
@@ -47,8 +47,13 @@ export class AutoChatEndpoint implements IChatEndpoint {
 
 	constructor(
 		private readonly _wrappedEndpoint: IChatEndpoint,
-		private readonly _sessionToken: string
-	) { }
+		private readonly _sessionToken: string,
+		private readonly _discountPercent: number
+	) {
+		// Calculate the multiplier including the discount percent, rounding to two decimal places
+		const baseMultiplier = this._wrappedEndpoint.multiplier ?? 1;
+		this.multiplier = Math.round(baseMultiplier * (1 - this._discountPercent) * 100) / 100;
+	}
 
 	getExtraHeaders(): Record<string, string> {
 		return {

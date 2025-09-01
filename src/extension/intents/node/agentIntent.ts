@@ -49,7 +49,7 @@ import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
 import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation } from './toolCallingLoop';
 
-const getTools = (instaService: IInstantiationService, request: vscode.ChatRequest) =>
+export const getAgentTools = (instaService: IInstantiationService, request: vscode.ChatRequest) =>
 	instaService.invokeFunction(async accessor => {
 		const toolsService = accessor.get<IToolsService>(IToolsService);
 		const testService = accessor.get<ITestProvider>(ITestProvider);
@@ -144,7 +144,7 @@ export class AgentIntent extends EditCodeIntent {
 	}
 
 	private async listTools(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken) {
-		const editingTools = await getTools(this.instantiationService, request);
+		const editingTools = await getAgentTools(this.instantiationService, request);
 		const grouping = this._toolGroupingService.create(conversation.sessionId, editingTools);
 		if (!grouping.isEnabled) {
 			stream.markdown(`Available tools: \n${editingTools.map(tool => `- ${tool.name}`).join('\n')}\n`);
@@ -226,7 +226,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 	}
 
 	public override getAvailableTools(): Promise<vscode.LanguageModelToolInformation[]> {
-		return getTools(this.instantiationService, this.request);
+		return getAgentTools(this.instantiationService, this.request);
 	}
 
 	override async buildPrompt(

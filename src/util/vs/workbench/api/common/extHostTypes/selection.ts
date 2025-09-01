@@ -1,12 +1,18 @@
+//!!! DO NOT modify, this file was COPIED from 'microsoft/vscode'
+
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type * as vscode from 'vscode';
+import { es5ClassCompat } from './es5ClassCompat';
 import { Position } from './position';
-import { Range } from './range';
+import { getDebugDescriptionOfRange, Range } from './range';
 
+@es5ClassCompat
 export class Selection extends Range {
+
 	static isSelection(thing: any): thing is Selection {
 		if (thing instanceof Selection) {
 			return true;
@@ -14,12 +20,10 @@ export class Selection extends Range {
 		if (!thing) {
 			return false;
 		}
-		return (
-			Range.isRange(thing) &&
-			Position.isPosition((<Selection>thing).anchor) &&
-			Position.isPosition((<Selection>thing).active) &&
-			typeof (<Selection>thing).isReversed === 'boolean'
-		);
+		return Range.isRange(thing)
+			&& Position.isPosition((<Selection>thing).anchor)
+			&& Position.isPosition((<Selection>thing).active)
+			&& typeof (<Selection>thing).isReversed === 'boolean';
 	}
 
 	private _anchor: Position;
@@ -36,21 +40,11 @@ export class Selection extends Range {
 
 	constructor(anchor: Position, active: Position);
 	constructor(anchorLine: number, anchorColumn: number, activeLine: number, activeColumn: number);
-	constructor(
-		anchorLineOrAnchor: number | Position,
-		anchorColumnOrActive: number | Position,
-		activeLine?: number,
-		activeColumn?: number
-	) {
+	constructor(anchorLineOrAnchor: number | Position, anchorColumnOrActive: number | Position, activeLine?: number, activeColumn?: number) {
 		let anchor: Position | undefined;
 		let active: Position | undefined;
 
-		if (
-			typeof anchorLineOrAnchor === 'number' &&
-			typeof anchorColumnOrActive === 'number' &&
-			typeof activeLine === 'number' &&
-			typeof activeColumn === 'number'
-		) {
+		if (typeof anchorLineOrAnchor === 'number' && typeof anchorColumnOrActive === 'number' && typeof activeLine === 'number' && typeof activeColumn === 'number') {
 			anchor = new Position(anchorLineOrAnchor, anchorColumnOrActive);
 			active = new Position(activeLine, activeColumn);
 		} else if (Position.isPosition(anchorLineOrAnchor) && Position.isPosition(anchorColumnOrActive)) {
@@ -77,7 +71,24 @@ export class Selection extends Range {
 			start: this.start,
 			end: this.end,
 			active: this.active,
-			anchor: this.anchor,
+			anchor: this.anchor
 		};
 	}
+
+
+	[Symbol.for('debug.description')]() {
+		return getDebugDescriptionOfSelection(this);
+	}
+}
+
+export function getDebugDescriptionOfSelection(selection: vscode.Selection): string {
+	let rangeStr = getDebugDescriptionOfRange(selection);
+	if (!selection.isEmpty) {
+		if (selection.active.isEqual(selection.start)) {
+			rangeStr = `|${rangeStr}`;
+		} else {
+			rangeStr = `${rangeStr}|`;
+		}
+	}
+	return rangeStr;
 }

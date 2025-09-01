@@ -4,13 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 export interface ThinkingDataInMessage {
-	// Azure Open AI fields
+	// Azure Open AI fields for Completions
 	cot_id?: string;
-	cot_summary?: string | string[];
+	cot_summary?: string;
 
-	// Copilot API fields
+	// Copilot API fields for Completions
 	reasoning_opaque?: string;
-	reasoning_text?: string | string[];
+	reasoning_text?: string;
 }
 
 export interface RawThinkingDelta {

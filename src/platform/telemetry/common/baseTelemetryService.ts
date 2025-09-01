@@ -62,7 +62,13 @@ export class BaseTelemetryService implements ITelemetryService {
 	}
 
 	sendGHTelemetryEvent(eventName: string, properties?: TelemetryEventProperties | undefined, measurements?: TelemetryEventMeasurements | undefined): void {
-		this.sendTelemetryEvent(eventName, { github: true, microsoft: false }, properties, measurements);
+		// Add SKU to GitHub telemetry events specifically
+		const sku = this._tokenStore.copilotToken?.sku;
+		const enrichedProperties = {
+			...properties,
+			sku: sku ?? ''
+		};
+		this.sendTelemetryEvent(eventName, { github: true, microsoft: false }, enrichedProperties, measurements);
 	}
 
 	sendGHTelemetryErrorEvent(eventName: string, properties?: TelemetryEventProperties | undefined, measurements?: TelemetryEventMeasurements | undefined): void {

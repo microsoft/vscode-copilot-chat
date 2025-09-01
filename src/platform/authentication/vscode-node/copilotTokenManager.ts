@@ -39,7 +39,7 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 		@IEnvService envService: IEnvService,
 		@IConfigurationService protected readonly configurationService: IConfigurationService
 	) {
-		super(new BaseOctoKitService(capiClientService, fetcherService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
+		super(new BaseOctoKitService(capiClientService, fetcherService, logService, telemetryService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
 	}
 
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
@@ -66,7 +66,7 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 		}
 		// Log the steps by default, but only log actual token values when the log level is set to debug.
 		this._logService.info(`Logged in as ${session.account.label}`);
-		const tokenResult = await this.authFromGitHubToken(session.accessToken);
+		const tokenResult = await this.authFromGitHubToken(session.accessToken, session.account.label);
 		if (tokenResult.kind === 'success') {
 			this._logService.info(`Got Copilot token for ${session.account.label}`);
 		}

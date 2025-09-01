@@ -15,14 +15,14 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { AnthropicAdapterFactory } from './adapters/anthropicAdapter';
 import { IAgentStreamBlock, IProtocolAdapter, IProtocolAdapterFactory, IStreamingContext } from './adapters/types';
 
-export interface IServerConfig {
+export interface ILanguageModelServerConfig {
 	port: number;
 	nonce: string;
 }
 
 export class LanguageModelServer {
 	private server: http.Server;
-	private config: IServerConfig;
+	private config: ILanguageModelServerConfig;
 	private adapterFactories: Map<string, IProtocolAdapterFactory>;
 
 	constructor(
@@ -43,19 +43,9 @@ export class LanguageModelServer {
 		return http.createServer(async (req, res) => {
 			this.logService.trace(`Received request: ${req.method} ${req.url}`);
 
-			// Set CORS headers
-			res.setHeader('Access-Control-Allow-Origin', '*');
-			res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-			res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Nonce');
-
 			if (req.method === 'OPTIONS') {
 				res.writeHead(200);
 				res.end();
-				return;
-			}
-
-			if (req.method === 'GET' && req.url === '/models') {
-				await this.handleModelsRequest(req, res);
 				return;
 			}
 
@@ -63,8 +53,6 @@ export class LanguageModelServer {
 				const adapterFactory = this.getAdapterFactoryForPath(req.url || '');
 				if (adapterFactory) {
 					try {
-						const body = await this.readRequestBody(req);
-
 						// Create new adapter instance for this request
 						const adapter = adapterFactory.createAdapter();
 
@@ -77,6 +65,7 @@ export class LanguageModelServer {
 							return;
 						}
 
+						const body = await this.readRequestBody(req);
 						await this.handleChatRequest(adapter, body, res);
 					} catch (error) {
 						res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -153,14 +142,18 @@ export class LanguageModelServer {
 				'Content-Type': adapter.getContentType(),
 				'Cache-Control': 'no-cache',
 				'Connection': 'keep-alive',
-				'Access-Control-Allow-Origin': '*'
 			});
 
 			// Create cancellation token for the request
 			const tokenSource = new vscode.CancellationTokenSource();
 
 			// Handle client disconnect
+			let requestComplete = false;
 			res.on('close', () => {
+				if (!requestComplete) {
+					this.logService.info(`[LanguageModelServer] Client disconnected before request complete`);
+				}
+
 				tokenSource.cancel();
 			});
 
@@ -231,6 +224,7 @@ export class LanguageModelServer {
 					requestOptions: openAiTools && openAiTools.length ? { tools: openAiTools } : undefined,
 					userInitiatedRequest
 				}, tokenSource.token);
+				requestComplete = true;
 
 				// Send final events
 				const finalEvents = adapter.generateFinalEvents(context);
@@ -240,6 +234,7 @@ export class LanguageModelServer {
 
 				res.end();
 			} catch (error) {
+				requestComplete = true;
 				if (error instanceof vscode.LanguageModelError) {
 					res.write(JSON.stringify({
 						error: 'Language model error',
@@ -295,36 +290,13 @@ export class LanguageModelServer {
 		return endpoints[0];
 	}
 
-	private async handleModelsRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-		try {
-			// Verify nonce from X-Nonce header
-			const nonce = req.headers['x-nonce'];
-			if (nonce !== this.config.nonce) {
-				res.writeHead(401, { 'Content-Type': 'application/json' });
-				res.end(JSON.stringify({ error: 'Invalid nonce' }));
-				return;
-			}
-
-			const models = await this.getAvailableModels();
-			res.writeHead(200, { 'Content-Type': 'application/json' });
-			res.end(JSON.stringify(models));
-		} catch (error) {
-			res.writeHead(500, { 'Content-Type': 'application/json' });
-			res.end(JSON.stringify({
-				error: 'Failed to get available models',
-				details: error instanceof Error ? error.message : String(error)
-			}));
-		}
-	}
-
 	public async start(): Promise<void> {
 		return new Promise((resolve) => {
-			this.server.listen(0, 'localhost', () => {
+			this.server.listen(0, '127.0.0.1', () => {
 				const address = this.server.address();
 				if (address && typeof address === 'object') {
 					this.config.port = address.port;
 					this.logService.trace(`Language Model Server started on http://localhost:${this.config.port}`);
-					// this.logService.trace(`Server nonce: ${this.config.nonce}`);
 					resolve();
 				}
 			});
@@ -335,7 +307,7 @@ export class LanguageModelServer {
 		this.server.close();
 	}
 
-	public getConfig(): IServerConfig {
+	public getConfig(): ILanguageModelServerConfig {
 		return { ...this.config };
 	}
 

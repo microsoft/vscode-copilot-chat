@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { TextEditor } from 'vscode';
+import type { TextEditor, Uri } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
@@ -52,7 +52,6 @@ function combineCancellationTokens(token1: CancellationToken, token2: Cancellati
 }
 
 let inProgress: CancellationTokenSource | undefined;
-const scmProgressKey = 'github.copilot.chat.review.sourceControlProgress';
 export async function doReview(
 	scopeSelector: IScopeSelector,
 	instantiationService: IInstantiationService,
@@ -69,7 +68,7 @@ export async function doReview(
 	workspaceService: IWorkspaceService,
 	commandService: IRunCommandExecutionService,
 	notificationService: INotificationService,
-	group: 'selection' | 'index' | 'workingTree' | 'all' | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
+	group: 'selection' | 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
 	progressLocation: ProgressLocation,
 	cancellationToken?: CancellationToken
 ): Promise<FeedbackResult | undefined> {
@@ -96,7 +95,10 @@ export async function doReview(
 	const title = group === 'selection' ? l10n.t('Reviewing selected code in {0}...', path.posix.basename(editor!.document.uri.path))
 		: group === 'index' ? l10n.t('Reviewing staged changes...')
 			: group === 'workingTree' ? l10n.t('Reviewing unstaged changes...')
-				: l10n.t('Reviewing changes...');
+				: group === 'all' ? l10n.t('Reviewing uncommitted changes...')
+					: 'repositoryRoot' in group ? l10n.t('Reviewing changes...')
+						: group.group === 'index' ? l10n.t('Reviewing staged changes in {0}...', path.posix.basename(group.file.path))
+							: l10n.t('Reviewing unstaged changes in {0}...', path.posix.basename(group.file.path));
 	return notificationService.withProgress({
 		location: progressLocation,
 		title,
@@ -106,9 +108,6 @@ export async function doReview(
 			inProgress.cancel();
 		}
 		const tokenSource = inProgress = new CancellationTokenSource(cancellationToken ? combineCancellationTokens(cancellationToken, progressToken) : progressToken);
-		if (progressLocation === ProgressLocation.SourceControl) {
-			await commandService.executeCommand('setContext', scmProgressKey, true);
-		}
 		reviewService.removeReviewComments(reviewService.getReviewComments());
 		const progress: Progress<ReviewComment[]> = {
 			report: comments => {
@@ -121,7 +120,7 @@ export async function doReview(
 		try {
 			const copilotToken = await authService.getCopilotToken();
 			const canUseGitHubAgent = (group === 'index' || group === 'workingTree' || group === 'all' || typeof group === 'object') && copilotToken.isCopilotCodeReviewEnabled;
-			result = canUseGitHubAgent ? await githubReview(logService, gitExtensionService, authService, capiClientService, domainService, fetcherService, envService, ignoreService, workspaceService, group, progress, tokenSource.token) : await review(instantiationService, gitExtensionService, workspaceService, group, editor, progress, tokenSource.token);
+			result = canUseGitHubAgent ? await githubReview(logService, gitExtensionService, authService, capiClientService, domainService, fetcherService, envService, ignoreService, workspaceService, group, progress, tokenSource.token) : await review(instantiationService, gitExtensionService, workspaceService, typeof group === 'object' && 'group' in group ? group.group : group, editor, progress, tokenSource.token);
 		} catch (err) {
 			result = { type: 'error', reason: err.message, severity: err.severity };
 		} finally {
@@ -129,9 +128,6 @@ export async function doReview(
 				inProgress = undefined;
 			}
 			tokenSource.dispose();
-			if (progressLocation === ProgressLocation.SourceControl) {
-				await commandService.executeCommand('setContext', scmProgressKey, undefined);
-			}
 		}
 		if (tokenSource.token.isCancellationRequested) {
 			return { type: 'cancelled' };
@@ -158,15 +154,6 @@ export async function doReview(
 		}
 		return result;
 	});
-}
-
-export async function cancelReview(progressLocation: ProgressLocation, commandService: IRunCommandExecutionService) {
-	if (inProgress) {
-		inProgress.cancel();
-	}
-	if (progressLocation === ProgressLocation.SourceControl) {
-		await commandService.executeCommand('setContext', scmProgressKey, undefined);
-	}
 }
 
 async function review(

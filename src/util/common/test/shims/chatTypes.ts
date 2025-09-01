@@ -5,7 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { VSBuffer } from '../../../vs/base/common/buffer';
-import { MarkdownString } from './markdownString';
+import { MarkdownString } from '../../../vs/workbench/api/common/extHostTypes/markdownString';
 
 export class ChatResponseMarkdownPart {
 	value: vscode.MarkdownString;
@@ -415,4 +415,34 @@ export enum LanguageModelChatMessageRole {
 	User = 1,
 	Assistant = 2,
 	System = 3
+}
+
+export class ChatToolInvocationPart {
+	toolName: string;
+	toolCallId: string;
+	isError?: boolean;
+	invocationMessage?: string | vscode.MarkdownString;
+	originMessage?: string | vscode.MarkdownString;
+	pastTenseMessage?: string | vscode.MarkdownString;
+	isConfirmed?: boolean;
+	isComplete?: boolean;
+	toolSpecificData?: vscode.ChatTerminalToolInvocationData;
+
+	constructor(toolName: string,
+		toolCallId: string,
+		isError?: boolean) {
+		this.toolName = toolName;
+		this.toolCallId = toolCallId;
+		this.isError = isError;
+	}
+}
+
+export class ChatResponseTurn2 implements vscode.ChatResponseTurn2 {
+
+	constructor(
+		readonly response: ReadonlyArray<ChatResponseMarkdownPart | ChatResponseFileTreePart | ChatResponseAnchorPart | ChatResponseCommandButtonPart | ChatResponseExtensionsPart | ChatToolInvocationPart>,
+		readonly result: vscode.ChatResult,
+		readonly participant: string,
+		readonly command?: string
+	) { }
 }

@@ -267,11 +267,11 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 		return this.instantiationService.createInstance(OpenAICompatibleTestEndpoint, this.modelConfig);
 	}
 
-	protected override getCapiCallback(): RawMessageConversionCallback | undefined {
+	protected override getCompletionsCallback(): RawMessageConversionCallback | undefined {
 		return (out, data) => {
 			if (data && data.id) {
 				out.cot_id = data.id;
-				out.cot_summary = data.text;
+				out.cot_summary = Array.isArray(data.text) ? data.text.join('') : data.text;
 			}
 		};
 	}

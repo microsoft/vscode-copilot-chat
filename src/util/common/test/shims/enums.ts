@@ -34,11 +34,6 @@ export enum TextEditorRevealType {
 	AtTop = 3
 }
 
-export enum EndOfLine {
-	LF = 1,
-	CRLF = 2
-}
-
 export enum DiagnosticSeverity {
 	Error = 0,
 	Warning = 1,

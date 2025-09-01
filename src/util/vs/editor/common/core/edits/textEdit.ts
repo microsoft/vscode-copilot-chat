@@ -10,14 +10,14 @@ import { assertFn, checkAdjacentItems } from '../../../../base/common/assert';
 import { BugIndicatingError } from '../../../../base/common/errors';
 import { commonPrefixLength, commonSuffixLength } from '../../../../base/common/strings';
 import { ISingleEditOperation } from '../editOperation';
-import { StringEdit, StringReplacement } from './stringEdit';
+import { BaseStringEdit, StringReplacement } from './stringEdit';
 import { Position } from '../position';
 import { Range } from '../range';
 import { TextLength } from '../text/textLength';
 import { AbstractText, StringText } from '../text/abstractText';
 
 export class TextEdit {
-	public static fromStringEdit(edit: StringEdit, initialState: AbstractText): TextEdit {
+	public static fromStringEdit(edit: BaseStringEdit, initialState: AbstractText): TextEdit {
 		const edits = edit.replacements.map(e => TextReplacement.fromStringReplacement(e, initialState));
 		return new TextEdit(edits);
 	}

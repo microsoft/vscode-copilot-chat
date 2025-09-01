@@ -10,7 +10,7 @@ import { ConfigKey, IConfigurationService } from '../../../../platform/configura
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
 import { IHeatmapService, SelectionPoint } from '../../../../platform/heatmap/common/heatmapService';
 import { createPlatformServices } from '../../../../platform/test/node/services';
-import { ExtHostDocumentData } from '../../../../util/common/test/shims/textDocument';
+import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { summarizeTemporalContext } from '../inline/temporalContext';
@@ -32,7 +32,7 @@ suite('summarizeTemporalContext', () => {
 	 */
 	async function makeSampleDoc(p: RelativeFilePath<'$dir/fixtures'>, languageId: string = 'typescript'): Promise<TextDocument> {
 		const file = await loadFile({ filePath: fixture(p), languageId });
-		return ExtHostDocumentData.create(URI.file(file.filePath), file.contents, file.languageId).document;
+		return createTextDocumentData(URI.file(file.filePath), file.contents, file.languageId).document;
 	}
 
 	beforeEach(async () => {
@@ -50,7 +50,7 @@ suite('summarizeTemporalContext', () => {
 
 		// sample files
 		sampleDocCodeEditorWidget = await makeSampleDoc('codeEditorWidget.ts');
-		sampleDocCurrent = TextDocumentSnapshot.create(ExtHostDocumentData.create(URI.parse('fake:///file/path/app.ts'), '', 'typescript').document);
+		sampleDocCurrent = TextDocumentSnapshot.create(createTextDocumentData(URI.parse('fake:///file/path/app.ts'), '', 'typescript').document);
 	});
 
 	test('no documents when not entries exist', async () => {

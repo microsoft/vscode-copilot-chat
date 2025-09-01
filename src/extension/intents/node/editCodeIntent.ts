@@ -416,7 +416,7 @@ export class EditCodeIntentInvocation implements IIntentInvocation {
 
 		return {
 			...result,
-			// The codebase tool is not actually called/referenced in the edit prompt, so we ned to
+			// The codebase tool is not actually called/referenced in the edit prompt, so we need to
 			// merge its metadata so that its output is not lost and it's not called repeatedly every turn
 			// todo@connor4312/joycerhl: this seems a bit janky
 			metadata: codebase ? mergeMetadata(result.metadata, codebase.metadatas) : result.metadata,

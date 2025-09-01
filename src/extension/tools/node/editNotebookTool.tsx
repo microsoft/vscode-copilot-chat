@@ -34,8 +34,6 @@ import { EXISTING_CODE_MARKER } from '../../prompts/node/panel/codeBlockFormatti
 import { CodeBlock } from '../../prompts/node/panel/safeElements';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 
 export interface IEditNotebookToolParams {
 	filePath: string;
@@ -55,62 +53,6 @@ class ErrorWithTelemetrySafeReason extends Error {
 		super(message);
 	}
 }
-
-export const alternativeDescriptionWithMandatoryCellId: vscode.LanguageModelToolInformation = {
-	name: ToolName.EditNotebook,
-	description: "This is a tool for editing an existing Notebook file in the workspace. Generate the \"explanation\" property first.\nThe system is very smart and can understand how to apply your edits to the notebooks.\nWhen updating the content of an existing cell, ensure newCode preserves whitespace and indentation exactly and does NOT include any code markers such as (...existing code...).",
-	tags: [
-		"enable_other_tool_copilot_getNotebookSummary"
-	],
-	source: undefined,
-	inputSchema: {
-		"type": "object",
-		"properties": {
-			"filePath": {
-				"type": "string",
-				"description": "An absolute path to the notebook file to edit, or the URI of a untitled, not yet named, file, such as `untitled:Untitled-1."
-			},
-			"cellId": {
-				"type": "string",
-				"description": "Id of the cell that needs to be deleted or edited. Use the value `TOP`, `BOTTOM` when inserting a cell at the top or bottom of the notebook, else provide the id of the cell after which a new cell is to be inserted. Remember, if a cellId is provided and editType=insert, then a cell will be inserted after the cell with the provided cellId."
-			},
-			"newCode": {
-				"anyOf": [
-					{
-						"type": "string",
-						"description": "The code for the new or existing cell to be edited. Code should not be wrapped within <VSCode.Cell> tags. Do NOT include code markers such as (...existing code...) to indicate existing code."
-					},
-					{
-						"type": "array",
-						"items": {
-							"type": "string",
-							"description": "The code for the new or existing cell to be edited. Code should not be wrapped within <VSCode.Cell> tags"
-						}
-					}
-				]
-			},
-			"language": {
-				"type": "string",
-				"description": "The language of the cell. `markdown`, `python`, `javascript`, `julia`, etc."
-			},
-			"editType": {
-				"type": "string",
-				"enum": [
-					"insert",
-					"delete",
-					"edit"
-				],
-				"description": "The operation peformed on the cell, whether `insert`, `delete` or `edit`.\nUse the `editType` field to specify the operation: `insert` to add a new cell, `edit` to modify an existing cell's content, and `delete` to remove a cell."
-			}
-		},
-		"required": [
-			"filePath",
-			"editType",
-			"cellId"
-		]
-	}
-};
-
 export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 	public static toolName = ToolName.EditNotebook;
 	private promptContext?: IBuildPromptContext;
@@ -124,8 +66,6 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IFileSystemService protected readonly fileSystemService: IFileSystemService,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IExperimentationService private readonly experimentationService: IExperimentationService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IEditNotebookToolParams>, token: vscode.CancellationToken) {
@@ -350,12 +290,6 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 			sendEditNotebookTelemetry(this.telemetryService, this.endpointProvider, 'notebookEdit', notebookUri, this.promptContext?.requestId, options.model ?? this.promptContext?.request?.model);
 		}
 
-	}
-
-	public alternativeDefinition(): vscode.LanguageModelToolInformation | undefined {
-		if (this.configurationService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.MandatoryCellIdInNotebookEdit, this.experimentationService)) {
-			return alternativeDescriptionWithMandatoryCellId;
-		}
 	}
 
 	async resolveInput(input: IEditNotebookToolParams, promptContext: IBuildPromptContext): Promise<IEditNotebookToolParams> {

@@ -65,11 +65,13 @@ describe('Virtual Tools - Grouper', () => {
 	}
 
 	function makeExtensionSource(id: string): LanguageModelToolExtensionSource {
-		return new LanguageModelToolExtensionSource(id, id);
+		// TODO@connor4312
+		return new (LanguageModelToolExtensionSource as any)(id, id);
 	}
 
 	function makeMCPSource(label: string): LanguageModelToolMCPSource {
-		return new LanguageModelToolMCPSource(label, label);
+		// TODO@connor4312
+		return new (LanguageModelToolMCPSource as any)(label, label);
 	}
 
 	beforeEach(() => {

@@ -39,7 +39,7 @@ export async function githubReview(
 	envService: IEnvService,
 	ignoreService: IIgnoreService,
 	workspaceService: IWorkspaceService,
-	group: 'index' | 'workingTree' | 'all' | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
+	group: 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
 	progress: Progress<ReviewComment[]>,
 	cancellationToken: CancellationToken
 ): Promise<FeedbackResult> {
@@ -76,7 +76,7 @@ export async function githubReview(
 			}));
 			return changes;
 		}))).flat()
-		: await Promise.all(group.patches.map(async patch => {
+		: 'repositoryRoot' in group ? await Promise.all(group.patches.map(async patch => {
 			const uri = Uri.parse(patch.fileUri);
 			const document = await workspaceService.openTextDocument(uri).then(undefined, () => undefined);
 			if (!document) {
@@ -92,7 +92,27 @@ export async function githubReview(
 				after,
 				document,
 			};
-		}))).filter((change): change is NonNullable<typeof change> => !!change);
+		}))
+			: await (async () => {
+				const { group: g, file } = group;
+				const repository = git.getRepository(file);
+				const document = await workspaceService.openTextDocument(file).then(undefined, () => undefined);
+				if (!repository || !document) {
+					return [];
+				}
+				const before = await (g === 'index' ? repository.show('HEAD', file.fsPath).catch(() => '') : repository.show('', file.fsPath).catch(() => ''));
+				const after = g === 'index' ? await (repository.show('', file.fsPath).catch(() => '')) : document.getText();
+				const relativePath = path.relative(repository.rootUri.fsPath, file.fsPath);
+				return [
+					{
+						repository,
+						relativePath: process.platform === 'win32' ? relativePath.replace(/\\/g, '/') : relativePath,
+						before,
+						after,
+						document,
+					}
+				];
+			})()).filter((change): change is NonNullable<typeof change> => !!change);
 
 	if (!changes.length) {
 		return { type: 'success', comments: [] };
@@ -329,7 +349,7 @@ async function fetchComments(logService: ILogService, authService: IAuthenticati
 
 	if (!response.ok) {
 		if (response.status === 402) {
-			const err = new Error(`You have reached your GitHub Copilot Code Review quota limit.`);
+			const err = new Error(`You have reached your Code Review quota limit.`);
 			(err as any).severity = 'info';
 			throw err;
 		}

@@ -3,9 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as vscode from 'vscode';
 import { getExperimentationService, IExperimentationFilterProvider, TargetPopulation } from 'vscode-tas-client';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
+import { IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
+import { packageJson } from '../../env/common/packagejson';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { ILogService } from '../../log/common/logService';
 import { ITelemetryService } from '../common/telemetry';
@@ -17,6 +20,23 @@ function getTargetPopulation(isPreRelease: boolean): TargetPopulation {
 	}
 
 	return TargetPopulation.Public;
+}
+
+class CopilotExtensionsFilterProvider implements IExperimentationFilterProvider {
+	constructor(private _logService: ILogService) { }
+
+	getFilters(): Map<string, any> {
+		const copilotExtensionversion = vscode.extensions.getExtension('github.copilot')?.packageJSON.version;
+		const copilotChatExtensionVersion = packageJson.version;
+		const completionsCoreVersion = packageJson.completionsCoreVersion;
+
+		this._logService.trace(`[CopilotExtensionsFilterProvider]::getFilters Copilot Extension Version: ${copilotExtensionversion}, Copilot Chat Extension Version: ${copilotChatExtensionVersion}, Completions Core Version: ${completionsCoreVersion}`);
+		const filters = new Map<string, any>();
+		filters.set('X-Copilot-RelatedPluginVersion-githubcopilot', copilotExtensionversion);
+		filters.set('X-Copilot-RelatedPluginVersion-githubcopilotchat', copilotChatExtensionVersion);
+		filters.set('X-VSCode-CompletionsInChatExtensionVersion', completionsCoreVersion);
+		return filters;
+	}
 }
 
 class GithubAccountFilterProvider implements IExperimentationFilterProvider {
@@ -38,6 +58,7 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 		@IVSCodeExtensionContext context: IVSCodeExtensionContext,
 		@IEnvService envService: IEnvService,
 		@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore,
+		@IConfigurationService configurationService: IConfigurationService,
 		@ILogService logService: ILogService
 	) {
 
@@ -45,9 +66,9 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 		const version = context.extension.packageJSON['version'];
 		const targetPopulation = getTargetPopulation(envService.isPreRelease());
 		const delegateFn = (globalState: any, userInfoStore: UserInfoStore) => {
-			return getExperimentationService(id, version, targetPopulation, telemetryService, globalState, new GithubAccountFilterProvider(userInfoStore, logService));
+			return getExperimentationService(id, version, targetPopulation, telemetryService, globalState, new GithubAccountFilterProvider(userInfoStore, logService), new CopilotExtensionsFilterProvider(logService));
 		};
 
-		super(delegateFn, context, copilotTokenStore, logService);
+		super(delegateFn, context, copilotTokenStore, configurationService, logService);
 	}
 }
