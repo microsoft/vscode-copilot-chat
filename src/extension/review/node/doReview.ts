@@ -52,7 +52,6 @@ function combineCancellationTokens(token1: CancellationToken, token2: Cancellati
 }
 
 let inProgress: CancellationTokenSource | undefined;
-const scmProgressKey = 'github.copilot.chat.review.sourceControlProgress';
 export async function doReview(
 	scopeSelector: IScopeSelector,
 	instantiationService: IInstantiationService,
@@ -96,7 +95,10 @@ export async function doReview(
 	const title = group === 'selection' ? l10n.t('Reviewing selected code in {0}...', path.posix.basename(editor!.document.uri.path))
 		: group === 'index' ? l10n.t('Reviewing staged changes...')
 			: group === 'workingTree' ? l10n.t('Reviewing unstaged changes...')
-				: l10n.t('Reviewing changes...');
+				: group === 'all' ? l10n.t('Reviewing uncommitted changes...')
+					: 'repositoryRoot' in group ? l10n.t('Reviewing changes...')
+						: group.group === 'index' ? l10n.t('Reviewing staged changes in {0}...', path.posix.basename(group.file.path))
+							: l10n.t('Reviewing unstaged changes in {0}...', path.posix.basename(group.file.path));
 	return notificationService.withProgress({
 		location: progressLocation,
 		title,
@@ -106,9 +108,6 @@ export async function doReview(
 			inProgress.cancel();
 		}
 		const tokenSource = inProgress = new CancellationTokenSource(cancellationToken ? combineCancellationTokens(cancellationToken, progressToken) : progressToken);
-		if (progressLocation === ProgressLocation.SourceControl) {
-			await commandService.executeCommand('setContext', scmProgressKey, true);
-		}
 		reviewService.removeReviewComments(reviewService.getReviewComments());
 		const progress: Progress<ReviewComment[]> = {
 			report: comments => {
@@ -129,9 +128,6 @@ export async function doReview(
 				inProgress = undefined;
 			}
 			tokenSource.dispose();
-			if (progressLocation === ProgressLocation.SourceControl) {
-				await commandService.executeCommand('setContext', scmProgressKey, undefined);
-			}
 		}
 		if (tokenSource.token.isCancellationRequested) {
 			return { type: 'cancelled' };
@@ -158,15 +154,6 @@ export async function doReview(
 		}
 		return result;
 	});
-}
-
-export async function cancelReview(progressLocation: ProgressLocation, commandService: IRunCommandExecutionService) {
-	if (inProgress) {
-		inProgress.cancel();
-	}
-	if (progressLocation === ProgressLocation.SourceControl) {
-		await commandService.executeCommand('setContext', scmProgressKey, undefined);
-	}
 }
 
 async function review(

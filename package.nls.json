@@ -16,7 +16,6 @@
 	"github.copilot.command.reviewStagedChanges": "Code Review - Staged Changes",
 	"github.copilot.command.reviewUnstagedChanges": "Code Review - Unstaged Changes",
 	"github.copilot.command.reviewChanges": "Code Review - Uncommitted Changes",
-	"github.copilot.command.reviewChanges.cancel": "Code Review - Cancel",
 	"github.copilot.command.reviewFileChange": "Review Changes",
 	"github.copilot.command.gotoPreviousReviewSuggestion": "Previous Suggestion",
 	"github.copilot.command.gotoNextReviewSuggestion": "Next Suggestion",

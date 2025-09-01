@@ -1895,12 +1895,6 @@
 				"category": "GitHub Copilot"
 			},
 			{
-				"command": "github.copilot.chat.review.changes.cancel",
-				"title": "%github.copilot.command.reviewChanges.cancel%",
-				"icon": "$(stop-circle)",
-				"category": "GitHub Copilot"
-			},
-			{
 				"command": "github.copilot.chat.review.previous",
 				"title": "%github.copilot.command.gotoPreviousReviewSuggestion%",
 				"icon": "$(arrow-up)",
@@ -3175,10 +3169,6 @@
 					"when": "false"
 				},
 				{
-					"command": "github.copilot.chat.review.changes.cancel",
-					"when": "false"
-				},
-				{
 					"command": "github.copilot.chat.review.previous",
 					"when": "false"
 				},
@@ -3448,12 +3438,7 @@
 				{
 					"command": "github.copilot.chat.review.changes",
 					"group": "navigation",
-					"when": "github.copilot.chat.reviewDiff.enabled && !github.copilot.chat.review.sourceControlProgress && scmProvider == git && scmProviderRootUri in github.copilot.chat.reviewDiff.enabledRootUris"
-				},
-				{
-					"command": "github.copilot.chat.review.changes.cancel",
-					"group": "navigation",
-					"when": "github.copilot.chat.reviewDiff.enabled && github.copilot.chat.review.sourceControlProgress && scmProvider == git && scmProviderRootUri in github.copilot.chat.reviewDiff.enabledRootUris"
+					"when": "github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmProviderRootUri in github.copilot.chat.reviewDiff.enabledRootUris"
 				}
 			],
 			"scm/resourceGroup/context": [
