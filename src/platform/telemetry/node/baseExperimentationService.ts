@@ -147,4 +147,39 @@ export class BaseExperimentationService extends Disposable implements IExperimen
 		this._previouslyReadTreatments.set(name, result);
 		return result;
 	}
+
+	// Note: This is only temporarily until we have fully migrated to the new completions implementation.
+	// At that point, we can remove this method and the related code.
+	private _completionsFilters: Map<string, string> = new Map<string, string>();
+	async setCompletionsFilters(filters: Map<string, string>): Promise<void> {
+		if (equalMap(this._completionsFilters, filters)) {
+			return;
+		}
+
+		this._completionsFilters.clear();
+		for (const [key, value] of filters) {
+			this._completionsFilters.set(key, value);
+		}
+
+		await this._delegate.initialFetch;
+		await this._delegate.getTreatmentVariableAsync('vscode', 'refresh');
+	}
+
+	protected getCompletionsFilters(): Map<string, string> {
+		return this._completionsFilters;
+	}
+}
+
+function equalMap(map1: Map<string, string>, map2: Map<string, string>): boolean {
+	if (map1.size !== map2.size) {
+		return false;
+	}
+
+	for (const [key, value] of map1) {
+		if (map2.get(key) !== value) {
+			return false;
+		}
+	}
+
+	return true;
 }

@@ -5,8 +5,10 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import * as http from 'http';
-import type * as vscode from 'vscode';
+import type { OpenAiFunctionTool } from '../../../../platform/networking/common/fetch';
+import { IMakeChatRequestOptions } from '../../../../platform/networking/common/networking';
 import { APIUsage } from '../../../../platform/networking/common/openai';
+import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { anthropicMessagesToRawMessages } from '../../../byok/common/anthropicMessageConverter';
 import { IAgentStreamBlock, IParsedRequest, IProtocolAdapter, IProtocolAdapterFactory, IStreamEventData, IStreamingContext } from './types';
 
@@ -35,24 +37,26 @@ class AnthropicAdapter implements IProtocolAdapter {
 		// Convert Anthropic messages to Raw (TSX) messages
 		const rawMessages = anthropicMessagesToRawMessages(requestBody.messages, { type: 'text', text: systemText });
 
-		const options: vscode.LanguageModelChatRequestOptions = {
-			justification: 'Anthropic-compatible chat request',
-			modelOptions: { temperature: 0 }
+		const options: IMakeChatRequestOptions['requestOptions'] = {
+			temperature: requestBody.temperature,
 		};
 
 		if (requestBody.tools && requestBody.tools.length > 0) {
 			// Map Anthropic tools to VS Code chat tools. Provide a no-op invoke since this server doesn't run tools.
-			const tools = requestBody.tools.map(tool => {
+			const tools = coalesce(requestBody.tools.map(tool => {
 				if ('input_schema' in tool) {
-					const chatTool: vscode.LanguageModelChatTool = {
-						name: tool.name,
-						description: tool.description || '',
-						inputSchema: tool.input_schema || {},
+					const chatTool: OpenAiFunctionTool = {
+						type: 'function',
+						function: {
+							name: tool.name,
+							description: tool.description || '',
+							parameters: tool.input_schema || {},
+						}
 					};
 					return chatTool;
 				}
 				return undefined;
-			}).filter((t): t is vscode.LanguageModelChatTool => !!t);
+			}));
 			if (tools.length) {
 				options.tools = tools;
 			}

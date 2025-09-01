@@ -5,14 +5,13 @@
 
 import { Raw } from '@vscode/prompt-tsx';
 import * as http from 'http';
-import type * as vscode from 'vscode';
+import type { IMakeChatRequestOptions } from '../../../../platform/networking/common/networking';
 import { APIUsage } from '../../../../platform/networking/common/openai';
 
 export interface IParsedRequest {
 	model?: string;
 	messages: Raw.ChatMessage[];
-	tools?: vscode.LanguageModelTool<any>[];
-	options?: vscode.LanguageModelChatRequestOptions;
+	options?: IMakeChatRequestOptions['requestOptions'];
 }
 
 export interface IStreamEventData {
