@@ -149,10 +149,6 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 	): Promise<NesCompletionList | undefined> {
 		const tracer = this._tracer.sub(['provideInlineCompletionItems', shortOpportunityId(context.requestUuid)]);
 
-		// Run classifier first to determine if we should proceed
-		const classificationResult = await this._classifier.classify(document, position);
-		console.log(`[InlineCompletionProvider] Classifier result: confidence=${classificationResult.confidence?.toFixed(3)}, processingTime=${classificationResult.processingTime}ms`);
-
 		const isCompletionsEnabled = this._isCompletionsEnabled(document);
 
 		const unification = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsUnification, this._expService);
@@ -165,6 +161,10 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			tracer.returns('inline edits disabled');
 			return undefined;
 		}
+
+		// TODO(cecagnia): Run classifier first to determine if we should proceed
+		const classificationResult = await this._classifier.classify(document, position);
+		console.log(`[InlineCompletionProvider] Classifier result: confidence=${classificationResult.confidence?.toFixed(3)}, processingTime=${classificationResult.processingTime}ms`);
 
 		const doc = this.model.workspace.getDocumentByTextDocument(document);
 		if (!doc) {

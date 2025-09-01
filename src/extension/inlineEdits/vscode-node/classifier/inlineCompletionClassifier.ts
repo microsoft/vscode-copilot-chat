@@ -106,11 +106,15 @@ export class InlineCompletionClassifier {
 
 			const startTimeTokenizer = Date.now();
 			const tokenizerOpts = {
+				// padding: 'max_length', // TODO: returns a BigInt error
 				add_special_tokens: false,
-				padding: true,
+				truncation: true,
+				// max_length: 256,       // TODO: combined with padding returns a BigInt error
+				return_tensors: true,
 				return_token_type_ids: true,
 			};
 			const feeds = await this.tokenizer!(context, tokenizerOpts);
+			this._logService.info(`[InlineCompletionClassifier] numTokens: "${feeds.input_ids.dims}"`);
 			const endTimeTokenizer = Date.now();
 
 			const startTimeInference = Date.now();
