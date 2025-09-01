@@ -78,8 +78,8 @@ export interface IProtocolAdapterFactory {
 
 export interface IStreamingContext {
 	requestId: string;
-	modelId: string;
-	endpoint?: {
+	endpoint: {
+		modelId: string;
 		modelMaxPromptTokens: number;
 	};
 }

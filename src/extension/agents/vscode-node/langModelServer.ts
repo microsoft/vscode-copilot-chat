@@ -162,8 +162,8 @@ export class LanguageModelServer {
 				// Create streaming context with only essential shared data
 				const context: IStreamingContext = {
 					requestId: `req_${Math.random().toString(36).substr(2, 20)}`,
-					modelId: selectedEndpoint.model,
 					endpoint: {
+						modelId: selectedEndpoint.model,
 						modelMaxPromptTokens: selectedEndpoint.modelMaxPromptTokens
 					}
 				};

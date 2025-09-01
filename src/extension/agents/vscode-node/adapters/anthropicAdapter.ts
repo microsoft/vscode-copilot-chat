@@ -226,7 +226,7 @@ class AnthropicAdapter implements IProtocolAdapter {
 		}
 
 		// If we don't have endpoint info, return the unadjusted usage
-		if (!context.endpoint || context.modelId === 'gpt-4o-mini') {
+		if (context.endpoint.modelId === 'gpt-4o-mini') {
 			return usage;
 		}
 
@@ -261,7 +261,7 @@ class AnthropicAdapter implements IProtocolAdapter {
 				id: context.requestId,
 				type: 'message',
 				role: 'assistant',
-				model: context.modelId,
+				model: context.endpoint.modelId,
 				content: [],
 				stop_reason: null,
 				stop_sequence: null,
