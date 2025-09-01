@@ -17,6 +17,7 @@ import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { ClaudeCodeSessionService } from '../claudeCodeSessionService';
+import { TestingServiceCollection } from '../../../../../platform/test/node/services';
 
 function computeFolderSlug(folderUri: URI): string {
 	return folderUri.path.replace(/\//g, '-');
@@ -29,13 +30,13 @@ describe('ClaudeCodeSessionService', () => {
 	let dirUri: URI;
 
 	let mockFs: MockFileSystemService;
-	let testingServiceCollection: ReturnType<typeof createExtensionUnitTestingServices>;
+	let testingServiceCollection: TestingServiceCollection;
 	let service: ClaudeCodeSessionService;
 
 	beforeEach(() => {
 		mockFs = new MockFileSystemService();
 		testingServiceCollection = createExtensionUnitTestingServices();
-		testingServiceCollection.set(IFileSystemService, mockFs as any);
+		testingServiceCollection.set(IFileSystemService, mockFs);
 
 		// Create mock workspace service with the test workspace folder
 		const workspaceService = new TestWorkspaceService([folderUri]);
