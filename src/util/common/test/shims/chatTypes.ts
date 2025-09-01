@@ -446,3 +446,28 @@ export class ChatResponseTurn2 implements vscode.ChatResponseTurn2 {
 		readonly command?: string
 	) { }
 }
+
+export class LanguageModelError extends Error {
+
+	static readonly #name = 'LanguageModelError';
+
+	static NotFound(message?: string): LanguageModelError {
+		return new LanguageModelError(message, LanguageModelError.NotFound.name);
+	}
+
+	static NoPermissions(message?: string): LanguageModelError {
+		return new LanguageModelError(message, LanguageModelError.NoPermissions.name);
+	}
+
+	static Blocked(message?: string): LanguageModelError {
+		return new LanguageModelError(message, LanguageModelError.Blocked.name);
+	}
+
+	readonly code: string;
+
+	constructor(message?: string, code?: string, cause?: Error) {
+		super(message, { cause });
+		this.name = LanguageModelError.#name;
+		this.code = code ?? '';
+	}
+}

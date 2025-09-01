@@ -5,7 +5,7 @@
 
 import { Raw } from '@vscode/prompt-tsx';
 import * as http from 'http';
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import { APIUsage } from '../../../../platform/networking/common/openai';
 
 export interface IParsedRequest {

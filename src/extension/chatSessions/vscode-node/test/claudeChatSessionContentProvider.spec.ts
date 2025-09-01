@@ -8,6 +8,7 @@ import { readFile } from 'fs/promises';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
+import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
@@ -20,11 +21,12 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
+import { ClaudeAgentManager } from '../../../agents/claude/node/claudeCodeAgent';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../../agents/claude/node/claudeCodeSessionService';
-import { ClaudeAgentManager } from '../../../agents/claude/vscode-node/claudeCodeAgent';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { ClaudeChatSessionContentProvider } from '../claudeChatSessionContentProvider';
 import { ClaudeSessionDataStore } from '../claudeChatSessionItemProvider';
+import { joinPath } from '../../../../util/vs/base/common/resources';
 
 // Mock os.homedir to return a test path
 vi.mock('os', async () => {
@@ -560,29 +562,26 @@ describe('ChatSessionContentProvider', () => {
 	it('loads real fixture file with tool invocation flow and converts to correct chat history', async () => {
 		const fixtureContent = await readFile(path.join(__dirname, 'fixtures', '4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl'), 'utf8');
 
+		// TODO use insta service
 		const mockFileSystem = accessor.get(IFileSystemService) as MockFileSystemService;
 		const testWorkspace = accessor.get(IWorkspaceService);
 		const testLogService = accessor.get(ILogService);
+		const testEnvService = accessor.get(INativeEnvService);
 
 		vi.spyOn(testWorkspace, 'getWorkspaceFolders').mockReturnValue([URI.file('/project')]);
 
 		const folderSlug = '/project'.replace(/[\/\.]/g, '-');
-		const homeDir = '/home/user'; // Test home directory
-		const projectDir = URI.file(`${homeDir}/.claude/projects/${folderSlug}`);
+		const projectDir = joinPath(testEnvService.userHome, `.claude/projects/${folderSlug}`);
 		const fixtureFile = URI.joinPath(projectDir, '4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl');
 
 		mockFileSystem.mockDirectory(projectDir, [['4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl', FileType.File]]);
 		mockFileSystem.mockFile(fixtureFile, fixtureContent);
 
-		// Mock os.homedir to return test home directory
-		// TODO set up IEnvService to provide this
-		const osMock = await import('os');
-		vi.spyOn(osMock, 'homedir').mockReturnValue(homeDir);
-
 		const realSessionService = new ClaudeCodeSessionService(
 			mockFileSystem as any,
 			testLogService,
-			testWorkspace
+			testWorkspace,
+			testEnvService
 		);
 
 		const instaService = accessor.get(IInstantiationService);

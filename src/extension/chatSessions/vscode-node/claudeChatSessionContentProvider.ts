@@ -11,8 +11,8 @@ import { coalesce } from '../../../util/vs/base/common/arrays';
 import { ChatRequestTurn2 } from '../../../vscodeTypes';
 import { ClaudeToolNames, IExitPlanModeInput } from '../../agents/claude/common/claudeTools';
 import { createFormattedToolInvocation } from '../../agents/claude/common/toolInvocationFormatter';
+import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
 import { IClaudeCodeSession, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
-import { ClaudeAgentManager } from '../../agents/claude/vscode-node/claudeCodeAgent';
 import { ClaudeSessionDataStore } from './claudeChatSessionItemProvider';
 
 interface ToolContext {

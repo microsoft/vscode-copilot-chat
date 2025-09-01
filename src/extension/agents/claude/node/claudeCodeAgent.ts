@@ -19,7 +19,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { LanguageModelTextPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { isFileOkForTool } from '../../../tools/node/toolUtils';
-import { ILanguageModelServerConfig, LanguageModelServer } from '../../vscode-node/langModelServer';
+import { ILanguageModelServerConfig, LanguageModelServer } from '../../node/langModelServer';
 import { ClaudeToolNames, IExitPlanModeInput, ITodoWriteInput } from '../common/claudeTools';
 import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 import { IToolsService } from '../../../tools/common/toolsService';

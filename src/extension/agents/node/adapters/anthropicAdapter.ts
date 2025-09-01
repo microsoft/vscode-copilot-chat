@@ -5,7 +5,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import * as http from 'http';
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import { APIUsage } from '../../../../platform/networking/common/openai';
 import { anthropicMessagesToRawMessages } from '../../../byok/common/anthropicMessageConverter';
 import { IAgentStreamBlock, IParsedRequest, IProtocolAdapter, IProtocolAdapterFactory, IStreamEventData, IStreamingContext } from './types';

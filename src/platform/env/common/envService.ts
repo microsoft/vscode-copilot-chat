@@ -62,7 +62,7 @@ export interface IEnvService {
 }
 
 export const INativeEnvService = createServiceIdentifier<INativeEnvService>('INativeEnvService');
-export interface INativeEnvService {
+export interface INativeEnvService extends IEnvService {
 	readonly _serviceBrand: undefined;
 	userHome: URI;
 }

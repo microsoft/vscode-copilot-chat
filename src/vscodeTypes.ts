@@ -90,6 +90,7 @@ export import TextDocumentChangeReason = vscode.TextDocumentChangeReason;
 export import ChatToolInvocationPart = vscode.ChatToolInvocationPart;
 export import ChatResponseTurn2 = vscode.ChatResponseTurn2;
 export import ChatRequestTurn2 = vscode.ChatRequestTurn2;
+export import LanguageModelError = vscode.LanguageModelError;
 
 export const l10n = {
 	/**
