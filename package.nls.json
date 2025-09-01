@@ -113,6 +113,7 @@
 	"github.copilot.config.testGeneration.instructions.deprecated": "Use instructions files instead. See https://aka.ms/vscode-ghcp-custom-instructions for more information.",
 	"github.copilot.config.experimental.testGeneration.instruction.text": "A text instruction that will be added to Copilot requests that generate tests. Optionally, you can specify a language for the instruction.",
 	"github.copilot.config.experimental.testGeneration.instruction.file": "A path to a file that will be added to Copilot requests that generate tests. Optionally, you can specify a language for the instruction.",
+	"github.copilot.config.reviewAgent.enabled": "Enables the code review agent.",
 	"github.copilot.config.reviewSelection.enabled": "Enables code review on current selection.",
 	"github.copilot.config.reviewSelection.instructions": "A set of instructions that will be added to Copilot requests that provide code review for the current selection.\nInstructions can come from: \n- a file in the workspace: `{ \"file\": \"fileName\" }`\n- text in natural language: `{ \"text\": \"Use underscore for field names.\" }`\n\nNote: Keep your instructions short and precise. Poor instructions can degrade Copilot's effectiveness.",
 	"github.copilot.config.reviewSelection.instruction.text": "A text instruction that will be added to Copilot requests that provide code review for the current selection. Optionally, you can specify a language for the instruction.",

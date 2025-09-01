@@ -1824,7 +1824,7 @@
 			{
 				"command": "github.copilot.chat.review",
 				"title": "%github.copilot.command.reviewAndComment%",
-				"enablement": "github.copilot.chat.reviewSelection.enabled && !github.copilot.interactiveSession.disabled",
+				"enablement": "config.github.copilot.chat.reviewSelection.enabled && !github.copilot.interactiveSession.disabled",
 				"category": "GitHub Copilot"
 			},
 			{
@@ -2339,6 +2339,14 @@
 						"type": "boolean",
 						"default": true,
 						"markdownDescription": "%github.copilot.config.startDebugging.enabled%",
+						"tags": [
+							"preview"
+						]
+					},
+					"github.copilot.chat.reviewAgent.enabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "%github.copilot.config.reviewAgent.enabled%",
 						"tags": [
 							"preview"
 						]
@@ -3071,7 +3079,7 @@
 				},
 				{
 					"command": "github.copilot.chat.review",
-					"when": "github.copilot.chat.reviewSelection.enabled && !github.copilot.interactiveSession.disabled && resourceScheme != 'vscode-chat-code-block'",
+					"when": "config.github.copilot.chat.reviewSelection.enabled && !github.copilot.interactiveSession.disabled && resourceScheme != 'vscode-chat-code-block'",
 					"group": "copilotAction@2"
 				},
 				{
@@ -3438,18 +3446,18 @@
 				{
 					"command": "github.copilot.chat.review.changes",
 					"group": "navigation",
-					"when": "github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmProviderRootUri in github.copilot.chat.reviewDiff.enabledRootUris"
+					"when": "config.github.copilot.chat.reviewAgent.enabled && github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmProviderRootUri in github.copilot.chat.reviewDiff.enabledRootUris"
 				}
 			],
 			"scm/resourceGroup/context": [
 				{
 					"command": "github.copilot.chat.review.stagedChanges",
-					"when": "github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmResourceGroup == index",
+					"when": "config.github.copilot.chat.reviewAgent.enabled && github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmResourceGroup == index",
 					"group": "inline@-3"
 				},
 				{
 					"command": "github.copilot.chat.review.unstagedChanges",
-					"when": "github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmResourceGroup == workingTree",
+					"when": "config.github.copilot.chat.reviewAgent.enabled && github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmResourceGroup == workingTree",
 					"group": "inline@-3"
 				}
 			],
@@ -3457,12 +3465,12 @@
 				{
 					"command": "github.copilot.chat.review.stagedFileChange",
 					"group": "3_copilot",
-					"when": "github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmResourceGroup == index"
+					"when": "config.github.copilot.chat.reviewAgent.enabled && github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmResourceGroup == index"
 				},
 				{
 					"command": "github.copilot.chat.review.unstagedFileChange",
 					"group": "3_copilot",
-					"when": "github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmResourceGroup == workingTree"
+					"when": "config.github.copilot.chat.reviewAgent.enabled && github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmResourceGroup == workingTree"
 				}
 			],
 			"scm/inputBox": [
