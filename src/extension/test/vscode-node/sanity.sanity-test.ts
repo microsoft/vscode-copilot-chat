@@ -20,7 +20,7 @@ import { ContributedToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
 import { TestChatRequest } from '../node/testHelpers';
 
-suite.skip('Copilot Chat Sanity Test', function () {
+suite('Copilot Chat Sanity Test', function () {
 	this.timeout(1000 * 60 * 1); // 1 minute
 
 	let realInstaAccessor: IInstantiationService;
@@ -151,7 +151,7 @@ suite.skip('Copilot Chat Sanity Test', function () {
 		});
 	});
 
-	test('E2E Production Inline Chat Test', async function () {
+	test.skip('E2E Production Inline Chat Test', async function () {
 		assert.ok(realInstaAccessor);
 
 		await realInstaAccessor.invokeFunction(async (accessor) => {

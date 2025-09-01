@@ -6,6 +6,7 @@
 import { Raw } from '@vscode/prompt-tsx';
 import * as http from 'http';
 import { IMakeChatRequestOptions } from '../../../../platform/networking/common/networking';
+import { APIUsage } from '../../../../platform/networking/common/openai';
 
 export interface IParsedRequest {
 	model?: string;
@@ -49,7 +50,7 @@ export interface IProtocolAdapter {
 	/**
 	 * Generate the final events to close the stream
 	 */
-	generateFinalEvents(context: IStreamingContext): IStreamEventData[];
+	generateFinalEvents(context: IStreamingContext, usage?: APIUsage): IStreamEventData[];
 
 	/**
 	 * Generate initial events to start the stream (optional, protocol-specific)
@@ -76,5 +77,8 @@ export interface IProtocolAdapterFactory {
 
 export interface IStreamingContext {
 	requestId: string;
-	modelId: string;
+	endpoint: {
+		modelId: string;
+		modelMaxPromptTokens: number;
+	};
 }
