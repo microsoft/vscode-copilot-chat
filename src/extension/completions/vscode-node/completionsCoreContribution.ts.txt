@@ -27,6 +27,7 @@ export class CompletionsCoreContribution extends Disposable {
 			const ctx = instantiationService.invokeFunction(createContext);
 			reader.store.add(setup(ctx));
 			const provider = new CopilotInlineCompletionItemProvider(ctx);
+			reader.store.add(provider);
 			reader.store.add(languages.registerInlineCompletionItemProvider({ pattern: '**' }, provider, { debounceDelayMs: 0, excludes: ['github.copilot'], groupId: 'completions' }));
 		}));
 	}

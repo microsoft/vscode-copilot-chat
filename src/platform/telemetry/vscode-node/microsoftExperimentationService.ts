@@ -105,6 +105,19 @@ class CopilotExtensionsFilterProvider implements IExperimentationFilterProvider 
 	}
 }
 
+class CopilotCompletionsFilterProvider implements IExperimentationFilterProvider {
+	constructor(private _getCompletionsFilters: () => Map<string, string>, private _logService: ILogService) { }
+
+	getFilters(): Map<string, any> {
+		const filters = new Map<string, any>();
+		for (const [key, value] of this._getCompletionsFilters()) {
+			filters.set(key, value);
+		}
+		this._logService.trace(`[CopilotCompletionsFilterProvider]::getFilters Filters: ${JSON.stringify(Array.from(filters.entries()))}`);
+		return filters;
+	}
+}
+
 class GithubAccountFilterProvider implements IExperimentationFilterProvider {
 	constructor(private _userInfoStore: UserInfoStore, private _logService: ILogService) { }
 
@@ -132,7 +145,7 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 		const version = context.extension.packageJSON['version'];
 		const targetPopulation = getTargetPopulation(envService.isPreRelease());
 		const delegateFn = (globalState: any, userInfoStore: UserInfoStore) => {
-			return getExperimentationService(id, version, targetPopulation, telemetryService, globalState, new GithubAccountFilterProvider(userInfoStore, logService), new RelatedExtensionsFilterProvider(logService), new CopilotExtensionsFilterProvider(logService));
+			return getExperimentationService(id, version, targetPopulation, telemetryService, globalState, new GithubAccountFilterProvider(userInfoStore, logService), new RelatedExtensionsFilterProvider(logService), new CopilotExtensionsFilterProvider(logService), new CopilotCompletionsFilterProvider(() => this.getCompletionsFilters(), logService));
 		};
 
 		super(delegateFn, context, copilotTokenStore, configurationService, logService);
