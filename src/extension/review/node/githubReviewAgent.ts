@@ -349,7 +349,7 @@ async function fetchComments(logService: ILogService, authService: IAuthenticati
 
 	if (!response.ok) {
 		if (response.status === 402) {
-			const err = new Error(`You have reached your GitHub Copilot Code Review quota limit.`);
+			const err = new Error(`You have reached your Code Review quota limit.`);
 			(err as any).severity = 'info';
 			throw err;
 		}
