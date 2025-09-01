@@ -2031,7 +2031,7 @@
 			{
 				"command": "github.copilot.debug.inlineEdit.reportNotebookNESIssue",
 				"title": "%github.copilot.command.inlineEdit.reportNotebookNESIssue%",
-				"enablement": "config.github.copilot.chat.advanced.notebook.alternativeNESFormat.enabled",
+				"enablement": "config.github.copilot.chat.advanced.notebook.alternativeNESFormat.enabled || github.copilot.chat.enableEnhancedNotebookNES",
 				"category": "GitHub Copilot Developer"
 			},
 			{
