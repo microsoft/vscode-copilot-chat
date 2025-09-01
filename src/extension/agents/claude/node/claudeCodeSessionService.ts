@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { SDKMessage } from '@anthropic-ai/claude-code';
+import Anthropic from '@anthropic-ai/sdk';
 import * as os from 'os';
 import type { CancellationToken } from 'vscode';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
@@ -259,10 +260,24 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	}
 
 	private _reviveStoredSDKMessage(raw: RawStoredSDKMessage): StoredSDKMessage {
-		return {
+		let revivedMessage: StoredSDKMessage = {
 			...raw,
 			timestamp: new Date(raw.timestamp)
 		};
+
+		// Strip attachments from user messages when loading from disk
+		if (revivedMessage.type === 'user' && 'message' in revivedMessage && revivedMessage.message?.role === 'user') {
+			const strippedContent = this._stripAttachmentsFromMessageContent(revivedMessage.message.content);
+			revivedMessage = {
+				...revivedMessage,
+				message: {
+					...revivedMessage.message,
+					content: strippedContent
+				}
+			};
+		}
+
+		return revivedMessage;
 	}
 
 	/**
@@ -331,14 +346,15 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			const message = firstUserMessage.message;
 			let content: string | undefined;
 
-			// Handle both string content and array content formats
-			if (typeof message.content === 'string') {
-				content = this._stripAttachments(message.content);
-			} else if (Array.isArray(message.content) && message.content.length > 0) {
+			// Handle both string content and array content formats using our helper
+			const strippedContent = this._stripAttachmentsFromMessageContent(message.content);
+			if (typeof strippedContent === 'string') {
+				content = strippedContent;
+			} else if (Array.isArray(strippedContent) && strippedContent.length > 0) {
 				// Extract text from the first text block in the content array
-				const firstUsefulText = message.content
-					.filter(block => block.type === 'text' && typeof (block as any).text === 'string')
-					.map(block => this._stripAttachments((block as any).text as string))
+				const firstUsefulText = strippedContent
+					.filter((block): block is Anthropic.TextBlockParam => block.type === 'text')
+					.map(block => block.text)
 					.find(text => text.trim().length > 0);
 				content = firstUsefulText;
 			}
@@ -356,6 +372,27 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		// Remove any <system-reminder> ... </system-reminder> blocks, including newlines
 		return text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, '').trim();
 	}
+
+	/**
+	 * Strip attachments from message content, handling both string and array formats
+	 */
+	private _stripAttachmentsFromMessageContent(content: string | Anthropic.ContentBlockParam[]): string | Anthropic.ContentBlockParam[] {
+		if (typeof content === 'string') {
+			return this._stripAttachments(content);
+		} else if (Array.isArray(content)) {
+			return content.map(block => {
+				if (block.type === 'text') {
+					return {
+						...block,
+						text: this._stripAttachments((block as Anthropic.TextBlockParam).text)
+					};
+				}
+				return block;
+			});
+		}
+		return content;
+	}
+
 }
 
 export interface IClaudeCodeSession {
