@@ -91,9 +91,9 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		return items;
 	}
 
-	async getSession(sessionId: string, token: CancellationToken): Promise<IClaudeCodeSession | undefined> {
+	async getSession(claudeCodeSessionId: string, token: CancellationToken): Promise<IClaudeCodeSession | undefined> {
 		const all = await this.getAllSessions(token);
-		return all.find(session => session.id === sessionId);
+		return all.find(session => session.id === claudeCodeSessionId);
 	}
 
 	/**

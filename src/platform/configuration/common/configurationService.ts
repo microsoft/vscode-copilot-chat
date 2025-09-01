@@ -730,6 +730,7 @@ export namespace ConfigKey {
 
 		export const EnableClaudeCodeAgent = defineSetting<boolean | string | undefined>('chat.advanced.claudeCode.enabled', false, INTERNAL);
 		export const ClaudeCodeDebugEnabled = defineSetting<boolean>('chat.advanced.claudeCode.debug', false, INTERNAL);
+		export const TaskToolsEnabled = defineSetting<boolean>('chat.advanced.taskTools.enabled', true);
 	}
 
 	export const AgentThinkingTool = defineSetting<boolean>('chat.agent.thinkingTool', false);
@@ -754,6 +755,7 @@ export namespace ConfigKey {
 	/** Enables the start debugging intent */
 	export const StartDebuggingIntent = defineSetting('chat.startDebugging.enabled', true);
 	export const UseInstructionFiles = defineSetting('chat.codeGeneration.useInstructionFiles', true);
+	export const CodeAgent = defineSetting('chat.reviewAgent.enabled', true);
 	export const CodeFeedback = defineSetting('chat.reviewSelection.enabled', true);
 	export const CodeFeedbackInstructions = defineSetting('chat.reviewSelection.instructions', [] as CodeGenerationInstruction[]);
 

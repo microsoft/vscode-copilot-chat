@@ -6,14 +6,14 @@
 import { SDKMessage } from '@anthropic-ai/claude-code';
 import Anthropic from '@anthropic-ai/sdk';
 import * as vscode from 'vscode';
+import { ILogService } from '../../../platform/log/common/logService';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { ChatRequestTurn2 } from '../../../vscodeTypes';
+import { ClaudeToolNames, IExitPlanModeInput } from '../../agents/claude/common/claudeTools';
 import { createFormattedToolInvocation } from '../../agents/claude/common/toolInvocationFormatter';
 import { IClaudeCodeSession, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
 import { ClaudeAgentManager } from '../../agents/claude/vscode-node/claudeCodeAgent';
 import { ClaudeSessionDataStore } from './claudeChatSessionItemProvider';
-import { ILogService } from '../../../platform/log/common/logService';
-import { ClaudeToolNames, IExitPlanModeInput } from '../../agents/claude/common/claudeTools';
 
 interface ToolContext {
 	unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>;
@@ -31,9 +31,12 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 
 	async provideChatSessionContent(internalSessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
 		const initialRequest = this.sessionStore.getAndConsumeInitialRequest(internalSessionId);
-		const existingSession = await this.sessionService.getSession(internalSessionId, token);
+		const claudeSessionId = this.sessionStore.getSessionId(internalSessionId);
+		const existingSession = claudeSessionId && await this.sessionService.getSession(claudeSessionId, token);
 		const toolContext = this._createToolContext();
-		const history = this._buildChatHistory(existingSession, toolContext);
+		const history = existingSession ?
+			this._buildChatHistory(existingSession, toolContext) :
+			[];
 		if (initialRequest) {
 			history.push(new ChatRequestTurn2(initialRequest.prompt, undefined, [], '', [], undefined));
 		}

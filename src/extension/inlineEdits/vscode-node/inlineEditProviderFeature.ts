@@ -34,6 +34,7 @@ import { VSCodeWorkspace } from './parts/vscodeWorkspace';
 import { makeSettable } from './utils/observablesUtils';
 
 const TRIGGER_INLINE_EDIT_ON_ACTIVE_EDITOR_CHANGE = false; // otherwise, eg, NES would trigger just when going through search results
+const useEnhancedNotebookNESContextKey = 'github.copilot.chat.enableEnhancedNotebookNES';
 
 export class InlineEditProviderFeature extends Disposable implements IExtensionContribution {
 
@@ -75,13 +76,17 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 		@IEnvService private readonly _envService: IEnvService,
 		@ILogService private readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IExperimentationService _experimentationService: IExperimentationService,
 	) {
 		super();
 
 		const tracer = createTracer(['NES', 'Feature'], (s) => this._logService.trace(s));
 		const constructorTracer = tracer.sub('constructor');
-
 		const hasUpdatedNesSettingKey = 'copilot.chat.nextEdits.hasEnabledNesInSettings';
+		const enableEnhancedNotebookNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, _experimentationService) || this._configurationService.getExperimentBasedConfig(ConfigKey.UseAlternativeNESNotebookFormat, _experimentationService);
+
+		commands.executeCommand('setContext', useEnhancedNotebookNESContextKey, enableEnhancedNotebookNES);
+
 		this._register(autorun((reader) => {
 			const copilotToken = this._copilotToken.read(reader);
 

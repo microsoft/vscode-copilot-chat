@@ -141,7 +141,8 @@ class ClaudeCodeSession {
 			// permissionMode: 'acceptEdits',
 			canUseTool: async (name, input, opts) => {
 				return this.canUseTool(name, input, toolInvocationToken);
-			}
+			},
+			appendSystemPrompt: 'Your responses will be rendered as markdown, so please reply with properly formatted markdown when appropriate. When replying with code or the name of a symbol, wrap it in backticks.'
 		};
 
 		this.logService.trace(`Claude CLI SDK: Starting query with options: ${JSON.stringify(options)}`);
