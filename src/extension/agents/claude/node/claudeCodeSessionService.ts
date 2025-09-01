@@ -5,8 +5,8 @@
 
 import { SDKMessage } from '@anthropic-ai/claude-code';
 import Anthropic from '@anthropic-ai/sdk';
-import * as os from 'os';
 import type { CancellationToken } from 'vscode';
+import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -53,6 +53,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		@IFileSystemService private readonly _fileSystem: IFileSystemService,
 		@ILogService private readonly _logService: ILogService,
 		@IWorkspaceService private readonly _workspace: IWorkspaceService,
+		@INativeEnvService private readonly _nativeEnvService: INativeEnvService
 	) { }
 
 	/**
@@ -65,7 +66,6 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	 */
 	async getAllSessions(token: CancellationToken): Promise<IClaudeCodeSession[]> {
 		const folders = this._workspace.getWorkspaceFolders();
-		const home = os.homedir();
 		const items: IClaudeCodeSession[] = [];
 
 		for (const folderUri of folders) {
@@ -74,7 +74,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 			}
 
 			const slug = this._computeFolderSlug(folderUri);
-			const projectDirUri = URI.joinPath(URI.file(home), '.claude', 'projects', slug);
+			const projectDirUri = URI.joinPath(this._nativeEnvService.userHome, '.claude', 'projects', slug);
 
 			// Check if we can use cached data
 			const cachedSessions = await this._getCachedSessionsIfValid(projectDirUri, token);

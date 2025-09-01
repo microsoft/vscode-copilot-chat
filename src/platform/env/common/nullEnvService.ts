@@ -66,3 +66,9 @@ export class NullEnvService extends AbstractEnvService {
 		return Promise.resolve(false);
 	}
 }
+
+export class NullNativeEnvService extends NullEnvService {
+	get userHome(): URI {
+		return URI.file('/home/testuser');
+	}
+}

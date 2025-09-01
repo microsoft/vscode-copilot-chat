@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { readFile } from 'fs/promises';
-import * as os from 'os';
 import * as path from 'path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { INativeEnvService } from '../../../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
@@ -26,8 +26,7 @@ describe('ClaudeCodeSessionService', () => {
 	const workspaceFolderPath = '/project';
 	const folderUri = URI.file(workspaceFolderPath);
 	const slug = computeFolderSlug(folderUri);
-	const home = os.homedir();
-	const dirUri = URI.joinPath(URI.file(home), '.claude', 'projects', slug);
+	let dirUri: URI;
 
 	let mockFs: MockFileSystemService;
 	let testingServiceCollection: ReturnType<typeof createExtensionUnitTestingServices>;
@@ -44,6 +43,8 @@ describe('ClaudeCodeSessionService', () => {
 
 		const accessor = testingServiceCollection.createTestingAccessor();
 		const instaService = accessor.get(IInstantiationService);
+		const nativeEnvService = accessor.get(INativeEnvService);
+		dirUri = URI.joinPath(nativeEnvService.userHome, '.claude', 'projects', slug);
 		service = instaService.createInstance(ClaudeCodeSessionService);
 	});
 
