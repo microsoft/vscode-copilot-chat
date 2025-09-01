@@ -6,11 +6,12 @@
 import { Raw } from '@vscode/prompt-tsx';
 import * as http from 'http';
 import * as vscode from 'vscode';
-import { ChatLocation } from '../../../platform/chat/common/commonTypes';
+import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
+import { APIUsage } from '../../../platform/networking/common/openai';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { AnthropicAdapterFactory } from './adapters/anthropicAdapter';
 import { IAgentStreamBlock, IProtocolAdapter, IProtocolAdapterFactory, IStreamingContext } from './adapters/types';
@@ -161,7 +162,10 @@ export class LanguageModelServer {
 				// Create streaming context with only essential shared data
 				const context: IStreamingContext = {
 					requestId: `req_${Math.random().toString(36).substr(2, 20)}`,
-					modelId: selectedEndpoint.model
+					modelId: selectedEndpoint.model,
+					endpoint: {
+						modelMaxPromptTokens: selectedEndpoint.modelMaxPromptTokens
+					}
 				};
 
 				// Send initial events if adapter supports them
@@ -185,7 +189,7 @@ export class LanguageModelServer {
 				}));
 
 				const userInitiatedRequest = parsedRequest.messages.at(-1)?.role === Raw.ChatRole.User;
-				await selectedEndpoint.makeChatRequest2({
+				const fetchResult = await selectedEndpoint.makeChatRequest2({
 					debugName: 'agentLanguageModelService',
 					messages: parsedRequest.messages,
 					finishedCb: async (_fullText, _index, delta) => {
@@ -224,10 +228,17 @@ export class LanguageModelServer {
 					requestOptions: openAiTools && openAiTools.length ? { tools: openAiTools } : undefined,
 					userInitiatedRequest
 				}, tokenSource.token);
+
+				// Capture usage information if available
+				let usage: APIUsage | undefined;
+				if (fetchResult.type === ChatFetchResponseType.Success && fetchResult.usage) {
+					usage = fetchResult.usage;
+				}
+
 				requestComplete = true;
 
 				// Send final events
-				const finalEvents = adapter.generateFinalEvents(context);
+				const finalEvents = adapter.generateFinalEvents(context, usage);
 				for (const event of finalEvents) {
 					res.write(`event: ${event.event}\ndata: ${event.data}\n\n`);
 				}
@@ -309,29 +320,5 @@ export class LanguageModelServer {
 
 	public getConfig(): ILanguageModelServerConfig {
 		return { ...this.config };
-	}
-
-	public async getAvailableModels(): Promise<Array<{
-		id: string;
-		name: string;
-		vendor: string;
-		family: string;
-		version: string;
-		maxInputTokens: number;
-	}>> {
-		try {
-			const models = await vscode.lm.selectChatModels();
-			return models.map(m => ({
-				id: m.id,
-				name: m.name,
-				vendor: m.vendor,
-				family: m.family,
-				version: m.version,
-				maxInputTokens: m.maxInputTokens
-			}));
-		} catch (error) {
-			this.logService.error('Failed to get available models:', error);
-			return [];
-		}
 	}
 }
