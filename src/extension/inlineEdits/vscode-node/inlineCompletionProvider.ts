@@ -125,7 +125,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, this._expService);
 
 		// Initialize the classifier asynchronously (don't await to avoid blocking constructor)
-		this._classifier = new InlineCompletionClassifier(this._logService);
+		this._classifier = this._instantiationService.createInstance(InlineCompletionClassifier);
 		this._classifier.initialize().catch(error => {
 			this._logService.error('[InlineCompletionProvider] Failed to initialize classifier:', error);
 		});

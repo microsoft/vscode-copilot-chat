@@ -5,11 +5,10 @@
 
 import { PreTrainedTokenizer } from '@huggingface/transformers';
 import * as ort from 'onnxruntime-node';
-import { Position, TextDocument } from 'vscode';
+import { Position, TextDocument, Uri } from 'vscode';
+import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
-// TODO(cecagnia): this seems forbidden. Need to find a way to do it in both node and web.
-const path = require('path');
-const fs = require('fs');
+import { join } from '../../../../util/vs/base/common/path';
 
 export interface ClassificationResult {
 	confidence: number | null;
@@ -38,9 +37,9 @@ export class InlineCompletionClassifier {
 	private tokenizer: PreTrainedTokenizer | null = null;
 
 	constructor(
-		private readonly logService: ILogService,
+		@ILogService private readonly _logService: ILogService,
+		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
 	) {
-		this.logService = logService;
 	}
 
 	/**
@@ -52,27 +51,32 @@ export class InlineCompletionClassifier {
 		}
 
 		try {
-			this.logService.trace('[InlineCompletionClassifier] Initializing classifier...');
-			this.logService.info(`[InlineCompletionClassifier] dirname is... ${__dirname}`);
-			const absoluteModelPath = path.join(__dirname, InlineCompletionClassifier.modelPath);
+			this._logService.trace('[InlineCompletionClassifier] Initializing classifier...');
+			this._logService.info(`[InlineCompletionClassifier] dirname is... ${__dirname}`);
 
-			this.session = await ort.InferenceSession.create(absoluteModelPath, onnxOptions);
-			this.logService.info('[InlineCompletionClassifier] ONNX model loaded successfully');
+			const absoluteModelPath = Uri.file(join(__dirname, InlineCompletionClassifier.modelPath));
+			const absoluteTokenizerPath = Uri.file(join(__dirname, InlineCompletionClassifier.tokenizerPath));
+			const absoluteTokenizerCfgPath = Uri.file(join(__dirname, InlineCompletionClassifier.tokenizerCfgPath));
 
-			const absoluteTokenizerPath = path.join(__dirname, InlineCompletionClassifier.tokenizerPath);
-			const absoluteTokenizerCfgPath = path.join(__dirname, InlineCompletionClassifier.tokenizerCfgPath);
+			const absoluteModelU8Array = await this._fileSystemService.readFile(absoluteModelPath, /*disableLimit=*/true);
+			this.session = await ort.InferenceSession.create(absoluteModelU8Array, onnxOptions);
+			this._logService.info('[InlineCompletionClassifier] ONNX model loaded successfully');
 
-			// Load and parse the tokenizer files to json
-			const tok_json = JSON.parse(fs.readFileSync(absoluteTokenizerPath, 'utf-8'));
-			const tok_cfg = JSON.parse(fs.readFileSync(absoluteTokenizerCfgPath, 'utf-8'));
+			const tokenizerJsonU8Array = await this._fileSystemService.readFile(absoluteTokenizerPath);
+			const tokenizerJsonStr = new TextDecoder().decode(tokenizerJsonU8Array);
+			const tokenizerJson = JSON.parse(tokenizerJsonStr);
 
-			this.tokenizer = new PreTrainedTokenizer(tok_json, tok_cfg);
-			this.logService.info('[InlineCompletionClassifier] Tokenizer loaded successfully');
+			const tokenizerCfgU8Array = await this._fileSystemService.readFile(absoluteTokenizerCfgPath);
+			const tokenizerCfgStr = new TextDecoder().decode(tokenizerCfgU8Array);
+			const tokenizerConfig = JSON.parse(tokenizerCfgStr);
+
+			this.tokenizer = new PreTrainedTokenizer(tokenizerJson, tokenizerConfig);
+			this._logService.info('[InlineCompletionClassifier] Tokenizer loaded successfully');
 
 			this.isInitialized = true;
-			this.logService.info('[InlineCompletionClassifier] Classifier initialized successfully');
+			this._logService.info('[InlineCompletionClassifier] Classifier initialized successfully');
 		} catch (error) {
-			this.logService.error('[InlineCompletionClassifier] Failed to initialize ONNX classifier', error);
+			this._logService.error('[InlineCompletionClassifier] Failed to initialize ONNX classifier', error);
 			this.isInitialized = false;
 		}
 	}
@@ -84,7 +88,7 @@ export class InlineCompletionClassifier {
 		const startTime = Date.now();
 
 		if (!this.isInitialized) {
-			this.logService.warn('[InlineCompletionClassifier] Classifier not initialized, proceeding by default');
+			this._logService.warn('[InlineCompletionClassifier] Classifier not initialized, proceeding by default');
 			return {
 				confidence: null,
 				processingTime: Date.now() - startTime
@@ -94,7 +98,7 @@ export class InlineCompletionClassifier {
 		try {
 			// Extract context from the document
 			const context = this.extractContext(document, position);
-			this.logService.trace(`[InlineCompletionClassifier] Extracted context: "${context}"`);
+			this._logService.trace(`[InlineCompletionClassifier] Extracted context: "${context}"`);
 
 			// Tokenize the input
 			const tokenizerOpts = {
@@ -117,14 +121,14 @@ export class InlineCompletionClassifier {
 
 			const probability = probs[1];
 			const processingTime = Date.now() - startTime;
-			this.logService.trace(`[InlineCompletionClassifier] Classification result: confidence=${probability.toFixed(3)}, time=${processingTime}ms`);
+			this._logService.trace(`[InlineCompletionClassifier] Classification result: confidence=${probability.toFixed(3)}, time=${processingTime}ms`);
 			return {
 				confidence: probability,
 				processingTime: Date.now() - startTime
 			};
 
 		} catch (error) {
-			this.logService.error('[InlineCompletionClassifier] Classification failed:', error);
+			this._logService.error('[InlineCompletionClassifier] Classification failed:', error);
 			return {
 				confidence: null,
 				processingTime: Date.now() - startTime
@@ -151,7 +155,7 @@ export class InlineCompletionClassifier {
 		const context = contextLines.join('\n');
 
 		// Log current line for debugging
-		this.logService.trace(`[InlineCompletionClassifier] Current line: "${currentLine}"`);
+		this._logService.trace(`[InlineCompletionClassifier] Current line: "${currentLine}"`);
 
 		return context;
 	}
@@ -166,6 +170,6 @@ export class InlineCompletionClassifier {
 		}
 		this.tokenizer = null;
 		this.isInitialized = false;
-		this.logService.trace('[InlineCompletionClassifier] Classifier disposed');
+		this._logService.trace('[InlineCompletionClassifier] Classifier disposed');
 	}
 }
