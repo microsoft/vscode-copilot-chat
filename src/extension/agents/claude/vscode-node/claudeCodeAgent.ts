@@ -178,7 +178,10 @@ class ClaudeCodeSession {
 					if (item.type === 'text' && item.text) {
 						stream.markdown(item.text);
 					} else if (item.type === 'tool_use') {
-						stream.progress(`\n\n🛠️ Using tool: ${item.name}...`);
+						// Don't show progress message for TodoWrite tool
+						if (item.name !== ClaudeToolNames.TodoWrite) {
+							stream.progress(`\n\n🛠️ Using tool: ${item.name}...`);
+						}
 						unprocessedToolCalls.set(item.id, item);
 					}
 				}
