@@ -5,7 +5,7 @@
 
 import { PreTrainedTokenizer } from '@huggingface/transformers';
 import * as ort from 'onnxruntime-node';
-import { Position, TextDocument, Uri } from 'vscode';
+import { Position, Range, TextDocument, Uri } from 'vscode';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { join } from '../../../../util/vs/base/common/path';
@@ -96,32 +96,37 @@ export class InlineCompletionClassifier {
 		}
 
 		try {
-			// Extract context from the document
-			const context = this.extractContext(document, position);
-			this._logService.trace(`[InlineCompletionClassifier] Extracted context: "${context}"`);
+			const kContextRadius = 2;
+			const begLine = Math.max(0, position.line - kContextRadius);
+			const endLine = Math.min(document.lineCount, position.line + kContextRadius);
+			const range = new Range(new Position(begLine, 0), new Position(endLine, 0));
+			const context = document.getText(range);
+			this._logService.info(`[InlineCompletionClassifier] Extracted context: "${context}"`);
 
-			// Tokenize the input
+
+			const startTimeTokenizer = Date.now();
 			const tokenizerOpts = {
 				add_special_tokens: false,
 				padding: true,
 				return_token_type_ids: true,
 			};
 			const feeds = await this.tokenizer!(context, tokenizerOpts);
+			const endTimeTokenizer = Date.now();
 
-			// Run inference
+			const startTimeInference = Date.now();
 			const results = await this.session!.run(feeds);
+			const endTimeInference = Date.now();
 
-			// Process the results (assuming binary classification with sigmoid output)
 			const logits = results.logits.data as Float32Array;
 			const maxLogit = Math.max(...logits);
 			const exps = logits.map(x => Math.exp(x - maxLogit));
 			const sumExps = exps.reduce((a, b) => a + b, 0);
 			const probs = exps.map(x => x / sumExps);
-			console.log("Probabilities:", probs);
+			this._logService.info(`[InlineCompletionClassifier] Probabilities=${probs}`);
 
 			const probability = probs[1];
-			const processingTime = Date.now() - startTime;
-			this._logService.trace(`[InlineCompletionClassifier] Classification result: confidence=${probability.toFixed(3)}, time=${processingTime}ms`);
+			this._logService.info(`[InlineCompletionClassifier] Classification result: confidence=${probability.toFixed(3)}, tokenizer=${endTimeTokenizer - startTimeTokenizer}ms, inference=${endTimeInference - startTimeInference}ms`);
+
 			return {
 				confidence: probability,
 				processingTime: Date.now() - startTime
@@ -134,30 +139,6 @@ export class InlineCompletionClassifier {
 				processingTime: Date.now() - startTime
 			};
 		}
-	}
-
-	/**
-	 * Extract relevant context from the document for classification
-	 */
-	private extractContext(document: TextDocument, position: Position): string {
-		// Get the current line
-		const currentLine = document.lineAt(position.line).text;
-
-		// Get some context before and after
-		const contextLines: string[] = [];
-		const contextRadius = 2;
-
-		for (let i = Math.max(0, position.line - contextRadius); i <= Math.min(document.lineCount - 1, position.line + contextRadius); i++) {
-			contextLines.push(document.lineAt(i).text);
-		}
-
-		// Include current line context for better classification
-		const context = contextLines.join('\n');
-
-		// Log current line for debugging
-		this._logService.trace(`[InlineCompletionClassifier] Current line: "${currentLine}"`);
-
-		return context;
 	}
 
 	/**
