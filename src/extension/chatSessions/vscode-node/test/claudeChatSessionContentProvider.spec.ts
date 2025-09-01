@@ -12,11 +12,11 @@ import { INativeEnvService } from '../../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
-import { ILogService } from '../../../../platform/log/common/logService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
+import { joinPath } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
@@ -26,16 +26,7 @@ import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../../ag
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { ClaudeChatSessionContentProvider } from '../claudeChatSessionContentProvider';
 import { ClaudeSessionDataStore } from '../claudeChatSessionItemProvider';
-import { joinPath } from '../../../../util/vs/base/common/resources';
-
-// Mock os.homedir to return a test path
-vi.mock('os', async () => {
-	const actual = await vi.importActual('os');
-	return {
-		...actual,
-		homedir: vi.fn(() => '/home/user')
-	};
-});
+import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 
 // Mock types for testing
 interface MockClaudeSession {
@@ -53,6 +44,7 @@ describe('ChatSessionContentProvider', () => {
 	let provider: ClaudeChatSessionContentProvider;
 	const store = new DisposableStore();
 	let accessor: ITestingServicesAccessor;
+	const workspaceFolderUri = URI.file('/project');
 
 	beforeEach(() => {
 		mockClaudeAgentManager = {
@@ -70,6 +62,10 @@ describe('ChatSessionContentProvider', () => {
 		} as any;
 
 		const serviceCollection = store.add(createExtensionUnitTestingServices());
+
+		const workspaceService = new TestWorkspaceService([workspaceFolderUri]);
+		serviceCollection.set(IWorkspaceService, workspaceService);
+
 		serviceCollection.define(IClaudeCodeSessionService, mockSessionService);
 		accessor = serviceCollection.createTestingAccessor();
 		const instaService = accessor.get(IInstantiationService);
@@ -562,13 +558,8 @@ describe('ChatSessionContentProvider', () => {
 	it('loads real fixture file with tool invocation flow and converts to correct chat history', async () => {
 		const fixtureContent = await readFile(path.join(__dirname, 'fixtures', '4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl'), 'utf8');
 
-		// TODO use insta service
 		const mockFileSystem = accessor.get(IFileSystemService) as MockFileSystemService;
-		const testWorkspace = accessor.get(IWorkspaceService);
-		const testLogService = accessor.get(ILogService);
 		const testEnvService = accessor.get(INativeEnvService);
-
-		vi.spyOn(testWorkspace, 'getWorkspaceFolders').mockReturnValue([URI.file('/project')]);
 
 		const folderSlug = '/project'.replace(/[\/\.]/g, '-');
 		const projectDir = joinPath(testEnvService.userHome, `.claude/projects/${folderSlug}`);
@@ -577,14 +568,9 @@ describe('ChatSessionContentProvider', () => {
 		mockFileSystem.mockDirectory(projectDir, [['4c289ca8-f8bb-4588-8400-88b78beb784d.jsonl', FileType.File]]);
 		mockFileSystem.mockFile(fixtureFile, fixtureContent);
 
-		const realSessionService = new ClaudeCodeSessionService(
-			mockFileSystem as any,
-			testLogService,
-			testWorkspace,
-			testEnvService
-		);
-
 		const instaService = accessor.get(IInstantiationService);
+		const realSessionService = instaService.createInstance(ClaudeCodeSessionService);
+
 		const childInstantiationService = instaService.createChild(new ServiceCollection(
 			[IClaudeCodeSessionService, realSessionService]
 		));
