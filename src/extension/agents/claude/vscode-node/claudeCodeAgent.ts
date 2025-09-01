@@ -5,7 +5,7 @@
 
 import { Options, SDKUserMessage } from '@anthropic-ai/claude-code';
 import Anthropic from '@anthropic-ai/sdk';
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -16,11 +16,14 @@ import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { LanguageModelTextPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { isFileOkForTool } from '../../../tools/node/toolUtils';
 import { ILanguageModelServerConfig, LanguageModelServer } from '../../vscode-node/langModelServer';
 import { ClaudeToolNames, IExitPlanModeInput, ITodoWriteInput } from '../common/claudeTools';
 import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
+import { IToolsService } from '../../../tools/common/toolsService';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 
 // Manages Claude Code agent interactions and language model server lifecycle
 export class ClaudeAgentManager extends Disposable {
@@ -106,6 +109,7 @@ class ClaudeCodeSession {
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IEnvService private readonly envService: IEnvService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IToolsService private readonly toolsService: IToolsService
 	) { }
 
 	public async invoke(
@@ -122,7 +126,7 @@ class ClaudeCodeSession {
 		// Build options for the Claude Code SDK
 		// process.env.DEBUG = '1'; // debug messages from sdk.mjs
 		const isDebugEnabled = this.configService.getConfig(ConfigKey.Internal.ClaudeCodeDebugEnabled);
-		this.logService.trace(`appRoot: ${vscode.env.appRoot}`);
+		this.logService.trace(`appRoot: ${this.envService.appRoot}`);
 		const pathSep = isWindows ? ';' : ':';
 		const options: Options = {
 			cwd: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
@@ -196,7 +200,7 @@ class ClaudeCodeSession {
 
 								if (toolUse.name === ClaudeToolNames.TodoWrite) {
 									const input = toolUse.input as ITodoWriteInput;
-									vscode.lm.invokeTool(ToolName.CoreManageTodoList, {
+									this.toolsService.invokeTool(ToolName.CoreManageTodoList, {
 										input: {
 											operation: 'write',
 											todoList: input.todos.map((todo, i) => ({
@@ -247,12 +251,12 @@ class ClaudeCodeSession {
 		}
 
 		try {
-			const result = await vscode.lm.invokeTool('vscode_get_confirmation', {
+			const result = await this.toolsService.invokeTool(ToolName.CoreConfirmationTool, {
 				input: this.getConfirmationToolParams(toolName, input),
 				toolInvocationToken,
-			});
+			}, CancellationToken.None);
 			const firstResultPart = result.content.at(0);
-			if (firstResultPart instanceof vscode.LanguageModelTextPart && firstResultPart.value === 'yes') {
+			if (firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes') {
 				return {
 					behavior: 'allow',
 					updatedInput: input
