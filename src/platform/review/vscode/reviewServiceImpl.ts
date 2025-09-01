@@ -212,7 +212,7 @@ export class ReviewServiceImpl implements IReviewService {
 
 	private updateThreadLabels() {
 		this._comments.forEach((comment, i) => {
-			comment.thread.label = l10n.t('Comment ({0} of {1})', i + 1, this._comments.length);
+			comment.thread.label = l10n.t('Comment {0} of {1}', i + 1, this._comments.length);
 		});
 	}
 
