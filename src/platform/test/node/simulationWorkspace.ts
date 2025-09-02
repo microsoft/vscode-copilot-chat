@@ -10,7 +10,7 @@ import { getLanguage, getLanguageForResource, ILanguage } from '../../../util/co
 import { getLanguageId } from '../../../util/common/markdown';
 import { ExtHostNotebookDocumentData } from '../../../util/common/test/shims/notebookDocument';
 import { ExtHostNotebookEditor } from '../../../util/common/test/shims/notebookEditor';
-import { createTextDocumentData, setDocText } from '../../../util/common/test/shims/textDocument';
+import { createTextDocumentData, IExtHostDocumentData, setDocText } from '../../../util/common/test/shims/textDocument';
 import { ExtHostTextEditor } from '../../../util/common/test/shims/textEditor';
 import { isUri } from '../../../util/common/types';
 import { Emitter } from '../../../util/vs/base/common/event';
@@ -20,7 +20,6 @@ import * as path from '../../../util/vs/base/common/path';
 import { isString } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
-import { ExtHostDocumentData } from '../../../util/vs/workbench/api/common/extHostDocumentData';
 import { Range, Selection, Uri } from '../../../vscodeTypes';
 import { IDebugOutputService } from '../../debug/common/debugOutputService';
 import { IDialogService } from '../../dialog/common/dialogService';
@@ -121,7 +120,7 @@ export class SimulationWorkspace {
 
 	private _workspaceState: IDeserializedWorkspaceState | undefined;
 	private _workspaceFolders: Uri[] | undefined;
-	private readonly _docs = new ResourceMap<ExtHostDocumentData>();
+	private readonly _docs = new ResourceMap<IExtHostDocumentData>();
 	private readonly _notebooks = new ResourceMap<ExtHostNotebookDocumentData>();
 	private _diagnostics = new ResourceMap<vscode.Diagnostic[]>();
 	private currentEditor: ExtHostTextEditor | undefined = undefined;
@@ -139,7 +138,7 @@ export class SimulationWorkspace {
 	public get testFailures() { return this._workspaceState?.testFailures; }
 	public get workspaceFolderPath() { return this._workspaceState?.workspaceFolderPath; }
 
-	public get documents(): ExtHostDocumentData[] {
+	public get documents(): IExtHostDocumentData[] {
 		return Array.from(this._docs.values());
 	}
 
@@ -354,7 +353,7 @@ export class SimulationWorkspace {
 		return this._diagnostics.get(uri) ?? [];
 	}
 
-	public getDocument(filePathOrUri: string | vscode.Uri): ExtHostDocumentData {
+	public getDocument(filePathOrUri: string | vscode.Uri): IExtHostDocumentData {
 		const queryUri = typeof filePathOrUri === 'string' ? this.getUriFromFilePath(filePathOrUri) : filePathOrUri;
 		const candidateFile = this._docs.get(queryUri);
 		if (!candidateFile) {
@@ -367,7 +366,7 @@ export class SimulationWorkspace {
 		return this._docs.has(uri);
 	}
 
-	public addDocument(doc: ExtHostDocumentData): void {
+	public addDocument(doc: IExtHostDocumentData): void {
 		this._docs.set(doc.document.uri, doc);
 	}
 
@@ -478,7 +477,7 @@ export class SimulationWorkspace {
  * Apply edits to `file` and return the new range and the new selection.
  */
 function applyEdits(
-	doc: ExtHostDocumentData,
+	doc: IExtHostDocumentData,
 	edits: vscode.TextEdit[],
 	range: vscode.Range,
 	selection: vscode.Range

@@ -10,9 +10,8 @@ import { MockAlternativeNotebookContentService } from '../../../../platform/note
 import { INotebookService } from '../../../../platform/notebook/common/notebookService';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { WorkspaceEdit as WorkspaceEditShim } from '../../../../util/common/test/shims/editing';
-import { createTextDocumentData, setDocText } from '../../../../util/common/test/shims/textDocument';
+import { createTextDocumentData, IExtHostDocumentData, setDocText } from '../../../../util/common/test/shims/textDocument';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ExtHostDocumentData } from '../../../../util/vs/workbench/api/common/extHostDocumentData';
 import { WorkspaceEdit } from '../../../../vscodeTypes';
 import { applyEdits as applyTextEdits } from '../../../prompt/node/intents';
 import { applyEdit, ContentFormatError, MultipleMatchesError, NoChangeError, NoMatchError } from '../editFileToolUtils';
@@ -22,7 +21,7 @@ describe('replace_string_in_file - applyEdit', () => {
 	let workspaceService: TestWorkspaceService;
 	let notebookService: { hasSupportedNotebooks: (uri: URI) => boolean };
 	let alternatveContentService: IAlternativeNotebookContentService;
-	let doc: ExtHostDocumentData;
+	let doc: IExtHostDocumentData;
 
 	async function doApplyEdit(oldString: string, newString: string, uri = doc.document.uri) {
 		const r = await applyEdit(uri, oldString, newString, workspaceService, notebookService as INotebookService, alternatveContentService, undefined);

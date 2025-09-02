@@ -3,12 +3,21 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type * as vscode from 'vscode';
+import { EndOfLine } from '../../../../vscodeTypes';
 import { splitLines } from '../../../vs/base/common/strings';
 import { URI as Uri, UriComponents } from '../../../vs/base/common/uri';
+import { IModelChangedEvent } from '../../../vs/editor/common/model/mirrorTextModel';
+// eslint-disable-next-line import/no-restricted-paths
 import { ExtHostDocumentData, IExtHostDocumentSaveDelegate } from '../../../vs/workbench/api/common/extHostDocumentData';
-import { EndOfLine } from '../../../vs/workbench/api/common/extHostTypes/textEdit';
 
-export function createTextDocumentData(uri: Uri, contents: string, languageId: string, eol: '\r\n' | '\n' | undefined = undefined): ExtHostDocumentData {
+export interface IExtHostDocumentData {
+	readonly document: vscode.TextDocument;
+	getText(): string;
+	onEvents(e: IModelChangedEvent): void;
+}
+
+export function createTextDocumentData(uri: Uri, contents: string, languageId: string, eol: '\r\n' | '\n' | undefined = undefined): IExtHostDocumentData {
 	const lines = splitLines(contents);
 	eol = eol ?? (contents.indexOf('\r\n') !== -1 ? '\r\n' : '\n');
 	const delegate: IExtHostDocumentSaveDelegate = {
@@ -16,10 +25,10 @@ export function createTextDocumentData(uri: Uri, contents: string, languageId: s
 			throw new Error('Not implemented.');
 		}
 	};
-	return new ExtHostDocumentData(delegate, uri, lines, eol, 1, languageId, false, 'utf8');
+	return new ExtHostDocumentData(delegate, uri, lines, eol, 1, languageId, false, 'utf8', false);
 }
 
-export function setDocText(doc: ExtHostDocumentData, text: string): void {
+export function setDocText(doc: IExtHostDocumentData, text: string): void {
 	doc.onEvents({
 		changes: [
 			{

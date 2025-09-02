@@ -4,15 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { NotebookCellKind, NotebookData } from '../../../../vscodeTypes';
 import { StringSHA1 } from '../../../vs/base/common/hash';
 import { Schemas } from '../../../vs/base/common/network';
 import { URI as Uri } from '../../../vs/base/common/uri';
-import { ExtHostDocumentData } from '../../../vs/workbench/api/common/extHostDocumentData';
-import { NotebookCellKind, NotebookCellOutput, NotebookCellOutputItem, NotebookData } from '../../../vs/workbench/api/common/extHostTypes/notebooks';
-import { createTextDocumentData } from './textDocument';
+// eslint-disable-next-line import/no-restricted-paths
+import { NotebookCellOutput, NotebookCellOutputItem } from '../../../vs/workbench/api/common/extHostTypes/notebooks';
+import { createTextDocumentData, IExtHostDocumentData } from './textDocument';
 
 interface ISimulationWorkspace {
-	addDocument(doc: ExtHostDocumentData): void;
+	addDocument(doc: IExtHostDocumentData): void;
 	addNotebookDocument(notebook: ExtHostNotebookDocumentData): void;
 }
 
@@ -380,7 +381,7 @@ export class ExtHostCell {
 	index: number;
 	notebook: ExtHostNotebookDocumentData;
 	kind: NotebookCellKind;
-	documentData: ExtHostDocumentData;
+	documentData: IExtHostDocumentData;
 	metadata: { readonly [key: string]: any };
 	private _outputs: vscode.NotebookCellOutput[];
 	executionSummary: NotebookCellExecutionSummary | undefined;
@@ -395,7 +396,7 @@ export class ExtHostCell {
 		index: number,
 		kind: NotebookCellKind,
 		notebook: ExtHostNotebookDocumentData,
-		documentData: ExtHostDocumentData,
+		documentData: IExtHostDocumentData,
 		metadata: { readonly [key: string]: any },
 		outputs: vscode.NotebookCellOutput[],
 		executionSummary: NotebookCellExecutionSummary | undefined,

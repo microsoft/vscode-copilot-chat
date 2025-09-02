@@ -17,7 +17,7 @@ import { SimulationAlternativeNotebookContentService, SimulationNotebookService 
 import { ResourceMap } from '../../src/util/vs/base/common/map';
 import { assertType } from '../../src/util/vs/base/common/types';
 import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/descriptors';
-import { NotebookRange } from '../../src/util/vs/workbench/api/common/extHostTypes/notebooks';
+import { NotebookRange } from '../../src/vscodeTypes';
 import { ISimulationTestRuntime, ssuite, stest } from '../base/stest';
 import { ensurePythonVEnv } from '../simulation/diagnosticProviders/python';
 import { simulateInlineChat } from '../simulation/inlineChatSimulator';

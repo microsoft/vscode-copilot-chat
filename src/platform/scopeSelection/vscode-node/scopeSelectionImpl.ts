@@ -6,7 +6,7 @@
 import { DocumentSymbol, Position, Range, Selection, TextEditor, ThemeIcon, l10n } from 'vscode';
 import { Codicon } from '../../../util/vs/base/common/codicons';
 import { CancellationError } from '../../../util/vs/base/common/errors';
-import { SymbolKind } from '../../../util/vs/workbench/api/common/extHostTypes/symbolInformation';
+import { SymbolKind } from '../../../vscodeTypes';
 import { IDialogService } from '../../dialog/common/dialogService';
 import { TextDocumentSnapshot } from '../../editing/common/textDocumentSnapshot';
 import { ILanguageFeaturesService } from '../../languages/common/languageFeaturesService';

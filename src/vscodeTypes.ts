@@ -91,6 +91,9 @@ export import ChatToolInvocationPart = vscode.ChatToolInvocationPart;
 export import ChatResponseTurn2 = vscode.ChatResponseTurn2;
 export import ChatRequestTurn2 = vscode.ChatRequestTurn2;
 export import LanguageModelError = vscode.LanguageModelError;
+export import SymbolKind = vscode.SymbolKind;
+export import SnippetString = vscode.SnippetString;
+export import SnippetTextEdit = vscode.SnippetTextEdit;
 
 export const l10n = {
 	/**
