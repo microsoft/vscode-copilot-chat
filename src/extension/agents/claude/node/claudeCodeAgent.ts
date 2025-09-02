@@ -5,20 +5,23 @@
 
 import { Options, SDKUserMessage } from '@anthropic-ai/claude-code';
 import Anthropic from '@anthropic-ai/sdk';
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { isLocation } from '../../../../util/common/types';
 import { DeferredPromise } from '../../../../util/vs/base/common/async';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { LanguageModelTextPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
+import { IToolsService } from '../../../tools/common/toolsService';
 import { isFileOkForTool } from '../../../tools/node/toolUtils';
-import { ILanguageModelServerConfig, LanguageModelServer } from '../../vscode-node/langModelServer';
+import { ILanguageModelServerConfig, LanguageModelServer } from '../../node/langModelServer';
 import { ClaudeToolNames, IExitPlanModeInput, ITodoWriteInput } from '../common/claudeTools';
 import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 
@@ -106,6 +109,7 @@ class ClaudeCodeSession {
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IEnvService private readonly envService: IEnvService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IToolsService private readonly toolsService: IToolsService
 	) { }
 
 	public async invoke(
@@ -122,7 +126,7 @@ class ClaudeCodeSession {
 		// Build options for the Claude Code SDK
 		// process.env.DEBUG = '1'; // debug messages from sdk.mjs
 		const isDebugEnabled = this.configService.getConfig(ConfigKey.Internal.ClaudeCodeDebugEnabled);
-		this.logService.trace(`appRoot: ${vscode.env.appRoot}`);
+		this.logService.trace(`appRoot: ${this.envService.appRoot}`);
 		const pathSep = isWindows ? ';' : ':';
 		const options: Options = {
 			cwd: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
@@ -174,64 +178,125 @@ class ClaudeCodeSession {
 			}
 
 			if (message.type === 'assistant') {
-				for (const item of message.message.content) {
-					if (item.type === 'text' && item.text) {
-						stream.markdown(item.text);
-					} else if (item.type === 'tool_use') {
-						// Don't show progress message for TodoWrite tool
-						if (item.name !== ClaudeToolNames.TodoWrite) {
-							stream.progress(`\n\n🛠️ Using tool: ${item.name}...`);
-						}
-						unprocessedToolCalls.set(item.id, item);
-					}
-				}
+				this.handleAssistantMessage(message, stream, unprocessedToolCalls);
 			} else if (message.type === 'user') {
-				if (Array.isArray(message.message.content)) {
-					for (const toolResult of message.message.content) {
-						if (toolResult.type === 'tool_result') {
-							const toolUse = unprocessedToolCalls.get(toolResult.tool_use_id);
-							if (toolUse) {
-								unprocessedToolCalls.delete(toolResult.tool_use_id);
-								const invocation = createFormattedToolInvocation(toolUse, toolResult);
-								if (toolResult?.content === ClaudeCodeSession.DenyToolMessage && invocation) {
-									invocation.isConfirmed = false;
-								}
-
-								if (toolUse.name === ClaudeToolNames.TodoWrite) {
-									const input = toolUse.input as ITodoWriteInput;
-									vscode.lm.invokeTool(ToolName.CoreManageTodoList, {
-										input: {
-											operation: 'write',
-											todoList: input.todos.map((todo, i) => ({
-												id: i,
-												title: todo.content,
-												description: '',
-												status: todo.status === 'pending' ?
-													'not-started' :
-													(todo.status === 'in_progress' ?
-														'in-progress' :
-														'completed')
-											} satisfies IManageTodoListToolInputParams['todoList'][number])),
-										} satisfies IManageTodoListToolInputParams,
-										toolInvocationToken,
-									}, token);
-								}
-
-								if (invocation) {
-									stream.push(invocation);
-								}
-							}
-						}
-					}
-				}
+				this.handleUserMessage(message, stream, unprocessedToolCalls, toolInvocationToken, token);
 			} else if (message.type === 'result') {
-				def.complete();
-				if (message.subtype === 'error_max_turns') {
-					stream.progress(`⚠️ Maximum turns reached (${message.num_turns})`);
-				} else if (message.subtype === 'error_during_execution') {
-					throw new KnownClaudeError(`Error during execution`);
+				this.handleResultMessage(message, stream, def);
+			}
+		}
+	}
+
+	/**
+	 * Handles assistant messages containing text content and tool use blocks
+	 */
+	private handleAssistantMessage(
+		message: any, // Use any to avoid complex type issues with SDK types
+		stream: vscode.ChatResponseStream,
+		unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>
+	): void {
+		for (const item of message.message.content) {
+			if (item.type === 'text' && item.text) {
+				stream.markdown(item.text);
+			} else if (item.type === 'tool_use') {
+				// Don't show progress message for TodoWrite tool
+				if (item.name !== ClaudeToolNames.TodoWrite) {
+					stream.progress(`\n\n🛠️ Using tool: ${item.name}...`);
+				}
+				unprocessedToolCalls.set(item.id!, item as Anthropic.ToolUseBlock);
+			}
+		}
+	}
+
+	/**
+	 * Handles user messages containing tool results
+	 */
+	private handleUserMessage(
+		message: any, // Use any to avoid complex type issues with SDK types
+		stream: vscode.ChatResponseStream,
+		unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>,
+		toolInvocationToken: vscode.ChatParticipantToolToken,
+		token: vscode.CancellationToken
+	): void {
+		if (Array.isArray(message.message.content)) {
+			for (const toolResult of message.message.content) {
+				if (toolResult.type === 'tool_result') {
+					this.processToolResult(toolResult, stream, unprocessedToolCalls, toolInvocationToken, token);
 				}
 			}
+		}
+	}
+
+	/**
+	 * Processes individual tool results and handles special tool types
+	 */
+	private processToolResult(
+		toolResult: any, // Use any to avoid complex type issues with Anthropic SDK types
+		stream: vscode.ChatResponseStream,
+		unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>,
+		toolInvocationToken: vscode.ChatParticipantToolToken,
+		token: vscode.CancellationToken
+	): void {
+		const toolUse = unprocessedToolCalls.get(toolResult.tool_use_id!);
+		if (!toolUse) {
+			return;
+		}
+
+		unprocessedToolCalls.delete(toolResult.tool_use_id!);
+		const invocation = createFormattedToolInvocation(toolUse, toolResult);
+		if (toolResult?.content === ClaudeCodeSession.DenyToolMessage && invocation) {
+			invocation.isConfirmed = false;
+		}
+
+		if (toolUse.name === ClaudeToolNames.TodoWrite) {
+			this.processTodoWriteTool(toolUse, toolInvocationToken, token);
+		}
+
+		if (invocation) {
+			stream.push(invocation);
+		}
+	}
+
+	/**
+	 * Handles the TodoWrite tool by converting Claude's todo format to the core todo list format
+	 */
+	private processTodoWriteTool(
+		toolUse: Anthropic.ToolUseBlock,
+		toolInvocationToken: vscode.ChatParticipantToolToken,
+		token: vscode.CancellationToken
+	): void {
+		const input = toolUse.input as ITodoWriteInput;
+		this.toolsService.invokeTool(ToolName.CoreManageTodoList, {
+			input: {
+				operation: 'write',
+				todoList: input.todos.map((todo, i) => ({
+					id: i,
+					title: todo.content,
+					description: '',
+					status: todo.status === 'pending' ?
+						'not-started' :
+						(todo.status === 'in_progress' ?
+							'in-progress' :
+							'completed')
+				} satisfies IManageTodoListToolInputParams['todoList'][number])),
+			} satisfies IManageTodoListToolInputParams,
+			toolInvocationToken,
+		}, token);
+	}
+
+	/**
+	 * Handles result messages that indicate completion or errors
+	 */
+	private handleResultMessage(
+		message: any, // Use any to avoid complex type issues with SDK types
+		stream: vscode.ChatResponseStream,
+		def: DeferredPromise<void>
+	): void {
+		def.complete();
+		if (message.subtype === 'error_max_turns') {
+			stream.progress(`⚠️ Maximum turns reached (${message.num_turns})`);
+		} else if (message.subtype === 'error_during_execution') {
+			throw new KnownClaudeError(`Error during execution`);
 		}
 	}
 
@@ -250,12 +315,12 @@ class ClaudeCodeSession {
 		}
 
 		try {
-			const result = await vscode.lm.invokeTool('vscode_get_confirmation', {
+			const result = await this.toolsService.invokeTool(ToolName.CoreConfirmationTool, {
 				input: this.getConfirmationToolParams(toolName, input),
 				toolInvocationToken,
-			});
+			}, CancellationToken.None);
 			const firstResultPart = result.content.at(0);
-			if (firstResultPart instanceof vscode.LanguageModelTextPart && firstResultPart.value === 'yes') {
+			if (firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes') {
 				return {
 					behavior: 'allow',
 					updatedInput: input

@@ -5,7 +5,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import * as http from 'http';
-import { OpenAiFunctionTool } from '../../../../platform/networking/common/fetch';
+import type { OpenAiFunctionTool } from '../../../../platform/networking/common/fetch';
 import { IMakeChatRequestOptions } from '../../../../platform/networking/common/networking';
 import { APIUsage } from '../../../../platform/networking/common/openai';
 import { coalesce } from '../../../../util/vs/base/common/arrays';

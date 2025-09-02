@@ -4,9 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { readFile } from 'fs/promises';
-import * as os from 'os';
 import * as path from 'path';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { INativeEnvService } from '../../../../../platform/env/common/envService';
 import { IFileSystemService } from '../../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
@@ -17,6 +17,7 @@ import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { ClaudeCodeSessionService } from '../claudeCodeSessionService';
+import { TestingServiceCollection } from '../../../../../platform/test/node/services';
 
 function computeFolderSlug(folderUri: URI): string {
 	return folderUri.path.replace(/\//g, '-');
@@ -26,17 +27,16 @@ describe('ClaudeCodeSessionService', () => {
 	const workspaceFolderPath = '/project';
 	const folderUri = URI.file(workspaceFolderPath);
 	const slug = computeFolderSlug(folderUri);
-	const home = os.homedir();
-	const dirUri = URI.joinPath(URI.file(home), '.claude', 'projects', slug);
+	let dirUri: URI;
 
 	let mockFs: MockFileSystemService;
-	let testingServiceCollection: ReturnType<typeof createExtensionUnitTestingServices>;
+	let testingServiceCollection: TestingServiceCollection;
 	let service: ClaudeCodeSessionService;
 
 	beforeEach(() => {
 		mockFs = new MockFileSystemService();
 		testingServiceCollection = createExtensionUnitTestingServices();
-		testingServiceCollection.set(IFileSystemService, mockFs as any);
+		testingServiceCollection.set(IFileSystemService, mockFs);
 
 		// Create mock workspace service with the test workspace folder
 		const workspaceService = new TestWorkspaceService([folderUri]);
@@ -44,6 +44,8 @@ describe('ClaudeCodeSessionService', () => {
 
 		const accessor = testingServiceCollection.createTestingAccessor();
 		const instaService = accessor.get(IInstantiationService);
+		const nativeEnvService = accessor.get(INativeEnvService);
+		dirUri = URI.joinPath(nativeEnvService.userHome, '.claude', 'projects', slug);
 		service = instaService.createInstance(ClaudeCodeSessionService);
 	});
 

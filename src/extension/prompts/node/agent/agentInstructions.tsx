@@ -340,7 +340,6 @@ export class CodexStyleGPTPrompt extends PromptElement<DefaultAgentPromptProps> 
 				The messages you send before tool calls should describe what is immediately about to be done next in very concise language. If there was previous work done, this preamble message should also include a note about the work done so far to bring the user along.<br />
 			</Tag>
 			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
-			{tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 			<Tag name='final_answer_formatting'>
 				## Presenting your work and final message<br />
 				<br />
@@ -515,20 +514,7 @@ export class DefaultAgentPromptV2 extends PromptElement<DefaultAgentPromptProps>
 					- You don't currently have any tools available for editing files. If the user asks you to edit a file, request enabling editing tools or print a codeblock with the suggested changes.<br />
 				</Tag>}
 				{this.props.codesearchMode && <Tag name='codesearch_mode_instructions'><CodesearchModeInstructions {...this.props} /></Tag>}
-				{tools[ToolName.CoreManageTodoList] && <>
-					<Tag name='planning_instructions'>
-						- Use the {ToolName.CoreManageTodoList} frequently to plan tasks throughout your coding session for task visibility and proper planning.<br />
-						- When to use: complex multi-step work requiring planning and tracking, when user provides multiple tasks or requests (numbered/comma-separated), after receiving new instructions that require multiple steps, BEFORE starting work on any todo (mark as in-progress), IMMEDIATELY after completing each todo (mark completed individually), when breaking down larger tasks into smaller actionable steps, to give users visibility into your progress and planning.<br />
-						- When NOT to use: single, trivial tasks that can be completed in one step, purely conversational/informational requests, when just reading files or performing simple searches.<br />
-						- CRITICAL workflow to follow:<br />
-						1. Plan tasks with specific, actionable items<br />
-						2. Update ONE todo as in-progress before starting work<br />
-						3. Complete the work for that specific todo<br />
-						4. Update completed todos IMMEDIATELY<br />
-						5. Update the user with a very short evidence note<br />
-						6. Move to next todo<br />
-					</Tag>
-				</>}
+				{tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 				{isGrokCode && tools[ToolName.ReplaceString] && !tools[ToolName.ApplyPatch] && <Tag name='edit_file_instructions'>
 					Before you edit an existing file, make sure you either already have it in the provided context, or read it with the {ToolName.ReadFile} tool, so that you can make proper changes.<br />
 					{tools[ToolName.MultiReplaceString]
@@ -1038,18 +1024,50 @@ class NotebookInstructions extends PromptElement<DefaultAgentPromptProps> {
 
 class TodoListToolInstructions extends PromptElement<DefaultAgentPromptProps> {
 	render() {
-		return <Tag name='todoListToolInstructions'>
-			Use the {ToolName.CoreManageTodoList} frequently to plan tasks throughout your coding session for task visibility and proper planning.<br />
-			When to use: complex multi-step work requiring planning and tracking, when user provides multiple tasks or requests (numbered/comma-separated), after receiving new instructions that require multiple steps, BEFORE starting work on any todo (mark as in-progress), IMMEDIATELY after completing each todo (mark completed individually), when breaking down larger tasks into smaller actionable steps, to give users visibility into your progress and planning.<br />
-			When NOT to use: single, trivial tasks that can be completed in one step, purely conversational/informational requests, when just reading files or performing simple searches.<br />
-			CRITICAL workflow to follow:<br />
-			1. Plan tasks with specific, actionable items<br />
-			2. Mark ONE todo as in-progress before starting work<br />
-			3. Complete the work for that specific todo<br />
-			4. Mark completed IMMEDIATELY<br />
-			5. Update the user with a very short evidence note<br />
-			6. Move to next todo<br />
-			7. Before wrapping up, ensure every todo item is properly updated and marked with the correct status ('completed', 'in-progress' or 'not-started') - never leave todo items in an ambiguous state<br />
+		return <Tag name='planning_instructions'>
+			You have access to an {ToolName.CoreManageTodoList} tool which tracks todos and progress and renders them to the user. Using the tool helps demonstrate that you've understood the task and convey how you're approaching it. Plans can help to make complex, ambiguous, or multi-phase work clearer and more collaborative for the user. A good plan should break the task into meaningful, logically ordered steps that are easy to verify as you go. Note that plans are not for padding out simple work with filler steps or stating the obvious. <br />
+			Use this tool to create and manage a structured todo list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.<br />
+			It also helps the user understand the progress of the task and overall progress of their requests.<br />
+			<br />
+			NOTE that you should not use this tool if there is only one trivial task to do. In this case you are better off just doing the task directly.<br />
+			<br />
+			Use a plan when:<br />
+			- The task is non-trivial and will require multiple actions over a long time horizon.<br />
+			- There are logical phases or dependencies where sequencing matters.<br />
+			- The work has ambiguity that benefits from outlining high-level goals.<br />
+			- You want intermediate checkpoints for feedback and validation.<br />
+			- When the user asked you to do more than one thing in a single prompt<br />
+			- The user has asked you to use the plan tool (aka "TODOs")<br />
+			- You generate additional steps while working, and plan to do them before yielding to the user<br />
+			<br />
+			Skip a plan when:<br />
+			- The task is simple and direct.<br />
+			- Breaking it down would only produce literal or trivial steps.<br />
+			<br />
+			Examples of TRIVIAL tasks (skip planning):<br />
+			- "Fix this typo in the README"<br />
+			- "Add a console.log statement to debug"<br />
+			- "Update the version number in package.json"<br />
+			- "Answer a question about existing code"<br />
+			- "Read and explain what this function does"<br />
+			- "Add a simple getter method to a class"<br />
+			<br />
+			Examples of NON-TRIVIAL tasks (use planning):<br />
+			- "Add user authentication to the app" → Plan: Design auth flow, Update backend API, Implement login UI, Add session management<br />
+			- "Refactor the payment system to support multiple currencies" → Plan: Analyze current system, Design new schema, Update backend logic, Migrate data, Update frontend<br />
+			- "Debug and fix the performance issue in the dashboard" → Plan: Profile performance, Identify bottlenecks, Implement optimizations, Validate improvements<br />
+			- "Implement a new feature with multiple components" → Plan: Design component architecture, Create data models, Build UI components, Add integration tests<br />
+			- "Migrate from REST API to GraphQL" → Plan: Design GraphQL schema, Update backend resolvers, Migrate frontend queries, Update documentation<br />
+			<br />
+			<br />
+			Planning Progress Rules<br />
+			- Before beginning any new todo: you MUST update the todo list and mark exactly one todo as `in-progress`. Never start work with zero `in-progress` items.<br />
+			- Keep only one todo `in-progress` at a time. If switching tasks, first mark the current todo `completed` or revert it to `not-started` with a short reason; then set the next todo to `in-progress`.<br />
+			- Immediately after finishing a todo: you MUST mark it `completed` and add any newly discovered follow-up todos. Do not leave completion implicit.<br />
+			- Before ending your turn or declaring completion: ensure EVERY todo is explicitly marked (`not-started`, `in-progress`, or `completed`). If the work is finished, ALL todos must be marked `completed`. Never leave items unchecked or ambiguous.<br />
+			<br />
+			The content of your plan should not involve doing anything that you aren't capable of doing (i.e. don't try to test things that you can't test). Do not use plans for simple or single-step queries that you can just do or answer immediately.<br />
+			<br />
 		</Tag>;
 	}
 }

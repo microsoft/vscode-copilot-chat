@@ -5,13 +5,14 @@
 
 import { Raw } from '@vscode/prompt-tsx';
 import * as http from 'http';
-import * as vscode from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { APIUsage } from '../../../platform/networking/common/openai';
+import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { LanguageModelError } from '../../../vscodeTypes';
 import { AnthropicAdapterFactory } from './adapters/anthropicAdapter';
 import { IAgentStreamBlock, IProtocolAdapter, IProtocolAdapterFactory, IStreamingContext } from './adapters/types';
 
@@ -145,7 +146,7 @@ export class LanguageModelServer {
 			});
 
 			// Create cancellation token for the request
-			const tokenSource = new vscode.CancellationTokenSource();
+			const tokenSource = new CancellationTokenSource();
 
 			// Handle client disconnect
 			let requestComplete = false;
@@ -233,7 +234,7 @@ export class LanguageModelServer {
 				res.end();
 			} catch (error) {
 				requestComplete = true;
-				if (error instanceof vscode.LanguageModelError) {
+				if (error instanceof LanguageModelError) {
 					res.write(JSON.stringify({
 						error: 'Language model error',
 						code: error.code,

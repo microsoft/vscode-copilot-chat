@@ -5,7 +5,7 @@
 
 import { Raw } from '@vscode/prompt-tsx';
 import * as http from 'http';
-import { IMakeChatRequestOptions } from '../../../../platform/networking/common/networking';
+import type { IMakeChatRequestOptions } from '../../../../platform/networking/common/networking';
 import { APIUsage } from '../../../../platform/networking/common/openai';
 
 export interface IParsedRequest {

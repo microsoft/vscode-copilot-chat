@@ -16,7 +16,7 @@ import { Range } from '../../../vs/workbench/api/common/extHostTypes/range';
 import { Selection } from '../../../vs/workbench/api/common/extHostTypes/selection';
 import { SymbolInformation } from '../../../vs/workbench/api/common/extHostTypes/symbolInformation';
 import { EndOfLine, TextEdit } from '../../../vs/workbench/api/common/extHostTypes/textEdit';
-import { AISearchKeyword, ChatErrorLevel, ChatImageMimeType, ChatPrepareToolInvocationPart, ChatReferenceBinaryData, ChatReferenceDiagnostic, ChatRequestEditedFileEventKind, ChatRequestEditorData, ChatRequestNotebookData, ChatRequestTurn, ChatResponseAnchorPart, ChatResponseClearToPreviousToolInvocationReason, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseExtensionsPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseMovePart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponsePullRequestPart, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn, ChatResponseWarningPart, ExcludeSettingOptions, LanguageModelChatMessageRole, LanguageModelDataPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelTextPart2, LanguageModelToolCallPart, LanguageModelToolExtensionSource, LanguageModelToolMCPSource, LanguageModelToolResult, LanguageModelToolResult2, LanguageModelToolResultPart, LanguageModelToolResultPart2, TextSearchMatch2, ChatToolInvocationPart, ChatResponseTurn2 } from './chatTypes';
+import { AISearchKeyword, ChatErrorLevel, ChatImageMimeType, ChatPrepareToolInvocationPart, ChatReferenceBinaryData, ChatReferenceDiagnostic, ChatRequestEditedFileEventKind, ChatRequestEditorData, ChatRequestNotebookData, ChatRequestTurn, ChatResponseAnchorPart, ChatResponseClearToPreviousToolInvocationReason, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseExtensionsPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseMovePart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponsePullRequestPart, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn, ChatResponseWarningPart, ExcludeSettingOptions, LanguageModelChatMessageRole, LanguageModelDataPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelTextPart2, LanguageModelToolCallPart, LanguageModelToolExtensionSource, LanguageModelToolMCPSource, LanguageModelToolResult, LanguageModelToolResult2, LanguageModelToolResultPart, LanguageModelToolResultPart2, TextSearchMatch2, ChatToolInvocationPart, ChatResponseTurn2, LanguageModelError } from './chatTypes';
 import { TextDocumentChangeReason, TextEditorSelectionChangeKind, WorkspaceEdit } from './editing';
 import { ChatLocation, ChatVariableLevel, DiagnosticSeverity, ExtensionMode, TextEditorCursorStyle, TextEditorLineNumbersStyle, TextEditorRevealType } from './enums';
 import { t } from './l10n';
@@ -109,7 +109,8 @@ const shim: typeof vscodeTypes = {
 	TextDocumentChangeReason,
 	ChatToolInvocationPart,
 	ChatResponseTurn2,
-	ChatRequestTurn2: ChatRequestTurn
+	ChatRequestTurn2: ChatRequestTurn,
+	LanguageModelError: LanguageModelError as any // Some difference in the definition of Error is breaking this
 };
 
 export = shim;

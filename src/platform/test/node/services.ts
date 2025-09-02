@@ -42,8 +42,8 @@ import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IDomainService } from '../../endpoint/common/domainService';
 import { CAPIClientImpl } from '../../endpoint/node/capiClientImpl';
 import { DomainService } from '../../endpoint/node/domainServiceImpl';
-import { IEnvService } from '../../env/common/envService';
-import { NullEnvService } from '../../env/common/nullEnvService';
+import { IEnvService, INativeEnvService } from '../../env/common/envService';
+import { NullEnvService, NullNativeEnvService } from '../../env/common/nullEnvService';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { IExtensionsService } from '../../extensions/common/extensionsService';
 import { IFileSystemService } from '../../filesystem/common/fileSystemService';
@@ -230,6 +230,7 @@ export function createPlatformServices(): TestingServiceCollection {
 	const testingServiceCollection = _createBaselineServices();
 	testingServiceCollection.define(IConfigurationService, new SyncDescriptor(InMemoryConfigurationService, [new DefaultsOnlyConfigurationService()]));
 	testingServiceCollection.define(IEnvService, new SyncDescriptor(NullEnvService));
+	testingServiceCollection.define(INativeEnvService, new SyncDescriptor(NullNativeEnvService));
 	testingServiceCollection.define(ITelemetryService, new SyncDescriptor(NullTelemetryService));
 	testingServiceCollection.define(IEditSurvivalTrackerService, new SyncDescriptor(NullEditSurvivalTrackerService));
 	testingServiceCollection.define(IExperimentationService, new SyncDescriptor(NullExperimentationService));
