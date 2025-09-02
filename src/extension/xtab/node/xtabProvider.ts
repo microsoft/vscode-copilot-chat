@@ -49,6 +49,7 @@ import { editWouldDeleteWhatWasJustInserted } from '../../inlineEdits/common/ghN
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
 import { AREA_AROUND_END_TAG, AREA_AROUND_START_TAG, CODE_TO_EDIT_END_TAG, CODE_TO_EDIT_START_TAG, createTaggedCurrentFileContentUsingPagedClipping, CURSOR_TAG, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/promptCrafting';
+import { createPromptStrategy, type PromptStrategyProps } from '../common/promptStrategies';
 import { XtabEndpoint } from './xtabEndpoint';
 import { linesWithBackticksRemoved, toLines } from './xtabUtils';
 
@@ -327,13 +328,18 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const prediction = this.getPredictedOutput(editWindowLines, promptOptions.promptingStrategy);
 
-		const messages = [
-			{
-				role: Raw.ChatRole.System,
-				content: toTextParts(this.pickSystemPrompt(promptOptions.promptingStrategy))
-			},
-			{ role: Raw.ChatRole.User, content: toTextParts(userPrompt) }
-		] satisfies Raw.ChatMessage[];
+		// TODO: Add configuration flag to enable modular prompt system
+		const useModularPrompts = this.configService.getExperimentBasedConfig('inlineEdits.xtab.useModularPrompts', this.expService) ?? false;
+		
+		const messages = useModularPrompts 
+			? this.createModularPrompt(request, taggedCurrentFileContent, areaAroundCodeToEdit, langCtx, computeTokens, promptOptions)
+			: [
+				{
+					role: Raw.ChatRole.System,
+					content: toTextParts(this.pickSystemPrompt(promptOptions.promptingStrategy))
+				},
+				{ role: Raw.ChatRole.User, content: toTextParts(userPrompt) }
+			] satisfies Raw.ChatMessage[];
 
 		logContext.setPrompt(messages);
 		telemetryBuilder.setPrompt(messages);
@@ -879,6 +885,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	}
 
 	private pickSystemPrompt(promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined): string {
+		// TODO: This method will be deprecated in favor of the modular prompt system
+		// For now, keeping it for backward compatibility during transition
 		switch (promptingStrategy) {
 			case xtabPromptOptions.PromptingStrategy.UnifiedModel:
 				return unifiedModelSystemPrompt;
@@ -892,6 +900,46 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			default:
 				return systemPromptTemplate;
 		}
+	}
+
+	/**
+	 * Create and render a prompt using the modular strategy system
+	 */
+	private createModularPrompt(
+		request: StatelessNextEditRequest,
+		currentFileContent: string,
+		areaAroundCodeToEdit: string,
+		langCtx: LanguageContextResponse | undefined,
+		computeTokens: (s: string) => number,
+		promptOptions: xtabPromptOptions.PromptOptions
+	): Raw.ChatMessage[] {
+		const strategyProps: PromptStrategyProps = {
+			request,
+			currentFileContent,
+			areaAroundCodeToEdit,
+			langCtx,
+			computeTokens,
+			opts: promptOptions
+		};
+
+		const strategy = createPromptStrategy(promptOptions.promptingStrategy, strategyProps);
+		const rendered = strategy.render();
+
+		// Convert TSX rendering result to Raw.ChatMessage[]
+		// This is a simplified conversion - in practice, the TSX renderer would handle this
+		const systemPrompt = strategy['getSystemPrompt']();
+		const userPrompt = strategy['buildUserPrompt']();
+
+		return [
+			{
+				role: Raw.ChatRole.System,
+				content: toTextParts(systemPrompt)
+			},
+			{
+				role: Raw.ChatRole.User,
+				content: toTextParts(userPrompt)
+			}
+		];
 	}
 
 	private determineLanguageContextOptions(languageId: LanguageId, { enabled, enabledLanguages, maxTokens }: { enabled: boolean; enabledLanguages: LanguageContextLanguages; maxTokens: number }): LanguageContextOptions {
