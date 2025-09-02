@@ -4,12 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
-import { EndOfLine } from '../../../../vscodeTypes';
 import { splitLines } from '../../../vs/base/common/strings';
 import { URI as Uri, UriComponents } from '../../../vs/base/common/uri';
 import { IModelChangedEvent } from '../../../vs/editor/common/model/mirrorTextModel';
-// eslint-disable-next-line import/no-restricted-paths
 import { ExtHostDocumentData, IExtHostDocumentSaveDelegate } from '../../../vs/workbench/api/common/extHostDocumentData';
+import { EndOfLine } from '../../../vs/workbench/api/common/extHostTypes/textEdit';
 
 export interface IExtHostDocumentData {
 	readonly document: vscode.TextDocument;

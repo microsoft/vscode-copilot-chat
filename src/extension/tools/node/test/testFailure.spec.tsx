@@ -16,7 +16,8 @@ import { IWorkspaceService } from '../../../../platform/workspace/common/workspa
 import { Event } from '../../../../util/vs/base/common/event';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { Position, Range } from '../../../../vscodeTypes';
+import { Position } from '../../../../util/vs/workbench/api/common/extHostTypes/position';
+import { Range } from '../../../../util/vs/workbench/api/common/extHostTypes/range';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { TestFailureTool } from '../testFailureTool';
 import { toolResultToString } from './toolTestUtils';

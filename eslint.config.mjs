@@ -237,23 +237,6 @@ export default tseslint.config(
 				{
 					zones: [
 						{
-							target: '**/**',
-							from: [
-								'**/vs/workbench/api/common/extHostTypes/diagnostic.ts',
-								'**/vs/workbench/api/common/extHostTypes/location.ts',
-								'**/vs/workbench/api/common/extHostTypes/notebooks.ts',
-								'**/vs/workbench/api/common/extHostTypes/position.ts',
-								'**/vs/workbench/api/common/extHostTypes/range.ts',
-								'**/vs/workbench/api/common/extHostTypes/selection.ts',
-								'**/vs/workbench/api/common/extHostTypes/snippetString.ts',
-								'**/vs/workbench/api/common/extHostTypes/snippetTextEdit.ts',
-								'**/vs/workbench/api/common/extHostTypes/textEdit.ts',
-								'**/vs/workbench/api/common/extHostTypes/symbolInformation.ts',
-								'**/vs/workbench/api/common/extHostDocumentData.ts',
-							],
-							message: "Please import from `src/vscodeTypes.ts` instead of `vs/workbench/api/common/extHostTypes/**`."
-						},
-						{
 							target: '**/common/**',
 							from: [
 								'**/vscode/**',

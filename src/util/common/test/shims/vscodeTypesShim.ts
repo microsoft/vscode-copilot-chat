@@ -7,26 +7,16 @@ import * as vscodeTypes from '../../../../vscodeTypes';
 import { CancellationTokenSource } from '../../../vs/base/common/cancellation';
 import { Emitter as EventEmitter } from '../../../vs/base/common/event';
 import { URI as Uri } from '../../../vs/base/common/uri';
-// eslint-disable-next-line import/no-restricted-paths
 import { Diagnostic, DiagnosticRelatedInformation } from '../../../vs/workbench/api/common/extHostTypes/diagnostic';
-// eslint-disable-next-line import/no-restricted-paths
 import { Location } from '../../../vs/workbench/api/common/extHostTypes/location';
 import { MarkdownString } from '../../../vs/workbench/api/common/extHostTypes/markdownString';
-// eslint-disable-next-line import/no-restricted-paths
 import { NotebookCellData, NotebookCellKind, NotebookData, NotebookEdit, NotebookRange } from '../../../vs/workbench/api/common/extHostTypes/notebooks';
-// eslint-disable-next-line import/no-restricted-paths
 import { Position } from '../../../vs/workbench/api/common/extHostTypes/position';
-// eslint-disable-next-line import/no-restricted-paths
 import { Range } from '../../../vs/workbench/api/common/extHostTypes/range';
-// eslint-disable-next-line import/no-restricted-paths
 import { Selection } from '../../../vs/workbench/api/common/extHostTypes/selection';
-// eslint-disable-next-line import/no-restricted-paths
 import { SnippetString } from '../../../vs/workbench/api/common/extHostTypes/snippetString';
-// eslint-disable-next-line import/no-restricted-paths
 import { SnippetTextEdit } from '../../../vs/workbench/api/common/extHostTypes/snippetTextEdit';
-// eslint-disable-next-line import/no-restricted-paths
 import { SymbolInformation, SymbolKind } from '../../../vs/workbench/api/common/extHostTypes/symbolInformation';
-// eslint-disable-next-line import/no-restricted-paths
 import { EndOfLine, TextEdit } from '../../../vs/workbench/api/common/extHostTypes/textEdit';
 import { AISearchKeyword, ChatErrorLevel, ChatImageMimeType, ChatPrepareToolInvocationPart, ChatReferenceBinaryData, ChatReferenceDiagnostic, ChatRequestEditedFileEventKind, ChatRequestEditorData, ChatRequestNotebookData, ChatRequestTurn, ChatResponseAnchorPart, ChatResponseClearToPreviousToolInvocationReason, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseExtensionsPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseMovePart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponsePullRequestPart, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn, ChatResponseTurn2, ChatResponseWarningPart, ChatToolInvocationPart, ExcludeSettingOptions, LanguageModelChatMessageRole, LanguageModelDataPart, LanguageModelDataPart2, LanguageModelError, LanguageModelPartAudience, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelTextPart2, LanguageModelToolCallPart, LanguageModelToolExtensionSource, LanguageModelToolMCPSource, LanguageModelToolResult, LanguageModelToolResult2, LanguageModelToolResultPart, LanguageModelToolResultPart2, TextSearchMatch2 } from './chatTypes';
 import { TextDocumentChangeReason, TextEditorSelectionChangeKind, WorkspaceEdit } from './editing';

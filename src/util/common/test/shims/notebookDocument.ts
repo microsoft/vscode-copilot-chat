@@ -4,12 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
-import { NotebookCellKind, NotebookData } from '../../../../vscodeTypes';
 import { StringSHA1 } from '../../../vs/base/common/hash';
 import { Schemas } from '../../../vs/base/common/network';
 import { URI as Uri } from '../../../vs/base/common/uri';
-// eslint-disable-next-line import/no-restricted-paths
-import { NotebookCellOutput, NotebookCellOutputItem } from '../../../vs/workbench/api/common/extHostTypes/notebooks';
+import { NotebookCellKind, NotebookCellOutput, NotebookCellOutputItem, NotebookData } from '../../../vs/workbench/api/common/extHostTypes/notebooks';
 import { createTextDocumentData, IExtHostDocumentData } from './textDocument';
 
 interface ISimulationWorkspace {

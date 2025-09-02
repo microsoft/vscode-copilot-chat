@@ -4,11 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 
-import { Position, Range, SnippetString, SnippetTextEdit, TextEdit } from '../../../../vscodeTypes';
 import { coalesceInPlace } from '../../../vs/base/common/arrays';
 import { ResourceMap } from '../../../vs/base/common/map';
 import { URI as Uri } from '../../../vs/base/common/uri';
-import { isSnippetTextEdit } from './utils';
+import { Position } from '../../../vs/workbench/api/common/extHostTypes/position';
+import { Range } from '../../../vs/workbench/api/common/extHostTypes/range';
+import { SnippetString } from '../../../vs/workbench/api/common/extHostTypes/snippetString';
+import { SnippetTextEdit } from '../../../vs/workbench/api/common/extHostTypes/snippetTextEdit';
+import { TextEdit } from '../../../vs/workbench/api/common/extHostTypes/textEdit';
 
 export interface WorkspaceEditEntryMetadata {
 	needsConfirmation: boolean;
@@ -150,7 +153,7 @@ export class WorkspaceEdit {
 				} else {
 					edit = editOrTuple;
 				}
-				if (isSnippetTextEdit(edit)) {
+				if (SnippetTextEdit.isSnippetTextEdit(edit)) {
 					this._edits.push({
 						_type: FileEditType.Snippet,
 						uri,
