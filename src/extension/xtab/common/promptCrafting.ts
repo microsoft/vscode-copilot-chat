@@ -308,11 +308,14 @@ function generateDocDiff(entry: IXtabHistoryEditEntry, workspacePath: string | u
 
 	const uniquePath = toUniquePath(entry.docId, workspacePath);
 
-	const docDiff = [
+	const docDiffArr = [
 		`--- ${uniquePath}`,
 		`+++ ${uniquePath}`,
-		...docDiffLines
-	].join('\n');
+	];
+
+	pushMany(docDiffArr, docDiffLines);
+
+	const docDiff = docDiffArr.join('\n');
 
 	return docDiff;
 }
