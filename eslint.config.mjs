@@ -241,7 +241,6 @@ export default tseslint.config(
 							from: [
 								'**/vs/workbench/api/common/extHostTypes/diagnostic.ts',
 								'**/vs/workbench/api/common/extHostTypes/location.ts',
-								'**/vs/workbench/api/common/extHostTypes/markdownString.ts',
 								'**/vs/workbench/api/common/extHostTypes/notebooks.ts',
 								'**/vs/workbench/api/common/extHostTypes/position.ts',
 								'**/vs/workbench/api/common/extHostTypes/range.ts',

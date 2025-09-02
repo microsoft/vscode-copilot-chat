@@ -11,7 +11,6 @@ import { URI as Uri } from '../../../vs/base/common/uri';
 import { Diagnostic, DiagnosticRelatedInformation } from '../../../vs/workbench/api/common/extHostTypes/diagnostic';
 // eslint-disable-next-line import/no-restricted-paths
 import { Location } from '../../../vs/workbench/api/common/extHostTypes/location';
-// eslint-disable-next-line import/no-restricted-paths
 import { MarkdownString } from '../../../vs/workbench/api/common/extHostTypes/markdownString';
 // eslint-disable-next-line import/no-restricted-paths
 import { NotebookCellData, NotebookCellKind, NotebookData, NotebookEdit, NotebookRange } from '../../../vs/workbench/api/common/extHostTypes/notebooks';
