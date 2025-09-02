@@ -247,12 +247,13 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 			const data: IModelAPIResponse[] = (await response.json()).data;
 			this._requestLogger.logModelListCall(requestId, requestMetadata, data);
 			for (const model of data) {
+				const isCompletionModel = isCompletionModelInformation(model);
 				// The base model is whatever model is deemed "fallback" by the server
-				if (model.is_chat_fallback) {
+				if (model.is_chat_fallback && !isCompletionModel) {
 					this._copilotBaseModel = model;
 				}
 				const family = model.capabilities.family;
-				const familyMap = isCompletionModelInformation(model) ? this._completionsFamilyMap : this._familyMap;
+				const familyMap = isCompletionModel ? this._completionsFamilyMap : this._familyMap;
 				if (!familyMap.has(family)) {
 					familyMap.set(family, []);
 				}
