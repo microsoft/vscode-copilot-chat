@@ -111,7 +111,9 @@ class CopilotCompletionsFilterProvider implements IExperimentationFilterProvider
 	getFilters(): Map<string, any> {
 		const filters = new Map<string, any>();
 		for (const [key, value] of this._getCompletionsFilters()) {
-			filters.set(key, value);
+			if (value !== "") {
+				filters.set(key, value);
+			}
 		}
 		this._logService.trace(`[CopilotCompletionsFilterProvider]::getFilters Filters: ${JSON.stringify(Array.from(filters.entries()))}`);
 		return filters;
