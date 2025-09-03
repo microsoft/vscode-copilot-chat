@@ -94,6 +94,7 @@ export import LanguageModelError = vscode.LanguageModelError;
 export import SymbolKind = vscode.SymbolKind;
 export import SnippetString = vscode.SnippetString;
 export import SnippetTextEdit = vscode.SnippetTextEdit;
+export import FileType = vscode.FileType;
 
 export const l10n = {
 	/**
