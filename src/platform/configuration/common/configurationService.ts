@@ -728,8 +728,8 @@ export namespace ConfigKey {
 		export const MultiReplaceString = defineExpSetting<boolean>('chat.advanced.multiReplaceString.enabled', false, INTERNAL);
 		export const Gpt5ApplyPatchExclusively = defineExpSetting<boolean>('chat.advanced.gpt5ApplyPatchExclusively.enabled', false, INTERNAL);
 
-		export const EnableClaudeCodeAgent = defineSetting<boolean | string | undefined>('chat.advanced.claudeCode.enabled', false, INTERNAL);
-		export const ClaudeCodeDebugEnabled = defineSetting<boolean>('chat.advanced.claudeCode.debug', false, INTERNAL);
+		export const EnableClaudeCodeAgent = defineSetting<boolean | string | undefined>('chat.advanced.claudeCode.enabled', false);
+		export const ClaudeCodeDebugEnabled = defineSetting<boolean>('chat.advanced.claudeCode.debug', false);
 		export const TaskToolsEnabled = defineSetting<boolean>('chat.advanced.taskTools.enabled', true);
 	}
 
