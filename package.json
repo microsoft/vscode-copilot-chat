@@ -4036,7 +4036,7 @@
 		"openai": "^5.11.0",
 		"outdent": "^0.8.0",
 		"picomatch": "^4.0.2",
-		"playwright": "^1.54.0",
+		"playwright": "^1.54.2",
 		"prettier": "^3.6.2",
 		"react": "^17.0.2",
 		"react-dom": "17.0.2",
@@ -4080,8 +4080,10 @@
 		"minimatch": "^10.0.3",
 		"undici": "^7.11.0",
 		"vscode-tas-client": "^0.1.84",
-		"web-tree-sitter": "^0.23.0"
-	},
+		"web-tree-sitter": "^0.23.0",
+        "@modelcontextprotocol/sdk": "^1.16.0",
+        "@roamhq/mac-ca": "^1.0.7"
+    },
 	"overrides": {
 		"@aminya/node-gyp-build": "npm:node-gyp-build@4.8.1",
 		"string_decoder": "npm:string_decoder@1.2.0",

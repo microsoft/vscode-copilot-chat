@@ -49,6 +49,7 @@ import { convertTestToVSCodeDiagnostics } from './diagnosticProviders/utils';
 import { SimulationLanguageFeaturesService } from './language/simulationLanguageFeatureService';
 import { IDiagnostic, IDiagnosticComparison, INLINE_CHANGED_DOC_TAG, INLINE_INITIAL_DOC_TAG, INLINE_STATE_TAG, IRange, IWorkspaceState, IWorkspaceStateFile } from './shared/sharedTypes';
 import { DiagnosticProviderId, EditTestStrategy, IDeserializedWorkspaceStateBasedScenario, IInlineEdit, IOutcome, IScenario, IScenarioDiagnostic, IScenarioQuery, OutcomeAnnotation } from './types';
+import { readFileIfExists } from '../base/fileUtils';
 
 export type SimulationWorkspaceInput = { files: IFile[]; workspaceFolders?: Uri[] } | { workspaceState: IDeserializedWorkspaceState };
 
@@ -374,6 +375,10 @@ export async function simulateEditingScenario(
 				tools: new Map(),
 				id: '1'
 			};
+
+			if (process.env.SIMULATION_MODE_INSTRUCTIONS) {
+				request.modeInstructions = await readFileIfExists(process.env.SIMULATION_MODE_INSTRUCTIONS);
+			}
 
 			// Run intent detection
 			if (!request.command) {

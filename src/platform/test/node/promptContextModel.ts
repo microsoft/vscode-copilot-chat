@@ -72,7 +72,15 @@ export function deserializeWorkbenchState(scenarioFolderPath: string, stateFileP
 
 	if (isInExtensionHost) {
 		workspaceFolderUri = extensionHostWorkspaceUri();
-		copyFolderContents(workspaceFolderPath, workspaceFolderUri.fsPath);
+
+		// Skip copyFolderContents on Windows systems
+		const isWindows = process.platform === 'win32';
+		if (isWindows) {
+			console.debug('Skipping copyFolderContents on Windows system');
+		} else {
+			copyFolderContents(workspaceFolderPath, workspaceFolderUri.fsPath);
+		}
+
 		workspaceFolderPath = workspaceFolderUri.fsPath;
 		workspaceFolders = [workspaceFolderUri];
 	}

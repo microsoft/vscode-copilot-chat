@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import type { ChatPromptReference, ChatResponseStream } from 'vscode';
 import { isCodeBlockWithResource } from '../../src/extension/codeBlocks/node/codeBlockProcessor';
+import { ILogService } from '../../src/platform/log/common/logService';
 import { ITabsAndEditorsService } from '../../src/platform/tabs/common/tabsAndEditorsService';
 import { TestingServiceCollection } from '../../src/platform/test/node/services';
 import { isLocation } from '../../src/util/common/types';
@@ -99,6 +100,8 @@ export async function simulatePanelCodeMapper(
 						}
 
 						const codeBlocks = chatResult?.metadata?.codeBlocks;
+						const logService = accessor.get(ILogService);
+						logService.logger.info(`Chart result: ${JSON.stringify(chatResult)}`);
 						if (!Array.isArray(codeBlocks)) {
 							throw new Error('No codeblocks in chat result metadata');
 						}
