@@ -32,6 +32,8 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 
 	private static readonly _diffRefreshInterval = 1000 * 60 * 2; // 2 minutes
 
+	private static readonly _maxDiffFiles = 10000;
+
 	private readonly _repos = new ResourceMap<RepoDiffState>();
 
 	private readonly _repoTracker: CodeSearchRepoTracker;
@@ -156,16 +158,20 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 
 	private async tryGetDiffedIndexedFiles(info: RepoEntry): Promise<URI[] | undefined> {
 		const diff = await this.tryGetDiff(info);
+		this._logService.trace(`CodeSearchWorkspaceDiff::tryGetDiffedIndexedFiles() Got ${diff?.changes.length ?? 0} initially changed files for ${info.repo.rootUri}`);
 		if (!diff) {
 			return;
 		}
 
 		const initialChanges = new ResourceSet();
-		await Promise.all(diff.changes.map(async change => {
+		await Promise.all(diff.changes.slice(0, CodeSearchWorkspaceDiffTracker._maxDiffFiles).map(async change => {
 			if (await this._workspaceFileIndex.shouldIndexFile(change.uri, CancellationToken.None)) {
 				initialChanges.add(change.uri);
 			}
 		}));
+
+		this._logService.trace(`CodeSearchWorkspaceDiff::tryGetDiffedIndexedFiles() Returning ${initialChanges} changes for ${info.repo.rootUri}`);
+
 		return Array.from(initialChanges);
 	}
 
@@ -179,11 +185,11 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 	}
 
 	private async refreshRepoDiff(repo: RepoDiffState) {
-		this._logService.trace(`CodeSearchWorkspaceDiff: refreshing diff for ${repo.info.repo.rootUri}.`);
+		this._logService.trace(`CodeSearchWorkspaceDiff: refreshing diff for ${repo.info.repo.rootUri}`);
 
 		if (this._simulationTestContext.isInSimulationTests) {
 			// In simulation tests, we don't want to refresh the diff
-			this._logService.trace(`CodeSearchWorkspaceDiff: Skipping diff refresh for ${repo.info.repo.rootUri} in simulation tests.`);
+			this._logService.trace(`CodeSearchWorkspaceDiff: Skipping diff refresh for ${repo.info.repo.rootUri} in simulation tests`);
 			repo.state = RepoState.Ready;
 			return;
 		}
