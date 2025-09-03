@@ -45,7 +45,7 @@ import { ActionType, Commit, DiffError, FileChange, identify_files_needed, Inval
 import { EditFileResult, IEditedFile } from './editFileToolResult';
 import { createEditConfirmation } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
-import { assertFileOkForTool, resolveToolInputPath } from './toolUtils';
+import { assertFileNotContentExcluded, resolveToolInputPath } from './toolUtils';
 
 export interface IApplyPatchToolParams {
 	input: string;
@@ -244,7 +244,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 			const notebookEdits = new ResourceMap<(vscode.NotebookEdit | [vscode.Uri, vscode.TextEdit[]])[]>();
 			for (const [file, changes] of Object.entries(commit.changes)) {
 				let path = resolveToolInputPath(file, this.promptPathRepresentationService);
-				await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, path));
+				await this.instantiationService.invokeFunction(accessor => assertFileNotContentExcluded(accessor, path));
 
 				switch (changes.type) {
 					case ActionType.ADD: {

@@ -37,7 +37,7 @@ import { CorrectedEditResult, healReplaceStringParams } from './editFileHealing'
 import { EditFileResult, IEditedFile } from './editFileToolResult';
 import { EditError, NoChangeError, NoMatchError, applyEdit, createEditConfirmation } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
-import { assertFileOkForTool, resolveToolInputPath } from './toolUtils';
+import { assertFileNotContentExcluded, resolveToolInputPath } from './toolUtils';
 
 export interface IAbstractReplaceStringInput {
 	filePath: string;
@@ -83,7 +83,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 	protected async prepareEditsForFile(options: vscode.LanguageModelToolInvocationOptions<T>, input: IAbstractReplaceStringInput, token: vscode.CancellationToken): Promise<IPrepareEdit> {
 		const uri = resolveToolInputPath(input.filePath, this.promptPathRepresentationService);
 		try {
-			await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, uri));
+			await this.instantiationService.invokeFunction(accessor => assertFileNotContentExcluded(accessor, uri));
 		} catch (error) {
 			this.sendReplaceTelemetry('invalidFile', options, input, undefined, undefined, undefined);
 			throw error;

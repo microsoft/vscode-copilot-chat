@@ -93,9 +93,10 @@ export async function isFileOkForTool(accessor: ServicesAccessor, uri: URI): Pro
 export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI): Promise<void> {
 	const workspaceService = accessor.get(IWorkspaceService);
 	const tabsAndEditorsService = accessor.get(ITabsAndEditorsService);
-	const ignoreService = accessor.get(IIgnoreService);
 	const promptPathRepresentationService = accessor.get(IPromptPathRepresentationService);
 	const customInstructionsService = accessor.get(ICustomInstructionsService);
+
+	await assertFileNotContentExcluded(accessor, uri);
 
 	if (!workspaceService.getWorkspaceFolder(normalizePath(uri)) && !customInstructionsService.isExternalInstructionsFile(uri)) {
 		const fileOpenInSomeTab = tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri));
@@ -103,6 +104,11 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI):
 			throw new Error(`File ${promptPathRepresentationService.getFilePath(uri)} is outside of the workspace, and not open in an editor, and can't be read`);
 		}
 	}
+}
+
+export async function assertFileNotContentExcluded(accessor: ServicesAccessor, uri: URI): Promise<void> {
+	const ignoreService = accessor.get(IIgnoreService);
+	const promptPathRepresentationService = accessor.get(IPromptPathRepresentationService);
 
 	if (await ignoreService.isCopilotIgnored(uri)) {
 		throw new Error(`File ${promptPathRepresentationService.getFilePath(uri)} is configured to be ignored by Copilot`);

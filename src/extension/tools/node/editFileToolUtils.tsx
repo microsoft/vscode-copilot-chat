@@ -3,20 +3,23 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { t } from '@vscode/l10n';
+import { homedir } from 'os';
 import type { LanguageModelChat, PreparedToolInvocation } from 'vscode';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 import { OffsetLineColumnConverter } from '../../../platform/editing/common/offsetLineColumnConverter';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import * as glob from '../../../util/vs/base/common/glob';
+import { isWindows } from '../../../util/vs/base/common/platform';
+import { normalizePath, relativePath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
-import { EndOfLine, MarkdownString, Position, Range, TextEdit } from '../../../vscodeTypes';
 import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { relativePath } from '../../../util/vs/base/common/resources';
-import { t } from '@vscode/l10n';
+import { EndOfLine, MarkdownString, Position, Range, TextEdit } from '../../../vscodeTypes';
 
 // Simplified Hunk type for the patch
 interface Hunk {
@@ -540,11 +543,25 @@ const ALWAYS_CHECKED_EDIT_PATTERNS: Readonly<Record<string, boolean>> = {
 	'**/.vscode/*.json': false,
 };
 
+// Path prefixes under which confirmation is unconditionally required
+const platformConfirmationRequiredPaths = (
+	isWindows
+		? [process.env.APPDATA + '/**', process.env.LOCALAPPDATA + '/**', homedir() + '/.*', homedir() + '/.*/**']
+		: [homedir() + '/.*', homedir() + '/.*/**']
+).map(p => glob.parse(p));
+
+const enum ConfirmationCheckResult {
+	NoConfirmation,
+	Sensitive,
+	SystemFile,
+	OutsideWorkspace
+}
+
 /**
  * Returns a function that returns whether a URI is approved for editing without
  * further user confirmation.
  */
-function makeUriConfirmationChecker(configuration: IConfigurationService) {
+function makeUriConfirmationChecker(configuration: IConfigurationService, workspaceService: IWorkspaceService, customInstructionsService: ICustomInstructionsService) {
 	const patterns = configuration.getNonExtensionConfig<Record<string, boolean>>('chat.tools.edits.autoApprove');
 
 	const checks: { pattern: glob.ParsedPattern; isApproved: boolean }[] = [];
@@ -557,27 +574,40 @@ function makeUriConfirmationChecker(configuration: IConfigurationService) {
 	}
 
 	return (uri: URI) => {
+		uri = normalizePath(uri);
+
+		if (!workspaceService.getWorkspaceFolder(normalizePath(uri)) && !customInstructionsService.isExternalInstructionsFile(uri)) {
+			return ConfirmationCheckResult.OutsideWorkspace;
+		}
+
 		let ok = true;
 		const fsPath = uri.fsPath;
+		if (platformConfirmationRequiredPaths.some(p => p(fsPath))) {
+			return ConfirmationCheckResult.SystemFile;
+		}
+
 		for (const { pattern, isApproved } of checks) {
 			if (isApproved !== ok && pattern(fsPath)) {
 				ok = isApproved;
 			}
 		}
 
-		return ok;
+		return ok ? ConfirmationCheckResult.NoConfirmation : ConfirmationCheckResult.Sensitive;
 	};
 }
 
 export function createEditConfirmation(accessor: ServicesAccessor, uris: readonly URI[], asString: () => string): PreparedToolInvocation {
-	const checker = makeUriConfirmationChecker(accessor.get(IConfigurationService));
-	const needsConfirmation = uris.filter(uri => !checker(uri));
+	const checker = makeUriConfirmationChecker(accessor.get(IConfigurationService), accessor.get(IWorkspaceService), accessor.get(ICustomInstructionsService));
+	const needsConfirmation = uris
+		.map(uri => ({ uri, reason: checker(uri) }))
+		.filter(r => r.reason !== ConfirmationCheckResult.NoConfirmation);
+
 	if (!needsConfirmation.length) {
 		return { presentation: 'hidden' };
 	}
 
 	const workspaceService = accessor.get(IWorkspaceService);
-	const fileParts = needsConfirmation.map(uri => {
+	const fileParts = needsConfirmation.map(({ uri }) => {
 		const wf = workspaceService.getWorkspaceFolder(uri);
 		return '`' + (wf ? relativePath(wf, uri) : uri.fsPath) + '`';
 	}).join(', ');
@@ -585,7 +615,14 @@ export function createEditConfirmation(accessor: ServicesAccessor, uris: readonl
 	return {
 		confirmationMessages: {
 			title: t('Allow edits to sensitive files?'),
-			message: new MarkdownString(t`The model wants to edit sensitive files (${fileParts}). Do you want to allow this?` + '\n\n' + asString()),
+			message: new MarkdownString(
+				(needsConfirmation.some(r => r.reason === ConfirmationCheckResult.Sensitive)
+					? t`The model wants to edit sensitive files (${fileParts}).`
+					: needsConfirmation.some(r => r.reason === ConfirmationCheckResult.OutsideWorkspace)
+						? t`The model wants to edit files outside of your workspace (${fileParts}).`
+						: t`The model wants to edit system files (${fileParts}).`)
+				+ ' ' + t`Do you want to allow this?` + '\n\n' + asString()
+			),
 		}
 	};
 }
