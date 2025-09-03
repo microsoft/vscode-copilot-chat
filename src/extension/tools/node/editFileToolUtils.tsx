@@ -14,6 +14,7 @@ import { IAlternativeNotebookContentService } from '../../../platform/notebook/c
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import * as glob from '../../../util/vs/base/common/glob';
+import { ResourceMap } from '../../../util/vs/base/common/map';
 import { isWindows } from '../../../util/vs/base/common/platform';
 import { normalizePath, relativePath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -564,19 +565,31 @@ const enum ConfirmationCheckResult {
 function makeUriConfirmationChecker(configuration: IConfigurationService, workspaceService: IWorkspaceService, customInstructionsService: ICustomInstructionsService) {
 	const patterns = configuration.getNonExtensionConfig<Record<string, boolean>>('chat.tools.edits.autoApprove');
 
-	const checks: { pattern: glob.ParsedPattern; isApproved: boolean }[] = [];
-	for (const obj of [patterns, ALWAYS_CHECKED_EDIT_PATTERNS]) {
-		if (obj) {
-			for (const [pattern, isApproved] of Object.entries(obj)) {
-				checks.push({ pattern: glob.parse(pattern), isApproved });
+	const checks = new ResourceMap<{ pattern: glob.ParsedPattern; isApproved: boolean }[]>();
+	const getPatterns = (wf: URI) => {
+		let arr = checks.get(wf);
+		if (arr) {
+			return arr;
+		}
+
+		arr = [];
+		for (const obj of [patterns, ALWAYS_CHECKED_EDIT_PATTERNS]) {
+			if (obj) {
+				for (const [pattern, isApproved] of Object.entries(obj)) {
+					arr.push({ pattern: glob.parse({ base: wf.fsPath, pattern }), isApproved });
+				}
 			}
 		}
-	}
+
+		checks.set(wf, arr);
+		return arr;
+	};
 
 	return (uri: URI) => {
 		uri = normalizePath(uri);
 
-		if (!workspaceService.getWorkspaceFolder(normalizePath(uri)) && !customInstructionsService.isExternalInstructionsFile(uri)) {
+		const workspaceFolder = workspaceService.getWorkspaceFolder(uri);
+		if (!workspaceFolder && !customInstructionsService.isExternalInstructionsFile(uri)) {
 			return ConfirmationCheckResult.OutsideWorkspace;
 		}
 
@@ -586,7 +599,7 @@ function makeUriConfirmationChecker(configuration: IConfigurationService, worksp
 			return ConfirmationCheckResult.SystemFile;
 		}
 
-		for (const { pattern, isApproved } of checks) {
+		for (const { pattern, isApproved } of getPatterns(workspaceFolder || URI.file('/'))) {
 			if (isApproved !== ok && pattern(fsPath)) {
 				ok = isApproved;
 			}
