@@ -10,12 +10,11 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
 import { isEqualOrParent } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
-import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LogExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
 import { CodeSearchDiff, CodeSearchRepoTracker, RepoEntry, RepoStatus } from '../../remoteCodeSearch/node/codeSearchRepoTracker';
 import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
-import { IWorkspaceFileIndex, shouldIndexFile } from './workspaceFileIndex';
+import { IWorkspaceFileIndex } from './workspaceFileIndex';
 
 enum RepoState {
 	Initializing,
@@ -52,7 +51,6 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 
 	constructor(
 		repoTracker: CodeSearchRepoTracker,
-		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ILogService private readonly _logService: ILogService,
 		@IWorkspaceFileIndex private readonly _workspaceFileIndex: IWorkspaceFileIndex,
 		@ISimulationTestContext private readonly _simulationTestContext: ISimulationTestContext,
@@ -164,7 +162,7 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 
 		const initialChanges = new ResourceSet();
 		await Promise.all(diff.changes.map(async change => {
-			if (await this._instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, change.uri, CancellationToken.None))) {
+			if (await this._workspaceFileIndex.shouldIndexFile(change.uri, CancellationToken.None)) {
 				initialChanges.add(change.uri);
 			}
 		}));
