@@ -130,7 +130,7 @@
       "question": "multi model word highlight",
       "stateFile": "./workspaceState.state.json",
       "keywords":[
-        "class MultiModelOccurenceRequest"
+        "class MultiModelOccurrenceRequest"
       ]
     },
     {
