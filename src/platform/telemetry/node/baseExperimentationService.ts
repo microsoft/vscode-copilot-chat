@@ -92,50 +92,52 @@ export class BaseExperimentationService extends Disposable implements IExperimen
 		delegateFn: TASClientDelegateFn,
 		@IVSCodeExtensionContext context: IVSCodeExtensionContext,
 		@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore,
-		@IConfigurationService configurationService: IConfigurationService,
-		@ILogService logService: ILogService
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@ILogService private readonly _logService: ILogService
 	) {
 		super();
 
-
 		this._userInfoStore = new UserInfoStore(context, copilotTokenStore);
-
-		const signalTreatmentsChangeEvent = () => {
-			const affectedTreatmentVariables: string[] = [];
-			for (const [key, previousValue] of this._previouslyReadTreatments) {
-				const currentValue = this._delegate.getTreatmentVariable('vscode', key);
-				if (currentValue !== previousValue) {
-					logService.trace(`[BaseExperimentationService] Treatment changed: ${key} from ${previousValue} to ${currentValue}`);
-					this._previouslyReadTreatments.set(key, currentValue);
-					affectedTreatmentVariables.push(key);
-				}
-			}
-
-			if (affectedTreatmentVariables.length > 0) {
-				this._onDidTreatmentsChange.fire({
-					affectedTreatmentVariables
-				});
-
-				configurationService.updateExperimentBasedConfiguration(affectedTreatmentVariables);
-			}
-		};
 
 		// Refresh treatments when user info changes
 		this._register(this._userInfoStore.onDidChangeUserInfo(async () => {
 			await this._delegate.getTreatmentVariableAsync('vscode', 'refresh');
-			logService.trace(`[BaseExperimentationService] User info changed, refreshed treatments`);
-			signalTreatmentsChangeEvent();
+			this._logService.trace(`[BaseExperimentationService] User info changed, refreshed treatments`);
+			this._signalTreatmentsChangeEvent();
 		}));
 
 		// Refresh treatments every hour
 		this._refreshTimer.cancelAndSet(async () => {
 			await this._delegate.getTreatmentVariableAsync('vscode', 'refresh');
-			logService.trace(`[BaseExperimentationService] Refreshed treatments on timer`);
-			signalTreatmentsChangeEvent();
+			this._logService.trace(`[BaseExperimentationService] Refreshed treatments on timer`);
+			this._signalTreatmentsChangeEvent();
 		}, 60 * 60 * 1000);
 
 		this._delegate = delegateFn(context.globalState, this._userInfoStore);
+		this._delegate.initialFetch.then(() => {
+			this._logService.trace(`[BaseExperimentationService] Initial fetch completed`);
+		});
 	}
+
+	private _signalTreatmentsChangeEvent = () => {
+		const affectedTreatmentVariables: string[] = [];
+		for (const [key, previousValue] of this._previouslyReadTreatments) {
+			const currentValue = this._delegate.getTreatmentVariable('vscode', key);
+			if (currentValue !== previousValue) {
+				this._logService.trace(`[BaseExperimentationService] Treatment changed: ${key} from ${previousValue} to ${currentValue}`);
+				this._previouslyReadTreatments.set(key, currentValue);
+				affectedTreatmentVariables.push(key);
+			}
+		}
+
+		if (affectedTreatmentVariables.length > 0) {
+			this._onDidTreatmentsChange.fire({
+				affectedTreatmentVariables
+			});
+
+			this._configurationService.updateExperimentBasedConfiguration(affectedTreatmentVariables);
+		}
+	};
 
 	async hasTreatments(): Promise<void> {
 		await this._delegate.initializePromise;
@@ -163,6 +165,7 @@ export class BaseExperimentationService extends Disposable implements IExperimen
 
 		await this._delegate.initialFetch;
 		await this._delegate.getTreatmentVariableAsync('vscode', 'refresh');
+		this._signalTreatmentsChangeEvent();
 	}
 
 	protected getCompletionsFilters(): Map<string, string> {
