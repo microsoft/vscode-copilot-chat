@@ -274,6 +274,7 @@ async function copyNESClassifierModels() {
 	const prefix = 'src/extension/inlineEdits/vscode-node/classifier/models/';
 	const pattern = prefix + '**/*';
 	const dstBasePath = path.join(__dirname, './dist/models');
+	await mkdir(dstBasePath, { recursive: true });
 	console.log(`[watch] globbing for model files with pattern: ${pattern}`);
 	const modelFiles = await glob(pattern, { cwd: REPO_ROOT, posix: true, nodir: true });
 	console.log(`[watch] copying files {${modelFiles.join(', ')}}`);
