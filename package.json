@@ -3966,7 +3966,10 @@
 		"extract-chat-lib": "tsx script/build/extractChatLib.ts",
 		"create_venv": "tsx script/setup/createVenv.mts",
 		"package": "vsce package",
-		"web": "vscode-test-web --headless --extensionDevelopmentPath=. ."
+		"web": "vscode-test-web --headless --extensionDevelopmentPath=. .",
+		"test:prompt": "mocha \"src/extension/completions-core/prompt/**/test/**/*.test.{ts,tsx}\"",
+        "test:lib": "mocha \"src/extension/completions-core/lib/src/**/*.test.{ts,tsx}\""
+
 	},
 	"devDependencies": {
 		"@azure/identity": "4.9.1",
@@ -4030,6 +4033,8 @@
 		"mobx": "^6.13.7",
 		"mobx-react-lite": "^4.1.0",
 		"mocha": "^11.7.1",
+        "mocha-junit-reporter": "^2.2.1",
+        "mocha-multi-reporters": "^1.5.1",
 		"monaco-editor": "0.44.0",
 		"npm-run-all": "^4.1.5",
 		"open": "^10.1.2",
