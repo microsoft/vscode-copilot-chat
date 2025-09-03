@@ -56,7 +56,7 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	const reasoningConfig = configService.getConfig(ConfigKey.Internal.ResponsesApiReasoning);
 	if (reasoningConfig === true) {
 		body.reasoning = {
-			'effort': 'high',
+			'effort': 'medium',
 			'summary': 'detailed'
 		};
 	} else if (typeof reasoningConfig === 'string') {
