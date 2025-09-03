@@ -5,7 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { DebugRecorder } from '../../extension/inlineEdits/node/debugRecorder';
-import { NextEditProvider } from '../../extension/inlineEdits/node/nextEditProvider';
+import { INextEditProvider, NextEditProvider } from '../../extension/inlineEdits/node/nextEditProvider';
 import { LlmNESTelemetryBuilder } from '../../extension/inlineEdits/node/nextEditProviderTelemetry';
 import { INextEditResult } from '../../extension/inlineEdits/node/nextEditResult';
 import { ChatMLFetcherImpl } from '../../extension/prompt/node/chatMLFetcher';
@@ -69,7 +69,7 @@ export function createNESProvider(workspace: ObservableWorkspace, fetcher: IFetc
 }
 
 class NESProvider extends Disposable implements INESProvider {
-	private readonly _nextEditProvider: NextEditProvider;
+	private readonly _nextEditProvider: INextEditProvider<INextEditResult, LlmNESTelemetryBuilder>;
 	private readonly _debugRecorder: DebugRecorder;
 
 	constructor(
@@ -92,6 +92,22 @@ class NESProvider extends Disposable implements INESProvider {
 
 	getId(): string {
 		return this._nextEditProvider.ID;
+	}
+
+	handleShown(suggestion: INextEditResult): void {
+		this._nextEditProvider.handleShown(suggestion);
+	}
+
+	handleAcceptance(docId: DocumentId, suggestion: INextEditResult): void {
+		this._nextEditProvider.handleAcceptance(docId, suggestion);
+	}
+
+	handleRejection(docId: DocumentId, suggestion: INextEditResult): void {
+		this._nextEditProvider.handleRejection(docId, suggestion);
+	}
+
+	handleIgnored(docId: DocumentId, suggestion: INextEditResult, supersededByRequestUuid: INextEditResult | undefined): void {
+		this._nextEditProvider.handleIgnored(docId, suggestion, supersededByRequestUuid);
 	}
 
 	async getNextEdit(documentUri: vscode.Uri, cancellationToken: CancellationToken): Promise<INextEditResult> {
@@ -132,6 +148,10 @@ class NESProvider extends Disposable implements INESProvider {
 export interface INESProvider {
 	getId(): string;
 	getNextEdit(documentUri: vscode.Uri, cancellationToken: CancellationToken): Promise<INextEditResult>;
+	handleShown(suggestion: INextEditResult): void;
+	handleAcceptance(docId: DocumentId, suggestion: INextEditResult): void;
+	handleRejection(docId: DocumentId, suggestion: INextEditResult): void;
+	handleIgnored(docId: DocumentId, suggestion: INextEditResult, supersededByRequestUuid: INextEditResult | undefined): void;
 	dispose(): void;
 }
 
