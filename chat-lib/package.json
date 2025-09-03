@@ -43,13 +43,10 @@
 	],
 	"files": [
 		"dist/src",
-		"src",
 		"README.md",
 		"LICENSE.txt",
-		"!src/**/*.tiktoken",
 		"!**/test/**",
-		"dist/src/_internal/util/common/test/shims",
-		"src/_internal/util/common/test/shims"
+		"dist/src/_internal/util/common/test/shims"
 	],
 	"scripts": {
 		"clean": "rimraf dist",
