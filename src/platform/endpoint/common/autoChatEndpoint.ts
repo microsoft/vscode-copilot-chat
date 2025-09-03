@@ -4,11 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { RequestMetadata } from '@vscode/copilot-api';
-import { ChatMessage } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
+import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
 import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
-import { Source } from '../../chat/common/chatMLFetcher';
+import { IChatMLFetcher, Source } from '../../chat/common/chatMLFetcher';
 import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
@@ -47,6 +47,7 @@ export class AutoChatEndpoint implements IChatEndpoint {
 
 	constructor(
 		private readonly _wrappedEndpoint: IChatEndpoint,
+		private readonly _chatMLFetcher: IChatMLFetcher,
 		private readonly _sessionToken: string,
 		private readonly _discountPercent: number
 	) {
@@ -79,11 +80,29 @@ export class AutoChatEndpoint implements IChatEndpoint {
 		return this._wrappedEndpoint.acquireTokenizer();
 	}
 
-	async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
-		return this._wrappedEndpoint.makeChatRequest2(options, token);
+	public async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
+		return this._makeChatRequest2({ ...options, ignoreStatefulMarker: options.ignoreStatefulMarker ?? true }, token);
 	}
 
-	async makeChatRequest(debugName: string, messages: ChatMessage[], finishedCb: FinishedCallback | undefined, token: CancellationToken, location: ChatLocation, source?: Source, requestOptions?: Omit<OptionalChatRequestParams, 'n'>, userInitiatedRequest?: boolean, telemetryProperties?: TelemetryProperties): Promise<ChatResponse> {
+	public async _makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken) {
+		return this._chatMLFetcher.fetchOne({
+			requestOptions: {},
+			...options,
+			endpoint: this,
+		}, token);
+	}
+
+	public async makeChatRequest(
+		debugName: string,
+		messages: Raw.ChatMessage[],
+		finishedCb: FinishedCallback | undefined,
+		token: CancellationToken,
+		location: ChatLocation,
+		source?: Source,
+		requestOptions?: Omit<OptionalChatRequestParams, 'n'>,
+		userInitiatedRequest?: boolean,
+		telemetryProperties?: TelemetryProperties,
+	): Promise<ChatResponse> {
 		return this.makeChatRequest2({
 			debugName,
 			messages,
