@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { t } from '@vscode/l10n';
+import { realpath } from 'fs/promises';
 import { homedir } from 'os';
 import type { LanguageModelChat, PreparedToolInvocation } from 'vscode';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
@@ -15,6 +16,7 @@ import { INotebookService } from '../../../platform/notebook/common/notebookServ
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import * as glob from '../../../util/vs/base/common/glob';
 import { ResourceMap } from '../../../util/vs/base/common/map';
+import { Schemas } from '../../../util/vs/base/common/network';
 import { isWindows } from '../../../util/vs/base/common/platform';
 import { normalizePath, relativePath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -585,9 +587,7 @@ function makeUriConfirmationChecker(configuration: IConfigurationService, worksp
 		return arr;
 	};
 
-	return (uri: URI) => {
-		uri = normalizePath(uri);
-
+	function checkUri(uri: URI) {
 		const workspaceFolder = workspaceService.getWorkspaceFolder(uri);
 		if (!workspaceFolder && !customInstructionsService.isExternalInstructionsFile(uri)) {
 			return ConfirmationCheckResult.OutsideWorkspace;
@@ -595,6 +595,7 @@ function makeUriConfirmationChecker(configuration: IConfigurationService, worksp
 
 		let ok = true;
 		const fsPath = uri.fsPath;
+
 		if (platformConfirmationRequiredPaths.some(p => p(fsPath))) {
 			return ConfirmationCheckResult.SystemFile;
 		}
@@ -606,20 +607,36 @@ function makeUriConfirmationChecker(configuration: IConfigurationService, worksp
 		}
 
 		return ok ? ConfirmationCheckResult.NoConfirmation : ConfirmationCheckResult.Sensitive;
+	}
+
+	return async (uri: URI) => {
+		const toCheck = [normalizePath(uri)];
+		if (uri.scheme === Schemas.file) {
+			try {
+				const linked = await realpath(uri.fsPath);
+				if (linked !== uri.fsPath) {
+					toCheck.push(URI.file(linked));
+				}
+			} catch (e) {
+				// Usually EPERM or ENOENT on the linkedFile
+			}
+		}
+
+		return Math.max(...toCheck.map(checkUri));
 	};
 }
 
-export function createEditConfirmation(accessor: ServicesAccessor, uris: readonly URI[], asString: () => string): PreparedToolInvocation {
+export async function createEditConfirmation(accessor: ServicesAccessor, uris: readonly URI[], asString: () => string): Promise<PreparedToolInvocation> {
 	const checker = makeUriConfirmationChecker(accessor.get(IConfigurationService), accessor.get(IWorkspaceService), accessor.get(ICustomInstructionsService));
-	const needsConfirmation = uris
-		.map(uri => ({ uri, reason: checker(uri) }))
-		.filter(r => r.reason !== ConfirmationCheckResult.NoConfirmation);
+	const workspaceService = accessor.get(IWorkspaceService);
+	const needsConfirmation = (await Promise.all(uris
+		.map(async uri => ({ uri, reason: await checker(uri) }))
+	)).filter(r => r.reason !== ConfirmationCheckResult.NoConfirmation);
 
 	if (!needsConfirmation.length) {
 		return { presentation: 'hidden' };
 	}
 
-	const workspaceService = accessor.get(IWorkspaceService);
 	const fileParts = needsConfirmation.map(({ uri }) => {
 		const wf = workspaceService.getWorkspaceFolder(uri);
 		return '`' + (wf ? relativePath(wf, uri) : uri.fsPath) + '`';

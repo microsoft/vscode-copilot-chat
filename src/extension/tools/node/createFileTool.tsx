@@ -147,11 +147,11 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 		return input;
 	}
 
-	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ICreateFileParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
+	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ICreateFileParams>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
 		const uri = resolveToolInputPath(options.input.filePath, this.promptPathRepresentationService);
 
 		return {
-			...this.instantiationService.invokeFunction(
+			...await this.instantiationService.invokeFunction(
 				createEditConfirmation,
 				[uri],
 				() => 'Contents:\n\n```\n' + options.input.content || '<empty>' + '\n```',
