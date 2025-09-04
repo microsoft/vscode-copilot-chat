@@ -48,13 +48,15 @@ export class AutomodeService implements IAutomodeService {
 	private async _updateAutoEndpointCache(chatRequest: ChatRequest | undefined, knownEndpoints: IChatEndpoint[]): Promise<IChatEndpoint> {
 		const startTime = Date.now();
 		const conversationId = getConversationId(chatRequest);
-		const existingToken = this._autoModelCache.get(conversationId)?.autoModeToken;
+		const cacheEntry = this._autoModelCache.get(conversationId);
+		const existingToken = cacheEntry?.autoModeToken;
+		const isExpired = cacheEntry && (cacheEntry.expiration <= Date.now());
 		const authToken = (await this._authService.getCopilotToken()).token;
 		const headers: Record<string, string> = {
 			'Content-Type': 'application/json',
 			'Authorization': `Bearer ${authToken}`
 		};
-		if (existingToken) {
+		if (existingToken && !isExpired) {
 			headers['Copilot-Session-Token'] = existingToken;
 		}
 		const response = await this._capiClientService.makeRequest<Response>({
