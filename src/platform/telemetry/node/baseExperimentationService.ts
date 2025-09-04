@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type * as vscode from 'vscode';
 import type { IExperimentationService as ITASExperimentationService } from 'vscode-tas-client';
 import { IntervalTimer } from '../../../util/vs/base/common/async';
 import { Emitter } from '../../../util/vs/base/common/event';
@@ -74,7 +75,7 @@ export class UserInfoStore extends Disposable {
 	}
 }
 
-export type TASClientDelegateFn = (globalState: any, userInfoStore: UserInfoStore) => ITASExperimentationService;
+export type TASClientDelegateFn = (globalState: vscode.Memento, userInfoStore: UserInfoStore) => ITASExperimentationService;
 
 export class BaseExperimentationService extends Disposable implements IExperimentationService {
 
