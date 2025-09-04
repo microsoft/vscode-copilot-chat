@@ -106,7 +106,7 @@ export class ReviewServiceImpl implements IReviewService {
 	}
 
 	isReviewDiffEnabled() {
-		return this._authenticationService.copilotToken?.isCopilotCodeReviewEnabled ?? false;
+		return this._configurationService.getConfig(ConfigKey.ReviewAgent) && this._authenticationService.copilotToken?.isCopilotCodeReviewEnabled || false;
 	}
 
 	isIntentEnabled(): boolean {
