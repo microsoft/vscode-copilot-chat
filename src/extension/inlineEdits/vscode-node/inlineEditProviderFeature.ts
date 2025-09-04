@@ -22,6 +22,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
 import { CompletionsProvider } from '../../completions/vscode-node/completionsProvider';
+import { unificationStateObservable } from '../../completions/vscode-node/completionsUnificationContribution';
 import { TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { InlineEditDebugComponent, reportFeedbackCommandId } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
@@ -84,6 +85,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 		const constructorTracer = tracer.sub('constructor');
 		const hasUpdatedNesSettingKey = 'copilot.chat.nextEdits.hasEnabledNesInSettings';
 		const enableEnhancedNotebookNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, _experimentationService) || this._configurationService.getExperimentBasedConfig(ConfigKey.UseAlternativeNESNotebookFormat, _experimentationService);
+		const unificationState = unificationStateObservable(this);
 
 		commands.executeCommand('setContext', useEnhancedNotebookNESContextKey, enableEnhancedNotebookNES);
 
@@ -137,12 +139,24 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 
 			const provider = this._instantiationService.createInstance(InlineCompletionProviderImpl, model, logger, logContextRecorder, inlineEditDebugComponent, telemetrySender);
 
+			const unificationStateValue = unificationState.read(reader);
+			let excludes = this._excludedProviders.read(reader);
+			if (unificationStateValue?.modelUnification) {
+				excludes = excludes.slice(0);
+				if (!excludes.includes('completions')) {
+					excludes.push('completions');
+				}
+				if (!excludes.includes('github.copilot')) {
+					excludes.push('github.copilot');
+				}
+			}
+
 			reader.store.add(languages.registerInlineCompletionItemProvider('*', provider, {
 				displayName: provider.displayName,
 				yieldTo: this._yieldToCopilot.read(reader) ? ['github.copilot'] : undefined,
 				debounceDelayMs: 0, // set 0 debounce to ensure consistent delays/timings
 				groupId: 'nes',
-				excludes: this._excludedProviders.read(reader),
+				excludes,
 			}));
 
 			if (TRIGGER_INLINE_EDIT_ON_ACTIVE_EDITOR_CHANGE) {
