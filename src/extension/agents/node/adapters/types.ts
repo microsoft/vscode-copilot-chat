@@ -35,6 +35,11 @@ export type IAgentStreamBlock = IAgentTextBlock | IAgentToolCallBlock;
 
 export interface IProtocolAdapter {
 	/**
+	 * The name of this protocol adapter
+	 */
+	readonly name: string;
+
+	/**
 	 * Parse the incoming request body and convert to VS Code format
 	 */
 	parseRequest(body: string): IParsedRequest;

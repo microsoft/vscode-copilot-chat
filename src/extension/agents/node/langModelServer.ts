@@ -178,7 +178,7 @@ export class LanguageModelServer {
 
 				const userInitiatedRequest = parsedRequest.messages.at(-1)?.role === Raw.ChatRole.User;
 				const fetchResult = await selectedEndpoint.makeChatRequest2({
-					debugName: 'agentLanguageModelService',
+					debugName: 'agentLanguageModelServer',
 					messages: parsedRequest.messages,
 					finishedCb: async (_fullText, _index, delta) => {
 						if (tokenSource.token.isCancellationRequested) {
@@ -214,7 +214,10 @@ export class LanguageModelServer {
 					},
 					location: ChatLocation.Agent,
 					requestOptions: parsedRequest.options,
-					userInitiatedRequest
+					userInitiatedRequest,
+					telemetryProperties: {
+						messageSource: `lmServer-${adapter.name}`
+					}
 				}, tokenSource.token);
 
 				// Capture usage information if available

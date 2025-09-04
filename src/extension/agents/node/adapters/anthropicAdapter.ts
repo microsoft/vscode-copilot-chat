@@ -19,6 +19,8 @@ export class AnthropicAdapterFactory implements IProtocolAdapterFactory {
 }
 
 class AnthropicAdapter implements IProtocolAdapter {
+	readonly name = 'anthropic';
+
 	// Per-request state
 	private currentBlockIndex = 0;
 	private hasTextBlock = false;
