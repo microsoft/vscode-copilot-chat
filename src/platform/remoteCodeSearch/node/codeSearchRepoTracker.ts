@@ -324,7 +324,7 @@ export class CodeSearchRepoTracker extends Disposable {
 	@LogExecTime(self => self._logService, 'CodeSearchRepoTracker::initialize')
 	public async initialize() {
 		this._initializePromise ??= (async () => {
-			logExecTime(this._logService, 'CodeSearchRepoTracker::initialize_impl', async () => {
+			return logExecTime(this._logService, 'CodeSearchRepoTracker::initialize_impl', async () => {
 				try {
 					// Wait for the initial repos to be found
 					// Find all initial repos

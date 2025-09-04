@@ -12,7 +12,7 @@ import { ChatFetchError, ChatFetchResponseType, ChatFetchRetriableError, ChatLoc
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { getTextPart, toTextParts } from '../../../platform/chat/common/globalStringUtils';
 import { IInteractionService } from '../../../platform/chat/common/interactionService';
-import { ConfigKey, HARD_TOOL_LIMIT, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { HARD_TOOL_LIMIT } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IEnvService } from '../../../platform/env/common/envService';
@@ -23,7 +23,6 @@ import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { ChatCompletion, FilterReason, FinishedCompletionReason } from '../../../platform/networking/common/openai';
 import { ChatFailKind, ChatRequestCanceled, ChatRequestFailed, ChatResults, fetchAndStreamChat, FetchResponseKind } from '../../../platform/openai/node/fetch';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
-import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../../platform/telemetry/common/telemetry';
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { calculateLineRepetitionStats, isRepetitive } from '../../../util/common/anomalyDetection';
@@ -93,8 +92,6 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		@IInteractionService private readonly _interactionService: IInteractionService,
 		@IChatQuotaService private readonly _chatQuotaService: IChatQuotaService,
 		@IConversationOptions options: IConversationOptions,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IExperimentationService private readonly experimentationService: IExperimentationService,
 	) {
 		super(options);
 	}
@@ -255,6 +252,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						source: telemetryProperties.messageSource ?? 'unknown',
 						requestId: ourRequestId,
 						model: chatEndpoint.model,
+						apiType: chatEndpoint.apiType,
 						...(telemetryProperties.retryAfterFilterCategory ? { retryAfterFilterCategory: telemetryProperties.retryAfterFilterCategory } : {}),
 					}, {
 						totalTokenMax: chatEndpoint.modelMaxPromptTokens ?? -1,
@@ -282,6 +280,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					source: telemetryProperties.messageSource ?? 'unknown',
 					requestId: ourRequestId,
 					model: chatEndpoint.model,
+					apiType: chatEndpoint.apiType
 				}, {
 					totalTokenMax: chatEndpoint.modelMaxPromptTokens ?? -1,
 					promptTokenCount: tokenCount,
@@ -304,10 +303,12 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			source,
 			requestId,
 			model,
+			apiType
 		}: {
 			source: string;
 			requestId: string;
 			model: string;
+			apiType: string | undefined;
 		},
 		{
 			totalTokenMax,
@@ -332,6 +333,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				"owner": "digitarald",
 				"comment": "Report canceled service responses for quality.",
 				"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
+				"apiType": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "API type for the response- chat completions or responses" },
 				"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source for why the request was made" },
 				"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the request" },
 				"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
@@ -345,6 +347,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			}
 		*/
 		this._telemetryService.sendTelemetryEvent('response.cancelled', { github: true, microsoft: true }, {
+			apiType,
 			source,
 			requestId,
 			model,
@@ -376,6 +379,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				"type": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Type of issue" },
 				"reason": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reason of issue" },
 				"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
+				"apiType": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "API type for the response- chat completions or responses" },
 				"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source for why the request was made" },
 				"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the request" },
 				"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
@@ -393,6 +397,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			source: telemetryProperties?.messageSource ?? 'unknown',
 			requestId: ourRequestId,
 			model: chatEndpointInfo.model,
+			apiType: chatEndpointInfo.apiType,
 			...(telemetryProperties?.retryAfterFilterCategory ? { retryAfterFilterCategory: telemetryProperties.retryAfterFilterCategory } : {})
 		}, {
 			totalTokenMax: chatEndpointInfo.modelMaxPromptTokens ?? -1,
@@ -428,6 +433,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source of the initial request" },
 					"initiatorType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was initiated by a user or an agent" },
 					"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
+					"apiType": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "API type for the response- chat completions or responses" },
 					"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the current turn request" },
 					"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
 					"clientPromptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens, locally counted", "isMeasurement": true },
@@ -451,6 +457,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				source: baseTelemetry?.properties.messageSource ?? 'unknown',
 				initiatorType: userInitiatedRequest ? 'user' : 'agent',
 				model: chatEndpointInfo?.model,
+				apiType: chatEndpointInfo?.apiType,
 				requestId,
 				...(baseTelemetry?.properties.retryAfterFilterCategory ? { retryAfterFilterCategory: baseTelemetry.properties.retryAfterFilterCategory } : {}),
 			}, {
@@ -486,28 +493,16 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 		const result = completions.at(0);
 
-		const isRetryAfterFilteredResponseEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.EnableRetryAfterFilteredResponse, this.experimentationService);
-
 		switch (result?.finishReason) {
 			case FinishedCompletionReason.ContentFilter:
-				if (isRetryAfterFilteredResponseEnabled) {
-					return {
-						type: ChatFetchResponseType.FilteredRetry,
-						category: result.filterReason ?? FilterReason.Copyright,
-						reason: 'Response got filtered.',
-						value: completions.map(c => getTextPart(c.message.content)),
-						requestId: requestId,
-						serverRequestId: result.requestId.headerRequestId,
-					};
-				} else {
-					return {
-						type: ChatFetchResponseType.Filtered,
-						category: result.filterReason ?? FilterReason.Copyright,
-						reason: 'Response got filtered.',
-						requestId: requestId,
-						serverRequestId: result.requestId.headerRequestId
-					};
-				}
+				return {
+					type: ChatFetchResponseType.FilteredRetry,
+					category: result.filterReason ?? FilterReason.Copyright,
+					reason: 'Response got filtered.',
+					value: completions.map(c => getTextPart(c.message.content)),
+					requestId: requestId,
+					serverRequestId: result.requestId.headerRequestId,
+				};
 			case FinishedCompletionReason.Length:
 				return {
 					type: ChatFetchResponseType.Length,

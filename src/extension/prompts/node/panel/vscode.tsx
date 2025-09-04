@@ -15,6 +15,7 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IReleaseNotesService } from '../../../../platform/releaseNotes/common/releaseNotesService';
 import { reportProgressOnSlowPromise } from '../../../../util/common/progress';
+import { sanitizeVSCodeVersion } from '../../../../util/common/vscodeVersion';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart } from '../../../../vscodeTypes';
 import { Turn } from '../../../prompt/common/conversation';
@@ -40,7 +41,8 @@ export interface VscodePromptState {
 	settings: SettingListItem[];
 	commands: CommandListItem[];
 	query: string;
-	releaseNotes?: string;
+	releaseNotes?: { version: string; notes: string }[];
+	currentVersion?: string;
 }
 
 export class VscodePrompt extends PromptElement<VscodePromptProps, VscodePromptState> {
@@ -104,9 +106,26 @@ export class VscodePrompt extends PromptElement<VscodePromptProps, VscodePromptS
 			this.logService.error(`[VSCode Prompt] Failed to refine the question: ${fetchResult.requestId}`);
 		}
 
+		const currentSanitized = sanitizeVSCodeVersion(this.envService.getEditorInfo().version); // major.minor
 		if (fetchReleaseNotes) {
-			const releaseNotes = await this.releaseNotesService.fetchLatestReleaseNotes();
-			return { settings: [], commands: [], releaseNotes: releaseNotes, query: this.props.promptContext.query };
+			// Determine which versions to fetch based on meta response
+			const rnMatch = fetchResult.type === ChatFetchResponseType.Success ? fetchResult.value.match(/release_notes(?:@(?<spec>[A-Za-z0-9._-]+))?/i) : undefined;
+			const spec = rnMatch?.groups?.['spec']?.toLowerCase();
+
+			let versionsToFetch: string[];
+			if (spec === 'last3') {
+				versionsToFetch = getLastNMinorVersions(currentSanitized, 3);
+			} else {
+				versionsToFetch = [currentSanitized];
+			}
+
+			const notes = await Promise.all(versionsToFetch.map(async (ver) => {
+				const text = await this.releaseNotesService.fetchReleaseNotesForVersion(ver);
+				return text ? { version: ver, notes: text } : undefined;
+			}));
+
+			const filtered = notes.filter((n): n is { version: string; notes: string } => !!n);
+			return { settings: [], commands: [], releaseNotes: filtered, query: this.props.promptContext.query, currentVersion: currentSanitized };
 		}
 
 		if (extensionSearch || vscodeApiSearch) {
@@ -119,10 +138,6 @@ export class VscodePrompt extends PromptElement<VscodePromptProps, VscodePromptS
 
 		const embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [userQuery], {}, undefined);
 		if (token.isCancellationRequested) {
-			return { settings: [], commands: [], releaseNotes: '', query: userQuery };
-		}
-
-		if (!embeddingResult) {
 			return { settings: [], commands: [], query: userQuery };
 		}
 
@@ -136,7 +151,7 @@ export class VscodePrompt extends PromptElement<VscodePromptProps, VscodePromptS
 
 		const embeddingResults = results[0].status === 'fulfilled' ? results[0].value : { commands: [], settings: [] };
 
-		return { settings: embeddingResults.settings, commands: embeddingResults.commands, query: userQuery };
+		return { settings: embeddingResults.settings, commands: embeddingResults.commands, query: userQuery, currentVersion: currentSanitized };
 	}
 
 	override render(state: VscodePromptState) {
@@ -161,7 +176,7 @@ export class VscodePrompt extends PromptElement<VscodePromptProps, VscodePromptS
 						If an extension might help the user, you may suggest a search query for the extension marketplace. You must also include the command **Search marketplace** (`workbench.extensions.search`) with args set to the suggested query in the commands section at the end of your response. The query can also contain the tags "@popular", "@recommended", or "@featured" to filter the results.<br />
 						The user is working on a {operatingSystem} machine. Please respond with system specific commands if applicable.<br />
 						If a command or setting is not a valid answer, but it still relates to Visual Studio Code, please still respond.<br />
-						If the question is about release notes, you must respond with the release notes of the latest Visual Studio Code release. You must also include the command **Show release notes** (`update.showCurrentReleaseNotes`) in the commands section at the end of your response.<br />
+						If the question is about release notes, you must also include the command **Show release notes** (`update.showCurrentReleaseNotes`) in the commands section at the end of your response.<br />
 						If the response includes a command, only reference the command description in the description. Do not include the actual command in the description.<br />
 						All responses for settings and commands code blocks must strictly adhere to the template shown below:<br />
 						<Tag name='responseTemplate'>
@@ -352,9 +367,12 @@ ms-python.python,ms-python.vscode-pylance
 						{state.settings.map(c => <TextChunk>{settingItemToContext(c)}</TextChunk>)}
 					</Tag>
 					</>}
-					{state.releaseNotes && <><Tag name='releaseNotes'>
-						Below is release notes of the latest Visual Studio Code which might be relevant to the question. <br />
-						<TextChunk>{state.releaseNotes}</TextChunk>
+					{state.currentVersion && <><Tag name='currentVSCodeVersion'>
+						Current VS Code version (major.minor): {state.currentVersion}
+					</Tag><br /></>}
+					{state.releaseNotes && state.releaseNotes.length > 0 && <><Tag name='releaseNotes'>
+						Below are release notes which might be relevant to the question. <br />
+						{state.releaseNotes.map(rn => <><TextChunk>Version {rn.version}:</TextChunk><br /><TextChunk>{rn.notes}</TextChunk></>)}
 					</Tag>
 					</>}
 					<Tag name='vscodeAPIToolUseInstructions'>
@@ -401,7 +419,11 @@ class VscodeMetaPrompt extends PromptElement<VscodeMetaPromptProps> {
 					Determine if the user's question is about the editor, terminal, activity bar, side bar, status bar, panel or other parts of Visual Studio Code's workbench and include those keyword in the rewrite.<br />
 					Determine if the user is asking about Visual Studio Code's Commands and/or Settings and explicitly include those keywords during the rewrite. <br />
 					If the question does not clearly indicate whether it pertains to a command or setting, categorize it as an ‘Other Question’ <br />
-					If the user is asking about Visual Studio Code Release Notes, simply respond with "release_notes" in your response and do not try to rephrase the question <br />
+					If the user is asking about Visual Studio Code Release Notes, respond using this exact protocol and do not rephrase the question: <br />
+					- Respond with only one of the following: `release_notes@latest` or `release_notes@last3`.<br />
+					- If the user does not specify a timeframe, respond with: `release_notes@latest`.<br />
+					- If the request is vague about a timeframe (e.g., "recent changes"), respond with: `release_notes@last3` to consider the last three versions (major.minor).<br />
+					- If the user asks to find or locate a specific change/feature in the release notes, respond with: `release_notes@last3` to search across the last three versions (major.minor).<br />
 					If the user is asking about Extensions available in Visual Studio Code, simply respond with "vscode_extensions"<br />
 					If the user is asking about Visual Studio Code API or Visual Studio Code Extension Development, simply respond with "vscode_api"<br />
 					Remove any references to "What" or "How" and instead rewrite the question as a description of the command or setting that the user is trying to find. <br />
@@ -439,7 +461,12 @@ class VscodeMetaPrompt extends PromptElement<VscodeMetaPromptProps> {
 					User: latest released features<br />
 					<br />
 					Assistant:<br />
-					release_notes<br />
+					release_notes@latest<br />
+					<br />
+					User: What are the recent changes?<br />
+					<br />
+					Assistant:<br />
+					release_notes@last3<br />
 					<br />
 					User: set up python<br />
 					<br />
@@ -471,4 +498,18 @@ function parseMetaPromptResponse(originalQuestion: string, response: string): st
 		return originalQuestion.trim();
 	}
 	return match.groups['question'].trim();
+}
+
+function getLastNMinorVersions(current: string, n: number): string[] {
+	const m = /^(\d+)\.(\d+)$/.exec(current);
+	if (!m) {
+		return [current];
+	}
+	const major = parseInt(m[1], 10);
+	let minor = parseInt(m[2], 10);
+	const out: string[] = [];
+	for (let i = 0; i < n && minor >= 0; i++, minor--) {
+		out.push(`${major}.${minor}`);
+	}
+	return out;
 }

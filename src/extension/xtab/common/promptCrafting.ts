@@ -10,7 +10,7 @@ import { CurrentFileOptions, DiffHistoryOptions, PromptingStrategy, PromptOption
 import { StatelessNextEditRequest } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { IXtabHistoryEditEntry, IXtabHistoryEntry } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ContextKind, TraitContext } from '../../../platform/languageServer/common/languageContextService';
-import { range } from '../../../util/vs/base/common/arrays';
+import { pushMany, range } from '../../../util/vs/base/common/arrays';
 import { illegalArgument } from '../../../util/vs/base/common/errors';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
@@ -298,8 +298,8 @@ function generateDocDiff(entry: IXtabHistoryEditEntry, workspacePath: string | u
 		const startLineNumber = singleLineEdit.lineRange.startLineNumber - 1;
 
 		docDiffLines.push(`@@ -${startLineNumber},${oldLines.length} +${startLineNumber},${newLines.length} @@`);
-		docDiffLines.push(...oldLines.map(x => `-${x}`));
-		docDiffLines.push(...newLines.map(x => `+${x}`));
+		pushMany(docDiffLines, oldLines.map(x => `-${x}`));
+		pushMany(docDiffLines, newLines.map(x => `+${x}`));
 	}
 
 	if (docDiffLines.length === 0) {
@@ -308,11 +308,14 @@ function generateDocDiff(entry: IXtabHistoryEditEntry, workspacePath: string | u
 
 	const uniquePath = toUniquePath(entry.docId, workspacePath);
 
-	const docDiff = [
+	const docDiffArr = [
 		`--- ${uniquePath}`,
 		`+++ ${uniquePath}`,
-		...docDiffLines
-	].join('\n');
+	];
+
+	pushMany(docDiffArr, docDiffLines);
+
+	const docDiff = docDiffArr.join('\n');
 
 	return docDiff;
 }

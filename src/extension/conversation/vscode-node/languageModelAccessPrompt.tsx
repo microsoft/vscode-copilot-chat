@@ -9,6 +9,7 @@ import * as vscode from 'vscode';
 import { LanguageModelTextPart } from 'vscode';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { decodeStatefulMarker, StatefulMarkerContainer } from '../../../platform/endpoint/common/statefulMarkerContainer';
+import { ThinkingDataContainer } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { SafetyRules } from '../../prompts/node/base/safetyRules';
 import { EditorIntegrationRules } from '../../prompts/node/panel/editorIntegrationRules';
 import { imageDataPartToTSX, ToolResult } from '../../prompts/node/panel/toolCalling';
@@ -40,9 +41,11 @@ export class LanguageModelAccessPrompt extends PromptElement<Props> {
 				// There should only be one string part per message
 				const content = filteredContent.find(part => part instanceof LanguageModelTextPart);
 				const toolCalls = filteredContent.filter(part => part instanceof vscode.LanguageModelToolCallPart);
+				const thinking = filteredContent.find(part => part instanceof vscode.LanguageModelThinkingPart);
 
 				const statefulMarkerElement = statefulMarker && <StatefulMarkerContainer statefulMarker={statefulMarker} />;
-				chatMessages.push(<AssistantMessage name={message.name} toolCalls={toolCalls.map(tc => ({ id: tc.callId, type: 'function', function: { name: tc.name, arguments: JSON.stringify(tc.input) } }))}>{statefulMarkerElement}{content?.value}</AssistantMessage>);
+				const thinkingElement = thinking && thinking.id && <ThinkingDataContainer thinking={{ id: thinking.id, text: thinking.value, metadata: thinking.metadata }} />;
+				chatMessages.push(<AssistantMessage name={message.name} toolCalls={toolCalls.map(tc => ({ id: tc.callId, type: 'function', function: { name: tc.name, arguments: JSON.stringify(tc.input) } }))}>{statefulMarkerElement}{content?.value}{thinkingElement}</AssistantMessage>);
 			} else if (message.role === vscode.LanguageModelChatMessageRole.User) {
 				for (const part of message.content) {
 					if (part instanceof vscode.LanguageModelToolResultPart2 || part instanceof vscode.LanguageModelToolResultPart) {

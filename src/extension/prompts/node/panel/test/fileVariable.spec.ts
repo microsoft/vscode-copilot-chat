@@ -7,7 +7,7 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import { ITestingServicesAccessor } from '../../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
-import { ExtHostDocumentData } from '../../../../../util/common/test/shims/textDocument';
+import { createTextDocumentData } from '../../../../../util/common/test/shims/textDocument';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { Uri } from '../../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
@@ -35,7 +35,7 @@ describe('FileVariable', () => {
 
 	test('does include known untitled file', async () => {
 		const untitledUri = Uri.parse('untitled:Untitled-1');
-		const untitledDoc = ExtHostDocumentData.create(untitledUri, 'test!', 'python').document;
+		const untitledDoc = createTextDocumentData(untitledUri, 'test!', 'python').document;
 
 		const testingServiceCollection = createExtensionUnitTestingServices();
 		testingServiceCollection.define(IWorkspaceService, new TestWorkspaceService(undefined, [untitledDoc]));

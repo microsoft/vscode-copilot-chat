@@ -9,6 +9,8 @@ import './createDirectoryTool';
 import './createFileTool';
 import './docTool';
 import './editNotebookTool';
+import './executePromptTool';
+import './executeTaskTool';
 import './findFilesTool';
 import './findTestsFilesTool';
 import './findTextInFilesTool';
@@ -37,4 +39,4 @@ import './usagesTool';
 import './userPreferencesTool';
 import './vscodeAPITool';
 import './vscodeCmdTool';
-
+import './toolReplayTool';

@@ -8,7 +8,7 @@ import type { ChatResponseStream, ChatVulnerability } from 'vscode';
 import { IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { IResponseDelta } from '../../../platform/networking/common/fetch';
 import { FilterReason } from '../../../platform/networking/common/openai';
-import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
+import { isEncryptedThinkingDelta } from '../../../platform/thinking/common/thinking';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { URI } from '../../../util/vs/base/common/uri';
 import { ChatResponseClearToPreviousToolInvocationReason } from '../../../vscodeTypes';
@@ -31,7 +31,6 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 	constructor(
 		private readonly stopStartMappings: readonly StartStopMapping[],
 		private readonly processNonReportedDelta: ((deltas: IResponseDelta[]) => string[]) | undefined,
-		@IThinkingDataService private readonly thinkingDataService: IThinkingDataService
 	) { }
 
 	async processResponse(_context: IResponseProcessorContext, inputStream: AsyncIterable<IResponsePart>, outputStream: ChatResponseStream, token: CancellationToken): Promise<void> {
@@ -62,9 +61,10 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 		}
 
 		if (delta.thinking) {
-			progress.thinkingProgress(delta.thinking);
-			// @karthiknadig: remove this when LM API becomes available
-			this.thinkingDataService.update(0, delta.thinking);
+			// Don't send parts that are only encrypted content
+			if (!isEncryptedThinkingDelta(delta.thinking) || delta.thinking.text) {
+				progress.thinkingProgress(delta.thinking);
+			}
 		}
 	}
 

@@ -31,7 +31,7 @@ import { ActionType } from './applyPatch/parser';
 import { EditFileResult } from './editFileToolResult';
 import { createEditConfirmation } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
-import { assertFileOkForTool, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
+import { assertFileNotContentExcluded, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
 
 export interface ICreateFileParams {
 	filePath: string;
@@ -63,7 +63,7 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 			throw new Error(`Invalid file path`);
 		}
 
-		await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, uri));
+		await this.instantiationService.invokeFunction(accessor => assertFileNotContentExcluded(accessor, uri));
 
 		if (!this._promptContext?.stream) {
 			throw new Error('Invalid stream');

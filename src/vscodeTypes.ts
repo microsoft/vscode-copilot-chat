@@ -4,17 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 import * as vscode from 'vscode';
 
-// Here we add an artifical `__vscodeBrand` to types with names which appear both
-// in the vscode API and in this project. This helps ensure that we depend
-// on the correct types in the code which interacts with the vscode API.
-declare module 'vscode' {
-	export interface MarkdownString { __vscodeBrand: undefined }
-	export interface Position { __vscodeBrand: undefined }
-	export interface Range { __vscodeBrand: undefined }
-	export interface Selection { __vscodeBrand: undefined }
-	export interface TextEdit { __vscodeBrand: undefined }
-}
-
 export import Position = vscode.Position;
 export import Range = vscode.Range;
 export import Selection = vscode.Selection;
@@ -92,6 +81,20 @@ export import ChatErrorLevel = vscode.ChatErrorLevel;
 export import TerminalShellExecutionCommandLineConfidence = vscode.TerminalShellExecutionCommandLineConfidence;
 export import ChatRequestEditedFileEventKind = vscode.ChatRequestEditedFileEventKind;
 export import Extension = vscode.Extension;
+export import LanguageModelToolCallPart = vscode.LanguageModelToolCallPart;
+export import LanguageModelToolResultPart = vscode.LanguageModelToolResultPart;
+export import LanguageModelToolResultPart2 = vscode.LanguageModelToolResultPart2;
+export import LanguageModelChatMessageRole = vscode.LanguageModelChatMessageRole;
+export import TextEditorSelectionChangeKind = vscode.TextEditorSelectionChangeKind;
+export import TextDocumentChangeReason = vscode.TextDocumentChangeReason;
+export import ChatToolInvocationPart = vscode.ChatToolInvocationPart;
+export import ChatResponseTurn2 = vscode.ChatResponseTurn2;
+export import ChatRequestTurn2 = vscode.ChatRequestTurn2;
+export import LanguageModelError = vscode.LanguageModelError;
+export import SymbolKind = vscode.SymbolKind;
+export import SnippetString = vscode.SnippetString;
+export import SnippetTextEdit = vscode.SnippetTextEdit;
+export import FileType = vscode.FileType;
 
 export const l10n = {
 	/**

@@ -43,7 +43,7 @@ export class NotebookService implements INotebookService {
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
 	) {
-		this._isVariableFilteringEnabled = this._experimentationService.getTreatmentVariable('vscode', 'copilotchat.notebookVariableFiltering')
+		this._isVariableFilteringEnabled = this._experimentationService.getTreatmentVariable('copilotchat.notebookVariableFiltering')
 			|| this._configurationService.getConfig(ConfigKey.Internal.NotebookVariableFilteringEnabled);
 		this._registerExecutionListener();
 	}

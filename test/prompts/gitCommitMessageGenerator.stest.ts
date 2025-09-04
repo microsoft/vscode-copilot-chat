@@ -7,7 +7,7 @@ import { GitCommitMessageGenerator } from '../../src/extension/prompt/node/gitCo
 import { Diff } from '../../src/platform/git/common/gitDiffService';
 import { TestWorkspaceService } from '../../src/platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../src/platform/workspace/common/workspaceService';
-import { ExtHostDocumentData } from '../../src/util/common/test/shims/textDocument';
+import { createTextDocumentData } from '../../src/util/common/test/shims/textDocument';
 import { CancellationToken } from '../../src/util/vs/base/common/cancellation';
 import { URI } from '../../src/util/vs/base/common/uri';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
@@ -19,7 +19,7 @@ ssuite({ title: 'git commit message', location: 'external' }, () => {
 def print_hello_world():
         print("Hello, World!")`;
 
-		const document = ExtHostDocumentData.create(URI.file('main.py'), content, 'python').document;
+		const document = createTextDocumentData(URI.file('main.py'), content, 'python').document;
 		testingServiceCollection.define(IWorkspaceService, new TestWorkspaceService(undefined, [document]));
 
 		const accessor = testingServiceCollection.createTestingAccessor();
@@ -55,7 +55,7 @@ index 0877b83..6260896 100644
 def print_hello_world():
         print("Hello, World!")`;
 
-		const document = ExtHostDocumentData.create(URI.file('main.py'), content, 'python').document;
+		const document = createTextDocumentData(URI.file('main.py'), content, 'python').document;
 		testingServiceCollection.define(IWorkspaceService, new TestWorkspaceService(undefined, [document]));
 
 		const accessor = testingServiceCollection.createTestingAccessor();
@@ -107,7 +107,7 @@ index 0877b83..6260896 100644
 def show_exomple():
         print("This is an example.")`;
 
-		const document = ExtHostDocumentData.create(URI.file('main.py'), content, 'python').document;
+		const document = createTextDocumentData(URI.file('main.py'), content, 'python').document;
 		testingServiceCollection.define(IWorkspaceService, new TestWorkspaceService(undefined, [document]));
 
 		const accessor = testingServiceCollection.createTestingAccessor();

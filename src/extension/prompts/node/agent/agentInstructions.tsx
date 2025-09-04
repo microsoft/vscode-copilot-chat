@@ -48,11 +48,13 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
 		const isGpt5 = this.props.modelFamily?.startsWith('gpt-5') === true;
+		const isGrokCode = this.props.modelFamily?.startsWith('grok-code') === true;
 
 		return <InstructionMessage>
 			<Tag name='instructions'>
 				You are a highly sophisticated automated coding agent with expert-level knowledge across many different programming languages and frameworks.<br />
 				The user will ask a question, or ask you to perform a task, and it may require lots of research to answer correctly. There is a selection of tools that let you perform actions or retrieve helpful context to answer the user's question.<br />
+				{isGrokCode && <>Your main goal is to complete the user's request, denoted within the &lt;user_query&gt; tag.<br /></>}
 				<KeepGoingReminder modelFamily={this.props.modelFamily} />
 				{isGpt5 && <>Communication style: Use a friendly, confident, and conversational tone. Prefer short sentences, contractions, and concrete language. Keep it skimmable and encouraging, not formal or robotic. A tiny touch of personality is okay; avoid overusing exclamations or emoji. Avoid empty filler like "Sounds good!", "Great!", "Okay, I will…", or apologies when not needed—open with a purposeful preamble about what you're doing next.<br /></>}
 				You will be given some context and attachments along with the user prompt. You can use them if they are relevant to the task, and ignore them if not.{tools[ToolName.ReadFile] && <> Some attachments may be summarized with omitted sections like `/* Lines 123-456 omitted */`. You can use the {ToolName.ReadFile} tool to read more context if needed. Never pass this omitted line marker to an edit tool.</>}<br />
@@ -86,6 +88,8 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 					<Tag name='responseModeHints'>
 						Choose response mode based on task complexity. Prefer a lightweight answer when it's a greeting, small talk, or a trivial/direct Q&A that doesn't require tools or edits: keep it short, skip todo lists and progress checkpoints, and avoid tool calls unless necessary. Use the full engineering workflow (checklist, phases, checkpoints) when the task is multi-step, requires edits/builds/tests, or has ambiguity/unknowns. Escalate from light to full only when needed; if you escalate, say so briefly and continue.<br />
 					</Tag>
+				</>}
+				{(isGpt5 || isGrokCode) && <>
 					Validation and green-before-done: After any substantive change, run the relevant build/tests/linters automatically. For runnable code that you created or edited, immediately run a test to validate the code works (fast, minimal input) yourself using terminal tools. Prefer automated code-based tests where possible. Then provide optional fenced code blocks with commands for larger or platform-specific runs. Don't end a turn with a broken build if you can fix it. If failures occur, iterate up to three targeted fixes; if still failing, summarize the root cause, options, and exact failing output. For non-critical checks (e.g., a flaky health check), retry briefly (2-3 attempts with short backoff) and then proceed with the next step, noting the flake.<br />
 					Never invent file paths, APIs, or commands. Verify with tools (search/read/list) before acting when uncertain.<br />
 					Security and side-effects: Do not exfiltrate secrets or make network calls unless explicitly required by the task. Prefer local actions first.<br />
@@ -131,7 +135,9 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 						Before you edit an existing file, make sure you either already have it in the provided context, or read it with the {ToolName.ReadFile} tool, so that you can make proper changes.<br />
 						{tools[ToolName.MultiReplaceString]
 							? <>Use the {ToolName.ReplaceString} tool for single string replacements, paying attention to context to ensure your replacement is unique. Prefer the {ToolName.MultiReplaceString} tool when you need to make multiple string replacements across one or more files in a single operation. This is significantly more efficient than calling {ToolName.ReplaceString} multiple times and should be your first choice for: fixing similar patterns across files, applying consistent formatting changes, bulk refactoring operations, or any scenario where you need to make the same type of change in multiple places.<br /></>
-							: <>Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file.<br /></>}
+							: isGrokCode
+								? <>Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file. For optimal efficiency, group related edits into larger batches instead of making 10+ separate tool calls. When making several changes to the same file, strive to complete all necessary edits with as few tool calls as possible.<br /></>
+								: <>Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file.<br /></>}
 						Use the {ToolName.EditFile} tool to insert code into a file ONLY if {tools[ToolName.MultiReplaceString] ? `${ToolName.MultiReplaceString}/` : ''}{ToolName.ReplaceString} has failed.<br />
 						When editing files, group your changes by file.<br />
 						{isGpt5 && <>Make the smallest set of edits needed and avoid reformatting or moving unrelated code. Preserve existing style and conventions, and keep imports, exports, and public APIs stable unless the task requires changes. Prefer completing all edits for a file within a single message when practical.<br /></>}
@@ -169,7 +175,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 			</Tag>}
 			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
-			{isGpt5 && tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
+			{tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
@@ -333,8 +339,8 @@ export class CodexStyleGPTPrompt extends PromptElement<DefaultAgentPromptProps> 
 				Before doing large chunks of work that may incur latency as experienced by the user (i.e. writing a new file), you should send a concise message to the user with an update indicating what you're about to do to ensure they know what you're spending time on. Don't start editing or writing large files before informing the user what you are doing and why.<br />
 				The messages you send before tool calls should describe what is immediately about to be done next in very concise language. If there was previous work done, this preamble message should also include a note about the work done so far to bring the user along.<br />
 			</Tag>
+			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
-			{tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 			<Tag name='final_answer_formatting'>
 				## Presenting your work and final message<br />
 				<br />
@@ -404,13 +410,15 @@ export class CodexStyleGPTPrompt extends PromptElement<DefaultAgentPromptProps> 
 	}
 }
 
-export class GPT5PromptV2 extends PromptElement<DefaultAgentPromptProps> {
+export class DefaultAgentPromptV2 extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
+		const isGrokCode = this.props.modelFamily?.startsWith('grok-code') === true;
 
 		return <InstructionMessage>
 			<Tag name='role'>
 				You are an expert AI programming assistant collaborating with the user in the VS Code editor to provide precise, actionable, and complete coding support until the task is fully resolved.<br />
+				{isGrokCode && <>Your main goal is to complete the user's request, denoted within the &lt;user_query&gt; tag.<br /></>}
 			</Tag>
 			<Tag name='persistence'>
 				- You are an agent - please keep going until the user's query is completely resolved, before ending your turn and yielding back to the user.<br />
@@ -507,20 +515,18 @@ export class GPT5PromptV2 extends PromptElement<DefaultAgentPromptProps> {
 					- You don't currently have any tools available for editing files. If the user asks you to edit a file, request enabling editing tools or print a codeblock with the suggested changes.<br />
 				</Tag>}
 				{this.props.codesearchMode && <Tag name='codesearch_mode_instructions'><CodesearchModeInstructions {...this.props} /></Tag>}
-				{tools[ToolName.CoreManageTodoList] && <>
-					<Tag name='planning_instructions'>
-						- Use the {ToolName.CoreManageTodoList} frequently to plan tasks throughout your coding session for task visibility and proper planning.<br />
-						- When to use: complex multi-step work requiring planning and tracking, when user provides multiple tasks or requests (numbered/comma-separated), after receiving new instructions that require multiple steps, BEFORE starting work on any todo (mark as in-progress), IMMEDIATELY after completing each todo (mark completed individually), when breaking down larger tasks into smaller actionable steps, to give users visibility into your progress and planning.<br />
-						- When NOT to use: single, trivial tasks that can be completed in one step, purely conversational/informational requests, when just reading files or performing simple searches.<br />
-						- CRITICAL workflow to follow:<br />
-						1. Plan tasks with specific, actionable items<br />
-						2. Mark ONE todo as in-progress before starting work<br />
-						3. Complete the work for that specific todo<br />
-						4. Mark completed IMMEDIATELY<br />
-						5. Update the user with a very short evidence note<br />
-						6. Move to next todo<br />
-					</Tag>
-				</>}
+				{tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
+				{isGrokCode && tools[ToolName.ReplaceString] && !tools[ToolName.ApplyPatch] && <Tag name='edit_file_instructions'>
+					Before you edit an existing file, make sure you either already have it in the provided context, or read it with the {ToolName.ReadFile} tool, so that you can make proper changes.<br />
+					{tools[ToolName.MultiReplaceString]
+						? <>Use the {ToolName.ReplaceString} tool for single string replacements, paying attention to context to ensure your replacement is unique. Prefer the {ToolName.MultiReplaceString} tool when you need to make multiple string replacements across one or more files in a single operation. This is significantly more efficient than calling {ToolName.ReplaceString} multiple times and should be your first choice for: fixing similar patterns across files, applying consistent formatting changes, bulk refactoring operations, or any scenario where you need to make the same type of change in multiple places.<br /></>
+						: <>Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file. For optimal efficiency, group related edits into larger batches instead of making 10 or more separate tool calls. When making several changes to the same file, strive to complete all necessary edits with as few tool calls as possible.<br /></>}
+					{tools[ToolName.EditFile] && <>Use the {ToolName.EditFile} tool to insert code into a file ONLY if {tools[ToolName.MultiReplaceString] ? `${ToolName.MultiReplaceString}/` : ''}{ToolName.ReplaceString} has failed.<br /></>}
+					When editing files, group your changes by file.<br />
+					NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
+					NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString}{tools[ToolName.MultiReplaceString] ? `, ${ToolName.MultiReplaceString},` : ''} or {ToolName.EditFile} instead.<br />
+					For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString}{tools[ToolName.MultiReplaceString] ? `, ${ToolName.MultiReplaceString},` : ''} or {ToolName.EditFile} tools. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br />
+				</Tag>}
 				{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 				{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			</Tag>
@@ -697,7 +703,7 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 			</Tag>}
 			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
-			{isGpt5 && tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
+			{tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
@@ -1019,17 +1025,50 @@ class NotebookInstructions extends PromptElement<DefaultAgentPromptProps> {
 
 class TodoListToolInstructions extends PromptElement<DefaultAgentPromptProps> {
 	render() {
-		return <Tag name='todoListToolInstructions'>
-			Use the {ToolName.CoreManageTodoList} frequently to plan tasks throughout your coding session for task visibility and proper planning.<br />
-			When to use: complex multi-step work requiring planning and tracking, when user provides multiple tasks or requests (numbered/comma-separated), after receiving new instructions that require multiple steps, BEFORE starting work on any todo (mark as in-progress), IMMEDIATELY after completing each todo (mark completed individually), when breaking down larger tasks into smaller actionable steps, to give users visibility into your progress and planning.<br />
-			When NOT to use: single, trivial tasks that can be completed in one step, purely conversational/informational requests, when just reading files or performing simple searches.<br />
-			CRITICAL workflow to follow:<br />
-			1. Plan tasks with specific, actionable items<br />
-			2. Mark ONE todo as in-progress before starting work<br />
-			3. Complete the work for that specific todo<br />
-			4. Mark completed IMMEDIATELY<br />
-			5. Update the user with a very short evidence note<br />
-			6. Move to next todo<br />
+		return <Tag name='planning_instructions'>
+			You have access to an {ToolName.CoreManageTodoList} tool which tracks todos and progress and renders them to the user. Using the tool helps demonstrate that you've understood the task and convey how you're approaching it. Plans can help to make complex, ambiguous, or multi-phase work clearer and more collaborative for the user. A good plan should break the task into meaningful, logically ordered steps that are easy to verify as you go. Note that plans are not for padding out simple work with filler steps or stating the obvious. <br />
+			Use this tool to create and manage a structured todo list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.<br />
+			It also helps the user understand the progress of the task and overall progress of their requests.<br />
+			<br />
+			NOTE that you should not use this tool if there is only one trivial task to do. In this case you are better off just doing the task directly.<br />
+			<br />
+			Use a plan when:<br />
+			- The task is non-trivial and will require multiple actions over a long time horizon.<br />
+			- There are logical phases or dependencies where sequencing matters.<br />
+			- The work has ambiguity that benefits from outlining high-level goals.<br />
+			- You want intermediate checkpoints for feedback and validation.<br />
+			- When the user asked you to do more than one thing in a single prompt<br />
+			- The user has asked you to use the plan tool (aka "TODOs")<br />
+			- You generate additional steps while working, and plan to do them before yielding to the user<br />
+			<br />
+			Skip a plan when:<br />
+			- The task is simple and direct.<br />
+			- Breaking it down would only produce literal or trivial steps.<br />
+			<br />
+			Examples of TRIVIAL tasks (skip planning):<br />
+			- "Fix this typo in the README"<br />
+			- "Add a console.log statement to debug"<br />
+			- "Update the version number in package.json"<br />
+			- "Answer a question about existing code"<br />
+			- "Read and explain what this function does"<br />
+			- "Add a simple getter method to a class"<br />
+			<br />
+			Examples of NON-TRIVIAL tasks (use planning):<br />
+			- "Add user authentication to the app" → Plan: Design auth flow, Update backend API, Implement login UI, Add session management<br />
+			- "Refactor the payment system to support multiple currencies" → Plan: Analyze current system, Design new schema, Update backend logic, Migrate data, Update frontend<br />
+			- "Debug and fix the performance issue in the dashboard" → Plan: Profile performance, Identify bottlenecks, Implement optimizations, Validate improvements<br />
+			- "Implement a new feature with multiple components" → Plan: Design component architecture, Create data models, Build UI components, Add integration tests<br />
+			- "Migrate from REST API to GraphQL" → Plan: Design GraphQL schema, Update backend resolvers, Migrate frontend queries, Update documentation<br />
+			<br />
+			<br />
+			Planning Progress Rules<br />
+			- Before beginning any new todo: you MUST update the todo list and mark exactly one todo as `in-progress`. Never start work with zero `in-progress` items.<br />
+			- Keep only one todo `in-progress` at a time. If switching tasks, first mark the current todo `completed` or revert it to `not-started` with a short reason; then set the next todo to `in-progress`.<br />
+			- Immediately after finishing a todo: you MUST mark it `completed` and add any newly discovered follow-up todos. Do not leave completion implicit.<br />
+			- Before ending your turn or declaring completion: ensure EVERY todo is explicitly marked (`not-started`, `in-progress`, or `completed`). If the work is finished, ALL todos must be marked `completed`. Never leave items unchecked or ambiguous.<br />
+			<br />
+			The content of your plan should not involve doing anything that you aren't capable of doing (i.e. don't try to test things that you can't test). Do not use plans for simple or single-step queries that you can just do or answer immediately.<br />
+			<br />
 		</Tag>;
 	}
 }

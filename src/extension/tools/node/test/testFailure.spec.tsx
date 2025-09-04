@@ -13,11 +13,11 @@ import { TestingTabsAndEditorsService } from '../../../../platform/test/node/sim
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { ITestFailure, ITestProvider } from '../../../../platform/testing/common/testProvider';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { Position } from '../../../../util/common/test/shims/position';
-import { Range } from '../../../../util/common/test/shims/range';
 import { Event } from '../../../../util/vs/base/common/event';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { Position } from '../../../../util/vs/workbench/api/common/extHostTypes/position';
+import { Range } from '../../../../util/vs/workbench/api/common/extHostTypes/range';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { TestFailureTool } from '../testFailureTool';
 import { toolResultToString } from './toolTestUtils';

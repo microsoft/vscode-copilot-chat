@@ -514,7 +514,7 @@ export class SSEProcessor {
 						this.completedFunctionCallIdxs.set(choice.index, 'tool');
 						const toolId = toolCalls.length > 0 ? toolCalls[0].id : undefined;
 						try {
-							if (await emitSolution({ toolCalls: toolCalls, thinking: (toolId && thinkingFound) ? { metadata: toolId } : undefined })) {
+							if (await emitSolution({ toolCalls: toolCalls, thinking: (toolId && thinkingFound) ? { metadata: { toolId } } : undefined })) {
 								continue;
 							}
 						} catch (error) {

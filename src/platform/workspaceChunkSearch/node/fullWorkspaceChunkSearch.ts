@@ -81,7 +81,8 @@ export class FullWorkspaceChunkSearch extends Disposable implements IWorkspaceCh
 
 		let errorReason: string | undefined;
 		return logExecTime(this._logService, 'FullWorkspaceChunkSearch.searchWorkspace', async () => {
-			if (!sizing.tokenBudget) {
+			const tokenBudget = sizing.fullWorkspaceTokenBudget ?? sizing.tokenBudget;
+			if (!tokenBudget) {
 				return undefined;
 			}
 
@@ -117,7 +118,7 @@ export class FullWorkspaceChunkSearch extends Disposable implements IWorkspaceCh
 						}
 
 						usedTokenBudget += fileTokens;
-						if (usedTokenBudget >= sizing.tokenBudget!) {
+						if (usedTokenBudget >= tokenBudget) {
 							cts.cancel();
 							return;
 						}
@@ -138,12 +139,12 @@ export class FullWorkspaceChunkSearch extends Disposable implements IWorkspaceCh
 					cts.dispose();
 				}
 
-				if (usedTokenBudget >= sizing.tokenBudget) {
+				if (usedTokenBudget >= tokenBudget) {
 					if (!options.globPatterns) {
 						this._previousHitWholeWorkspaceTokenCount = Math.max(usedTokenBudget, this._previousHitWholeWorkspaceTokenCount);
 					}
 
-					this._logService.debug(`FullWorkspaceChunkSearch: Workspace too large. Found at least ${usedTokenBudget} of ${sizing.tokenBudget} token limit`);
+					this._logService.debug(`FullWorkspaceChunkSearch: Workspace too large. Found at least ${usedTokenBudget} of ${tokenBudget} token limit`);
 					errorReason = 'too-large';
 					return undefined;
 				} else {
@@ -182,7 +183,8 @@ export class FullWorkspaceChunkSearch extends Disposable implements IWorkspaceCh
 	}
 
 	private mayBeUnderGlobalTokenBudget(sizing: StrategySearchSizing): boolean {
-		return !!sizing.tokenBudget && this._previousHitWholeWorkspaceTokenCount < sizing.tokenBudget;
+		const tokenBudget = sizing.fullWorkspaceTokenBudget ?? sizing.tokenBudget;
+		return !!tokenBudget && this._previousHitWholeWorkspaceTokenCount < tokenBudget;
 	}
 
 	private isEnabled(): boolean {

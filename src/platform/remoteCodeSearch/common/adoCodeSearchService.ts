@@ -9,6 +9,7 @@ import { raceCancellationError } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Range } from '../../../util/vs/editor/common/core/range';
 import { createDecorator } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -23,6 +24,7 @@ import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
 import { AdoRepoId } from '../../git/common/gitService';
 import { IIgnoreService } from '../../ignore/common/ignoreService';
+import { measureExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { getRequest, postRequest } from '../../networking/common/networking';
@@ -147,6 +149,28 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 	}
 
 	async getRemoteIndexState(auth: { readonly silent: boolean }, repoId: AdoRepoId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
+		return measureExecTime(() => this.getRemoteIndexStateImpl(auth, repoId, token), (execTime, status, result) => {
+			/* __GDPR__
+				"adoCodeSearch.getRemoteIndexState" : {
+					"owner": "mjbvz",
+					"comment": "Information about failed remote index state requests",
+					"status": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the call succeeded or failed" },
+					"ok": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Details on successful calls" },
+					"err": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Details on failed calls" },
+					"execTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Time in milliseconds that the call took" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('adoCodeSearch.getRemoteIndexState', {
+				status,
+				ok: result?.isOk() ? result.val.status : undefined,
+				error: result?.isError() ? result.err.type : undefined,
+			}, {
+				execTime
+			});
+		});
+	}
+
+	private async getRemoteIndexStateImpl(auth: { readonly silent: boolean }, repoId: AdoRepoId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
 		if (!this.isEnabled()) {
 			return Result.ok<RemoteCodeSearchIndexState>({
 				status: RemoteCodeSearchIndexStatus.NotIndexable,
@@ -186,6 +210,17 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 			token);
 
 		if (!result.ok) {
+			/* __GDPR__
+				"adoCodeSearch.getRemoteIndexState.requestError" : {
+					"owner": "mjbvz",
+					"comment": "Information about failed remote index state requests",
+					"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('adoCodeSearch.getRemoteIndexState.requestError', {}, {
+				statusCode: result.status,
+			});
+
 			// TODO: how can we tell the difference between no access to repo and semantic search not being enabled?
 			return Result.error<RemoteCodeSearchError>({ type: 'generic-error', error: new Error(`ADO code search index status request failed with status: ${result.status}`) });
 		}
@@ -239,6 +274,8 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 		telemetryInfo: TelemetryCorrelationId,
 		token: CancellationToken
 	): Promise<CodeSearchResult> {
+		const totalSw = new StopWatch();
+
 		if (!this.isEnabled()) {
 			return { chunks: [], outOfSync: false };
 		}
@@ -260,6 +297,7 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 			...getGithubMetadataHeaders(new CallTracker('AdoCodeSearchService::searchRepo'), this._envService)
 		};
 
+		const requestSw = new StopWatch();
 		const response = await raceCancellationError(
 			postRequest(
 				this._fetcherService,
@@ -286,6 +324,8 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 				token),
 			token);
 
+		const requestExecTime = requestSw.elapsed();
+
 		if (!response.ok) {
 			/* __GDPR__
 				"adoCodeSearch.searchRepo.error" : {
@@ -293,7 +333,9 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 					"comment": "Information about failed code ado searches",
 					"workspaceSearchSource": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Caller of the search" },
 					"workspaceSearchCorrelationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Correlation id for the search" },
-					"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" }
+					"statusCode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The response status code" },
+					"execTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The total time for the search call" },
+					"requestExecTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The request execution time" }
 				}
 			*/
 			this._telemetryService.sendMSFTTelemetryEvent('adoCodeSearch.searchRepo.error', {
@@ -301,7 +343,11 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 				workspaceSearchCorrelationId: telemetryInfo.correlationId,
 			}, {
 				statusCode: response.status,
+				execTime: totalSw.elapsed(),
+				requestExecTime: requestExecTime,
 			});
+
+			this._logService.trace(`AdoCodeSearchService::searchRepo: Failed. Status code: ${response.status}`);
 
 			throw new Error(`Ado code search semantic search failed with status: ${response.status}`);
 		}
@@ -310,6 +356,7 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 		if (!Array.isArray(body.results)) {
 			throw new Error(`Code search semantic search unexpected response json shape`);
 		}
+		const rawResultCount = body.results.length;
 
 		const returnedEmbeddingsType = body.embedding_model ? new EmbeddingType(body.embedding_model) : adoCustomEmbeddingScoreType;
 
@@ -357,8 +404,11 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 				"comment": "Information about successful ado code search searches",
 				"workspaceSearchSource": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Caller of the search" },
 				"workspaceSearchCorrelationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight",  "comment": "Correlation id for the search" },
-				"resultCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of returned chunks from the search" },
-				"resultOutOfSync": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Tracks if the commit we think code search has indexed matches the commit code search returns results from" }
+				"resultCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Total number of returned chunks from the search after filtering" },
+				"rawResultCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Original number of returned chunks from the search before filtering" },
+				"resultOutOfSync": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Tracks if the commit we think code search has indexed matches the commit code search returns results from" },
+				"execTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The total time for the search call" },
+				"requestExecTime": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The request execution time" }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('adoCodeSearch.searchRepo.success', {
@@ -366,9 +416,13 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 			workspaceSearchCorrelationId: telemetryInfo.correlationId,
 		}, {
 			resultCount: body.results.length,
+			rawResultCount,
 			resultOutOfSync: outOfSync ? 1 : 0,
+			execTime: totalSw.elapsed(),
+			requestExecTime: requestExecTime,
 		});
 
+		this._logService.trace(`AdoCodeSearchService::searchRepo: Returning ${outChunks.length} chunks. Raw result count: ${rawResultCount}`);
 		return { chunks: outChunks, outOfSync };
 	}
 

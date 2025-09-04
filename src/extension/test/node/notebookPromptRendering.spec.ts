@@ -107,6 +107,7 @@ describe('Notebook Prompt Rendering', function () {
 			override onDidChangeTextDocument = Event.None;
 			override onDidChangeWorkspaceFolders = Event.None;
 			override onDidChangeNotebookDocument = Event.None;
+			override onDidChangeTextEditorSelection = Event.None;
 			override openTextDocument(uri: vscode.Uri): Promise<vscode.TextDocument> {
 				throw new Error('Method not implemented.');
 			}
@@ -120,7 +121,7 @@ describe('Notebook Prompt Rendering', function () {
 			}
 
 			override getWorkspaceFolders(): URI[] {
-				throw new Error('Method not implemented.');
+				return [];
 			}
 			override getWorkspaceFolderName(workspaceFolderUri: URI): string {
 				return '';
@@ -137,7 +138,7 @@ describe('Notebook Prompt Rendering', function () {
 
 		});
 		testingServiceCollection.define(IExperimentationService, new class extends NullExperimentationService {
-			override getTreatmentVariable<T extends string | number | boolean>(_configId: string, _name: string): T | undefined {
+			override getTreatmentVariable<T extends string | number | boolean>(_name: string): T | undefined {
 				if (_name === 'copilotchat.notebookPackages' || _name === 'copilotchat.notebookPriorities') {
 					return treatmeants[_name] as T;
 				}

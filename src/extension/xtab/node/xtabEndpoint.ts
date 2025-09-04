@@ -11,14 +11,13 @@ import { IDomainService } from '../../../platform/endpoint/common/domainService'
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { IEnvService } from '../../../platform/env/common/envService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ILogService } from '../../../platform/log/common/logService';
 
 
 export class XtabEndpoint extends ChatEndpoint {
@@ -62,7 +61,6 @@ export class XtabEndpoint extends ChatEndpoint {
 		@IChatMLFetcher _chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider _tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService _instantiationService: IInstantiationService,
-		@IThinkingDataService _thinkingDataService: IThinkingDataService,
 		@IExperimentationService _experimentationService: IExperimentationService,
 		@ILogService _logService: ILogService
 	) {

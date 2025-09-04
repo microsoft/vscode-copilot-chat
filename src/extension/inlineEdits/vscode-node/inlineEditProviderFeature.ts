@@ -8,10 +8,12 @@ import { IAuthenticationService } from '../../../platform/authentication/common/
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ObservableGit } from '../../../platform/inlineEdits/common/observableGit';
 import { NesHistoryContextProvider } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesHistoryContextProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { isNotebookCell } from '../../../util/common/notebooks';
 import { createTracer } from '../../../util/common/tracing';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun, derived, derivedDisposable, observableFromEvent } from '../../../util/vs/base/common/observable';
@@ -20,6 +22,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IExtensionContribution } from '../../common/contributions';
 import { CompletionsProvider } from '../../completions/vscode-node/completionsProvider';
+import { unificationStateObservable } from '../../completions/vscode-node/completionsUnificationContribution';
 import { TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { InlineEditDebugComponent, reportFeedbackCommandId } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
@@ -30,10 +33,9 @@ import { InlineEditLogger } from './parts/inlineEditLogger';
 import { LastEditTimeTracker } from './parts/lastEditTimeTracker';
 import { VSCodeWorkspace } from './parts/vscodeWorkspace';
 import { makeSettable } from './utils/observablesUtils';
-import { isNotebookCell } from '../../../util/common/notebooks';
-import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 
 const TRIGGER_INLINE_EDIT_ON_ACTIVE_EDITOR_CHANGE = false; // otherwise, eg, NES would trigger just when going through search results
+const useEnhancedNotebookNESContextKey = 'github.copilot.chat.enableEnhancedNotebookNES';
 
 export class InlineEditProviderFeature extends Disposable implements IExtensionContribution {
 
@@ -43,6 +45,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 	private readonly _enableDiagnosticsProvider = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.InlineEditsEnableDiagnosticsProvider, this._expService);
 	private readonly _enableCompletionsProvider = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Internal.InlineEditsEnableCompletionsProvider, this._expService);
 	private readonly _yieldToCopilot = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Internal.InlineEditsYieldToCopilot, this._expService);
+	private readonly _excludedProviders = this._configurationService.getExperimentBasedConfigObservable(ConfigKey.Internal.InlineEditsExcludedProviders, this._expService).map(v => v ? v.split(',').map(v => v.trim()).filter(v => v !== '') : []);
 	private readonly _copilotToken = observableFromEvent(this, this._authenticationService.onDidAuthenticationChange, () => this._authenticationService.copilotToken);
 
 	public readonly inlineEditsEnabled = derived(this, (reader) => {
@@ -74,13 +77,18 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 		@IEnvService private readonly _envService: IEnvService,
 		@ILogService private readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IExperimentationService _experimentationService: IExperimentationService,
 	) {
 		super();
 
 		const tracer = createTracer(['NES', 'Feature'], (s) => this._logService.trace(s));
 		const constructorTracer = tracer.sub('constructor');
-
 		const hasUpdatedNesSettingKey = 'copilot.chat.nextEdits.hasEnabledNesInSettings';
+		const enableEnhancedNotebookNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, _experimentationService) || this._configurationService.getExperimentBasedConfig(ConfigKey.UseAlternativeNESNotebookFormat, _experimentationService);
+		const unificationState = unificationStateObservable(this);
+
+		commands.executeCommand('setContext', useEnhancedNotebookNESContextKey, enableEnhancedNotebookNES);
+
 		this._register(autorun((reader) => {
 			const copilotToken = this._copilotToken.read(reader);
 
@@ -89,7 +97,7 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 			}
 
 			if (
-				this._expService.getTreatmentVariable<boolean>('vscode', 'copilotchat.enableNesInSettings') &&
+				this._expService.getTreatmentVariable<boolean>('copilotchat.enableNesInSettings') &&
 				this._vscodeExtensionContext.globalState.get<boolean | undefined>(hasUpdatedNesSettingKey) !== true &&
 				!copilotToken.isFreeUser
 			) {
@@ -131,10 +139,24 @@ export class InlineEditProviderFeature extends Disposable implements IExtensionC
 
 			const provider = this._instantiationService.createInstance(InlineCompletionProviderImpl, model, logger, logContextRecorder, inlineEditDebugComponent, telemetrySender);
 
+			const unificationStateValue = unificationState.read(reader);
+			let excludes = this._excludedProviders.read(reader);
+			if (unificationStateValue?.modelUnification) {
+				excludes = excludes.slice(0);
+				if (!excludes.includes('completions')) {
+					excludes.push('completions');
+				}
+				if (!excludes.includes('github.copilot')) {
+					excludes.push('github.copilot');
+				}
+			}
+
 			reader.store.add(languages.registerInlineCompletionItemProvider('*', provider, {
 				displayName: provider.displayName,
 				yieldTo: this._yieldToCopilot.read(reader) ? ['github.copilot'] : undefined,
 				debounceDelayMs: 0, // set 0 debounce to ensure consistent delays/timings
+				groupId: 'nes',
+				excludes,
 			}));
 
 			if (TRIGGER_INLINE_EDIT_ON_ACTIVE_EDITOR_CHANGE) {
