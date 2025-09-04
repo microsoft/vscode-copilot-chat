@@ -100,6 +100,10 @@ export class FetcherService implements IFetcherService {
 					const json = JSON.parse(text); // Verify JSON
 					this._logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} succeeded`);
 					if (fetcher !== this._availableFetchers[0]) {
+						const retry = await this.retryFetchJSON(this._availableFetchers[0], url, options);
+						if ('res' in retry && retry.res.ok) {
+							return retry.res;
+						}
 						this._logService.info(`FetcherService: using ${fetcher.getUserAgentLibrary()} from now on`);
 						this._fetcher = fetcher;
 					}
@@ -124,6 +128,31 @@ export class FetcherService implements IFetcherService {
 			throw firstError;
 		}
 		return this._fetcher.fetch(url, options);
+	}
+	private async retryFetchJSON(fetcher: IFetcher, url: string, options: FetchOptions): Promise<{ res: Response } | { err: any }> {
+		try {
+			const res = await fetcher.fetch(url, options);
+			if (!res.ok) {
+				this._logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} failed with status: ${res.status} ${res.statusText}`);
+				return { res };
+			}
+			const text = await res.text();
+			const json = JSON.parse(text); // Verify JSON
+			this._logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} succeeded`);
+			return {
+				res: new Response(
+					res.status,
+					res.statusText,
+					res.headers,
+					async () => text,
+					async () => json,
+					async () => Readable.from([text])
+				)
+			};
+		} catch (err) {
+			this._logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} failed with error: ${err.message}`);
+			return { err };
+		}
 	}
 	disconnectAll(): Promise<unknown> {
 		return this._fetcher.disconnectAll();
