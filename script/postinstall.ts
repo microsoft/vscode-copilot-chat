@@ -54,6 +54,9 @@ const treeSitterGrammars: ITreeSitterGrammar[] = [
 	},
 	{
 		name: 'tree-sitter-rust',
+	},
+	{
+		name: 'tree-sitter-php'
 	}
 ];
 
