@@ -298,7 +298,7 @@ class DbCache implements IWorkspaceChunkAndEmbeddingCache {
 	) { }
 
 	dispose(): void {
-		// Noop
+		this.db.close();
 	}
 
 	/**
