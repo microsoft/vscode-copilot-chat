@@ -289,7 +289,7 @@
 	"github.copilot.config.customInstructionsInSystemMessage": "When enabled, custom instructions and mode instructions will be appended to the system message instead of a user message.",
 	"copilot.toolSet.editing.description": "Edit files in your workspace",
 	"copilot.toolSet.runCommand.description": "Run commands in the terminal",
-	"copilot.toolSet.notebooks.description": "Work with notebooks",
+	"copilot.toolSet.runNotebook.description": "Run notebook cells",
 	"copilot.toolSet.search.description": "Search and read files in your workspace",
 	"copilot.toolSet.new.description": "Scaffold a new workspace with VS Code-specific configurations to compile, debug and run new projects.",
 	"copilot.toolSet.runTasks.description": "Run tasks in your workspace"

@@ -1134,16 +1134,16 @@
 				"tools": [
 					"createFile",
 					"createDirectory",
+					"editNotebook",
+					"newJupyterNotebook",
 					"editFiles"
 				]
 			},
 			{
-				"name": "notebooks",
-				"description": "%copilot.toolSet.notebooks.description%",
+				"name": "runNotebooks",
+				"description": "%copilot.toolSet.runNotebook.description%",
 				"icon": "$(notebook)",
 				"tools": [
-					"newJupyterNotebook",
-					"editNotebook",
 					"runCell",
 					"getNotebookSummary",
 					"readNotebookCellOutput"
