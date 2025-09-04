@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { getExperimentationService, IExperimentationFilterProvider, TargetPopulation } from 'vscode-tas-client';
+import { isObject } from '../../../util/vs/base/common/types';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
@@ -13,7 +14,6 @@ import { IVSCodeExtensionContext } from '../../extContext/common/extensionContex
 import { ILogService } from '../../log/common/logService';
 import { ITelemetryService } from '../common/telemetry';
 import { BaseExperimentationService, UserInfoStore } from '../node/baseExperimentationService';
-import { isObject } from '../../../util/vs/base/common/types';
 
 function getTargetPopulation(isPreRelease: boolean): TargetPopulation {
 	if (isPreRelease) {
@@ -147,12 +147,26 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 		const id = context.extension.id;
 		const version = context.extension.packageJSON['version'];
 		const targetPopulation = getTargetPopulation(envService.isPreRelease());
+		let self: MicrosoftExperimentationService | undefined = undefined;
 		const delegateFn = (globalState: vscode.Memento, userInfoStore: UserInfoStore) => {
 			const wrappedMemento = new ExpMementoWrapper(globalState, envService);
-			return getExperimentationService(id, version, targetPopulation, telemetryService, wrappedMemento, new GithubAccountFilterProvider(userInfoStore, logService), new RelatedExtensionsFilterProvider(logService), new CopilotExtensionsFilterProvider(logService), new CopilotCompletionsFilterProvider(() => this.getCompletionsFilters(), logService));
+			return getExperimentationService(
+				id,
+				version,
+				targetPopulation,
+				telemetryService,
+				wrappedMemento,
+				new GithubAccountFilterProvider(userInfoStore, logService),
+				new RelatedExtensionsFilterProvider(logService),
+				new CopilotExtensionsFilterProvider(logService),
+				// The callback is called in super ctor. At that time, self/this is not initialized yet (but also, no filter could have been possibly set).
+				new CopilotCompletionsFilterProvider(() => self?.getCompletionsFilters() ?? new Map(), logService)
+			);
 		};
 
 		super(delegateFn, context, copilotTokenStore, configurationService, logService);
+
+		self = this; // This is now fully initialized.
 	}
 }
 
