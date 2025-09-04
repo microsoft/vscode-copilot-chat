@@ -156,6 +156,7 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 				[uri],
 				() => 'Contents:\n\n```\n' + options.input.content || '<empty>' + '\n```',
 			),
+			presentation: undefined,
 			invocationMessage: new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)}`),
 			pastTenseMessage: new MarkdownString(l10n.t`Created ${formatUriForFileWidget(uri)}`)
 		};
