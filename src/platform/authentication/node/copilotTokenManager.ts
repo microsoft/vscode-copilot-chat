@@ -197,12 +197,14 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 	}
 
 	private async fetchCopilotUserInfo(githubToken: string): Promise<CopilotUserInfo> {
-		const response = await this._capiClientService.makeRequest<Response>({
+		const options: FetchOptions = {
 			headers: {
 				Authorization: `token ${githubToken}`,
 				'X-GitHub-Api-Version': '2025-04-01',
-			}
-		}, { type: RequestType.CopilotUserInfo });
+			},
+			verifyJSONAndRetry: true,
+		};
+		const response = await this._capiClientService.makeRequest<Response>(options, { type: RequestType.CopilotUserInfo });
 		const data = await response.json();
 		return data;
 	}
