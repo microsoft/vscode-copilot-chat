@@ -121,7 +121,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	protected abstract buildPrompt(buildPromptContext: IBuildPromptContext, progress: Progress<ChatResponseReferencePart | ChatResponseProgressPart>, token: CancellationToken): Promise<IBuildPromptResult>;
 
 	/** Gets the tools that should be callable by the model. */
-	protected abstract getAvailableTools(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<LanguageModelToolInformation[]>;
+	protected abstract getAvailableTools(query: string, outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<LanguageModelToolInformation[]>;
 
 	/** Creates the prompt context for the request. */
 	protected createPromptContext(availableTools: LanguageModelToolInformation[], outputStream: ChatResponseStream | undefined): Mutable<IBuildPromptContext> {
@@ -339,14 +339,14 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 	/** Runs a single iteration of the tool calling loop. */
 	public async runOne(outputStream: ChatResponseStream | undefined, iterationNumber: number, token: CancellationToken | PauseController): Promise<IToolCallSingleResult> {
-		let availableTools = await this.getAvailableTools(outputStream, token);
+		let availableTools = await this.getAvailableTools(this.options.request.prompt, outputStream, token);
 		const context = this.createPromptContext(availableTools, outputStream);
 		const isContinuation = context.isContinuation || false;
 		const buildPromptResult: IBuildPromptResult = await this.buildPrompt2(context, outputStream, token);
 		await this.throwIfCancelled(token);
 		this.turn.addReferences(buildPromptResult.references);
 		// Possible the tool call resulted in new tools getting added.
-		availableTools = await this.getAvailableTools(outputStream, token);
+		availableTools = await this.getAvailableTools(this.options.request.prompt, outputStream, token);
 
 		const isToolInputFailure = buildPromptResult.metadata.get(ToolFailureEncountered);
 		const conversationSummary = buildPromptResult.metadata.get(SummarizedConversationHistoryMetadata);
