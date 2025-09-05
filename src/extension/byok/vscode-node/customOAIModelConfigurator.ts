@@ -87,17 +87,19 @@ export class CustomOAIModelConfigurator {
 		if (selected?.action === 'apiKey') {
 			return this._provider.updateAPIKey();
 		} else if (selected?.action === 'configureModels') {
-			return this.configure();
+			return this.configure(false);
 		}
 	}
 
 	/**
 	 * Main entry point for configuring Custom OAI models
 	 */
-	async configure(): Promise<void> {
-		const models = this._configurationService.getConfig(this._configKey);
+	async configure(isProvideLMInfoCall: boolean): Promise<void> {
 
 		while (true) {
+			const models = this._configurationService.getConfig(this._configKey);
+
+
 			const items: ModelQuickPickItem[] = [];
 
 			// Add existing models
@@ -109,6 +111,15 @@ export class CustomOAIModelConfigurator {
 					modelId,
 					action: 'edit'
 				});
+			}
+
+			if (items.length === 0 && isProvideLMInfoCall) {
+				const newModel = await this._configureModel();
+				if (newModel) {
+					const updatedModels = { ...models, [newModel.id]: newModel.config };
+					await this._configurationService.setConfig(this._configKey, updatedModels);
+				}
+				return;
 			}
 
 			// Add separator and actions
@@ -162,7 +173,6 @@ export class CustomOAIModelConfigurator {
 				if (newModel) {
 					const updatedModels = { ...models, [newModel.id]: newModel.config };
 					await this._configurationService.setConfig(this._configKey, updatedModels);
-					Object.assign(models, updatedModels);
 				}
 			} else if (selected.action === 'edit' && selected.modelId) {
 				const result = await this._editModel(selected.modelId, models[selected.modelId]);
@@ -170,12 +180,10 @@ export class CustomOAIModelConfigurator {
 					if (result.action === 'update') {
 						const updatedModels = { ...models, [result.id]: result.config };
 						await this._configurationService.setConfig(this._configKey, updatedModels);
-						Object.assign(models, updatedModels);
 					} else if (result.action === 'delete') {
 						const updatedModels = { ...models };
 						delete updatedModels[selected.modelId];
 						await this._configurationService.setConfig(this._configKey, updatedModels);
-						Object.assign(models, updatedModels);
 					}
 				}
 			}

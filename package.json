@@ -1725,11 +1725,6 @@
 				"vendor": "openrouter",
 				"displayName": "OpenRouter",
 				"managementCommand": "github.copilot.chat.manageBYOK"
-			},
-			{
-				"vendor": "customoai",
-				"displayName": "OpenAI Compatible",
-				"managementCommand": "github.copilot.chat.manageBYOK"
 			}
 		],
 		"interactiveSession": [
