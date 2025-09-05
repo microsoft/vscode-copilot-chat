@@ -17,6 +17,7 @@ import { NesXtabHistoryTracker } from '../../../platform/inlineEdits/common/work
 import { ILogService } from '../../../platform/log/common/logService';
 import { ISnippyService } from '../../../platform/snippy/common/snippyService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import * as errors from '../../../util/common/errors';
 import { Result } from '../../../util/common/result';
 import { createTracer, ITracer } from '../../../util/common/tracing';
 import { assert } from '../../../util/vs/base/common/assert';
@@ -119,7 +120,13 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		}
 	}
 
-	public async getNextEdit(docId: DocumentId, context: vscode.InlineCompletionContext, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, telemetryBuilder: LlmNESTelemetryBuilder): Promise<NextEditResult> {
+	public async getNextEdit(
+		docId: DocumentId,
+		context: vscode.InlineCompletionContext,
+		logContext: InlineEditRequestLogContext,
+		cancellationToken: CancellationToken,
+		telemetryBuilder: LlmNESTelemetryBuilder
+	): Promise<NextEditResult> {
 		this._lastTriggerTime = Date.now();
 
 		const shouldExpandEditWindow = this._shouldExpandEditWindow;
@@ -132,6 +139,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			result = await this._getNextEdit(docId, context, this._lastTriggerTime, shouldExpandEditWindow, logContext, cancellationToken, telemetryBuilder);
 		} catch (error) {
 			logContext.setError(error);
+			telemetryBuilder.setNextEditProviderError(errors.toString(error));
 			throw error;
 		} finally {
 			telemetryBuilder.markEndTime();
@@ -142,13 +150,22 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		return result;
 	}
 
-	public async _getNextEdit(docId: DocumentId, context: vscode.InlineCompletionContext, triggerTime: number, shouldExpandEditWindow: boolean, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken, telemetryBuilder: LlmNESTelemetryBuilder): Promise<NextEditResult> {
+	public async _getNextEdit(
+		docId: DocumentId,
+		context: vscode.InlineCompletionContext,
+		triggerTime: number,
+		shouldExpandEditWindow: boolean,
+		logContext: InlineEditRequestLogContext,
+		cancellationToken: CancellationToken,
+		telemetryBuilder: LlmNESTelemetryBuilder
+	): Promise<NextEditResult> {
+
 		const tracer = this._tracer.sub('_getNextEdit');
 
 		const doc = this._workspace.getDocument(docId);
 		if (!doc) {
-			tracer.throws(`Document "${docId}" not found`);
-			throw new BugIndicatingError(`Document "${docId}" not found`); // FIXME@ulugbekna: currently this's not reported in telemetry
+			tracer.throws(`Document "${docId.baseName}" not found`);
+			throw new BugIndicatingError(`Document "${docId.baseName}" not found`);
 		}
 
 		const documentAtInvocationTime = doc.value.get();

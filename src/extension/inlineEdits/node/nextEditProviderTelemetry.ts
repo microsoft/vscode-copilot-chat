@@ -76,6 +76,7 @@ export interface ILlmNESTelemetry extends Partial<IStatelessNextEditTelemetry> {
 	readonly hasNextEdit: boolean;
 	readonly wasPreviouslyRejected: boolean;
 	readonly status: NextEditTelemetryStatus;
+	readonly nextEditProviderError: string | undefined;
 	readonly nesConfigs: INesConfigs | undefined;
 	readonly repositoryUrls: string[] | undefined;
 	readonly documentsCount: number | undefined;
@@ -106,6 +107,7 @@ export interface INextEditProviderTelemetry extends ILlmNESTelemetry, IDiagnosti
 	readonly disposalReason: string | undefined;
 	readonly supersededByOpportunityId: string | undefined;
 	readonly status: NextEditTelemetryStatus;
+	readonly nextEditProviderError: string | undefined;
 	readonly activeDocumentRepository: string | undefined;
 	readonly repositoryUrls: string[] | undefined;
 	readonly alternativeAction: IAlternativeAction | undefined;
@@ -258,6 +260,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 			isNotebook: isNotebook,
 			notebookType,
 			status: this._status,
+			nextEditProviderError: this._nextEditProviderError,
 			alternativeAction,
 
 			...this._statelessNextEditTelemetry,
@@ -359,6 +362,12 @@ export class LlmNESTelemetryBuilder extends Disposable {
 	private _status: NextEditTelemetryStatus = 'new';
 	public setStatus(status: NextEditTelemetryStatus): this {
 		this._status = status;
+		return this;
+	}
+
+	private _nextEditProviderError: string | undefined;
+	public setNextEditProviderError(nextEditProviderError: string | undefined): this {
+		this._nextEditProviderError = nextEditProviderError;
 		return this;
 	}
 }
@@ -790,6 +799,7 @@ export class TelemetrySender implements IDisposable {
 				"fetchResult": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Fetch result" },
 				"fetchError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Fetch error message" },
 				"pickedNES": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request had picked NES" },
+				"nextEditProviderError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error message from next edit provider" },
 				"diagnosticType": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Type of diagnostics" },
 				"diagnosticDroppedReasons": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Reasons for dropping diagnostics NES suggestions" },
 				"requestN": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Request number", "isMeasurement": true },
@@ -862,6 +872,7 @@ export class TelemetrySender implements IDisposable {
 				noNextEditReasonKind,
 				noNextEditReasonMessage,
 				fetchResult: fetchResult_,
+				nextEditProviderError: telemetry.nextEditProviderError,
 				diagnosticType,
 				diagnosticDroppedReasons,
 				pickedNES,
