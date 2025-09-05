@@ -10,6 +10,7 @@ import { toTextParts } from '../../../platform/chat/common/globalStringUtils';
 import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { createProxyXtabEndpoint } from '../../../platform/endpoint/node/proxyXtabEndpoint';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
 import { LanguageContextEntry, LanguageContextResponse } from '../../../platform/inlineEdits/common/dataTypes/languageContext';
@@ -73,6 +74,11 @@ const enum RetryState {
 	RetryingWithExpandedWindow
 }
 
+const STORAGE_KEYS = {
+	NES_ACCEPT_COUNTER: 'xtab.nesAcceptCounter',
+	NES_REJECT_COUNTER: 'xtab.nesRejectCounter'
+} as const;
+
 export class XtabProvider implements IStatelessNextEditProvider {
 
 	public static readonly ID = XTabProviderId;
@@ -87,6 +93,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 	private forceUseDefaultModel: boolean = false;
 
+	private nesAcceptCounter: number = 0;
+	private nesRejectCounter: number = 0;
+
 	constructor(
 		@ISimulationTestContext private readonly simulationCtx: ISimulationTestContext,
 		@IInstantiationService private readonly instaService: IInstantiationService,
@@ -98,17 +107,46 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		@ILanguageContextProviderService private readonly langCtxService: ILanguageContextProviderService,
 		@ILanguageDiagnosticsService private readonly langDiagService: ILanguageDiagnosticsService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
+		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 	) {
 		this.delayer = new Delayer(this.configService, this.expService);
 		this.tracer = createTracer(['NES', 'XtabProvider'], (s) => this.logService.trace(s));
+
+		this.nesAcceptCounter = this.extensionContext.globalState.get<number>(STORAGE_KEYS.NES_ACCEPT_COUNTER, 0);
+		this.nesRejectCounter = this.extensionContext.globalState.get<number>(STORAGE_KEYS.NES_REJECT_COUNTER, 0);
 	}
 
 	public handleAcceptance(): void {
 		this.delayer.handleAcceptance();
+		this.nesAcceptCounter++;
+		this.extensionContext.globalState.update(STORAGE_KEYS.NES_ACCEPT_COUNTER, this.nesAcceptCounter);
+
+		this.tracer.trace(`[XtabProvider] NES accept counter updated: ${this.nesAcceptCounter}`);
 	}
 
 	public handleRejection(): void {
 		this.delayer.handleRejection();
+		this.nesRejectCounter++;
+		this.extensionContext.globalState.update(STORAGE_KEYS.NES_REJECT_COUNTER, this.nesRejectCounter);
+
+		this.tracer.trace(`[XtabProvider] NES reject counter updated: ${this.nesRejectCounter}`);
+	}
+
+	public getNesAcceptCounter(): number {
+		return this.nesAcceptCounter;
+	}
+
+	public getNesRejectCounter(): number {
+		return this.nesRejectCounter;
+	}
+
+	public resetNesCounters(): void {
+		this.nesAcceptCounter = 0;
+		this.nesRejectCounter = 0;
+		this.extensionContext.globalState.update(STORAGE_KEYS.NES_ACCEPT_COUNTER, 0);
+		this.extensionContext.globalState.update(STORAGE_KEYS.NES_REJECT_COUNTER, 0);
+
+		this.tracer.trace('[XtabProvider] NES counters reset');
 	}
 
 	public provideNextEdit(request: StatelessNextEditRequest, pushEdit: PushEdit, logContext: InlineEditRequestLogContext, cancellationToken: CancellationToken): Promise<StatelessNextEditResult> {
@@ -949,7 +987,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 		const debounceTime = delaySession.getDebounceTime();
 
-		this.tracer.trace(`Debouncing for ${debounceTime} ms`);
+		this.tracer.trace(`Debouncin for ${debounceTime} ms`);
 		telemetry.setDebounceTime(debounceTime);
 
 		await timeout(debounceTime);
