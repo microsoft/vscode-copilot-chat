@@ -764,6 +764,7 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 }
 
 function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {
+	const isGpt5Mini = modelFamily === 'gpt-5-mini';
 	return modelFamily?.startsWith('gpt-5') === true ?
 		<>
 			Skip filler acknowledgements like "Sounds good" or "Okay, I will…". Open with a purposeful one-liner about what you're doing next.<br />
@@ -774,10 +775,10 @@ function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: b
 			Your goal is to act like a pair programmer: be friendly and helpful. If you can do more, do more. Be proactive with your solutions, think about what the user needs and what they want, and implement it proactively.<br />
 			<Tag name='importantReminders'>
 				Before starting a task, review and follow the guidance in &lt;responseModeHints&gt;, &lt;engineeringMindsetHints&gt;, and &lt;requirementsUnderstanding&gt;.<br />
-				Start your response with a brief acknowledgement, followed by a concise high-level plan outlining your approach.<br />
+				{!isGpt5Mini && <>Start your response with a brief acknowledgement, followed by a concise high-level plan outlining your approach.<br /></>}
 				DO NOT state your identity or model name unless the user explicitly asks you to. <br />
 				{hasTodoTool && <>You MUST use the todo list tool to plan and track your progress. NEVER skip this step, and START with this step whenever the task is multi-step. This is essential for maintaining visibility and proper execution of large tasks. Follow the todoListToolInstructions strictly.<br /></>}
-				{!hasTodoTool && <>Break down the request into clear, actionable steps and present them as a plan at the beginning of your response before proceeding with implementation. This helps maintain visibility and ensures all requirements are addressed systematically.<br /></>}
+				{!hasTodoTool && <>Break down the request into clear, actionable steps and present them at the beginning of your response before proceeding with implementation. This helps maintain visibility and ensures all requirements are addressed systematically.<br /></>}
 				When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
 			</Tag>
 		</>

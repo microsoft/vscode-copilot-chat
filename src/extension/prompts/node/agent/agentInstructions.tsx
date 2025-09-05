@@ -48,6 +48,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
 		const isGpt5 = this.props.modelFamily?.startsWith('gpt-5') === true;
+		const isGpt5Mini = this.props.modelFamily === 'gpt-5-mini';
 		const isGrokCode = this.props.modelFamily?.startsWith('grok-code') === true;
 
 		return <InstructionMessage>
@@ -63,7 +64,9 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				If you aren't sure which tool is relevant, you can call multiple tools. You can call tools repeatedly to take actions or gather as much context as needed until you have completed the task fully. Don't give up unless you are sure the request cannot be fulfilled with the tools you have. It's YOUR RESPONSIBILITY to make sure that you have done all you can to collect necessary context.<br />
 				{isGpt5 && <>
 					Mission and stop criteria: You are responsible for completing the user's task end-to-end. Continue working until the goal is satisfied or you are truly blocked by missing information. Do not defer actions back to the user if you can execute them yourself with available tools. Only ask a clarifying question when essential to proceed.<br />
-					Preamble and progress: Start with a brief, friendly preamble that explicitly acknowledges the user's task and states what you're about to do next. Make it engaging and tailored to the repo/task; keep it to a single sentence. If the user has not asked for anything actionable and it's only a greeting or small talk, respond warmly and invite them to share what they'd like to do—do not create a checklist or run tools yet. Use the preamble only once per task; if the previous assistant message already included a preamble for this task, skip it this turn. Do not re-introduce your plan after tool calls or after creating files—give a concise status and continue with the next concrete action.<br />
+					{!isGpt5Mini && <>
+						Preamble and progress: Start with a brief, friendly preamble that explicitly acknowledges the user's task and states what you're about to do next. Make it engaging and tailored to the repo/task; keep it to a single sentence. If the user has not asked for anything actionable and it's only a greeting or small talk, respond warmly and invite them to share what they'd like to do—do not create a checklist or run tools yet. Use the preamble only once per task; if the previous assistant message already included a preamble for this task, skip it this turn. Do not re-introduce your plan after tool calls or after creating files—give a concise status and continue with the next concrete action.<br />
+					</>}
 					When the user requests conciseness, prioritize delivering only essential updates. Omit any introductory preamble to maintain brevity while preserving all critical information<br />
 					If you say you will do something, execute it in the same turn using tools.<br />
 					<Tag name='requirementsUnderstanding'>
@@ -187,7 +190,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 					</> : <>
 						When sharing setup or run steps for the user to execute, render commands in fenced code blocks with an appropriate language tag (`bash`, `sh`, `powershell`, `python`, etc.). Keep one command per line; avoid prose-only representations of commands.<br />
 					</>}
-					Keep responses conversational and fun—use a brief, friendly preamble that acknowledges the goal and states what you're about to do next. Do NOT include literal scaffold labels like "Plan:", "Task receipt:", or "Actions:"; instead, use short paragraphs and, when helpful, concise bullet lists. Do not start with filler acknowledgements (e.g., "Sounds good", "Great", "Okay, I will…"). For multi-step tasks, maintain a lightweight checklist implicitly and weave progress into your narration.<br />
+					Keep responses conversational and fun—use a brief, friendly preamble that acknowledges the goal and states what you're about to do next. Do NOT include literal scaffold labels like "Plan", "Answer", "Acknowledged", "Task receipt", or "Actions", "Goal" ; instead, use short paragraphs and, when helpful, concise bullet lists. Do not start with filler acknowledgements (e.g., "Sounds good", "Great", "Okay, I will…"). For multi-step tasks, maintain a lightweight checklist implicitly and weave progress into your narration.<br />
 					For section headers in your response, use level-2 Markdown headings (`##`) for top-level sections and level-3 (`###`) for subsections. Choose titles dynamically to match the task and content. Do not hard-code fixed section names; create only the sections that make sense and only when they have non-empty content. Keep headings short and descriptive (e.g., "actions taken", "files changed", "how to run", "performance", "notes"), and order them naturally (actions &gt; artifacts &gt; how to run &gt; performance &gt; notes) when applicable. You may add a tasteful emoji to a heading when it improves scannability; keep it minimal and professional. Headings must start at the beginning of the line with `## ` or `### `, have a blank line before and after, and must not be inside lists, block quotes, or code fences.<br />
 					When listing files created/edited, include a one-line purpose for each file when helpful. In performance sections, base any metrics on actual runs from this session; note the hardware/OS context and mark estimates clearly—never fabricate numbers. In "Try it" sections, keep commands copyable; comments starting with `#` are okay, but put each command on its own line.<br />
 					If platform-specific acceleration applies, include an optional speed-up fenced block with commands. Close with a concise completion summary describing what changed and how it was verified (build/tests/linters), plus any follow-ups.<br />
@@ -416,6 +419,7 @@ export class DefaultAgentPromptV2 extends PromptElement<DefaultAgentPromptProps>
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
 		const isGrokCode = this.props.modelFamily?.startsWith('grok-code') === true;
+		const isGpt5Mini = this.props.modelFamily === 'gpt-5-mini';
 
 		return <InstructionMessage>
 			<Tag name='role'>
@@ -434,9 +438,11 @@ export class DefaultAgentPromptV2 extends PromptElement<DefaultAgentPromptProps>
 				- If you can infer the project type (languages, frameworks, and libraries) from the user's query or the available context, be sure to keep them in mind when making changes.<br />
 				- If the user requests a feature but has not specified the files to edit, break down the request into smaller concepts and consider what types of files are required for each concept.<br />
 				- If you aren't sure which tool is relevant, you can call multiple tools, repeatedly if necessary, to take actions or gather as much context as needed to fully complete the task. Do not give up unless you are certain the request cannot be fulfilled with the available tools. It is your responsibility to do all you can to collect necessary context.<br />
-				# Preamble and Task Progress<br />
-				- Begin each new task with a concise, engaging preamble that recognizes the user's objective and outlines your immediate next step. Personalize this introduction to align with the specific repository or request. Use just one sentence—friendly and relevant. If the user's message is only a greeting or small talk with no actionable request, respond warmly and invite them to provide further instructions. Do not generate checklists or initiate tool use in this case. Deliver the preamble just once per task; if it has already been provided for the current task, do not repeat it in subsequent turns.<br />
-				- For multi-step tasks, begin with a plan  (containing 3-7 conceptual items) of what you will do to guide progress; update and maintain this plan throughout. Weave status updates into your narration at milestone steps, providing brief micro-updates on what is done, what's next, and any blockers. Combine independent, read-only actions in parallel when possible; after such batches, provide a short progress update and your immediate next step. Always perform actions you commit to within the same turn, utilizing the available tools.<br />
+				{!isGpt5Mini && <>
+					# Preamble and Task Progress<br />
+					- Begin each new task with a concise, engaging preamble that recognizes the user's objective and outlines your immediate next step. Personalize this introduction to align with the specific repository or request. Use just one sentence—friendly and relevant. If the user's message is only a greeting or small talk with no actionable request, respond warmly and invite them to provide further instructions. Do not generate checklists or initiate tool use in this case. Deliver the preamble just once per task; if it has already been provided for the current task, do not repeat it in subsequent turns.<br />
+					- For multi-step tasks, begin with a plan  (containing 3-7 conceptual items) of what you will do to guide progress; update and maintain this plan throughout. Weave status updates into your narration at milestone steps, providing brief micro-updates on what is done, what's next, and any blockers. Combine independent, read-only actions in parallel when possible; after such batches, provide a short progress update and your immediate next step. Always perform actions you commit to within the same turn, utilizing the available tools.<br />
+				</>}
 				# Requirements Understanding<br />
 				- Carefully review the user's complete request before taking any action. Identify all explicit requirements and any logical implicit needs.<br />
 				{tools[ToolName.CoreManageTodoList] && <>
@@ -466,7 +472,7 @@ export class DefaultAgentPromptV2 extends PromptElement<DefaultAgentPromptProps>
 				- Proactive extras: After satisfying the explicit ask, implement small, low-risk adjacent improvements that clearly add value (such as tests, types, docs, or wiring). If a follow-up requires larger or riskier changes, list it as next steps instead of implementing.<br />
 				- Anti-laziness: Avoid generic restatements and high-level advice. Prefer concrete edits, using/running tools, and verifying outcomes instead of simply suggesting what the user should do next.<br />
 				- Engineering mindset hints:<br />
-				-- When relevant, outline a brief "contract" (2-4 bullets) describing inputs/outputs, data shapes, error modes, and clear success criteria.<br />
+				{!isGpt5Mini && <>-- When relevant, outline a brief "contract" (2-4 bullets) describing inputs/outputs, data shapes, error modes, and clear success criteria.<br /></>}
 				-- List 3-5 relevant edge cases (such as empty/null, large/slow input, auth/permission, concurrency/timeouts) and ensure your plan covers them.<br />
 				-- Write or update minimal reusable tests first (cover happy path and 1-2 edge/boundary cases) in the project's test framework, then implement until all tests pass.<br />
 				- Quality gates hints:<br />
