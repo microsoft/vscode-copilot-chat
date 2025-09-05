@@ -14,6 +14,7 @@ import { createTextDocumentData, IExtHostDocumentData, setDocText } from '../../
 import { ExtHostTextEditor } from '../../../util/common/test/shims/textEditor';
 import { isUri } from '../../../util/common/types';
 import { Emitter } from '../../../util/vs/base/common/event';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import * as path from '../../../util/vs/base/common/path';
@@ -113,9 +114,9 @@ export function isNotebook(file: string | vscode.Uri | vscode.TextDocument) {
 	return file.uri.scheme === Schemas.vscodeNotebookCell || file.uri.fsPath.endsWith('.ipynb');
 }
 
-export class SimulationWorkspace {
+export class SimulationWorkspace extends Disposable {
 
-	private readonly _onDidChangeDiagnostics = new Emitter<vscode.DiagnosticChangeEvent>();
+	private readonly _onDidChangeDiagnostics = this._register(new Emitter<vscode.DiagnosticChangeEvent>());
 	public readonly onDidChangeDiagnostics = this._onDidChangeDiagnostics.event;
 
 	private _workspaceState: IDeserializedWorkspaceState | undefined;
@@ -163,6 +164,12 @@ export class SimulationWorkspace {
 	}
 
 	constructor() {
+		super();
+		this._clear();
+	}
+
+	public override dispose(): void {
+		super.dispose();
 		this._clear();
 	}
 

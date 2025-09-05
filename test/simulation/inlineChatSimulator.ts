@@ -64,11 +64,12 @@ export function setupSimulationWorkspace(testingServiceCollection: TestingServic
 	return workspace;
 }
 
-export async function teardownSimulationWorkspace(accessor: ITestingServicesAccessor, _workbench: SimulationWorkspace): Promise<void> {
+export async function teardownSimulationWorkspace(accessor: ITestingServicesAccessor, workbench: SimulationWorkspace): Promise<void> {
 	const ls = accessor.get(ILanguageFeaturesService);
 	if (ls instanceof SimulationLanguageFeaturesService) {
 		await ls.teardown();
 	}
+	workbench.dispose();
 }
 
 function isDeserializedWorkspaceStateBasedScenario(scenario: IScenario): scenario is IDeserializedWorkspaceStateBasedScenario {
