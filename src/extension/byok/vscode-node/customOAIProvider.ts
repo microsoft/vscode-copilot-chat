@@ -138,7 +138,7 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 		try {
 			let knownModels = await this.getModelsWithAPIKeys(options.silent);
 			if (Object.keys(knownModels).length === 0 && !options.silent) {
-				await new CustomOAIModelConfigurator(this._configurationService, this.providerName.toLowerCase(), this).configure();
+				await new CustomOAIModelConfigurator(this._configurationService, this.providerName.toLowerCase(), this).configure(true);
 				knownModels = await this.getModelsWithAPIKeys(options.silent);
 			}
 			return Object.entries(knownModels).map(([id, capabilities]) => {
