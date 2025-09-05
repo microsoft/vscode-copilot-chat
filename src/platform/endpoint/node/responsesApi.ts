@@ -197,6 +197,10 @@ export async function processResponseFromChatEndpoint(instantiationService: IIns
 	});
 }
 
+interface CapiResponsesTextDeltaEvent extends Omit<OpenAI.Responses.ResponseTextDeltaEvent, 'logprobs'> {
+	logprobs: Array<OpenAI.Responses.ResponseTextDeltaEvent.Logprob> | undefined;
+}
+
 class OpenAIResponsesProcessor {
 	private textAccumulator: string = '';
 	private hasReceivedReasoningSummary = false;
@@ -216,10 +220,16 @@ class OpenAIResponsesProcessor {
 			case 'error':
 				return onProgress({ text: '', copilotErrors: [{ agent: 'openai', code: chunk.code || 'unknown', message: chunk.message, type: 'error', identifier: chunk.param || undefined }] });
 			case 'response.output_text.delta': {
-				const haystack = new Lazy(() => new TextEncoder().encode(chunk.delta));
+				const capiChunk: CapiResponsesTextDeltaEvent = chunk;
+				const haystack = new Lazy(() => new TextEncoder().encode(capiChunk.delta));
 				return onProgress({
-					text: chunk.delta,
-					logprobs: { content: chunk.logprobs.map(lp => ({ ...mapLogProp(haystack, lp), top_logprobs: lp.top_logprobs?.map(l => mapLogProp(haystack, l)) || [] })) },
+					text: capiChunk.delta,
+					logprobs: capiChunk.logprobs && {
+						content: capiChunk.logprobs.map(lp => ({
+							...mapLogProp(haystack, lp),
+							top_logprobs: lp.top_logprobs?.map(l => mapLogProp(haystack, l)) || []
+						}))
+					},
 				});
 			}
 			case 'response.output_item.added':
