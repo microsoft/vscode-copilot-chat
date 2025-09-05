@@ -11,7 +11,7 @@ import { IBlockedExtensionService } from '../../../platform/chat/common/blockedE
 import { ChatFetchResponseType, ChatLocation, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { getTextPart } from '../../../platform/chat/common/globalStringUtils';
 import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
-import { AutoChatEndpoint, isAutoModeEnabled } from '../../../platform/endpoint/common/autoChatEndpoint';
+import { AutoChatEndpoint, isAutoModelDefault, isAutoModelEnabled } from '../../../platform/endpoint/common/autoChatEndpoint';
 import { IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
@@ -104,9 +104,13 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		const models: vscode.LanguageModelChatInformation[] = [];
 		const chatEndpoints = await this._endpointProvider.getAllChatEndpoints();
 
-		const defaultChatEndpoint = chatEndpoints.find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1') ?? chatEndpoints[0];
-		if (isAutoModeEnabled(this._expService, this._envService)) {
-			chatEndpoints.push(await this._automodeService.resolveAutoModeEndpoint(undefined, chatEndpoints));
+		let defaultChatEndpoint = chatEndpoints.find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1') ?? chatEndpoints[0];
+		if (isAutoModelEnabled(this._expService, this._envService)) {
+			const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, chatEndpoints);
+			chatEndpoints.push(autoEndpoint);
+			if (isAutoModelDefault(this._expService)) {
+				defaultChatEndpoint = autoEndpoint;
+			}
 		}
 		const seenFamilies = new Set<string>();
 
