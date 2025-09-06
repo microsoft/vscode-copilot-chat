@@ -30,6 +30,7 @@ import { LoggingActionsContrib } from '../../log/vscode-node/loggingActions';
 import { RequestLogTree } from '../../log/vscode-node/requestLogTree';
 import { McpSetupCommands } from '../../mcp/vscode-node/commands';
 import { NotebookFollowCommands } from '../../notebook/vscode-node/followActions';
+import { ReleaseNotesCommandContribution } from '../../releaseNotes/vscode-node/commands';
 import { CopilotDebugCommandContribution } from '../../onboardDebug/vscode-node/copilotDebugCommandContribution';
 import { OnboardTerminalTestsContribution } from '../../onboardDebug/vscode-node/onboardTerminalTestsContribution';
 import { DebugCommandsContribution } from '../../prompt/vscode-node/debugCommands';
@@ -66,9 +67,10 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(ContextKeysContribution),
 	asContributionFactory(CopilotDebugCommandContribution),
 	asContributionFactory(DebugCommandsContribution),
-	asContributionFactory(LanguageModelAccess),
-	asContributionFactory(WalkthroughCommandContribution),
-	asContributionFactory(InlineEditProviderFeature),
+        asContributionFactory(LanguageModelAccess),
+        asContributionFactory(WalkthroughCommandContribution),
+        asContributionFactory(ReleaseNotesCommandContribution),
+        asContributionFactory(InlineEditProviderFeature),
 	asContributionFactory(SettingsSchemaFeature),
 	asContributionFactory(WorkspaceRecorderFeature),
 	asContributionFactory(SurveyCommandContribution),
