@@ -39,7 +39,7 @@ import { AgentPrompt, AgentPromptProps, AgentUserMessage, getUserMessagePropsFro
 import { SimpleSummarizedHistory } from './simpleSummarizedHistoryPrompt';
 
 export interface ConversationHistorySummarizationPromptProps extends SummarizedAgentHistoryProps {
-	simpleMode?: boolean;
+	readonly simpleMode?: boolean;
 }
 
 const SummaryPrompt = <>
@@ -188,7 +188,7 @@ class WorkingNotebookSummary extends PromptElement<NotebookSummaryProps> {
 }
 
 export interface NotebookSummaryProps extends BasePromptElementProps {
-	notebook: NotebookDocument;
+	readonly notebook: NotebookDocument;
 }
 
 /**
@@ -634,8 +634,8 @@ function stripCacheBreakpoints(messages: ChatMessage[]): void {
 }
 
 export interface ISummarizedConversationHistoryInfo {
-	props: SummarizedAgentHistoryProps;
-	summarizedToolCallRoundId: string;
+	readonly props: SummarizedAgentHistoryProps;
+	readonly summarizedToolCallRoundId: string;
 }
 
 /**
@@ -707,8 +707,8 @@ export class SummarizedConversationHistoryPropsBuilder {
 }
 
 interface SummaryMessageProps extends BasePromptElementProps {
-	summaryText: string;
-	endpoint: IChatEndpoint;
+	readonly summaryText: string;
+	readonly endpoint: IChatEndpoint;
 }
 
 class SummaryMessageElement extends PromptElement<SummaryMessageProps> {

@@ -370,18 +370,18 @@ class ClaudeCodeSession {
  * Tool params from core
  */
 interface IConfirmationToolParams {
-	title: string;
-	message: string;
-	confirmationType?: 'basic' | 'terminal';
-	terminalCommand?: string;
+	readonly title: string;
+	readonly message: string;
+	readonly confirmationType?: 'basic' | 'terminal';
+	readonly terminalCommand?: string;
 }
 
 interface IManageTodoListToolInputParams {
-	operation?: 'write' | 'read'; // Optional in write-only mode
-	todoList: Array<{
-		id: number;
-		title: string;
-		description: string;
-		status: 'not-started' | 'in-progress' | 'completed';
-	}>;
+	readonly operation?: 'write' | 'read'; // Optional in write-only mode
+	readonly todoList: readonly {
+		readonly id: number;
+		readonly title: string;
+		readonly description: string;
+		readonly status: 'not-started' | 'in-progress' | 'completed';
+	}[];
 }

@@ -17,7 +17,7 @@ import { KeepGoingReminder } from './agentPrompt';
 
 // Types and interfaces for reusable components
 interface ToolCapabilities extends Partial<Record<ToolName, boolean>> {
-	hasSomeEditTool: boolean;
+	readonly hasSomeEditTool: boolean;
 }
 
 // Utility function to detect available tools
