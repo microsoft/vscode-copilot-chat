@@ -23,19 +23,19 @@ export enum ClaudeToolNames {
 }
 
 export interface ITodoWriteInput {
-	todos: {
-		content: string;
-		status: 'pending' | 'in_progress' | 'completed';
-		activeForm: string;
+	readonly todos: readonly {
+		readonly content: string;
+		readonly status: 'pending' | 'in_progress' | 'completed';
+		readonly activeForm: string;
 	}[];
 }
 
 export interface IExitPlanModeInput {
-	plan: string;
+	readonly plan: string;
 }
 
 export interface ITaskToolInput {
-	description: string;
-	subagent_type: string;
-	prompt: string;
+	readonly description: string;
+	readonly subagent_type: string;
+	readonly prompt: string;
 }

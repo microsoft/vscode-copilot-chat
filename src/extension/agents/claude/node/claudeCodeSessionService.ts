@@ -17,28 +17,28 @@ import { isEqualOrParent } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
 
 type RawStoredSDKMessage = SDKMessage & {
-	parentUuid: string | null;
-	sessionId: string;
-	timestamp: string;
+	readonly parentUuid: string | null;
+	readonly sessionId: string;
+	readonly timestamp: string;
 }
 interface SummaryEntry {
-	type: 'summary';
-	summary: string;
-	leafUuid: string;
+	readonly type: 'summary';
+	readonly summary: string;
+	readonly leafUuid: string;
 }
 type ClaudeSessionFileEntry = RawStoredSDKMessage | SummaryEntry;
 
 type StoredSDKMessage = SDKMessage & {
-	parentUuid: string | null;
-	sessionId: string;
-	timestamp: Date;
+	readonly parentUuid: string | null;
+	readonly sessionId: string;
+	readonly timestamp: Date;
 }
 
 export const IClaudeCodeSessionService = createServiceIdentifier<IClaudeCodeSessionService>('IClaudeCodeSessionService');
 
 export interface IClaudeCodeSessionService {
 	readonly _serviceBrand: undefined;
-	getAllSessions(token: CancellationToken): Promise<IClaudeCodeSession[]>;
+	getAllSessions(token: CancellationToken): Promise<readonly IClaudeCodeSession[]>;
 	getSession(sessionId: string, token: CancellationToken): Promise<IClaudeCodeSession | undefined>;
 }
 
@@ -46,7 +46,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	declare _serviceBrand: undefined;
 
 	// Simple mtime-based cache
-	private _sessionCache = new ResourceMap<IClaudeCodeSession[]>();
+	private _sessionCache = new ResourceMap<readonly IClaudeCodeSession[]>();
 	private _fileMtimes = new ResourceMap<number>();
 
 	constructor(
@@ -64,7 +64,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	 * - Build message chains from leaf nodes
 	 * - These are the complete "sessions" that can be resumed
 	 */
-	async getAllSessions(token: CancellationToken): Promise<IClaudeCodeSession[]> {
+	async getAllSessions(token: CancellationToken): Promise<readonly IClaudeCodeSession[]> {
 		const folders = this._workspace.getWorkspaceFolders();
 		const items: IClaudeCodeSession[] = [];
 
@@ -100,7 +100,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	/**
 	 * Check if cached sessions are still valid by comparing file modification times
 	 */
-	private async _getCachedSessionsIfValid(projectDirUri: URI, token: CancellationToken): Promise<IClaudeCodeSession[] | null> {
+	private async _getCachedSessionsIfValid(projectDirUri: URI, token: CancellationToken): Promise<readonly IClaudeCodeSession[] | null> {
 		if (!this._sessionCache.has(projectDirUri)) {
 			return null; // No cache entry
 		}
@@ -158,7 +158,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	/**
 	 * Load sessions from disk and update file modification time tracking
 	 */
-	private async _loadSessionsFromDisk(projectDirUri: URI, token: CancellationToken): Promise<IClaudeCodeSession[]> {
+	private async _loadSessionsFromDisk(projectDirUri: URI, token: CancellationToken): Promise<readonly IClaudeCodeSession[]> {
 		let entries: [string, FileType][] = [];
 		try {
 			entries = await this._fileSystem.readDirectory(projectDirUri);
@@ -396,8 +396,8 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 }
 
 export interface IClaudeCodeSession {
-	id: string;
-	label: string;
-	messages: SDKMessage[];
-	timestamp: Date;
+	readonly id: string;
+	readonly label: string;
+	readonly messages: readonly SDKMessage[];
+	readonly timestamp: Date;
 }
