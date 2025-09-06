@@ -18,7 +18,7 @@ import { createTextDocumentData } from '../../../../../util/common/test/shims/te
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelTextPart, LanguageModelToolResult } from '../../../../../vscodeTypes';
+import { ChatRequestEditedFileEventKind, LanguageModelTextPart, LanguageModelToolResult } from '../../../../../vscodeTypes';
 import { addCacheBreakpoints } from '../../../../intents/node/cacheBreakpoints';
 import { ChatVariablesCollection } from '../../../../prompt/common/chatVariablesCollection';
 import { Conversation, ICopilotChatResultIn, Turn, TurnStatus } from '../../../../prompt/common/conversation';
@@ -266,6 +266,22 @@ import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 				history: [],
 				query: 'hello',
 			}, undefined)).toMatchSnapshot();
+		});
+
+		test('edited file events are grouped by kind', async () => {
+			const otherUri = URI.file('/workspace/other.ts');
+
+			expect((await agentPromptToString(accessor, {
+				chatVariables: new ChatVariablesCollection(),
+				history: [],
+				query: 'hello',
+				editedFileEvents: [
+					{ eventKind: ChatRequestEditedFileEventKind.Undo, uri: fileTsUri },
+					{ eventKind: ChatRequestEditedFileEventKind.UserModification, uri: otherUri },
+					// duplicate to ensure deduplication within a group
+					{ eventKind: ChatRequestEditedFileEventKind.Undo, uri: fileTsUri },
+				],
+			}, undefined))).toMatchSnapshot();
 		});
 	});
 });

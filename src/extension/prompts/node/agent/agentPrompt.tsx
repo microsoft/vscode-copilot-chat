@@ -20,7 +20,6 @@ import { ITabsAndEditorsService } from '../../../../platform/tabs/common/tabsAnd
 import { ITasksService } from '../../../../platform/tasks/common/tasksService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { basename } from '../../../../util/vs/base/common/path';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestEditedFileEventKind, Position, Range } from '../../../../vscodeTypes';
@@ -803,27 +802,50 @@ export class EditedFileEvents extends PromptElement<EditedFileEventsProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const events = this.props.editedFileEvents;
 
-		const eventStrs = events && coalesce(events.map(event => this.editedFileEventToString(event)));
-		if (eventStrs && eventStrs.length > 0) {
-			return (
-				<>
-					The user has taken some actions between the last request and now:<br />
-					{eventStrs.map(str => `- ${str}`).join('\n')}<br />
-					So be sure to check the current file contents before making any new edits.
-				</>);
-		} else {
+		if (!events || events.length === 0) {
 			return undefined;
 		}
-	}
 
-	private editedFileEventToString(event: ChatRequestEditedFileEvent): string | undefined {
-		switch (event.eventKind) {
-			case ChatRequestEditedFileEventKind.Keep:
-				return undefined;
-			case ChatRequestEditedFileEventKind.Undo:
-				return `Undone your edits to ${this.promptPathRepresentationService.getFilePath(event.uri)}`;
-			case ChatRequestEditedFileEventKind.UserModification:
-				return `Made manual edits to ${this.promptPathRepresentationService.getFilePath(event.uri)}`;
+		// Group by event kind and collect file paths
+		const undoFiles: string[] = [];
+		const modFiles: string[] = [];
+		const seenUndo = new Set<string>();
+		const seenMod = new Set<string>();
+
+		for (const event of events) {
+			if (event.eventKind === ChatRequestEditedFileEventKind.Undo) {
+				const fp = this.promptPathRepresentationService.getFilePath(event.uri);
+				if (!seenUndo.has(fp)) { seenUndo.add(fp); undoFiles.push(fp); }
+			} else if (event.eventKind === ChatRequestEditedFileEventKind.UserModification) {
+				const fp = this.promptPathRepresentationService.getFilePath(event.uri);
+				if (!seenMod.has(fp)) { seenMod.add(fp); modFiles.push(fp); }
+			}
 		}
+
+		if (undoFiles.length === 0 && modFiles.length === 0) {
+			return undefined;
+		}
+
+		const sections: string[] = [];
+		if (undoFiles.length > 0) {
+			sections.push([
+				'The user undid your edits to:',
+				...undoFiles.map(f => `- ${f}`)
+			].join('\n'));
+		}
+		if (modFiles.length > 0) {
+			sections.push([
+				'Some edits were made, by the user or possibly by a formatter or another automated tool, to:',
+				...modFiles.map(f => `- ${f}`)
+			].join('\n'));
+		}
+
+		return (
+			<>
+				There have been some changes between the last request and now.<br />
+				{sections.join('\n')}<br />
+				So be sure to check the current file contents before making any new edits.
+			</>
+		);
 	}
 }
