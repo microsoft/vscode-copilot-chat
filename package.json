@@ -1793,6 +1793,12 @@
 		],
 		"commands": [
 			{
+				"command": "github.copilot.claude.sessions.refresh",
+				"title": "Refresh Claude Code Sessions",
+				"icon": "$(refresh)",
+				"category": "Claude Code"
+			},
+			{
 				"command": "github.copilot.chat.replay",
 				"title": "Start Chat Replay",
 				"icon": "$(debug-line-by-line)"
@@ -3273,6 +3279,11 @@
 				}
 			],
 			"view/title": [
+				{
+					"command": "github.copilot.claude.sessions.refresh",
+					"when": "view == workbench.view.chat.sessions.claude-code",
+					"group": "navigation@1"
+				},
 				{
 					"submenu": "github.copilot.chat.debug.filter",
 					"when": "view == copilot-chat",

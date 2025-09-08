@@ -30,6 +30,11 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const sessionItemProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionItemProvider, sessionStore));
 		this._register(vscode.chat.registerChatSessionItemProvider('claude-code', sessionItemProvider));
 
+		// Register refresh command for Claude Code sessions view
+		this._register(vscode.commands.registerCommand('github.copilot.claude.sessions.refresh', () => {
+			sessionItemProvider.refresh();
+		}));
+
 		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
 		const chatSessionContentProvider = claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider, claudeAgentManager, sessionStore);
 		this._register(vscode.chat.registerChatSessionContentProvider('claude-code', chatSessionContentProvider));
