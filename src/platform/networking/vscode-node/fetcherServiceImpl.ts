@@ -3,12 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Readable } from 'stream';
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { FetchOptions, IAbortController, IFetcherService, Response } from '../common/fetcherService';
 import { IFetcher } from '../common/networking';
+import { fetchWithFallbacks } from '../node/fetcherFallback';
 import { NodeFetcher } from '../node/nodeFetcher';
 import { NodeFetchFetcher } from '../node/nodeFetchFetcher';
 import { ElectronFetcher } from './electronFetcher';
@@ -16,7 +16,7 @@ import { ElectronFetcher } from './electronFetcher';
 export class FetcherService implements IFetcherService {
 
 	declare readonly _serviceBrand: undefined;
-	private readonly _availableFetchers: IFetcher[];
+	private _availableFetchers: readonly IFetcher[];
 	private _fetcher: IFetcher;
 
 	constructor(
@@ -72,88 +72,14 @@ export class FetcherService implements IFetcherService {
 	}
 
 	async fetch(url: string, options: FetchOptions): Promise<Response> {
-		if (options.verifyJSONAndRetry && this._fetcher === this._availableFetchers[0] && this._availableFetchers.length > 1) {
-			let firstResponse: Response | undefined;
-			let firstError: any;
-			for (const fetcher of this._availableFetchers) {
-				try {
-					const res = await fetcher.fetch(url, options);
-					if (fetcher === this._availableFetchers[0]) {
-						firstResponse = res;
-					}
-					if (!res.ok) {
-						this._logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} failed with status: ${res.status} ${res.statusText}`);
-						continue;
-					}
-					const text = await res.text();
-					if (fetcher === this._availableFetchers[0]) {
-						// Update to unconsumed response
-						firstResponse = new Response(
-							res.status,
-							res.statusText,
-							res.headers,
-							async () => text,
-							async () => JSON.parse(text),
-							async () => Readable.from([text])
-						);
-					}
-					const json = JSON.parse(text); // Verify JSON
-					this._logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} succeeded`);
-					if (fetcher !== this._availableFetchers[0]) {
-						const retry = await this.retryFetchJSON(this._availableFetchers[0], url, options);
-						if ('res' in retry && retry.res.ok) {
-							return retry.res;
-						}
-						this._logService.info(`FetcherService: using ${fetcher.getUserAgentLibrary()} from now on`);
-						this._fetcher = fetcher;
-					}
-					return new Response(
-						res.status,
-						res.statusText,
-						res.headers,
-						async () => text,
-						async () => json,
-						async () => Readable.from([text])
-					);
-				} catch (err) {
-					if (fetcher === this._availableFetchers[0]) {
-						firstError = err;
-					}
-					this._logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} failed with error: ${err.message}`);
-				}
-			}
-			if (firstResponse) {
-				return firstResponse;
-			}
-			throw firstError;
+		const { response: res, updatedFetchers } = await fetchWithFallbacks(this._availableFetchers, url, options, this._logService);
+		if (updatedFetchers) {
+			this._availableFetchers = updatedFetchers;
+			this._fetcher = this._availableFetchers[0];
 		}
-		return this._fetcher.fetch(url, options);
+		return res;
 	}
-	private async retryFetchJSON(fetcher: IFetcher, url: string, options: FetchOptions): Promise<{ res: Response } | { err: any }> {
-		try {
-			const res = await fetcher.fetch(url, options);
-			if (!res.ok) {
-				this._logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} failed with status: ${res.status} ${res.statusText}`);
-				return { res };
-			}
-			const text = await res.text();
-			const json = JSON.parse(text); // Verify JSON
-			this._logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} succeeded`);
-			return {
-				res: new Response(
-					res.status,
-					res.statusText,
-					res.headers,
-					async () => text,
-					async () => json,
-					async () => Readable.from([text])
-				)
-			};
-		} catch (err) {
-			this._logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} failed with error: ${err.message}`);
-			return { err };
-		}
-	}
+
 	disconnectAll(): Promise<unknown> {
 		return this._fetcher.disconnectAll();
 	}
