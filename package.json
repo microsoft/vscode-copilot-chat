@@ -4077,7 +4077,7 @@
 		"@vscode/extension-telemetry": "^1.0.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",
-		"@vscode/tree-sitter-wasm": "0.0.5-php.1",
+		"@vscode/tree-sitter-wasm": "0.0.5-php.2",
 		"@xterm/headless": "^5.5.0",
 		"ajv": "^8.17.1",
 		"applicationinsights": "^2.9.7",
