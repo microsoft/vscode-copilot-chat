@@ -3986,6 +3986,7 @@
 		"@hediet/node-reload": "^0.8.0",
 		"@keyv/sqlite": "^4.0.5",
 		"@nteract/messaging": "^7.0.20",
+		"@octokit/types": "^14.1.0",
 		"@parcel/watcher": "^2.5.1",
 		"@stylistic/eslint-plugin": "^3.0.1",
 		"@types/eslint": "^9.0.0",
