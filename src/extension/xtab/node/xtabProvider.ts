@@ -307,7 +307,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		let langCtx: LanguageContextResponse | undefined;
 		if (promptOptions.languageContext.enabled || recordingEnabled) {
-			const langCtxPromise = this.getLanguageContext(request, delaySession, activeDocument, cursorPosition, logContext, cancellationToken, promptOptions);
+			const langCtxPromise = this.getLanguageContext(request, delaySession, activeDocument, cursorPosition, logContext, cancellationToken);
 
 			if (promptOptions.languageContext.enabled) {
 				langCtx = await langCtxPromise;
@@ -378,7 +378,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		cursorPosition: Position,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
-		promptOptions: xtabPromptOptions.PromptOptions
 	): Promise<LanguageContextResponse | undefined> {
 		try {
 			const textDoc = this.workspaceService.textDocuments.find(doc => doc.uri.toString() === activeDocument.id.uri);
