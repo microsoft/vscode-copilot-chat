@@ -177,7 +177,7 @@ export async function createSimulationAccessor(
 	opts: SimulationServicesOptions,
 	currentTestRunInfo: CurrentTestRunInfo
 ): Promise<TestingServiceCollection> {
-	const testingServiceCollection = createExtensionUnitTestingServices(currentTestRunInfo, modelConfig);
+	const testingServiceCollection = createExtensionUnitTestingServices(undefined, currentTestRunInfo, modelConfig);
 	if (currentTestRunInfo.isInRealExtensionHost) {
 		const { addExtensionHostSimulationServices } = await import('./extHostContext/simulationExtHostContext');
 		await addExtensionHostSimulationServices(testingServiceCollection);

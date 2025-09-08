@@ -10,14 +10,15 @@ import { INativeEnvService } from '../../../../../platform/env/common/envService
 import { IFileSystemService } from '../../../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../../platform/filesystem/node/test/mockFileSystemService';
+import { TestingServiceCollection } from '../../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
+import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../util/common/test/testUtils';
 import { CancellationToken, CancellationTokenSource } from '../../../../../util/vs/base/common/cancellation';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { ClaudeCodeSessionService } from '../claudeCodeSessionService';
-import { TestingServiceCollection } from '../../../../../platform/test/node/services';
 
 function computeFolderSlug(folderUri: URI): string {
 	return folderUri.path.replace(/\//g, '-');
@@ -33,13 +34,15 @@ describe('ClaudeCodeSessionService', () => {
 	let testingServiceCollection: TestingServiceCollection;
 	let service: ClaudeCodeSessionService;
 
+	const store = ensureNoDisposablesAreLeakedInTestSuite();
+
 	beforeEach(() => {
 		mockFs = new MockFileSystemService();
-		testingServiceCollection = createExtensionUnitTestingServices();
+		testingServiceCollection = store.add(createExtensionUnitTestingServices(store));
 		testingServiceCollection.set(IFileSystemService, mockFs);
 
 		// Create mock workspace service with the test workspace folder
-		const workspaceService = new TestWorkspaceService([folderUri]);
+		const workspaceService = store.add(new TestWorkspaceService([folderUri]));
 		testingServiceCollection.set(IWorkspaceService, workspaceService);
 
 		const accessor = testingServiceCollection.createTestingAccessor();
