@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
-import { StringTextDocument } from '../../../platform/editing/common/abstractText';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { DebugRecorderBookmark } from '../../../platform/inlineEdits/common/debugRecorderBookmark';
 import { IObservableDocument } from '../../../platform/inlineEdits/common/observableWorkspace';
@@ -22,8 +21,6 @@ import { StringEdit, StringReplacement } from '../../../util/vs/editor/common/co
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { Uri } from '../../../vscodeTypes';
-import { ProjectedDocument } from '../../prompts/node/inline/summarizedDocument/implementation';
-import { ProjectedText } from '../../prompts/node/inline/summarizedDocument/projectedText';
 import { DebugRecorder } from './debugRecorder';
 import { INesConfigs } from './nesConfigs';
 import { INextEditDisplayLocation, INextEditResult } from './nextEditResult';
@@ -37,9 +34,6 @@ export interface IAlternativeAction {
 	readonly textLength: number;
 	readonly selection: ITelemetryRange[];
 	readonly edits: ITelemetryEdit[];
-	readonly summarizedText: string | undefined;
-	readonly summarizedTextLength: number | undefined;
-	readonly summarizedEdits: ITelemetryEdit[] | undefined;
 	readonly tags: string[];
 	readonly recording: ITelemetryRecording | undefined;
 }
@@ -181,30 +175,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 
 		let alternativeAction: IAlternativeAction | undefined;
 		if (includeAlternativeAction) {
-			const tags: string[] = [];
-			const projDoc: ProjectedDocument<StringTextDocument> | undefined = this._statelessNextEditTelemetry?.summarizedEditWindow;
-			if (projDoc && projDoc.originalText !== this._originalDoc.value) {
-				tags.push('original_texts_deviate');
-			}
-			const originalText = projDoc ? projDoc.originalText : this._originalDoc.value;
-			const summarizedText = projDoc?.text;
-			let summarizedEdits: { time: Date; edit: StringEdit }[] | undefined;
-			if (projDoc) {
-				let currentProjText: ProjectedText = projDoc;
-				const projEdits: { time: Date; edit: StringEdit }[] = summarizedEdits = [];
-				for (const { time, edit } of this._edits) {
-					const rebased = currentProjText.tryRebase(edit);
-					if (!rebased) {
-						tags.push('user_edit_conflict_with_summarization');
-						break;
-					}
-					currentProjText = rebased.text;
-					projEdits.push({
-						time,
-						edit: rebased.edit,
-					});
-				}
-			}
+			const originalText = this._originalDoc.value;
 			let recording: ITelemetryRecording | undefined;
 			if (this._debugRecorder && this._requestBookmark) {
 				const entries = this._debugRecorder.getRecentLog();
@@ -228,15 +199,7 @@ export class LlmNESTelemetryBuilder extends Disposable {
 					endExclusive: e.replaceRange.endExclusive,
 					newText: e.newText,
 				}))).flat(),
-				summarizedText,
-				summarizedTextLength: summarizedText?.length,
-				summarizedEdits: summarizedEdits?.map(edit => edit.edit.replacements.map(e => ({
-					time: edit.time.toISOString(),
-					start: e.replaceRange.start,
-					endExclusive: e.replaceRange.endExclusive,
-					newText: e.newText,
-				}))).flat(),
-				tags,
+				tags: [],
 				recording,
 			};
 		}

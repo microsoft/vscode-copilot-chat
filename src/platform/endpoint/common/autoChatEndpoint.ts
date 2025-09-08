@@ -81,10 +81,6 @@ export class AutoChatEndpoint implements IChatEndpoint {
 	}
 
 	public async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
-		return this._makeChatRequest2({ ...options, ignoreStatefulMarker: options.ignoreStatefulMarker ?? true }, token);
-	}
-
-	public async _makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken) {
 		return this._chatMLFetcher.fetchOne({
 			requestOptions: {},
 			...options,

@@ -343,7 +343,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		// return response;
 	}
 
-	public async _makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken) {
+	protected async _makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken) {
 		return this._chatMLFetcher.fetchOne({
 			requestOptions: {},
 			...options,

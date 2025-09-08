@@ -1793,6 +1793,12 @@
 		],
 		"commands": [
 			{
+				"command": "github.copilot.claude.sessions.refresh",
+				"title": "Refresh Claude Code Sessions",
+				"icon": "$(refresh)",
+				"category": "Claude Code"
+			},
+			{
 				"command": "github.copilot.chat.replay",
 				"title": "Start Chat Replay",
 				"icon": "$(debug-line-by-line)"
@@ -3274,6 +3280,11 @@
 			],
 			"view/title": [
 				{
+					"command": "github.copilot.claude.sessions.refresh",
+					"when": "view == workbench.view.chat.sessions.claude-code",
+					"group": "navigation@1"
+				},
+				{
 					"submenu": "github.copilot.chat.debug.filter",
 					"when": "view == copilot-chat",
 					"group": "navigation"
@@ -4066,7 +4077,7 @@
 		"@vscode/extension-telemetry": "^1.0.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",
-		"@vscode/tree-sitter-wasm": "0.0.5-php.1",
+		"@vscode/tree-sitter-wasm": "0.0.5-php.2",
 		"@xterm/headless": "^5.5.0",
 		"ajv": "^8.17.1",
 		"applicationinsights": "^2.9.7",
