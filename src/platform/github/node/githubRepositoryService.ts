@@ -36,10 +36,9 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 		}
 
 		const response = await this._doGetRepositoryInfo(owner, repo);
-		if (response.ok) {
-			const repoInfo = await response.json();
-			this.githubRepositoryInfoCache.set(`${owner}/${repo}`, repoInfo);
-			return repoInfo;
+		if (response) {
+			this.githubRepositoryInfoCache.set(`${owner}/${repo}`, response);
+			return response;
 		}
 		throw new Error(`Failed to fetch repository info for ${owner}/${repo}`);
 	}
@@ -47,7 +46,7 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 	async isAvailable(org: string, repo: string): Promise<boolean> {
 		try {
 			const response = await this._doGetRepositoryInfo(org, repo);
-			return response.ok;
+			return response !== undefined;
 		} catch (e) {
 			return false;
 		}
