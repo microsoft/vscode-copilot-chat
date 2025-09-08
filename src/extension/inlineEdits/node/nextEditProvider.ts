@@ -150,7 +150,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		return result;
 	}
 
-	public async _getNextEdit(
+	private async _getNextEdit(
 		docId: DocumentId,
 		context: vscode.InlineCompletionContext,
 		triggerTime: number,
