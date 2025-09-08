@@ -127,7 +127,6 @@ export interface IMakeChatRequestOptions {
 	debugName: string;
 	/** The array of chat messages to send */
 	messages: Raw.ChatMessage[];
-	// todo
 	ignoreStatefulMarker?: boolean;
 	/** Streaming callback for each response part. */
 	finishedCb: FinishedCallback | undefined;

@@ -12,6 +12,7 @@ export interface IParsedRequest {
 	readonly model?: string;
 	readonly messages: readonly Raw.ChatMessage[];
 	readonly options?: IMakeChatRequestOptions['requestOptions'];
+	readonly type?: string;
 }
 
 export interface IStreamEventData {

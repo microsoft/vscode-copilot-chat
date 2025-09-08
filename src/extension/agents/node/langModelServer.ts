@@ -178,7 +178,7 @@ export class LanguageModelServer {
 
 				const userInitiatedRequest = parsedRequest.messages.at(-1)?.role === Raw.ChatRole.User;
 				const fetchResult = await selectedEndpoint.makeChatRequest2({
-					debugName: 'agentLanguageModelServer',
+					debugName: 'agentLMServer' + (parsedRequest.type ? `-${parsedRequest.type}` : ''),
 					messages: parsedRequest.messages as Raw.ChatMessage[],
 					finishedCb: async (_fullText, _index, delta) => {
 						if (tokenSource.token.isCancellationRequested) {
