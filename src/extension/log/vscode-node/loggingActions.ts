@@ -24,7 +24,7 @@ import { getRequest, IFetcher } from '../../../platform/networking/common/networ
 import { NodeFetcher } from '../../../platform/networking/node/nodeFetcher';
 import { NodeFetchFetcher } from '../../../platform/networking/node/nodeFetchFetcher';
 import { ElectronFetcher } from '../../../platform/networking/vscode-node/electronFetcher';
-import { FetcherService } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
+import { FetcherService, getShadowedConfig } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { createRequestHMAC } from '../../../util/common/crypto';
@@ -49,6 +49,7 @@ export class LoggingActionsContrib {
 		@IVSCodeExtensionContext private readonly _context: IVSCodeExtensionContext,
 		@IEnvService private envService: IEnvService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IAuthenticationService private readonly authService: IAuthenticationService,
 		@ICAPIClientService private readonly capiClientService: ICAPIClientService,
 		@IFetcherService private readonly fetcherService: IFetcherService,
@@ -57,6 +58,9 @@ export class LoggingActionsContrib {
 		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.collectDiagnostics', async () => {
 			const document = await vscode.workspace.openTextDocument({ language: 'markdown' });
 			const editor = await vscode.window.showTextDocument(document);
+			const electronConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseElectronFetcher, ConfigKey.Internal.DebugExpUseElectronFetcher);
+			const nodeConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseNodeFetcher, ConfigKey.Internal.DebugExpUseNodeFetcher);
+			const nodeFetchConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseNodeFetchFetcher, ConfigKey.Internal.DebugExpUseNodeFetchFetcher);
 			await appendText(editor, `## GitHub Copilot Chat
 
 - Extension Version: ${this.envService.getVersion()} (${this.envService.getBuildType()})
@@ -68,9 +72,9 @@ export class LoggingActionsContrib {
 
 User Settings:
 \`\`\`json${getNonDefaultSettings()}
-  "github.copilot.advanced.debug.useElectronFetcher": ${this.configurationService.getConfig<boolean>(ConfigKey.Shared.DebugUseElectronFetcher)},
-  "github.copilot.advanced.debug.useNodeFetcher": ${this.configurationService.getConfig<boolean>(ConfigKey.Shared.DebugUseNodeFetcher)},
-  "github.copilot.advanced.debug.useNodeFetchFetcher": ${this.configurationService.getConfig<boolean>(ConfigKey.Shared.DebugUseNodeFetchFetcher)}
+  "github.copilot.advanced.debug.useElectronFetcher": ${electronConfig},
+  "github.copilot.advanced.debug.useNodeFetcher": ${nodeConfig},
+  "github.copilot.advanced.debug.useNodeFetchFetcher": ${nodeFetchConfig}
 \`\`\`${getProxyEnvVariables()}
 `);
 			const urls = [
@@ -80,9 +84,9 @@ User Settings:
 			const isGHEnterprise = this.capiClientService.dotcomAPIURL !== 'https://api.github.com';
 			const timeoutSeconds = 10;
 			const electronFetcher = ElectronFetcher.create(this.envService);
-			const electronCurrent = !!electronFetcher && this.configurationService.getConfig<boolean>(ConfigKey.Shared.DebugUseElectronFetcher);
-			const nodeCurrent = !electronCurrent && this.configurationService.getConfig<boolean>(ConfigKey.Shared.DebugUseNodeFetcher);
-			const nodeFetchCurrent = !electronCurrent && !nodeCurrent && this.configurationService.getConfig<boolean>(ConfigKey.Shared.DebugUseNodeFetchFetcher);
+			const electronCurrent = !!electronFetcher && electronConfig;
+			const nodeCurrent = !electronCurrent && nodeConfig;
+			const nodeFetchCurrent = !electronCurrent && !nodeCurrent && nodeFetchConfig;
 			const nodeCurrentFallback = !electronCurrent && !nodeFetchCurrent;
 			const activeFetcher = this.fetcherService.getUserAgentLibrary();
 			const fetchers = {
