@@ -170,16 +170,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		const documentAtInvocationTime = doc.value.get();
 
-		const nesConfigs: INesConfigs = {
-			isAsyncCompletions: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsAsyncCompletions, this._expService),
-			isRevisedCacheStrategy: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRevisedCacheStrategy, this._expService),
-			isCacheTracksRejections: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheTracksRejections, this._expService),
-			isRecentlyShownCacheEnabled: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRecentlyShownCacheEnabled, this._expService),
-			debounceUseCoreRequestTime: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounceUseCoreRequestTime, this._expService),
-		};
-
-		telemetryBuilder.setNESConfigs({ ...nesConfigs });
-		logContext.addCodeblockToLog(JSON.stringify(nesConfigs, null, '\t'));
+		const nesConfigs = this.determineNesConfigs(telemetryBuilder, logContext);
 
 		const recentlyShownCachedEdit = this._recentlyShownCache.get(docId, documentAtInvocationTime);
 		const cachedEdit = this._nextEditCache.lookupNextEdit(docId, documentAtInvocationTime, doc.selection.get(), nesConfigs);
@@ -331,6 +322,21 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		tracer.returns('returning next edit result');
 		return nextEditResult;
+	}
+
+	private determineNesConfigs(telemetryBuilder: LlmNESTelemetryBuilder, logContext: InlineEditRequestLogContext): INesConfigs {
+		const nesConfigs = {
+			isAsyncCompletions: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsAsyncCompletions, this._expService),
+			isRevisedCacheStrategy: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRevisedCacheStrategy, this._expService),
+			isCacheTracksRejections: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheTracksRejections, this._expService),
+			isRecentlyShownCacheEnabled: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRecentlyShownCacheEnabled, this._expService),
+			debounceUseCoreRequestTime: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounceUseCoreRequestTime, this._expService),
+		};
+
+		telemetryBuilder.setNESConfigs({ ...nesConfigs });
+		logContext.addCodeblockToLog(JSON.stringify(nesConfigs, null, '\t'));
+
+		return nesConfigs;
 	}
 
 	private _processDoc(doc: DocumentHistory): ProcessedDoc {
