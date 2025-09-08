@@ -136,7 +136,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		let result: NextEditResult;
 		try {
-			result = await this._getNextEdit(docId, context, this._lastTriggerTime, shouldExpandEditWindow, logContext, cancellationToken, telemetryBuilder);
+			result = await this._getNextEditCanThrow(docId, context, this._lastTriggerTime, shouldExpandEditWindow, logContext, cancellationToken, telemetryBuilder);
 		} catch (error) {
 			logContext.setError(error);
 			telemetryBuilder.setNextEditProviderError(errors.toString(error));
@@ -150,7 +150,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		return result;
 	}
 
-	private async _getNextEdit(
+	private async _getNextEditCanThrow(
 		docId: DocumentId,
 		context: vscode.InlineCompletionContext,
 		triggerTime: number,
