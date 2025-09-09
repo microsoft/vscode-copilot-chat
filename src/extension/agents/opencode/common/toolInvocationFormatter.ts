@@ -14,18 +14,22 @@ export function createFormattedToolInvocation(
 	toolInvocation: OpenCodeToolInvocation,
 	toolResult?: OpenCodeToolResult
 ): ChatToolInvocationPart | undefined {
-	const config = getToolConfig(toolInvocation.name);
-	
-	// Create the base tool invocation part
-	const invocationPart: ChatToolInvocationPart = {
-		toolName: toolInvocation.name,
-		input: toolInvocation.input,
-		result: undefined // Will be set below if result is available
-	};
+	// Create the base tool invocation part following VS Code ChatToolInvocationPart constructor
+	const invocationPart = new ChatToolInvocationPart(
+		toolInvocation.name,
+		toolInvocation.id,
+		toolResult ? !toolResult.success : false // isError flag
+	);
 
-	// Format the result if available
-	if (toolResult) {
-		invocationPart.result = formatToolResult(toolInvocation.name, toolResult);
+	// Set completion state
+	invocationPart.isConfirmed = true;
+	invocationPart.isComplete = toolResult !== undefined;
+
+	// Set invocation message if there's input
+	if (Object.keys(toolInvocation.input).length > 0) {
+		const inputMarkdown = new vscode.MarkdownString();
+		inputMarkdown.appendCodeblock(JSON.stringify(toolInvocation.input, null, 2), 'json');
+		invocationPart.invocationMessage = inputMarkdown;
 	}
 
 	return invocationPart;

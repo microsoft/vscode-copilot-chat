@@ -11,7 +11,6 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { OpenCodeToolInvocation, OpenCodeToolNames, OpenCodeToolResult, requiresPermission, isDangerousTool, getToolConfig } from '../common/opencodeTools';
 import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
@@ -40,9 +39,7 @@ export class OpenCodeAgentManager extends Disposable implements IOpenCodeAgentMa
 	constructor(
 		@IOpenCodeServerManager private readonly serverManager: IOpenCodeServerManager,
 		@IOpenCodeClient private readonly client: IOpenCodeClient,
-		@IToolsService private readonly toolsService: IToolsService,
-		@ILogService private readonly logService: ILogService,
-		@IInstantiationService private readonly instantiationService: IInstantiationService
+		@ILogService private readonly logService: ILogService
 	) {
 		super();
 	}
@@ -280,7 +277,7 @@ export class OpenCodeAgentManager extends Disposable implements IOpenCodeAgentMa
 			// Format and display tool invocation
 			const formattedInvocation = createFormattedToolInvocation(toolInvocation);
 			if (formattedInvocation) {
-				stream.toolInvocation(formattedInvocation);
+				stream.push(formattedInvocation);
 			}
 
 			// Execute tool via OpenCode server (this would be implemented based on actual OpenCode API)
@@ -291,7 +288,7 @@ export class OpenCodeAgentManager extends Disposable implements IOpenCodeAgentMa
 			if (formattedInvocation && result) {
 				const updatedInvocation = createFormattedToolInvocation(toolInvocation, result);
 				if (updatedInvocation) {
-					stream.toolInvocation(updatedInvocation);
+					stream.push(updatedInvocation);
 				}
 			}
 
@@ -306,7 +303,6 @@ export class OpenCodeAgentManager extends Disposable implements IOpenCodeAgentMa
 	 */
 	private async requestToolPermission(toolName: OpenCodeToolNames, input: any): Promise<boolean> {
 		const config = getToolConfig(toolName);
-		const message = config.confirmationMessage || `Allow execution of ${toolName}?`;
 		
 		// Use VS Code's tools service for permission handling
 		try {

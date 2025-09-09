@@ -5,7 +5,6 @@
 
 import * as vscode from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
-import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { ChatRequestTurn2 } from '../../../../vscodeTypes';
 import { IOpenCodeAgentManager } from '../node/opencodeAgentManager';
 import { OpenCodeMessage, IOpenCodeSession, IOpenCodeSessionService } from '../node/opencodeSessionService';
@@ -174,7 +173,7 @@ export class OpenCodeChatSessionContentProvider implements vscode.ChatSessionCon
 			return undefined;
 		}
 		
-		return new vscode.ChatResponseTurn2(responseParts, undefined, undefined);
+		return new vscode.ChatResponseTurn2(responseParts, undefined);
 	}
 
 	/**
@@ -279,7 +278,7 @@ export class OpenCodeChatSessionContentProvider implements vscode.ChatSessionCon
 			toolContext.pendingToolInvocations.delete(toolCallId);
 			toolContext.unprocessedToolCalls.delete(toolCallId);
 			
-			return updatedInvocation || undefined;
+			return updatedInvocation;
 		}
 		
 		// If no pending invocation, create a standalone result display

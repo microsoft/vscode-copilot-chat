@@ -9,6 +9,9 @@ import { createServiceIdentifier } from '../../../../util/common/services';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { CreateSessionOptions, IOpenCodeClient, OpenCodeMessage, OpenCodeSessionData } from './opencodeClient';
 
+// Re-export OpenCodeMessage for use by other modules
+export { OpenCodeMessage };
+
 export interface IOpenCodeSession {
 	readonly id: string;
 	readonly label: string;

@@ -48,6 +48,7 @@ export const IOpenCodeClient = createServiceIdentifier<IOpenCodeClient>('IOpenCo
 
 export interface IOpenCodeClient {
 	readonly _serviceBrand: undefined;
+	setConfig(config: IOpenCodeServerConfig): void;
 	getAllSessions(token?: CancellationToken): Promise<readonly OpenCodeSessionData[]>;
 	getSession(sessionId: string, token?: CancellationToken): Promise<OpenCodeSessionData | undefined>;
 	createSession(options?: CreateSessionOptions, token?: CancellationToken): Promise<OpenCodeSessionData>;

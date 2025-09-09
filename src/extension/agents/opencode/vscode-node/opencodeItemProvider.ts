@@ -175,9 +175,7 @@ export class OpenCodeChatSessionItemProvider extends Disposable implements vscod
 			for (const [id, session] of this.sessionStore.getUnresolvedSessions()) {
 				items.push({
 					id,
-					label: session.label,
-					providerName: 'opencode',
-					createdAt: new Date() // We don't have creation time for unresolved sessions
+					label: session.label
 				});
 			}
 			
@@ -190,14 +188,12 @@ export class OpenCodeChatSessionItemProvider extends Disposable implements vscod
 				
 				items.push({
 					id: internalId || session.id, // Use internal ID if mapped, otherwise OpenCode ID
-					label: session.label,
-					providerName: 'opencode',
-					createdAt: session.timestamp
+					label: session.label
 				});
 			}
 			
-			// Sort by creation time (newest first)
-			items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+			// Sort by creation time (newest first) - note: ChatSessionItem doesn't have createdAt
+			// items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 			
 			this.logService.info(`[OpenCodeChatSessionItemProvider] Provided ${items.length} session items`);
 			return items;
@@ -213,20 +209,22 @@ export class OpenCodeChatSessionItemProvider extends Disposable implements vscod
 	 * Creates a new chat session item
 	 */
 	async provideNewChatSessionItem(options: {
-		prompt: string;
+		request: vscode.ChatRequest;
+		prompt?: string;
+		history?: ReadonlyArray<vscode.ChatRequestTurn | vscode.ChatResponseTurn>;
+		metadata?: any;
 	}): Promise<vscode.ChatSessionItem> {
 		try {
-			this.logService.info(`[OpenCodeChatSessionItemProvider] Creating new session for prompt: "${options.prompt}"`);
+			const prompt = options.prompt || options.request.prompt;
+			this.logService.info(`[OpenCodeChatSessionItemProvider] Creating new session for prompt: "${prompt}"`);
 			
 			// Register the new session in our store
-			const internalId = this.sessionStore.registerNewSession(options.prompt);
+			const internalId = this.sessionStore.registerNewSession(prompt);
 			
 			// Create the session item
 			const item: vscode.ChatSessionItem = {
 				id: internalId,
-				label: this.generateSessionLabel(options.prompt),
-				providerName: 'opencode',
-				createdAt: new Date()
+				label: this.generateSessionLabel(prompt)
 			};
 			
 			// Notify that session list has changed
