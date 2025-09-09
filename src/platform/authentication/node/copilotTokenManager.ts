@@ -103,21 +103,21 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 	 * @todo this should be not be public, but it is for now to allow testing.
 	 */
 	async authFromGitHubToken(githubToken: string, ghUsername: string): Promise<TokenInfoOrError & NotGitHubLoginFailed> {
-		return this.doAuthFromGitHubTokenOrDeviceId({ githubToken, ghUsername });
+		return this.doAuthFromGitHubTokenOrDevDeviceId({ githubToken, ghUsername });
 	}
 
 	/**
-	 * Fetches a Copilot token from the deviceId.
-	 * @param deviceId A device ID to mint a Copilot token from.
+	 * Fetches a Copilot token from the devDeviceId.
+	 * @param devDeviceId A device ID to mint a Copilot token from.
 	 * @returns A Copilot token info or an error.
 	 * @todo this should be not be public, but it is for now to allow testing.
 	 */
-	async authFromDeviceId(deviceId: string): Promise<TokenInfoOrError & NotGitHubLoginFailed> {
-		return this.doAuthFromGitHubTokenOrDeviceId({ deviceId });
+	async authFromDevDeviceId(devDeviceId: string): Promise<TokenInfoOrError & NotGitHubLoginFailed> {
+		return this.doAuthFromGitHubTokenOrDevDeviceId({ devDeviceId });
 	}
 
-	private async doAuthFromGitHubTokenOrDeviceId(
-		context: { githubToken: string; ghUsername: string } | { deviceId: string }
+	private async doAuthFromGitHubTokenOrDevDeviceId(
+		context: { githubToken: string; ghUsername: string } | { devDeviceId: string }
 	): Promise<TokenInfoOrError & NotGitHubLoginFailed> {
 		this._telemetryService.sendGHTelemetryEvent('auth.new_login');
 
@@ -129,7 +129,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 				this.fetchCopilotUserInfo(context.githubToken)
 			]));
 		} else {
-			response = await this.fetchCopilotTokenFromDeviceId(context.deviceId);
+			response = await this.fetchCopilotTokenFromDevDeviceId(context.devDeviceId);
 		}
 
 		if (!response) {
@@ -219,11 +219,11 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 		return await this._capiClientService.makeRequest<Response>(options, { type: RequestType.CopilotToken });
 	}
 
-	private async fetchCopilotTokenFromDeviceId(deviceId: string) {
+	private async fetchCopilotTokenFromDevDeviceId(devDeviceId: string) {
 		const options: FetchOptions = {
 			headers: {
 				'X-GitHub-Api-Version': '2025-04-01',
-				'Editor-Device-Id': `${deviceId}`
+				'Editor-Device-Id': `${devDeviceId}`
 			},
 			retryFallbacks: true,
 			expectJSON: true,
