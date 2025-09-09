@@ -189,9 +189,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		let req: NextEditFetchRequest;
 		let targetDocumentId = docId;
 
-		const cacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheDelay, this._expService);
-		const minimumResponseDelay = cacheDelay;
-
 		let isRebasedCachedEdit = false;
 		let isSubsequentCachedEdit = false;
 
@@ -304,19 +301,27 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		telemetryBuilder.setHasNextEdit(true);
 
-		if (isRebasedCachedEdit || isSubsequentCachedEdit) {
-			tracer.trace(`minimum response delay: NOT enforced. isRebasedCachedEdit: ${isRebasedCachedEdit}, isSubsequentCachedEdit: ${isSubsequentCachedEdit}`);
-		} else {
-			tracer.trace(`minimum response delay: enforced. isRebasedCachedEdit: ${isRebasedCachedEdit}, isSubsequentCachedEdit: ${isSubsequentCachedEdit}`);
-			const fetchLatency = Date.now() - triggerTime;
-			const delay = Math.max(0, minimumResponseDelay - fetchLatency);
-			if (delay > 0) {
-				await timeout(delay);
-				if (cancellationToken.isCancellationRequested) {
-					tracer.returns('cancelled');
-					telemetryBuilder.setStatus(`noEdit:gotCancelled`);
-					return emptyResult;
-				}
+		const cacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheDelay, this._expService);
+		const rebasedCacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRebasedCacheDelay, this._expService);
+		const subsequentCacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsSubsequentCacheDelay, this._expService);
+
+		let minimumResponseDelay = cacheDelay;
+		if (isRebasedCachedEdit && rebasedCacheDelay !== undefined) {
+			minimumResponseDelay = rebasedCacheDelay;
+		} else if (isSubsequentCachedEdit && subsequentCacheDelay !== undefined) {
+			minimumResponseDelay = subsequentCacheDelay;
+		}
+
+		tracer.trace(`minimum response delay: expecting ${minimumResponseDelay}ms delay. isRebasedCachedEdit: ${isRebasedCachedEdit} (rebasedCacheDelay: ${rebasedCacheDelay}), isSubsequentCachedEdit: ${isSubsequentCachedEdit} (subsequentCacheDelay: ${subsequentCacheDelay})`);
+
+		const fetchLatency = Date.now() - triggerTime;
+		const delay = Math.max(0, minimumResponseDelay - fetchLatency);
+		if (delay > 0) {
+			await timeout(delay);
+			if (cancellationToken.isCancellationRequested) {
+				tracer.returns('cancelled');
+				telemetryBuilder.setStatus(`noEdit:gotCancelled`);
+				return emptyResult;
 			}
 		}
 
