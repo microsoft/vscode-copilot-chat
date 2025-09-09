@@ -8,13 +8,13 @@ import * as l10n from '@vscode/l10n';
 import { Image as BaseImage, BasePromptElementProps, ChatResponseReferencePartStatusKind, PromptElement, PromptReference, PromptSizing, UserMessage } from '@vscode/prompt-tsx';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { modelCanUseImageURL } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { IImageService } from '../../../../platform/image/common/imageService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { getMimeType } from '../../../../util/common/imageUtils';
 import { Uri } from '../../../../vscodeTypes';
 import { IPromptEndpoint } from '../base/promptRenderer';
-import { modelCanUseImageURL } from '../../../../platform/endpoint/common/chatModelCapabilities';
 
 export interface ImageProps extends BasePromptElementProps {
 	variableName: string;

@@ -128,6 +128,7 @@
 	"github.copilot.config.notebook.followCellExecution": "Controls whether the currently executing cell is revealed into the viewport upon execution from Copilot.",
 	"github.copilot.config.notebook.enhancedNextEditSuggestions": "Controls whether to use an enhanced approach for generating next edit suggestions in notebook cells.",
 	"github.copilot.chat.editor.temporalContext.enabled": "When making inline chat request whether to include recently viewed and edited files with Copilot requests.",
+	"github.copilot.config.imageUpload.enabled": "Enables the use of image upload URLs in chat requests instead of raw base64 strings.",
 	"github.copilot.chat.edits.temporalContext.enabled": "When making edits request whether to include recently viewed and edited files with Copilot requests.",
 	"github.copilot.config.startDebugging.enabled": "Enables the `/startDebugging` intent in panel chat. Generates or finds launch config to match the query (if any), project structure, and more.",
 	"github.copilot.config.agent.thinkingTool": "Enables the thinking tool that allows Copilot to think deeply about your request before generating a response in agent mode.",

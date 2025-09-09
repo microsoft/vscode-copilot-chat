@@ -722,7 +722,7 @@ export namespace ConfigKey {
 		export const UseResponsesApiTruncation = defineSetting<boolean | undefined>('chat.advanced.useResponsesApiTruncation', false, INTERNAL_RESTRICTED);
 		export const ResponsesApiReasoning = defineSetting<boolean | string | undefined>('chat.advanced.responsesApiReasoning', false, INTERNAL_RESTRICTED);
 
-		export const EnableChatImageUpload = defineExpSetting<boolean>('chat.imageUpload', true);
+		export const EnableChatImageUpload = defineExpSetting<boolean>('chat.imageUpload.enabled', true);
 
 		export const EnableReadFileV2 = defineExpSetting<boolean>('chat.advanced.enableReadFileV2', isPreRelease, INTERNAL_RESTRICTED);
 		export const AskAgent = defineExpSetting<boolean>('chat.advanced.enableAskAgent', { defaultValue: false, teamDefaultValue: true, internalDefaultValue: true }, INTERNAL_RESTRICTED);
