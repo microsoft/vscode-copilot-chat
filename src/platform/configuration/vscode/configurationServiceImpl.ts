@@ -35,11 +35,6 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 	}
 
 	getConfig<T>(key: Config<T>, scope?: vscode.ConfigurationScope): T {
-		if (key.options?.valueIgnoredForExternals && !this._isInternal) {
-			// If the setting is restricted to internal users and the user is not internal, we return the default value
-			return this.getDefaultValue(key);
-		}
-
 		const config = scope === undefined ? this.config : vscode.workspace.getConfiguration(CopilotConfigPrefix, scope);
 
 		let configuredValue: T | undefined;
@@ -93,10 +88,6 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 	}
 
 	inspectConfig<T>(key: BaseConfig<T>, scope?: vscode.ConfigurationScope): InspectConfigResult<T> | undefined {
-		if (key.options?.valueIgnoredForExternals && !this._isInternal) {
-			return { defaultValue: this.getDefaultValue(key) };
-		}
-
 		const config = scope === undefined ? this.config : vscode.workspace.getConfiguration(CopilotConfigPrefix, scope);
 		return config.inspect(key.id);
 	}
@@ -194,11 +185,6 @@ export class ConfigurationServiceImpl extends AbstractConfigurationService {
 	}
 
 	private _getUserConfiguredValueForExperimentBasedConfig<T extends ExperimentBasedConfigType>(key: ExperimentBasedConfig<T>, scope?: vscode.ConfigurationScope): T | undefined {
-		if (key.options?.valueIgnoredForExternals && !this._isInternal) {
-			// If the setting is restricted to internal users and the user is not internal, we return the default value
-			return undefined;
-		}
-
 		const config = scope === undefined ? this.config : vscode.workspace.getConfiguration(CopilotConfigPrefix, scope);
 
 		if (!this.isConfigured(key, scope)) {

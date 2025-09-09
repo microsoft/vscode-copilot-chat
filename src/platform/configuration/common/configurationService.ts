@@ -188,10 +188,6 @@ export abstract class AbstractConfigurationService extends Disposable implements
 	}
 
 	getConfigMixedWithDefaults<T>(key: Config<T>): T {
-		if (key.options?.valueIgnoredForExternals && !this._isInternal) {
-			return this.getDefaultValue(key);
-		}
-
 		const userValue = this.getConfig(key);
 
 		// if user doesn't override the setting, return the default
@@ -382,11 +378,6 @@ export interface BaseConfig<T> {
 	 */
 	readonly defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>;
 
-	/**
-	 * Setting options
-	 */
-	readonly options?: ConfigOptions;
-
 	readonly validator?: IValidator<T>;
 }
 
@@ -394,20 +385,6 @@ export const enum ConfigType {
 	Simple,
 	ExperimentBased
 }
-
-export interface ConfigOptions {
-	readonly internal?: boolean;
-	readonly valueIgnoredForExternals?: boolean;
-}
-
-const INTERNAL: ConfigOptions = {
-	internal: true
-};
-
-const INTERNAL_RESTRICTED: ConfigOptions = {
-	internal: true,
-	valueIgnoredForExternals: true,
-};
 
 export interface Config<T> extends BaseConfig<T> {
 	readonly configType: ConfigType.Simple;
@@ -434,7 +411,7 @@ function getPackageJsonDefaults(): Map<string, any> {
 	return packageJsonDefaults;
 }
 
-function toBaseConfig<T>(key: string, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, options: ConfigOptions | undefined): BaseConfig<T> {
+function toBaseConfig<T>(key: string, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>): BaseConfig<T> {
 	const fullyQualifiedId = `${CopilotConfigPrefix}.${key}`;
 	const packageJsonDefaults = getPackageJsonDefaults();
 	const isPublic = packageJsonDefaults.has(fullyQualifiedId);
@@ -452,12 +429,6 @@ function toBaseConfig<T>(key: string, defaultValue: T | DefaultValueWithTeamValu
 			throw new BugIndicatingError(`The default value for setting ${key} is different in packageJson and in code`);
 		}
 	}
-	if (isPublic && options?.internal) {
-		throw new BugIndicatingError(`The setting ${key} is public, it therefore cannot be marked internal!`);
-	}
-	if (isPublic && options?.valueIgnoredForExternals) {
-		throw new BugIndicatingError(`The setting ${key} is public, it therefore cannot be restricted to internal!`);
-	}
 	if (
 		ConfigValueValidators.isDefaultValueWithTeamAndInternalValue(defaultValue)
 		|| ConfigValueValidators.isDefaultValueWithTeamValue(defaultValue)
@@ -468,7 +439,7 @@ function toBaseConfig<T>(key: string, defaultValue: T | DefaultValueWithTeamValu
 		}
 	}
 	const advancedSubKey = fullyQualifiedId.startsWith('github.copilot.advanced.') ? fullyQualifiedId.substring('github.copilot.advanced.'.length) : undefined;
-	return { id: key, isPublic, fullyQualifiedId, advancedSubKey, defaultValue, options };
+	return { id: key, isPublic, fullyQualifiedId, advancedSubKey, defaultValue };
 }
 
 class ConfigRegistry {
@@ -484,14 +455,14 @@ class ConfigRegistry {
 
 export const globalConfigRegistry = new ConfigRegistry();
 
-function defineValidatedSetting<T>(key: string, validator: IValidator<T>, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, options?: ConfigOptions): Config<T> {
-	const value: Config<T> = { ...toBaseConfig(key, defaultValue, options), configType: ConfigType.Simple, validator };
+function defineValidatedSetting<T>(key: string, validator: IValidator<T>, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>): Config<T> {
+	const value: Config<T> = { ...toBaseConfig(key, defaultValue), configType: ConfigType.Simple, validator };
 	globalConfigRegistry.registerConfig(value);
 	return value;
 }
 
-function defineSetting<T>(key: string, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, options?: ConfigOptions): Config<T> {
-	const value: Config<T> = { ...toBaseConfig(key, defaultValue, options), configType: ConfigType.Simple };
+function defineSetting<T>(key: string, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>): Config<T> {
+	const value: Config<T> = { ...toBaseConfig(key, defaultValue), configType: ConfigType.Simple };
 	globalConfigRegistry.registerConfig(value);
 	return value;
 }
@@ -505,8 +476,8 @@ function defineSetting<T>(key: string, defaultValue: T | DefaultValueWithTeamVal
  *     config.github.copilot.chat.advanced.inlineEdits.internalRollout
  * ```
  */
-export function defineExpSetting<T extends ExperimentBasedConfigType>(key: string, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, options?: ConfigOptions, expOptions?: { experimentName?: string }): ExperimentBasedConfig<T> {
-	const value: ExperimentBasedConfig<T> = { ...toBaseConfig(key, defaultValue, options), configType: ConfigType.ExperimentBased, experimentName: expOptions?.experimentName };
+export function defineExpSetting<T extends ExperimentBasedConfigType>(key: string, defaultValue: T | DefaultValueWithTeamValue<T> | DefaultValueWithTeamAndInternalValue<T>, expOptions?: { experimentName?: string }): ExperimentBasedConfig<T> {
+	const value: ExperimentBasedConfig<T> = { ...toBaseConfig(key, defaultValue), configType: ConfigType.ExperimentBased, experimentName: expOptions?.experimentName };
 	if (value.advancedSubKey) {
 		// This is a `github.copilot.advanced.*` setting
 		throw new BugIndicatingError('Shared settings cannot be experiment based');
@@ -571,8 +542,8 @@ export namespace ConfigKey {
 	*/
 	export namespace Shared {
 		/** Allows for overriding the base domain we use for making requests to the CAPI. This helps CAPI devs develop against a local instance. */
-		export const DebugOverrideProxyUrl = defineSetting<string | undefined>('advanced.debug.overrideProxyUrl', undefined, INTERNAL_RESTRICTED);
-		export const DebugOverrideCAPIUrl = defineSetting<string | undefined>('advanced.debug.overrideCapiUrl', undefined, INTERNAL_RESTRICTED);
+		export const DebugOverrideProxyUrl = defineSetting<string | undefined>('advanced.debug.overrideProxyUrl', undefined);
+		export const DebugOverrideCAPIUrl = defineSetting<string | undefined>('advanced.debug.overrideCapiUrl', undefined);
 		export const DebugUseNodeFetchFetcher = defineSetting('advanced.debug.useNodeFetchFetcher', true);
 		export const DebugUseNodeFetcher = defineSetting('advanced.debug.useNodeFetcher', false);
 		export const DebugUseElectronFetcher = defineSetting('advanced.debug.useElectronFetcher', true);
@@ -597,142 +568,142 @@ export namespace ConfigKey {
 		 * Note: this should not be used while self-hosting because it might lead to
 		 * a fundamental different experience compared to our end-users.
 		 */
-		export const DebugOverrideChatEngine = defineSetting<string | undefined>('chat.advanced.debug.overrideChatEngine', undefined, INTERNAL_RESTRICTED);
+		export const DebugOverrideChatEngine = defineSetting<string | undefined>('chat.advanced.debug.overrideChatEngine', undefined);
 		/** Allows forcing a particular context window size.
 		 * This setting doesn't validate values so large windows may not be supported by the model.
 		 * Note: this should not be used while self-hosting because it might lead to
 		 * a fundamental different experience compared to our end-users.
 		 */
-		export const DebugOverrideChatMaxTokenNum = defineSetting('chat.advanced.debug.overrideChatMaxTokenNum', 0, INTERNAL_RESTRICTED);
+		export const DebugOverrideChatMaxTokenNum = defineSetting('chat.advanced.debug.overrideChatMaxTokenNum', 0);
 		/** Allow reporting issue when clicking on the Unhelpful button
 		 * Requires a window reload to take effect
 		 */
-		export const DebugReportFeedback = defineSetting('chat.advanced.debug.reportFeedback', { defaultValue: false, teamDefaultValue: true }, INTERNAL_RESTRICTED);
-		export const DebugCollectFetcherTelemetry = defineExpSetting<boolean>('chat.advanced.debug.collectFetcherTelemetry', true, INTERNAL_RESTRICTED);
-		export const DebugExpUseNodeFetchFetcher = defineExpSetting<boolean | undefined>('chat.advanced.debug.useNodeFetchFetcher', undefined, INTERNAL_RESTRICTED);
-		export const DebugExpUseNodeFetcher = defineExpSetting<boolean | undefined>('chat.advanced.debug.useNodeFetcher', undefined, INTERNAL_RESTRICTED);
-		export const DebugExpUseElectronFetcher = defineExpSetting<boolean | undefined>('chat.advanced.debug.useElectronFetcher', undefined, INTERNAL_RESTRICTED);
+		export const DebugReportFeedback = defineSetting('chat.advanced.debug.reportFeedback', { defaultValue: false, teamDefaultValue: true });
+		export const DebugCollectFetcherTelemetry = defineExpSetting<boolean>('chat.advanced.debug.collectFetcherTelemetry', true);
+		export const DebugExpUseNodeFetchFetcher = defineExpSetting<boolean | undefined>('chat.advanced.debug.useNodeFetchFetcher', undefined);
+		export const DebugExpUseNodeFetcher = defineExpSetting<boolean | undefined>('chat.advanced.debug.useNodeFetcher', undefined);
+		export const DebugExpUseElectronFetcher = defineExpSetting<boolean | undefined>('chat.advanced.debug.useElectronFetcher', undefined);
 		export const GitHistoryRelatedFilesUsingEmbeddings = defineSetting('chat.advanced.suggestRelatedFilesFromGitHistory.useEmbeddings', false);
 
 		/** Uses new expanded project labels */
-		export const ProjectLabelsExpanded = defineExpSetting<boolean>('chat.advanced.projectLabels.expanded', false, INTERNAL);
+		export const ProjectLabelsExpanded = defineExpSetting<boolean>('chat.advanced.projectLabels.expanded', false);
 		/** Add project labels in default agent */
-		export const ProjectLabelsChat = defineExpSetting<boolean>('chat.advanced.projectLabels.chat', false, INTERNAL);
+		export const ProjectLabelsChat = defineExpSetting<boolean>('chat.advanced.projectLabels.chat', false);
 		/** Add project labels in default agent */
-		export const ProjectLabelsInline = defineExpSetting<boolean>('chat.advanced.projectLabels.inline', false, INTERNAL);
-		export const WorkspaceMaxLocalIndexSize = defineExpSetting<number>('chat.advanced.workspace.maxLocalIndexSize', 100_000, INTERNAL);
-		export const WorkspaceEnableFullWorkspace = defineExpSetting<boolean>('chat.advanced.workspace.enableFullWorkspace', true, INTERNAL);
-		export const WorkspaceEnableCodeSearch = defineExpSetting<boolean>('chat.advanced.workspace.enableCodeSearch', true, INTERNAL);
-		export const WorkspaceEnableEmbeddingsSearch = defineExpSetting<boolean>('chat.advanced.workspace.enableEmbeddingsSearch', true, INTERNAL);
-		export const WorkspaceUseCodeSearchInstantIndexing = defineExpSetting<boolean>('chat.advanced.workspace.useCodeSearchInstantIndexing', true, INTERNAL);
-		export const WorkspacePreferredEmbeddingsModel = defineExpSetting<string>('chat.advanced.workspace.preferredEmbeddingsModel', '', INTERNAL);
-		export const WorkspaceEnableAdoCodeSearch = defineExpSetting<boolean>('chat.advanced.workspace.enabledAdoCodeSearch', true, INTERNAL);
-		export const WorkspacePrototypeAdoCodeSearchEndpointOverride = defineSetting<string>('chat.advanced.workspace.prototypeAdoCodeSearchEndpointOverride', '', INTERNAL);
-		export const FeedbackOnChange = defineSetting('chat.advanced.feedback.onChange', false, INTERNAL);
-		export const ReviewIntent = defineSetting('chat.advanced.review.intent', false, INTERNAL);
+		export const ProjectLabelsInline = defineExpSetting<boolean>('chat.advanced.projectLabels.inline', false);
+		export const WorkspaceMaxLocalIndexSize = defineExpSetting<number>('chat.advanced.workspace.maxLocalIndexSize', 100_000);
+		export const WorkspaceEnableFullWorkspace = defineExpSetting<boolean>('chat.advanced.workspace.enableFullWorkspace', true);
+		export const WorkspaceEnableCodeSearch = defineExpSetting<boolean>('chat.advanced.workspace.enableCodeSearch', true);
+		export const WorkspaceEnableEmbeddingsSearch = defineExpSetting<boolean>('chat.advanced.workspace.enableEmbeddingsSearch', true);
+		export const WorkspaceUseCodeSearchInstantIndexing = defineExpSetting<boolean>('chat.advanced.workspace.useCodeSearchInstantIndexing', true);
+		export const WorkspacePreferredEmbeddingsModel = defineExpSetting<string>('chat.advanced.workspace.preferredEmbeddingsModel', '');
+		export const WorkspaceEnableAdoCodeSearch = defineExpSetting<boolean>('chat.advanced.workspace.enabledAdoCodeSearch', true);
+		export const WorkspacePrototypeAdoCodeSearchEndpointOverride = defineSetting<string>('chat.advanced.workspace.prototypeAdoCodeSearchEndpointOverride', '');
+		export const FeedbackOnChange = defineSetting('chat.advanced.feedback.onChange', false);
+		export const ReviewIntent = defineSetting('chat.advanced.review.intent', false);
 		/** Enable the new notebook priorities experiment */
-		export const NotebookSummaryExperimentEnabled = defineSetting('chat.advanced.notebook.summaryExperimentEnabled', false, INTERNAL);
+		export const NotebookSummaryExperimentEnabled = defineSetting('chat.advanced.notebook.summaryExperimentEnabled', false);
 		/** Enable filtering variables by cell document symbols */
-		export const NotebookVariableFilteringEnabled = defineSetting('chat.advanced.notebook.variableFilteringEnabled', false, INTERNAL);
-		export const NotebookAlternativeDocumentFormat = defineExpSetting<AlternativeNotebookFormat>('chat.advanced.notebook.alternativeFormat', AlternativeNotebookFormat.xml, INTERNAL);
-		export const UseAlternativeNESNotebookFormat = defineExpSetting<boolean>('chat.advanced.notebook.alternativeNESFormat.enabled', false, INTERNAL);
-		export const TerminalToDebuggerPatterns = defineSetting<string[]>('chat.advanced.debugTerminalCommandPatterns', [], INTERNAL);
-		export const InlineEditsIgnoreCompletionsDisablement = defineValidatedSetting<boolean>('chat.advanced.inlineEdits.ignoreCompletionsDisablement', vBoolean(), false, INTERNAL_RESTRICTED);
-		export const InlineEditsAsyncCompletions = defineExpSetting<boolean>('chat.advanced.inlineEdits.asyncCompletions', true, INTERNAL_RESTRICTED);
-		export const InlineEditsRevisedCacheStrategy = defineExpSetting<boolean>('chat.advanced.inlineEdits.revisedCacheStrategy', true, INTERNAL_RESTRICTED);
-		export const InlineEditsCacheTracksRejections = defineExpSetting<boolean>('chat.advanced.inlineEdits.cacheTracksRejections', true, INTERNAL_RESTRICTED);
-		export const InlineEditsRecentlyShownCacheEnabled = defineExpSetting<boolean>('chat.advanced.inlineEdits.recentlyShownCacheEnabled', false, INTERNAL_RESTRICTED);
-		export const InlineEditsDebounceUseCoreRequestTime = defineExpSetting<boolean>('chat.advanced.inlineEdits.debounceUseCoreRequestTime', false, INTERNAL_RESTRICTED);
-		export const InlineEditsYieldToCopilot = defineExpSetting<boolean>('chat.advanced.inlineEdits.yieldToCopilot', false, INTERNAL_RESTRICTED);
-		export const InlineEditsExcludedProviders = defineExpSetting<string | undefined>('chat.advanced.inlineEdits.excludedProviders', undefined, INTERNAL_RESTRICTED);
-		export const InlineEditsEnableCompletionsProvider = defineExpSetting<boolean>('chat.advanced.inlineEdits.completionsProvider.enabled', false, INTERNAL_RESTRICTED);
-		export const InlineEditsEnableGhCompletionsProvider = defineExpSetting<boolean>('chat.advanced.inlineEdits.githubCompletionsProvider.enabled', false, INTERNAL_RESTRICTED);
-		export const InlineEditsCompletionsUrl = defineExpSetting<string | undefined>('chat.advanced.inlineEdits.completionsProvider.url', undefined, INTERNAL_RESTRICTED);
-		export const InlineEditsLogContextRecorderEnabled = defineSetting('chat.advanced.inlineEdits.logContextRecorder.enabled', false, INTERNAL_RESTRICTED);
-		export const InlineEditsDebounce = defineExpSetting<number>('chat.advanced.inlineEdits.debounce', 200, INTERNAL_RESTRICTED);
-		export const InlineEditsCacheDelay = defineExpSetting<number>('chat.advanced.inlineEdits.cacheDelay', 300, INTERNAL_RESTRICTED);
-		export const InlineEditsSubsequentCacheDelay = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.subsequentCacheDelay', undefined, INTERNAL_RESTRICTED);
-		export const InlineEditsRebasedCacheDelay = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.rebasedCacheDelay', undefined, INTERNAL_RESTRICTED);
-		export const InlineEditsBackoffDebounceEnabled = defineExpSetting<boolean>('chat.advanced.inlineEdits.backoffDebounceEnabled', true, INTERNAL_RESTRICTED);
-		export const InlineEditsExtraDebounceEndOfLine = defineExpSetting<number>('chat.advanced.inlineEdits.extraDebounceEndOfLine', 0, INTERNAL_RESTRICTED);
-		export const InlineEditsDebounceOnSelectionChange = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.debounceOnSelectionChange', undefined, INTERNAL_RESTRICTED);
-		export const InlineEditsProviderId = defineExpSetting<string | undefined>('chat.advanced.inlineEdits.providerId', undefined, INTERNAL_RESTRICTED);
-		export const InlineEditsHideInternalInterface = defineValidatedSetting<boolean>('chat.advanced.inlineEdits.hideInternalInterface', vBoolean(), false, INTERNAL_RESTRICTED);
-		export const InlineEditsLogCancelledRequests = defineValidatedSetting<boolean>('chat.advanced.inlineEdits.logCancelledRequests', vBoolean(), false, INTERNAL_RESTRICTED);
-		export const InlineEditsUnification = defineExpSetting<boolean>('chat.advanced.inlineEdits.unification', false, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabProviderUrl = defineValidatedSetting<string | undefined>('chat.advanced.inlineEdits.xtabProvider.url', vString(), undefined, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabProviderApiKey = defineValidatedSetting<string | undefined>('chat.advanced.inlineEdits.xtabProvider.apiKey', vString(), undefined, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabProviderModelName = defineExpSetting<string | undefined>('chat.advanced.inlineEdits.xtabProvider.modelName', undefined, INTERNAL_RESTRICTED);
-		export const InlineEditsInlineCompletionsEnabled = defineValidatedSetting<boolean>('chat.advanced.inlineEdits.inlineCompletions.enabled', vBoolean(), true, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabProviderUsePrediction = defineValidatedSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.usePrediction', vBoolean(), true, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabProviderUseVaryingLinesAbove = defineExpSetting<boolean | undefined>('chat.advanced.inlineEdits.xtabProvider.useVaryingLinesAbove', undefined, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabProviderNLinesAbove = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.xtabProvider.nLinesAbove', undefined, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabProviderNLinesBelow = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.xtabProvider.nLinesBelow', undefined, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabProviderRetryWithNMoreLinesBelow = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.xtabProvider.retryWithNMoreLinesBelow', undefined, INTERNAL_RESTRICTED);
-		export const InlineEditsAutoExpandEditWindowLines = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.autoExpandEditWindowLines', undefined, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabNRecentlyViewedDocuments = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.nRecentlyViewedDocuments', xtabPromptOptions.DEFAULT_OPTIONS.recentlyViewedDocuments.nDocuments, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabRecentlyViewedDocumentsMaxTokens = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.recentlyViewedDocuments.maxTokens', xtabPromptOptions.DEFAULT_OPTIONS.recentlyViewedDocuments.maxTokens, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabDiffNEntries = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.diffNEntries', xtabPromptOptions.DEFAULT_OPTIONS.diffHistory.nEntries, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabDiffMaxTokens = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.diffMaxTokens', xtabPromptOptions.DEFAULT_OPTIONS.diffHistory.maxTokens, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabProviderEmitFastCursorLineChange = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.emitFastCursorLineChange', true, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabIncludeViewedFiles = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.includeViewedFiles', xtabPromptOptions.DEFAULT_OPTIONS.recentlyViewedDocuments.includeViewedFiles, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabPageSize = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.pageSize', xtabPromptOptions.DEFAULT_OPTIONS.pagedClipping.pageSize, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabIncludeTagsInCurrentFile = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.includeTagsInCurrentFile', xtabPromptOptions.DEFAULT_OPTIONS.currentFile.includeTags, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabCurrentFileMaxTokens = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.currentFileMaxTokens', xtabPromptOptions.DEFAULT_OPTIONS.currentFile.maxTokens, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabPrioritizeAboveCursor = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.currentFile.prioritizeAboveCursor', xtabPromptOptions.DEFAULT_OPTIONS.currentFile.prioritizeAboveCursor, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabDiffOnlyForDocsInPrompt = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.diffOnlyForDocsInPrompt', xtabPromptOptions.DEFAULT_OPTIONS.diffHistory.onlyForDocsInPrompt, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabDiffUseRelativePaths = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.diffUseRelativePaths', xtabPromptOptions.DEFAULT_OPTIONS.diffHistory.useRelativePaths, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabNNonSignificantLinesToConverge = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.nNonSignificantLinesToConverge', ResponseProcessor.DEFAULT_DIFF_PARAMS.nLinesToConverge, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabNSignificantLinesToConverge = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.nSignificantLinesToConverge', ResponseProcessor.DEFAULT_DIFF_PARAMS.nSignificantLinesToConverge, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabLanguageContextEnabled = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.languageContext.enabled', xtabPromptOptions.DEFAULT_OPTIONS.languageContext.enabled, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabLanguageContextEnabledLanguages = defineSetting<LanguageContextLanguages>('chat.advanced.inlineEdits.xtabProvider.languageContext.enabledLanguages', LANGUAGE_CONTEXT_ENABLED_LANGUAGES, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabLanguageContextMaxTokens = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.languageContext.maxTokens', xtabPromptOptions.DEFAULT_OPTIONS.languageContext.maxTokens, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabUseUnifiedModel = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.useUnifiedModel', false, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabProviderUseSimplifiedPrompt = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.simplifiedPrompt', false, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabProviderUseXtab275Prompting = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.xtab275Prompting', false, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabUseNes41Miniv3Prompting = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.useNes41Miniv3Prompting', false, INTERNAL_RESTRICTED);
-		export const InlineEditsXtabCodexV21NesUnified = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.codexv21nesUnified', false, INTERNAL_RESTRICTED);
-		export const InlineEditsDiagnosticsExplorationEnabled = defineSetting<boolean | undefined>('chat.advanced.inlineEdits.inlineEditsDiagnosticsExplorationEnabled', false, INTERNAL_RESTRICTED);
-		export const EditSourceTrackingShowDecorations = defineSetting('chat.advanced.editSourceTracking.showDecorations', false, INTERNAL);
-		export const EditSourceTrackingShowStatusBar = defineSetting('chat.advanced.editSourceTracking.showStatusBar', false, INTERNAL);
-		export const WorkspaceRecordingEnabled = defineSetting('chat.advanced.localWorkspaceRecording.enabled', false, INTERNAL);
-		export const EditRecordingEnabled = defineSetting('chat.advanced.editRecording.enabled', false, INTERNAL);
-		export const InternalWelcomeHintEnabled = defineSetting('chat.advanced.welcomePageHint.enabled', { defaultValue: false, internalDefaultValue: true, teamDefaultValue: true }, INTERNAL_RESTRICTED);
+		export const NotebookVariableFilteringEnabled = defineSetting('chat.advanced.notebook.variableFilteringEnabled', false);
+		export const NotebookAlternativeDocumentFormat = defineExpSetting<AlternativeNotebookFormat>('chat.advanced.notebook.alternativeFormat', AlternativeNotebookFormat.xml);
+		export const UseAlternativeNESNotebookFormat = defineExpSetting<boolean>('chat.advanced.notebook.alternativeNESFormat.enabled', false);
+		export const TerminalToDebuggerPatterns = defineSetting<string[]>('chat.advanced.debugTerminalCommandPatterns', []);
+		export const InlineEditsIgnoreCompletionsDisablement = defineValidatedSetting<boolean>('chat.advanced.inlineEdits.ignoreCompletionsDisablement', vBoolean(), false);
+		export const InlineEditsAsyncCompletions = defineExpSetting<boolean>('chat.advanced.inlineEdits.asyncCompletions', true);
+		export const InlineEditsRevisedCacheStrategy = defineExpSetting<boolean>('chat.advanced.inlineEdits.revisedCacheStrategy', true);
+		export const InlineEditsCacheTracksRejections = defineExpSetting<boolean>('chat.advanced.inlineEdits.cacheTracksRejections', true);
+		export const InlineEditsRecentlyShownCacheEnabled = defineExpSetting<boolean>('chat.advanced.inlineEdits.recentlyShownCacheEnabled', false);
+		export const InlineEditsDebounceUseCoreRequestTime = defineExpSetting<boolean>('chat.advanced.inlineEdits.debounceUseCoreRequestTime', false);
+		export const InlineEditsYieldToCopilot = defineExpSetting<boolean>('chat.advanced.inlineEdits.yieldToCopilot', false);
+		export const InlineEditsExcludedProviders = defineExpSetting<string | undefined>('chat.advanced.inlineEdits.excludedProviders', undefined);
+		export const InlineEditsEnableCompletionsProvider = defineExpSetting<boolean>('chat.advanced.inlineEdits.completionsProvider.enabled', false);
+		export const InlineEditsEnableGhCompletionsProvider = defineExpSetting<boolean>('chat.advanced.inlineEdits.githubCompletionsProvider.enabled', false);
+		export const InlineEditsCompletionsUrl = defineExpSetting<string | undefined>('chat.advanced.inlineEdits.completionsProvider.url', undefined);
+		export const InlineEditsLogContextRecorderEnabled = defineSetting('chat.advanced.inlineEdits.logContextRecorder.enabled', false);
+		export const InlineEditsDebounce = defineExpSetting<number>('chat.advanced.inlineEdits.debounce', 200);
+		export const InlineEditsCacheDelay = defineExpSetting<number>('chat.advanced.inlineEdits.cacheDelay', 300);
+		export const InlineEditsSubsequentCacheDelay = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.subsequentCacheDelay', undefined);
+		export const InlineEditsRebasedCacheDelay = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.rebasedCacheDelay', undefined);
+		export const InlineEditsBackoffDebounceEnabled = defineExpSetting<boolean>('chat.advanced.inlineEdits.backoffDebounceEnabled', true);
+		export const InlineEditsExtraDebounceEndOfLine = defineExpSetting<number>('chat.advanced.inlineEdits.extraDebounceEndOfLine', 0);
+		export const InlineEditsDebounceOnSelectionChange = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.debounceOnSelectionChange', undefined);
+		export const InlineEditsProviderId = defineExpSetting<string | undefined>('chat.advanced.inlineEdits.providerId', undefined);
+		export const InlineEditsHideInternalInterface = defineValidatedSetting<boolean>('chat.advanced.inlineEdits.hideInternalInterface', vBoolean(), false);
+		export const InlineEditsLogCancelledRequests = defineValidatedSetting<boolean>('chat.advanced.inlineEdits.logCancelledRequests', vBoolean(), false);
+		export const InlineEditsUnification = defineExpSetting<boolean>('chat.advanced.inlineEdits.unification', false);
+		export const InlineEditsXtabProviderUrl = defineValidatedSetting<string | undefined>('chat.advanced.inlineEdits.xtabProvider.url', vString(), undefined);
+		export const InlineEditsXtabProviderApiKey = defineValidatedSetting<string | undefined>('chat.advanced.inlineEdits.xtabProvider.apiKey', vString(), undefined);
+		export const InlineEditsXtabProviderModelName = defineExpSetting<string | undefined>('chat.advanced.inlineEdits.xtabProvider.modelName', undefined);
+		export const InlineEditsInlineCompletionsEnabled = defineValidatedSetting<boolean>('chat.advanced.inlineEdits.inlineCompletions.enabled', vBoolean(), true);
+		export const InlineEditsXtabProviderUsePrediction = defineValidatedSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.usePrediction', vBoolean(), true);
+		export const InlineEditsXtabProviderUseVaryingLinesAbove = defineExpSetting<boolean | undefined>('chat.advanced.inlineEdits.xtabProvider.useVaryingLinesAbove', undefined);
+		export const InlineEditsXtabProviderNLinesAbove = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.xtabProvider.nLinesAbove', undefined);
+		export const InlineEditsXtabProviderNLinesBelow = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.xtabProvider.nLinesBelow', undefined);
+		export const InlineEditsXtabProviderRetryWithNMoreLinesBelow = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.xtabProvider.retryWithNMoreLinesBelow', undefined);
+		export const InlineEditsAutoExpandEditWindowLines = defineExpSetting<number | undefined>('chat.advanced.inlineEdits.autoExpandEditWindowLines', undefined);
+		export const InlineEditsXtabNRecentlyViewedDocuments = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.nRecentlyViewedDocuments', xtabPromptOptions.DEFAULT_OPTIONS.recentlyViewedDocuments.nDocuments);
+		export const InlineEditsXtabRecentlyViewedDocumentsMaxTokens = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.recentlyViewedDocuments.maxTokens', xtabPromptOptions.DEFAULT_OPTIONS.recentlyViewedDocuments.maxTokens);
+		export const InlineEditsXtabDiffNEntries = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.diffNEntries', xtabPromptOptions.DEFAULT_OPTIONS.diffHistory.nEntries);
+		export const InlineEditsXtabDiffMaxTokens = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.diffMaxTokens', xtabPromptOptions.DEFAULT_OPTIONS.diffHistory.maxTokens);
+		export const InlineEditsXtabProviderEmitFastCursorLineChange = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.emitFastCursorLineChange', true);
+		export const InlineEditsXtabIncludeViewedFiles = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.includeViewedFiles', xtabPromptOptions.DEFAULT_OPTIONS.recentlyViewedDocuments.includeViewedFiles);
+		export const InlineEditsXtabPageSize = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.pageSize', xtabPromptOptions.DEFAULT_OPTIONS.pagedClipping.pageSize);
+		export const InlineEditsXtabIncludeTagsInCurrentFile = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.includeTagsInCurrentFile', xtabPromptOptions.DEFAULT_OPTIONS.currentFile.includeTags);
+		export const InlineEditsXtabCurrentFileMaxTokens = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.currentFileMaxTokens', xtabPromptOptions.DEFAULT_OPTIONS.currentFile.maxTokens);
+		export const InlineEditsXtabPrioritizeAboveCursor = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.currentFile.prioritizeAboveCursor', xtabPromptOptions.DEFAULT_OPTIONS.currentFile.prioritizeAboveCursor);
+		export const InlineEditsXtabDiffOnlyForDocsInPrompt = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.diffOnlyForDocsInPrompt', xtabPromptOptions.DEFAULT_OPTIONS.diffHistory.onlyForDocsInPrompt);
+		export const InlineEditsXtabDiffUseRelativePaths = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.diffUseRelativePaths', xtabPromptOptions.DEFAULT_OPTIONS.diffHistory.useRelativePaths);
+		export const InlineEditsXtabNNonSignificantLinesToConverge = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.nNonSignificantLinesToConverge', ResponseProcessor.DEFAULT_DIFF_PARAMS.nLinesToConverge);
+		export const InlineEditsXtabNSignificantLinesToConverge = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.nSignificantLinesToConverge', ResponseProcessor.DEFAULT_DIFF_PARAMS.nSignificantLinesToConverge);
+		export const InlineEditsXtabLanguageContextEnabled = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.languageContext.enabled', xtabPromptOptions.DEFAULT_OPTIONS.languageContext.enabled);
+		export const InlineEditsXtabLanguageContextEnabledLanguages = defineSetting<LanguageContextLanguages>('chat.advanced.inlineEdits.xtabProvider.languageContext.enabledLanguages', LANGUAGE_CONTEXT_ENABLED_LANGUAGES);
+		export const InlineEditsXtabLanguageContextMaxTokens = defineExpSetting<number>('chat.advanced.inlineEdits.xtabProvider.languageContext.maxTokens', xtabPromptOptions.DEFAULT_OPTIONS.languageContext.maxTokens);
+		export const InlineEditsXtabUseUnifiedModel = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.useUnifiedModel', false);
+		export const InlineEditsXtabProviderUseSimplifiedPrompt = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.simplifiedPrompt', false);
+		export const InlineEditsXtabProviderUseXtab275Prompting = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.xtab275Prompting', false);
+		export const InlineEditsXtabUseNes41Miniv3Prompting = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.useNes41Miniv3Prompting', false);
+		export const InlineEditsXtabCodexV21NesUnified = defineExpSetting<boolean>('chat.advanced.inlineEdits.xtabProvider.codexv21nesUnified', false);
+		export const InlineEditsDiagnosticsExplorationEnabled = defineSetting<boolean | undefined>('chat.advanced.inlineEdits.inlineEditsDiagnosticsExplorationEnabled', false);
+		export const EditSourceTrackingShowDecorations = defineSetting('chat.advanced.editSourceTracking.showDecorations', false);
+		export const EditSourceTrackingShowStatusBar = defineSetting('chat.advanced.editSourceTracking.showStatusBar', false);
+		export const WorkspaceRecordingEnabled = defineSetting('chat.advanced.localWorkspaceRecording.enabled', false);
+		export const EditRecordingEnabled = defineSetting('chat.advanced.editRecording.enabled', false);
+		export const InternalWelcomeHintEnabled = defineSetting('chat.advanced.welcomePageHint.enabled', { defaultValue: false, internalDefaultValue: true, teamDefaultValue: true });
 		/** Configure temporal context max age */
-		export const TemporalContextMaxAge = defineExpSetting<number>('chat.advanced.temporalContext.maxAge', 100, INTERNAL);
-		export const TemporalContextPreferSameLang = defineExpSetting<boolean>('chat.advanced.temporalContext.preferSameLang', false, INTERNAL);
-		export const CodeSearchAgentEnabled = defineSetting<boolean | undefined>('chat.advanced.codesearch.agent.enabled', true, INTERNAL_RESTRICTED);
-		export const EditLinkification = defineSetting<boolean | undefined>('chat.advanced.edits.linkification', undefined, INTERNAL_RESTRICTED);
-		export const AgentTemperature = defineSetting<number | undefined>('chat.advanced.agent.temperature', undefined, INTERNAL_RESTRICTED);
+		export const TemporalContextMaxAge = defineExpSetting<number>('chat.advanced.temporalContext.maxAge', 100);
+		export const TemporalContextPreferSameLang = defineExpSetting<boolean>('chat.advanced.temporalContext.preferSameLang', false);
+		export const CodeSearchAgentEnabled = defineSetting<boolean | undefined>('chat.advanced.codesearch.agent.enabled', true);
+		export const EditLinkification = defineSetting<boolean | undefined>('chat.advanced.edits.linkification', undefined);
+		export const AgentTemperature = defineSetting<number | undefined>('chat.advanced.agent.temperature', undefined);
 
-		export const InlineChatUseCodeMapper = defineSetting<boolean>('chat.advanced.inlineChat.useCodeMapper', false, INTERNAL_RESTRICTED);
-		export const InstantApplyModelName = defineExpSetting<string>('chat.advanced.instantApply.modelName', 'gpt-4o-instant-apply-full-ft-v66', INTERNAL_RESTRICTED);
-		export const InstantApplyShortModelName = defineExpSetting<string>('chat.advanced.instantApply.shortContextModelName', CHAT_MODEL.SHORT_INSTANT_APPLY, INTERNAL);
-		export const InstantApplyShortContextLimit = defineExpSetting<number>('chat.advanced.instantApply.shortContextLimit', 8000, INTERNAL);
+		export const InlineChatUseCodeMapper = defineSetting<boolean>('chat.advanced.inlineChat.useCodeMapper', false);
+		export const InstantApplyModelName = defineExpSetting<string>('chat.advanced.instantApply.modelName', 'gpt-4o-instant-apply-full-ft-v66');
+		export const InstantApplyShortModelName = defineExpSetting<string>('chat.advanced.instantApply.shortContextModelName', CHAT_MODEL.SHORT_INSTANT_APPLY);
+		export const InstantApplyShortContextLimit = defineExpSetting<number>('chat.advanced.instantApply.shortContextLimit', 8000);
 
-		export const EnableUserPreferences = defineSetting<boolean>('chat.advanced.enableUserPreferences', false, INTERNAL_RESTRICTED);
+		export const EnableUserPreferences = defineSetting<boolean>('chat.advanced.enableUserPreferences', false);
 
-		export const SweBenchAgentPrompt = defineSetting<boolean>('chat.advanced.swebench.agentPrompt', false, INTERNAL_RESTRICTED);
+		export const SweBenchAgentPrompt = defineSetting<boolean>('chat.advanced.swebench.agentPrompt', false);
 
-		export const SummarizeAgentConversationHistoryThreshold = defineSetting<number | undefined>('chat.advanced.summarizeAgentConversationHistoryThreshold', undefined, INTERNAL_RESTRICTED);
-		export const AgentHistorySummarizationMode = defineSetting<string | undefined>('chat.advanced.agentHistorySummarizationMode', undefined, INTERNAL_RESTRICTED);
-		export const AgentHistorySummarizationWithPromptCache = defineExpSetting<boolean | undefined>('chat.advanced.agentHistorySummarizationWithPromptCache', false, INTERNAL_RESTRICTED);
-		export const AgentHistorySummarizationForceGpt41 = defineExpSetting<boolean | undefined>('chat.advanced.agentHistorySummarizationForceGpt41', false, INTERNAL_RESTRICTED);
-		export const UseResponsesApi = defineExpSetting<boolean | undefined>('chat.advanced.useResponsesApi', false, INTERNAL_RESTRICTED);
-		export const UseResponsesApiTruncation = defineSetting<boolean | undefined>('chat.advanced.useResponsesApiTruncation', false, INTERNAL_RESTRICTED);
-		export const ResponsesApiReasoning = defineSetting<boolean | string | undefined>('chat.advanced.responsesApiReasoning', false, INTERNAL_RESTRICTED);
+		export const SummarizeAgentConversationHistoryThreshold = defineSetting<number | undefined>('chat.advanced.summarizeAgentConversationHistoryThreshold', undefined);
+		export const AgentHistorySummarizationMode = defineSetting<string | undefined>('chat.advanced.agentHistorySummarizationMode', undefined);
+		export const AgentHistorySummarizationWithPromptCache = defineExpSetting<boolean | undefined>('chat.advanced.agentHistorySummarizationWithPromptCache', false);
+		export const AgentHistorySummarizationForceGpt41 = defineExpSetting<boolean | undefined>('chat.advanced.agentHistorySummarizationForceGpt41', false);
+		export const UseResponsesApi = defineExpSetting<boolean | undefined>('chat.advanced.useResponsesApi', false);
+		export const UseResponsesApiTruncation = defineSetting<boolean | undefined>('chat.advanced.useResponsesApiTruncation', false);
+		export const ResponsesApiReasoning = defineSetting<boolean | string | undefined>('chat.advanced.responsesApiReasoning', false);
 
-		export const EnableChatImageUpload = defineExpSetting<boolean>('chat.advanced.imageUpload', false, INTERNAL);
+		export const EnableChatImageUpload = defineExpSetting<boolean>('chat.advanced.imageUpload', false);
 
-		export const EnableReadFileV2 = defineExpSetting<boolean>('chat.advanced.enableReadFileV2', isPreRelease, INTERNAL_RESTRICTED);
-		export const AskAgent = defineExpSetting<boolean>('chat.advanced.enableAskAgent', { defaultValue: false, teamDefaultValue: true, internalDefaultValue: true }, INTERNAL_RESTRICTED);
-		export const VerifyTextDocumentChanges = defineExpSetting<boolean>('chat.advanced.inlineEdits.verifyTextDocumentChanges', false, INTERNAL_RESTRICTED);
-		export const OmitBaseAgentInstructions = defineSetting<boolean>('chat.advanced.omitBaseAgentInstructions', false, INTERNAL);
+		export const EnableReadFileV2 = defineExpSetting<boolean>('chat.advanced.enableReadFileV2', isPreRelease);
+		export const AskAgent = defineExpSetting<boolean>('chat.advanced.enableAskAgent', { defaultValue: false, teamDefaultValue: true, internalDefaultValue: true });
+		export const VerifyTextDocumentChanges = defineExpSetting<boolean>('chat.advanced.inlineEdits.verifyTextDocumentChanges', false);
+		export const OmitBaseAgentInstructions = defineSetting<boolean>('chat.advanced.omitBaseAgentInstructions', false);
 
 		export const PromptFileContext = defineExpSetting<boolean>('chat.advanced.promptFileContextProvider.enabled', true);
-		export const MultiReplaceString = defineExpSetting<boolean>('chat.advanced.multiReplaceString.enabled', false, INTERNAL);
-		export const MultiReplaceStringGrok = defineExpSetting<boolean>('chat.advanced.multiReplaceStringGrok.enabled', false, INTERNAL);
-		export const Gpt5ApplyPatchExclusively = defineExpSetting<boolean>('chat.advanced.gpt5ApplyPatchExclusively.enabled', false, INTERNAL);
+		export const MultiReplaceString = defineExpSetting<boolean>('chat.advanced.multiReplaceString.enabled', false);
+		export const MultiReplaceStringGrok = defineExpSetting<boolean>('chat.advanced.multiReplaceStringGrok.enabled', false);
+		export const Gpt5ApplyPatchExclusively = defineExpSetting<boolean>('chat.advanced.gpt5ApplyPatchExclusively.enabled', false);
 
 		export const EnableClaudeCodeAgent = defineSetting<boolean | string | undefined>('chat.advanced.claudeCode.enabled', false);
 		export const ClaudeCodeDebugEnabled = defineSetting<boolean>('chat.advanced.claudeCode.debug', false);
