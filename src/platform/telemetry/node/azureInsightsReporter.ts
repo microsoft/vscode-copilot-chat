@@ -9,6 +9,7 @@ process.env.APPLICATION_INSIGHTS_NO_STATSBEAT = 'true';
 import * as appInsights from 'applicationinsights';
 import * as os from 'os';
 import type { TelemetrySender } from 'vscode';
+import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IEnvService } from '../../env/common/envService';
 import { TelemetryProperties } from '../common/telemetry';
@@ -26,7 +27,7 @@ function unwrapEventNameFromPrefix(eventName: string): string {
 
 export class AzureInsightReporter implements TelemetrySender {
 	private readonly client: appInsights.TelemetryClient;
-	constructor(capiClientService: ICAPIClientService, envService: IEnvService, private readonly namespace: string, key: string) {
+	constructor(capiClientService: ICAPIClientService, envService: IEnvService, private readonly tokenStore: ICopilotTokenStore, private readonly namespace: string, key: string) {
 		this.client = createAppInsightsClient(capiClientService, envService, key);
 		configureReporter(capiClientService, envService, this.client);
 	}
@@ -51,10 +52,12 @@ export class AzureInsightReporter implements TelemetrySender {
 
 	sendEventData(eventName: string, data?: Record<string, any> | undefined): void {
 		const { properties, measurements } = this.separateData(data || {});
+		const trackingId = this.tokenStore.copilotToken?.getTokenValue('tid');
 		this.client.trackEvent({
 			name: this.massageEventName(eventName),
 			properties,
 			measurements,
+			tagOverrides: trackingId ? { 'ai.user.id': trackingId } : undefined
 		});
 	}
 
@@ -102,6 +105,8 @@ function configureReporter(capiClientService: ICAPIClientService, envService: IE
 	client.commonProperties = decorateWithCommonProperties(client.commonProperties, envService);
 	// Do not want personal machine names to be sent
 	client.context.tags[client.context.keys.cloudRoleInstance] = 'REDACTED';
+
+	client.context.tags[client.context.keys.sessionId] = envService.sessionId;
 
 	client.config.endpointUrl = capiClientService.copilotTelemetryURL;
 }
