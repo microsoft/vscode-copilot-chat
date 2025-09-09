@@ -752,6 +752,7 @@ export class VerifyTextDocumentChanges extends Disposable {
 	private _verifyDocumentStateConsistency(e: TextDocumentChangeEvent): void {
 		// Only interested in telemetry for known schemas (files, untitled, notebook cells)
 		if (e.document.uri.scheme !== Schemas.file &&
+			e.document.uri.scheme !== Schemas.vscodeRemote &&
 			e.document.uri.scheme !== 'untitled' &&
 			e.document.uri.scheme !== Schemas.vscodeNotebookCell) {
 			return;
