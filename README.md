@@ -59,6 +59,77 @@ Your code is yours. We follow responsible practices in accordance with our [Priv
 
 To get the latest security fixes, please use the latest version of the Copilot extension and VS Code.
 
+## Self-Hosting / Building from Source
+
+If you want to build and run GitHub Copilot Chat from source code instead of installing from the marketplace, follow these steps:
+
+### Requirements
+
+- **Node.js**: Version 22.x or higher
+- **npm**: Version 9.0.0 or higher  
+- **Python**: Version 3.10-3.12 (for native modules)
+- **Git LFS**: Required for running tests
+- **Windows**: Visual Studio Build Tools 2019 or later (for node-gyp)
+
+### Installation and Build
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/microsoft/vscode-copilot-chat.git
+   cd vscode-copilot-chat
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Set up authentication token (optional for basic building):**
+   ```bash
+   npm run get_token
+   ```
+
+4. **Build the extension:**
+   ```bash
+   npm run build
+   ```
+
+### Package and Install
+
+1. **Create a .vsix package:**
+   ```bash
+   npm run package
+   ```
+   This creates a `copilot-chat-{version}.vsix` file in the root directory.
+
+2. **Install the packaged extension in VS Code:**
+   - Open VS Code
+   - Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on Mac)
+   - Type "Extensions: Install from VSIX"
+   - Select the generated `.vsix` file
+
+### Development Mode
+
+For active development with hot reloading:
+
+1. **Start watch mode:**
+   ```bash
+   npm run watch
+   ```
+
+2. **Launch in VS Code:**
+   - Open the project in VS Code
+   - Press `F5` or use "Run and Debug" → "Launch Copilot Extension"
+
+### Configuration
+
+After installation, you'll still need:
+- A valid GitHub Copilot subscription
+- GitHub authentication through VS Code
+- Proper network access to GitHub's Copilot services
+
+For detailed development instructions, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ### Resources & next steps
 * **Sign up for [GitHub Copilot Free](https://github.com/settings/copilot?utm_source=vscode-chat-readme&utm_medium=third&utm_campaign=2025mar-em-MSFT-signup)**
     * If you're using Copilot for your business, check out [Copilot Business](https://docs.github.com/en/copilot/copilot-business/about-github-copilot-business) and [Copilot Enterprise](https://docs.github.com/en/copilot/github-copilot-enterprise/overview/about-github-copilot-enterprise)
