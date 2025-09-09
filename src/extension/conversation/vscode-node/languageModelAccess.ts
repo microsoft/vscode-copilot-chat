@@ -7,6 +7,7 @@
 import { Raw } from '@vscode/prompt-tsx';
 import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
 import { IBlockedExtensionService } from '../../../platform/chat/common/blockedExtensionService';
 import { ChatFetchResponseType, ChatLocation, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { getTextPart } from '../../../platform/chat/common/globalStringUtils';
@@ -95,11 +96,11 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 	}
 
 	private async _provideLanguageModelChatInfo(options: { silent: boolean }, token: vscode.CancellationToken): Promise<vscode.LanguageModelChatInformation[]> {
-		// const session = await this._getAuthSession();
-		// if (!session) {
-		// 	this._currentModels = [];
-		// 	return [];
-		// }
+		const session = await this._getAuthSession();
+		if (!session) {
+			this._currentModels = [];
+			return [];
+		}
 
 		const models: vscode.LanguageModelChatInformation[] = [];
 		const chatEndpoints = await this._endpointProvider.getAllChatEndpoints();
@@ -149,6 +150,8 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				multiplierString = 'Variable';
 			}
 
+			const session = this._authenticationService.anyGitHubSession;
+
 			const model: vscode.LanguageModelChatInformation = {
 				id: endpoint.model,
 				name: endpoint.model === AutoChatEndpoint.id ? 'Auto' : endpoint.name,
@@ -159,7 +162,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				version: endpoint.version,
 				maxInputTokens: endpoint.modelMaxPromptTokens - baseCount - BaseTokensPerCompletion,
 				maxOutputTokens: endpoint.maxOutputTokens,
-				requiresAuthorization: undefined, //session && { label: session.account.label },
+				requiresAuthorization: session && { label: session.account.label },
 				isDefault: endpoint === defaultChatEndpoint,
 				isUserSelectable: endpoint.showInModelPicker,
 				capabilities: {
@@ -239,23 +242,15 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		await update();
 	}
 
-	private async _getAuthSession(): Promise<vscode.AuthenticationSession | undefined> {
+	private async _getAuthSession(): Promise<CopilotToken | undefined> {
 		try {
-			await this._authenticationService.getCopilotToken();
+			const copilotToken = await this._authenticationService.getCopilotToken();
+			return copilotToken;
 		} catch (e) {
 			this._logService.warn('[LanguageModelAccess] LanguageModel/Embeddings are not available without auth token');
 			this._logService.error(e);
 			return undefined;
 		}
-
-		const session = this._authenticationService.anyGitHubSession;
-		if (!session) {
-			// At this point, we should have auth, but log just in case we don't so we have record of it
-			this._logService.error('[LanguageModelAccess] Auth token not present when we expected it to be');
-			return undefined;
-		}
-
-		return session;
 	}
 }
 
