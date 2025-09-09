@@ -777,7 +777,6 @@ export class VerifyTextDocumentChanges extends Disposable {
 					"comment": "Telemetry for verifying VSCode content change API consistency",
 					"languageId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Language of the currently open document." },
 					"sourceOfChange": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Source of the change." },
-					"isLineFeedChange": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the change was a line feed change.", "isMeasurement": true },
 					"reason": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Reason for change (1 = undo, 2 = redo).", "isMeasurement": true },
 					"previousLineFeed": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Line feed of the previously open document.", "isMeasurement": true },
 					"currentLineFeed": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Line feed of the currently open document.", "isMeasurement": true },
@@ -792,7 +791,6 @@ export class VerifyTextDocumentChanges extends Disposable {
 				reason: e.reason,
 				previousLineFeed: previousValue.linefeed,
 				currentLineFeed: e.document.eol,
-				isLineFeedChange: expectedText.replace(/\r?\n/g, '') === currentText.replace(/\r?\n/g, '') ? 1 : 0
 			});
 		}
 	}
