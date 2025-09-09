@@ -23,7 +23,7 @@ export class ObservableGit extends Disposable {
 
 		this.branch = observableValue<string | undefined>('branchName', undefined);
 
-		// this.init();
+		this.init();
 	}
 
 	async init() {
