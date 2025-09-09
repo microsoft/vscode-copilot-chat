@@ -5,7 +5,7 @@
 
 import * as cp from 'child_process';
 import type { CancellationToken } from 'vscode';
-import { IConfigurationService } from '../../../../platform/configuration/common/configuration';
+import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
@@ -67,7 +67,7 @@ export class OpenCodeServerManager extends Disposable implements IOpenCodeServer
 	}
 
 	private getConfiguration(): OpenCodeConfiguration {
-		const config = this.configurationService.getValue<any>('opencode');
+		const config = this.configurationService.getNonExtensionConfig<any>('opencode');
 		return {
 			server: {
 				hostname: config?.server?.hostname ?? '127.0.0.1',
@@ -98,7 +98,7 @@ export class OpenCodeServerManager extends Disposable implements IOpenCodeServer
 
 	async start(token?: CancellationToken): Promise<IOpenCodeServerConfig> {
 		const userConfig = this.getConfiguration();
-		
+
 		if (!userConfig.server.autoStart) {
 			throw new Error('OpenCode server auto-start is disabled');
 		}
@@ -113,7 +113,7 @@ export class OpenCodeServerManager extends Disposable implements IOpenCodeServer
 		const port = userConfig.server.port;
 
 		this._server = new OpenCodeServer(hostname, port, userConfig.server.timeout, this.logService);
-		
+
 		try {
 			this._config = await this._server.start(token);
 			this.logService.info(`[OpenCodeServerManager] OpenCode server started at ${this._config.url}`);
@@ -164,7 +164,7 @@ class OpenCodeServer {
 		private readonly port: number,
 		private readonly timeout: number,
 		private readonly logService: ILogService
-	) {}
+	) { }
 
 	async start(token?: CancellationToken): Promise<IOpenCodeServerConfig> {
 		if (this._process) {
@@ -174,12 +174,12 @@ class OpenCodeServer {
 		return new Promise((resolve, reject) => {
 			// Build the command arguments for opencode serve
 			const args = ['serve'];
-			
+
 			// Add hostname and port if specified
 			if (this.hostname !== '127.0.0.1') {
 				args.push('--hostname', this.hostname);
 			}
-			
+
 			if (this.port !== 0) {
 				args.push('--port', this.port.toString());
 			}
@@ -233,13 +233,13 @@ class OpenCodeServer {
 				if (serverReadyMatch && !this._config) {
 					const detectedPort = parseInt(serverReadyMatch[1] || serverReadyMatch[2] || serverReadyMatch[3], 10);
 					const actualPort = this.port === 0 ? detectedPort : this.port;
-					
+
 					this._config = {
 						hostname: this.hostname,
 						port: actualPort,
 						url: `http://${this.hostname}:${actualPort}`
 					};
-					
+
 					this.logService.info(`[OpenCodeServer] Server ready at ${this._config.url}`);
 					resolve(this._config);
 				}
@@ -284,7 +284,7 @@ class OpenCodeServer {
 
 		return new Promise((resolve) => {
 			const process = this._process!;
-			
+
 			// Set up exit handler
 			const onExit = () => {
 				this._process = undefined;

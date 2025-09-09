@@ -353,19 +353,19 @@ This document breaks down the implementation of the OpenCode integration into a 
 
 ## Phase 3: Registration and Testing
 
-### Step 3.1: Register Providers
+### [x] Step 3.1: Register Providers
 - **Task:** Register the `opencode` chat providers with VS Code.
 - **Details:**
     - Create `src/extension/agents/opencode/vscode-node/opencodeContribution.ts`.
     - In this file, create a class that registers the `OpenCodeChatSessionContentProvider` and `OpenCodeChatSessionItemProvider`.
 
-### Step 3.2: Write Unit Tests
+### [x] Step 3.2: Write Unit Tests
 - **Task:** Write unit tests for the new components.
 - **Details:**
     - Create test files under `src/extension/agents/opencode/node/test/`.
     - Write tests for `OpenCodeServerManager`, `OpenCodeAgentManager`, and `OpenCodeSessionService`.
 
-### Step 3.3: Write Integration Tests
+### [x] Step 3.3: Write Integration Tests
 - **Task:** Write integration tests for the `opencode` integration.
 - **Details:**
     - Create integration tests that use a mock `opencode` server to test the end-to-end flow.
@@ -484,12 +484,12 @@ interface OpenCodeConfiguration {
 ## Success Criteria
 
 ### Functional Requirements
-- [ ] OpenCode server lifecycle management
-- [ ] Session creation, persistence, and recovery
-- [ ] Real-time message streaming and updates
-- [ ] Tool invocation with permission handling
-- [ ] VS Code chat interface integration
-- [ ] Error handling and recovery mechanisms
+- [x] OpenCode server lifecycle management
+- [x] Session creation, persistence, and recovery
+- [x] Real-time message streaming and updates
+- [x] Tool invocation with permission handling
+- [x] VS Code chat interface integration
+- [x] Error handling and recovery mechanisms
 
 ### Performance Requirements
 - [ ] Server startup time < 5 seconds
