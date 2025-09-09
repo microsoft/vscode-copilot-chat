@@ -3,14 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { TestingServiceCollection } from '../../../../../platform/test/node/services';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../util/common/test/testUtils';
 import { CancellationToken, CancellationTokenSource } from '../../../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { CreateSessionOptions, IOpenCodeClient, OpenCodeMessage, OpenCodeSessionData } from '../opencodeClient';
-import { IOpenCodeSessionService, OpenCodeSessionService } from '../opencodeSessionService';
+import { OpenCodeSessionService } from '../opencodeSessionService';
 
 class MockOpenCodeClient implements IOpenCodeClient {
 	declare _serviceBrand: undefined;

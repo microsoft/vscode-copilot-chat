@@ -231,7 +231,8 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 			};
 
 			if (body) {
-				requestOptions.headers!['Content-Length'] = Buffer.byteLength(body);
+				const headers = requestOptions.headers as Record<string, string>;
+				headers['Content-Length'] = Buffer.byteLength(body).toString();
 			}
 
 			const req = httpModule.request(requestOptions, (res) => {
@@ -252,7 +253,7 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 								try {
 									data = JSON.parse(responseBody);
 								} catch (parseError) {
-									this.logService.warn('[OpenCodeClient] Failed to parse response JSON', parseError);
+									this.logService.warn(`[OpenCodeClient] Failed to parse response JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
 								}
 							}
 							resolve({ success: true, data });
@@ -274,7 +275,7 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 			});
 
 			req.on('error', (error) => {
-				this.logService.error('[OpenCodeClient] Request error', error);
+				this.logService.error(`[OpenCodeClient] Request error: ${error instanceof Error ? error.message : String(error)}`);
 				reject(error);
 			});
 

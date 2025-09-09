@@ -111,7 +111,7 @@ export class OpenCodeSessionService extends Disposable implements IOpenCodeSessi
 
 	async createSession(options?: CreateSessionOptions): Promise<IOpenCodeSession> {
 		try {
-			this.logService.info('[OpenCodeSessionService] Creating new session', options);
+			this.logService.info(`[OpenCodeSessionService] Creating new session: ${options?.label || 'default'}`);
 			const sessionData = await this.client.createSession(options);
 			
 			const session = this.convertToOpenCodeSession(sessionData);

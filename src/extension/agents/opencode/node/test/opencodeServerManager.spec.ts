@@ -3,18 +3,16 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { TestingServiceCollection } from '../../../../../platform/test/node/services';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../util/common/test/testUtils';
-import { CancellationToken, CancellationTokenSource } from '../../../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
-import { IOpenCodeServerManager, OpenCodeServerManager } from '../opencodeServerManager';
+import { OpenCodeServerManager } from '../opencodeServerManager';
 
 describe('OpenCodeServerManager', () => {
 	let testingServiceCollection: TestingServiceCollection;
 	let manager: OpenCodeServerManager;
-	let token: CancellationToken;
 
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
 
@@ -24,9 +22,6 @@ describe('OpenCodeServerManager', () => {
 		const accessor = testingServiceCollection.createTestingAccessor();
 		const instantiationService = accessor.get(IInstantiationService);
 		manager = store.add(instantiationService.createInstance(OpenCodeServerManager));
-
-		const tokenSource = store.add(new CancellationTokenSource());
-		token = tokenSource.token;
 	});
 
 	describe('initial state', () => {

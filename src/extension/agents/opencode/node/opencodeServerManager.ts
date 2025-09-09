@@ -132,7 +132,7 @@ class OpenCodeServer {
 
 			// Handle process errors
 			this._process.on('error', (error) => {
-				this.logService.error('[OpenCodeServer] Process error:', error);
+				this.logService.error(`[OpenCodeServer] Process error: ${error instanceof Error ? error.message : String(error)}`);
 				this._process = undefined;
 				reject(new Error(`Failed to start opencode server: ${error.message}`));
 			});
