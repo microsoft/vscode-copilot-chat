@@ -39,7 +39,7 @@ function guessLineType(line: string): GuessedLineType {
 
 	// If the line starts with a # followed by a space, it's possibly markdown header
 	if (line.match(/^#+ .+$/)) {
-		// if line does not contain any # directives used in c, cpp
+		// If line does not contain any # directives used in C, C++.
 		const cppDirectives = ['#include', '#define', '#ifdef', '#ifndef', '#endif', '#pragma', '#if', '#else', '#elif', '#undef', '#error', '#line', '#warning'];
 		if (!cppDirectives.some(directive => line.includes(directive))) {
 			return GuessedLineType.NaturalLanguage;
