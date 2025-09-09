@@ -95,11 +95,11 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 	}
 
 	private async _provideLanguageModelChatInfo(options: { silent: boolean }, token: vscode.CancellationToken): Promise<vscode.LanguageModelChatInformation[]> {
-		const session = await this._getAuthSession();
-		if (!session) {
-			this._currentModels = [];
-			return [];
-		}
+		// const session = await this._getAuthSession();
+		// if (!session) {
+		// 	this._currentModels = [];
+		// 	return [];
+		// }
 
 		const models: vscode.LanguageModelChatInformation[] = [];
 		const chatEndpoints = await this._endpointProvider.getAllChatEndpoints();
@@ -159,7 +159,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				version: endpoint.version,
 				maxInputTokens: endpoint.modelMaxPromptTokens - baseCount - BaseTokensPerCompletion,
 				maxOutputTokens: endpoint.maxOutputTokens,
-				requiresAuthorization: session && { label: session.account.label },
+				requiresAuthorization: undefined, //session && { label: session.account.label },
 				isDefault: endpoint === defaultChatEndpoint,
 				isUserSelectable: endpoint.showInModelPicker,
 				capabilities: {

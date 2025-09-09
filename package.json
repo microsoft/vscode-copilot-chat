@@ -135,7 +135,8 @@
 		"taskExecutionTerminal",
 		"dataChannels",
 		"languageModelThinkingPart",
-		"chatSessionsProvider"
+		"chatSessionsProvider",
+		"devDeviceId"
 	],
 	"contributes": {
 		"languageModelTools": [
