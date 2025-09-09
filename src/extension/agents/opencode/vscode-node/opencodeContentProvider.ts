@@ -7,9 +7,8 @@ import * as vscode from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { ChatRequestTurn2 } from '../../../../vscodeTypes';
 import { IOpenCodeAgentManager } from '../node/opencodeAgentManager';
-import { OpenCodeMessage, IOpenCodeSession, IOpenCodeSessionService } from '../node/opencodeSessionService';
-import { OpenCodeToolInvocation, OpenCodeToolResult } from '../common/opencodeTools';
-import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
+import { IOpenCodeSession, IOpenCodeSessionService, OpenCodeMessage } from '../node/opencodeSessionService';
+
 import { OpenCodeSessionDataStore } from './opencodeItemProvider';
 
 /**
@@ -38,22 +37,22 @@ export class OpenCodeChatSessionContentProvider implements vscode.ChatSessionCon
 	 */
 	async provideChatSessionContent(internalSessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
 		this._log(`Providing content for session: ${internalSessionId}`);
-		
+
 		const initialRequest = this.sessionStore.getAndConsumeInitialRequest(internalSessionId);
 		const opencodeSessionId = this.sessionStore.getSessionId(internalSessionId) ?? internalSessionId;
 		const existingSession = opencodeSessionId && await this.sessionService.getSession(opencodeSessionId, token);
 		const toolContext = this._createToolContext();
-		
+
 		// Build chat history from existing session
 		const history = existingSession ?
 			this._buildChatHistory(existingSession, toolContext) :
 			[];
-		
+
 		// Add initial request if this is a new session
 		if (initialRequest) {
 			history.push(new ChatRequestTurn2(initialRequest.prompt, undefined, [], '', [], undefined));
 		}
-		
+
 		return {
 			history,
 			// Active response callback for new sessions
@@ -96,7 +95,7 @@ export class OpenCodeChatSessionContentProvider implements vscode.ChatSessionCon
 	 */
 	private _buildChatHistory(session: IOpenCodeSession, toolContext: ToolContext): (vscode.ChatRequestTurn2 | vscode.ChatResponseTurn2)[] {
 		const history: (vscode.ChatRequestTurn2 | vscode.ChatResponseTurn2)[] = [];
-		
+
 		for (const message of session.messages) {
 			if (message.role === 'user') {
 				const requestTurn = this._userMessageToRequest(message, toolContext);
@@ -110,7 +109,7 @@ export class OpenCodeChatSessionContentProvider implements vscode.ChatSessionCon
 				}
 			}
 		}
-		
+
 		return history;
 	}
 
@@ -120,15 +119,15 @@ export class OpenCodeChatSessionContentProvider implements vscode.ChatSessionCon
 	private _userMessageToRequest(message: OpenCodeMessage, toolContext: ToolContext): vscode.ChatRequestTurn2 | undefined {
 		// Extract text content from message
 		const textContent = this._extractTextContent(message.content);
-		
+
 		// Process any tool results in the message
 		this._processToolResults(message, toolContext);
-		
+
 		// If the message only contains tool results and no visible text, don't create a request turn
 		if (!textContent.trim()) {
 			return undefined;
 		}
-		
+
 		return new ChatRequestTurn2(
 			textContent,
 			undefined, // command (not used for OpenCode)
@@ -143,94 +142,28 @@ export class OpenCodeChatSessionContentProvider implements vscode.ChatSessionCon
 	 * Converts OpenCode assistant message to VS Code chat response turn
 	 */
 	private _assistantMessageToResponse(message: OpenCodeMessage, toolContext: ToolContext): vscode.ChatResponseTurn2 | undefined {
-		const responseParts: vscode.ChatResponsePart[] = [];
-		
+		const responseParts: (vscode.ChatResponsePart | vscode.ChatToolInvocationPart)[] = [];
+
 		// Process message content - OpenCodeMessage.content is always a string
 		if (typeof message.content === 'string' && message.content.trim()) {
 			responseParts.push(new vscode.ChatResponseMarkdownPart(message.content));
 		}
-		
+
 		// Add any pending tool invocations
 		for (const toolInvocation of toolContext.pendingToolInvocations.values()) {
-			responseParts.push(toolInvocation as any); // Cast since ChatToolInvocationPart should be acceptable
+			responseParts.push(toolInvocation);
 		}
-		
+
 		if (responseParts.length === 0) {
 			return undefined;
 		}
-		
+
 		return new vscode.ChatResponseTurn2(responseParts, {}, '');
 	}
 
-	/**
-	 * Processes tool use (invocation)
-	 */
-	private _processToolUse(toolUse: any, toolContext: ToolContext): vscode.ChatResponsePart | undefined {
-		const toolInvocation: OpenCodeToolInvocation = {
-			id: toolUse.id || `tool_${Date.now()}`,
-			name: toolUse.name,
-			input: toolUse.input || {},
-			timestamp: new Date()
-		};
-		
-		// Create formatted tool invocation
-		const formattedInvocation = createFormattedToolInvocation(toolInvocation);
-		if (formattedInvocation) {
-			// Store for later processing with results
-			toolContext.pendingToolInvocations.set(toolInvocation.id, formattedInvocation);
-			toolContext.unprocessedToolCalls.set(toolInvocation.id, toolUse);
-			return formattedInvocation as vscode.ChatResponsePart;
-		}
-		
-		return undefined;
-	}
 
-	/**
-	 * Processes tool result
-	 */
-	private _processToolResult(toolResultData: any, toolContext: ToolContext): vscode.ChatResponsePart | undefined {
-		const toolCallId = toolResultData.tool_call_id || toolResultData.id;
-		if (!toolCallId) {
-			return undefined;
-		}
-		
-		// Find the corresponding tool invocation
-		const pendingInvocation = toolContext.pendingToolInvocations.get(toolCallId);
-		const toolCall = toolContext.unprocessedToolCalls.get(toolCallId);
-		
-		if (pendingInvocation && toolCall) {
-			// Create tool result
-			const toolResult: OpenCodeToolResult = {
-				id: `result_${Date.now()}`,
-				toolInvocationId: toolCallId,
-				success: !toolResultData.is_error && !toolResultData.error,
-				result: toolResultData.content || toolResultData.result,
-				error: toolResultData.error || (toolResultData.is_error ? 'Tool execution failed' : undefined),
-				timestamp: new Date(),
-				duration: toolResultData.duration
-			};
-			
-			// Create tool invocation with result
-			const toolInvocation: OpenCodeToolInvocation = {
-				id: toolCallId,
-				name: toolCall.name,
-				input: toolCall.input || {},
-				timestamp: new Date()
-			};
-			
-			const updatedInvocation = createFormattedToolInvocation(toolInvocation, toolResult);
-			
-			// Remove from pending
-			toolContext.pendingToolInvocations.delete(toolCallId);
-			toolContext.unprocessedToolCalls.delete(toolCallId);
-			
-			return updatedInvocation as vscode.ChatResponsePart;
-		}
-		
-		// If no pending invocation, create a standalone result display
-		const markdown = toolResultData.content || toolResultData.result || 'Tool result';
-		return new vscode.ChatResponseMarkdownPart(markdown);
-	}
+
+
 
 	/**
 	 * Extracts text content from message
@@ -239,21 +172,21 @@ export class OpenCodeChatSessionContentProvider implements vscode.ChatSessionCon
 		if (typeof content === 'string') {
 			return content;
 		}
-		
+
 		if (Array.isArray(content)) {
 			return content
 				.filter(part => typeof part === 'string' || (part && part.type === 'text'))
 				.map(part => typeof part === 'string' ? part : part.text || part.content || '')
 				.join('');
 		}
-		
+
 		if (content && typeof content === 'object') {
 			if (content.type === 'text') {
 				return content.text || content.content || '';
 			}
 			return content.text || content.content || '';
 		}
-		
+
 		return '';
 	}
 
