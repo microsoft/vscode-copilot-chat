@@ -163,46 +163,6 @@ export class OpenCodeChatSessionContentProvider implements vscode.ChatSessionCon
 	}
 
 	/**
-	 * Processes a content part from OpenCode message
-	 */
-	private _processContentPart(part: any, toolContext: ToolContext): vscode.ChatResponsePart | undefined {
-		if (typeof part === 'string') {
-			return new vscode.ChatResponseMarkdownPart(part);
-		}
-		
-		if (!part || typeof part !== 'object') {
-			return undefined;
-		}
-		
-		switch (part.type) {
-			case 'text':
-				const text = part.text || part.content || '';
-				return text.trim() ? new vscode.ChatResponseMarkdownPart(text) : undefined;
-			
-			case 'code':
-				const code = part.code || part.content || '';
-				const language = part.language || '';
-				const markdown = language ? `\`\`\`${language}\n${code}\n\`\`\`` : `\`\`\`\n${code}\n\`\`\``;
-				return new vscode.ChatResponseMarkdownPart(markdown);
-			
-			case 'tool_use':
-				return this._processToolUse(part, toolContext);
-			
-			case 'tool_result':
-				return this._processToolResult(part, toolContext);
-			
-			default:
-				// Generic content handling
-				if (part.text) {
-					return new vscode.ChatResponseMarkdownPart(part.text);
-				} else if (part.content) {
-					return new vscode.ChatResponseMarkdownPart(part.content);
-				}
-				return undefined;
-		}
-	}
-
-	/**
 	 * Processes tool use (invocation)
 	 */
 	private _processToolUse(toolUse: any, toolContext: ToolContext): vscode.ChatResponsePart | undefined {
@@ -219,7 +179,7 @@ export class OpenCodeChatSessionContentProvider implements vscode.ChatSessionCon
 			// Store for later processing with results
 			toolContext.pendingToolInvocations.set(toolInvocation.id, formattedInvocation);
 			toolContext.unprocessedToolCalls.set(toolInvocation.id, toolUse);
-			return formattedInvocation;
+			return formattedInvocation as vscode.ChatResponsePart;
 		}
 		
 		return undefined;
@@ -264,7 +224,7 @@ export class OpenCodeChatSessionContentProvider implements vscode.ChatSessionCon
 			toolContext.pendingToolInvocations.delete(toolCallId);
 			toolContext.unprocessedToolCalls.delete(toolCallId);
 			
-			return updatedInvocation;
+			return updatedInvocation as vscode.ChatResponsePart;
 		}
 		
 		// If no pending invocation, create a standalone result display

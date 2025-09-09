@@ -247,7 +247,7 @@ export class OpenCodeChatSessionItemProvider extends Disposable implements vscod
 			this.logService.info(`[OpenCodeChatSessionItemProvider] Deleting session: ${id}`);
 			
 			// Get the OpenCode session ID if this is an internal ID
-			const opencodeSessionId = this.sessionStore.getSessionId(id) || id;
+			this.sessionStore.getSessionId(id) || id;
 			
 			// Try to delete from OpenCode server if it exists there
 			try {

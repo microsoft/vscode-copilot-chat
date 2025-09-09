@@ -11,7 +11,7 @@ import { CancellationToken } from '../../../../util/vs/base/common/cancellation'
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 
-import { OpenCodeToolInvocation, OpenCodeToolNames, OpenCodeToolResult, requiresPermission, isDangerousTool, getToolConfig } from '../common/opencodeTools';
+import { OpenCodeToolInvocation, OpenCodeToolNames, OpenCodeToolResult, requiresPermission, isDangerousTool } from '../common/opencodeTools';
 import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 import { IOpenCodeClient } from './opencodeClient';
 import { IOpenCodeServerManager } from './opencodeServerManager';
