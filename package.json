@@ -4051,6 +4051,7 @@
 		"prettier": "^3.6.2",
 		"react": "^17.0.2",
 		"react-dom": "17.0.2",
+		"rimraf": "^6.0.1",
 		"run-script-os": "^1.1.6",
 		"sinon": "^21.0.0",
 		"source-map-support": "^0.5.21",
