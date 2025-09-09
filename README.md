@@ -68,6 +68,33 @@ To get the latest security fixes, please use the latest version of the Copilot e
 * **[FAQ](https://code.visualstudio.com/docs/copilot/faq)**
 * **[Feedback](https://github.com/microsoft/vscode-copilot-release/issues)**: We'd love to get your help in making GitHub Copilot better!
 
+## Development Setup
+
+Interested in contributing to the GitHub Copilot Chat extension? Get started with development:
+
+### Prerequisites
+- **Node.js 22.14.0+**: Required for building and running the extension
+- **GitHub Copilot Access**: Needed for testing and development
+- **Git LFS**: Required for accessing test fixtures and large files
+
+### Quick Start
+```bash
+# Check your development environment
+npm run check-env
+
+# Install dependencies and set up authentication
+npm run setup
+
+# Start development in VS Code
+# Use "Launch Copilot Extension - Watch Mode" debug configuration
+```
+
+### Detailed Instructions
+For comprehensive setup instructions, development guidelines, and contribution information, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Customizing the Agent Environment
+Learn about customizing GitHub Copilot agents for your development workflow in the [GitHub documentation](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/customize-the-agent-environment).
+
 ## Data and telemetry
 
 The GitHub Copilot Extension for Visual Studio Code collects usage data and sends it to Microsoft to help improve our products and services. Read our [privacy statement](https://privacy.microsoft.com/privacystatement) to learn more. This extension respects the `telemetry.telemetryLevel` setting which you can learn more about at https://code.visualstudio.com/docs/supporting/faq#_how-to-disable-telemetry-reporting.

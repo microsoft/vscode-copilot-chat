@@ -67,16 +67,65 @@ Please include the following with each issue:
 # Developing
 
 ## Requirements
-- Node 22.x
+- **Node.js 22.14.0 or higher** (see [Node Version](#node-version-management) below)
+- **npm 9.0.0 or higher**
 - Python >= 3.10, <= 3.12
 - Git Large File Storage (LFS) - for running tests
 - (Windows) Visual Studio Build Tools >=2019 - for building with node-gyp [see node-gyp docs](https://github.com/nodejs/node-gyp?tab=readme-ov-file#on-windows)
 
+### Node Version Management
+
+This project requires Node.js 22.14.0 or higher. The exact version used by the project is specified in `.nvmrc`.
+
+**Using Node Version Manager (nvm) - Recommended:**
+```bash
+# Install and use the correct Node.js version
+nvm install 22.15.1
+nvm use 22.15.1
+
+# Verify version
+node --version  # should show v22.15.1 or higher
+```
+
+**Manual Installation:**
+Download Node.js 22.x from [nodejs.org](https://nodejs.org/) if you prefer not to use nvm.
+
+### Copilot Agent Environment Setup
+
+This extension works with GitHub Copilot agents and requires proper authentication and environment configuration. Follow these steps for agent environment customization:
+
+1. **GitHub Authentication**: Ensure you have access to GitHub Copilot
+2. **Development Token**: Run `npm run get_token` to set up your development OAuth token
+3. **Environment Variables**: Run `npm run get_env` to configure additional secrets (for Microsoft team members)
+
+For more details on customizing the Copilot agent environment, see the [GitHub Copilot documentation](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/customize-the-agent-environment).
+
 ### First-time setup
-- on Windows you need to run `Set-ExecutionPolicy Unrestricted` as admin in Powershell.
-- `npm install`
-- `npm run get_token`
-- Then you can run the build task with `cmd+shift+B`, or just start the "Launch Copilot Extension - Watch Mode" launch config to start the build then start debugging the extension.
+1. **Check Prerequisites**: Verify your development environment meets the requirements
+   ```bash
+   # Check Node.js and npm versions
+   npm run check-env
+   ```
+
+2. **Windows Setup**: On Windows, run `Set-ExecutionPolicy Unrestricted` as admin in Powershell.
+
+3. **Install Dependencies**: 
+   ```bash
+   npm install
+   ```
+
+4. **Authentication Setup**:
+   ```bash
+   # Set up GitHub OAuth token for development
+   npm run get_token
+   
+   # (Microsoft team members only) Set up additional environment variables
+   npm run get_env
+   ```
+
+5. **Start Development**: 
+   - Use VS Code's build task: `Ctrl+Shift+P` → "Tasks: Run Build Task" 
+   - Or start the "Launch Copilot Extension - Watch Mode" launch config to build and debug the extension
 
 **Tip:** If "Launch Copilot Extension - Watch Mode" doesn't work for you, try using the "Launch Copilot Extension" debug configuration instead.
 
