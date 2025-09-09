@@ -34,15 +34,14 @@ describe('ClaudeCodeSessionService', () => {
 	let service: ClaudeCodeSessionService;
 
 	beforeEach(() => {
-		mockFs = new MockFileSystemService();
 		testingServiceCollection = createExtensionUnitTestingServices();
-		testingServiceCollection.set(IFileSystemService, mockFs);
 
 		// Create mock workspace service with the test workspace folder
 		const workspaceService = new TestWorkspaceService([folderUri]);
 		testingServiceCollection.set(IWorkspaceService, workspaceService);
 
 		const accessor = testingServiceCollection.createTestingAccessor();
+		mockFs = accessor.get(IFileSystemService) as MockFileSystemService;
 		const instaService = accessor.get(IInstantiationService);
 		const nativeEnvService = accessor.get(INativeEnvService);
 		dirUri = URI.joinPath(nativeEnvService.userHome, '.claude', 'projects', slug);
