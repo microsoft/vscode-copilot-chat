@@ -10,10 +10,10 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ServiceCollection } from '../../../util/vs/platform/instantiation/common/serviceCollection';
 import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
-import { OpenCodeAgentManager, IOpenCodeAgentManager } from '../../agents/opencode/node/opencodeAgentManager';
-import { OpenCodeClient, IOpenCodeClient } from '../../agents/opencode/node/opencodeClient';
-import { OpenCodeServerManager, IOpenCodeServerManager } from '../../agents/opencode/node/opencodeServerManager';
-import { OpenCodeSessionService, IOpenCodeSessionService } from '../../agents/opencode/node/opencodeSessionService';
+import { IOpenCodeAgentManager, OpenCodeAgentManager } from '../../agents/opencode/node/opencodeAgentManager';
+import { IOpenCodeClient, OpenCodeClient } from '../../agents/opencode/node/opencodeClient';
+import { IOpenCodeServerManager, OpenCodeServerManager } from '../../agents/opencode/node/opencodeServerManager';
+import { IOpenCodeSessionService, OpenCodeSessionService } from '../../agents/opencode/node/opencodeSessionService';
 import { OpenCodeChatSessionContentProvider } from '../../agents/opencode/vscode-node/opencodeContentProvider';
 import { OpenCodeChatSessionItemProvider, OpenCodeSessionDataStore } from '../../agents/opencode/vscode-node/opencodeItemProvider';
 import { IExtensionContribution } from '../../common/contributions';
@@ -46,12 +46,12 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 
 		// === OpenCode Integration ===
 		const opencodeInstaService = instantiationService.createChild(
-			new ServiceCollection([
+			new ServiceCollection(
 				[IOpenCodeServerManager, new SyncDescriptor(OpenCodeServerManager)],
 				[IOpenCodeClient, new SyncDescriptor(OpenCodeClient)],
 				[IOpenCodeSessionService, new SyncDescriptor(OpenCodeSessionService)],
 				[IOpenCodeAgentManager, new SyncDescriptor(OpenCodeAgentManager)]
-			])
+			)
 		);
 
 		const opencodeSessionStore = opencodeInstaService.createInstance(OpenCodeSessionDataStore);
