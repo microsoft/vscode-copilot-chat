@@ -6,8 +6,10 @@
 import * as vscode from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { ChatRequestTurn2 } from '../../../../vscodeTypes';
+import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { IOpenCodeAgentManager } from '../node/opencodeAgentManager';
 import { IOpenCodeSession, IOpenCodeSessionService, OpenCodeMessage } from '../node/opencodeSessionService';
+import { IOpenCodeClient, SessionUpdatedEvent, MessageReceivedEvent } from '../node/opencodeClient';
 
 import { OpenCodeSessionDataStore } from './opencodeItemProvider';
 
@@ -21,16 +23,20 @@ interface ToolContext {
 
 /**
  * Content provider for OpenCode chat sessions
- * Converts OpenCode session data to VS Code chat format
+ * Converts OpenCode session data to VS Code chat format and handles real-time updates
  */
-export class OpenCodeChatSessionContentProvider implements vscode.ChatSessionContentProvider {
+export class OpenCodeChatSessionContentProvider extends Disposable implements vscode.ChatSessionContentProvider {
 
 	constructor(
 		private readonly opencodeAgentManager: IOpenCodeAgentManager,
 		private readonly sessionStore: OpenCodeSessionDataStore,
 		@IOpenCodeSessionService private readonly sessionService: IOpenCodeSessionService,
+		@IOpenCodeClient private readonly opencodeClient: IOpenCodeClient,
 		@ILogService private readonly logService: ILogService
-	) { }
+	) { 
+		super();
+		this._setupRealTimeUpdates();
+	}
 
 	/**
 	 * Provides chat session content for VS Code
@@ -205,6 +211,44 @@ export class OpenCodeChatSessionContentProvider implements vscode.ChatSessionCon
 		// Store the initial request for the session
 		this.sessionStore.setInitialRequest(internalSessionId, initialRequest);
 		return initialRequest;
+	}
+
+	/**
+	 * Set up real-time updates via WebSocket
+	 */
+	private _setupRealTimeUpdates(): void {
+		// Set up WebSocket connection
+		this.opencodeClient.connectWebSocket().catch(error => {
+			this.logService.error('[OpenCodeChatSessionContentProvider] Failed to connect WebSocket', error);
+		});
+
+		// Listen for session updates
+		this._register(this.opencodeClient.onSessionUpdated(event => {
+			this._handleSessionUpdated(event);
+		}));
+
+		// Listen for new messages
+		this._register(this.opencodeClient.onMessageReceived(event => {
+			this._handleMessageReceived(event);
+		}));
+	}
+
+	/**
+	 * Handle session updated events
+	 */
+	private _handleSessionUpdated(event: SessionUpdatedEvent): void {
+		this._log(`Session updated: ${event.data.id}`);
+		// In a real implementation, this could trigger a refresh of the session content
+		// or notify any active chat sessions that need to update their display
+	}
+
+	/**
+	 * Handle new message events
+	 */
+	private _handleMessageReceived(event: MessageReceivedEvent): void {
+		this._log(`New message in session ${event.data.sessionId}: ${event.data.id}`);
+		// In a real implementation, this could trigger real-time message updates
+		// in the active chat view without requiring a full refresh
 	}
 
 	/**

@@ -10,6 +10,7 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { CancellationError } from '../../../../util/vs/base/common/errors';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
+import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { IOpenCodeServerConfig } from './opencodeServerManager';
 
 export interface OpenCodeMessage {
@@ -44,22 +45,76 @@ export interface ApiResponse<T> {
 	readonly error?: string;
 }
 
+/**
+ * WebSocket event types for real-time updates
+ */
+export interface OpenCodeWebSocketEvent {
+	readonly type: string;
+	readonly data: any;
+	readonly sessionId?: string;
+	readonly timestamp: Date;
+}
+
+export interface SessionUpdatedEvent extends OpenCodeWebSocketEvent {
+	readonly type: 'session_updated';
+	readonly data: OpenCodeSessionData;
+}
+
+export interface MessageReceivedEvent extends OpenCodeWebSocketEvent {
+	readonly type: 'message_received';
+	readonly data: OpenCodeMessage;
+}
+
+export interface SessionCreatedEvent extends OpenCodeWebSocketEvent {
+	readonly type: 'session_created';
+	readonly data: OpenCodeSessionData;
+}
+
+export interface SessionDeletedEvent extends OpenCodeWebSocketEvent {
+	readonly type: 'session_deleted';
+	readonly data: { sessionId: string };
+}
+
 export const IOpenCodeClient = createServiceIdentifier<IOpenCodeClient>('IOpenCodeClient');
 
 export interface IOpenCodeClient {
 	readonly _serviceBrand: undefined;
+	
+	// Configuration
 	setConfig(config: IOpenCodeServerConfig): void;
+	
+	// Session management
 	getAllSessions(token?: CancellationToken): Promise<readonly OpenCodeSessionData[]>;
 	getSession(sessionId: string, token?: CancellationToken): Promise<OpenCodeSessionData | undefined>;
 	createSession(options?: CreateSessionOptions, token?: CancellationToken): Promise<OpenCodeSessionData>;
 	sendMessage(options: SendMessageOptions, token?: CancellationToken): Promise<OpenCodeMessage>;
 	deleteSession(sessionId: string, token?: CancellationToken): Promise<void>;
+	
+	// Real-time updates
+	connectWebSocket(): Promise<void>;
+	disconnectWebSocket(): Promise<void>;
+	readonly onSessionUpdated: Event<SessionUpdatedEvent>;
+	readonly onMessageReceived: Event<MessageReceivedEvent>;
+	readonly onSessionCreated: Event<SessionCreatedEvent>;
+	readonly onSessionDeleted: Event<SessionDeletedEvent>;
 }
 
 export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 	declare _serviceBrand: undefined;
 
 	private _config: IOpenCodeServerConfig | undefined;
+	private _isWebSocketConnecting = false;
+
+	// Event emitters for real-time updates
+	private readonly _onSessionUpdated = this._register(new Emitter<SessionUpdatedEvent>());
+	private readonly _onMessageReceived = this._register(new Emitter<MessageReceivedEvent>());
+	private readonly _onSessionCreated = this._register(new Emitter<SessionCreatedEvent>());
+	private readonly _onSessionDeleted = this._register(new Emitter<SessionDeletedEvent>());
+
+	readonly onSessionUpdated = this._onSessionUpdated.event;
+	readonly onMessageReceived = this._onMessageReceived.event;
+	readonly onSessionCreated = this._onSessionCreated.event;
+	readonly onSessionDeleted = this._onSessionDeleted.event;
 
 	constructor(
 		@ILogService private readonly logService: ILogService
@@ -197,6 +252,82 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 			this.logService.error(`[OpenCodeClient] Failed to delete session ${sessionId}`, error);
 			throw error;
 		}
+	}
+
+	/**
+	 * Connect to WebSocket for real-time updates
+	 * Note: This is a placeholder implementation. In a real implementation,
+	 * this would establish a WebSocket connection to the OpenCode server.
+	 */
+	async connectWebSocket(): Promise<void> {
+		const config = this.ensureConfig();
+		
+		if (this._isWebSocketConnecting) {
+			this.logService.trace('[OpenCodeClient] WebSocket already connecting');
+			return;
+		}
+
+		this._isWebSocketConnecting = true;
+		
+		try {
+			// Convert HTTP URL to WebSocket URL
+			const wsUrl = config.url.replace(/^http/, 'ws') + '/ws';
+			this.logService.info(`[OpenCodeClient] Would connect to WebSocket: ${wsUrl}`);
+
+			// In a real implementation, this would:
+			// 1. Create a WebSocket connection using Node.js built-in or a compatible library
+			// 2. Set up event handlers for open, close, error, and message events
+			// 3. Handle reconnection logic
+			// 4. Parse incoming messages and emit appropriate events
+			
+			// For now, we'll simulate successful connection
+			this._isWebSocketConnecting = false;
+			this.logService.info('[OpenCodeClient] WebSocket connection simulated');
+		} catch (error) {
+			this._isWebSocketConnecting = false;
+			this.logService.error('[OpenCodeClient] Failed to connect WebSocket', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Disconnect from WebSocket
+	 */
+	async disconnectWebSocket(): Promise<void> {
+		if (this._isWebSocketConnecting) {
+			this.logService.info('[OpenCodeClient] Disconnecting WebSocket');
+			this._isWebSocketConnecting = false;
+		}
+	}
+
+	/**
+	 * Handle incoming WebSocket events
+	 * This method would be called when WebSocket messages are received
+	 */
+	private _handleWebSocketEvent(event: OpenCodeWebSocketEvent): void {
+		this.logService.trace(`[OpenCodeClient] WebSocket event: ${event.type}`);
+
+		switch (event.type) {
+			case 'session_updated':
+				this._onSessionUpdated.fire(event as SessionUpdatedEvent);
+				break;
+			case 'message_received':
+				this._onMessageReceived.fire(event as MessageReceivedEvent);
+				break;
+			case 'session_created':
+				this._onSessionCreated.fire(event as SessionCreatedEvent);
+				break;
+			case 'session_deleted':
+				this._onSessionDeleted.fire(event as SessionDeletedEvent);
+				break;
+			default:
+				this.logService.warn(`[OpenCodeClient] Unknown WebSocket event type: ${event.type}`);
+		}
+	}
+
+	override dispose(): void {
+		this.disconnectWebSocket();
+		super.dispose();
 	}
 
 	private async makeRequest<T>(options: {

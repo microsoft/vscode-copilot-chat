@@ -5,6 +5,7 @@
 
 import * as cp from 'child_process';
 import type { CancellationToken } from 'vscode';
+import { IConfigurationService } from '../../../../platform/configuration/common/configuration';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
@@ -13,6 +14,33 @@ export interface IOpenCodeServerConfig {
 	readonly url: string;
 	readonly port: number;
 	readonly hostname: string;
+}
+
+export interface OpenCodeConfiguration {
+	readonly server: {
+		readonly hostname: string;
+		readonly port: number;
+		readonly timeout: number;
+		readonly autoStart: boolean;
+		readonly logLevel: 'debug' | 'info' | 'warn' | 'error';
+		readonly logFilePath?: string;
+	};
+	readonly session: {
+		readonly autoSave: boolean;
+		readonly maxHistory: number;
+		readonly enableRealTimeSync: boolean;
+	};
+	readonly tools: {
+		readonly enablePermissions: boolean;
+		readonly autoApproveReadOnly: boolean;
+		readonly dangerousToolsConfirm: boolean;
+	};
+	readonly defaultModel?: string;
+	readonly defaultAgent?: string;
+	readonly workspace: {
+		readonly enableProjectAnalysis: boolean;
+		readonly watchFiles: boolean;
+	};
 }
 
 export const IOpenCodeServerManager = createServiceIdentifier<IOpenCodeServerManager>('IOpenCodeServerManager');
@@ -32,22 +60,59 @@ export class OpenCodeServerManager extends Disposable implements IOpenCodeServer
 	private _config: IOpenCodeServerConfig | undefined;
 
 	constructor(
-		@ILogService private readonly logService: ILogService
+		@ILogService private readonly logService: ILogService,
+		@IConfigurationService private readonly configurationService: IConfigurationService
 	) {
 		super();
 	}
 
+	private getConfiguration(): OpenCodeConfiguration {
+		const config = this.configurationService.getValue<any>('opencode');
+		return {
+			server: {
+				hostname: config?.server?.hostname ?? '127.0.0.1',
+				port: config?.server?.port ?? 0,
+				timeout: config?.server?.timeout ?? 5000,
+				autoStart: config?.server?.autoStart ?? true,
+				logLevel: config?.server?.logLevel ?? 'info',
+				logFilePath: config?.server?.logFilePath || undefined,
+			},
+			session: {
+				autoSave: config?.session?.autoSave ?? true,
+				maxHistory: config?.session?.maxHistory ?? 100,
+				enableRealTimeSync: config?.session?.enableRealTimeSync ?? true,
+			},
+			tools: {
+				enablePermissions: config?.tools?.enablePermissions ?? true,
+				autoApproveReadOnly: config?.tools?.autoApproveReadOnly ?? true,
+				dangerousToolsConfirm: config?.tools?.dangerousToolsConfirm ?? true,
+			},
+			defaultModel: config?.defaultModel || undefined,
+			defaultAgent: config?.defaultAgent || undefined,
+			workspace: {
+				enableProjectAnalysis: config?.workspace?.enableProjectAnalysis ?? true,
+				watchFiles: config?.workspace?.watchFiles ?? true,
+			},
+		};
+	}
+
 	async start(token?: CancellationToken): Promise<IOpenCodeServerConfig> {
+		const userConfig = this.getConfiguration();
+		
+		if (!userConfig.server.autoStart) {
+			throw new Error('OpenCode server auto-start is disabled');
+		}
+
 		if (this._server && this._server.isRunning()) {
 			return this.getConfig()!;
 		}
 
 		this.logService.info('[OpenCodeServerManager] Starting OpenCode server...');
 
-		const hostname = '127.0.0.1';
-		const port = 0; // Let the system assign an available port
+		const hostname = userConfig.server.hostname;
+		const port = userConfig.server.port;
 
-		this._server = new OpenCodeServer(hostname, port, this.logService);
+		this._server = new OpenCodeServer(hostname, port, userConfig.server.timeout, this.logService);
 		
 		try {
 			this._config = await this._server.start(token);
@@ -97,6 +162,7 @@ class OpenCodeServer {
 	constructor(
 		private readonly hostname: string,
 		private readonly port: number,
+		private readonly timeout: number,
 		private readonly logService: ILogService
 	) {}
 
@@ -194,7 +260,7 @@ class OpenCodeServer {
 					}
 					reject(new Error('OpenCode server startup timeout'));
 				}
-			}, 30000); // 30 second timeout
+			}, this.timeout);
 
 			// Clear timeout when we resolve
 			const originalResolve = resolve;

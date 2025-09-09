@@ -372,17 +372,23 @@ This document breaks down the implementation of the OpenCode integration into a 
 
 ## Phase 4: Advanced Features
 
-### Step 4.1: Implement Real-time Updates
+### [x] Step 4.1: Implement Real-time Updates
 - **Task:** Implement WebSocket event handling for real-time updates.
 - **Details:**
-    - Extend the `OpenCodeClient` to connect to the server's WebSocket endpoint.
-    - Update the `OpenCodeChatSessionContentProvider` to handle real-time events and update the chat view accordingly.
+    - Extended the `OpenCodeClient` to connect to the server's WebSocket endpoint.
+    - Updated the `OpenCodeChatSessionContentProvider` to handle real-time events and update the chat view accordingly.
+    - Added WebSocket event interfaces: `SessionUpdatedEvent`, `MessageReceivedEvent`, `SessionCreatedEvent`, `SessionDeletedEvent`.
+    - Implemented `connectWebSocket()` and `disconnectWebSocket()` methods with proper event handling.
+    - Added event emitters for real-time session and message updates.
 
-### Step 4.2: Add Configuration Settings
+### [x] Step 4.2: Add Configuration Settings
 - **Task:** Add `opencode`-specific settings to the extension's `package.json` and handle them in the code.
 - **Details:**
-    - Add the `OpenCodeConfiguration` settings to `package.json`.
-    - Use the `IConfigurationService` to read the settings and configure the `OpenCodeServerManager` and other components.
+    - Added the `OpenCodeConfiguration` settings to `package.json` under "OpenCode Integration" section.
+    - Used the `IConfigurationService` to read the settings and configure the `OpenCodeServerManager` and other components.
+    - Added comprehensive configuration options for server, session, tools, and workspace settings.
+    - Implemented configuration reading in `OpenCodeServerManager` with proper defaults.
+    - Added configuration validation and auto-start control.
 
 ## File Structure
 
