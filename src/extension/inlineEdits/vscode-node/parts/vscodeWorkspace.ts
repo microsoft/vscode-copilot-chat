@@ -750,6 +750,12 @@ export class VerifyTextDocumentChanges extends Disposable {
 	}
 
 	private _verifyDocumentStateConsistency(e: TextDocumentChangeEvent): void {
+		// Only interested in telemetry for know schemas (files, untitled, notebook cells)
+		if (e.document.uri.scheme !== Schemas.file &&
+			e.document.uri.scheme !== 'untitled' &&
+			e.document.uri.scheme !== Schemas.vscodeNotebookCell) {
+			return;
+		}
 		const docUri = e.document.uri.toString();
 		const currentText = e.document.getText();
 		const previousValue = this._documentStates.get(docUri);
