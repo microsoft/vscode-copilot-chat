@@ -23,7 +23,9 @@ import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { asPromise, raceCancellation, raceTimeout } from '../../../../util/vs/base/common/async';
 import { diffMaps } from '../../../../util/vs/base/common/collections';
 import { onUnexpectedError } from '../../../../util/vs/base/common/errors';
+import { Lazy } from '../../../../util/vs/base/common/lazy';
 import { Disposable, DisposableStore, IDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { ResourceSet } from '../../../../util/vs/base/common/map';
 import { Schemas } from '../../../../util/vs/base/common/network';
 import { autorun, derived, IObservable, IReader, ISettableObservable, mapObservableArrayCached, observableFromEvent, observableValue, transaction } from '../../../../util/vs/base/common/observableInternal';
 import { isDefined } from '../../../../util/vs/base/common/types';
@@ -34,8 +36,6 @@ import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offse
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { toInternalTextEdit } from '../utils/translations';
-import { ResourceSet } from '../../../../util/vs/base/common/map';
-import { Lazy } from '../../../../util/vs/base/common/lazy';
 
 function trackMarkdownCells(cells: NotebookCell[], resources: ResourceSet): void {
 	cells.forEach(c => {
@@ -729,22 +729,51 @@ export class VerifyTextDocumentChanges extends Disposable {
 	) {
 		super();
 
+		// This comes from telemetry
+		const allowedSchemes = new Set([
+			"file",
+			"vscode-notebook-cell",
+			"untitled",
+			// "vscode-local",
+			// "vscode-chat-code-block",
+			// "chat-editing-text-model",
+			// "embedded-html",
+			// "vscode-userdata",
+			// "vscode-remote",
+			// "git",
+		]);
+		function shouldVerifyDoc(doc: TextDocument): boolean {
+			return allowedSchemes.has(doc.uri.scheme);
+		}
+
 		this._register(workspace.onDidOpenTextDocument(doc => {
+			if (!shouldVerifyDoc(doc)) {
+				return;
+			}
 			const docUri = doc.uri.toString();
 			this._documentStates.set(docUri, { text: doc.getText(), linefeed: doc.eol });
 		}));
 
 		this._register(workspace.onDidCloseTextDocument(doc => {
+			if (!shouldVerifyDoc(doc)) {
+				return;
+			}
 			const docUri = doc.uri.toString();
 			this._documentStates.delete(docUri);
 		}));
 
 		workspace.textDocuments.forEach(doc => {
+			if (!shouldVerifyDoc(doc)) {
+				return;
+			}
 			const docUri = doc.uri.toString();
 			this._documentStates.set(docUri, { text: doc.getText(), linefeed: doc.eol });
 		});
 
 		this._register(workspace.onDidChangeTextDocument(e => {
+			if (!shouldVerifyDoc(e.document)) {
+				return;
+			}
 			this._verifyDocumentStateConsistency(e);
 		}));
 	}
