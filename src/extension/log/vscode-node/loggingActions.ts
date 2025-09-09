@@ -490,8 +490,8 @@ async function findProxyInfo(capiClientService: ICAPIClientService) {
 	return proxy;
 }
 
-const ids_paths = /\b[\p{L}\p{Nd}]+([.:=/"_-]+[\p{L}\p{Nd}]+)+\b/giu;
-function sanitizeValue(input: string | undefined): string {
+const ids_paths = /(^|\b)[\p{L}\p{Nd}]+((=""?[^"]+""?)|(([.:=/"_-]+[\p{L}\p{Nd}]+)+))(\b|$)/giu;
+export function sanitizeValue(input: string | undefined): string {
 	return (input || '').replace(ids_paths, (m) => maskByClass(m));
 }
 
