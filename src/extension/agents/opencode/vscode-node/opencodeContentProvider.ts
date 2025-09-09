@@ -145,35 +145,21 @@ export class OpenCodeChatSessionContentProvider implements vscode.ChatSessionCon
 	private _assistantMessageToResponse(message: OpenCodeMessage, toolContext: ToolContext): vscode.ChatResponseTurn2 | undefined {
 		const responseParts: vscode.ChatResponsePart[] = [];
 		
-		// Process message content
-		if (typeof message.content === 'string') {
-			if (message.content.trim()) {
-				responseParts.push(new vscode.ChatResponseMarkdownPart(message.content));
-			}
-		} else if (Array.isArray(message.content)) {
-			for (const part of message.content) {
-				const responsePart = this._processContentPart(part, toolContext);
-				if (responsePart) {
-					responseParts.push(responsePart);
-				}
-			}
-		} else if (message.content && typeof message.content === 'object') {
-			const responsePart = this._processContentPart(message.content, toolContext);
-			if (responsePart) {
-				responseParts.push(responsePart);
-			}
+		// Process message content - OpenCodeMessage.content is always a string
+		if (typeof message.content === 'string' && message.content.trim()) {
+			responseParts.push(new vscode.ChatResponseMarkdownPart(message.content));
 		}
 		
 		// Add any pending tool invocations
 		for (const toolInvocation of toolContext.pendingToolInvocations.values()) {
-			responseParts.push(toolInvocation);
+			responseParts.push(toolInvocation as any); // Cast since ChatToolInvocationPart should be acceptable
 		}
 		
 		if (responseParts.length === 0) {
 			return undefined;
 		}
 		
-		return new vscode.ChatResponseTurn2(responseParts, undefined);
+		return new vscode.ChatResponseTurn2(responseParts, {}, '');
 	}
 
 	/**

@@ -10,8 +10,7 @@ import { isLocation } from '../../../../util/common/types';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { IToolsService } from '../../../tools/common/toolsService';
+
 import { OpenCodeToolInvocation, OpenCodeToolNames, OpenCodeToolResult, requiresPermission, isDangerousTool, getToolConfig } from '../common/opencodeTools';
 import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 import { IOpenCodeClient } from './opencodeClient';
@@ -302,8 +301,6 @@ export class OpenCodeAgentManager extends Disposable implements IOpenCodeAgentMa
 	 * Requests permission from user for tool execution
 	 */
 	private async requestToolPermission(toolName: OpenCodeToolNames, input: any): Promise<boolean> {
-		const config = getToolConfig(toolName);
-		
 		// Use VS Code's tools service for permission handling
 		try {
 			// This would integrate with the actual tools permission system
