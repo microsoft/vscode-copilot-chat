@@ -56,7 +56,7 @@ export class Image extends PromptElement<ImageProps, unknown> {
 			const variable = await this.props.variableValue;
 			let imageSource = Buffer.from(variable).toString('base64');
 			const isChatCompletions = typeof this.promptEndpoint.urlOrRequestMetadata !== 'string' && this.promptEndpoint.urlOrRequestMetadata.type === RequestType.ChatCompletions;
-			const enabled = this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.EnableChatImageUpload, this.experimentationService);
+			const enabled = this.configurationService.getExperimentBasedConfig(ConfigKey.EnableChatImageUpload, this.experimentationService);
 			if (isChatCompletions && enabled && modelCanUseImageURL(this.promptEndpoint)) {
 				try {
 					const githubToken = (await this.authService.getAnyGitHubSession())?.accessToken;

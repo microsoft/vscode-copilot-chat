@@ -412,7 +412,7 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 	protected async onData(part: LanguageModelDataPart) {
 		const githubToken = (await this.authService.getAnyGitHubSession())?.accessToken;
 		const uploadsEnabled = this.configurationService && this.experimentationService
-			? this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.EnableChatImageUpload, this.experimentationService)
+			? this.configurationService.getExperimentBasedConfig(ConfigKey.EnableChatImageUpload, this.experimentationService)
 			: false;
 
 		// Anthropic (from CAPI) currently does not support image uploads from tool calls.
