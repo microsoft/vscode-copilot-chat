@@ -323,9 +323,9 @@ This document breaks down the implementation of the OpenCode integration into a 
     - Define the `IOpenCodeSessionService` interface with methods like `getAllSessions`, `getSession`, and `createSession`.
     - Implement the `OpenCodeSessionService` class, which will use the `OpenCodeClient` to interact with the server's session endpoints.
 
-## Phase 2: VS Code Integration
+## [x] Phase 2: VS Code Integration
 
-### Step 2.1: Create `OpenCodeAgentManager`
+### [x] Step 2.1: Create `OpenCodeAgentManager`
 - **Task:** Create the `OpenCodeAgentManager` class.
 - **Details:**
     - Create the file `src/extension/agents/opencode/node/opencodeAgentManager.ts`.
@@ -333,19 +333,19 @@ This document breaks down the implementation of the OpenCode integration into a 
     - It will use the `OpenCodeServerManager` to manage the server and the `OpenCodeClient` to send requests.
     - Implement the `handleRequest` method to process `vscode.ChatRequest` objects.
 
-### Step 2.2: Implement `OpenCodeChatSessionContentProvider`
+### [x] Step 2.2: Implement `OpenCodeChatSessionContentProvider`
 - **Task:** Implement the `vscode.ChatSessionContentProvider` interface.
 - **Details:**
     - Create the file `src/extension/agents/opencode/vscode-node/opencodeContentProvider.ts`.
     - Implement the `provideChatSessionContent` method to fetch session history from the `OpenCodeSessionService` and convert it to the VS Code chat format.
 
-### Step 2.3: Implement `OpenCodeChatSessionItemProvider`
+### [x] Step 2.3: Implement `OpenCodeChatSessionItemProvider`
 - **Task:** Implement the `vscode.ChatSessionItemProvider` interface.
 - **Details:**
     - Create the file `src/extension/agents/opencode/vscode-node/opencodeItemProvider.ts`.
     - Implement the `provideChatSessionItems` method to list available sessions and `provideNewChatSessionItem` to create new sessions.
 
-### Step 2.4: Implement Tool Integration
+### [x] Step 2.4: Implement Tool Integration
 - **Task:** Create the necessary files for tool integration.
 - **Details:**
     - Create `src/extension/agents/opencode/common/opencodeTools.ts` to define the tool names and interfaces.

@@ -63,8 +63,28 @@ class MockOpenCodeClient implements IOpenCodeClient {
 		return message;
 	}
 
+	async deleteMessage(sessionId: string, messageId: string, token?: CancellationToken): Promise<boolean> {
+		const session = this._sessions.get(sessionId);
+		if (!session) {
+			return false;
+		}
+
+		// Filter out the message
+		const updatedMessages = session.messages.filter(m => m.id !== messageId);
+		const updatedSession: OpenCodeSessionData = {
+			...session,
+			messages: updatedMessages
+		};
+		this._sessions.set(sessionId, updatedSession);
+		return true;
+	}
+
 	async deleteSession(sessionId: string, token?: CancellationToken): Promise<void> {
 		this._sessions.delete(sessionId);
+	}
+
+	setConfig(config: any): void {
+		// Mock implementation - do nothing
 	}
 
 	// Test helper methods
