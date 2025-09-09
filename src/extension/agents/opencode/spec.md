@@ -299,9 +299,9 @@ export function createFormattedToolInvocation(
 
 This document breaks down the implementation of the OpenCode integration into a series of sequential steps that can be delegated to background agents.
 
-## Phase 1: Core Infrastructure
+## [x] Phase 1: Core Infrastructure
 
-### Step 1.1: Create `OpenCodeServerManager`
+### [x] Step 1.1: Create `OpenCodeServerManager`
 - **Task:** Create the file `src/extension/agents/opencode/node/opencodeServerManager.ts`.
 - **Details:**
     - Define the `OpenCodeServerManager` class.
@@ -309,14 +309,14 @@ This document breaks down the implementation of the OpenCode integration into a 
     - The `start` method should spawn the `opencode serve` process and handle its lifecycle.
     - Add logging for the server's stdout and stderr.
 
-### Step 1.2: Implement `OpenCodeClient`
+### [x] Step 1.2: Implement `OpenCodeClient`
 - **Task:** Create a client to communicate with the `opencode` server. This could be a new class or an integration of an existing SDK.
 - **Details:**
     - Create a file `src/extension/agents/opencode/node/opencodeClient.ts`.
     - Implement methods for making API calls to the `opencode` server (e.g., for sessions, tools, etc.).
     - Handle authentication based on the `OPENCODE_CONFIG_CONTENT` environment variable.
 
-### Step 1.3: Create `IOpenCodeSessionService`
+### [x] Step 1.3: Create `IOpenCodeSessionService`
 - **Task:** Create the `IOpenCodeSessionService` interface and its implementation.
 - **Details:**
     - Create the file `src/extension/agents/opencode/node/opencodeSessionService.ts`.
