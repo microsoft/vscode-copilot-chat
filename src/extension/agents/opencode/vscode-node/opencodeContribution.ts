@@ -9,10 +9,10 @@ import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/commo
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { IExtensionContribution } from '../../../common/contributions';
-import { OpenCodeAgentManager, IOpenCodeAgentManager } from '../node/opencodeAgentManager';
-import { OpenCodeClient, IOpenCodeClient } from '../node/opencodeClient';
-import { OpenCodeServerManager, IOpenCodeServerManager } from '../node/opencodeServerManager';
-import { OpenCodeSessionService, IOpenCodeSessionService } from '../node/opencodeSessionService';
+import { IOpenCodeAgentManager, OpenCodeAgentManager } from '../node/opencodeAgentManager';
+import { IOpenCodeClient, OpenCodeClient } from '../node/opencodeClient';
+import { IOpenCodeServerManager, OpenCodeServerManager } from '../node/opencodeServerManager';
+import { IOpenCodeSessionService, OpenCodeSessionService } from '../node/opencodeSessionService';
 import { OpenCodeChatSessionContentProvider } from './opencodeContentProvider';
 import { OpenCodeChatSessionItemProvider, OpenCodeSessionDataStore } from './opencodeItemProvider';
 
@@ -30,12 +30,12 @@ export class OpenCodeContribution extends Disposable implements IExtensionContri
 
 		// Create OpenCode-specific service collection
 		const opencodeInstaService = instantiationService.createChild(
-			new ServiceCollection([
+			new ServiceCollection(
 				[IOpenCodeServerManager, new SyncDescriptor(OpenCodeServerManager)],
 				[IOpenCodeClient, new SyncDescriptor(OpenCodeClient)],
 				[IOpenCodeSessionService, new SyncDescriptor(OpenCodeSessionService)],
 				[IOpenCodeAgentManager, new SyncDescriptor(OpenCodeAgentManager)]
-			])
+			)
 		);
 
 		// Create and register session data store
