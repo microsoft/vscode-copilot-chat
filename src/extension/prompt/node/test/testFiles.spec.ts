@@ -143,6 +143,18 @@ suite.skipIf(process.platform === 'win32')('TestFileFinder', function () {
 		await assertTestFileFoundAsync(sourceFile, '/test/app/api/foo_test.rb');
 	});
 
+	test('returns a test for C++', async function () {
+		const sourceFile = '/project/src/Foo.cpp';
+		const testFile = '/project/tests/Foo_test.cpp';
+		await assertTestFileFoundAsync(sourceFile, testFile);
+	});
+
+	test('returns a test for C++ with different extension', async function () {
+		const sourceFile = '/project/src/Foo.cc';
+		const testFile = '/project/tests/FooTest.cc';
+		await assertTestFileFoundAsync(sourceFile, testFile);
+	});
+
 	test('determine java test file with absolute path', async () => {
 		await assertTestFileFoundAsync(
 			'/Users/copilot/git/commons-io/src/main/java/org/apache/commons/io/EndianUtils.java',
@@ -196,6 +208,14 @@ suite.skipIf(process.platform === 'win32')('TestFileFinder', function () {
 		{ filename: 'FooTest.java', isTestFile: true },
 		{ filename: 'Foo.cs', isTestFile: false },
 		{ filename: 'FooTest.cs', isTestFile: true },
+		{ filename: 'foo.cpp', isTestFile: false },
+		{ filename: 'foo_test.cpp', isTestFile: true },
+		{ filename: 'fooTest.cpp', isTestFile: true },
+		{ filename: 'foo.test.cpp', isTestFile: true },
+		{ filename: 'foo.cc', isTestFile: false },
+		{ filename: 'foo_test.cc', isTestFile: true },
+		{ filename: 'foo.cxx', isTestFile: false },
+		{ filename: 'foo_test.cxx', isTestFile: true },
 		{ filename: 'foo.xx', isTestFile: false },
 		{ filename: 'foo~Test.xx', isTestFile: true },
 		{ filename: 'foo.spec.xx', isTestFile: true },
