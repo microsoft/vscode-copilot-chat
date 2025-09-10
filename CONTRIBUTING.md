@@ -400,7 +400,58 @@ You can run the extension from Code OSS Desktop, provided that you follow along 
       "completionsAdvancedSetting": "github.copilot.advanced",
       "completionsEnablementSetting": "github.copilot.enable",
       "nextEditSuggestionsSetting": "github.copilot.nextEditSuggestions.enabled"
-   }
+   },
+   "trustedExtensionAuthAccess": {
+		"github": [
+			"vscode.git",
+			"vscode.github",
+			"github.remotehub",
+			"ms-vscode.remote-server",
+			"github.vscode-pull-request-github",
+			"github.codespaces",
+			"github.copilot",
+			"github.copilot-chat",
+			"ms-vsliveshare.vsliveshare",
+			"ms-azuretools.vscode-azure-github-copilot"
+		],
+		"github-enterprise": [
+			"vscode.git",
+			"vscode.github",
+			"github.remotehub",
+			"ms-vscode.remote-server",
+			"github.vscode-pull-request-github",
+			"github.codespaces",
+			"github.copilot",
+			"github.copilot-chat",
+			"ms-vsliveshare.vsliveshare",
+			"ms-azuretools.vscode-azure-github-copilot"
+		],
+		"microsoft": [
+			"vscode.git",
+			"ms-vscode.azure-repos",
+			"ms-vscode.remote-server",
+			"ms-vsliveshare.vsliveshare",
+			"ms-azuretools.vscode-azure-github-copilot",
+			"ms-azuretools.vscode-azureresourcegroups",
+			"ms-edu.vscode-learning",
+			"ms-toolsai.vscode-ai",
+			"ms-toolsai.vscode-ai-remote"
+		],
+		"microsoft-sovereign-cloud": [
+			"vscode.git",
+			"ms-vscode.azure-repos",
+			"ms-vscode.remote-server",
+			"ms-vsliveshare.vsliveshare",
+			"ms-azuretools.vscode-azure-github-copilot",
+			"ms-azuretools.vscode-azureresourcegroups",
+			"ms-edu.vscode-learning",
+			"ms-toolsai.vscode-ai",
+			"ms-toolsai.vscode-ai-remote"
+		],
+		"__GitHub.copilot-chat": [
+			"ms-azuretools.vscode-azure-github-copilot"
+		]
+	}
 }
 ```
 
