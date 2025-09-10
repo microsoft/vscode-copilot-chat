@@ -105,7 +105,7 @@ export class MergeConflictParser {
 		return text.includes(startHeaderMarker) && text.includes(endFooterMarker);
 	}
 
-	private static scanItemTolMergeConflictDescriptor(document: vscode.TextDocument, scanned: IScanMergedConflict): IDocumentMergeConflictDescriptor | null {
+	private static scanItemToMergeConflictDescriptor(document: vscode.TextDocument, scanned: IScanMergedConflict): IDocumentMergeConflictDescriptor | null {
 		// Validate we have all the required lines within the scan item.
 		if (!scanned.startHeader || !scanned.splitter || !scanned.endFooter) {
 			return null;
