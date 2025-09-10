@@ -140,6 +140,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			filters.push((edits) => IgnoreWhitespaceOnlyChanges.filterEdit(activeDoc, edits));
 		}
 
+		if (this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsUndoInsertionFilteringEnabled, this.expService)) {
+			filters.push((edits) => editWouldDeleteWhatWasJustInserted(activeDoc, new LineEdit(edits)) ? [] : edits);
+		}
+
 		return filters.reduce((acc, filter) => filter(acc), edits);
 	}
 
@@ -672,14 +676,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 					logContext.setResponse(responseSoFar);
 
 					for (const singleLineEdit of singleLineEdits) {
-						const lineEdit = new LineEdit([singleLineEdit]);
-
-						if (editWouldDeleteWhatWasJustInserted(request.getActiveDocument(), lineEdit)) {
-							this.trace(`filtering edit because it would undo previous insertion: ${singleLineEdit.toString()}`, logContext, tracer);
-							i++;
-							continue;
-						}
-
 						this.trace(`pushing edit #${i}:\n${singleLineEdit.toString()}`, logContext, tracer);
 
 						if (!hasBeenDelayed) { // delay only the first one
