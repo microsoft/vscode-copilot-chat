@@ -33,7 +33,7 @@ import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offse
 import { StringText } from '../../../../util/vs/editor/common/core/text/abstractText';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { toInternalTextEdit } from '../utils/translations';
-import { stringValueFromDoc } from './common';
+import { editFromTextDocumentContentChangeEvents, stringValueFromDoc } from './common';
 import { DocumentFilter } from './documentFilter';
 import { VerifyTextDocumentChanges } from './verifyTextDocumentChanges';
 
