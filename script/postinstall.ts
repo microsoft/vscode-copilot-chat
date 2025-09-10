@@ -6,45 +6,8 @@
 import { downloadZMQ } from '@vscode/zeromq';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
 import { compressTikToken } from './build/compressTikToken';
 import { copyStaticAssets } from './build/copyStaticAssets';
-
-// Check Node.js version before proceeding
-function checkNodeVersion(): void {
-	const packageJsonPath = path.join(__dirname, 'package.json');
-	const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-	
-	const requiredNodeVersion = packageJson.engines?.node;
-	if (!requiredNodeVersion) {
-		return;
-	}
-	
-	const currentNodeVersion = process.version;
-	const currentVersion = currentNodeVersion.slice(1);
-	
-	const requiredMatch = requiredNodeVersion.match(/>=(\d+)\.(\d+)\.(\d+)/);
-	if (!requiredMatch) {
-		return;
-	}
-	
-	const [, reqMajor, reqMinor, reqPatch] = requiredMatch.map(Number);
-	const [currentMajor, currentMinor, currentPatch] = currentVersion.split('.').map(Number);
-	
-	const isVersionValid = 
-		currentMajor > reqMajor || 
-		(currentMajor === reqMajor && currentMinor > reqMinor) ||
-		(currentMajor === reqMajor && currentMinor === reqMinor && currentPatch >= reqPatch);
-	
-	if (!isVersionValid) {
-		console.error('\n❌ Node.js version requirement not met!');
-		console.error(`Required: ${requiredNodeVersion}`);
-		console.error(`Current:  ${currentNodeVersion}`);
-		console.error('\nPlease upgrade your Node.js version.');
-		console.error('Run: npm run check-env for detailed instructions.');
-		process.exit(1);
-	}
-}
 
 export interface ITreeSitterGrammar {
 	name: string;
@@ -100,9 +63,6 @@ const treeSitterGrammars: ITreeSitterGrammar[] = [
 const REPO_ROOT = path.join(__dirname, '..');
 
 async function main() {
-	// Check Node.js version before starting
-	checkNodeVersion();
-	
 	await fs.promises.mkdir(path.join(REPO_ROOT, '.build'), { recursive: true });
 
 	const vendoredTiktokenFiles = ['src/platform/tokenizer/node/cl100k_base.tiktoken', 'src/platform/tokenizer/node/o200k_base.tiktoken'];
