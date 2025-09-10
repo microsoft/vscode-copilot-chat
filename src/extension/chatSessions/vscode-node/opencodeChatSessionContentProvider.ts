@@ -42,8 +42,19 @@ export class OpenCodeChatSessionContentProvider extends Disposable implements vs
 		this._log(`Providing content for session: ${internalSessionId}`);
 
 		const initialRequest = this.sessionStore.getAndConsumeInitialRequest(internalSessionId);
-		const opencodeSessionId = this.sessionStore.getSessionId(internalSessionId);
-		const existingSession = opencodeSessionId ? await this.sessionService.getSession(opencodeSessionId, token) : undefined;
+		// Resolve OpenCode session id; on reload, the internal id may already be the OpenCode id
+		let opencodeSessionId = this.sessionStore.getSessionId(internalSessionId);
+		let existingSession: IOpenCodeSession | undefined;
+		if (opencodeSessionId) {
+			existingSession = await this.sessionService.getSession(opencodeSessionId, token);
+		} else {
+			const maybe = await this.sessionService.getSession(internalSessionId, token);
+			if (maybe) {
+				existingSession = maybe;
+				opencodeSessionId = internalSessionId;
+				this.sessionStore.setOpenCodeSessionId(internalSessionId, opencodeSessionId);
+			}
+		}
 		const toolContext = this._createToolContext();
 
 		// Build chat history from existing session
@@ -147,14 +158,60 @@ export class OpenCodeChatSessionContentProvider extends Disposable implements vs
 	private _assistantMessageToResponse(message: OpenCodeMessage, toolContext: ToolContext): vscode.ChatResponseTurn2 | undefined {
 		const responseParts: (vscode.ChatResponsePart | vscode.ChatToolInvocationPart)[] = [];
 
-		// Process message content - OpenCodeMessage.content is always a string
-		if (typeof message.content === 'string' && message.content.trim()) {
-			responseParts.push(new vscode.ChatResponseMarkdownPart(message.content));
+		// Prefer structured parts when available
+		if (Array.isArray((message as any).parts)) {
+			// Structured content: detect tool calls/results and text
+			for (const part of (message as any).parts) {
+				if (!part || typeof part !== 'object') {
+					continue;
+				}
+				// Text block
+				if (part.type === 'text' && typeof part.text === 'string' && part.text.trim()) {
+					responseParts.push(new vscode.ChatResponseMarkdownPart(part.text));
+					continue;
+				}
+				// Heuristic: treat certain parts as tool invocations
+				const toolUse = this._asOpenCodeToolUse(part);
+				if (toolUse) {
+					const invocation = new vscode.ChatToolInvocationPart(toolUse.name, toolUse.id, false);
+					invocation.isConfirmed = true;
+					if (toolUse.input) {
+						const md = new vscode.MarkdownString();
+						md.appendCodeblock(JSON.stringify(toolUse.input, null, 2), 'json');
+						invocation.invocationMessage = md;
+					}
+					toolContext.pendingToolInvocations.set(toolUse.id, invocation);
+					responseParts.push(invocation);
+
+					// If OpenCode 'tool' part already includes completion, finalize immediately
+					if (part.type === 'tool') {
+						const status = String(part.state?.status ?? '');
+						const output = part.state?.output ?? part.output ?? part.result ?? part.content;
+						if (status === 'completed' || typeof output !== 'undefined') {
+							invocation.isComplete = true;
+							invocation.isError = status === 'error' || !!part.error;
+							const mdOut = new vscode.MarkdownString();
+							if (typeof output === 'string') { mdOut.appendCodeblock(output); }
+							else { mdOut.appendCodeblock(JSON.stringify(output ?? {}, null, 2), 'json'); }
+							invocation.pastTenseMessage = mdOut;
+							toolContext.pendingToolInvocations.delete(toolUse.id);
+						}
+					}
+				}
+			}
+		} else if (typeof message.content === 'string') {
+			// Fallback: plain string content
+			const text = message.content.trim();
+			if (text) {
+				responseParts.push(new vscode.ChatResponseMarkdownPart(text));
+			}
 		}
 
-		// Add any pending tool invocations
-		for (const toolInvocation of toolContext.pendingToolInvocations.values()) {
-			responseParts.push(toolInvocation);
+		// Add any pending tool invocations (if not already included)
+		for (const inv of toolContext.pendingToolInvocations.values()) {
+			if (!responseParts.includes(inv)) {
+				responseParts.push(inv);
+			}
 		}
 
 		if (responseParts.length === 0) {
@@ -173,32 +230,127 @@ export class OpenCodeChatSessionContentProvider extends Disposable implements vs
 	 */
 	private _extractTextContent(content: any): string {
 		if (typeof content === 'string') {
-			return content;
+			return this._stripSystemReminder(content);
 		}
 
 		if (Array.isArray(content)) {
-			return content
+			const text = content
 				.filter(part => typeof part === 'string' || (part && part.type === 'text'))
 				.map(part => typeof part === 'string' ? part : part.text || part.content || '')
 				.join('');
+			return this._stripSystemReminder(text);
 		}
 
 		if (content && typeof content === 'object') {
 			if (content.type === 'text') {
-				return content.text || content.content || '';
+				return this._stripSystemReminder(content.text || content.content || '');
 			}
-			return content.text || content.content || '';
+			return this._stripSystemReminder(content.text || content.content || '');
 		}
 
 		return '';
 	}
 
 	/**
+	 * Remove any <system-reminder>...</system-reminder> blocks from text.
+	 */
+	private _stripSystemReminder(text: string): string {
+		try {
+			return text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, '').trim();
+		} catch {
+			return text;
+		}
+	}
+
+	/**
 	 * Processes tool results from message content
 	 */
 	private _processToolResults(message: OpenCodeMessage, toolContext: ToolContext): void {
-		// This would process tool results embedded in the message
-		// Implementation depends on how OpenCode structures tool results in messages
+		// Try to match tool result parts back to pending invocations and complete them
+		const content: any = (message as any).content;
+		const parts: any[] = Array.isArray(content) ? content : (content && typeof content === 'object' ? [content] : []);
+		for (const part of parts) {
+			if (!part || typeof part !== 'object') { continue; }
+			const toolResult = this._asOpenCodeToolResult(part);
+			if (!toolResult) { continue; }
+			const pending = toolContext.pendingToolInvocations.get(toolResult.tool_use_id || toolResult.id);
+			if (!pending) { continue; }
+
+			// Mark completion and attach result message
+			pending.isComplete = true;
+			pending.isError = !!toolResult.is_error;
+			const md = new vscode.MarkdownString();
+			if (toolResult.is_error) {
+				md.appendMarkdown('**Error:**\n');
+			}
+			if (typeof toolResult.result === 'string') {
+				md.appendCodeblock(toolResult.result);
+			} else {
+				md.appendCodeblock(JSON.stringify(toolResult.result ?? {}, null, 2), 'json');
+			}
+			pending.pastTenseMessage = md;
+			// Remove from pending once completed
+			toolContext.pendingToolInvocations.delete(toolResult.tool_use_id || toolResult.id);
+		}
+	}
+
+	private _asOpenCodeToolUse(part: any): { id: string; name: string; input?: any } | undefined {
+		// Heuristics: known shapes could be { type: 'tool_use', name, id, input }
+		if (part?.type === 'tool_use' && typeof part?.name === 'string') {
+			return { id: String(part.id ?? this._genId()), name: part.name, input: part.input };
+		}
+		// OpenCode: { type: 'tool', tool, callID, state: { input, output, status } }
+		if (part?.type === 'tool' && (part.tool || part.name)) {
+			return {
+				id: String(part.callID ?? part.id ?? this._genId()),
+				name: String(part.tool ?? part.name),
+				input: part.state?.input ?? part.input
+			};
+		}
+		// Treat certain types as tool invocations
+		const toolLike = new Set(['shell', 'command', 'git', 'http', 'search']);
+		if (typeof part?.type === 'string' && toolLike.has(part.type)) {
+			return { id: String(part.id ?? this._genId()), name: part.type, input: part };
+		}
+		return undefined;
+	}
+
+	private _asOpenCodeToolResult(part: any): { id: string; tool_use_id?: string; is_error?: boolean; result?: any } | undefined {
+		// Known shape: { type: 'tool_result', tool_use_id, is_error, content/result }
+		if (part?.type === 'tool_result') {
+			return {
+				id: String(part.id ?? this._genId()),
+				tool_use_id: typeof part.tool_use_id === 'string' ? part.tool_use_id : undefined,
+				is_error: !!part.is_error,
+				result: part.result ?? part.content ?? part.output ?? part
+			};
+		}
+		// OpenCode 'tool' may also include the result
+		if (part?.type === 'tool') {
+			const status = String(part.state?.status ?? '');
+			const output = part.state?.output ?? part.output ?? part.result ?? part.content;
+			if (status === 'completed' || typeof output !== 'undefined') {
+				return {
+					id: String(part.callID ?? part.id ?? this._genId()),
+					tool_use_id: String(part.callID ?? part.id ?? ''),
+					is_error: status === 'error' || !!part.error,
+					result: output
+				};
+			}
+		}
+		// Fallback: recognize generic result blocks
+		if (typeof part?.result !== 'undefined' || typeof part?.output !== 'undefined') {
+			return {
+				id: String(part.id ?? this._genId()),
+				is_error: !!part.error,
+				result: part.result ?? part.output
+			};
+		}
+		return undefined;
+	}
+
+	private _genId(): string {
+		return 'oc_tool_' + Math.random().toString(36).slice(2, 10);
 	}
 
 	/**

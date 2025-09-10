@@ -20,6 +20,7 @@ export interface OpenCodeMessage {
 	readonly content: string;
 	readonly timestamp: Date;
 	readonly sessionId?: string;
+	readonly parts?: readonly any[];
 }
 
 export interface OpenCodeSessionData {
@@ -90,6 +91,7 @@ export interface IOpenCodeClient {
 	createSession(options?: CreateSessionOptions, token?: CancellationToken): Promise<OpenCodeSessionData>;
 	sendMessage(options: SendMessageOptions, token?: CancellationToken): Promise<OpenCodeMessage>;
 	deleteSession(sessionId: string, token?: CancellationToken): Promise<void>;
+	getSessionMessages(sessionId: string, token?: CancellationToken): Promise<readonly OpenCodeMessage[]>;
 
 	// Real-time updates
 	connectWebSocket(): Promise<void>;
@@ -251,6 +253,23 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 		}
 	}
 
+	async getSessionMessages(sessionId: string, token?: CancellationToken): Promise<readonly OpenCodeMessage[]> {
+		try {
+			const response = await this.tryPaths<any>([
+				`/session/${encodeURIComponent(sessionId)}/message`
+			], {
+				method: 'GET',
+				token
+			});
+
+			const arr: any[] = Array.isArray(response.data) ? response.data : [];
+			return arr.map(entry => this.mapMessageEntry(entry));
+		} catch (error) {
+			this.logService.error(`[OpenCodeClient] Failed to get session messages for ${sessionId}`, error);
+			throw error;
+		}
+	}
+
 	private mapSessionSummary(data: any): OpenCodeSessionData {
 		const id = String(data?.id ?? data?.sessionID ?? '');
 		const label = String(data?.title ?? id);
@@ -285,13 +304,38 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 			try { content = JSON.stringify(data); } catch { content = String(data); }
 		}
 
-		return {
+		const msg: any = {
 			id: String(data?.id ?? `msg_${Date.now()}`),
 			role,
 			content,
 			timestamp: new Date(),
 			sessionId: String(data?.sessionID ?? '')
 		} satisfies OpenCodeMessage;
+		if (Array.isArray(data?.parts)) {
+			msg.parts = data.parts; // preserve structured parts for rendering
+		}
+		return msg as OpenCodeMessage;
+	}
+
+	private mapMessageEntry(entry: any): OpenCodeMessage {
+		const info = entry?.info ?? {};
+		const parts = Array.isArray(entry?.parts) ? entry.parts : [];
+		const texts: string[] = [];
+		for (const p of parts) {
+			if (p && typeof p === 'object' && p.type === 'text' && typeof p.text === 'string') {
+				texts.push(p.text);
+			}
+		}
+		const content = texts.join('\n');
+		const msg: OpenCodeMessage = {
+			id: String(info.id ?? `msg_${Date.now()}`),
+			role: (info.role === 'assistant' || info.role === 'user') ? info.role : 'assistant',
+			content,
+			timestamp: new Date(),
+			sessionId: String(info.sessionID ?? ''),
+			parts: parts
+		};
+		return msg;
 	}
 
 	/**

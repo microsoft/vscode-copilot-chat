@@ -110,6 +110,18 @@ export class OpenCodeSessionService extends Disposable implements IOpenCodeSessi
 			// Check cache first
 			const cached = this._sessionCache.get(sessionId);
 			if (cached && this.isCacheValid(cached.timestamp)) {
+				// If we have a cached session but no messages, try to hydrate messages now
+				if (!cached.session.messages || cached.session.messages.length === 0) {
+					try {
+						const messages = await this.client.getSessionMessages(sessionId, token);
+						const updated = { ...cached.session, messages } as IOpenCodeSession;
+						this._sessionCache.set(sessionId, { session: updated, timestamp: Date.now() });
+						this.logService.trace(`[OpenCodeSessionService] Hydrated messages for cached session: ${sessionId}`);
+						return updated;
+					} catch (e) {
+						this.logService.error(`[OpenCodeSessionService] Failed to hydrate messages for cached session ${sessionId}`, e);
+					}
+				}
 				this.logService.trace(`[OpenCodeSessionService] Returning cached session: ${sessionId}`);
 				return cached.session;
 			}
@@ -123,7 +135,18 @@ export class OpenCodeSessionService extends Disposable implements IOpenCodeSessi
 				return undefined;
 			}
 
-			const session = this.convertToOpenCodeSession(sessionData);
+			// Load full message history for this session
+			let messages: readonly OpenCodeMessage[] = [];
+			try {
+				messages = await this.client.getSessionMessages(sessionId, token);
+			} catch (e) {
+				this.logService.error(`[OpenCodeSessionService] Failed to load messages for session ${sessionId}`, e);
+			}
+
+			const session = {
+				...this.convertToOpenCodeSession(sessionData),
+				messages
+			};
 
 			// Update cache
 			this._sessionCache.set(sessionId, {

@@ -10,7 +10,7 @@ import { isLocation } from '../../../../util/common/types';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
-
+import { ChatToolInvocationPart, MarkdownString } from '../../../../vscodeTypes';
 import { IOpenCodeClient } from './opencodeClient';
 import { IOpenCodeServerManager } from './opencodeServerManager';
 
@@ -71,8 +71,9 @@ export class OpenCodeAgentManager extends Disposable implements IOpenCodeAgentMa
 				content: this.resolvePrompt(request)
 			}, token);
 
-			// Stream the response
-			await this.streamResponse(message, stream, token);
+			// Stream the response (render text/code; create tool parts)
+			const pendingTools = new Map<string, vscode.ChatToolInvocationPart>();
+			await this.streamResponse(message as any, stream, token, pendingTools);
 
 			return {
 				sessionId: activeSessionId
@@ -130,7 +131,7 @@ export class OpenCodeAgentManager extends Disposable implements IOpenCodeAgentMa
 			}
 		});
 
-		// Add context references if any
+		// Add context references if any via a system-reminder block (used only for the live prompt)
 		if (extraRefsTexts.length > 0) {
 			prompt = `<system-reminder>\nThe user provided the following references:\n${extraRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>\n\n` + prompt;
 		}
@@ -165,14 +166,23 @@ export class OpenCodeAgentManager extends Disposable implements IOpenCodeAgentMa
 	private async streamResponse(
 		message: any,
 		stream: vscode.ChatResponseStream,
-		token: CancellationToken
+		token: CancellationToken,
+		pendingTools: Map<string, vscode.ChatToolInvocationPart>
 	): Promise<void> {
 		if (token.isCancellationRequested) {
 			return;
 		}
 
 		// Handle different message types
-		if (typeof message.content === 'string') {
+		const contentParts = Array.isArray(message?.parts) ? message.parts : undefined;
+		if (contentParts) {
+			for (const part of contentParts) {
+				if (token.isCancellationRequested) {
+					break;
+				}
+				await this.streamContentPart(part, stream, token, pendingTools);
+			}
+		} else if (typeof message.content === 'string') {
 			// Simple text message
 			stream.markdown(message.content);
 		} else if (message.content && Array.isArray(message.content)) {
@@ -181,12 +191,11 @@ export class OpenCodeAgentManager extends Disposable implements IOpenCodeAgentMa
 				if (token.isCancellationRequested) {
 					break;
 				}
-
-				await this.streamContentPart(part, stream, token);
+				await this.streamContentPart(part, stream, token, pendingTools);
 			}
 		} else if (message.content) {
 			// Object content
-			await this.streamContentPart(message.content, stream, token);
+			await this.streamContentPart(message.content, stream, token, pendingTools);
 		}
 	}
 
@@ -196,7 +205,8 @@ export class OpenCodeAgentManager extends Disposable implements IOpenCodeAgentMa
 	private async streamContentPart(
 		part: any,
 		stream: vscode.ChatResponseStream,
-		token: CancellationToken
+		token: CancellationToken,
+		pendingTools: Map<string, vscode.ChatToolInvocationPart>
 	): Promise<void> {
 		if (token.isCancellationRequested) {
 			return;
@@ -217,11 +227,78 @@ export class OpenCodeAgentManager extends Disposable implements IOpenCodeAgentMa
 						stream.markdown(`\`\`\`\n${part.code || part.content}\n\`\`\``);
 					}
 					break;
-
-				case 'tool_use':
-					// Defer tool handling until OpenCode server exposes tool_use semantics
-					stream.progress(`\n\n🛠️ Tool requested: ${part?.name ?? 'unknown'} (not executed)`);
+				case 'tool_use': {
+					const id = String(part.id ?? `oc_${Date.now()}`);
+					const name = String(part.name ?? part.tool ?? 'tool');
+					const inv = new ChatToolInvocationPart(name, id, false);
+					inv.isConfirmed = true;
+					if (part.input) {
+						const md = new MarkdownString();
+						md.appendCodeblock(JSON.stringify(part.input, null, 2), 'json');
+						inv.invocationMessage = md;
+					}
+					pendingTools.set(id, inv);
+					stream.push(inv);
 					break;
+				}
+				case 'tool_result': {
+					const toolUseId = String(part.tool_use_id ?? part.id ?? '');
+					const inv = pendingTools.get(toolUseId);
+					if (inv) {
+						inv.isComplete = true;
+						inv.isError = !!part.is_error;
+						const md = new MarkdownString();
+						const result = part.result ?? part.content ?? part.output;
+						if (typeof result === 'string') {
+							md.appendCodeblock(result);
+						} else {
+							try {
+								md.appendCodeblock(JSON.stringify(result ?? {}, null, 2), 'json');
+							} catch {
+								md.appendCodeblock(String(result));
+							}
+						}
+						inv.pastTenseMessage = md;
+						pendingTools.delete(toolUseId);
+					}
+					break;
+				}
+				case 'tool': {
+					const id = String(part.callID ?? part.id ?? `oc_${Date.now()}`);
+					const name = String(part.tool ?? part.name ?? 'tool');
+					let inv = pendingTools.get(id);
+					if (!inv) {
+						inv = new ChatToolInvocationPart(name, id, false);
+						inv.isConfirmed = true;
+						const input = part.state?.input ?? part.input;
+						if (input) {
+							const mdIn = new MarkdownString();
+							try { mdIn.appendCodeblock(JSON.stringify(input, null, 2), 'json'); }
+							catch { mdIn.appendCodeblock(String(input)); }
+							inv.invocationMessage = mdIn;
+						}
+
+						pendingTools.set(id, inv);
+						stream.push(inv);
+					}
+
+					const status = String(part.state?.status ?? '');
+					const output = part.state?.output ?? part.output ?? part.result ?? part.content;
+					if (status === 'completed' || typeof output !== 'undefined') {
+						inv!.isComplete = true;
+						inv!.isError = status === 'error' || !!part.error;
+						const mdOut = new MarkdownString();
+						if (typeof output === 'string') {
+							mdOut.appendCodeblock(output);
+						} else {
+							try { mdOut.appendCodeblock(JSON.stringify(output ?? {}, null, 2), 'json'); }
+							catch { mdOut.appendCodeblock(String(output)); }
+						}
+						inv!.pastTenseMessage = mdOut;
+						pendingTools.delete(id);
+					}
+					break;
+				}
 
 				default:
 					// Generic content
