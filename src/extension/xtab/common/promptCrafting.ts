@@ -7,7 +7,7 @@ import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/docum
 import { RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit';
 import { LanguageContextResponse } from '../../../platform/inlineEdits/common/dataTypes/languageContext';
 import { CurrentFileOptions, DiffHistoryOptions, PromptingStrategy, PromptOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-import { StatelessNextEditRequest } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { StatelessNextEditDocument } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { IXtabHistoryEditEntry, IXtabHistoryEntry } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ContextKind, TraitContext } from '../../../platform/languageServer/common/languageContextService';
 import { pushMany, range } from '../../../util/vs/base/common/arrays';
@@ -131,15 +131,13 @@ export const simplifiedPrompt = 'Predict next code edit based on the context giv
 
 export const xtab275SystemPrompt = `Predict the next code edit based on user context, following Microsoft content policies and avoiding copyright violations. If a request may breach guidelines, reply: "Sorry, I can't assist with that."`;
 
-export function getUserPrompt(request: StatelessNextEditRequest, currentFileContent: string, areaAroundCodeToEdit: string, langCtx: LanguageContextResponse | undefined, computeTokens: (s: string) => number, opts: PromptOptions): string {
+export function getUserPrompt(activeDoc: StatelessNextEditDocument, xtabHistory: readonly IXtabHistoryEntry[], currentFileContent: string, areaAroundCodeToEdit: string, langCtx: LanguageContextResponse | undefined, computeTokens: (s: string) => number, opts: PromptOptions): string {
 
-	const activeDoc = request.getActiveDocument();
-
-	const { codeSnippets: recentlyViewedCodeSnippets, documents: docsInPrompt } = getRecentCodeSnippets(request, langCtx, computeTokens, opts);
+	const { codeSnippets: recentlyViewedCodeSnippets, documents: docsInPrompt } = getRecentCodeSnippets(activeDoc, xtabHistory, langCtx, computeTokens, opts);
 
 	docsInPrompt.add(activeDoc.id); // Add active document to the set of documents in prompt
 
-	const editDiffHistory = getEditDiffHistory(request, docsInPrompt, computeTokens, opts.diffHistory);
+	const editDiffHistory = getEditDiffHistory(activeDoc, xtabHistory, docsInPrompt, computeTokens, opts.diffHistory);
 
 	const relatedInformation = getRelatedInformation(langCtx);
 
@@ -228,19 +226,22 @@ function getRelatedInformation(langCtx: LanguageContextResponse | undefined): st
 }
 
 function getEditDiffHistory(
-	request: StatelessNextEditRequest,
+	activeDoc: StatelessNextEditDocument,
+	xtabHistory: readonly IXtabHistoryEntry[],
 	docsInPrompt: Set<DocumentId>,
 	computeTokens: (s: string) => number,
 	{ onlyForDocsInPrompt, maxTokens, nEntries, useRelativePaths }: DiffHistoryOptions
 ) {
-	const workspacePath = useRelativePaths ? request.getActiveDocument().workspaceRoot?.path : undefined;
+	const workspacePath = useRelativePaths ? activeDoc.workspaceRoot?.path : undefined;
+
+	const reversedHistory = xtabHistory.slice().reverse();
 
 	let tokenBudget = maxTokens;
 
 	const allDiffs: string[] = [];
 
 	// we traverse in reverse (ie from most recent to least recent) because we may terminate early due to token-budget overflow
-	for (const entry of request.xtabEditHistory.reverse()) {
+	for (const entry of reversedHistory) {
 		if (allDiffs.length >= nEntries) { // we've reached the maximum number of entries
 			break;
 		}
@@ -347,7 +348,8 @@ function formatCodeSnippet(
 }
 
 function getRecentCodeSnippets(
-	request: StatelessNextEditRequest,
+	activeDoc: StatelessNextEditDocument,
+	xtabHistory: readonly IXtabHistoryEntry[],
 	langCtx: LanguageContextResponse | undefined,
 	computeTokens: (code: string) => number,
 	opts: PromptOptions,
@@ -358,13 +360,11 @@ function getRecentCodeSnippets(
 
 	const { includeViewedFiles, nDocuments } = opts.recentlyViewedDocuments;
 
-	const activeDoc = request.getActiveDocument();
-
 	// get last documents besides active document
 	// enforces the option to include/exclude viewed files
 	const docsBesidesActiveDoc: IXtabHistoryEntry[] = []; // from most to least recent
-	for (let i = request.xtabEditHistory.length - 1, seenDocuments = new Set<DocumentId>(); i >= 0; --i) {
-		const entry = request.xtabEditHistory[i];
+	for (let i = xtabHistory.length - 1, seenDocuments = new Set<DocumentId>(); i >= 0; --i) {
+		const entry = xtabHistory[i];
 
 		if (!includeViewedFiles && entry.kind === 'visibleRanges') {
 			continue;
