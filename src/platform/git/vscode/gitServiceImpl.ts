@@ -208,6 +208,12 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		return repository?.fetch(remote, ref, depth);
 	}
 
+	async getMergeBase(uri: URI, ref1: string, ref2: string): Promise<string | undefined> {
+		const gitAPI = this.gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(uri);
+		return repository?.getMergeBase(ref1, ref2);
+	}
+
 	async initialize(): Promise<void> {
 		if (this._isInitialized.get()) {
 			return;

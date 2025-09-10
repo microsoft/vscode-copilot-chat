@@ -14,7 +14,6 @@ import { ICombinedEmbeddingIndex } from '../../../platform/embeddings/common/vsc
 import { FEEDBACK_URL } from '../../../platform/endpoint/common/domainService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitCommitMessageService } from '../../../platform/git/common/gitCommitMessageService';
-import { IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ISettingsEditorSearchService } from '../../../platform/settingsEditor/common/settingsEditorSearchService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -35,7 +34,7 @@ import { InlineCodeSymbolLinkifier } from '../../linkify/vscode-node/inlineCodeS
 import { NotebookCellLinkifier } from '../../linkify/vscode-node/notebookCellLinkifier';
 import { SymbolLinkifier } from '../../linkify/vscode-node/symbolLinkifier';
 import { IntentDetector } from '../../prompt/node/intentDetector';
-import { IDocumentMergeConflictDescriptor } from '../../scm/vscode-node/mergeConflictParser';
+import { IMergeConflictService } from '../../scm/common/mergeConflictService';
 import { SemanticSearchTextSearchProvider } from '../../workspaceSemanticSearch/node/semanticSearchTextSearchProvider';
 import { GitHubPullRequestProviders } from '../node/githubPullRequestProviders';
 import { startFeedbackCollection } from './feedbackCollection';
@@ -74,8 +73,8 @@ export class ConversationFeature implements IExtensionContribution {
 		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 		@ICombinedEmbeddingIndex private readonly embeddingIndex: ICombinedEmbeddingIndex,
 		@IDevContainerConfigurationService private readonly devContainerConfigurationService: IDevContainerConfigurationService,
-		@IGitService private readonly gitService: IGitService,
 		@IGitCommitMessageService private readonly gitCommitMessageService: IGitCommitMessageService,
+		@IMergeConflictService private readonly mergeConflictService: IMergeConflictService,
 		@ILinkifyService private readonly linkifyService: ILinkifyService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@INewWorkspacePreviewContentManager private readonly newWorkspacePreviewContentManager: INewWorkspacePreviewContentManager,
@@ -249,11 +248,8 @@ export class ConversationFeature implements IExtensionContribution {
 					repository.inputBox.value = commitMessage;
 				}
 			}),
-			vscode.commands.registerCommand('github.copilot.git.resolveMergeConflict', async (rootUri: vscode.Uri | undefined, document: vscode.Uri, conflict: IDocumentMergeConflictDescriptor, cancellationToken: vscode.CancellationToken | undefined) => {
-				const repository = rootUri ? this.gitService.getRepository(rootUri) : undefined;
-				if (!repository) {
-					return;
-				}
+			vscode.commands.registerCommand('github.copilot.git.resolveMergeConflicts', async (...resourceStates: vscode.SourceControlResourceState[]) => {
+				await this.mergeConflictService.resolveMergeConflicts(resourceStates.map(r => r.resourceUri), undefined);
 			}),
 			vscode.commands.registerCommand('github.copilot.devcontainer.generateDevContainerConfig', async (args: DevContainerConfigGeneratorArguments, cancellationToken = new vscode.CancellationTokenSource().token) => {
 				return this.devContainerConfigurationService.generateConfiguration(args, cancellationToken);

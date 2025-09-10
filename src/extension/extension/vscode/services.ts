@@ -92,6 +92,8 @@ import { IInstantiationServiceBuilder } from '../../../util/common/services';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { ILaunchConfigService } from '../../onboardDebug/common/launchConfigService';
 import { LaunchConfigService } from '../../onboardDebug/vscode/launchConfigService';
+import { IMergeConflictService } from '../../scm/common/mergeConflictService';
+import { MergeConflictServiceImpl } from '../../scm/vscode/mergeConflictServiceImpl';
 import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
 import { ToolGroupingCache } from '../../tools/common/virtualTools/virtualToolGroupCache';
 import { IToolGroupingCache, IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
@@ -167,4 +169,5 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IEmbeddingsComputer, new SyncDescriptor(RemoteEmbeddingsComputer));
 	builder.define(IToolGroupingService, new SyncDescriptor(ToolGroupingService));
 	builder.define(IToolGroupingCache, new SyncDescriptor(ToolGroupingCache));
+	builder.define(IMergeConflictService, new SyncDescriptor(MergeConflictServiceImpl));
 }

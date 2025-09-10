@@ -1950,9 +1950,9 @@
 				"category": "GitHub Copilot"
 			},
 			{
-				"command": "github.copilot.git.resolveMergeConflict",
-				"title": "%github.copilot.git.resolveMergeConflict%",
-				"icon": "$(sparkle)",
+				"command": "github.copilot.git.resolveMergeConflicts",
+				"title": "%github.copilot.git.resolveMergeConflicts%",
+				"icon": "$(chat-sparkle)",
 				"enablement": "!github.copilot.interactiveSession.disabled",
 				"category": "GitHub Copilot"
 			},
@@ -3071,7 +3071,7 @@
 					"when": "false"
 				},
 				{
-					"command": "github.copilot.git.resolveMergeConflict",
+					"command": "github.copilot.git.resolveMergeConflicts",
 					"when": "false"
 				},
 				{
@@ -3406,6 +3406,13 @@
 					"command": "github.copilot.chat.review.unstagedChanges",
 					"when": "github.copilot.chat.reviewDiff.enabled && scmProvider == git && scmResourceGroup == workingTree",
 					"group": "inline@-3"
+				}
+			],
+			"scm/resourceState/context": [
+				{
+					"command": "github.copilot.git.resolveMergeConflicts",
+					"when": "scmProvider == git && scmResourceGroup == merge",
+					"group": "z_chat@1"
 				}
 			],
 			"scm/inputBox": [
