@@ -82,7 +82,7 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(CompletionsCoreContribution),
 	asContributionFactory(CompletionsUnificationContribution),
 	workspaceIndexingContribution,
-	asContributionFactory(ChatSessionsContrib),
+	asContributionFactory(ChatSessionsContrib)
 ];
 
 /**
