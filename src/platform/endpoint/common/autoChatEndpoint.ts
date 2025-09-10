@@ -120,7 +120,19 @@ export class AutoChatEndpoint implements IChatEndpoint {
  * @returns True if the auto mode is enabled, false otherwise
  */
 export async function isAutoModelEnabled(expService: IExperimentationService, envService: IEnvService, authService: IAuthenticationService): Promise<boolean> {
-	return envService.isPreRelease() || (!!expService.getTreatmentVariable<boolean>('autoModelEnabled') && (await authService.getCopilotToken()).isEditorPreviewFeaturesEnabled());
+	if (envService.isPreRelease()) {
+		return true;
+	}
+
+	if (!!expService.getTreatmentVariable<boolean>('autoModelEnabled')) {
+		try {
+			(await authService.getCopilotToken()).isEditorPreviewFeaturesEnabled();
+		} catch (e) {
+			return false;
+		}
+	}
+
+	return false;
 }
 
 /**
