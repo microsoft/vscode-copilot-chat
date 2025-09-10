@@ -75,7 +75,7 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 			}
 			return tokenResult;
 		} else {
-			const devDeviceId = (env as any).devDeviceId;
+			const devDeviceId = env.devDeviceId;
 			const tokenResult = await this.authFromDevDeviceId(devDeviceId);
 			if (tokenResult.kind === 'success') {
 				this._logService.info(`Got Copilot token for ${devDeviceId}`);
