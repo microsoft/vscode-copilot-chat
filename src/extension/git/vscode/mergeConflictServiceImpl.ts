@@ -47,15 +47,21 @@ export class MergeConflictServiceImpl extends Disposable implements IMergeConfli
 				continue;
 			}
 
+			const conflicts = MergeConflictParser.scanDocument(textDocument);
+			if (conflicts.length === 0) {
+				continue;
+			}
+
 			// Attach file
 			attachFiles.push(resource);
 
-			const conflict = MergeConflictParser.scanDocument(textDocument)[0];
+			const currentName = conflicts[0].current.name;
+			const incomingName = conflicts[0].incoming.name;
 
 			// Get merge base
-			const mergeBase = await this.gitService.getMergeBase(resource, conflict.current.name, conflict.incoming.name);
+			const mergeBase = await this.gitService.getMergeBase(resource, currentName, incomingName);
 			if (!mergeBase) {
-				return;
+				continue;
 			}
 
 			// Attach merge base
@@ -71,8 +77,8 @@ export class MergeConflictServiceImpl extends Disposable implements IMergeConfli
 					historyItemId: mergeBase
 				},
 				end: {
-					uri: toGitUri(resource, conflict.current.name),
-					historyItemId: conflict.current.name
+					uri: toGitUri(resource, currentName),
+					historyItemId: currentName
 				}
 			});
 
@@ -83,8 +89,8 @@ export class MergeConflictServiceImpl extends Disposable implements IMergeConfli
 					historyItemId: mergeBase
 				},
 				end: {
-					uri: toGitUri(resource, conflict.incoming.name),
-					historyItemId: conflict.incoming.name
+					uri: toGitUri(resource, incomingName),
+					historyItemId: incomingName
 				}
 			});
 		}
