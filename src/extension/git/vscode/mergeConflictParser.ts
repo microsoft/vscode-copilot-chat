@@ -81,7 +81,7 @@ export class MergeConflictParser {
 
 				// Create a full descriptor from the lines that we matched. This can return
 				// null if the descriptor could not be completed.
-				const completeDescriptor = MergeConflictParser.scanItemTolMergeConflictDescriptor(document, currentConflict);
+				const completeDescriptor = MergeConflictParser.scanItemToMergeConflictDescriptor(document, currentConflict);
 
 				if (completeDescriptor !== null) {
 					conflictDescriptors.push(completeDescriptor);
