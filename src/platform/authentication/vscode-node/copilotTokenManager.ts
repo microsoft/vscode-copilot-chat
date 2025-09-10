@@ -75,10 +75,9 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 			}
 			return tokenResult;
 		} else {
-			const devDeviceId = env.devDeviceId;
-			const tokenResult = await this.authFromDevDeviceId(devDeviceId);
+			const tokenResult = await this.authFromDevDeviceId(env.devDeviceId);
 			if (tokenResult.kind === 'success') {
-				this._logService.info(`Got Copilot token for ${devDeviceId}`);
+				this._logService.info(`Got Copilot token for ${env.devDeviceId}`);
 				this._logService.info(`Copilot Chat: ${this._envService.getVersion()}, VS Code: ${this._envService.vscodeVersion}`);
 			} else {
 				this._logService.warn('GitHub login failed');
