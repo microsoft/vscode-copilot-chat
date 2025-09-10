@@ -130,7 +130,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		this._lastTriggerTime = Date.now();
 
 		const shouldExpandEditWindow = this._shouldExpandEditWindow;
-		this._shouldExpandEditWindow = false;
 
 		logContext.setStatelessNextEditProviderId(this._statelessNextEditProvider.ID);
 
@@ -569,6 +568,11 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				tracer.trace(`processing edit #${ithEdit} (starts at 0)`);
 
 				if (result.isError()) { // either error or stream of edits ended
+					// if there was a request made, and it ended without any edits, reset shouldExpandEditWindow
+					if (ithEdit === 0 && result.err instanceof NoNextEditReason.NoSuggestions) {
+						tracer.trace('resetting shouldExpandEditWindow to false due to NoSuggestions');
+						this._shouldExpandEditWindow = false;
+					}
 					if (statePerDoc.get(curDocId).nextEdits.length) {
 						tracer.returns(`${statePerDoc.get(curDocId).nextEdits.length} edits returned`);
 					} else {
@@ -602,6 +606,10 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 					}
 					return;
 				}
+
+				// reset shouldExpandEditWindow to false when we get any edit
+				tracer.trace('resetting shouldExpandEditWindow to false due to receiving an edit');
+				this._shouldExpandEditWindow = false;
 
 				const targetDocState = statePerDoc.get(result.val.targetDocument ?? curDocId);
 
@@ -718,7 +726,10 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		this._statelessNextEditProvider.handleAcceptance?.();
 
 		if (suggestion === this._lastNextEditResult) {
+			this._tracer.trace('setting shouldExpandEditWindow to true due to acceptance of last suggestion');
 			this._shouldExpandEditWindow = true;
+		} else {
+			this._tracer.trace('NOT setting shouldExpandEditWindow to true because suggestion is not the last suggestion');
 		}
 	}
 
