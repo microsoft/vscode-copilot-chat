@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Remote } from '../vscode/git';
 import type * as vscode from 'vscode';
+import { Remote } from '../vscode/git';
 
 interface GitConfigSection {
 	name: string;
