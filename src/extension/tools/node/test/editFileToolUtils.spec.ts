@@ -10,7 +10,7 @@ import { MockAlternativeNotebookContentService } from '../../../../platform/note
 import { INotebookService } from '../../../../platform/notebook/common/notebookService';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { WorkspaceEdit as WorkspaceEditShim } from '../../../../util/common/test/shims/editing';
-import { ExtHostDocumentData } from '../../../../util/common/test/shims/textDocument';
+import { createTextDocumentData, IExtHostDocumentData, setDocText } from '../../../../util/common/test/shims/textDocument';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { WorkspaceEdit } from '../../../../vscodeTypes';
 import { applyEdits as applyTextEdits } from '../../../prompt/node/intents';
@@ -21,7 +21,7 @@ describe('replace_string_in_file - applyEdit', () => {
 	let workspaceService: TestWorkspaceService;
 	let notebookService: { hasSupportedNotebooks: (uri: URI) => boolean };
 	let alternatveContentService: IAlternativeNotebookContentService;
-	let doc: ExtHostDocumentData;
+	let doc: IExtHostDocumentData;
 
 	async function doApplyEdit(oldString: string, newString: string, uri = doc.document.uri) {
 		const r = await applyEdit(uri, oldString, newString, workspaceService, notebookService as INotebookService, alternatveContentService, undefined);
@@ -30,14 +30,11 @@ describe('replace_string_in_file - applyEdit', () => {
 	}
 
 	function setText(value: string) {
-		doc.onEvents({
-			changes: [{ range: { startColumn: 1, startLineNumber: 1, endColumn: 1, endLineNumber: 1 }, text: value }],
-			versionId: 1,
-		});
+		setDocText(doc, value);
 	}
 
 	beforeEach(() => {
-		doc = ExtHostDocumentData.create(URI.file('/my/file.ts'), '', 'ts');
+		doc = createTextDocumentData(URI.file('/my/file.ts'), '', 'ts');
 		workspaceEdit = new WorkspaceEditShim() as any;
 		workspaceService = new TestWorkspaceService([], [doc.document]);
 		notebookService = { hasSupportedNotebooks: () => false };
@@ -345,7 +342,7 @@ describe('replace_string_in_file - applyEdit', () => {
 		const output = JSON.parse(fs.readFileSync(__dirname + '/editFileToolUtilsFixtures/crlf-output.json', 'utf8')).join('\r\n');
 		const toolCall = JSON.parse(fs.readFileSync(__dirname + '/editFileToolUtilsFixtures/crlf-tool-call.json', 'utf8'));
 
-		const crlfDoc = new ExtHostDocumentData(URI.file('/my/file2.ts'), input, '\r\n', 1, 'ts', false);
+		const crlfDoc = createTextDocumentData(URI.file('/my/file2.ts'), input.join('\r\n'), 'ts', '\r\n');
 		workspaceService.textDocuments.push(crlfDoc.document);
 
 		const result = await doApplyEdit(toolCall.oldString, toolCall.newString, crlfDoc.document.uri);

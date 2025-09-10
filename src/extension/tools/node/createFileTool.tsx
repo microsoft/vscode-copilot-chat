@@ -31,7 +31,7 @@ import { ActionType } from './applyPatch/parser';
 import { EditFileResult } from './editFileToolResult';
 import { createEditConfirmation } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
-import { assertFileOkForTool, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
+import { assertFileNotContentExcluded, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
 
 export interface ICreateFileParams {
 	filePath: string;
@@ -63,7 +63,7 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 			throw new Error(`Invalid file path`);
 		}
 
-		await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, uri));
+		await this.instantiationService.invokeFunction(accessor => assertFileNotContentExcluded(accessor, uri));
 
 		if (!this._promptContext?.stream) {
 			throw new Error('Invalid stream');
@@ -147,15 +147,16 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 		return input;
 	}
 
-	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ICreateFileParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
+	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<ICreateFileParams>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
 		const uri = resolveToolInputPath(options.input.filePath, this.promptPathRepresentationService);
 
 		return {
-			...this.instantiationService.invokeFunction(
+			...await this.instantiationService.invokeFunction(
 				createEditConfirmation,
 				[uri],
 				() => 'Contents:\n\n```\n' + options.input.content || '<empty>' + '\n```',
 			),
+			presentation: undefined,
 			invocationMessage: new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)}`),
 			pastTenseMessage: new MarkdownString(l10n.t`Created ${formatUriForFileWidget(uri)}`)
 		};

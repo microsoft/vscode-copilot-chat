@@ -28,7 +28,7 @@ export class ReviewServiceImpl implements IReviewService {
 	private _repositoryDisposables = new DisposableStore();
 	private _reviewDiffReposString: string | undefined;
 	private _diagnosticCollection: vscode.DiagnosticCollection | undefined;
-	private _commentController = vscode.comments.createCommentController('github-copilot-review', 'GitHub Copilot Review');
+	private _commentController = vscode.comments.createCommentController('github-copilot-review', 'Code Review');
 	private _comments: InternalComment[] = [];
 	private _monitorActiveThread: any | undefined;
 	private _activeThread: vscode.CommentThread | undefined;
@@ -106,7 +106,7 @@ export class ReviewServiceImpl implements IReviewService {
 	}
 
 	isReviewDiffEnabled() {
-		return this._authenticationService.copilotToken?.isCopilotCodeReviewEnabled ?? false;
+		return this._configurationService.getConfig(ConfigKey.ReviewAgent) && this._authenticationService.copilotToken?.isCopilotCodeReviewEnabled || false;
 	}
 
 	isIntentEnabled(): boolean {
@@ -170,7 +170,7 @@ export class ReviewServiceImpl implements IReviewService {
 				body: typeof comment.body === 'string' ? `${comment.body}${change}${appendText}` : new vscode.MarkdownString(`${comment.body.value}${change}${appendText}`),
 				mode: vscode.CommentMode.Preview,
 				author: {
-					name: l10n.t('GitHub Copilot'),
+					name: l10n.t('Code Review'),
 					iconPath: URI.joinPath(this._contextService.extensionUri, 'assets', 'copilot.png'),
 				},
 			}
@@ -212,7 +212,7 @@ export class ReviewServiceImpl implements IReviewService {
 
 	private updateThreadLabels() {
 		this._comments.forEach((comment, i) => {
-			comment.thread.label = l10n.t('Code Review Comment ({0} of {1})', i + 1, this._comments.length);
+			comment.thread.label = l10n.t('Comment {0} of {1}', i + 1, this._comments.length);
 		});
 	}
 

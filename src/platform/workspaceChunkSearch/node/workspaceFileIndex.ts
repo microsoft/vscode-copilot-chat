@@ -17,7 +17,7 @@ import { Lazy } from '../../../util/vs/base/common/lazy';
 import { Disposable, dispose, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
-import { basename, extname, isEqual } from '../../../util/vs/base/common/resources';
+import { basename, extname, isEqual, isEqualOrParent } from '../../../util/vs/base/common/resources';
 import { TernarySearchTree } from '../../../util/vs/base/common/ternarySearchTree';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -185,12 +185,20 @@ export function shouldAlwaysIgnoreFile(resource: URI): boolean {
 		return true;
 	}
 
+	// Ignore some common filenames
 	if (EXCLUDED_FILES.includes(basename(resource).toLowerCase())) {
 		return true;
 	}
 
+	// Ignore some common folders like node_modules
 	const parts = resource.fsPath.toLowerCase().split(/[/\\]/g);
 	if (parts.some(part => EXCLUDED_FOLDERS.includes(part))) {
+		return true;
+	}
+
+	// Ignore some common extensions
+	const normalizedExt = extname(resource).replace(/\./, '').toLowerCase();
+	if (EXCLUDE_EXTENSIONS.has(normalizedExt)) {
 		return true;
 	}
 
@@ -200,7 +208,7 @@ export function shouldAlwaysIgnoreFile(resource: URI): boolean {
 /**
  * Checks if a file in the workspace should potentially be indexed.
  *
- * Caller should also look at file content to make sure the file is not binary.
+ * Caller should also look at file content to make sure the file is not binary or copilot ignored.
  */
 function shouldPotentiallyIndexFile(accessor: ServicesAccessor, resource: URI): boolean {
 	if (shouldAlwaysIgnoreFile(resource)) {
@@ -216,77 +224,7 @@ function shouldPotentiallyIndexFile(accessor: ServicesAccessor, resource: URI): 
 		return false;
 	}
 
-	// Ignore some common extensions
-	const normalizedExt = extname(resource).replace(/\./, '').toLowerCase();
-	if (EXCLUDE_EXTENSIONS.has(normalizedExt)) {
-		return false;
-	}
-
 	return true;
-}
-
-/**
- * Checks if a file in the workspace should be indexed.
- *
- * Caller should still look at file content to make sure the file is not binary.
- */
-export async function shouldIndexFile(accessor: ServicesAccessor, resource: URI, token: CancellationToken): Promise<boolean> {
-	const ignoreService = accessor.get(IIgnoreService);
-	return shouldPotentiallyIndexFile(accessor, resource)
-		&& !await ignoreService.isCopilotIgnored(resource, token);
-}
-
-async function getWorkspaceFilesToIndex(accessor: ServicesAccessor, maxResults: number, token: CancellationToken): Promise<Iterable<URI>> {
-	const workspaceService = accessor.get(IWorkspaceService);
-	const searchService = accessor.get(ISearchService);
-	const ignoreService = accessor.get(IIgnoreService);
-	const instantiationService = accessor.get(IInstantiationService);
-
-	await raceCancellationError(ignoreService.init(), token);
-
-	const resourcesToIndex = new ResourceMap<void>();
-
-	const cts = new CancellationTokenSource(token);
-	const limiter = new Limiter<void>(20);
-
-	try {
-		for (const folder of workspaceService.getWorkspaceFolders() ?? []) {
-			const paths = await raceCancellationError(
-				searchService.findFilesWithDefaultExcludes(new RelativePattern(folder, `**/*`), maxResults - resourcesToIndex.size, cts.token),
-				cts.token);
-
-			const tasks = paths.map(uri => limiter.queue(async () => {
-				if (await instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, uri, cts.token))) {
-					if (resourcesToIndex.size < maxResults) {
-						resourcesToIndex.set(uri);
-					}
-
-					if (resourcesToIndex.size >= maxResults) {
-						cts.cancel();
-					}
-				}
-			}));
-			await raceCancellationError(Promise.all(tasks), cts.token);
-		}
-	} catch (e) {
-		if (isCancellationError(e)) {
-			// If outer token was cancelled, rethrow
-			if (token.isCancellationRequested) {
-				throw e;
-			}
-
-			// Otherwise ignore
-
-		} else {
-			// Rethrow all non-cancellation errors
-			throw e;
-		}
-	} finally {
-		cts.dispose();
-		limiter.dispose();
-	}
-
-	return resourcesToIndex.keys();
 }
 
 export abstract class FileRepresentation implements IDisposable {
@@ -511,6 +449,13 @@ export interface IWorkspaceFileIndex extends IDisposable {
 	 * Tries to read a file.
 	 */
 	tryRead(file: URI): Promise<string | undefined>;
+
+	/**
+	 * Checks if a file in the workspace should be indexed.
+	 *
+	 * Caller should still look at file content to make sure the file is not binary.
+	 */
+	shouldIndexWorkspaceFile(resource: URI, token: CancellationToken): Promise<boolean>;
 }
 
 export class WorkspaceFileIndex extends Disposable implements IWorkspaceFileIndex {
@@ -535,10 +480,12 @@ export class WorkspaceFileIndex extends Disposable implements IWorkspaceFileInde
 	private readonly _fileReadLimiter: Limiter<any>;
 
 	constructor(
-		@IFileSystemService private readonly _fileSystem: IFileSystemService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
+		@IFileSystemService private readonly _fileSystem: IFileSystemService,
+		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@ISearchService private readonly _searchService: ISearchService,
 		@ITabsAndEditorsService private readonly _tabsAndEditorsService: ITabsAndEditorsService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
@@ -653,7 +600,7 @@ export class WorkspaceFileIndex extends Disposable implements IWorkspaceFileInde
 
 		this._register(
 			watcher.onDidChange(async uri => {
-				if (!await this._instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, uri, this._disposeCts.token))) {
+				if (!await this.shouldIndexWorkspaceFile(uri, this._disposeCts.token)) {
 					return;
 				}
 
@@ -672,7 +619,7 @@ export class WorkspaceFileIndex extends Disposable implements IWorkspaceFileInde
 
 		this._register(
 			watcher.onDidCreate(async uri => {
-				if (!await this._instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, uri, this._disposeCts.token))) {
+				if (!await this.shouldIndexWorkspaceFile(uri, this._disposeCts.token)) {
 					return;
 				}
 
@@ -733,7 +680,7 @@ export class WorkspaceFileIndex extends Disposable implements IWorkspaceFileInde
 				return;
 			}
 
-			for (const resource of await this._instantiationService.invokeFunction(accessor => getWorkspaceFilesToIndex(accessor, this.getMaxFilesToIndex(), this._disposeCts.token))) {
+			for (const resource of await this.getWorkspaceFilesToIndex(this.getMaxFilesToIndex(), this._disposeCts.token)) {
 				this.createOrUpdateFsEntry(resource);
 			}
 
@@ -756,6 +703,66 @@ export class WorkspaceFileIndex extends Disposable implements IWorkspaceFileInde
 		return this._configurationService.getExperimentBasedConfig<number>(ConfigKey.Internal.WorkspaceMaxLocalIndexSize, this._expService);
 	}
 
+	private async getWorkspaceFilesToIndex(maxResults: number, token: CancellationToken): Promise<Iterable<URI>> {
+		await raceCancellationError(this._ignoreService.init(), token);
+
+		const resourcesToIndex = new ResourceMap<void>();
+		const cts = new CancellationTokenSource(token);
+
+		try {
+			for (const folder of this._workspaceService.getWorkspaceFolders() ?? []) {
+				const paths = await raceCancellationError(
+					this._searchService.findFilesWithDefaultExcludes(new RelativePattern(folder, `**/*`), maxResults - resourcesToIndex.size, cts.token),
+					cts.token);
+
+				const tasks = paths.map(async uri => {
+					if (await this.shouldIndexWorkspaceFile(uri, cts.token)) {
+						if (resourcesToIndex.size < maxResults) {
+							resourcesToIndex.set(uri);
+						}
+
+						if (resourcesToIndex.size >= maxResults) {
+							cts.cancel();
+						}
+					}
+				});
+				await raceCancellationError(Promise.all(tasks), cts.token);
+			}
+		} catch (e) {
+			if (isCancellationError(e)) {
+				// If outer token was cancelled, rethrow
+				if (token.isCancellationRequested) {
+					throw e;
+				}
+
+				// Otherwise ignore
+
+			} else {
+				// Rethrow all non-cancellation errors
+				throw e;
+			}
+		} finally {
+			cts.dispose();
+		}
+
+		return resourcesToIndex.keys();
+	}
+
+	public async shouldIndexWorkspaceFile(resource: URI, token: CancellationToken): Promise<boolean> {
+		if (!this._instantiationService.invokeFunction(accessor => shouldPotentiallyIndexFile(accessor, resource))) {
+			return false;
+		}
+
+		// Only index files that are inside of the workspace
+		if (!this._workspaceService.getWorkspaceFolders().some(folder => isEqualOrParent(resource, folder))) {
+			return false;
+		}
+
+		return this._fileReadLimiter.queue(async () => {
+			return !await this._ignoreService.isCopilotIgnored(resource, token);
+		});
+	}
+
 	private createOrUpdateFsEntry(resource: URI): FsFileRepresentation {
 		const entry = this._fsFileTree.get(resource);
 		if (entry) {
@@ -772,7 +779,7 @@ export class WorkspaceFileIndex extends Disposable implements IWorkspaceFileInde
 	}
 
 	private async addOrUpdateTextDocumentEntry(doc: vscode.TextDocument, skipEmit = false): Promise<void> {
-		if (!await this._instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, doc.uri, this._disposeCts.token))) {
+		if (!await this.shouldIndexWorkspaceFile(doc.uri, this._disposeCts.token)) {
 			return;
 		}
 

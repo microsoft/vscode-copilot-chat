@@ -10,7 +10,7 @@ import { BudgetExceededError } from '@vscode/prompt-tsx/dist/base/materialized';
 import type * as vscode from 'vscode';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { isHiddenModelB, modelCanUseApplyPatchExclusively, modelCanUseReplaceStringExclusively, modelSupportsApplyPatch, modelSupportsMultiReplaceString, modelSupportsReplaceString } from '../../../platform/endpoint/common/chatModelCapabilities';
+import { isHiddenModelB, modelCanUseApplyPatchExclusively, modelCanUseReplaceStringExclusively, modelSupportsApplyPatch, modelSupportsMultiReplaceString, modelSupportsReplaceString, modelSupportsSimplifiedApplyPatchInstructions } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -45,11 +45,12 @@ import { ContributedToolName, ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
 import { VirtualTool } from '../../tools/common/virtualTools/virtualTool';
 import { IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
+import { applyPatch5Description } from '../../tools/node/applyPatchTool';
 import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
 import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation } from './toolCallingLoop';
 
-const getTools = (instaService: IInstantiationService, request: vscode.ChatRequest) =>
+export const getAgentTools = (instaService: IInstantiationService, request: vscode.ChatRequest) =>
 	instaService.invokeFunction(async accessor => {
 		const toolsService = accessor.get<IToolsService>(IToolsService);
 		const testService = accessor.get<ITestProvider>(ITestProvider);
@@ -73,10 +74,12 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 			switch (treatment) {
 				case 'with_replace_string':
 					allowTools[ToolName.ReplaceString] = true;
+					allowTools[ToolName.MultiReplaceString] = configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceStringGrok, experimentationService);
 					allowTools[ToolName.EditFile] = true;
 					break;
 				case 'only_replace_string':
 					allowTools[ToolName.ReplaceString] = true;
+					allowTools[ToolName.MultiReplaceString] = configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceStringGrok, experimentationService);
 					allowTools[ToolName.EditFile] = false;
 					break;
 				case 'control':
@@ -104,9 +107,10 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 			allowTools[ToolName.ApplyPatch] = false;
 			allowTools[ToolName.EditFile] = false;
 			allowTools[ToolName.ReplaceString] = false;
+			allowTools[ToolName.MultiReplaceString] = false;
 		}
 
-		return toolsService.getEnabledTools(request, tool => {
+		const tools = toolsService.getEnabledTools(request, tool => {
 			if (typeof allowTools[tool.name] === 'boolean') {
 				return allowTools[tool.name];
 			}
@@ -114,6 +118,15 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 			// Must return undefined to fall back to other checks
 			return undefined;
 		});
+
+		if (modelSupportsSimplifiedApplyPatchInstructions(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.Gpt5AlternativePatch, experimentationService)) {
+			const ap = tools.findIndex(t => t.name === ToolName.ApplyPatch);
+			if (ap !== -1) {
+				tools[ap] = { ...tools[ap], description: applyPatch5Description };
+			}
+		}
+
+		return tools;
 	});
 
 export class AgentIntent extends EditCodeIntent {
@@ -144,7 +157,7 @@ export class AgentIntent extends EditCodeIntent {
 	}
 
 	private async listTools(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken) {
-		const editingTools = await getTools(this.instantiationService, request);
+		const editingTools = await getAgentTools(this.instantiationService, request);
 		const grouping = this._toolGroupingService.create(conversation.sessionId, editingTools);
 		if (!grouping.isEnabled) {
 			stream.markdown(`Available tools: \n${editingTools.map(tool => `- ${tool.name}`).join('\n')}\n`);
@@ -226,7 +239,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 	}
 
 	public override getAvailableTools(): Promise<vscode.LanguageModelToolInformation[]> {
-		return getTools(this.instantiationService, this.request);
+		return getAgentTools(this.instantiationService, this.request);
 	}
 
 	override async buildPrompt(

@@ -45,7 +45,7 @@ const baseNodeBuildOptions = {
 	mainFields: ["module", "main"], // needed for jsonc-parser,
 	define: {
 		'process.env.APPLICATIONINSIGHTS_CONFIGURATION_CONTENT': '"{}"'
-	}
+	},
 } satisfies esbuild.BuildOptions;
 
 const nodeExtHostTestGlobs = [
@@ -65,7 +65,7 @@ const testBundlePlugin: esbuild.Plugin = {
 			return { path: path.resolve(args.path) };
 		});
 		build.onLoad({ filter: /[\/\\]test-extension\.ts$/ }, async args => {
-			let files = await glob(nodeExtHostTestGlobs, { cwd: REPO_ROOT, posix: true });
+			let files = await glob(nodeExtHostTestGlobs, { cwd: REPO_ROOT, posix: true, ignore: ['src/extension/completions-core/**/*'] });
 			files = files.map(f => path.posix.relative('src', f));
 			if (files.length === 0) {
 				throw new Error('No extension tests found');
@@ -95,7 +95,7 @@ const sanityTestBundlePlugin: esbuild.Plugin = {
 			return { path: path.resolve(args.path) };
 		});
 		build.onLoad({ filter: /[\/\\]sanity-test-extension\.ts$/ }, async args => {
-			let files = await glob(nodeExtHostSanityTestGlobs, { cwd: REPO_ROOT, posix: true });
+			let files = await glob(nodeExtHostSanityTestGlobs, { cwd: REPO_ROOT, posix: true, ignore: ['src/extension/completions-core/**/*'] });
 			files = files.map(f => path.posix.relative('src', f));
 			if (files.length === 0) {
 				throw new Error('No extension tests found');
@@ -235,7 +235,7 @@ const nodeSimulationWorkbenchUIBuildOptions = {
 		'child_process',
 		'http',
 		'assert',
-	]
+	],
 } satisfies esbuild.BuildOptions;
 
 async function typeScriptServerPluginPackageJsonInstall(): Promise<void> {

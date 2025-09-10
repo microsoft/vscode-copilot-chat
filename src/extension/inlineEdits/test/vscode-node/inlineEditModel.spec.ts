@@ -10,7 +10,7 @@ import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/do
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
-import { ExtHostDocumentData } from '../../../../util/common/test/shims/textDocument';
+import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
 import { ExtHostTextEditor } from '../../../../util/common/test/shims/textEditor';
 import { Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
@@ -104,7 +104,7 @@ suite('InlineEditModel', () => {
 		}
 
 		function createTextDocument(selection: Selection = new Selection(0, 0, 0, 0), uri: Uri = Uri.file('sample.py'), content = 'print("Hello World")') {
-			const doc = ExtHostDocumentData.create(Uri.file('sample.py'), 'print("Hello World")', 'python');
+			const doc = createTextDocumentData(Uri.file('sample.py'), 'print("Hello World")', 'python');
 			const textEditor = new ExtHostTextEditor(doc.document, [selection], {}, [], undefined);
 			vscWorkspace.addDoc(doc.document, createObservableTextDoc(doc.document.uri));
 			return {

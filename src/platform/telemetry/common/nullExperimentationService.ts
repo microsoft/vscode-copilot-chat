@@ -46,6 +46,13 @@ export interface IExperimentationService {
 	 * @param name name of the treatment variable.
 	 */
 	getTreatmentVariable<T extends boolean | number | string>(name: string): T | undefined;
+
+	/**
+	 * Sets the filters for the completions experiments.
+	 * @param filters Map of filter names to their values.
+	 * @deprecated This will be removed once we have fully migrated to the new completions implementation.
+	 */
+	setCompletionsFilters(filters: Map<string, string>): void;
 }
 
 export const IExperimentationService = createServiceIdentifier<IExperimentationService>('IExperimentationService');
@@ -61,4 +68,6 @@ export class NullExperimentationService implements IExperimentationService {
 	getTreatmentVariable<T extends boolean | number | string>(_name: string): T | undefined {
 		return undefined;
 	}
+
+	async setCompletionsFilters(filters: Map<string, string>): Promise<void> { }
 }

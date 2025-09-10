@@ -61,7 +61,7 @@ export class StatelessNextEditRequest<TFirstEdit = any> {
 		public readonly documentBeforeEdits: StringText,
 		public readonly documents: readonly StatelessNextEditDocument[],
 		public readonly activeDocumentIdx: number,
-		public readonly xtabEditHistory: IXtabHistoryEntry[],
+		public readonly xtabEditHistory: readonly IXtabHistoryEntry[],
 		public readonly firstEdit: DeferredPromise<Result<TFirstEdit, NoNextEditReason>>,
 		public readonly expandedEditWindowNLines: number | undefined,
 		public readonly logContext: InlineEditRequestLogContext,
@@ -293,7 +293,6 @@ export interface IStatelessNextEditTelemetry {
 	readonly nextEditLogprob: number | undefined;
 	readonly noNextEditReasonKind: string | undefined;
 	readonly noNextEditReasonMessage: string | undefined;
-	readonly summarizedEditWindow: any;
 }
 
 export type FetchResultWithStats = {
@@ -362,7 +361,6 @@ export class StatelessNextEditTelemetryBuilder {
 			nEditsSuggested: this._nEditsSuggested,
 			nextEditLogprob: this._nextEditLogProb,
 			lineDistanceToMostRecentEdit: this._lineDistanceToMostRecentEdit,
-			summarizedEditWindow: this._summarizedEditWindow,
 		};
 	}
 
@@ -457,12 +455,6 @@ export class StatelessNextEditTelemetryBuilder {
 	private _lineDistanceToMostRecentEdit: number | undefined;
 	public setLineDistanceToMostRecentEdit(distanceToMostRecentEdit: number): this {
 		this._lineDistanceToMostRecentEdit = distanceToMostRecentEdit;
-		return this;
-	}
-
-	private _summarizedEditWindow: any;
-	public setSummarizedEditWindow(summarizedEditWindow: any): this {
-		this._summarizedEditWindow = summarizedEditWindow;
 		return this;
 	}
 }

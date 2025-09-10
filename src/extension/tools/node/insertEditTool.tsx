@@ -23,7 +23,7 @@ import { ActionType } from './applyPatch/parser';
 import { EditFileResult } from './editFileToolResult';
 import { createEditConfirmation } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
-import { assertFileOkForTool } from './toolUtils';
+import { assertFileNotContentExcluded } from './toolUtils';
 
 export interface IEditFileParams {
 	explanation: string;
@@ -54,7 +54,7 @@ export class EditFileTool implements ICopilotTool<IEditFileParams> {
 			throw new Error(`Invalid file path`);
 		}
 
-		await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, uri));
+		await this.instantiationService.invokeFunction(accessor => assertFileNotContentExcluded(accessor, uri));
 
 		const existingDiagnostics = this.languageDiagnosticsService.getDiagnostics(uri);
 

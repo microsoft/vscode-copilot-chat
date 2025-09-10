@@ -113,3 +113,10 @@ export function modelCanUseApplyPatchExclusively(model: LanguageModelChat | ICha
 export function modelNeedsStrongReplaceStringHint(model: LanguageModelChat | IChatEndpoint): boolean {
 	return model.family.toLowerCase().includes('gemini');
 }
+
+/**
+ * Model can take the simple, modern apply_patch instructions.
+ */
+export function modelSupportsSimplifiedApplyPatchInstructions(model: LanguageModelChat | IChatEndpoint): boolean {
+	return model.family.startsWith('gpt-5');
+}
