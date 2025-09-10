@@ -130,7 +130,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		this._lastTriggerTime = Date.now();
 
 		const shouldExpandEditWindow = this._shouldExpandEditWindow;
-		this._shouldExpandEditWindow = false;
 
 		logContext.setStatelessNextEditProviderId(this._statelessNextEditProvider.ID);
 
@@ -301,21 +300,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		telemetryBuilder.setHasNextEdit(true);
 
-		const cacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheDelay, this._expService);
-		const rebasedCacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRebasedCacheDelay, this._expService);
-		const subsequentCacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsSubsequentCacheDelay, this._expService);
-
-		let minimumResponseDelay = cacheDelay;
-		if (isRebasedCachedEdit && rebasedCacheDelay !== undefined) {
-			minimumResponseDelay = rebasedCacheDelay;
-		} else if (isSubsequentCachedEdit && subsequentCacheDelay !== undefined) {
-			minimumResponseDelay = subsequentCacheDelay;
-		}
-
-		tracer.trace(`minimum response delay: expecting ${minimumResponseDelay}ms delay. isRebasedCachedEdit: ${isRebasedCachedEdit} (rebasedCacheDelay: ${rebasedCacheDelay}), isSubsequentCachedEdit: ${isSubsequentCachedEdit} (subsequentCacheDelay: ${subsequentCacheDelay})`);
-
-		const fetchLatency = Date.now() - triggerTime;
-		const delay = Math.max(0, minimumResponseDelay - fetchLatency);
+		const delay = this.computeMinimumResponseDelay({ triggerTime, isRebasedCachedEdit, isSubsequentCachedEdit }, tracer);
 		if (delay > 0) {
 			await timeout(delay);
 			if (cancellationToken.isCancellationRequested) {
@@ -569,6 +554,11 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 				tracer.trace(`processing edit #${ithEdit} (starts at 0)`);
 
 				if (result.isError()) { // either error or stream of edits ended
+					// if there was a request made, and it ended without any edits, reset shouldExpandEditWindow
+					if (ithEdit === 0 && result.err instanceof NoNextEditReason.NoSuggestions) {
+						tracer.trace('resetting shouldExpandEditWindow to false due to NoSuggestions');
+						this._shouldExpandEditWindow = false;
+					}
 					if (statePerDoc.get(curDocId).nextEdits.length) {
 						tracer.returns(`${statePerDoc.get(curDocId).nextEdits.length} edits returned`);
 					} else {
@@ -602,6 +592,10 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 					}
 					return;
 				}
+
+				// reset shouldExpandEditWindow to false when we get any edit
+				tracer.trace('resetting shouldExpandEditWindow to false due to receiving an edit');
+				this._shouldExpandEditWindow = false;
 
 				const targetDocState = statePerDoc.get(result.val.targetDocument ?? curDocId);
 
@@ -709,6 +703,29 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		return disposables;
 	}
 
+	private computeMinimumResponseDelay({ triggerTime, isRebasedCachedEdit, isSubsequentCachedEdit }: { triggerTime: number; isRebasedCachedEdit: boolean; isSubsequentCachedEdit: boolean }, tracer: ITracer): number {
+
+		const cacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheDelay, this._expService);
+		const rebasedCacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRebasedCacheDelay, this._expService);
+		const subsequentCacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsSubsequentCacheDelay, this._expService);
+
+		let minimumResponseDelay = cacheDelay;
+		if (isRebasedCachedEdit && rebasedCacheDelay !== undefined) {
+			minimumResponseDelay = rebasedCacheDelay;
+		} else if (isSubsequentCachedEdit && subsequentCacheDelay !== undefined) {
+			minimumResponseDelay = subsequentCacheDelay;
+		}
+
+		const nextEditProviderCallLatency = Date.now() - triggerTime;
+
+		// if the provider call took longer than the minimum delay, we don't need to delay further
+		const delay = Math.max(0, minimumResponseDelay - nextEditProviderCallLatency);
+
+		tracer.trace(`[minimumDelay] expected delay: ${minimumResponseDelay}ms, effective delay: ${delay}. isRebasedCachedEdit: ${isRebasedCachedEdit} (rebasedCacheDelay: ${rebasedCacheDelay}), isSubsequentCachedEdit: ${isSubsequentCachedEdit} (subsequentCacheDelay: ${subsequentCacheDelay})`);
+
+		return delay;
+	}
+
 	public handleShown(suggestion: NextEditResult) {
 		this._lastShownTime = Date.now();
 	}
@@ -718,7 +735,10 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		this._statelessNextEditProvider.handleAcceptance?.();
 
 		if (suggestion === this._lastNextEditResult) {
+			this._tracer.trace('setting shouldExpandEditWindow to true due to acceptance of last suggestion');
 			this._shouldExpandEditWindow = true;
+		} else {
+			this._tracer.trace('NOT setting shouldExpandEditWindow to true because suggestion is not the last suggestion');
 		}
 	}
 
