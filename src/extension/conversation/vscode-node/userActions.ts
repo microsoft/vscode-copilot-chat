@@ -176,6 +176,18 @@ export class UserFeedbackService implements IUserFeedbackService {
 						isNotebookCell: e.action.uri.scheme === Schemas.vscodeNotebookCell ? 1 : 0
 					});
 
+					this.telemetryService.sendInternalMSFTTelemetryEvent('panel.edit.feedback', {
+						languageId: document?.languageId,
+						requestId: result.metadata?.responseId,
+						participant: agentId,
+						command: result.metadata?.command,
+						outcome: outcomes.get(e.action.outcome) ?? 'unknown',
+						hasRemainingEdits: String(e.action.hasRemainingEdits),
+					}, {
+						isNotebook: this.notebookService.hasSupportedNotebooks(e.action.uri) ? 1 : 0,
+						isNotebookCell: e.action.uri.scheme === Schemas.vscodeNotebookCell ? 1 : 0
+					});
+
 					if (result.metadata?.responseId
 						&& (e.action.outcome === vscode.ChatEditingSessionActionOutcome.Accepted
 							|| e.action.outcome === vscode.ChatEditingSessionActionOutcome.Rejected)

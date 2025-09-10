@@ -51,7 +51,10 @@
 			"type": "node",
 			"request": "launch",
 			"name": "Launch Copilot Extension - Watch Mode - Code OSS",
-			"runtimeExecutable": "../../vscode/scripts/code.bat",
+			"runtimeExecutable": "${workspaceFolder}/../vscode/scripts/code.sh",
+			"windows": {
+				"runtimeExecutable": "${workspaceFolder}/../vscode/scripts/code.bat",
+			},
 
 			"attachSimplePort": 5870,
 			"args": [

@@ -31,7 +31,7 @@ export class NesActivationTelemetryContribution {
 				"isNesUserConfigured": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the Inline Edits feature is configured by the user", "isMeasurement": true }
 			}
 		*/
-		_telemetryService.sendMSFTTelemetryErrorEvent(
+		_telemetryService.sendMSFTTelemetryEvent(
 			'nesStatusOnActivation',
 			{},
 			{

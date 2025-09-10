@@ -136,7 +136,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		let result: NextEditResult;
 		try {
-			result = await this._getNextEdit(docId, context, this._lastTriggerTime, shouldExpandEditWindow, logContext, cancellationToken, telemetryBuilder);
+			result = await this._getNextEditCanThrow(docId, context, this._lastTriggerTime, shouldExpandEditWindow, logContext, cancellationToken, telemetryBuilder);
 		} catch (error) {
 			logContext.setError(error);
 			telemetryBuilder.setNextEditProviderError(errors.toString(error));
@@ -150,7 +150,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		return result;
 	}
 
-	public async _getNextEdit(
+	private async _getNextEditCanThrow(
 		docId: DocumentId,
 		context: vscode.InlineCompletionContext,
 		triggerTime: number,
@@ -170,16 +170,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		const documentAtInvocationTime = doc.value.get();
 
-		const nesConfigs: INesConfigs = {
-			isAsyncCompletions: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsAsyncCompletions, this._expService),
-			isRevisedCacheStrategy: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRevisedCacheStrategy, this._expService),
-			isCacheTracksRejections: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheTracksRejections, this._expService),
-			isRecentlyShownCacheEnabled: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRecentlyShownCacheEnabled, this._expService),
-			debounceUseCoreRequestTime: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounceUseCoreRequestTime, this._expService),
-		};
-
-		telemetryBuilder.setNESConfigs({ ...nesConfigs });
-		logContext.addCodeblockToLog(JSON.stringify(nesConfigs, null, '\t'));
+		const nesConfigs = this.determineNesConfigs(telemetryBuilder, logContext);
 
 		const recentlyShownCachedEdit = this._recentlyShownCache.get(docId, documentAtInvocationTime);
 		const cachedEdit = this._nextEditCache.lookupNextEdit(docId, documentAtInvocationTime, doc.selection.get(), nesConfigs);
@@ -197,9 +188,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		let throwingError: Error | undefined;
 		let req: NextEditFetchRequest;
 		let targetDocumentId = docId;
-
-		const cacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheDelay, this._expService);
-		const minimumResponseDelay = cacheDelay;
 
 		let isRebasedCachedEdit = false;
 		let isSubsequentCachedEdit = false;
@@ -313,24 +301,47 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		telemetryBuilder.setHasNextEdit(true);
 
-		if (isRebasedCachedEdit || isSubsequentCachedEdit) {
-			tracer.trace(`minimum response delay: NOT enforced. isRebasedCachedEdit: ${isRebasedCachedEdit}, isSubsequentCachedEdit: ${isSubsequentCachedEdit}`);
-		} else {
-			tracer.trace(`minimum response delay: enforced. isRebasedCachedEdit: ${isRebasedCachedEdit}, isSubsequentCachedEdit: ${isSubsequentCachedEdit}`);
-			const fetchLatency = Date.now() - triggerTime;
-			const delay = Math.max(0, minimumResponseDelay - fetchLatency);
-			if (delay > 0) {
-				await timeout(delay);
-				if (cancellationToken.isCancellationRequested) {
-					tracer.returns('cancelled');
-					telemetryBuilder.setStatus(`noEdit:gotCancelled`);
-					return emptyResult;
-				}
+		const cacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheDelay, this._expService);
+		const rebasedCacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRebasedCacheDelay, this._expService);
+		const subsequentCacheDelay = this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsSubsequentCacheDelay, this._expService);
+
+		let minimumResponseDelay = cacheDelay;
+		if (isRebasedCachedEdit && rebasedCacheDelay !== undefined) {
+			minimumResponseDelay = rebasedCacheDelay;
+		} else if (isSubsequentCachedEdit && subsequentCacheDelay !== undefined) {
+			minimumResponseDelay = subsequentCacheDelay;
+		}
+
+		tracer.trace(`minimum response delay: expecting ${minimumResponseDelay}ms delay. isRebasedCachedEdit: ${isRebasedCachedEdit} (rebasedCacheDelay: ${rebasedCacheDelay}), isSubsequentCachedEdit: ${isSubsequentCachedEdit} (subsequentCacheDelay: ${subsequentCacheDelay})`);
+
+		const fetchLatency = Date.now() - triggerTime;
+		const delay = Math.max(0, minimumResponseDelay - fetchLatency);
+		if (delay > 0) {
+			await timeout(delay);
+			if (cancellationToken.isCancellationRequested) {
+				tracer.returns('cancelled');
+				telemetryBuilder.setStatus(`noEdit:gotCancelled`);
+				return emptyResult;
 			}
 		}
 
 		tracer.returns('returning next edit result');
 		return nextEditResult;
+	}
+
+	private determineNesConfigs(telemetryBuilder: LlmNESTelemetryBuilder, logContext: InlineEditRequestLogContext): INesConfigs {
+		const nesConfigs = {
+			isAsyncCompletions: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsAsyncCompletions, this._expService),
+			isRevisedCacheStrategy: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRevisedCacheStrategy, this._expService),
+			isCacheTracksRejections: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheTracksRejections, this._expService),
+			isRecentlyShownCacheEnabled: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRecentlyShownCacheEnabled, this._expService),
+			debounceUseCoreRequestTime: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounceUseCoreRequestTime, this._expService),
+		};
+
+		telemetryBuilder.setNESConfigs({ ...nesConfigs });
+		logContext.addCodeblockToLog(JSON.stringify(nesConfigs, null, '\t'));
+
+		return nesConfigs;
 	}
 
 	private _processDoc(doc: DocumentHistory): ProcessedDoc {

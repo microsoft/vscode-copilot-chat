@@ -18,7 +18,7 @@ import { IPromptPathRepresentationService } from '../../../platform/prompts/comm
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { createSha256Hash } from '../../../util/common/crypto';
-import { findCell, findNotebook } from '../../../util/common/notebooks';
+import { findCell, findNotebook, isJupyterNotebook } from '../../../util/common/notebooks';
 import { findLast } from '../../../util/vs/base/common/arraysFind';
 import { raceCancellation, StatefulPromise } from '../../../util/vs/base/common/async';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
@@ -316,6 +316,13 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 			case 'insert':
 				if (newCode === undefined) {
 					throw new ErrorWithTelemetrySafeReason('None of the edits were applied as newCode is required for insert operation', 'missingNewCode');
+				}
+				if (newCode.length && isJupyterNotebook(notebook)) {
+					if (newCode.startsWith('{') && newCode.includes('"cell_type') && newCode.includes('"source') && newCode.endsWith('}')) {
+						// Possible the entire notebook JSON was provided as newCode.
+						// This is not supported.
+						throw new ErrorWithTelemetrySafeReason('When inserting cell(s) do NOT provide the entire notebook JSON as newCode. Provide the code (as plain text) for the cell instead.', 'gotEntireNotebookJson');
+					}
 				}
 				break;
 			case 'delete':
