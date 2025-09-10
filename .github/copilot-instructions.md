@@ -28,8 +28,8 @@ This is the **GitHub Copilot Chat** extension for Visual Studio Code - a VS Code
 You MUST check compilation output before running ANY script or declaring work complete!
 
 1. **ALWAYS** check the `start-watch-tasks` watch task output for compilation errors
-3. **NEVER** use the `compile` task to to make sure everything is working properly
-4. **FIX** all compilation errors before moving forward
+2. **NEVER** use the `compile` task as a way to check if everything is working properly
+3. **FIX** all compilation errors before moving forward
 
 ### TypeScript compilation steps
 - Monitor the `start-watch-tasks` task outputs for real-time compilation errors as you make changes
