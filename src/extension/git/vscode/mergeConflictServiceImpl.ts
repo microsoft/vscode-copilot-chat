@@ -16,7 +16,7 @@ type HistoryItemChange = { uri: vscode.Uri; historyItemId: string };
 type HistoryItemChangeRange = { start: HistoryItemChange; end: HistoryItemChange };
 
 export class MergeConflictServiceImpl extends Disposable implements IMergeConflictService {
-	_serviceBrand: undefined;
+	readonly _serviceBrand: undefined;
 
 	constructor(
 		@IGitService private readonly gitService: IGitService,
@@ -109,4 +109,10 @@ export class MergeConflictServiceImpl extends Disposable implements IMergeConfli
 			});
 		}
 	}
+}
+
+export class TestMergeConflictServiceImpl implements IMergeConflictService {
+	_serviceBrand: undefined;
+
+	async resolveMergeConflicts(resources: vscode.Uri[], cancellationToken: vscode.CancellationToken | undefined): Promise<void> { }
 }
