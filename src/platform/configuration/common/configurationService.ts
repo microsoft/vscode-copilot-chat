@@ -722,8 +722,6 @@ export namespace ConfigKey {
 		export const UseResponsesApiTruncation = defineSetting<boolean | undefined>('chat.advanced.useResponsesApiTruncation', false, INTERNAL_RESTRICTED);
 		export const ResponsesApiReasoning = defineSetting<boolean | string | undefined>('chat.advanced.responsesApiReasoning', false, INTERNAL_RESTRICTED);
 
-		export const EnableChatImageUpload = defineExpSetting<boolean>('chat.advanced.imageUpload', false, INTERNAL);
-
 		export const EnableReadFileV2 = defineExpSetting<boolean>('chat.advanced.enableReadFileV2', isPreRelease, INTERNAL_RESTRICTED);
 		export const AskAgent = defineExpSetting<boolean>('chat.advanced.enableAskAgent', { defaultValue: false, teamDefaultValue: true, internalDefaultValue: true }, INTERNAL_RESTRICTED);
 		export const VerifyTextDocumentChanges = defineExpSetting<boolean>('chat.advanced.inlineEdits.verifyTextDocumentChanges', false, INTERNAL_RESTRICTED);
@@ -731,6 +729,7 @@ export namespace ConfigKey {
 
 		export const PromptFileContext = defineExpSetting<boolean>('chat.advanced.promptFileContextProvider.enabled', true);
 		export const MultiReplaceString = defineExpSetting<boolean>('chat.advanced.multiReplaceString.enabled', false, INTERNAL);
+		export const MultiReplaceStringGrok = defineExpSetting<boolean>('chat.advanced.multiReplaceStringGrok.enabled', false, INTERNAL);
 		export const Gpt5ApplyPatchExclusively = defineExpSetting<boolean>('chat.advanced.gpt5ApplyPatchExclusively.enabled', false, INTERNAL);
 
 		export const EnableClaudeCodeAgent = defineSetting<boolean | string | undefined>('chat.advanced.claudeCode.enabled', false);
@@ -740,6 +739,7 @@ export namespace ConfigKey {
 	}
 
 	export const AgentThinkingTool = defineSetting<boolean>('chat.agent.thinkingTool', false);
+	export const EnableChatImageUpload = defineExpSetting<boolean>('chat.imageUpload.enabled', true);
 
 	/** Add context from recently used files */
 	export const TemporalContextInlineChatEnabled = defineExpSetting<boolean>('chat.editor.temporalContext.enabled', false);

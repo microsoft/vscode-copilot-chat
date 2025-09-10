@@ -74,10 +74,12 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 			switch (treatment) {
 				case 'with_replace_string':
 					allowTools[ToolName.ReplaceString] = true;
+					allowTools[ToolName.MultiReplaceString] = configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceStringGrok, experimentationService);
 					allowTools[ToolName.EditFile] = true;
 					break;
 				case 'only_replace_string':
 					allowTools[ToolName.ReplaceString] = true;
+					allowTools[ToolName.MultiReplaceString] = configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceStringGrok, experimentationService);
 					allowTools[ToolName.EditFile] = false;
 					break;
 				case 'control':
@@ -105,6 +107,7 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 			allowTools[ToolName.ApplyPatch] = false;
 			allowTools[ToolName.EditFile] = false;
 			allowTools[ToolName.ReplaceString] = false;
+			allowTools[ToolName.MultiReplaceString] = false;
 		}
 
 		const tools = toolsService.getEnabledTools(request, tool => {
