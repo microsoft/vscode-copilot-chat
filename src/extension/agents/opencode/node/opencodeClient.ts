@@ -6,11 +6,12 @@
 import * as http from 'http';
 import * as https from 'https';
 import type { CancellationToken } from 'vscode';
+import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { CancellationError } from '../../../../util/vs/base/common/errors';
-import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
+import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { IOpenCodeServerConfig } from './opencodeServerManager';
 
 export interface OpenCodeMessage {
@@ -79,17 +80,17 @@ export const IOpenCodeClient = createServiceIdentifier<IOpenCodeClient>('IOpenCo
 
 export interface IOpenCodeClient {
 	readonly _serviceBrand: undefined;
-	
+
 	// Configuration
 	setConfig(config: IOpenCodeServerConfig): void;
-	
+
 	// Session management
 	getAllSessions(token?: CancellationToken): Promise<readonly OpenCodeSessionData[]>;
 	getSession(sessionId: string, token?: CancellationToken): Promise<OpenCodeSessionData | undefined>;
 	createSession(options?: CreateSessionOptions, token?: CancellationToken): Promise<OpenCodeSessionData>;
 	sendMessage(options: SendMessageOptions, token?: CancellationToken): Promise<OpenCodeMessage>;
 	deleteSession(sessionId: string, token?: CancellationToken): Promise<void>;
-	
+
 	// Real-time updates
 	connectWebSocket(): Promise<void>;
 	disconnectWebSocket(): Promise<void>;
@@ -117,7 +118,8 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 	readonly onSessionDeleted = this._onSessionDeleted.event;
 
 	constructor(
-		@ILogService private readonly logService: ILogService
+		@ILogService private readonly logService: ILogService,
+		@IConfigurationService private readonly configurationService: IConfigurationService
 	) {
 		super();
 	}
@@ -135,17 +137,14 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 	}
 
 	async getAllSessions(token?: CancellationToken): Promise<readonly OpenCodeSessionData[]> {
-		const config = this.ensureConfig();
-		
 		try {
-			const response = await this.makeRequest<OpenCodeSessionData[]>({
+			const response = await this.tryPaths<any>(['/session'], {
 				method: 'GET',
-				path: '/api/sessions',
-				config,
 				token
 			});
 
-			return response.data ?? [];
+			const list = Array.isArray(response.data) ? response.data : [];
+			return list.map(s => this.mapSessionSummary(s));
 		} catch (error) {
 			this.logService.error('[OpenCodeClient] Failed to get all sessions', error);
 			throw error;
@@ -153,17 +152,18 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 	}
 
 	async getSession(sessionId: string, token?: CancellationToken): Promise<OpenCodeSessionData | undefined> {
-		const config = this.ensureConfig();
-		
 		try {
-			const response = await this.makeRequest<OpenCodeSessionData>({
+			const response = await this.tryPaths<any>([
+				`/session/${encodeURIComponent(sessionId)}`
+			], {
 				method: 'GET',
-				path: `/api/sessions/${encodeURIComponent(sessionId)}`,
-				config,
 				token
 			});
 
-			return response.data;
+			if (!response.data) {
+				return undefined;
+			}
+			return this.mapSessionSummary(response.data);
 		} catch (error) {
 			this.logService.error(`[OpenCodeClient] Failed to get session ${sessionId}`, error);
 			// Return undefined for 404 errors (session not found)
@@ -175,19 +175,15 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 	}
 
 	async createSession(options?: CreateSessionOptions, token?: CancellationToken): Promise<OpenCodeSessionData> {
-		const config = this.ensureConfig();
-		
 		try {
 			const body = JSON.stringify({
-				label: options?.label,
-				initialMessage: options?.initialMessage
+				title: options?.label,
+				parentID: undefined
 			});
 
-			const response = await this.makeRequest<OpenCodeSessionData>({
+			const response = await this.tryPaths<any>(['/session'], {
 				method: 'POST',
-				path: '/api/sessions',
 				body,
-				config,
 				token,
 				headers: {
 					'Content-Type': 'application/json'
@@ -198,8 +194,9 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 				throw new Error('Failed to create session: no data returned');
 			}
 
-			this.logService.info(`[OpenCodeClient] Created session: ${response.data.id}`);
-			return response.data;
+			const session = this.mapSessionSummary(response.data);
+			this.logService.info(`[OpenCodeClient] Created session: ${session.id}`);
+			return session;
 		} catch (error) {
 			this.logService.error('[OpenCodeClient] Failed to create session', error);
 			throw error;
@@ -207,18 +204,19 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 	}
 
 	async sendMessage(options: SendMessageOptions, token?: CancellationToken): Promise<OpenCodeMessage> {
-		const config = this.ensureConfig();
-		
 		try {
+			// The server expects ChatInput with a required `parts` array
 			const body = JSON.stringify({
-				content: options.content
+				parts: [
+					{ type: 'text', text: options.content }
+				]
 			});
 
-			const response = await this.makeRequest<OpenCodeMessage>({
+			const response = await this.tryPaths<any>([
+				`/session/${encodeURIComponent(options.sessionId)}/message`
+			], {
 				method: 'POST',
-				path: `/api/sessions/${encodeURIComponent(options.sessionId)}/messages`,
 				body,
-				config,
 				token,
 				headers: {
 					'Content-Type': 'application/json'
@@ -229,7 +227,8 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 				throw new Error('Failed to send message: no data returned');
 			}
 
-			return response.data;
+			// Map minimal message shape
+			return this.mapMessage(response.data);
 		} catch (error) {
 			this.logService.error(`[OpenCodeClient] Failed to send message to session ${options.sessionId}`, error);
 			throw error;
@@ -237,13 +236,11 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 	}
 
 	async deleteSession(sessionId: string, token?: CancellationToken): Promise<void> {
-		const config = this.ensureConfig();
-		
 		try {
-			await this.makeRequest<void>({
+			await this.tryPaths<void>([
+				`/session/${encodeURIComponent(sessionId)}`
+			], {
 				method: 'DELETE',
-				path: `/api/sessions/${encodeURIComponent(sessionId)}`,
-				config,
 				token
 			});
 
@@ -254,6 +251,49 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 		}
 	}
 
+	private mapSessionSummary(data: any): OpenCodeSessionData {
+		const id = String(data?.id ?? data?.sessionID ?? '');
+		const label = String(data?.title ?? id);
+		return {
+			id,
+			label,
+			messages: [],
+			timestamp: new Date(),
+			status: 'active'
+		} satisfies OpenCodeSessionData;
+	}
+
+	private mapMessage(data: any): OpenCodeMessage {
+		const role = (data?.role === 'assistant' || data?.role === 'user') ? data.role : 'assistant';
+		// Prefer explicit string content
+		let content: string | undefined = typeof data?.content === 'string' ? data.content : undefined;
+		// If parts are present, extract text parts
+		if (!content && Array.isArray(data?.parts)) {
+			const texts = data.parts
+				.filter((p: any) => p && (p.type === 'text') && typeof p.text === 'string')
+				.map((p: any) => p.text);
+			if (texts.length > 0) {
+				content = texts.join('\n');
+			}
+		}
+		// Fallback to a text field if present
+		if (!content && typeof data?.text === 'string') {
+			content = data.text;
+		}
+		// Last resort: stringify the payload
+		if (!content) {
+			try { content = JSON.stringify(data); } catch { content = String(data); }
+		}
+
+		return {
+			id: String(data?.id ?? `msg_${Date.now()}`),
+			role,
+			content,
+			timestamp: new Date(),
+			sessionId: String(data?.sessionID ?? '')
+		} satisfies OpenCodeMessage;
+	}
+
 	/**
 	 * Connect to WebSocket for real-time updates
 	 * Note: This is a placeholder implementation. In a real implementation,
@@ -261,14 +301,14 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 	 */
 	async connectWebSocket(): Promise<void> {
 		const config = this.ensureConfig();
-		
+
 		if (this._isWebSocketConnecting) {
 			this.logService.trace('[OpenCodeClient] WebSocket already connecting');
 			return;
 		}
 
 		this._isWebSocketConnecting = true;
-		
+
 		try {
 			// Convert HTTP URL to WebSocket URL
 			const wsUrl = config.url.replace(/^http/, 'ws') + '/ws';
@@ -279,7 +319,7 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 			// 2. Set up event handlers for open, close, error, and message events
 			// 3. Handle reconnection logic
 			// 4. Parse incoming messages and emit appropriate events
-			
+
 			// For now, we'll simulate successful connection
 			this._isWebSocketConnecting = false;
 			this.logService.info('[OpenCodeClient] WebSocket connection simulated');
@@ -300,30 +340,7 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 		}
 	}
 
-	/**
-	 * Handle incoming WebSocket events
-	 * This method would be called when WebSocket messages are received
-	 */
-	private _handleWebSocketEvent(event: OpenCodeWebSocketEvent): void {
-		this.logService.trace(`[OpenCodeClient] WebSocket event: ${event.type}`);
 
-		switch (event.type) {
-			case 'session_updated':
-				this._onSessionUpdated.fire(event as SessionUpdatedEvent);
-				break;
-			case 'message_received':
-				this._onMessageReceived.fire(event as MessageReceivedEvent);
-				break;
-			case 'session_created':
-				this._onSessionCreated.fire(event as SessionCreatedEvent);
-				break;
-			case 'session_deleted':
-				this._onSessionDeleted.fire(event as SessionDeletedEvent);
-				break;
-			default:
-				this.logService.warn(`[OpenCodeClient] Unknown WebSocket event type: ${event.type}`);
-		}
-	}
 
 	override dispose(): void {
 		this.disconnectWebSocket();
@@ -339,7 +356,7 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 		token?: CancellationToken;
 	}): Promise<ApiResponse<T>> {
 		const { method, path, config, body, headers = {}, token } = options;
-		
+
 		if (token?.isCancellationRequested) {
 			throw new CancellationError();
 		}
@@ -393,12 +410,26 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 							// Error response
 							let errorMessage = `HTTP ${res.statusCode}`;
 							try {
-								const errorData = JSON.parse(responseBody);
-								errorMessage = errorData.error || errorData.message || errorMessage;
+								const errorData = responseBody ? JSON.parse(responseBody) : undefined;
+								const pickString = (val: unknown): string | undefined => {
+									if (!val) { return undefined; }
+									if (typeof val === 'string') { return val; }
+									if (typeof val === 'object') {
+										// common shapes: { message: '...' } or nested error
+										const msg = (val as any).message;
+										if (typeof msg === 'string') { return msg; }
+										try { return JSON.stringify(val); } catch { return String(val); }
+									}
+									return String(val);
+								};
+								const msg1 = errorData ? pickString((errorData as any).error) : undefined;
+								const msg2 = errorData ? pickString((errorData as any).message) : undefined;
+								errorMessage = msg1 || msg2 || errorMessage;
 							} catch {
 								errorMessage = responseBody || errorMessage;
 							}
-							reject(new Error(`${errorMessage} (${res.statusCode})`));
+							// Include method and path for easier debugging
+							reject(new Error(`${requestOptions.method} ${url.pathname}: ${errorMessage} (${res.statusCode})`));
 						}
 					} catch (error) {
 						reject(error);
@@ -426,5 +457,66 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 
 			req.end();
 		});
+	}
+
+	/**
+	 * Attempt the same request across multiple candidate paths, falling back on 404s.
+	 */
+	private async tryPaths<T>(paths: string[], options: {
+		method: string;
+		body?: string;
+		headers?: Record<string, string>;
+		token?: CancellationToken;
+	}): Promise<ApiResponse<T>> {
+		const config = this.ensureConfig();
+		const candidates = this.addConfiguredBasePath(paths);
+		let lastError: unknown;
+		for (let i = 0; i < candidates.length; i++) {
+			const path = candidates[i];
+			try {
+				this.logService.trace(`[OpenCodeClient] Trying path: ${path}`);
+				return await this.makeRequest<T>({
+					method: options.method,
+					path,
+					config,
+					body: options.body,
+					headers: options.headers,
+					token: options.token
+				});
+			} catch (error) {
+				lastError = error;
+				const msg = error instanceof Error ? error.message : String(error);
+				// Only fall back on 404; propagate other errors
+				if (!msg.includes('(404)') || i === candidates.length - 1) {
+					throw error;
+				}
+				this.logService.trace(`[OpenCodeClient] Path ${path} returned 404, trying next candidate`);
+			}
+		}
+		// Shouldn't reach here because last path throws
+		throw lastError instanceof Error ? lastError : new Error(String(lastError));
+	}
+
+	private addConfiguredBasePath(paths: string[]): string[] {
+		const cfg = this.configurationService.getNonExtensionConfig<any>('opencode');
+		let base: string = cfg?.server?.apiBasePath ?? '';
+		base = typeof base === 'string' ? base.trim() : '';
+		if (base === '') {
+			return paths;
+		}
+		if (!base.startsWith('/')) {
+			base = '/' + base;
+		}
+		if (base.endsWith('/')) {
+			base = base.slice(0, -1);
+		}
+		const withBase = paths.map(p => {
+			const rel = p.startsWith('/') ? p : '/' + p;
+			return base + rel;
+		});
+		// De-duplicate while preserving order: [withBase..., original...]
+		const seen = new Set<string>();
+		const merged = [...withBase, ...paths].filter(p => (seen.has(p) ? false : (seen.add(p), true)));
+		return merged;
 	}
 }

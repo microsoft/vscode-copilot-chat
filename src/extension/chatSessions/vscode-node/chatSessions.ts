@@ -14,8 +14,8 @@ import { IOpenCodeAgentManager, OpenCodeAgentManager } from '../../agents/openco
 import { IOpenCodeClient, OpenCodeClient } from '../../agents/opencode/node/opencodeClient';
 import { IOpenCodeServerManager, OpenCodeServerManager } from '../../agents/opencode/node/opencodeServerManager';
 import { IOpenCodeSessionService, OpenCodeSessionService } from '../../agents/opencode/node/opencodeSessionService';
-import { OpenCodeChatSessionContentProvider } from '../../agents/opencode/vscode-node/opencodeContentProvider';
-import { OpenCodeChatSessionItemProvider, OpenCodeSessionDataStore } from '../../agents/opencode/vscode-node/opencodeItemProvider';
+import { OpenCodeChatSessionContentProvider } from './opencodeChatSessionContentProvider';
+import { OpenCodeChatSessionItemProvider, OpenCodeSessionDataStore } from './opencodeChatSessionItemProvider';
 import { IExtensionContribution } from '../../common/contributions';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
 import { ClaudeChatSessionItemProvider, ClaudeSessionDataStore } from './claudeChatSessionItemProvider';

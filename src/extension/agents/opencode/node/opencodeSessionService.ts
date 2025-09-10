@@ -8,6 +8,7 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { CreateSessionOptions, IOpenCodeClient, OpenCodeMessage, OpenCodeSessionData } from './opencodeClient';
+import { IOpenCodeServerConfig, IOpenCodeServerManager } from './opencodeServerManager';
 
 // Re-export OpenCodeMessage for use by other modules
 export { OpenCodeMessage };
@@ -39,6 +40,7 @@ export class OpenCodeSessionService extends Disposable implements IOpenCodeSessi
 
 	constructor(
 		@IOpenCodeClient private readonly client: IOpenCodeClient,
+		@IOpenCodeServerManager private readonly serverManager: IOpenCodeServerManager,
 		@ILogService private readonly logService: ILogService
 	) {
 		super();
@@ -53,10 +55,28 @@ export class OpenCodeSessionService extends Disposable implements IOpenCodeSessi
 			}
 
 			this.logService.trace('[OpenCodeSessionService] Fetching all sessions from client');
-			const sessionData = await this.client.getAllSessions(token);
-			
+			let sessionData: readonly OpenCodeSessionData[];
+			try {
+				sessionData = await this.client.getAllSessions(token);
+			} catch (e) {
+				const msg = e instanceof Error ? e.message : String(e);
+				if (msg.includes('OpenCodeClient not configured')) {
+					// Attempt to start server and configure client, then retry once
+					const cfg = await this.ensureClientConfigured(token);
+					if (cfg) {
+						sessionData = await this.client.getAllSessions(token);
+					} else {
+						// Could not configure (e.g., autoStart disabled)
+						this.logService.trace('[OpenCodeSessionService] Could not configure client; returning empty session list');
+						return [];
+					}
+				} else {
+					throw e;
+				}
+			}
+
 			const sessions = sessionData.map(data => this.convertToOpenCodeSession(data));
-			
+
 			// Update cache
 			this._allSessionsCache = {
 				sessions,
@@ -74,6 +94,12 @@ export class OpenCodeSessionService extends Disposable implements IOpenCodeSessi
 			this.logService.info(`[OpenCodeSessionService] Retrieved ${sessions.length} sessions`);
 			return sessions;
 		} catch (error) {
+			const msg = error instanceof Error ? error.message : String(error);
+			if (msg.includes('OpenCodeClient not configured')) {
+				// Client not configured yet; treat as no sessions instead of surfacing an error
+				this.logService.trace('[OpenCodeSessionService] Client not configured; returning empty session list');
+				return [];
+			}
 			this.logService.error('[OpenCodeSessionService] Failed to get all sessions', error);
 			throw error;
 		}
@@ -89,8 +115,8 @@ export class OpenCodeSessionService extends Disposable implements IOpenCodeSessi
 			}
 
 			this.logService.trace(`[OpenCodeSessionService] Fetching session from client: ${sessionId}`);
-			const sessionData = await this.client.getSession(sessionId, token);
-			
+			const sessionData = await this.safeGetSession(sessionId, token);
+
 			if (!sessionData) {
 				// Remove from cache if it doesn't exist
 				this._sessionCache.delete(sessionId);
@@ -98,7 +124,7 @@ export class OpenCodeSessionService extends Disposable implements IOpenCodeSessi
 			}
 
 			const session = this.convertToOpenCodeSession(sessionData);
-			
+
 			// Update cache
 			this._sessionCache.set(sessionId, {
 				session,
@@ -107,8 +133,42 @@ export class OpenCodeSessionService extends Disposable implements IOpenCodeSessi
 
 			return session;
 		} catch (error) {
+			const msg = error instanceof Error ? error.message : String(error);
+			if (msg.includes('OpenCodeClient not configured')) {
+				this.logService.trace(`[OpenCodeSessionService] Client not configured; session ${sessionId} not available yet`);
+				return undefined;
+			}
 			this.logService.error(`[OpenCodeSessionService] Failed to get session ${sessionId}`, error);
 			throw error;
+		}
+	}
+
+	private async safeGetSession(sessionId: string, token: CancellationToken): Promise<OpenCodeSessionData | undefined> {
+		try {
+			return await this.client.getSession(sessionId, token);
+		} catch (e) {
+			const msg = e instanceof Error ? e.message : String(e);
+			if (msg.includes('OpenCodeClient not configured')) {
+				const cfg = await this.ensureClientConfigured(token);
+				if (cfg) {
+					return await this.client.getSession(sessionId, token);
+				}
+				return undefined;
+			}
+			throw e;
+		}
+	}
+
+	private async ensureClientConfigured(token: CancellationToken): Promise<IOpenCodeServerConfig | undefined> {
+		try {
+			const cfg = await this.serverManager.start(token);
+			// setConfig on client
+			this.client.setConfig(cfg);
+			this.logService.trace(`[OpenCodeSessionService] Configured client with server ${cfg.url}`);
+			return cfg;
+		} catch (e) {
+			this.logService.trace(`[OpenCodeSessionService] Failed to start server for configuration: ${e}`);
+			return undefined;
 		}
 	}
 
@@ -116,9 +176,9 @@ export class OpenCodeSessionService extends Disposable implements IOpenCodeSessi
 		try {
 			this.logService.info(`[OpenCodeSessionService] Creating new session: ${options?.label || 'default'}`);
 			const sessionData = await this.client.createSession(options);
-			
+
 			const session = this.convertToOpenCodeSession(sessionData);
-			
+
 			// Update cache
 			this._sessionCache.set(session.id, {
 				session,

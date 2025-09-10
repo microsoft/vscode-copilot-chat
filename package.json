@@ -3055,68 +3055,10 @@
 						"default": true,
 						"description": "Automatically start the OpenCode server when needed"
 					},
-					"opencode.server.logLevel": {
-						"type": "string",
-						"enum": ["debug", "info", "warn", "error"],
-						"default": "info",
-						"description": "Log level for the OpenCode server"
-					},
-					"opencode.server.logFilePath": {
+					"opencode.server.apiBasePath": {
 						"type": "string",
 						"default": "",
-						"description": "Optional path to log file for OpenCode server"
-					},
-					"opencode.session.autoSave": {
-						"type": "boolean",
-						"default": true,
-						"description": "Automatically save session changes"
-					},
-					"opencode.session.maxHistory": {
-						"type": "number",
-						"default": 100,
-						"minimum": 10,
-						"maximum": 1000,
-						"description": "Maximum number of messages to keep in session history"
-					},
-					"opencode.session.enableRealTimeSync": {
-						"type": "boolean",
-						"default": true,
-						"description": "Enable real-time synchronization via WebSocket"
-					},
-					"opencode.tools.enablePermissions": {
-						"type": "boolean",
-						"default": true,
-						"description": "Enable permission dialogs for tool usage"
-					},
-					"opencode.tools.autoApproveReadOnly": {
-						"type": "boolean",
-						"default": true,
-						"description": "Automatically approve read-only tool operations"
-					},
-					"opencode.tools.dangerousToolsConfirm": {
-						"type": "boolean",
-						"default": true,
-						"description": "Require confirmation for potentially dangerous tool operations"
-					},
-					"opencode.defaultModel": {
-						"type": "string",
-						"default": "",
-						"description": "Default model to use for OpenCode sessions"
-					},
-					"opencode.defaultAgent": {
-						"type": "string",
-						"default": "",
-						"description": "Default agent to use for OpenCode sessions"
-					},
-					"opencode.workspace.enableProjectAnalysis": {
-						"type": "boolean",
-						"default": true,
-						"description": "Enable project analysis for better context understanding"
-					},
-					"opencode.workspace.watchFiles": {
-						"type": "boolean",
-						"default": true,
-						"description": "Watch workspace files for changes"
+						"markdownDescription": "Optional prefix for API routes, for example `/api` or `/api/v1`. Leave empty if the server exposes endpoints at the root."
 					}
 				}
 			}
@@ -3985,6 +3927,16 @@
 				"displayName": "Claude Code",
 				"description": "The Claude Code agent",
 				"when": "config.github.copilot.chat.advanced.claudeCode.enabled",
+				"capabilities": {
+					"supportsFileAttachments": true,
+					"supportsToolAttachments": false
+				}
+			},
+			{
+				"type": "opencode",
+				"name": "opencode",
+				"displayName": "OpenCode",
+				"description": "The OpenCode agent",
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsToolAttachments": false

@@ -62,7 +62,7 @@ describe('OpenCodeClient', () => {
 			// we verify that the methods exist and handle calls gracefully
 			expect(typeof client.connectWebSocket).toBe('function');
 			expect(typeof client.disconnectWebSocket).toBe('function');
-			
+
 			// Should not throw for placeholder implementation
 			await expect(client.connectWebSocket()).resolves.toBeUndefined();
 			await expect(client.disconnectWebSocket()).resolves.toBeUndefined();
@@ -70,7 +70,7 @@ describe('OpenCodeClient', () => {
 
 		it('should clean up WebSocket on dispose', () => {
 			// Ensure dispose doesn't throw
-			expect(() => client.dispose()).not.toThrow();
+			expect(() => (client as unknown as OpenCodeClient).dispose()).not.toThrow();
 		});
 	});
 

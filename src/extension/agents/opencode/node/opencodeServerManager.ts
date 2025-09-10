@@ -22,24 +22,6 @@ export interface OpenCodeConfiguration {
 		readonly port: number;
 		readonly timeout: number;
 		readonly autoStart: boolean;
-		readonly logLevel: 'debug' | 'info' | 'warn' | 'error';
-		readonly logFilePath?: string;
-	};
-	readonly session: {
-		readonly autoSave: boolean;
-		readonly maxHistory: number;
-		readonly enableRealTimeSync: boolean;
-	};
-	readonly tools: {
-		readonly enablePermissions: boolean;
-		readonly autoApproveReadOnly: boolean;
-		readonly dangerousToolsConfirm: boolean;
-	};
-	readonly defaultModel?: string;
-	readonly defaultAgent?: string;
-	readonly workspace: {
-		readonly enableProjectAnalysis: boolean;
-		readonly watchFiles: boolean;
 	};
 }
 
@@ -74,24 +56,6 @@ export class OpenCodeServerManager extends Disposable implements IOpenCodeServer
 				port: config?.server?.port ?? 0,
 				timeout: config?.server?.timeout ?? 5000,
 				autoStart: config?.server?.autoStart ?? true,
-				logLevel: config?.server?.logLevel ?? 'info',
-				logFilePath: config?.server?.logFilePath || undefined,
-			},
-			session: {
-				autoSave: config?.session?.autoSave ?? true,
-				maxHistory: config?.session?.maxHistory ?? 100,
-				enableRealTimeSync: config?.session?.enableRealTimeSync ?? true,
-			},
-			tools: {
-				enablePermissions: config?.tools?.enablePermissions ?? true,
-				autoApproveReadOnly: config?.tools?.autoApproveReadOnly ?? true,
-				dangerousToolsConfirm: config?.tools?.dangerousToolsConfirm ?? true,
-			},
-			defaultModel: config?.defaultModel || undefined,
-			defaultAgent: config?.defaultAgent || undefined,
-			workspace: {
-				enableProjectAnalysis: config?.workspace?.enableProjectAnalysis ?? true,
-				watchFiles: config?.workspace?.watchFiles ?? true,
 			},
 		};
 	}

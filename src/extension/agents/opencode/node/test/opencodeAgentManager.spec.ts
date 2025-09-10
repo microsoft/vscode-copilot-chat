@@ -65,11 +65,13 @@ class MockOpenCodeClient implements IOpenCodeClient {
 		return message;
 	}
 
-	// Required methods for WebSocket functionality (mocked)
+	// Configuration + WebSocket placeholders
+	setConfig(config: IOpenCodeServerConfig): void { /* no-op for tests */ }
 	connectWebSocket(): Promise<void> { return Promise.resolve(); }
 	disconnectWebSocket(): Promise<void> { return Promise.resolve(); }
-	isConnected(): boolean { return true; }
-	configure(config: IOpenCodeServerConfig): void { }
+	async deleteSession(sessionId: string): Promise<void> {
+		this._sessions.delete(sessionId);
+	}
 	onSessionUpdated = vi.fn();
 	onMessageReceived = vi.fn();
 	onSessionCreated = vi.fn();
@@ -106,14 +108,23 @@ class MockOpenCodeServerManager implements IOpenCodeServerManager {
 
 // Mock VS Code types for testing
 function createMockChatRequest(prompt: string): vscode.ChatRequest {
-	return {
+	// Provide the minimal shape and cast to satisfy TS; tests only use `prompt`
+	const req: any = {
 		prompt,
 		command: undefined,
 		references: [],
-		location: undefined as any,
+		location: undefined,
 		attempt: 0,
-		enableCommandDetection: false
+		enableCommandDetection: false,
+		// Additional fields that may be required by the type
+		model: undefined,
+		tools: undefined,
+		toolReferences: [],
+		toolInvocationToken: undefined,
+		followupQuestions: undefined,
+		participant: ''
 	};
+	return req as vscode.ChatRequest;
 }
 
 function createMockChatContext(): vscode.ChatContext {
@@ -174,7 +185,7 @@ describe('OpenCodeAgentManager', () => {
 		it('should use existing session when sessionId is provided', async () => {
 			// First create a session
 			const session = await mockClient.createSession({ label: 'Test Session' });
-			
+
 			const request = createMockChatRequest('Continue conversation');
 			const context = createMockChatContext();
 			const stream = createMockChatResponseStream();
@@ -207,7 +218,7 @@ describe('OpenCodeAgentManager', () => {
 			const context = createMockChatContext();
 			const stream = createMockChatResponseStream();
 			const tokenSource = new CancellationTokenSource();
-			
+
 			// Cancel immediately
 			tokenSource.cancel();
 

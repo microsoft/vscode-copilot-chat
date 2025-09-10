@@ -4,14 +4,13 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { ILogService } from '../../../../platform/log/common/logService';
-import { ChatRequestTurn2 } from '../../../../vscodeTypes';
-import { Disposable } from '../../../../util/vs/base/common/lifecycle';
-import { IOpenCodeAgentManager } from '../node/opencodeAgentManager';
-import { IOpenCodeSession, IOpenCodeSessionService, OpenCodeMessage } from '../node/opencodeSessionService';
-import { IOpenCodeClient, SessionUpdatedEvent, MessageReceivedEvent } from '../node/opencodeClient';
+import { ILogService } from '../../../platform/log/common/logService';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { ChatRequestTurn2 } from '../../../vscodeTypes';
+import { IOpenCodeAgentManager } from '../../agents/opencode/node/opencodeAgentManager';
+import { IOpenCodeSession, IOpenCodeSessionService, OpenCodeMessage } from '../../agents/opencode/node/opencodeSessionService';
 
-import { OpenCodeSessionDataStore } from './opencodeItemProvider';
+import { OpenCodeSessionDataStore } from './opencodeChatSessionItemProvider';
 
 /**
  * Tool context for tracking tool invocations and results
@@ -31,11 +30,9 @@ export class OpenCodeChatSessionContentProvider extends Disposable implements vs
 		private readonly opencodeAgentManager: IOpenCodeAgentManager,
 		private readonly sessionStore: OpenCodeSessionDataStore,
 		@IOpenCodeSessionService private readonly sessionService: IOpenCodeSessionService,
-		@IOpenCodeClient private readonly opencodeClient: IOpenCodeClient,
 		@ILogService private readonly logService: ILogService
-	) { 
+	) {
 		super();
-		this._setupRealTimeUpdates();
 	}
 
 	/**
@@ -45,8 +42,8 @@ export class OpenCodeChatSessionContentProvider extends Disposable implements vs
 		this._log(`Providing content for session: ${internalSessionId}`);
 
 		const initialRequest = this.sessionStore.getAndConsumeInitialRequest(internalSessionId);
-		const opencodeSessionId = this.sessionStore.getSessionId(internalSessionId) ?? internalSessionId;
-		const existingSession = opencodeSessionId && await this.sessionService.getSession(opencodeSessionId, token);
+		const opencodeSessionId = this.sessionStore.getSessionId(internalSessionId);
+		const existingSession = opencodeSessionId ? await this.sessionService.getSession(opencodeSessionId, token) : undefined;
 		const toolContext = this._createToolContext();
 
 		// Build chat history from existing session
@@ -208,48 +205,14 @@ export class OpenCodeChatSessionContentProvider extends Disposable implements vs
 	 * Creates initial chat request from stored request
 	 */
 	private _createInitialChatRequest(initialRequest: vscode.ChatRequest, internalSessionId: string): vscode.ChatRequest {
-		// Store the initial request for the session
-		this.sessionStore.setInitialRequest(internalSessionId, initialRequest);
-		return initialRequest;
+		// Mirror Claude: pass through the initial request and attach a toolInvocationToken
+		return {
+			...initialRequest,
+			toolInvocationToken: { sessionId: internalSessionId } as vscode.ChatParticipantToolToken
+		};
 	}
 
-	/**
-	 * Set up real-time updates via WebSocket
-	 */
-	private _setupRealTimeUpdates(): void {
-		// Set up WebSocket connection
-		this.opencodeClient.connectWebSocket().catch(error => {
-			this.logService.error('[OpenCodeChatSessionContentProvider] Failed to connect WebSocket', error);
-		});
 
-		// Listen for session updates
-		this._register(this.opencodeClient.onSessionUpdated(event => {
-			this._handleSessionUpdated(event);
-		}));
-
-		// Listen for new messages
-		this._register(this.opencodeClient.onMessageReceived(event => {
-			this._handleMessageReceived(event);
-		}));
-	}
-
-	/**
-	 * Handle session updated events
-	 */
-	private _handleSessionUpdated(event: SessionUpdatedEvent): void {
-		this._log(`Session updated: ${event.data.id}`);
-		// In a real implementation, this could trigger a refresh of the session content
-		// or notify any active chat sessions that need to update their display
-	}
-
-	/**
-	 * Handle new message events
-	 */
-	private _handleMessageReceived(event: MessageReceivedEvent): void {
-		this._log(`New message in session ${event.data.sessionId}: ${event.data.id}`);
-		// In a real implementation, this could trigger real-time message updates
-		// in the active chat view without requiring a full refresh
-	}
 
 	/**
 	 * Logging helper

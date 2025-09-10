@@ -4,12 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
-import { ILogService } from '../../../../platform/log/common/logService';
-import { Emitter } from '../../../../util/vs/base/common/event';
-import { Disposable } from '../../../../util/vs/base/common/lifecycle';
-import { generateUuid } from '../../../../util/vs/base/common/uuid';
-import { IOpenCodeSessionService } from '../node/opencodeSessionService';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { ILogService } from '../../../platform/log/common/logService';
+import { Emitter } from '../../../util/vs/base/common/event';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { IOpenCodeSessionService } from '../../agents/opencode/node/opencodeSessionService';
 
 /**
  * Data store for managing OpenCode session mappings and state
@@ -34,7 +34,7 @@ export class OpenCodeSessionDataStore {
 		curMap[internalSessionId] = opencodeSessionId;
 		curMap[opencodeSessionId] = internalSessionId;
 		this.extensionContext.workspaceState.update(OpenCodeSessionDataStore.StorageKey, curMap);
-		
+
 		this.logService.trace(`[OpenCodeSessionDataStore] Mapped session: ${internalSessionId} <-> ${opencodeSessionId}`);
 	}
 
@@ -52,7 +52,7 @@ export class OpenCodeSessionDataStore {
 		const id = generateUuid();
 		const label = this.generateSessionLabel(prompt);
 		this._unresolvedNewSessions.set(id, { id, label });
-		
+
 		this.logService.trace(`[OpenCodeSessionDataStore] Registered new session: ${id} - ${label}`);
 		return id;
 	}
@@ -71,11 +71,11 @@ export class OpenCodeSessionDataStore {
 	public getAndConsumeInitialRequest(sessionId: string): vscode.ChatRequest | undefined {
 		const request = this._internalSessionToInitialRequest.get(sessionId);
 		this._internalSessionToInitialRequest.delete(sessionId);
-		
+
 		if (request) {
 			this.logService.trace(`[OpenCodeSessionDataStore] Consumed initial request for session: ${sessionId}`);
 		}
-		
+
 		return request;
 	}
 
@@ -94,14 +94,14 @@ export class OpenCodeSessionDataStore {
 	public removeSession(sessionId: string): void {
 		const curMap: Record<string, string> = this.extensionContext.workspaceState.get(OpenCodeSessionDataStore.StorageKey) ?? {};
 		const mappedId = curMap[sessionId];
-		
+
 		if (mappedId) {
 			delete curMap[sessionId];
 			delete curMap[mappedId];
 			this.extensionContext.workspaceState.update(OpenCodeSessionDataStore.StorageKey, curMap);
 			this.logService.trace(`[OpenCodeSessionDataStore] Removed session mapping: ${sessionId} <-> ${mappedId}`);
 		}
-		
+
 		this._unresolvedNewSessions.delete(sessionId);
 		this._internalSessionToInitialRequest.delete(sessionId);
 	}
@@ -125,15 +125,15 @@ export class OpenCodeSessionDataStore {
 		if (cleaned.length <= 50) {
 			return cleaned;
 		}
-		
+
 		// Try to break at word boundary
 		const truncated = cleaned.substring(0, 47);
 		const lastSpace = truncated.lastIndexOf(' ');
-		
+
 		if (lastSpace > 20) {
 			return truncated.substring(0, lastSpace) + '...';
 		}
-		
+
 		return truncated + '...';
 	}
 }
@@ -168,9 +168,9 @@ export class OpenCodeChatSessionItemProvider extends Disposable implements vscod
 	async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
 		try {
 			this.logService.trace('[OpenCodeChatSessionItemProvider] Providing chat session items');
-			
+
 			const items: vscode.ChatSessionItem[] = [];
-			
+
 			// Add unresolved sessions (newly created but not yet mapped)
 			for (const [id, session] of this.sessionStore.getUnresolvedSessions()) {
 				items.push({
@@ -178,26 +178,26 @@ export class OpenCodeChatSessionItemProvider extends Disposable implements vscod
 					label: session.label
 				});
 			}
-			
+
 			// Get sessions from OpenCode server
 			const opencodeActiveSessions = await this.opencodeSessionService.getAllSessions(token);
-			
+
 			for (const session of opencodeActiveSessions) {
 				// Check if this session has a VS Code mapping
 				const internalId = this.sessionStore.getSessionId(session.id);
-				
+
 				items.push({
 					id: internalId || session.id, // Use internal ID if mapped, otherwise OpenCode ID
 					label: session.label
 				});
 			}
-			
+
 			// Sort by creation time (newest first) - note: ChatSessionItem doesn't have createdAt
 			// items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-			
+
 			this.logService.info(`[OpenCodeChatSessionItemProvider] Provided ${items.length} session items`);
 			return items;
-			
+
 		} catch (error) {
 			this.logService.error('[OpenCodeChatSessionItemProvider] Failed to provide session items', error);
 			// Return empty list on error to avoid breaking the UI
@@ -209,30 +209,35 @@ export class OpenCodeChatSessionItemProvider extends Disposable implements vscod
 	 * Creates a new chat session item
 	 */
 	async provideNewChatSessionItem(options: {
-		request: vscode.ChatRequest;
-		prompt?: string;
-		history?: ReadonlyArray<vscode.ChatRequestTurn | vscode.ChatResponseTurn>;
+		readonly request: vscode.ChatRequest;
+		readonly prompt?: string;
+		readonly history?: ReadonlyArray<vscode.ChatRequestTurn | vscode.ChatResponseTurn>;
 		metadata?: any;
-	}): Promise<vscode.ChatSessionItem> {
+	}, token: vscode.CancellationToken): Promise<vscode.ChatSessionItem> {
 		try {
 			const prompt = options.prompt || options.request.prompt;
 			this.logService.info(`[OpenCodeChatSessionItemProvider] Creating new session for prompt: "${prompt}"`);
-			
+
 			// Register the new session in our store
 			const internalId = this.sessionStore.registerNewSession(prompt);
-			
+
+			// Store initial request so the content provider can send it
+			if (options.request) {
+				this.sessionStore.setInitialRequest(internalId, options.request);
+			}
+
 			// Create the session item
 			const item: vscode.ChatSessionItem = {
 				id: internalId,
 				label: this.generateSessionLabel(prompt)
 			};
-			
+
 			// Notify that session list has changed
 			this.refresh();
-			
+
 			this.logService.info(`[OpenCodeChatSessionItemProvider] Created new session item: ${internalId}`);
 			return item;
-			
+
 		} catch (error) {
 			this.logService.error('[OpenCodeChatSessionItemProvider] Failed to create new session item', error);
 			throw error;
@@ -245,10 +250,10 @@ export class OpenCodeChatSessionItemProvider extends Disposable implements vscod
 	async deleteChatSessionItem?(id: string): Promise<void> {
 		try {
 			this.logService.info(`[OpenCodeChatSessionItemProvider] Deleting session: ${id}`);
-			
+
 			// Get the OpenCode session ID if this is an internal ID
 			this.sessionStore.getSessionId(id) || id;
-			
+
 			// Try to delete from OpenCode server if it exists there
 			try {
 				// Note: This depends on OpenCode server supporting deletion
@@ -256,15 +261,15 @@ export class OpenCodeChatSessionItemProvider extends Disposable implements vscod
 			} catch (deleteError) {
 				this.logService.warn(`[OpenCodeChatSessionItemProvider] Could not delete from OpenCode server: ${deleteError}`);
 			}
-			
+
 			// Remove from our session store
 			this.sessionStore.removeSession(id);
-			
+
 			// Refresh the session list
 			this.refresh();
-			
+
 			this.logService.info(`[OpenCodeChatSessionItemProvider] Deleted session: ${id}`);
-			
+
 		} catch (error) {
 			this.logService.error(`[OpenCodeChatSessionItemProvider] Failed to delete session ${id}`, error);
 			throw error;
@@ -279,14 +284,14 @@ export class OpenCodeChatSessionItemProvider extends Disposable implements vscod
 		if (cleaned.length <= 50) {
 			return cleaned;
 		}
-		
+
 		const truncated = cleaned.substring(0, 47);
 		const lastSpace = truncated.lastIndexOf(' ');
-		
+
 		if (lastSpace > 20) {
 			return truncated.substring(0, lastSpace) + '...';
 		}
-		
+
 		return truncated + '...';
 	}
 }
