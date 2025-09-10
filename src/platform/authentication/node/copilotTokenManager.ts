@@ -183,7 +183,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 		}
 		const extendedInfo: ExtendedTokenInfo = {
 			...tokenInfo,
-			copilot_plan: userInfo?.copilot_plan ?? 'no_auth_limited_copilot',
+			copilot_plan: userInfo?.copilot_plan ?? tokenInfo.sku ?? '',
 			quota_snapshots: userInfo?.quota_snapshots,
 			quota_reset_date: userInfo?.quota_reset_date,
 			username: login,
