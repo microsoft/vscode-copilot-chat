@@ -43,7 +43,7 @@ import { IToolsService } from '../common/toolsService';
 import { PATCH_PREFIX, PATCH_SUFFIX } from './applyPatch/parseApplyPatch';
 import { ActionType, Commit, DiffError, FileChange, identify_files_needed, InvalidContextError, InvalidPatchFormatError, processPatch } from './applyPatch/parser';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
-import { createEditConfirmation } from './editFileToolUtils';
+import { canExistingFileBeEdited, createEditConfirmation } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileNotContentExcluded, resolveToolInputPath } from './toolUtils';
 
@@ -309,7 +309,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 				const existingDiagnostics = this.languageDiagnosticsService.getDiagnostics(uri);
 
 				// Initialize edit survival tracking for text documents
-				const existsOnDisk = await this.fileSystemService.stat(uri).then(() => true, () => false);
+				const existsOnDisk = await this.instantiationService.invokeFunction(canExistingFileBeEdited, uri);
 				if (existsOnDisk) {
 					const document = notebookUri ?
 						await this.workspaceService.openNotebookDocumentAndSnapshot(notebookUri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model)) :
