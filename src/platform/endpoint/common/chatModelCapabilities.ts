@@ -26,10 +26,6 @@ export async function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
 	return await getSha256Hash(model.family) === 'a99dd17dfee04155d863268596b7f6dd36d0a6531cd326348dbe7416142a21a3';
 }
 
-export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint) {
-	return await getSha256Hash(model.family) === '008ed1bfd28fb7f15ff17f6e308c417635da136603b83b32db4719bd1cd64c09';
-}
-
 /**
  * Returns whether the instructions should be given in a user message instead
  * of a system message when talking to the model.
