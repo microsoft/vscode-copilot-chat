@@ -226,7 +226,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		const globalContext = await this.getOrCreateGlobalAgentContextContent(endpoint);
 		return globalContext ?
 			renderedMessageToTsxChildren(globalContext, !!this.props.enableCacheBreakpoints) :
-			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} />;
+			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} availableTools={this.props.promptContext.tools?.availableTools} />;
 	}
 
 	private async getOrCreateGlobalAgentContextContent(endpoint: IChatEndpoint): Promise<Raw.ChatCompletionContentPart[] | undefined> {
@@ -238,7 +238,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			}
 		}
 
-		const rendered = await renderPromptElement(this.instantiationService, endpoint, GlobalAgentContext, { enableCacheBreakpoints: this.props.enableCacheBreakpoints }, undefined, undefined);
+		const rendered = await renderPromptElement(this.instantiationService, endpoint, GlobalAgentContext, { enableCacheBreakpoints: this.props.enableCacheBreakpoints, availableTools: this.props.promptContext.tools?.availableTools }, undefined, undefined);
 		const msg = rendered.messages.at(0)?.content;
 		if (msg) {
 			firstTurn?.setMetadata(new GlobalContextMessageMetadata(msg));
@@ -249,6 +249,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 
 interface GlobalAgentContextProps extends BasePromptElementProps {
 	readonly enableCacheBreakpoints?: boolean;
+	readonly availableTools?: readonly LanguageModelToolInformation[];
 }
 
 /**
@@ -263,7 +264,7 @@ class GlobalAgentContext extends PromptElement<GlobalAgentContextProps> {
 				<UserShellPrompt />
 			</Tag>
 			<Tag name='workspace_info'>
-				<AgentTasksInstructions />
+				<AgentTasksInstructions availableTools={this.props.availableTools} />
 				<WorkspaceFoldersHint />
 				<MultirootWorkspaceStructure maxSize={2000} excludeDotFiles={true} /><br />
 				This is the state of the context at this point in the conversation. The view of the workspace structure may be truncated. You can use tools to collect more context if needed.
@@ -628,9 +629,13 @@ class WorkspaceFoldersHint extends PromptElement<BasePromptElementProps> {
 }
 
 
-class AgentTasksInstructions extends PromptElement {
+interface AgentTasksInstructionsProps extends BasePromptElementProps {
+	readonly availableTools?: readonly LanguageModelToolInformation[];
+}
+
+export class AgentTasksInstructions extends PromptElement<AgentTasksInstructionsProps> {
 	constructor(
-		props: BasePromptElementProps,
+		props: AgentTasksInstructionsProps,
 		@ITasksService private readonly _tasksService: ITasksService,
 		@IPromptPathRepresentationService private readonly _promptPathRepresentationService: IPromptPathRepresentationService,
 	) {
@@ -638,6 +643,14 @@ class AgentTasksInstructions extends PromptElement {
 	}
 
 	render() {
+		// Check if the run_task tool is available before rendering task instructions
+		const availableToolNames = new Set(this.props.availableTools?.map(t => t.name) ?? []);
+		const isRunTaskToolAvailable = availableToolNames.has(ToolName.CoreRunTask);
+		
+		if (!isRunTaskToolAvailable) {
+			return 0;
+		}
+
 		const taskGroupsRaw = this._tasksService.getTasks();
 		const taskGroups = taskGroupsRaw.map(([wf, tasks]) => [wf, tasks.filter(task => (!!task.type || task.dependsOn) && !task.hide)] as const).filter(([, tasks]) => tasks.length > 0);
 		if (taskGroups.length === 0) {
