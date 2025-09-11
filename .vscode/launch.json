@@ -145,7 +145,8 @@
 				"--sidebar",
 				"--scenario-test=toolcall.stest",
 				"--external-scenarios=${workspaceFolder}/test/toolcalls",
-				"--output=${workspaceFolder}/test/out/"
+				"--output=${workspaceFolder}/test/out/",
+				"--in-extension-host", "--scenario-workspace-folder",
 
 			],
 			"request": "launch",

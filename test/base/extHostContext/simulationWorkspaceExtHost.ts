@@ -18,7 +18,6 @@ export class SimulationWorkspaceExtHost extends SimulationWorkspace {
 	public override setupServices(testingServiceCollection: TestingServiceCollection): void {
 		super.setupServices(testingServiceCollection);
 		addExtensionHostSimulationServices(testingServiceCollection);
-		vscode.workspace.getConfiguration('chat.tools').update('autoApprove', true, vscode.ConfigurationTarget.Global);
 	}
 
 	override applyEdits(uri: vscode.Uri, edits: vscode.TextEdit[], initialRange?: vscode.Range): vscode.Range {

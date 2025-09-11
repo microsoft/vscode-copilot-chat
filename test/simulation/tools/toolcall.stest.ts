@@ -151,21 +151,27 @@ ssuite({ title: 'tooltest', subtitle: 'toolcall', location: 'panel' }, (inputPat
 
 		const toolsService = accessor.get(IToolsService);
 		const tool = toolsService.getCopilotTool(toolName);
-
-		if (!tool) {
-			throw new Error(`Tool not found: ${toolName}`);
-		}
-
 		let processedArgs = args;
-		if (toolArgsPreprocessors[toolName]) {
-			processedArgs = await toolArgsPreprocessors[toolName](accessor, args, workspaceFoldersFilePaths);
-		}
 
-		if (tool.resolveInput) {
-			const context = { stream: new SpyChatResponseStream() } as any;
-			processedArgs = await tool.resolveInput(processedArgs, context, CopilotToolMode.FullContext);
-		}
+		if (tool && 'resolveInput' in tool) {
+			if (toolArgsPreprocessors[toolName]) {
+				processedArgs = await toolArgsPreprocessors[toolName](accessor, args, workspaceFoldersFilePaths);
+			}
 
+			if (tool.resolveInput) {
+				const context = { stream: new SpyChatResponseStream() } as any;
+				processedArgs = await tool.resolveInput(processedArgs, context, CopilotToolMode.FullContext);
+			}
+
+			return await toolsService.invokeTool(
+				toolName,
+				{
+					input: processedArgs || {},
+					toolInvocationToken: undefined
+				},
+				token
+			);
+		}
 		return await toolsService.invokeTool(
 			toolName,
 			{

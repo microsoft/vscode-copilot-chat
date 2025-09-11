@@ -1,0 +1,12 @@
+{
+	"name": "get_errors_1",
+	"stateFile": "example.state.json",
+	"toolArgs": {
+		"tool": "run_in_terminal",
+		"args": {
+			"command": "echo Hello, World!",
+			"explanation": "Running a command to demonstrate the run_in_terminal tool.",
+			"isBackground": false
+		}
+	}
+}
