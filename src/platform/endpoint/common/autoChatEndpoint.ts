@@ -19,6 +19,7 @@ import { ChatCompletion } from '../../networking/common/openai';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
+import { IAuthenticationService } from '../../authentication/common/authentication';
 
 /**
  * This endpoint represents the "Auto" model in the model picker.
@@ -122,8 +123,20 @@ export class AutoChatEndpoint implements IChatEndpoint {
  * @param envService The environment service to use to check if the auto mode is enabled
  * @returns True if the auto mode is enabled, false otherwise
  */
-export function isAutoModelEnabled(expService: IExperimentationService, envService: IEnvService): boolean {
-	return !!expService.getTreatmentVariable<boolean>('autoModelEnabled') || envService.isPreRelease();
+export async function isAutoModelEnabled(expService: IExperimentationService, envService: IEnvService, authService: IAuthenticationService): Promise<boolean> {
+	if (envService.isPreRelease()) {
+		return true;
+	}
+
+	if (!!expService.getTreatmentVariable<boolean>('autoModelEnabled')) {
+		try {
+			(await authService.getCopilotToken()).isEditorPreviewFeaturesEnabled();
+		} catch (e) {
+			return false;
+		}
+	}
+
+	return false;
 }
 
 /**

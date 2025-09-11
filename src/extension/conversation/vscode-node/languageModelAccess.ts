@@ -105,7 +105,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		const chatEndpoints = await this._endpointProvider.getAllChatEndpoints();
 
 		let defaultChatEndpoint = chatEndpoints.find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1') ?? chatEndpoints[0];
-		if (isAutoModelEnabled(this._expService, this._envService)) {
+		if (await isAutoModelEnabled(this._expService, this._envService, this._authenticationService)) {
 			const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, chatEndpoints);
 			chatEndpoints.push(autoEndpoint);
 			if (isAutoModelDefault(this._expService)) {
