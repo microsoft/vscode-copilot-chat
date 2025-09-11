@@ -24,7 +24,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.104.0-20250905",
+		"vscode": "^1.105.0-20250905",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
