@@ -19,7 +19,8 @@
 			"vscode": ["./src/util/common/test/shims/vscodeTypesShim.ts"],
 			"#lib/*": ["./src/extension/completions-core/lib/src/*"],
 			"#prompt/*": ["./src/extension/completions-core/prompt/src/*"],
-			"#types": ["./src/extension/completions-core/types/src"]
+			"#types": ["./src/extension/completions-core/types/src"],
+			"@opencode-ai/sdk": ["./node_modules/@opencode-ai/sdk/dist/index.d.ts"]
 		}
 	},
 	"include": [

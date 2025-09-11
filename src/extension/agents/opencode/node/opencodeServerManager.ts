@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import * as cp from 'child_process';
+import { createOpencodeServer } from '@opencode-ai/sdk';
 import type { CancellationToken } from 'vscode';
 import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -120,8 +120,8 @@ export class OpenCodeServerManager extends Disposable implements IOpenCodeServer
 }
 
 class OpenCodeServer {
-	private _process: cp.ChildProcess | undefined;
 	private _config: IOpenCodeServerConfig | undefined;
+	private _sdkServer: any | undefined;
 
 	constructor(
 		private readonly hostname: string,
@@ -131,148 +131,40 @@ class OpenCodeServer {
 	) { }
 
 	async start(token?: CancellationToken): Promise<IOpenCodeServerConfig> {
-		if (this._process) {
+		if (this._sdkServer) {
 			throw new Error('OpenCode server is already running');
 		}
-
-		return new Promise((resolve, reject) => {
-			// Build the command arguments for opencode serve
-			const args = ['serve'];
-
-			// Add hostname and port if specified
-			if (this.hostname !== '127.0.0.1') {
-				args.push('--hostname', this.hostname);
-			}
-
-			if (this.port !== 0) {
-				args.push('--port', this.port.toString());
-			}
-
-			this.logService.trace(`[OpenCodeServer] Spawning: opencode ${args.join(' ')}`);
-
-			// Spawn the opencode serve process
-			this._process = cp.spawn('opencode', args, {
-				stdio: ['pipe', 'pipe', 'pipe'],
-				env: {
-					...process.env,
-					// Set OPENCODE_CONFIG_CONTENT if needed for authentication
-					// This will be implemented in later phases when we understand the config structure
-				}
-			});
-
-			// Handle process errors
-			this._process.on('error', (error) => {
-				this.logService.error(`[OpenCodeServer] Process error: ${error instanceof Error ? error.message : String(error)}`);
-				this._process = undefined;
-				reject(new Error(`Failed to start opencode server: ${error.message}`));
-			});
-
-			// Handle process exit
-			this._process.on('exit', (code, signal) => {
-				this.logService.info(`[OpenCodeServer] Process exited with code ${code}, signal ${signal}`);
-				this._process = undefined;
-				this._config = undefined;
-			});
-
-			// Handle cancellation
-			if (token) {
-				token.onCancellationRequested(() => {
-					if (this._process) {
-						this.logService.info('[OpenCodeServer] Cancellation requested, stopping server');
-						this._process.kill('SIGTERM');
-					}
-				});
-			}
-
-			// Capture stdout to detect when server is ready and extract port
-			let stdoutBuffer = '';
-			this._process.stdout?.on('data', (data) => {
-				const chunk = data.toString();
-				stdoutBuffer += chunk;
-				this.logService.trace(`[OpenCodeServer] stdout: ${chunk}`);
-
-				// Look for server ready indication
-				// This pattern may need to be adjusted based on actual opencode serve output
-				const serverReadyMatch = stdoutBuffer.match(/Server listening on.*:(\d+)|Server started.*port (\d+)|listening.*:(\d+)/i);
-				if (serverReadyMatch && !this._config) {
-					const detectedPort = parseInt(serverReadyMatch[1] || serverReadyMatch[2] || serverReadyMatch[3], 10);
-					const actualPort = this.port === 0 ? detectedPort : this.port;
-
-					this._config = {
-						hostname: this.hostname,
-						port: actualPort,
-						url: `http://${this.hostname}:${actualPort}`
-					};
-
-					this.logService.info(`[OpenCodeServer] Server ready at ${this._config.url}`);
-					resolve(this._config);
-				}
-			});
-
-			// Capture stderr for logging
-			this._process.stderr?.on('data', (data) => {
-				const chunk = data.toString();
-				this.logService.warn(`[OpenCodeServer] stderr: ${chunk}`);
-			});
-
-			// Set a timeout in case we don't detect the server starting
-			const startupTimeout = setTimeout(() => {
-				if (!this._config) {
-					this.logService.error('[OpenCodeServer] Startup timeout - server did not become ready');
-					if (this._process) {
-						this._process.kill('SIGTERM');
-					}
-					reject(new Error('OpenCode server startup timeout'));
-				}
-			}, this.timeout);
-
-			// Clear timeout when we resolve
-			const originalResolve = resolve;
-			resolve = (config) => {
-				clearTimeout(startupTimeout);
-				originalResolve(config);
-			};
-
-			const originalReject = reject;
-			reject = (error) => {
-				clearTimeout(startupTimeout);
-				originalReject(error);
-			};
-		});
+		const ac = new AbortController();
+		if (token) {
+			token.onCancellationRequested(() => ac.abort());
+		}
+		this._sdkServer = await createOpencodeServer({ hostname: this.hostname, port: this.port, timeout: this.timeout, signal: ac.signal });
+		const url: string = String(this._sdkServer.url || `http://${this.hostname}:${this.port || 4096}`);
+		const parsed = new URL(url);
+		const actualPort = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
+		this._config = { hostname: parsed.hostname || this.hostname, port: actualPort, url };
+		this.logService.info(`[OpenCodeServer] (SDK) Server ready at ${this._config.url}`);
+		return this._config;
 	}
 
+	// CLI fallback removed; SDK server is always used
+
 	async stop(): Promise<void> {
-		if (!this._process) {
-			return;
-		}
-
-		return new Promise((resolve) => {
-			const process = this._process!;
-
-			// Set up exit handler
-			const onExit = () => {
-				this._process = undefined;
+		if (this._sdkServer) {
+			try {
+				await this._sdkServer.close();
+				this.logService.info('[OpenCodeServer] (SDK) Server closed');
+			} catch (e) {
+				this.logService.error('[OpenCodeServer] (SDK) Error during close', e);
+			} finally {
+				this._sdkServer = undefined;
 				this._config = undefined;
-				resolve();
-			};
-
-			process.on('exit', onExit);
-
-			// Try graceful shutdown first
-			process.kill('SIGTERM');
-
-			// Force kill after timeout
-			setTimeout(() => {
-				if (this._process === process) {
-					this.logService.warn('[OpenCodeServer] Force killing process after timeout');
-					process.kill('SIGKILL');
-				}
-			}, 5000);
-		});
+			}
+		}
 	}
 
 	isRunning(): boolean {
-		return this._process !== undefined && !this._process.killed;
+		return (this._sdkServer !== undefined);
 	}
 
 	getUrl(): string {

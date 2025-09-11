@@ -72,11 +72,11 @@ The Claude integration consists of several key components that work together to 
 
 ### OpenCode Architecture Overview
 
-OpenCode uses a **server/client architecture** instead of a direct SDK:
+OpenCode uses a **server/client architecture** and provides an official SDK:
 
-- **Server**: `opencode serve` runs as headless HTTP server exposing OpenAPI endpoints
-- **Client**: Node.js client library communicates with server via HTTP
-- **API**: RESTful API with WebSocket events for real-time updates
+- **Server**: Prefer programmatic start via SDK (`createOpencodeServer`) instead of spawning the CLI
+- **Client**: Prefer the SDK client (`createOpencodeClient`) over a custom HTTP client
+- **API**: RESTful APIs surfaced through a type-safe SDK; real-time via server-sent events
 - **Sessions**: Server-managed sessions with message persistence
 - **Tools**: Built-in tool ecosystem similar to Claude
 
@@ -104,24 +104,17 @@ interface IOpenCodeServerConfig {
 }
 
 class OpenCodeServer {
-  constructor(
-    private readonly config: IOpenCodeServerConfig,
-    private readonly workspaceFolder: string
-  );
-
-  async start(): Promise<void>;
-  async stop(): Promise<void>;
-  getUrl(): string;
+  // Implementation prefers SDK (`createOpencodeServer`) and
+  // falls back to spawning `opencode serve` if SDK is unavailable.
 }
 ```
 
 **Key Responsibilities**:
-- Spawn and manage the `opencode serve` child process.
-- Pass necessary arguments to the `opencode serve` command (e.g., `--port`, `--hostname`).
-- Monitor the server's stdout and stderr streams for logging and health checking.
-- Handle server process termination, restarts, and error recovery.
-- Provide the server's URL and port to other components like `OpenCodeAgentManager`.
-- Manage workspace-specific configurations and pass them to the server via the `OPENCODE_CONFIG_CONTENT` environment variable.
+- Prefer SDK server lifecycle via `createOpencodeServer` (URL/port returned directly)
+- Fall back to spawning `opencode serve` when SDK is not installed
+- Monitor CLI process stdout/stderr only in fallback mode
+- Handle termination/restarts and error recovery
+- Provide server URL/port to other components
 
 #### 2. OpenCodeAgentManager (`opencode/node/opencodeAgentManager.ts`)
 
@@ -187,9 +180,9 @@ export class OpenCodeSessionService implements IOpenCodeSessionService {
 ```
 
 **Key Differences from Claude**:
-- Uses HTTP API calls instead of reading JSONL files
+- Uses SDK client (with HTTP fallback) instead of file reads
 - Server-managed sessions instead of file-based persistence
-- Real-time session updates via WebSocket events
+- Real-time updates via SDK events stream (SSE)
 - Built-in session status tracking
 
 #### 4. OpenCodeChatSessionContentProvider (`opencode/vscode-node/opencodeContentProvider.ts`)
@@ -269,18 +262,18 @@ export function createFormattedToolInvocation(
 
 #### Server Management
 - **Claude**: Uses language model server with nonce-based auth
-- **OpenCode**: Uses headless HTTP server with standard REST API
-- **Implementation**: Create `OpenCodeServerManager` to handle `opencode serve` lifecycle
+- **OpenCode**: Prefer SDK `createOpencodeServer`; CLI spawn only as fallback
+- **Implementation**: `OpenCodeServerManager` first tries SDK, then falls back to `opencode serve`
 
 #### Session Persistence
 - **Claude**: File-based JSONL storage with manual parsing
-- **OpenCode**: Server-managed sessions via HTTP API
-- **Implementation**: Use OpenCode's session API endpoints instead of file reading
+- **OpenCode**: Server-managed sessions via SDK client
+- **Implementation**: Use SDK session APIs; retain HTTP fallback if SDK absent
 
 #### Real-time Updates
 - **Claude**: Polling and message streaming via SDK
-- **OpenCode**: WebSocket events for real-time session updates
-- **Implementation**: Subscribe to OpenCode events for live session updates
+- **OpenCode**: Server-sent events stream via SDK
+- **Implementation**: Subscribe via `client.event.subscribe()` where available
 
 #### Tool System
 - **Claude**: Built into SDK with permission callbacks
@@ -289,11 +282,10 @@ export function createFormattedToolInvocation(
 
 #### Authentication
 - **Claude**: API key based with local storage, using a nonce for the local server.
-- **OpenCode**: The `opencode serve` process appears to handle authentication based on the configuration passed via the `OPENCODE_CONFIG_CONTENT` environment variable. There is no explicit auth token passed as a command-line argument.
+- **OpenCode**: SDK/server read credentials from config (e.g., providers), and CLI fallback can use `OPENCODE_CONFIG_CONTENT`.
 - **Implementation**:
-  - The `OpenCodeServerManager` will be responsible for creating the necessary configuration for authentication.
-  - This configuration will be passed to the `opencode serve` process through the `OPENCODE_CONFIG_CONTENT` environment variable.
-  - The `OpenCodeAgentManager` and its `OpenCodeClient` will need to use the same configuration to authenticate with the server.
+  - Prefer SDK configuration (`createOpencodeServer({ config })` and/or `client.auth.set()` where needed)
+  - Keep CLI env-based fallback for environments without the SDK installed
 
 ## Implementation Notes
 
