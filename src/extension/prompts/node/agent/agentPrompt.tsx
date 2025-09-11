@@ -643,11 +643,8 @@ export class AgentTasksInstructions extends PromptElement<AgentTasksInstructions
 	}
 
 	render() {
-		// Check if the run_task tool is available before rendering task instructions
-		const availableToolNames = new Set(this.props.availableTools?.map(t => t.name) ?? []);
-		const isRunTaskToolAvailable = availableToolNames.has(ToolName.CoreRunTask);
-		
-		if (!isRunTaskToolAvailable) {
+		const foundEnabledTaskTool = this.props.availableTools?.find(t => t.name === ToolName.CoreRunTask || t.name === ToolName.CoreCreateAndRunTask || t.name === ToolName.CoreGetTaskOutput);
+		if (!foundEnabledTaskTool) {
 			return 0;
 		}
 
