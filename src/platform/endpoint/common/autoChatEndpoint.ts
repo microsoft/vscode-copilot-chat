@@ -8,6 +8,7 @@ import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
 import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
+import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher, Source } from '../../chat/common/chatMLFetcher';
 import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { IEnvService } from '../../env/common/envService';
@@ -19,7 +20,6 @@ import { ChatCompletion } from '../../networking/common/openai';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { IAuthenticationService } from '../../authentication/common/authentication';
 
 /**
  * This endpoint represents the "Auto" model in the model picker.
@@ -120,7 +120,7 @@ export class AutoChatEndpoint implements IChatEndpoint {
  * @returns True if the auto mode is enabled, false otherwise
  */
 export async function isAutoModelEnabled(expService: IExperimentationService, envService: IEnvService, authService: IAuthenticationService): Promise<boolean> {
-	if (envService.isPreRelease()) {
+	if (envService.isPreRelease() || authService.copilotToken?.isNoAuthUser) {
 		return true;
 	}
 
@@ -138,8 +138,12 @@ export async function isAutoModelEnabled(expService: IExperimentationService, en
 /**
  * Checks if the auto chat model is the default model
  * @param expService The experimentation service to use to check if the auto model is the default
+ * @param authService The authentication service to use to check if the auto model is the default
  * @returns True if the auto model is the default, false otherwise
  */
-export function isAutoModelDefault(expService: IExperimentationService) {
+export function isAutoModelDefault(expService: IExperimentationService, authService: IAuthenticationService) {
+	if (authService.copilotToken?.isNoAuthUser) {
+		return true;
+	}
 	return !!expService.getTreatmentVariable<boolean>('autoModelDefault');
 }

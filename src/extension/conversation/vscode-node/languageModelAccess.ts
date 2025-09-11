@@ -109,7 +109,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		if (await isAutoModelEnabled(this._expService, this._envService, this._authenticationService)) {
 			const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, chatEndpoints);
 			chatEndpoints.push(autoEndpoint);
-			if (isAutoModelDefault(this._expService)) {
+			if (isAutoModelDefault(this._expService, this._authenticationService)) {
 				defaultChatEndpoint = autoEndpoint;
 			}
 		}
