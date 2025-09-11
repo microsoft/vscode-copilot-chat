@@ -454,36 +454,38 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		logContext.setFetchStartTime();
 
 		// we must not await this promise because we want to stream edits as they come in
-		const fetchResultPromise = endpoint.makeChatRequest(
-			XtabProvider.ID,
-			messages,
-			async (text, _, delta) => {
-				if (!firstTokenReceived.isSettled) {
-					firstTokenReceived.complete();
-				}
-				if (ttft === undefined) {
-					ttft = fetchRequestStopWatch.elapsed();
-					logContext.addLog(`TTFT ${ttft} ms`);
-				}
+		const fetchResultPromise = endpoint.makeChatRequest2(
+			{
+				debugName: XtabProvider.ID,
+				messages,
+				finishedCb: async (text, _, delta) => {
+					if (!firstTokenReceived.isSettled) {
+						firstTokenReceived.complete();
+					}
+					if (ttft === undefined) {
+						ttft = fetchRequestStopWatch.elapsed();
+						logContext.addLog(`TTFT ${ttft} ms`);
+					}
 
-				fetchStreamSource.update(text, delta);
-				responseSoFar = text;
-				logContext.setResponse(responseSoFar);
-				return undefined;
+					fetchStreamSource.update(text, delta);
+					responseSoFar = text;
+					logContext.setResponse(responseSoFar);
+					return undefined;
+				},
+				location: ChatLocation.Other,
+				source: undefined,
+				requestOptions: {
+					temperature: 0,
+					stream: true,
+					prediction,
+				} satisfies OptionalChatRequestParams,
+				userInitiatedRequest: undefined,
+				telemetryProperties: {
+					requestId: request.id,
+				},
+				isFilterRetry: true,
 			},
 			cancellationToken,
-			ChatLocation.Other,
-			undefined,
-			{
-				temperature: 0,
-				// max_tokens: 256, // `max_tokens` is not supported along with `prediction` - https://platform.openai.com/docs/guides/predicted-outputs#limitations
-				stream: true,
-				prediction,
-			} satisfies OptionalChatRequestParams,
-			undefined,
-			{
-				requestId: request.id,
-			}
 		);
 
 		telemetryBuilder.setResponse(fetchResultPromise.then((response) => ({ response, ttft })));
