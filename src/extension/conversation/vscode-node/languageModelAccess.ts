@@ -96,7 +96,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 	}
 
 	private async _provideLanguageModelChatInfo(options: { silent: boolean }, token: vscode.CancellationToken): Promise<vscode.LanguageModelChatInformation[]> {
-		const session = await this._getAuthSession();
+		const session = await this._getToken();
 		if (!session) {
 			this._currentModels = [];
 			return [];
@@ -217,7 +217,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 		const update = async () => {
 
-			if (!await this._getAuthSession()) {
+			if (!await this._getToken()) {
 				dispo.clear();
 				return;
 			}
@@ -242,7 +242,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		await update();
 	}
 
-	private async _getAuthSession(): Promise<CopilotToken | undefined> {
+	private async _getToken(): Promise<CopilotToken | undefined> {
 		try {
 			const copilotToken = await this._authenticationService.getCopilotToken();
 			return copilotToken;

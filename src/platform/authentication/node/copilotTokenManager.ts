@@ -206,7 +206,6 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 	//#endregion
 
 	//#region Private methods
-
 	private async fetchCopilotTokenFromGitHubToken(githubToken: string) {
 		const options: FetchOptions = {
 			headers: {

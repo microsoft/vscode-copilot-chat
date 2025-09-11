@@ -58,9 +58,9 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 	}
 
 	private async _auth(): Promise<TokenInfoOrError> {
-		const allowAnonymousAccess = workspace.getConfiguration('chat').get('allowAnonymousAccess');
+		const allowNoAuthAccess = workspace.getConfiguration('chat').get('allowAnonymousAccess');
 		const session = await getAnyAuthSession(this.configurationService, { silent: true });
-		if (!session && !allowAnonymousAccess) {
+		if (!session && !allowNoAuthAccess) {
 			this._logService.warn('GitHub login failed');
 			this._telemetryService.sendGHTelemetryErrorEvent('auth.github_login_failed');
 			return { kind: 'failure', reason: 'GitHubLoginFailed' };
@@ -75,9 +75,10 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 			}
 			return tokenResult;
 		} else {
+			this._logService.info(`Allowing anonymous access with devDeviceId`);
 			const tokenResult = await this.authFromDevDeviceId(env.devDeviceId);
 			if (tokenResult.kind === 'success') {
-				this._logService.info(`Got Copilot token for ${env.devDeviceId}`);
+				this._logService.info(`Got Copilot token for devDeviceId`);
 				this._logService.info(`Copilot Chat: ${this._envService.getVersion()}, VS Code: ${this._envService.vscodeVersion}`);
 			} else {
 				this._logService.warn('GitHub login failed');
