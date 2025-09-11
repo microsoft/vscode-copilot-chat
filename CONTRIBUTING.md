@@ -486,11 +486,11 @@ Object.assign(product, {
 			'completionsEnablementSetting': 'github.copilot.enable',
 			'nextEditSuggestionsSetting': 'github.copilot.nextEditSuggestions.enabled'
 		},
-      trustedExtensionAuthAccess: {
-         'github': [
-            'github.copilot-chat'
-         ]
-      }
+		trustedExtensionAuthAccess: {
+			'github': [
+				'github.copilot-chat'
+			]
+		}
 	});
 }
 ```
