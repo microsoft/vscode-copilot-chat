@@ -8,6 +8,7 @@ import type { LanguageModelChat } from 'vscode';
 import { createRequestHMAC } from '../../../util/common/crypto';
 import { TaskSingler } from '../../../util/common/taskSingler';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
@@ -60,7 +61,7 @@ export interface IModelMetadataFetcher {
  * This is solely owned by the EndpointProvider (and TestEndpointProvider) which uses this service to power server side rollout of models
  * All model acquisition should be done through the EndpointProvider
  */
-export class ModelMetadataFetcher implements IModelMetadataFetcher {
+export class ModelMetadataFetcher extends Disposable implements IModelMetadataFetcher {
 
 	private static readonly ALL_MODEL_KEY = 'allModels';
 
@@ -88,11 +89,13 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 		@ILogService private readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 	) {
-		this._authService.onDidAuthenticationChange(() => {
+		super();
+		this._register(this._authService.onDidAuthenticationChange(() => {
 			// Auth changed so next fetch should be forced to get a new list
 			this._familyMap.clear();
+			this._completionsFamilyMap.clear();
 			this._lastFetchTime = 0;
-		});
+		}));
 	}
 
 	public async getAllCompletionModels(forceRefresh: boolean): Promise<ICompletionModelInformation[]> {
