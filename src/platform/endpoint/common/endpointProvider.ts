@@ -116,7 +116,7 @@ export interface IEndpointProvider {
 	/**
 	 * Get the CAPI embedding endpoint information
 	 */
-	getEmbeddingsEndpoint(family: EmbeddingsEndpointFamily): Promise<IEmbeddingsEndpoint>;
+	getEmbeddingsEndpoint(family?: EmbeddingsEndpointFamily): Promise<IEmbeddingsEndpoint>;
 }
 
 export const IEndpointProvider = createServiceIdentifier<IEndpointProvider>('IEndpointProvider');
