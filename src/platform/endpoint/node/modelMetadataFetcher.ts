@@ -87,7 +87,13 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@ILogService private readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-	) { }
+	) {
+		this._authService.onDidAuthenticationChange(() => {
+			// Auth changed so next fetch should be forced to get a new list
+			this._familyMap.clear();
+			this._lastFetchTime = 0;
+		});
+	}
 
 	public async getAllCompletionModels(forceRefresh: boolean): Promise<ICompletionModelInformation[]> {
 		await this._taskSingler.getOrCreate(ModelMetadataFetcher.ALL_MODEL_KEY, () => this._fetchModels(forceRefresh));

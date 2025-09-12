@@ -93,6 +93,10 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			provideTokenCount: this._provideTokenCount.bind(this)
 		};
 		this._register(vscode.lm.registerLanguageModelChatProvider('copilot', provider));
+		this._register(this._authenticationService.onDidAuthenticationChange(() => {
+			// Auth changed which means models could've changed. Fire the event
+			this._onDidChange.fire();
+		}));
 	}
 
 	private async _provideLanguageModelChatInfo(options: { silent: boolean }, token: vscode.CancellationToken): Promise<vscode.LanguageModelChatInformation[]> {
