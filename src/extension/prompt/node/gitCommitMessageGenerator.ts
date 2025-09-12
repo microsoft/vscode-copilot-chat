@@ -14,7 +14,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { GitCommitMessagePrompt } from '../../prompts/node/git/gitCommitMessagePrompt';
-import { RecentCommitMessages } from '../common/repository';
+import { GitCommitRepoContext, RecentCommitMessages } from '../common/repository';
 
 type ResponseFormat = 'noTextCodeBlock' | 'oneTextCodeBlock' | 'multipleTextCodeBlocks';
 
@@ -29,16 +29,16 @@ export class GitCommitMessageGenerator {
 		@IInteractionService private readonly interactionService: IInteractionService,
 	) { }
 
-	async generateGitCommitMessage(changes: Diff[], recentCommitMessages: RecentCommitMessages, attemptCount: number, token: CancellationToken): Promise<string | undefined> {
+	async generateGitCommitMessage(changes: Diff[], recentCommitMessages: RecentCommitMessages, repoContext: GitCommitRepoContext, attemptCount: number, token: CancellationToken): Promise<string | undefined> {
 		const startTime = Date.now();
 
 		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-4o-mini');
-		const promptRenderer = PromptRenderer.create(this.instantiationService, endpoint, GitCommitMessagePrompt, { changes, recentCommitMessages });
+		const promptRenderer = PromptRenderer.create(this.instantiationService, endpoint, GitCommitMessagePrompt, { changes, recentCommitMessages, repoContext });
 		const prompt = await promptRenderer.render(undefined, undefined);
 
 		const temperature = Math.min(
 			this.conversationOptions.temperature * (1 + attemptCount),
-			2 /* MAX temperature - https://platform.openai.com/docs/api-reference/chat/create#chat/create-temperature */
+			2 /* MAX temperature - https://platform.openai.com/docs/api-reference/chat/create#chat_create-temperature */
 		);
 
 		const requestStartTime = Date.now();
