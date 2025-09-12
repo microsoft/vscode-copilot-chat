@@ -272,7 +272,7 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 				this._capiClientService,
 				endpoint,
 				token.token,
-				await createRequestHMAC(env.HMAC_SECRET), // TODO@bpasero we need web support for these environmental things
+				await createRequestHMAC(env.HMAC_SECRET),
 				'copilot-panel',
 				requestId,
 				body,
