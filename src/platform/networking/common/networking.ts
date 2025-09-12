@@ -140,8 +140,8 @@ export interface IMakeChatRequestOptions {
 	userInitiatedRequest?: boolean;
 	/** (CAPI-only) Optional telemetry properties for analytics */
 	telemetryProperties?: TelemetryProperties;
-	/** Whether this request is retrying a filtered response */
-	isFilterRetry?: boolean;
+	/** Enable retrying the request when it was filtered due to snippy. Note- if using finishedCb, requires supporting delta.retryReason, eg with clearToPreviousToolInvocation */
+	enableRetryOnFilter?: boolean;
 }
 
 export interface ICreateEndpointBodyOptions extends IMakeChatRequestOptions {

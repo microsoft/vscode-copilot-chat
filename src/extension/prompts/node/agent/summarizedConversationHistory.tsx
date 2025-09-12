@@ -489,11 +489,18 @@ class ConversationHistorySummarizer {
 				stripCacheBreakpoints(summarizationPrompt);
 			}
 
-			summaryResponse = await endpoint.makeChatRequest(`summarizeConversationHistory-${mode}`, ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt), undefined, this.token ?? CancellationToken.None, ChatLocation.Other, undefined, {
-				temperature: 0,
-				stream: false,
-				...toolOpts
-			});
+			summaryResponse = await endpoint.makeChatRequest2({
+				debugName: `summarizeConversationHistory-${mode}`,
+				messages: ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt),
+				finishedCb: undefined,
+				location: ChatLocation.Other,
+				requestOptions: {
+					temperature: 0,
+					stream: false,
+					...toolOpts
+				},
+				enableRetryOnFilter: true
+			}, this.token ?? CancellationToken.None);
 		} catch (e) {
 			this.logInfo(`Error from summarization request. ${e.message}`, mode);
 			this.sendSummarizationTelemetry('requestThrow', '', this.props.endpoint.model, mode, stopwatch.elapsed(), undefined);

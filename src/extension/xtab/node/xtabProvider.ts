@@ -483,7 +483,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				telemetryProperties: {
 					requestId: request.id,
 				},
-				isFilterRetry: true,
 			},
 			cancellationToken,
 		);

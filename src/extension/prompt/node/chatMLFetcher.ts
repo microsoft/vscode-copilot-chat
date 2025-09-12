@@ -198,7 +198,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					// Handle FilteredRetry case with augmented messages
 					if (result.type === ChatFetchResponseType.FilteredRetry) {
 
-						if (opts.isFilterRetry !== true) {
+						if (opts.enableRetryOnFilter) {
 							streamRecorder.callback('', 0, { text: '', retryReason: result.category });
 
 							const filteredContent = result.value[0];
@@ -225,7 +225,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 									requestOptions,
 									userInitiatedRequest: false, // do not mark the retry as user initiated
 									telemetryProperties: { ...telemetryProperties, retryAfterFilterCategory: result.category ?? 'uncategorized' },
-									isFilterRetry: true,
+									enableRetryOnFilter: false,
 								}, token);
 
 								pendingLoggedChatRequest?.resolve(retryResult, streamRecorder.deltas);

@@ -422,13 +422,13 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 			}
 		).render(undefined, token);
 
-		const fetchResult = await endpoint.makeChatRequest(
-			'healApplyPatch',
-			prompt.messages,
-			undefined,
-			token,
-			ChatLocation.Other
-		);
+		const fetchResult = await endpoint.makeChatRequest2({
+			debugName: 'healApplyPatch',
+			messages: prompt.messages,
+			finishedCb: undefined,
+			location: ChatLocation.Other,
+			enableRetryOnFilter: true
+		}, token);
 
 		if (fetchResult.type !== ChatFetchResponseType.Success) {
 			return undefined;
