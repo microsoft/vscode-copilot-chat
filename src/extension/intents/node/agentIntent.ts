@@ -34,7 +34,7 @@ import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
 import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIntentRequestHandler';
 import { IDocumentContext } from '../../prompt/node/documentContext';
-import { IBuildPromptResult, IIntent, IntentLinkificationOptions } from '../../prompt/node/intents';
+import { IBuildPromptResult, IIntent } from '../../prompt/node/intents';
 import { AgentPrompt, AgentPromptProps } from '../../prompts/node/agent/agentPrompt';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
@@ -203,10 +203,6 @@ export class AgentIntent extends EditCodeIntent {
 }
 
 export class AgentIntentInvocation extends EditCodeIntentInvocation {
-
-	public override get linkification(): IntentLinkificationOptions {
-		return { disable: false };
-	}
 
 	public override readonly codeblocksRepresentEdits = false;
 
