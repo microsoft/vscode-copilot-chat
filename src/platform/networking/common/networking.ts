@@ -13,8 +13,6 @@ import { CancellationError } from '../../../util/vs/base/common/errors';
 import { Source } from '../../chat/common/chatMLFetcher';
 import type { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
-import { IDomainService } from '../../endpoint/common/domainService';
-import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
@@ -246,14 +244,11 @@ export function createCapiRequestBody(options: ICreateEndpointBodyOptions, model
 
 function networkRequest(
 	fetcher: IFetcher,
-	envService: IEnvService,
 	telemetryService: ITelemetryService,
-	domainService: IDomainService,
 	capiClientService: ICAPIClientService,
 	requestType: 'GET' | 'POST',
 	endpointOrUrl: IEndpoint | string | RequestMetadata,
 	secretKey: string,
-	hmac: string | undefined,
 	intent: string,
 	requestId: string,
 	body?: IEndpointBody,
@@ -339,9 +334,7 @@ export function canRetryOnceNetworkError(reason: any) {
 
 export function postRequest(
 	fetcherService: IFetcherService,
-	envService: IEnvService,
 	telemetryService: ITelemetryService,
-	domainService: IDomainService,
 	capiClientService: ICAPIClientService,
 	endpointOrUrl: IEndpoint | string | RequestMetadata,
 	secretKey: string,
@@ -353,14 +346,11 @@ export function postRequest(
 	cancelToken?: CancellationToken
 ): Promise<Response> {
 	return networkRequest(fetcherService,
-		envService,
 		telemetryService,
-		domainService,
 		capiClientService,
 		'POST',
 		endpointOrUrl,
 		secretKey,
-		hmac,
 		intent,
 		requestId,
 		body,
@@ -371,9 +361,7 @@ export function postRequest(
 
 export function getRequest(
 	fetcherService: IFetcher,
-	envService: IEnvService,
 	telemetryService: ITelemetryService,
-	domainService: IDomainService,
 	capiClientService: ICAPIClientService,
 	endpointOrUrl: IEndpoint | string | RequestMetadata,
 	secretKey: string,
@@ -385,14 +373,11 @@ export function getRequest(
 	cancelToken?: CancellationToken
 ): Promise<Response> {
 	return networkRequest(fetcherService,
-		envService,
 		telemetryService,
-		domainService,
 		capiClientService,
 		'GET',
 		endpointOrUrl,
 		secretKey,
-		hmac,
 		intent,
 		requestId,
 		body,

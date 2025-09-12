@@ -20,7 +20,6 @@ import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
-import { IDomainService } from '../common/domainService';
 import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IModelAPIResponse, isChatModelInformation, isCompletionModelInformation } from '../common/endpointProvider';
 import { getMaxPromptTokens } from './chatEndpoint';
 
@@ -80,7 +79,6 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 		protected readonly _isModelLab: boolean,
 		@IFetcherService private readonly _fetcher: IFetcherService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
-		@IDomainService private readonly _domainService: IDomainService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
@@ -219,9 +217,7 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 		try {
 			const response = await getRequest(
 				this._fetcher,
-				this._envService,
 				this._telemetryService,
-				this._domainService,
 				this._capiClientService,
 				requestMetadata,
 				copilotToken,
@@ -284,9 +280,7 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 		try {
 			const response = await getRequest(
 				this._fetcher,
-				this._envService,
 				this._telemetryService,
-				this._domainService,
 				this._capiClientService,
 				requestMetadata,
 				copilotToken,

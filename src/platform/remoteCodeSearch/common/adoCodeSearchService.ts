@@ -20,7 +20,6 @@ import { stripChunkTextMetadata } from '../../chunking/common/chunkingStringUtil
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { EmbeddingType } from '../../embeddings/common/embeddingsComputer';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
-import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
 import { AdoRepoId } from '../../git/common/gitService';
 import { IIgnoreService } from '../../ignore/common/ignoreService';
@@ -122,7 +121,6 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 	constructor(
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IDomainService private readonly _domainService: IDomainService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IEnvService private readonly _envService: IEnvService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
@@ -195,9 +193,7 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 		const result = await raceCancellationError(
 			getRequest(
 				this._fetcherService,
-				this._envService,
 				this._telemetryService,
-				this._domainService,
 				this._capiClientService,
 				endpoint,
 				authToken,
@@ -301,9 +297,7 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 		const response = await raceCancellationError(
 			postRequest(
 				this._fetcherService,
-				this._envService,
 				this._telemetryService,
-				this._domainService,
 				this._capiClientService,
 				endpoint,
 				authToken,

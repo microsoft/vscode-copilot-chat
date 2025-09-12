@@ -5,17 +5,11 @@
 
 import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
-import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { FetchStreamRecorder, IChatMLFetcher, IFetchMLOptions, Source } from '../../../platform/chat/common/chatMLFetcher';
-import { IChatQuotaService } from '../../../platform/chat/common/chatQuotaService';
 import { ChatFetchError, ChatFetchResponseType, ChatFetchRetriableError, ChatLocation, ChatResponse, ChatResponses } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { getTextPart, toTextParts } from '../../../platform/chat/common/globalStringUtils';
-import { IInteractionService } from '../../../platform/chat/common/interactionService';
 import { HARD_TOOL_LIMIT } from '../../../platform/configuration/common/configurationService';
-import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
-import { IDomainService } from '../../../platform/endpoint/common/domainService';
-import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
@@ -30,6 +24,7 @@ import * as errorsUtil from '../../../util/common/errors';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { OpenAIEndpoint } from '../../byok/node/openAIEndpoint';
 import { EXTENSION_ID } from '../../common/constants';
 
@@ -85,12 +80,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@ILogService private readonly _logService: ILogService,
-		@IEnvService private readonly _envService: IEnvService,
-		@IDomainService private readonly _domainService: IDomainService,
-		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
-		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
-		@IInteractionService private readonly _interactionService: IInteractionService,
-		@IChatQuotaService private readonly _chatQuotaService: IChatQuotaService,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IConversationOptions options: IConversationOptions,
 	) {
 		super(options);
@@ -158,16 +148,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					reason: payloadValidationResult.reason,
 				};
 			} else {
-				response = await fetchAndStreamChat(
-					this._logService,
-					this._telemetryService,
-					this._fetcherService,
-					this._envService,
-					this._chatQuotaService,
-					this._domainService,
-					this._capiClientService,
-					this._authenticationService,
-					this._interactionService,
+				response = await this._instantiationService.invokeFunction(accessor => fetchAndStreamChat(
+					accessor,
 					chatEndpoint,
 					requestBody,
 					baseTelemetry,
@@ -179,7 +161,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					userInitiatedRequest,
 					token,
 					telemetryProperties
-				);
+				));
 				tokenCount = await chatEndpoint.acquireTokenizer().countMessagesTokens(messages);
 				const extensionId = source?.extensionId ?? EXTENSION_ID;
 				this._onDidMakeChatMLRequest.fire({

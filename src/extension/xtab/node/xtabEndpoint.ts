@@ -10,7 +10,6 @@ import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
-import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -55,7 +54,6 @@ export class XtabEndpoint extends ChatEndpoint {
 		@IDomainService _domainService: IDomainService,
 		@IFetcherService _fetcherService: IFetcherService,
 		@ICAPIClientService _capiClientService: ICAPIClientService,
-		@IEnvService _envService: IEnvService,
 		@ITelemetryService _telemetryService: ITelemetryService,
 		@IAuthenticationService _authService: IAuthenticationService,
 		@IChatMLFetcher _chatMLFetcher: IChatMLFetcher,
@@ -70,7 +68,6 @@ export class XtabEndpoint extends ChatEndpoint {
 			_domainService,
 			_capiClientService,
 			_fetcherService,
-			_envService,
 			_telemetryService,
 			_authService,
 			_chatMLFetcher,
