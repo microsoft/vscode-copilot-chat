@@ -5,7 +5,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LanguageModelToolInformation } from 'vscode';
-import { HARD_TOOL_LIMIT } from '../../../../../platform/configuration/common/configurationService';
+import { HARD_TOOL_LIMIT, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
+import { EmbeddingType, IEmbeddingsComputer } from '../../../../../platform/embeddings/common/embeddingsComputer';
 import { IVSCodeExtensionContext } from '../../../../../platform/extContext/common/extensionContext';
 import { ITestingServicesAccessor } from '../../../../../platform/test/node/services';
 import { CancellationToken } from '../../../../../util/vs/base/common/cancellation';
@@ -169,7 +170,7 @@ describe('Virtual Tools - Grouper', () => {
 				makeTool(`tool_${i}`)
 			);
 
-			await grouper.addGroups(root, tools, CancellationToken.None);
+			await grouper.addGroups('', root, tools, CancellationToken.None);
 
 			expect(root.contents).toEqual(tools);
 		});
@@ -179,7 +180,7 @@ describe('Virtual Tools - Grouper', () => {
 				makeTool(`tool_${i}`)
 			);
 
-			await grouper.addGroups(root, tools, CancellationToken.None);
+			await grouper.addGroups('', root, tools, CancellationToken.None);
 
 			expect(root.contents.length).toBeGreaterThan(0);
 			expect(root.contents.length).toEqual(tools.length);
@@ -194,7 +195,7 @@ describe('Virtual Tools - Grouper', () => {
 				makeTool('builtin_tool3'),
 			];
 
-			await grouper.addGroups(root, builtInTools, CancellationToken.None);
+			await grouper.addGroups('', root, builtInTools, CancellationToken.None);
 
 			expect(root.contents).toEqual(builtInTools);
 		});
@@ -211,7 +212,7 @@ describe('Virtual Tools - Grouper', () => {
 				...Array.from({ length: START_GROUPING_AFTER_TOOL_COUNT }, (_, i) => makeTool(`extra_${i}`))
 			];
 
-			await grouper.addGroups(root, allTools, CancellationToken.None);
+			await grouper.addGroups('', root, allTools, CancellationToken.None);
 
 			// Should have created virtual tools for the extension
 			const vt = root.contents.filter((tool): tool is VirtualTool => tool instanceof VirtualTool);
@@ -231,7 +232,7 @@ describe('Virtual Tools - Grouper', () => {
 				...Array.from({ length: START_GROUPING_AFTER_TOOL_COUNT }, (_, i) => makeTool(`extra_${i}`))
 			];
 
-			await grouper.addGroups(root, allTools, CancellationToken.None);
+			await grouper.addGroups('', root, allTools, CancellationToken.None);
 
 			// Should have created virtual tools for the extension
 			const vt = root.contents.filter((tool): tool is VirtualTool => tool instanceof VirtualTool);
@@ -255,7 +256,7 @@ describe('Virtual Tools - Grouper', () => {
 				...Array.from({ length: START_GROUPING_AFTER_TOOL_COUNT }, (_, i) => makeTool(`extra_${i}`))
 			];
 
-			await grouper.addGroups(root, allTools, CancellationToken.None);
+			await grouper.addGroups('', root, allTools, CancellationToken.None);
 
 			// Should have built-in tools and virtual tools for extension and MCP
 			const nonExtra = root.contents.filter(tool => !tool.name.includes('extra_'));
@@ -280,7 +281,7 @@ describe('Virtual Tools - Grouper', () => {
 				...Array.from({ length: START_GROUPING_AFTER_TOOL_COUNT }, (_, i) => makeTool(`builtin_${i}`))
 			];
 
-			await grouper.addGroups(root, allTools, CancellationToken.None);
+			await grouper.addGroups('', root, allTools, CancellationToken.None);
 
 			// Small toolset should be added directly without grouping
 			const addedDirectly = root.contents.filter(tool =>
@@ -302,7 +303,7 @@ describe('Virtual Tools - Grouper', () => {
 			];
 
 
-			await grouper.addGroups(root, allTools, CancellationToken.None);
+			await grouper.addGroups('', root, allTools, CancellationToken.None);
 
 			// Should have created virtual tools for the extension
 			const vt = root.contents.filter((tool): tool is VirtualTool => tool instanceof VirtualTool);
@@ -324,7 +325,7 @@ describe('Virtual Tools - Grouper', () => {
 			);
 
 			// First grouping
-			await grouper.addGroups(root, tools, CancellationToken.None);
+			await grouper.addGroups('', root, tools, CancellationToken.None);
 
 			// Expand a virtual tool
 			const virtualTool = root.contents.find(tool => tool instanceof VirtualTool) as VirtualTool;
@@ -334,7 +335,7 @@ describe('Virtual Tools - Grouper', () => {
 			}
 
 			// Second grouping with same tools
-			await grouper.addGroups(root, tools, CancellationToken.None);
+			await grouper.addGroups('', root, tools, CancellationToken.None);
 
 			// State should be preserved
 			const newVirtualTool = root.contents.find(tool =>
@@ -367,7 +368,7 @@ describe('Virtual Tools - Grouper', () => {
 				...Array.from({ length: START_GROUPING_AFTER_TOOL_COUNT - 4 }, (_, i) => makeTool(`extra_${i}`))
 			];
 
-			await grouper.addGroups(root, allTools, CancellationToken.None);
+			await grouper.addGroups('', root, allTools, CancellationToken.None);
 
 			// Should have expanded small groups automatically
 			const expandedVirtualTools = root.contents.filter(tool =>
@@ -384,7 +385,7 @@ describe('Virtual Tools - Grouper', () => {
 				makeTool(`individual_${i}`)
 			);
 
-			await grouper.addGroups(root, tools, CancellationToken.None);
+			await grouper.addGroups('', root, tools, CancellationToken.None);
 
 			// All tools should remain as individual tools (no virtual tools created)
 			const virtualTools = root.contents.filter(tool => tool instanceof VirtualTool);
@@ -400,7 +401,7 @@ describe('Virtual Tools - Grouper', () => {
 				)
 			).flat();
 
-			await grouper.addGroups(root, largeGroups, CancellationToken.None);
+			await grouper.addGroups('', root, largeGroups, CancellationToken.None);
 
 			const totalTools = Array.from(root.tools()).length;
 			expect(totalTools).toBeLessThanOrEqual(HARD_TOOL_LIMIT);
@@ -418,7 +419,7 @@ describe('Virtual Tools - Grouper', () => {
 				...Array.from({ length: 20 }, (_, i) => makeTool(`large_tool_${i}`, extensionSource)),
 			];
 
-			await grouper.addGroups(root, tools, CancellationToken.None);
+			await grouper.addGroups('', root, tools, CancellationToken.None);
 
 			// The smaller group should be more likely to be expanded
 			const smallGroup = root.contents.find(tool =>
@@ -451,7 +452,7 @@ describe('Virtual Tools - Grouper', () => {
 				...Array.from({ length: START_GROUPING_AFTER_TOOL_COUNT }, (_, i) => makeTool(`extra_${i}`))
 			];
 
-			await grouper.addGroups(root, allTools, CancellationToken.None);
+			await grouper.addGroups('', root, allTools, CancellationToken.None);
 
 			const context = accessor.get(IVSCodeExtensionContext);
 			const cached = context.globalState.get('virtToolGroupCache');
@@ -523,7 +524,7 @@ describe('Virtual Tools - Grouper', () => {
 			const intoGroups = vi.spyOn(grouper, '_divideToolsIntoGroups' as any);
 			const intoSummary = vi.spyOn(grouper, '_summarizeToolGroup' as any);
 
-			await grouper.addGroups(root, allTools, CancellationToken.None);
+			await grouper.addGroups('', root, allTools, CancellationToken.None);
 			expect(intoGroups).not.toHaveBeenCalled();
 			expect(intoSummary).not.toHaveBeenCalled();
 
@@ -536,16 +537,74 @@ describe('Virtual Tools - Grouper', () => {
 				...tools3,
 				...Array.from({ length: START_GROUPING_AFTER_TOOL_COUNT }, (_, i) => makeTool(`extra_${i}`))
 			];
-			await grouper.addGroups(root, allTools2, CancellationToken.None);
+			await grouper.addGroups('', root, allTools2, CancellationToken.None);
 
 			expect(intoGroups).not.toHaveBeenCalled();
 			expect(intoSummary).toHaveBeenCalledOnce();
 		});
 	});
 
+	describe('embedding-based expansion', () => {
+		beforeEach(() => {
+			const configurationService = accessor.get(IConfigurationService);
+			vi.spyOn(configurationService, 'getExperimentBasedConfig').mockReturnValue(true);
+		});
+
+		it('should expand virtual tools containing predicted tools when embedding ranking is enabled', async () => {
+			// Create extension tools that will be grouped
+			const extensionSource = makeExtensionSource('test.extension');
+			const extensionTools = [
+				makeTool('predicted_tool1', extensionSource), // Higher priority (index 0)
+				makeTool('predicted_tool2', extensionSource), // Lower priority (index 1)
+				makeTool('other_tool1', extensionSource),
+				makeTool('other_tool2', extensionSource),
+			];
+
+			// Add enough builtin tools to trigger grouping
+			const builtinTools = Array.from({ length: START_GROUPING_AFTER_TOOL_COUNT }, (_, i) =>
+				makeTool(`builtin_${i}`)
+			);
+
+			const allTools = [...extensionTools, ...builtinTools];
+
+			// Mock the embedding computation and tool retrieval
+			const embeddingsComputer = accessor.get(IEmbeddingsComputer);
+			vi.spyOn(embeddingsComputer, 'computeEmbeddings').mockResolvedValue({
+				type: EmbeddingType.text3small_512,
+				values: [{
+					type: EmbeddingType.text3small_512,
+					value: [0.1, 0.2, 0.3, 0.4, 0.5]
+				}]
+			});
+
+			// Mock the tool embeddings computer to return specific predicted tools
+			vi.spyOn(grouper['toolEmbeddingsComputer'], 'retrieveSimilarEmbeddingsForAvailableTools')
+				.mockResolvedValue(['predicted_tool1', 'predicted_tool2']);
+
+			const query = 'test query for embeddings';
+
+			// Call addGroups which should trigger embedding-based expansion
+			await grouper.addGroups(query, root, allTools, CancellationToken.None);
+
+			// Find the virtual tool that was created for the extension
+			const virtualTools = root.contents.filter((tool): tool is VirtualTool => tool instanceof VirtualTool);
+			expect(virtualTools.length).toBeGreaterThan(0);
+
+			// The virtual tool containing predicted tools should be expanded
+			const extVirtualTool = virtualTools.find(vt =>
+				vt.contents.some(tool => tool.name === 'predicted_tool1' || tool.name === 'predicted_tool2')
+			);
+			expect(extVirtualTool).toBeDefined();
+			if (extVirtualTool) {
+				expect(extVirtualTool.isExpanded).toBe(true);
+				expect(extVirtualTool.metadata.preExpanded).toBe(true);
+			}
+		});
+	});
+
 	describe('edge cases', () => {
 		it('should handle empty tool list', async () => {
-			await grouper.addGroups(root, [], CancellationToken.None);
+			await grouper.addGroups('', root, [], CancellationToken.None);
 
 			expect(root.contents).toHaveLength(0);
 		});
@@ -553,7 +612,7 @@ describe('Virtual Tools - Grouper', () => {
 		it('should handle single tool', async () => {
 			const tools = [makeTool('single_tool')];
 
-			await grouper.addGroups(root, tools, CancellationToken.None);
+			await grouper.addGroups('', root, tools, CancellationToken.None);
 
 			expect(root.contents).toEqual(tools);
 		});

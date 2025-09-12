@@ -32,6 +32,7 @@ export enum RemoteCacheType {
 	Api = 'api',
 	Extensions = 'extensions',
 	ProjectTemplates = 'project-templates',
+	Tools = 'tools'
 }
 
 // These values are the blob storage container names where we publish computed embeddings

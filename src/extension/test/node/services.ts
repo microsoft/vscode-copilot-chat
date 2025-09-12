@@ -9,7 +9,8 @@ import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { MockChatMLFetcher } from '../../../platform/chat/test/common/mockChatMLFetcher';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { DiffServiceImpl } from '../../../platform/diff/node/diffServiceImpl';
-import { EmbeddingType } from '../../../platform/embeddings/common/embeddingsComputer';
+import { EmbeddingType, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
+import { RemoteEmbeddingsComputer } from '../../../platform/embeddings/common/remoteEmbeddingsComputer';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IModelConfig } from '../../../platform/endpoint/test/node/openaiCompatibleEndpoint';
 import { TestEndpointProvider } from '../../../platform/endpoint/test/node/testEndpointProvider';
@@ -91,6 +92,7 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(ITerminalService, new SyncDescriptor(NullTerminalService));
 	testingServiceCollection.define(IToolGroupingCache, new SyncDescriptor(ToolGroupingCache));
 	testingServiceCollection.define(IToolGroupingService, new SyncDescriptor(ToolGroupingService));
+	testingServiceCollection.define(IEmbeddingsComputer, new SyncDescriptor(RemoteEmbeddingsComputer));
 	testingServiceCollection.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
 	return testingServiceCollection;
 }

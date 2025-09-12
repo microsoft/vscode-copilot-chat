@@ -4,15 +4,20 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { LanguageModelToolInformation } from 'vscode';
-import { CHAT_MODEL, HARD_TOOL_LIMIT } from '../../../../platform/configuration/common/configurationService';
+import { CHAT_MODEL, ConfigKey, HARD_TOOL_LIMIT, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { IEmbeddingsComputer } from '../../../../platform/embeddings/common/embeddingsComputer';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
+import { TelemetryCorrelationId } from '../../../../util/common/telemetryCorrelationId';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { groupBy } from '../../../../util/vs/base/common/collections';
 import { Iterable } from '../../../../util/vs/base/common/iterator';
 import { StopWatch } from '../../../../util/vs/base/common/stopwatch';
+import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelToolExtensionSource, LanguageModelToolMCPSource } from '../../../../vscodeTypes';
+import { EMBEDDING_TYPE_FOR_TOOL_GROUPING, ToolEmbeddingsComputer } from './toolEmbeddingsCache';
 import { VIRTUAL_TOOL_NAME_PREFIX, VirtualTool } from './virtualTool';
 import { divideToolsIntoExistingGroups, divideToolsIntoGroups, summarizeToolGroup } from './virtualToolSummarizer';
 import { ISummarizedToolCategory, IToolCategorization, IToolGroupingCache } from './virtualToolTypes';
@@ -24,15 +29,22 @@ const SUMMARY_PREFIX = 'Call this tool when you need access to a new category of
 const SUMMARY_SUFFIX = '\n\nBe sure to call this tool if you need a capability related to the above.';
 
 export class VirtualToolGrouper implements IToolCategorization {
+	private readonly toolEmbeddingsComputer: ToolEmbeddingsComputer;
+
 	constructor(
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@IToolGroupingCache private readonly _cache: IToolGroupingCache,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@ILogService private readonly _logService: ILogService,
+		@IEmbeddingsComputer private readonly embeddingsComputer: IEmbeddingsComputer,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IExperimentationService private readonly _expService: IExperimentationService,
+		@IInstantiationService _instantiationService: IInstantiationService,
 	) {
+		this.toolEmbeddingsComputer = _instantiationService.createInstance(ToolEmbeddingsComputer);
 	}
 
-	async addGroups(root: VirtualTool, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<void> {
+	async addGroups(query: string, root: VirtualTool, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<void> {
 		// If there's no need to group tools, just add them all directly;
 		if (tools.length < Constant.START_GROUPING_AFTER_TOOL_COUNT) {
 			root.contents = tools;
@@ -82,7 +94,16 @@ export class VirtualToolGrouper implements IToolCategorization {
 			}
 		}
 
-		this._reExpandToolsToHitBudget(root);
+		const virtualToolEmbeddingRankingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.VirtualToolEmbeddingRanking, this._expService);
+
+		if (virtualToolEmbeddingRankingEnabled) {
+			const predictedTools = await this._getPredictedTools(query, tools, token);
+
+			// Aggressively expand groups with predicted tools up to hard limit
+			this._reExpandToolsToHitBudget(root, g => this._getGroupPredictedRelevancy(g, predictedTools), HARD_TOOL_LIMIT);
+		} else {
+			this._reExpandToolsToHitBudget(root, g => g.contents.length);
+		}
 	}
 
 	public static deduplicateGroups(grouped: readonly (VirtualTool | LanguageModelToolInformation)[]) {
@@ -110,24 +131,52 @@ export class VirtualToolGrouper implements IToolCategorization {
 	}
 
 	/**
-	 * Eagerly expand small groups when possible just to reduce the number of indirections.
-	 * Later we should rank this based on query/embedding similarity to the request.
+	 * Gets the predicted relevancy score for a group based on the highest priority predicted tool it contains.
+	 * Lower scores indicate higher relevancy (earlier in the predictedTools array).
+	 */
+	private _getGroupPredictedRelevancy(group: VirtualTool, predictedTools: LanguageModelToolInformation[]): number {
+		// Create a set of predicted tool names for fast lookup
+		const predictedToolNames = new Set(predictedTools.map(tool => tool.name));
+
+		// Create a map of tool name to its priority (index in predictedTools array)
+		const toolPriority = new Map<string, number>();
+		predictedTools.forEach((tool, index) => {
+			toolPriority.set(tool.name, index);
+		});
+
+		// Find the highest priority (lowest index) predicted tool in this group
+		const priorities = group.contents
+			.filter(tool => 'name' in tool && predictedToolNames.has(tool.name))
+			.map(tool => toolPriority.get(tool.name) ?? Infinity)
+			.filter(index => index !== Infinity);
+
+		// Return the highest priority (lowest index), or Infinity if no predicted tools
+		return priorities.length > 0 ? Math.min(...priorities) : Infinity;
+	}
+
+	/**
+	 * Eagerly expand groups when possible just to reduce the number of indirections.
+	 * Uses the provided ranker function to determine expansion priority.
+	 *
+	 * @param root The root virtual tool containing groups to expand
+	 * @param ranker Function to rank groups (lower scores = higher priority)
+	 * @param targetLimit Maximum number of tools to expand to (defaults to EXPAND_UNTIL_COUNT)
 	 *
 	 * Note: when this is made smarter, we should increase `MIN_TOOLSET_SIZE_TO_GROUP`,
 	 * which is right now because tiny toolsets are likely to automatically be included.
 	 */
-	private _reExpandToolsToHitBudget(root: VirtualTool): void {
+	private _reExpandToolsToHitBudget(root: VirtualTool, ranker: (group: VirtualTool) => number, targetLimit: number = Constant.EXPAND_UNTIL_COUNT): void {
 		let toolCount = Iterable.length(root.tools());
-		if (toolCount > Constant.EXPAND_UNTIL_COUNT) {
+		if (toolCount > targetLimit) {
 			return; // No need to expand further.
 		}
 
-		// Get unexpanded virtual tools, sorted ascending by their size.
+		// Get unexpanded virtual tools, sorted by the ranker function (ascending order).
 		const expandable = root.contents
 			.filter((t): t is VirtualTool => t instanceof VirtualTool && !t.isExpanded)
-			.sort((a, b) => a.contents.length - b.contents.length);
+			.sort((a, b) => ranker(a) - ranker(b));
 
-		// Expand them until we hit the minimum EXPAND_UNTIL_COUNT
+		// Expand them until we hit the target limit
 		for (const vtool of expandable) {
 			const nextCount = toolCount - 1 + vtool.contents.length;
 			if (nextCount > HARD_TOOL_LIMIT) {
@@ -138,7 +187,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 			vtool.metadata.preExpanded = true;
 			toolCount = nextCount;
 
-			if (toolCount > Constant.EXPAND_UNTIL_COUNT) {
+			if (toolCount > targetLimit) {
 				break;
 			}
 		}
@@ -219,6 +268,35 @@ export class VirtualToolGrouper implements IToolCategorization {
 		}) || [];
 
 		return virtualTools.concat(uncategorized);
+	}
+
+	private async _getPredictedTools(query: string, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<LanguageModelToolInformation[]> {
+		// compute the embeddings for the query
+		const queryEmbedding = await this.embeddingsComputer.computeEmbeddings(EMBEDDING_TYPE_FOR_TOOL_GROUPING, [query], {}, new TelemetryCorrelationId('VirtualToolGrouper::_getPredictedTools'), token);
+		if (!queryEmbedding || queryEmbedding.values.length === 0) {
+			return [];
+		}
+		const queryEmbeddingVector = queryEmbedding.values[0];
+
+		// Filter out built-in tools. Only consider extension and MCP tools for similarity computation
+		const nonBuiltInTools = tools.filter(tool =>
+			tool.source instanceof LanguageModelToolExtensionSource ||
+			tool.source instanceof LanguageModelToolMCPSource
+		);
+
+		// Get the top 10 tool embeddings for the non-built-in tools
+		const availableToolNames = new Set(nonBuiltInTools.map(tool => tool.name));
+		const toolEmbeddings = await this.toolEmbeddingsComputer.retrieveSimilarEmbeddingsForAvailableTools(queryEmbeddingVector, availableToolNames, 10, token);
+		if (!toolEmbeddings) {
+			return [];
+		}
+
+		// Filter the tools by the top 10 tool embeddings, maintaining order
+		const toolNameToTool = new Map(tools.map(tool => [tool.name, tool]));
+		const predictedTools = toolEmbeddings
+			.map((toolName: string) => toolNameToTool.get(toolName))
+			.filter((tool: LanguageModelToolInformation | undefined): tool is LanguageModelToolInformation => tool !== undefined);
+		return predictedTools;
 	}
 
 	/** Makes multiple sub-groups from the given tool list. */
