@@ -57,6 +57,10 @@ export class AutoChatEndpoint implements IChatEndpoint {
 		this.multiplier = Math.round(baseMultiplier * (1 - this._discountPercent) * 100) / 100;
 	}
 
+	public get apiType(): string | undefined {
+		return this._wrappedEndpoint.apiType;
+	}
+
 	getExtraHeaders(): Record<string, string> {
 		return {
 			...(this._wrappedEndpoint.getExtraHeaders?.() || {}),
@@ -86,6 +90,8 @@ export class AutoChatEndpoint implements IChatEndpoint {
 			requestOptions: {},
 			...options,
 			endpoint: this,
+			// TODO https://github.com/microsoft/vscode/issues/266410
+			ignoreStatefulMarker: options.ignoreStatefulMarker ?? true
 		}, token);
 	}
 
