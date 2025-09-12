@@ -823,13 +823,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		if (this.forceUseDefaultModel) {
 			return xtabPromptOptions.DEFAULT_OPTIONS;
 		} else {
-			const promptingStrategy = this.determinePromptingStrategy({
-				isXtabUnifiedModel: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabUseUnifiedModel, this.expService),
-				isCodexV21NesUnified: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabCodexV21NesUnified, this.expService),
-				useSimplifiedPrompt: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseSimplifiedPrompt, this.expService),
-				useXtab275Prompting: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseXtab275Prompting, this.expService),
-				useNes41Miniv3Prompting: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabUseNes41Miniv3Prompting, this.expService),
-			});
+			const promptingStrategy = this.determinePromptingStrategy();
 			return {
 				promptingStrategy,
 				currentFile: {
@@ -861,7 +855,13 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 	}
 
-	private determinePromptingStrategy({ isXtabUnifiedModel, isCodexV21NesUnified, useSimplifiedPrompt, useXtab275Prompting, useNes41Miniv3Prompting }: { isXtabUnifiedModel: boolean; isCodexV21NesUnified: boolean; useSimplifiedPrompt: boolean; useXtab275Prompting: boolean; useNes41Miniv3Prompting: boolean }): xtabPromptOptions.PromptingStrategy | undefined {
+	private determinePromptingStrategy(): xtabPromptOptions.PromptingStrategy | undefined {
+		const isXtabUnifiedModel = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabUseUnifiedModel, this.expService);
+		const isCodexV21NesUnified = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabCodexV21NesUnified, this.expService);
+		const useSimplifiedPrompt = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseSimplifiedPrompt, this.expService);
+		const useXtab275Prompting = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseXtab275Prompting, this.expService);
+		const useNes41Miniv3Prompting = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabUseNes41Miniv3Prompting, this.expService);
+
 		if (isXtabUnifiedModel) {
 			return xtabPromptOptions.PromptingStrategy.UnifiedModel;
 		} else if (isCodexV21NesUnified) {
