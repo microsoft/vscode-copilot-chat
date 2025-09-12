@@ -292,5 +292,8 @@
 	"copilot.toolSet.runNotebook.description": "Run notebook cells",
 	"copilot.toolSet.search.description": "Search and read files in your workspace",
 	"copilot.toolSet.new.description": "Scaffold a new workspace with VS Code-specific configurations to compile, debug and run new projects.",
-	"copilot.toolSet.runTasks.description": "Run tasks in your workspace"
+	"copilot.toolSet.runTasks.description": "Run tasks in your workspace",
+	"github.copilot.config.useResponsesApi": "Use the Responses API instead of the Chat Completions API when supported. Enables reasoning and reasoning summaries.\n\n**Note**: This is an experimental feature that is not yet activated for all users.",
+	"github.copilot.config.responsesApiReasoningEffort": "Sets the reasoning effort used for the Responses API. Requires `#github.copilot.chat.useResponsesApi#`.",
+	"github.copilot.config.responsesApiReasoningSummary": "Sets the reasoning summary style used for the Responses API. Requires `#github.copilot.chat.useResponsesApi#`."
 }
