@@ -7,7 +7,7 @@ import { ClientHttp2Stream } from 'http2';
 import type { CancellationToken } from 'vscode';
 import { createRequestHMAC } from '../../../util/common/crypto';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatQuotaService } from '../../chat/common/chatQuotaService';
 import { ChatLocation } from '../../chat/common/commonTypes';
@@ -119,6 +119,7 @@ export async function fetchAndStreamChat(
 	const capiClientService = accessor.get(ICAPIClientService);
 	const authenticationService = accessor.get(IAuthenticationService);
 	const interactionService = accessor.get(IInteractionService);
+	const instantiationService = accessor.get(IInstantiationService);
 	if (cancel?.isCancellationRequested) {
 		return { type: FetchResponseKind.Canceled, reason: 'before fetch request' };
 	}
@@ -181,7 +182,7 @@ export async function fetchAndStreamChat(
 	if (response.status !== 200) {
 		const telemetryData = createTelemetryData(chatEndpointInfo, location, ourRequestId);
 		logService.info('Request ID for failed request: ' + ourRequestId);
-		return handleError(accessor, telemetryData, response, ourRequestId);
+		return instantiationService.invokeFunction(handleError, telemetryData, response, ourRequestId);
 	}
 
 	// Extend baseTelemetryData with modelCallId for output messages

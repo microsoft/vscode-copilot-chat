@@ -724,9 +724,7 @@ export namespace ConfigKey {
 		export const AgentHistorySummarizationMode = defineSetting<string | undefined>('chat.advanced.agentHistorySummarizationMode', undefined, INTERNAL);
 		export const AgentHistorySummarizationWithPromptCache = defineExpSetting<boolean | undefined>('chat.advanced.agentHistorySummarizationWithPromptCache', false, INTERNAL);
 		export const AgentHistorySummarizationForceGpt41 = defineExpSetting<boolean | undefined>('chat.advanced.agentHistorySummarizationForceGpt41', false, INTERNAL);
-		export const UseResponsesApi = defineExpSetting<boolean | undefined>('chat.advanced.useResponsesApi', false, INTERNAL);
-		export const UseResponsesApiTruncation = defineSetting<boolean | undefined>('chat.advanced.useResponsesApiTruncation', false, INTERNAL);
-		export const ResponsesApiReasoning = defineSetting<boolean | string | undefined>('chat.advanced.responsesApiReasoning', false, INTERNAL);
+		export const UseResponsesApiTruncation = defineSetting<boolean | undefined>('chat.useResponsesApiTruncation', false);
 
 		export const EnableReadFileV2 = defineExpSetting<boolean>('chat.advanced.enableReadFileV2', isPreRelease);
 		export const AskAgent = defineExpSetting<boolean>('chat.advanced.enableAskAgent', { defaultValue: false, teamDefaultValue: true, internalDefaultValue: true });
@@ -745,6 +743,12 @@ export namespace ConfigKey {
 	}
 
 	export const AgentThinkingTool = defineSetting<boolean>('chat.agent.thinkingTool', false);
+	/** Use the Responses API instead of Chat Completions when supported */
+	export const UseResponsesApi = defineExpSetting<boolean | undefined>('chat.useResponsesApi', false);
+	/** Configure reasoning effort sent to Responses API */
+	export const ResponsesApiReasoningEffort = defineExpSetting<'low' | 'medium' | 'high' | 'default'>('chat.responsesApiReasoningEffort', 'default');
+	/** Configure reasoning summary style sent to Responses API */
+	export const ResponsesApiReasoningSummary = defineExpSetting<'off' | 'detailed'>('chat.responsesApiReasoningSummary', 'off');
 	export const EnableChatImageUpload = defineExpSetting<boolean>('chat.imageUpload.enabled', true);
 
 	/** Add context from recently used files */
