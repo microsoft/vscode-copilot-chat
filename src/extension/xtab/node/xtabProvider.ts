@@ -788,13 +788,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return new OffsetRange(codeToEditStart, codeToEditEndExcl);
 	}
 
-
-	public static getBacktickSection(text: string): string {
-		const textTrimmedStart = text.replace(/^\`\`\`[a-zA-Z]*\r?\n/, '');
-		const textTrimmedEnd = textTrimmedStart.replace(/(\r?\n)\`\`\`$/, '');
-		return textTrimmedEnd;
-	}
-
 	private static mapChatFetcherErrorToNoNextEditReason(fetchError: ChatFetchError): NoNextEditReason {
 		switch (fetchError.type) {
 			case ChatFetchResponseType.Canceled:
