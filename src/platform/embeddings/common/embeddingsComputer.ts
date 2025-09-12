@@ -91,6 +91,7 @@ export const IEmbeddingsComputer = createServiceIdentifier<IEmbeddingsComputer>(
 
 export type ComputeEmbeddingsOptions = {
 	readonly inputType?: 'document' | 'query';
+	readonly endpointType?: 'capi' | 'github';
 };
 
 export interface IEmbeddingsComputer {

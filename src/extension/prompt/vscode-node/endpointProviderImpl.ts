@@ -9,15 +9,16 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { AutoChatEndpoint } from '../../../platform/endpoint/common/autoChatEndpoint';
 import { IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
-import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CopilotChatEndpoint } from '../../../platform/endpoint/node/copilotChatEndpoint';
+import { EmbeddingEndpoint } from '../../../platform/endpoint/node/embeddingsEndpoint';
 import { IModelMetadataFetcher, ModelMetadataFetcher } from '../../../platform/endpoint/node/modelMetadataFetcher';
 import { applyExperimentModifications, ExperimentConfig, getCustomDefaultModelExperimentConfig, ProxyExperimentEndpoint } from '../../../platform/endpoint/node/proxyExperimentEndpoint';
 import { ExtensionContributedChatEndpoint } from '../../../platform/endpoint/vscode-node/extChatEndpoint';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
-import { IChatEndpoint } from '../../../platform/networking/common/networking';
+import { IChatEndpoint, IEmbeddingsEndpoint } from '../../../platform/networking/common/networking';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -30,6 +31,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 	declare readonly _serviceBrand: undefined;
 
 	private _chatEndpoints: Map<string, IChatEndpoint> = new Map();
+	private _embeddingEndpoints: Map<string, IEmbeddingsEndpoint> = new Map();
 	private readonly _modelFetcher: IModelMetadataFetcher;
 
 	constructor(
@@ -142,6 +144,24 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 
 		this._logService.trace(`Resolved chat model`);
 		return endpoint;
+	}
+
+	async getEmbeddingsEndpoint(): Promise<IEmbeddingsEndpoint> {
+		this._logService.trace(`Resolving embedding model`);
+		const modelMetadata = await this._modelFetcher.getEmbeddingsModel('text-embedding-3-small');
+		const model = await this.getOrCreateEmbeddingEndpointInstance(modelMetadata);
+		this._logService.trace(`Resolved embedding model`);
+		return model;
+	}
+
+	private async getOrCreateEmbeddingEndpointInstance(modelMetadata: IEmbeddingModelInformation): Promise<IEmbeddingsEndpoint> {
+		const modelId = 'text-embedding-3-small';
+		let embeddingEndpoint = this._embeddingEndpoints.get(modelId);
+		if (!embeddingEndpoint) {
+			embeddingEndpoint = this._instantiationService.createInstance(EmbeddingEndpoint, modelMetadata);
+			this._embeddingEndpoints.set(modelId, embeddingEndpoint);
+		}
+		return embeddingEndpoint;
 	}
 
 	async getAllCompletionModels(forceRefresh?: boolean): Promise<ICompletionModelInformation[]> {
