@@ -238,6 +238,7 @@ x => x + x                    // ✓ Correct
 ### Code Structure
 - Always surround loop and conditional bodies with curly braces
 - Open curly braces always go on the same line as whatever necessitates them
+   - But the bodies should not be on the same line, they should be indented on the next line
 - Parenthesized constructs should have no surrounding whitespace
 - Single space follows commas, colons, and semicolons
 
@@ -254,6 +255,8 @@ function f(x: number, y: string): void { }
 ### Type Management
 - Do not export `types` or `functions` unless you need to share it across multiple components
 - Do not introduce new `types` or `values` to the global namespace
+- Use proper types. Do not use `any` unless absolutely necessary.
+- Use `readonly` whenever possible.
 
 ## Key APIs and Integrations
 
