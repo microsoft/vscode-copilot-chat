@@ -193,7 +193,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			pendingLoggedChatRequest?.markTimeToFirstToken(timeToFirstToken);
 			switch (response.type) {
 				case FetchResponseKind.Success: {
-					const result = await this.processSuccessfulResponse(response, messages, requestBody, ourRequestId, maxResponseTokens, tokenCount, timeToFirstToken, baseTelemetry, chatEndpoint, userInitiatedRequest);
+					const result = await this.processSuccessfulResponse(response, messages, requestBody, ourRequestId, maxResponseTokens, tokenCount, timeToFirstToken, streamRecorder, baseTelemetry, chatEndpoint, userInitiatedRequest);
 
 					// Handle FilteredRetry case with augmented messages
 					if (result.type === ChatFetchResponseType.FilteredRetry) {
@@ -259,6 +259,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						promptTokenCount: tokenCount,
 						tokenCountMax: maxResponseTokens,
 						timeToFirstToken,
+						timeToFirstTokenEmitted: (baseTelemetry && streamRecorder.firstTokenEmittedTime) ? streamRecorder.firstTokenEmittedTime - baseTelemetry.issuedTime : -1,
 						timeToCancelled: baseTelemetry ? Date.now() - baseTelemetry.issuedTime : -1,
 						isVisionRequest: this.filterImageMessages(messages) ? 1 : -1,
 						isBYOK: chatEndpoint instanceof OpenAIEndpoint ? 1 : -1
@@ -315,6 +316,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			promptTokenCount,
 			tokenCountMax,
 			timeToFirstToken,
+			timeToFirstTokenEmitted,
 			timeToCancelled,
 			isVisionRequest,
 			isBYOK
@@ -323,6 +325,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			promptTokenCount: number;
 			tokenCountMax: number;
 			timeToFirstToken: number | undefined;
+			timeToFirstTokenEmitted?: number;
 			timeToCancelled: number;
 			isVisionRequest: number;
 			isBYOK: number;
@@ -340,6 +343,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens", "isMeasurement": true },
 				"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
 				"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
+				"timeToFirstTokenEmitted": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token emitted (visible text)", "isMeasurement": true },
 				"timeToCancelled": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
 				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
@@ -356,6 +360,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			promptTokenCount,
 			tokenCountMax,
 			timeToFirstToken,
+			timeToFirstTokenEmitted,
 			timeToCancelled,
 			isVisionRequest,
 			isBYOK
@@ -389,6 +394,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens", "isMeasurement": true },
 				"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
 				"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
+				"timeToFirstTokenEmitted": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token emitted (visible text)", "isMeasurement": true },
 				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
 				"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
@@ -422,6 +428,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		maxResponseTokens: number,
 		promptTokenCount: number,
 		timeToFirstToken: number,
+		streamRecorder: FetchStreamRecorder,
 		baseTelemetry?: TelemetryData,
 		chatEndpointInfo?: IChatEndpoint,
 		userInitiatedRequest?: boolean
@@ -454,6 +461,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					"rejectedPredictionTokens": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tokens in the prediction that appeared in the completion", "isMeasurement": true },
 					"completionTokens": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tokens in the output", "isMeasurement": true },
 					"timeToFirstToken": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
+					"timeToFirstTokenEmitted": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token emitted (visible text)", "isMeasurement": true },
 					"timeToComplete": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to complete the request", "isMeasurement": true },
 					"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
 					"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
@@ -483,6 +491,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				rejectedPredictionTokens: chatCompletion.usage?.completion_tokens_details?.rejected_prediction_tokens,
 				completionTokens: chatCompletion.usage?.completion_tokens,
 				timeToFirstToken,
+				timeToFirstTokenEmitted: (baseTelemetry && streamRecorder.firstTokenEmittedTime) ? streamRecorder.firstTokenEmittedTime - baseTelemetry.issuedTime : -1,
 				timeToComplete: baseTelemetry ? Date.now() - baseTelemetry.issuedTime : -1,
 				isVisionRequest: this.filterImageMessages(messages) ? 1 : -1,
 				isBYOK: chatEndpointInfo instanceof OpenAIEndpoint ? 1 : -1

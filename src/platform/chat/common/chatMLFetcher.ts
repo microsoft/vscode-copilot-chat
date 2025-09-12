@@ -112,10 +112,20 @@ export class FetchStreamRecorder {
 	public readonly callback: FinishedCallback;
 	public readonly deltas: IResponseDelta[] = [];
 
+	// TTFTe
+	private _firstTokenEmittedTime: number | undefined;
+	public get firstTokenEmittedTime(): number | undefined {
+		return this._firstTokenEmittedTime;
+	}
+
 	constructor(
 		callback: FinishedCallback | undefined
 	) {
 		this.callback = async (text: string, index: number, delta: IResponseDelta): Promise<number | undefined> => {
+			if (this._firstTokenEmittedTime === undefined && (delta.text || delta.beginToolCalls || (typeof delta.thinking?.text === 'string' && delta.thinking?.text || delta.thinking?.text?.length) || delta.copilotToolCalls)) {
+				this._firstTokenEmittedTime = Date.now();
+			}
+
 			const result = callback ? await callback(text, index, delta) : undefined;
 			this.deltas.push(delta);
 			return result;
