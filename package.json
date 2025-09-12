@@ -2337,43 +2337,6 @@
 						"type": "boolean",
 						"default": true,
 						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
-					},
-					"github.copilot.chat.useResponsesApi": {
-						"type": "boolean",
-						"default": false,
-						"markdownDescription": "%github.copilot.config.useResponsesApi%",
-						"tags": [
-							"experimental",
-							"onExp"
-						]
-					},
-					"github.copilot.chat.responsesApiReasoningEffort": {
-						"type": "string",
-						"default": "default",
-						"markdownDescription": "%github.copilot.config.responsesApiReasoningEffort%",
-						"tags": [
-							"experimental",
-							"onExp"
-						],
-						"enum": [
-							"low",
-							"medium",
-							"high",
-							"default"
-						]
-					},
-					"github.copilot.chat.responsesApiReasoningSummary": {
-						"type": "string",
-						"default": "off",
-						"markdownDescription": "%github.copilot.config.responsesApiReasoningSummary%",
-						"tags": [
-							"experimental",
-							"onExp"
-						],
-						"enum": [
-							"off",
-							"detailed"
-						]
 					}
 				}
 			},
@@ -3069,6 +3032,43 @@
 							"experimental"
 						],
 						"description": "%github.copilot.config.grokCodeAlternatePrompt%"
+					},
+					"github.copilot.chat.useResponsesApi": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.useResponsesApi%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.responsesApiReasoningEffort": {
+						"type": "string",
+						"default": "default",
+						"markdownDescription": "%github.copilot.config.responsesApiReasoningEffort%",
+						"tags": [
+							"experimental",
+							"onExp"
+						],
+						"enum": [
+							"low",
+							"medium",
+							"high",
+							"default"
+						]
+					},
+					"github.copilot.chat.responsesApiReasoningSummary": {
+						"type": "string",
+						"default": "off",
+						"markdownDescription": "%github.copilot.config.responsesApiReasoningSummary%",
+						"tags": [
+							"experimental",
+							"onExp"
+						],
+						"enum": [
+							"off",
+							"detailed"
+						]
 					}
 				}
 			}
