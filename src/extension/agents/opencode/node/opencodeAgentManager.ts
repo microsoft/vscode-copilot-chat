@@ -5,37 +5,21 @@
 
 import type * as vscode from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
-import { createServiceIdentifier } from '../../../../util/common/services';
 import { isLocation } from '../../../../util/common/types';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatToolInvocationPart, MarkdownString } from '../../../../vscodeTypes';
-import { IOpenCodeClient } from './opencodeClient';
-import { IOpenCodeServerManager } from './opencodeServerManager';
-
-export const IOpenCodeAgentManager = createServiceIdentifier<IOpenCodeAgentManager>('IOpenCodeAgentManager');
-
-export interface IOpenCodeAgentManager {
-	readonly _serviceBrand: undefined;
-	handleRequest(
-		sessionId: string | undefined,
-		request: vscode.ChatRequest,
-		context: vscode.ChatContext,
-		stream: vscode.ChatResponseStream,
-		token: vscode.CancellationToken
-	): Promise<vscode.ChatResult & { sessionId?: string }>;
-}
+import { OpenCodeClient } from './opencodeClient';
+import { OpenCodeServerManager } from './opencodeServerManager';
 
 /**
  * Manages OpenCode agent interactions and server lifecycle
  */
-export class OpenCodeAgentManager extends Disposable implements IOpenCodeAgentManager {
-	declare _serviceBrand: undefined;
-
+export class OpenCodeAgentManager extends Disposable {
 	constructor(
-		@IOpenCodeServerManager private readonly serverManager: IOpenCodeServerManager,
-		@IOpenCodeClient private readonly client: IOpenCodeClient,
+		private readonly serverManager: OpenCodeServerManager,
+		private readonly client: OpenCodeClient,
 		@ILogService private readonly logService: ILogService
 	) {
 		super();
@@ -65,15 +49,82 @@ export class OpenCodeAgentManager extends Disposable implements IOpenCodeAgentMa
 				this.logService.info(`[OpenCodeAgentManager] Created session: ${activeSessionId}`);
 			}
 
-			// Send message and handle response
-			const message = await this.client.sendMessage({
+			// Connect event stream and forward relevant events to VS Code stream
+			await this.client.connectWebSocket();
+			const pendingTools = new Map<string, vscode.ChatToolInvocationPart>();
+			const partTextCache = new Map<string, string>();
+			const messageRoleById = new Map<string, string>();
+			const sub = this.client.onMessageReceived(async (ev) => {
+				try {
+					if (token.isCancellationRequested) { return; }
+					if (!ev || (ev.sessionId && ev.sessionId !== activeSessionId)) { return; }
+					// Track message role by id (for filtering parts later)
+					try {
+						const mid = (ev.data as any)?.id;
+						const role = (ev.data as any)?.role;
+						if (typeof mid === 'string' && typeof role === 'string') {
+							messageRoleById.set(mid, role);
+						}
+					} catch { /* ignore */ }
+					// Avoid duplicating content: parts are streamed incrementally via onPartReceived
+					return;
+				} catch (e) {
+					this.logService.error('[OpenCodeAgentManager] Failed to stream event message', e);
+				}
+			});
+
+			// Also subscribe to raw part stream
+			const subPart = this.client.onPartReceived(async ({ data, sessionId, messageId }: any) => {
+				try {
+					if (token.isCancellationRequested) { return; }
+					if (sessionId && sessionId !== activeSessionId) { return; }
+					// Filter out parts from user messages
+					const mid = String(data?.messageID ?? messageId ?? '');
+					const knownRole = mid ? messageRoleById.get(mid) : undefined;
+					if (knownRole === 'user') { return; }
+					// Handle text parts with de-duplication and delta streaming
+					if (data && typeof data === 'object' && data.type === 'text') {
+						const pid = String(data.id ?? data.partID ?? data.partId ?? `oc_${Date.now()}`);
+						const currentRaw: string = String(data.text ?? data.content ?? '');
+						const current = this.stripSystemReminder(currentRaw);
+						const previous = partTextCache.get(pid) ?? '';
+						if (current && current !== previous) {
+							let delta = current;
+							if (previous && current.startsWith(previous)) {
+								delta = current.slice(previous.length);
+							}
+							partTextCache.set(pid, current);
+							if (delta.trim()) {
+								stream.markdown(delta);
+							}
+						}
+						return;
+					}
+
+					// Non-text parts: reuse existing renderer
+					await this.streamContentPart(data, stream, token as any, pendingTools);
+				} catch (e) {
+					this.logService.error('[OpenCodeAgentManager] Failed to stream event part', e);
+				}
+			});
+
+			// Dispose subscriptions on cancellation
+			token.onCancellationRequested(() => {
+				try { (sub as any)?.dispose?.(); } catch { /* noop */ }
+				try { (subPart as any)?.dispose?.(); } catch { /* noop */ }
+			});
+
+			// Kick off the prompt; do not wait for its content to stream here
+			await this.client.sendMessage({
 				sessionId: activeSessionId,
 				content: this.resolvePrompt(request)
 			}, token);
 
-			// Stream the response (render text/code; create tool parts)
-			const pendingTools = new Map<string, vscode.ChatToolInvocationPart>();
-			await this.streamResponse(message as any, stream, token, pendingTools);
+			// Small grace period to flush late events before disposing listeners (optional)
+			setTimeout(() => {
+				try { (sub as any)?.dispose?.(); } catch { /* noop */ }
+				try { (subPart as any)?.dispose?.(); } catch { /* noop */ }
+			}, 250);
 
 			return {
 				sessionId: activeSessionId
@@ -161,45 +212,6 @@ export class OpenCodeAgentManager extends Disposable implements IOpenCodeAgentMa
 	}
 
 	/**
-	 * Streams the response message to VS Code
-	 */
-	private async streamResponse(
-		message: any,
-		stream: vscode.ChatResponseStream,
-		token: CancellationToken,
-		pendingTools: Map<string, vscode.ChatToolInvocationPart>
-	): Promise<void> {
-		if (token.isCancellationRequested) {
-			return;
-		}
-
-		// Handle different message types
-		const contentParts = Array.isArray(message?.parts) ? message.parts : undefined;
-		if (contentParts) {
-			for (const part of contentParts) {
-				if (token.isCancellationRequested) {
-					break;
-				}
-				await this.streamContentPart(part, stream, token, pendingTools);
-			}
-		} else if (typeof message.content === 'string') {
-			// Simple text message
-			stream.markdown(message.content);
-		} else if (message.content && Array.isArray(message.content)) {
-			// Structured content
-			for (const part of message.content) {
-				if (token.isCancellationRequested) {
-					break;
-				}
-				await this.streamContentPart(part, stream, token, pendingTools);
-			}
-		} else if (message.content) {
-			// Object content
-			await this.streamContentPart(message.content, stream, token, pendingTools);
-		}
-	}
-
-	/**
 	 * Streams a content part to VS Code
 	 */
 	private async streamContentPart(
@@ -213,11 +225,15 @@ export class OpenCodeAgentManager extends Disposable implements IOpenCodeAgentMa
 		}
 
 		if (typeof part === 'string') {
-			stream.markdown(part);
+			const text = this.stripSystemReminder(part);
+			if (text) { stream.markdown(text); }
 		} else if (part && typeof part === 'object') {
 			switch (part.type) {
 				case 'text':
-					stream.markdown(part.text || part.content || '');
+					{
+						const text = this.stripSystemReminder(part.text || part.content || '');
+						if (text) { stream.markdown(text); }
+					}
 					break;
 
 				case 'code':
@@ -294,7 +310,9 @@ export class OpenCodeAgentManager extends Disposable implements IOpenCodeAgentMa
 							try { mdOut.appendCodeblock(JSON.stringify(output ?? {}, null, 2), 'json'); }
 							catch { mdOut.appendCodeblock(String(output)); }
 						}
+						inv!.invocationMessage = mdOut;
 						inv!.pastTenseMessage = mdOut;
+						stream.push(inv);
 						pendingTools.delete(id);
 					}
 					break;
@@ -312,7 +330,13 @@ export class OpenCodeAgentManager extends Disposable implements IOpenCodeAgentMa
 		}
 	}
 
-
+	private stripSystemReminder(text: string): string {
+		try {
+			return text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, '').trim();
+		} catch {
+			return text;
+		}
+	}
 
 	override dispose(): void {
 		// Clean up resources

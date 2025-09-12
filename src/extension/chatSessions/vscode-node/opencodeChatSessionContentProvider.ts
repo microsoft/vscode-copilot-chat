@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ChatRequestTurn2 } from '../../../vscodeTypes';
-import { IOpenCodeAgentManager } from '../../agents/opencode/node/opencodeAgentManager';
+import { OpenCodeAgentManager } from '../../agents/opencode/node/opencodeAgentManager';
 import { IOpenCodeSession, IOpenCodeSessionService, OpenCodeMessage } from '../../agents/opencode/node/opencodeSessionService';
 
 import { OpenCodeSessionDataStore } from './opencodeChatSessionItemProvider';
@@ -27,7 +27,7 @@ interface ToolContext {
 export class OpenCodeChatSessionContentProvider extends Disposable implements vscode.ChatSessionContentProvider {
 
 	constructor(
-		private readonly opencodeAgentManager: IOpenCodeAgentManager,
+		private readonly opencodeAgentManager: OpenCodeAgentManager,
 		private readonly sessionStore: OpenCodeSessionDataStore,
 		@IOpenCodeSessionService private readonly sessionService: IOpenCodeSessionService,
 		@ILogService private readonly logService: ILogService

@@ -7,8 +7,8 @@ import type { CancellationToken } from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
-import { CreateSessionOptions, IOpenCodeClient, OpenCodeMessage, OpenCodeSessionData } from './opencodeClient';
-import { IOpenCodeServerConfig, IOpenCodeServerManager } from './opencodeServerManager';
+import { CreateSessionOptions, OpenCodeClient, OpenCodeMessage, OpenCodeSessionData } from './opencodeClient';
+import { IOpenCodeServerConfig, OpenCodeServerManager } from './opencodeServerManager';
 
 // Re-export OpenCodeMessage for use by other modules
 export { OpenCodeMessage };
@@ -39,8 +39,8 @@ export class OpenCodeSessionService extends Disposable implements IOpenCodeSessi
 	private readonly _cacheTimeout = 30000; // 30 seconds
 
 	constructor(
-		@IOpenCodeClient private readonly client: IOpenCodeClient,
-		@IOpenCodeServerManager private readonly serverManager: IOpenCodeServerManager,
+		private readonly client: OpenCodeClient,
+		private readonly serverManager: OpenCodeServerManager,
 		@ILogService private readonly logService: ILogService
 	) {
 		super();

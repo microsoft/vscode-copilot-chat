@@ -3,11 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { createOpencodeClient } from '@opencode-ai/sdk';
+import { createOpencodeClient, OpencodeClient } from '@opencode-ai/sdk';
 import type { CancellationToken } from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
-import { createServiceIdentifier } from '../../../../util/common/services';
-import { Emitter, Event } from '../../../../util/vs/base/common/event';
+import { Emitter } from '../../../../util/vs/base/common/event';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { IOpenCodeServerConfig } from './opencodeServerManager';
 
@@ -74,37 +73,10 @@ export interface SessionDeletedEvent extends OpenCodeWebSocketEvent {
 	readonly data: { sessionId: string };
 }
 
-export const IOpenCodeClient = createServiceIdentifier<IOpenCodeClient>('IOpenCodeClient');
-
-export interface IOpenCodeClient {
-	readonly _serviceBrand: undefined;
-
-	// Configuration
-	setConfig(config: IOpenCodeServerConfig): void;
-
-	// Session management
-	getAllSessions(token?: CancellationToken): Promise<readonly OpenCodeSessionData[]>;
-	getSession(sessionId: string, token?: CancellationToken): Promise<OpenCodeSessionData | undefined>;
-	createSession(options?: CreateSessionOptions, token?: CancellationToken): Promise<OpenCodeSessionData>;
-	sendMessage(options: SendMessageOptions, token?: CancellationToken): Promise<OpenCodeMessage>;
-	deleteSession(sessionId: string, token?: CancellationToken): Promise<void>;
-	getSessionMessages(sessionId: string, token?: CancellationToken): Promise<readonly OpenCodeMessage[]>;
-
-	// Real-time updates
-	connectWebSocket(): Promise<void>;
-	disconnectWebSocket(): Promise<void>;
-	readonly onSessionUpdated: Event<SessionUpdatedEvent>;
-	readonly onMessageReceived: Event<MessageReceivedEvent>;
-	readonly onSessionCreated: Event<SessionCreatedEvent>;
-	readonly onSessionDeleted: Event<SessionDeletedEvent>;
-}
-
-export class OpenCodeClient extends Disposable implements IOpenCodeClient {
-	declare _serviceBrand: undefined;
-
+export class OpenCodeClient extends Disposable {
 	private _config: IOpenCodeServerConfig | undefined;
 	private _isWebSocketConnecting = false;
-	private _sdkClient: any | undefined;
+	private _sdkClient: OpencodeClient | undefined;
 	private _sdkEventsAbort?: AbortController;
 
 	// Event emitters for real-time updates
@@ -112,11 +84,13 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 	private readonly _onMessageReceived = this._register(new Emitter<MessageReceivedEvent>());
 	private readonly _onSessionCreated = this._register(new Emitter<SessionCreatedEvent>());
 	private readonly _onSessionDeleted = this._register(new Emitter<SessionDeletedEvent>());
+	private readonly _onPartStream = this._register(new Emitter<{ type: 'part_received'; data: any; sessionId?: string; messageId?: string; timestamp: Date }>());
 
 	readonly onSessionUpdated = this._onSessionUpdated.event;
 	readonly onMessageReceived = this._onMessageReceived.event;
 	readonly onSessionCreated = this._onSessionCreated.event;
 	readonly onSessionDeleted = this._onSessionDeleted.event;
+	readonly onPartReceived = this._onPartStream.event;
 
 	constructor(
 		@ILogService private readonly logService: ILogService
@@ -172,7 +146,7 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 	async sendMessage(options: SendMessageOptions, token?: CancellationToken): Promise<OpenCodeMessage> {
 		if (!this._sdkClient) { throw new Error('OpenCodeClient not configured. Call setConfig() first.'); }
 		try {
-			const result = await this._sdkClient.session.prompt({ path: { id: options.sessionId }, body: { parts: [{ type: 'text', text: options.content }] } });
+			const result = (await this._sdkClient.session.prompt({ path: { id: options.sessionId }, body: { parts: [{ type: 'text', text: options.content }] } })) as any;
 			const mapped = this.mapMessage({ id: result?.info?.id, role: result?.info?.role ?? 'assistant', content: undefined, parts: Array.isArray(result?.parts) ? result.parts : [] });
 			return mapped;
 		} catch (error) {
@@ -298,10 +272,14 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 							const type = (ev as any).type || (ev as any).event || '';
 							const props = (ev as any).properties || (ev as any).data || {};
 							switch (type) {
+								case 'server.connected':
+									// ignore
+									break;
 								case 'session_created':
 									this._onSessionCreated.fire({ type: 'session_created', data: props, sessionId: props?.id, timestamp: new Date() });
 									break;
 								case 'session_updated':
+								case 'session.updated':
 									this._onSessionUpdated.fire({ type: 'session_updated', data: props, sessionId: props?.id, timestamp: new Date() });
 									break;
 								case 'session_deleted':
@@ -309,9 +287,30 @@ export class OpenCodeClient extends Disposable implements IOpenCodeClient {
 									break;
 								case 'message_received':
 								case 'message_created':
-									this._onMessageReceived.fire({ type: 'message_received', data: this.mapMessage(props), sessionId: props?.sessionID, timestamp: new Date() });
+								case 'message.created':
+								case 'message.updated': {
+									const info = props?.info ?? props;
+									const parts = props?.parts ?? [];
+									const entry = { info, parts };
+									this._onMessageReceived.fire({ type: 'message_received', data: this.mapMessageEntry(entry), sessionId: info?.sessionID, timestamp: new Date() });
 									break;
+								}
+								case 'message.part.updated':
+								case 'message.part.created': {
+									const part = props?.part ?? props;
+									if (part) {
+										this._onPartStream.fire({ type: 'part_received', data: part, sessionId: part?.sessionID, messageId: part?.messageID, timestamp: new Date() });
+									}
+									break;
+								}
 								default:
+									// Heuristic: forward part-like payloads
+									if (props && typeof props === 'object') {
+										const maybe = (props as any).part ?? props;
+										if (maybe && typeof maybe === 'object' && typeof (maybe as any).type === 'string' && (typeof (maybe as any).messageID === 'string' || typeof (maybe as any).sessionID === 'string')) {
+											this._onPartStream.fire({ type: 'part_received', data: maybe, sessionId: (maybe as any).sessionID, messageId: (maybe as any).messageID, timestamp: new Date() });
+										}
+									}
 									break;
 							}
 						} catch (inner) {

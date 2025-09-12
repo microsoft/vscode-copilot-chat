@@ -7,7 +7,6 @@ import { createOpencodeServer } from '@opencode-ai/sdk';
 import type { CancellationToken } from 'vscode';
 import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../../platform/log/common/logService';
-import { createServiceIdentifier } from '../../../../util/common/services';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 
 export interface IOpenCodeServerConfig {
@@ -25,17 +24,7 @@ export interface OpenCodeConfiguration {
 	};
 }
 
-export const IOpenCodeServerManager = createServiceIdentifier<IOpenCodeServerManager>('IOpenCodeServerManager');
-
-export interface IOpenCodeServerManager {
-	readonly _serviceBrand: undefined;
-	start(token?: CancellationToken): Promise<IOpenCodeServerConfig>;
-	stop(): Promise<void>;
-	getConfig(): IOpenCodeServerConfig | undefined;
-	isRunning(): boolean;
-}
-
-export class OpenCodeServerManager extends Disposable implements IOpenCodeServerManager {
+export class OpenCodeServerManager extends Disposable {
 	declare _serviceBrand: undefined;
 
 	private _server: OpenCodeServer | undefined;
