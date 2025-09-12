@@ -60,7 +60,6 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	const summary = summaryConfig === 'off' ? undefined : summaryConfig;
 	if (effort || summary) {
 		body.reasoning = {
-			// cast as string to satisfy type checking, values come from user config
 			...(effort ? { effort } : {}),
 			...(summary ? { summary } : {})
 		};
