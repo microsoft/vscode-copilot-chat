@@ -9,7 +9,7 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { AutoChatEndpoint } from '../../../platform/endpoint/common/autoChatEndpoint';
 import { IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
-import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { ChatEndpointFamily, EmbeddingsEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CopilotChatEndpoint } from '../../../platform/endpoint/node/copilotChatEndpoint';
 import { EmbeddingEndpoint } from '../../../platform/endpoint/node/embeddingsEndpoint';
 import { IModelMetadataFetcher, ModelMetadataFetcher } from '../../../platform/endpoint/node/modelMetadataFetcher';
@@ -146,7 +146,7 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 		return endpoint;
 	}
 
-	async getEmbeddingsEndpoint(): Promise<IEmbeddingsEndpoint> {
+	async getEmbeddingsEndpoint(family?: EmbeddingsEndpointFamily): Promise<IEmbeddingsEndpoint> {
 		this._logService.trace(`Resolving embedding model`);
 		const modelMetadata = await this._modelFetcher.getEmbeddingsModel('text-embedding-3-small');
 		const model = await this.getOrCreateEmbeddingEndpointInstance(modelMetadata);

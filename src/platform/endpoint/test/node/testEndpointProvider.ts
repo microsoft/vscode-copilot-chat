@@ -23,7 +23,7 @@ import { IRequestLogger } from '../../../requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../../common/capiClient';
-import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../common/endpointProvider';
+import { ChatEndpointFamily, EmbeddingsEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../common/endpointProvider';
 import { EmbeddingEndpoint } from '../../node/embeddingsEndpoint';
 import { ModelMetadataFetcher } from '../../node/modelMetadataFetcher';
 import { AzureTestEndpoint } from './azureEndpoint';
@@ -204,7 +204,7 @@ export class TestEndpointProvider implements IEndpointProvider {
 			return await this.getChatEndpointInfo(this.gpt4oMiniModelToRunAgainst ?? CHAT_MODEL.GPT4OMINI, await this._modelLabChatModelMetadata, await this._prodChatModelMetadata);
 		}
 	}
-	async getEmbeddingsEndpoint(): Promise<IEmbeddingsEndpoint> {
+	async getEmbeddingsEndpoint(family?: EmbeddingsEndpointFamily): Promise<IEmbeddingsEndpoint> {
 		const id = LEGACY_EMBEDDING_MODEL_ID.TEXT3SMALL;
 		const modelInformation: IEmbeddingModelInformation = {
 			id: id,
