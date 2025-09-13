@@ -120,6 +120,10 @@ export function stringifyUrlOrRequestMetadata(urlOrRequestMetadata: string | Req
 	return JSON.stringify(urlOrRequestMetadata);
 }
 
+export interface IEmbeddingsEndpoint extends IEndpoint {
+	readonly maxBatchSize: number;
+}
+
 export interface IMakeChatRequestOptions {
 	/** The debug name for this request */
 	debugName: string;

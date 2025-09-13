@@ -21,7 +21,7 @@ import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
-import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IModelAPIResponse, isChatModelInformation, isCompletionModelInformation } from '../common/endpointProvider';
+import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IModelAPIResponse, isChatModelInformation, isCompletionModelInformation, isEmbeddingModelInformation } from '../common/endpointProvider';
 import { getMaxPromptTokens } from './chatEndpoint';
 
 export interface IModelMetadataFetcher {
@@ -54,6 +54,12 @@ export interface IModelMetadataFetcher {
 	 * @returns The chat model information if found, otherwise undefined
 	 */
 	getChatModelFromApiModel(model: LanguageModelChat): Promise<IChatModelInformation | undefined>;
+
+	/**
+	 * Retrieves an embeddings model by its family name
+	 * @param family The family of the model to fetch
+	 */
+	getEmbeddingsModel(family: 'text-embedding-3-small'): Promise<IEmbeddingModelInformation>;
 }
 
 /**
@@ -188,6 +194,16 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		resolvedModel = await this._hydrateResolvedModel(resolvedModel);
 		if (!isChatModelInformation(resolvedModel)) {
 			throw new Error(`Unable to resolve chat model: ${apiModel.id},${apiModel.name},${apiModel.version},${apiModel.family}`);
+		}
+		return resolvedModel;
+	}
+
+	public async getEmbeddingsModel(family: 'text-embedding-3-small'): Promise<IEmbeddingModelInformation> {
+		await this._taskSingler.getOrCreate(ModelMetadataFetcher.ALL_MODEL_KEY, this._fetchModels.bind(this));
+		let resolvedModel = this._familyMap.get(family)?.[0];
+		resolvedModel = await this._hydrateResolvedModel(resolvedModel);
+		if (!isEmbeddingModelInformation(resolvedModel)) {
+			throw new Error(`Unable to resolve embeddings model with family selection: ${family}`);
 		}
 		return resolvedModel;
 	}
