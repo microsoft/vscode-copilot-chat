@@ -48,7 +48,7 @@ import { IToolGroupingService } from '../../tools/common/virtualTools/virtualToo
 import { applyPatch5Description } from '../../tools/node/applyPatchTool';
 import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
-import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation } from './toolCallingLoop';
+import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation, isToolCallLimitAcceptance } from './toolCallingLoop';
 
 export const getAgentTools = (instaService: IInstantiationService, request: vscode.ChatRequest) =>
 	instaService.invokeFunction(async accessor => {
@@ -369,6 +369,12 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 			];
 		}
 		return errorDetails;
+	}
+
+	getAdditionalVariables(promptContext: IBuildPromptContext): ChatVariablesCollection | undefined {
+		if (isToolCallLimitAcceptance(this.request)) {
+			return promptContext.conversation?.turns.at(-2)?.promptVariables;
+		}
 	}
 
 	override processResponse = undefined;
