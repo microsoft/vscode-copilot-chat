@@ -121,13 +121,9 @@ export class ChatParticipantRequestHandler {
 			this.request
 		);
 
-		const latestTurn = new Turn(
+		const latestTurn = Turn.fromRequest(
 			this.chatTelemetry.telemetryMessageId,
-			{ message: request.prompt, type: 'user' },
-			new ChatVariablesCollection(request.references),
-			request.toolReferences.map(InternalToolReference.from),
-			request.editedFileEvents,
-		);
+			this.request);
 
 		this.conversation = new Conversation(actualSessionId, turns.concat(latestTurn));
 

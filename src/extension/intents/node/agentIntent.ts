@@ -25,6 +25,7 @@ import { ITestProvider } from '../../../platform/testing/common/testProvider';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
+import { Iterable } from '../../../util/vs/base/common/iterator';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ICommandService } from '../../commands/node/commandService';
 import { Intent } from '../../common/constants';
@@ -34,7 +35,7 @@ import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
 import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIntentRequestHandler';
 import { IDocumentContext } from '../../prompt/node/documentContext';
-import { IBuildPromptResult, IIntent } from '../../prompt/node/intents';
+import { IBuildPromptResult, IIntent, IIntentInvocation } from '../../prompt/node/intents';
 import { AgentPrompt, AgentPromptProps } from '../../prompts/node/agent/agentPrompt';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
@@ -48,7 +49,7 @@ import { IToolGroupingService } from '../../tools/common/virtualTools/virtualToo
 import { applyPatch5Description } from '../../tools/node/applyPatchTool';
 import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
-import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation, isToolCallLimitAcceptance } from './toolCallingLoop';
+import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation } from './toolCallingLoop';
 
 export const getAgentTools = (instaService: IInstantiationService, request: vscode.ChatRequest) =>
 	instaService.invokeFunction(async accessor => {
@@ -202,7 +203,7 @@ export class AgentIntent extends EditCodeIntent {
 	}
 }
 
-export class AgentIntentInvocation extends EditCodeIntentInvocation {
+export class AgentIntentInvocation extends EditCodeIntentInvocation implements IIntentInvocation {
 
 	public override readonly codeblocksRepresentEdits = false;
 
@@ -372,8 +373,21 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 	}
 
 	getAdditionalVariables(promptContext: IBuildPromptContext): ChatVariablesCollection | undefined {
-		if (isToolCallLimitAcceptance(this.request)) {
-			return promptContext.conversation?.turns.at(-2)?.promptVariables;
+		const lastTurn = promptContext.conversation?.turns.at(-1);
+		if (!lastTurn) {
+			return;
+		}
+
+		// Search backwards to find the first real request and return those variables too.
+		// Variables aren't re-attached to requests from confirmations.
+		// TODO https://github.com/microsoft/vscode/issues/262858, more to do here
+		if (lastTurn.acceptedConfirmationData) {
+			const turns = promptContext.conversation!.turns.slice(0, -1);
+			for (const turn of Iterable.reverse(turns)) {
+				if (!turn.acceptedConfirmationData) {
+					return turn.promptVariables;
+				}
+			}
 		}
 	}
 

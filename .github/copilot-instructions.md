@@ -238,7 +238,7 @@ x => x + x                    // ✓ Correct
 ### Code Structure
 - Always surround loop and conditional bodies with curly braces
 - Open curly braces always go on the same line as whatever necessitates them
-   - But the bodies should not be on the same line, they should be indented on the next line
+   - An open curly brace MUST be followed by a newline, with the body indented on the next line
 - Parenthesized constructs should have no surrounding whitespace
 - Single space follows commas, colons, and semicolons
 

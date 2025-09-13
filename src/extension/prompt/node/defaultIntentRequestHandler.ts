@@ -554,7 +554,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		this._handleVirtualCalls(context);
 
 		const extraVars = this.options.invocation.getAdditionalVariables?.(context);
-		if (extraVars) {
+		if (extraVars?.hasVariables()) {
 			return {
 				...context,
 				chatVariables: ChatVariablesCollection.merge(context.chatVariables, extraVars),

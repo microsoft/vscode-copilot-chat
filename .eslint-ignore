@@ -11,6 +11,7 @@ test/scenarios/**
 .simulation/**
 .eslintplugin/**
 chat-lib/**
+test/aml/out/**
 
 # ignore vs
 src/util/vs/**
