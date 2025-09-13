@@ -2338,6 +2338,11 @@
 						"default": true,
 						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
 					}
+				},
+				"github.copilot.chat.agent.currentEditorContext.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
 				}
 			},
 			{
@@ -2857,14 +2862,6 @@
 						],
 						"markdownDescription": "%github.copilot.config.newWorkspace.useContext7%"
 					},
-					"github.copilot.chat.agent.currentEditorContext.enabled": {
-						"type": "boolean",
-						"default": true,
-						"tags": [
-							"experimental"
-						],
-						"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
-					},
 					"github.copilot.chat.notebook.followCellExecution.enabled": {
 						"type": "boolean",
 						"default": false,
@@ -2886,8 +2883,7 @@
 						"type": "boolean",
 						"default": true,
 						"tags": [
-							"experimental",
-							"onExp"
+							"experimental"
 						],
 						"description": "%github.copilot.config.summarizeAgentConversationHistory.enabled%"
 					},

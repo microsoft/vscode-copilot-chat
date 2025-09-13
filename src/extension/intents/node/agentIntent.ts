@@ -229,7 +229,6 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 		@ITelemetryService telemetryService: ITelemetryService,
 		@INotebookService notebookService: INotebookService,
 		@ILogService private readonly logService: ILogService,
-		@IExperimentationService private readonly experimentationService: IExperimentationService,
 	) {
 		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService);
 	}
@@ -266,7 +265,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 			Number.MAX_SAFE_INTEGER :
 			Math.floor((baseBudget - toolTokens) * 0.85);
 		const endpoint = toolTokens > 0 ? this.endpoint.cloneWithTokenOverride(safeBudget) : this.endpoint;
-		const summarizationEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.SummarizeAgentConversationHistory, this.experimentationService) && this.prompt === AgentPrompt;
+		const summarizationEnabled = this.configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory) && this.prompt === AgentPrompt;
 		this.logService.debug(`AgentIntent: rendering with budget=${safeBudget} (baseBudget: ${baseBudget}, toolTokens: ${toolTokens}), summarizationEnabled=${summarizationEnabled}`);
 		let result: RenderPromptResult;
 		const props: AgentPromptProps = {
