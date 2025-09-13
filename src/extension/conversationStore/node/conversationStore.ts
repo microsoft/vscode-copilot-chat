@@ -15,6 +15,11 @@ export interface IConversationStore {
 	addConversation(responseId: string, conversation: Conversation): void;
 	getConversation(responseId: string): Conversation | undefined;
 	lastConversation: Conversation | undefined;
+	/**
+	 * Gets all conversations in the store, returning them as an array of objects
+	 * containing both the responseId and the conversation data.
+	 */
+	getAllConversations(): Array<{ responseId: string; conversation: Conversation }>;
 }
 
 export class ConversationStore implements IConversationStore {
@@ -35,5 +40,14 @@ export class ConversationStore implements IConversationStore {
 
 	get lastConversation(): Conversation | undefined {
 		return this.conversationMap.last;
+	}
+
+	getAllConversations(): Array<{ responseId: string; conversation: Conversation }> {
+		const conversations: Array<{ responseId: string; conversation: Conversation }> = [];
+		// Use the forEach method from the underlying LinkedMap to iterate through all conversations
+		this.conversationMap.forEach((conversation, responseId) => {
+			conversations.push({ responseId, conversation });
+		});
+		return conversations;
 	}
 }
