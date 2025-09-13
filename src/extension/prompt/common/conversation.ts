@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptReference, Raw } from '@vscode/prompt-tsx';
-import type { ChatRequestEditedFileEvent, ChatResponseStream, ChatResult, LanguageModelToolResult } from 'vscode';
+import type { ChatRequest, ChatRequestEditedFileEvent, ChatResponseStream, ChatResult, LanguageModelToolResult } from 'vscode';
 import { FilterReason } from '../../../platform/networking/common/openai';
 import { isLocation, toLocation } from '../../../util/common/types';
 import { ResourceMap } from '../../../util/vs/base/common/map';
@@ -62,12 +62,27 @@ export class Turn {
 
 	public readonly startTime = Date.now();
 
+	static fromRequest(
+		id: string | undefined,
+		request: ChatRequest
+	) {
+		return new Turn(
+			id,
+			{ message: request.prompt, type: 'user' },
+			new ChatVariablesCollection(request.references),
+			request.toolReferences.map(InternalToolReference.from),
+			request.editedFileEvents,
+			request.acceptedConfirmationData
+		);
+	}
+
 	constructor(
 		readonly id: string = generateUuid(),
 		readonly request: TurnMessage,
 		private readonly _promptVariables: ChatVariablesCollection | undefined = undefined,
 		private readonly _toolReferences: readonly InternalToolReference[] = [],
-		readonly editedFileEvents?: ChatRequestEditedFileEvent[]
+		readonly editedFileEvents?: ChatRequestEditedFileEvent[],
+		readonly acceptedConfirmationData?: any[]
 	) { }
 
 	get promptVariables(): ChatVariablesCollection | undefined {
