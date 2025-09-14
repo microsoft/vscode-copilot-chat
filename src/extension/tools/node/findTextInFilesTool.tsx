@@ -11,6 +11,7 @@ import { IPromptPathRepresentationService } from '../../../platform/prompts/comm
 import { ISearchService } from '../../../platform/search/common/searchService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { asArray } from '../../../util/vs/base/common/arrays';
+import { raceTimeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { count } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -32,6 +33,9 @@ interface IFindTextInFilesToolParams {
 }
 
 const MaxResultsCap = 200;
+
+/** Timeout for text search operations in milliseconds (30 seconds) */
+const SEARCH_TIMEOUT_MS = 30_000;
 
 export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolParams> {
 	public static readonly toolName = ToolName.FindTextInFiles;
@@ -77,26 +81,44 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 	}
 
 	private async searchAndCollectResults(query: string, isRegExp: boolean, patterns: vscode.GlobPattern[] | undefined, maxResults: number, token: CancellationToken): Promise<vscode.TextSearchResult2[]> {
-		const searchResult = this.searchService.findTextInFiles2(
-			{
-				pattern: query,
-				isRegExp,
-			},
-			{
-				include: patterns ? patterns : undefined,
-				maxResults: maxResults + 1
-			},
-			token);
-		const results: vscode.TextSearchResult2[] = [];
-		for await (const item of searchResult.results) {
-			checkCancellation(token);
-			results.push(item);
+		const searchOperation = async (): Promise<vscode.TextSearchResult2[]> => {
+			const searchResult = this.searchService.findTextInFiles2(
+				{
+					pattern: query,
+					isRegExp,
+				},
+				{
+					include: patterns ? patterns : undefined,
+					maxResults: maxResults + 1
+				},
+				token);
+			const results: vscode.TextSearchResult2[] = [];
+			for await (const item of searchResult.results) {
+				checkCancellation(token);
+				results.push(item);
+			}
+
+			// Necessary in case it was rejected
+			await searchResult.complete;
+
+			return results;
+		};
+
+		const timeoutResult = await raceTimeout(
+			searchOperation(),
+			SEARCH_TIMEOUT_MS,
+			() => {
+				// Log timeout occurrence for debugging
+				console.warn(`FindTextInFiles search operation timed out after ${SEARCH_TIMEOUT_MS}ms for query: ${query}`);
+			}
+		);
+
+		// If timeout occurred, return empty results
+		if (timeoutResult === undefined) {
+			return [];
 		}
 
-		// Necessary in case it was rejected
-		await searchResult.complete;
-
-		return results;
+		return timeoutResult;
 	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IFindTextInFilesToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {

@@ -12,6 +12,7 @@ import * as l10n from '@vscode/l10n';
 import { ISearchService } from '../../../platform/search/common/searchService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { raceTimeout } from '../../../util/vs/base/common/async';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, MarkdownString } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
@@ -24,6 +25,9 @@ export interface IFindFilesToolParams {
 	query: string;
 	maxResults?: number;
 }
+
+/** Timeout for file search operations in milliseconds (30 seconds) */
+const SEARCH_TIMEOUT_MS = 30_000;
 
 export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 	public static readonly toolName = ToolName.FindFiles;
@@ -40,8 +44,23 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 		// The input _should_ be a pattern matching inside a workspace, folder, but sometimes we get absolute paths, so try to resolve them
 		const pattern = inputGlobToPattern(options.input.query, this.workspaceService);
 
-		const results = await this.searchService.findFiles(pattern, undefined, token);
+		const searchOperation = async (): Promise<vscode.Uri[]> => {
+			return await this.searchService.findFiles(pattern, undefined, token);
+		};
+
+		const timeoutResult = await raceTimeout(
+			searchOperation(),
+			SEARCH_TIMEOUT_MS,
+			() => {
+				// Log timeout occurrence for debugging
+				console.warn(`FindFiles search operation timed out after ${SEARCH_TIMEOUT_MS}ms for pattern: ${options.input.query}`);
+			}
+		);
+
 		checkCancellation(token);
+
+		// If timeout occurred, return empty results
+		const results = timeoutResult ?? [];
 
 		const maxResults = options.input.maxResults ?? 20;
 		const resultsToShow = results.slice(0, maxResults);

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { afterEach, beforeEach, expect, suite, test } from 'vitest';
+import { afterEach, beforeEach, expect, suite, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
 import { RelativePattern } from '../../../../platform/filesystem/common/fileTypes';
 import { AbstractSearchService, ISearchService } from '../../../../platform/search/common/searchService';
@@ -81,6 +81,33 @@ suite('FindTextInFiles', () => {
 		const prepared = await tool.prepareInvocation({ input: { query: 'hello `world`' }, }, CancellationToken.None);
 		expect((prepared?.invocationMessage as any as MarkdownString).value).toMatchInlineSnapshot(`"Searching text for \`\` hello \`world\` \`\`"`);
 	});
+
+	test('handles timeout gracefully', async () => {
+		vi.useFakeTimers();
+		
+		// Use a mock search service that takes longer than the timeout
+		collection.define(ISearchService, new TimeoutTestSearchService());
+		accessor = collection.createTestingAccessor();
+
+		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
+		
+		// Start the search operation 
+		const resultPromise = tool.invoke({ 
+			input: { query: 'hello' }, 
+			toolInvocationToken: null!,
+		}, CancellationToken.None);
+
+		// Fast-forward past the timeout (30 seconds)
+		vi.advanceTimersByTime(31_000);
+
+		const result = await resultPromise;
+		
+		// Should return empty results when timeout occurs
+		expect(result.toolResultDetails).toEqual([]);
+		expect((result.toolResultMessage as any as MarkdownString).value).toContain('no results');
+
+		vi.useRealTimers();
+	});
 });
 
 class TestSearchService extends AbstractSearchService {
@@ -97,6 +124,25 @@ class TestSearchService extends AbstractSearchService {
 		return {
 			complete: Promise.resolve({}),
 			results: (async function* () { })()
+		};
+	}
+
+	override async findFiles(filePattern: vscode.GlobPattern, options?: vscode.FindFiles2Options | undefined, token?: vscode.CancellationToken | undefined): Promise<vscode.Uri[]> {
+		throw new Error('Method not implemented.');
+	}
+}
+
+class TimeoutTestSearchService extends AbstractSearchService {
+	override async findTextInFiles(query: vscode.TextSearchQuery, options: vscode.FindTextInFilesOptions, progress: vscode.Progress<vscode.TextSearchResult>, token: vscode.CancellationToken): Promise<vscode.TextSearchComplete> {
+		throw new Error('Method not implemented.');
+	}
+
+	override findTextInFiles2(query: vscode.TextSearchQuery2, options?: vscode.FindTextInFilesOptions2, token?: vscode.CancellationToken): vscode.FindTextInFilesResponse {
+		return {
+			complete: new Promise(() => { /* never resolves */ }),
+			results: (async function* () { 
+				// Never yields anything, simulating a hanging search
+			})()
 		};
 	}
 
