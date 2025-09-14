@@ -15,6 +15,8 @@ import { Location, Range } from '../../../vscodeTypes';
 import { InternalToolReference, IToolCallRound } from '../common/intents';
 import { ChatVariablesCollection } from './chatVariablesCollection';
 import { ToolCallRound } from './toolCallRound';
+import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 export { PromptReference } from '@vscode/prompt-tsx';
 
 export enum TurnStatus {
@@ -316,6 +318,7 @@ export interface IResultMetadata {
 	/** The user message exactly as it must be rendered in history. Should not be optional, but not every prompt will adopt this immediately */
 	renderedUserMessage?: Raw.ChatCompletionContentPart[];
 	renderedGlobalContext?: Raw.ChatCompletionContentPart[];
+	globalContextCacheKey?: string;
 	command?: string;
 	filterCategory?: FilterReason;
 
@@ -348,5 +351,11 @@ export class RenderedUserMessageMetadata {
 export class GlobalContextMessageMetadata {
 	constructor(
 		readonly renderedGlobalContext: Raw.ChatCompletionContentPart[],
+		readonly cacheKey: string
 	) { }
+}
+
+export function getGlobalContextCacheKey(accessor: ServicesAccessor): string {
+	const workspaceService = accessor.get(IWorkspaceService);
+	return workspaceService.getWorkspaceFolders().map(folder => folder.toString()).join(',');
 }

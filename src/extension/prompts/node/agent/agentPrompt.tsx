@@ -26,7 +26,7 @@ import { ChatRequestEditedFileEventKind, Position, Range } from '../../../../vsc
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
 import { GitHubPullRequestProviders } from '../../../conversation/node/githubPullRequestProviders';
 import { ChatVariablesCollection } from '../../../prompt/common/chatVariablesCollection';
-import { GlobalContextMessageMetadata, RenderedUserMessageMetadata, Turn } from '../../../prompt/common/conversation';
+import { getGlobalContextCacheKey, GlobalContextMessageMetadata, RenderedUserMessageMetadata, Turn } from '../../../prompt/common/conversation';
 import { InternalToolReference } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { ToolName } from '../../../tools/common/toolNames';
@@ -234,14 +234,17 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		if (firstTurn) {
 			const metadata = firstTurn.getMetadata(GlobalContextMessageMetadata);
 			if (metadata) {
-				return metadata.renderedGlobalContext;
+				const currentCacheKey = this.instantiationService.invokeFunction(getGlobalContextCacheKey);
+				if (metadata.cacheKey === currentCacheKey) {
+					return metadata.renderedGlobalContext;
+				}
 			}
 		}
 
 		const rendered = await renderPromptElement(this.instantiationService, endpoint, GlobalAgentContext, { enableCacheBreakpoints: this.props.enableCacheBreakpoints, availableTools: this.props.promptContext.tools?.availableTools }, undefined, undefined);
 		const msg = rendered.messages.at(0)?.content;
 		if (msg) {
-			firstTurn?.setMetadata(new GlobalContextMessageMetadata(msg));
+			firstTurn?.setMetadata(new GlobalContextMessageMetadata(msg, this.instantiationService.invokeFunction(getGlobalContextCacheKey)));
 			return msg;
 		}
 	}
