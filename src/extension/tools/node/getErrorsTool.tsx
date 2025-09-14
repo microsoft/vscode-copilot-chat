@@ -10,7 +10,6 @@ import { FileType } from '../../../platform/filesystem/common/fileTypes';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
-import { ISearchService } from '../../../platform/search/common/searchService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { getLanguage } from '../../../util/common/languages';
 import { isLocation } from '../../../util/common/types';
@@ -26,8 +25,9 @@ import { Tag } from '../../prompts/node/base/tag';
 import { DiagnosticContext, Diagnostics } from '../../prompts/node/inline/diagnosticsContext';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { checkCancellation, formatUriForFileWidget, inputGlobToPattern, resolveToolInputPath } from './toolUtils';
+import { checkCancellation, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
 import { coalesce } from '../../../util/vs/base/common/arrays';
+import { isEqualOrParent } from '../../../util/vs/base/common/resources';
 
 interface IGetErrorsParams {
 	// Note that empty array is not the same as absence; empty array
@@ -46,8 +46,7 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
-		@ILogService private readonly logService: ILogService,
-		@ISearchService private readonly searchService: ISearchService
+		@ILogService private readonly logService: ILogService
 	) {
 		super();
 	}
@@ -58,7 +57,7 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 			// filter any documents w/o warnings or errors
 			.filter(d => d.diagnostics.length > 0);
 
-		const getSome = async (filePaths: string[], token: CancellationToken) => {
+		const getSome = async (filePaths: string[]) => {
 			const results = [];
 			for (let i = 0; i < filePaths.length; i++) {
 				const filePath = filePaths[i];
@@ -78,20 +77,20 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 				}
 
 				if (isDirectory) {
-					// Find all files in the directory
-					this.logService.info(`Expanding directory path in get_errors: ${filePath}`);
-					const patterns = inputGlobToPattern(filePath, this.workspaceService);
-					const filesInDir = await this.searchService.findFiles(patterns, undefined, token);
+					// Get all diagnostics and filter for files in this directory
+					this.logService.info(`Getting diagnostics for directory: ${filePath}`);
+					const allDiagnostics = this.languageDiagnosticsService.getAllDiagnostics();
 					
-					for (const fileUri of filesInDir) {
-						const diagnostics = this.languageDiagnosticsService.getDiagnostics(fileUri)
-							.filter(d => d.severity <= DiagnosticSeverity.Warning);
-						
-						if (diagnostics.length > 0) {
-							results.push({
-								diagnostics,
-								uri: fileUri,
-							});
+					for (const [fileUri, fileDiagnostics] of allDiagnostics) {
+						// Check if this file is under the directory
+						if (isEqualOrParent(fileUri, uri)) {
+							const filteredDiagnostics = fileDiagnostics.filter(d => d.severity <= DiagnosticSeverity.Warning);
+							if (filteredDiagnostics.length > 0) {
+								results.push({
+									diagnostics: filteredDiagnostics,
+									uri: fileUri,
+								});
+							}
 						}
 					}
 				} else {
@@ -111,7 +110,7 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 			return results;
 		};
 
-		const ds = options.input.filePaths?.length ? await getSome(options.input.filePaths, token) : getAll();
+		const ds = options.input.filePaths?.length ? await getSome(options.input.filePaths) : getAll();
 
 		const diagnostics = coalesce(await Promise.all(ds.map((async ({ uri, diagnostics }) => {
 			try {
