@@ -115,8 +115,8 @@ export class SimpleSummarizedHistory extends PromptElement<SummarizedAgentHistor
 }
 
 type ChunkTagProps = PromptElementProps<{
-	name: string;
-	attrs?: Record<string, string | undefined | boolean | number>;
+	readonly name: string;
+	readonly attrs?: Record<string, string | undefined | boolean | number>;
 }>;
 
 class ChunkTag extends PromptElement<ChunkTagProps> {
@@ -132,6 +132,6 @@ class ChunkTag extends PromptElement<ChunkTagProps> {
 }
 
 interface IRoundHistoryEntry {
-	round: IToolCallRound;
-	results?: Record<string, LanguageModelToolResult>;
+	readonly round: IToolCallRound;
+	readonly results?: Record<string, LanguageModelToolResult>;
 }

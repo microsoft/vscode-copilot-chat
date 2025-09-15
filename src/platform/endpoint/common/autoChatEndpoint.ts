@@ -8,6 +8,7 @@ import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
 import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
+import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher, Source } from '../../chat/common/chatMLFetcher';
 import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { IEnvService } from '../../env/common/envService';
@@ -56,6 +57,10 @@ export class AutoChatEndpoint implements IChatEndpoint {
 		this.multiplier = Math.round(baseMultiplier * (1 - this._discountPercent) * 100) / 100;
 	}
 
+	public get apiType(): string | undefined {
+		return this._wrappedEndpoint.apiType;
+	}
+
 	getExtraHeaders(): Record<string, string> {
 		return {
 			...(this._wrappedEndpoint.getExtraHeaders?.() || {}),
@@ -85,6 +90,8 @@ export class AutoChatEndpoint implements IChatEndpoint {
 			requestOptions: {},
 			...options,
 			endpoint: this,
+			// TODO https://github.com/microsoft/vscode/issues/266410
+			ignoreStatefulMarker: options.ignoreStatefulMarker ?? true
 		}, token);
 	}
 
@@ -118,15 +125,31 @@ export class AutoChatEndpoint implements IChatEndpoint {
  * @param envService The environment service to use to check if the auto mode is enabled
  * @returns True if the auto mode is enabled, false otherwise
  */
-export function isAutoModelEnabled(expService: IExperimentationService, envService: IEnvService): boolean {
-	return !!expService.getTreatmentVariable<boolean>('autoModelEnabled') || envService.isPreRelease();
+export async function isAutoModelEnabled(expService: IExperimentationService, envService: IEnvService, authService: IAuthenticationService): Promise<boolean> {
+	if (envService.isPreRelease() || authService.copilotToken?.isNoAuthUser) {
+		return true;
+	}
+
+	if (!!expService.getTreatmentVariable<boolean>('autoModelEnabled')) {
+		try {
+			(await authService.getCopilotToken()).isEditorPreviewFeaturesEnabled();
+		} catch (e) {
+			return false;
+		}
+	}
+
+	return false;
 }
 
 /**
  * Checks if the auto chat model is the default model
  * @param expService The experimentation service to use to check if the auto model is the default
+ * @param authService The authentication service to use to check if the auto model is the default
  * @returns True if the auto model is the default, false otherwise
  */
-export function isAutoModelDefault(expService: IExperimentationService) {
+export function isAutoModelDefault(expService: IExperimentationService, authService: IAuthenticationService) {
+	if (authService.copilotToken?.isNoAuthUser) {
+		return true;
+	}
 	return !!expService.getTreatmentVariable<boolean>('autoModelDefault');
 }

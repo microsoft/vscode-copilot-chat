@@ -138,7 +138,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 	}
 
 	async triggerIndexingOfFile(uri: URI, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<void> {
-		if (!await this._workspaceIndex.shouldIndexFile(uri, token)) {
+		if (!await this._workspaceIndex.shouldIndexWorkspaceFile(uri, token)) {
 			return;
 		}
 

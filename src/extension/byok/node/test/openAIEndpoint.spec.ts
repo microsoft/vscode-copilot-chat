@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
-import { beforeEach, afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IChatModelInformation, ModelSupportedEndpoint } from '../../../../platform/endpoint/common/endpointProvider';
 import { ICreateEndpointBodyOptions } from '../../../../platform/networking/common/networking';
@@ -134,8 +134,9 @@ describe('OpenAIEndpoint - Reasoning Properties', () => {
 
 	describe('Responses API mode (useResponsesApi = true)', () => {
 		it('should preserve reasoning object when thinking is supported', () => {
-			accessor.get(IConfigurationService).setConfig(ConfigKey.Internal.UseResponsesApi, true);
-			accessor.get(IConfigurationService).setConfig(ConfigKey.Internal.ResponsesApiReasoning, true);
+			accessor.get(IConfigurationService).setConfig(ConfigKey.UseResponsesApi, true);
+			accessor.get(IConfigurationService).setConfig(ConfigKey.ResponsesApiReasoningEffort, 'medium');
+			accessor.get(IConfigurationService).setConfig(ConfigKey.ResponsesApiReasoningSummary, 'detailed');
 			const endpoint = instaService.createInstance(OpenAIEndpoint,
 				modelMetadata,
 				'test-api-key',
@@ -164,8 +165,9 @@ describe('OpenAIEndpoint - Reasoning Properties', () => {
 				}
 			};
 
-			accessor.get(IConfigurationService).setConfig(ConfigKey.Internal.UseResponsesApi, true);
-			accessor.get(IConfigurationService).setConfig(ConfigKey.Internal.ResponsesApiReasoning, true);
+			accessor.get(IConfigurationService).setConfig(ConfigKey.UseResponsesApi, true);
+			accessor.get(IConfigurationService).setConfig(ConfigKey.ResponsesApiReasoningEffort, 'medium');
+			accessor.get(IConfigurationService).setConfig(ConfigKey.ResponsesApiReasoningSummary, 'detailed');
 			const endpoint = instaService.createInstance(OpenAIEndpoint,
 				modelWithoutThinking,
 				'test-api-key',

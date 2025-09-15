@@ -9,6 +9,9 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { makeGitHubAPIRequest } from './githubAPI';
+import type { Endpoints } from "@octokit/types";
+
+export type IGetRepositoryInfoResponseData = Endpoints["GET /repos/{owner}/{repo}"]["response"]["data"];
 
 export const IGithubRepositoryService = createServiceIdentifier<IGithubRepositoryService>('IGithubRepositoryService');
 export const IOctoKitService = createServiceIdentifier<IOctoKitService>('IOctoKitService');
@@ -32,7 +35,7 @@ export interface IGithubRepositoryService {
 	 * @param repo The GitHub repository
 	 */
 	isAvailable(org: string, repo: string): Promise<boolean>;
-	getRepositoryInfo(owner: string, repo: string): Promise<{ id: number }>;
+	getRepositoryInfo(owner: string, repo: string): Promise<IGetRepositoryInfoResponseData>;
 	getRepositoryItems(org: string, repo: string, path: string): Promise<GithubRepositoryItem[]>;
 	getRepositoryItemContent(org: string, repo: string, path: string): Promise<Uint8Array | undefined>;
 }

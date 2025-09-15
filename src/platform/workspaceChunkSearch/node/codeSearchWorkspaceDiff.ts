@@ -165,7 +165,7 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 
 		const initialChanges = new ResourceSet();
 		await Promise.all(diff.changes.slice(0, CodeSearchWorkspaceDiffTracker._maxDiffFiles).map(async change => {
-			if (await this._workspaceFileIndex.shouldIndexFile(change.uri, CancellationToken.None)) {
+			if (await this._workspaceFileIndex.shouldIndexWorkspaceFile(change.uri, CancellationToken.None)) {
 				initialChanges.add(change.uri);
 			}
 		}));

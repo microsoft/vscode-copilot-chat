@@ -9,7 +9,6 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { AutoChatEndpoint } from '../../../platform/endpoint/common/autoChatEndpoint';
 import { IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
-import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CopilotChatEndpoint } from '../../../platform/endpoint/node/copilotChatEndpoint';
 import { IModelMetadataFetcher, ModelMetadataFetcher } from '../../../platform/endpoint/node/modelMetadataFetcher';
@@ -35,7 +34,6 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 
 	constructor(
 		collectFetcherTelemetry: (accessor: ServicesAccessor, error: any) => void,
-		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IFetcherService fetcher: IFetcherService,
 		@IAutomodeService private readonly _autoModeService: IAutomodeService,
@@ -54,7 +52,6 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 			false,
 			fetcher,
 			_requestLogger,
-			domainService,
 			capiClientService,
 			this._configService,
 			this._expService,

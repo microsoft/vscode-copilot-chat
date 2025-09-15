@@ -5,6 +5,8 @@
 
 import { BasePromptElementProps, PromptElement, PromptSizing } from '@vscode/prompt-tsx';
 import type { LanguageModelToolInformation } from 'vscode';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { LanguageModelToolMCPSource } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
@@ -17,7 +19,7 @@ import { KeepGoingReminder } from './agentPrompt';
 
 // Types and interfaces for reusable components
 interface ToolCapabilities extends Partial<Record<ToolName, boolean>> {
-	hasSomeEditTool: boolean;
+	readonly hasSomeEditTool: boolean;
 }
 
 // Utility function to detect available tools
@@ -981,14 +983,26 @@ export class ApplyPatchFormatInstructions extends PromptElement {
 }
 
 class ApplyPatchInstructions extends PromptElement<DefaultAgentPromptProps & { tools: ToolCapabilities }> {
+	constructor(
+		props: DefaultAgentPromptProps & { tools: ToolCapabilities },
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+	) {
+		super(props);
+	}
+
 	async render(state: void, sizing: PromptSizing) {
 		const isGpt5 = this.props.modelFamily?.startsWith('gpt-5') === true;
+		const useSimpleInstructions = isGpt5 && this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.Gpt5AlternativePatch, this._experimentationService);
+
 		return <Tag name='applyPatchInstructions'>
 			To edit files in the workspace, use the {ToolName.ApplyPatch} tool. If you have issues with it, you should first try to fix your patch and continue using {ToolName.ApplyPatch}. {this.props.tools[ToolName.EditFile] && <>If you are stuck, you can fall back on the {ToolName.EditFile} tool, but {ToolName.ApplyPatch} is much faster and is the preferred tool.</>}<br />
 			{isGpt5 && <>Prefer the smallest set of changes needed to satisfy the task. Avoid reformatting unrelated code; preserve existing style and public APIs unless the task requires changes. When practical, complete all edits for a file within a single message.<br /></>}
-			The input for this tool is a string representing the patch to apply, following a special format. For each snippet of code that needs to be changed, repeat the following:<br />
-			<ApplyPatchFormatInstructions /><br />
-			NEVER print this out to the user, instead call the tool and the edits will be applied and shown to the user.<br />
+			{!useSimpleInstructions && <>
+				The input for this tool is a string representing the patch to apply, following a special format. For each snippet of code that needs to be changed, repeat the following:<br />
+				<ApplyPatchFormatInstructions /><br />
+				NEVER print this out to the user, instead call the tool and the edits will be applied and shown to the user.<br />
+			</>}
 			<GenericEditingTips {...this.props} />
 		</Tag>;
 	}

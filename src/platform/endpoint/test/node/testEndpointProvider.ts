@@ -21,7 +21,6 @@ import { IRequestLogger } from '../../../requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../../common/capiClient';
-import { IDomainService } from '../../common/domainService';
 import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEndpointProvider } from '../../common/endpointProvider';
 import { ModelMetadataFetcher } from '../../node/modelMetadataFetcher';
 import { AzureTestEndpoint } from './azureEndpoint';
@@ -68,7 +67,6 @@ export class TestModelMetadataFetcher extends ModelMetadataFetcher {
 		info: CurrentTestRunInfo | undefined,
 		private readonly _skipModelMetadataCache: boolean = false,
 		@IFetcherService _fetcher: IFetcherService,
-		@IDomainService _domainService: IDomainService,
 		@ICAPIClientService _capiClientService: ICAPIClientService,
 		@IConfigurationService _configService: IConfigurationService,
 		@IExperimentationService _expService: IExperimentationService,
@@ -84,7 +82,6 @@ export class TestModelMetadataFetcher extends ModelMetadataFetcher {
 			_isModelLab,
 			_fetcher,
 			_requestLogger,
-			_domainService,
 			_capiClientService,
 			_configService,
 			_expService,

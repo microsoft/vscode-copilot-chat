@@ -309,9 +309,7 @@ export class EditCodeIntentInvocation implements IIntentInvocation {
 	protected stableToolReferences = this.request.toolReferences.map(InternalToolReference.from);
 
 	public get linkification(): IntentLinkificationOptions {
-		// off by default:
-		const enabled = this.configurationService.getConfig(ConfigKey.Internal.EditLinkification) === true;
-		return { disable: !enabled };
+		return { disable: false };
 	}
 
 	public readonly codeblocksRepresentEdits: boolean = true;

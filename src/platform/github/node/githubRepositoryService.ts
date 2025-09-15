@@ -7,13 +7,13 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { makeGitHubAPIRequest } from '../common/githubAPI';
-import { GithubRepositoryItem, IGithubRepositoryService } from '../common/githubService';
+import { GithubRepositoryItem, IGetRepositoryInfoResponseData, IGithubRepositoryService } from '../common/githubService';
 
 export class GithubRepositoryService implements IGithubRepositoryService {
 
 	declare readonly _serviceBrand: undefined;
 
-	private readonly githubRepositoryInfoCache = new Map<string, { id: number }>();
+	private readonly githubRepositoryInfoCache = new Map<string, IGetRepositoryInfoResponseData>();
 
 	constructor(
 		@IFetcherService private readonly _fetcherService: IFetcherService,
@@ -23,7 +23,7 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 	) {
 	}
 
-	private async _doGetRepositoryInfo(owner: string, repo: string) {
+	private async _doGetRepositoryInfo(owner: string, repo: string): Promise<IGetRepositoryInfoResponseData | undefined> {
 		const authToken: string | undefined = this._authenticationService.permissiveGitHubSession?.accessToken ?? this._authenticationService.anyGitHubSession?.accessToken;
 
 		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.github.com', `repos/${owner}/${repo}`, 'GET', authToken);
@@ -36,10 +36,9 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 		}
 
 		const response = await this._doGetRepositoryInfo(owner, repo);
-		if (response.ok) {
-			const repoInfo = await response.json();
-			this.githubRepositoryInfoCache.set(`${owner}/${repo}`, repoInfo);
-			return repoInfo;
+		if (response) {
+			this.githubRepositoryInfoCache.set(`${owner}/${repo}`, response);
+			return response;
 		}
 		throw new Error(`Failed to fetch repository info for ${owner}/${repo}`);
 	}
@@ -47,7 +46,7 @@ export class GithubRepositoryService implements IGithubRepositoryService {
 	async isAvailable(org: string, repo: string): Promise<boolean> {
 		try {
 			const response = await this._doGetRepositoryInfo(org, repo);
-			return response.ok;
+			return response !== undefined;
 		} catch (e) {
 			return false;
 		}

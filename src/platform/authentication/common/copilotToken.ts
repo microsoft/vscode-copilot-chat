@@ -109,6 +109,10 @@ export class CopilotToken {
 		return this.sku === 'free_limited_copilot';
 	}
 
+	get isNoAuthUser(): boolean {
+		return this.sku === 'no_auth_limited_copilot';
+	}
+
 	get isChatQuotaExceeded(): boolean {
 		return this.isFreeUser && (this._info.limited_user_quotas?.chat ?? 1) <= 0;
 	}

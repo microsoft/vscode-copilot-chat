@@ -23,6 +23,19 @@ This is the **GitHub Copilot Chat** extension for Visual Studio Code - a VS Code
 - **Vitest**: Unit testing framework
 - **Python**: For notebooks integration and ML evaluation scripts
 
+## Validating changes
+
+You MUST check compilation output before running ANY script or declaring work complete!
+
+1. **ALWAYS** check the `start-watch-tasks` watch task output for compilation errors
+2. **NEVER** use the `compile` task as a way to check if everything is working properly
+3. **FIX** all compilation errors before moving forward
+
+### TypeScript compilation steps
+- Monitor the `start-watch-tasks` task outputs for real-time compilation errors as you make changes
+- This task runs `npm: watch:tsc-extension`,`npm: watch:tsc-extension-web`, `npm: watch:tsc-simulation-workbench`, and `npm: watch:esbuild` to incrementally compile the project
+- Start the task if it's not already running in the background
+
 ## Project Architecture
 
 ### Top-Level Directory Structure
@@ -225,7 +238,7 @@ x => x + x                    // ✓ Correct
 ### Code Structure
 - Always surround loop and conditional bodies with curly braces
 - Open curly braces always go on the same line as whatever necessitates them
-   - But the bodies should not be on the same line, they should be indented on the next line
+   - An open curly brace MUST be followed by a newline, with the body indented on the next line
 - Parenthesized constructs should have no surrounding whitespace
 - Single space follows commas, colons, and semicolons
 

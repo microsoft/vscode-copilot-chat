@@ -7,6 +7,7 @@
 import { Raw } from '@vscode/prompt-tsx';
 import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
 import { IBlockedExtensionService } from '../../../platform/chat/common/blockedExtensionService';
 import { ChatFetchResponseType, ChatLocation, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { getTextPart } from '../../../platform/chat/common/globalStringUtils';
@@ -92,10 +93,14 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			provideTokenCount: this._provideTokenCount.bind(this)
 		};
 		this._register(vscode.lm.registerLanguageModelChatProvider('copilot', provider));
+		this._register(this._authenticationService.onDidAuthenticationChange(() => {
+			// Auth changed which means models could've changed. Fire the event
+			this._onDidChange.fire();
+		}));
 	}
 
 	private async _provideLanguageModelChatInfo(options: { silent: boolean }, token: vscode.CancellationToken): Promise<vscode.LanguageModelChatInformation[]> {
-		const session = await this._getAuthSession();
+		const session = await this._getToken();
 		if (!session) {
 			this._currentModels = [];
 			return [];
@@ -105,10 +110,10 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		const chatEndpoints = await this._endpointProvider.getAllChatEndpoints();
 
 		let defaultChatEndpoint = chatEndpoints.find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1') ?? chatEndpoints[0];
-		if (isAutoModelEnabled(this._expService, this._envService)) {
+		if (await isAutoModelEnabled(this._expService, this._envService, this._authenticationService)) {
 			const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, chatEndpoints);
 			chatEndpoints.push(autoEndpoint);
-			if (isAutoModelDefault(this._expService)) {
+			if (isAutoModelDefault(this._expService, this._authenticationService)) {
 				defaultChatEndpoint = autoEndpoint;
 			}
 		}
@@ -123,7 +128,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			const sanitizedModelName = endpoint.name.replace(/\(Preview\)/g, '').trim();
 			let modelDescription: string | undefined;
 			if (endpoint.model === AutoChatEndpoint.id) {
-				modelDescription = localize('languageModel.autoTooltip', 'Auto selects the best model for your request based on capacity and performance. Counted at 0x-1x the request rate, depending on the model.');
+				modelDescription = localize('languageModel.autoTooltip', 'Auto selects the best model for your request based on capacity and performance. Counted at 0x-0.9x the request rate, depending on the model.');
 			} else if (endpoint.multiplier) {
 				modelDescription = localize('languageModel.costTooltip', '{0} ({1}) is counted at a {2}x rate.', sanitizedModelName, endpoint.version, endpoint.multiplier);
 			} else if (endpoint.isFallback && endpoint.multiplier === 0) {
@@ -148,6 +153,8 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			if (endpoint.model === AutoChatEndpoint.id) {
 				multiplierString = 'Variable';
 			}
+
+			const session = this._authenticationService.anyGitHubSession;
 
 			const model: vscode.LanguageModelChatInformation = {
 				id: endpoint.model,
@@ -214,7 +221,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 		const update = async () => {
 
-			if (!await this._getAuthSession()) {
+			if (!await this._getToken()) {
 				dispo.clear();
 				return;
 			}
@@ -239,23 +246,15 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		await update();
 	}
 
-	private async _getAuthSession(): Promise<vscode.AuthenticationSession | undefined> {
+	private async _getToken(): Promise<CopilotToken | undefined> {
 		try {
-			await this._authenticationService.getCopilotToken();
+			const copilotToken = await this._authenticationService.getCopilotToken();
+			return copilotToken;
 		} catch (e) {
 			this._logService.warn('[LanguageModelAccess] LanguageModel/Embeddings are not available without auth token');
 			this._logService.error(e);
 			return undefined;
 		}
-
-		const session = this._authenticationService.anyGitHubSession;
-		if (!session) {
-			// At this point, we should have auth, but log just in case we don't so we have record of it
-			this._logService.error('[LanguageModelAccess] Auth token not present when we expected it to be');
-			return undefined;
-		}
-
-		return session;
 	}
 }
 

@@ -85,6 +85,7 @@
 	"github.copilot.command.explainTerminalLastCommand": "Explain Last Terminal Command",
 	"github.copilot.command.collectWorkspaceIndexDiagnostics": "Collect Workspace Index Diagnostics",
 	"github.copilot.git.generateCommitMessage": "Generate Commit Message",
+	"github.copilot.git.resolveMergeConflicts": "Resolve Conflicts with AI",
 	"github.copilot.devcontainer.generateDevContainerConfig": "Generate Dev Container Configuration",
 	"github.copilot.config.enableCodeActions": "Controls if Copilot commands are shown as Code Actions when available",
 	"github.copilot.config.renameSuggestions.triggerAutomatically": "Controls whether Copilot generates suggestions for renaming",
@@ -128,6 +129,7 @@
 	"github.copilot.config.notebook.followCellExecution": "Controls whether the currently executing cell is revealed into the viewport upon execution from Copilot.",
 	"github.copilot.config.notebook.enhancedNextEditSuggestions": "Controls whether to use an enhanced approach for generating next edit suggestions in notebook cells.",
 	"github.copilot.chat.editor.temporalContext.enabled": "When making inline chat request whether to include recently viewed and edited files with Copilot requests.",
+	"github.copilot.config.imageUpload.enabled": "Enables the use of image upload URLs in chat requests instead of raw base64 strings.",
 	"github.copilot.chat.edits.temporalContext.enabled": "When making edits request whether to include recently viewed and edited files with Copilot requests.",
 	"github.copilot.config.startDebugging.enabled": "Enables the `/startDebugging` intent in panel chat. Generates or finds launch config to match the query (if any), project structure, and more.",
 	"github.copilot.config.agent.thinkingTool": "Enables the thinking tool that allows Copilot to think deeply about your request before generating a response in agent mode.",
@@ -292,5 +294,8 @@
 	"copilot.toolSet.runNotebook.description": "Run notebook cells",
 	"copilot.toolSet.search.description": "Search and read files in your workspace",
 	"copilot.toolSet.new.description": "Scaffold a new workspace with VS Code-specific configurations to compile, debug and run new projects.",
-	"copilot.toolSet.runTasks.description": "Run tasks in your workspace"
+	"copilot.toolSet.runTasks.description": "Run tasks in your workspace",
+	"github.copilot.config.useResponsesApi": "Use the Responses API instead of the Chat Completions API when supported. Enables reasoning and reasoning summaries.\n\n**Note**: This is an experimental feature that is not yet activated for all users.",
+	"github.copilot.config.responsesApiReasoningEffort": "Sets the reasoning effort used for the Responses API. Requires `#github.copilot.chat.useResponsesApi#`.",
+	"github.copilot.config.responsesApiReasoningSummary": "Sets the reasoning summary style used for the Responses API. Requires `#github.copilot.chat.useResponsesApi#`."
 }

@@ -140,6 +140,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			filters.push((edits) => IgnoreWhitespaceOnlyChanges.filterEdit(activeDoc, edits));
 		}
 
+		if (this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsUndoInsertionFilteringEnabled, this.expService)) {
+			filters.push((edits) => editWouldDeleteWhatWasJustInserted(activeDoc, new LineEdit(edits)) ? [] : edits);
+		}
+
 		return filters.reduce((acc, filter) => filter(acc), edits);
 	}
 
@@ -245,46 +249,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			AREA_AROUND_END_TAG
 		].join('\n');
 
-		let promptOptions: xtabPromptOptions.PromptOptions;
-
-		if (this.forceUseDefaultModel) {
-			promptOptions = xtabPromptOptions.DEFAULT_OPTIONS;
-		} else {
-			const promptingStrategy = this.determinePromptingStrategy({
-				isXtabUnifiedModel: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabUseUnifiedModel, this.expService),
-				isCodexV21NesUnified: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabCodexV21NesUnified, this.expService),
-				useSimplifiedPrompt: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseSimplifiedPrompt, this.expService),
-				useXtab275Prompting: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseXtab275Prompting, this.expService),
-				useNes41Miniv3Prompting: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabUseNes41Miniv3Prompting, this.expService),
-			});
-			promptOptions = {
-				promptingStrategy,
-				currentFile: {
-					maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabCurrentFileMaxTokens, this.expService),
-					includeTags: promptingStrategy !== xtabPromptOptions.PromptingStrategy.UnifiedModel /* unified model doesn't use tags in current file */ && this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabIncludeTagsInCurrentFile, this.expService),
-					prioritizeAboveCursor: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabPrioritizeAboveCursor, this.expService)
-				},
-				pagedClipping: {
-					pageSize: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabPageSize, this.expService)
-				},
-				recentlyViewedDocuments: {
-					nDocuments: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabNRecentlyViewedDocuments, this.expService),
-					maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabRecentlyViewedDocumentsMaxTokens, this.expService),
-					includeViewedFiles: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabIncludeViewedFiles, this.expService),
-				},
-				languageContext: this.determineLanguageContextOptions(activeDocument.languageId, {
-					enabled: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabLanguageContextEnabled, this.expService),
-					enabledLanguages: this.configService.getConfig(ConfigKey.Internal.InlineEditsXtabLanguageContextEnabledLanguages),
-					maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabLanguageContextMaxTokens, this.expService),
-				}),
-				diffHistory: {
-					nEntries: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffNEntries, this.expService),
-					maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffMaxTokens, this.expService),
-					onlyForDocsInPrompt: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffOnlyForDocsInPrompt, this.expService),
-					useRelativePaths: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffUseRelativePaths, this.expService),
-				}
-			};
-		}
+		const promptOptions = this.determinePromptOptions(activeDocument);
 
 		const areaAroundCodeToEditForCurrentFile = promptOptions.currentFile.includeTags
 			? areaAroundCodeToEdit
@@ -307,7 +272,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		let langCtx: LanguageContextResponse | undefined;
 		if (promptOptions.languageContext.enabled || recordingEnabled) {
-			const langCtxPromise = this.getLanguageContext(request, delaySession, activeDocument, cursorPosition, logContext, cancellationToken, promptOptions);
+			const langCtxPromise = this.getLanguageContext(request, delaySession, activeDocument, cursorPosition, logContext, cancellationToken);
 
 			if (promptOptions.languageContext.enabled) {
 				langCtx = await langCtxPromise;
@@ -323,7 +288,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			}
 		}
 
-		const userPrompt = getUserPrompt(request, taggedCurrentFileContent, areaAroundCodeToEdit, langCtx, computeTokens, promptOptions);
+		const userPrompt = getUserPrompt(activeDocument, request.xtabEditHistory, taggedCurrentFileContent, areaAroundCodeToEdit, langCtx, computeTokens, promptOptions);
 
 		const prediction = this.getPredictedOutput(editWindowLines, promptOptions.promptingStrategy);
 
@@ -378,7 +343,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		cursorPosition: Position,
 		logContext: InlineEditRequestLogContext,
 		cancellationToken: CancellationToken,
-		promptOptions: xtabPromptOptions.PromptOptions
 	): Promise<LanguageContextResponse | undefined> {
 		try {
 			const textDoc = this.workspaceService.textDocuments.find(doc => doc.uri.toString() === activeDocument.id.uri);
@@ -490,36 +454,37 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		logContext.setFetchStartTime();
 
 		// we must not await this promise because we want to stream edits as they come in
-		const fetchResultPromise = endpoint.makeChatRequest(
-			XtabProvider.ID,
-			messages,
-			async (text, _, delta) => {
-				if (!firstTokenReceived.isSettled) {
-					firstTokenReceived.complete();
-				}
-				if (ttft === undefined) {
-					ttft = fetchRequestStopWatch.elapsed();
-					logContext.addLog(`TTFT ${ttft} ms`);
-				}
+		const fetchResultPromise = endpoint.makeChatRequest2(
+			{
+				debugName: XtabProvider.ID,
+				messages,
+				finishedCb: async (text, _, delta) => {
+					if (!firstTokenReceived.isSettled) {
+						firstTokenReceived.complete();
+					}
+					if (ttft === undefined) {
+						ttft = fetchRequestStopWatch.elapsed();
+						logContext.addLog(`TTFT ${ttft} ms`);
+					}
 
-				fetchStreamSource.update(text, delta);
-				responseSoFar = text;
-				logContext.setResponse(responseSoFar);
-				return undefined;
+					fetchStreamSource.update(text, delta);
+					responseSoFar = text;
+					logContext.setResponse(responseSoFar);
+					return undefined;
+				},
+				location: ChatLocation.Other,
+				source: undefined,
+				requestOptions: {
+					temperature: 0,
+					stream: true,
+					prediction,
+				} satisfies OptionalChatRequestParams,
+				userInitiatedRequest: undefined,
+				telemetryProperties: {
+					requestId: request.id,
+				},
 			},
 			cancellationToken,
-			ChatLocation.Other,
-			undefined,
-			{
-				temperature: 0,
-				// max_tokens: 256, // `max_tokens` is not supported along with `prediction` - https://platform.openai.com/docs/guides/predicted-outputs#limitations
-				stream: true,
-				prediction,
-			} satisfies OptionalChatRequestParams,
-			undefined,
-			{
-				requestId: request.id,
-			}
 		);
 
 		telemetryBuilder.setResponse(fetchResultPromise.then((response) => ({ response, ttft })));
@@ -712,14 +677,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 					logContext.setResponse(responseSoFar);
 
 					for (const singleLineEdit of singleLineEdits) {
-						const lineEdit = new LineEdit([singleLineEdit]);
-
-						if (editWouldDeleteWhatWasJustInserted(request.getActiveDocument(), lineEdit)) {
-							this.trace(`filtering edit because it would undo previous insertion: ${singleLineEdit.toString()}`, logContext, tracer);
-							i++;
-							continue;
-						}
-
 						this.trace(`pushing edit #${i}:\n${singleLineEdit.toString()}`, logContext, tracer);
 
 						if (!hasBeenDelayed) { // delay only the first one
@@ -860,6 +817,48 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			case ChatFetchResponseType.Unknown:
 				return new NoNextEditReason.FetchFailure(errors.fromUnknown(fetchError));
 		}
+	}
+
+	private determinePromptOptions(activeDocument: StatelessNextEditDocument): xtabPromptOptions.PromptOptions {
+		if (this.forceUseDefaultModel) {
+			return xtabPromptOptions.DEFAULT_OPTIONS;
+		} else {
+			const promptingStrategy = this.determinePromptingStrategy({
+				isXtabUnifiedModel: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabUseUnifiedModel, this.expService),
+				isCodexV21NesUnified: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabCodexV21NesUnified, this.expService),
+				useSimplifiedPrompt: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseSimplifiedPrompt, this.expService),
+				useXtab275Prompting: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseXtab275Prompting, this.expService),
+				useNes41Miniv3Prompting: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabUseNes41Miniv3Prompting, this.expService),
+			});
+			return {
+				promptingStrategy,
+				currentFile: {
+					maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabCurrentFileMaxTokens, this.expService),
+					includeTags: promptingStrategy !== xtabPromptOptions.PromptingStrategy.UnifiedModel /* unified model doesn't use tags in current file */ && this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabIncludeTagsInCurrentFile, this.expService),
+					prioritizeAboveCursor: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabPrioritizeAboveCursor, this.expService)
+				},
+				pagedClipping: {
+					pageSize: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabPageSize, this.expService)
+				},
+				recentlyViewedDocuments: {
+					nDocuments: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabNRecentlyViewedDocuments, this.expService),
+					maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabRecentlyViewedDocumentsMaxTokens, this.expService),
+					includeViewedFiles: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabIncludeViewedFiles, this.expService),
+				},
+				languageContext: this.determineLanguageContextOptions(activeDocument.languageId, {
+					enabled: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabLanguageContextEnabled, this.expService),
+					enabledLanguages: this.configService.getConfig(ConfigKey.Internal.InlineEditsXtabLanguageContextEnabledLanguages),
+					maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabLanguageContextMaxTokens, this.expService),
+				}),
+				diffHistory: {
+					nEntries: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffNEntries, this.expService),
+					maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffMaxTokens, this.expService),
+					onlyForDocsInPrompt: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffOnlyForDocsInPrompt, this.expService),
+					useRelativePaths: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffUseRelativePaths, this.expService),
+				}
+			};
+		}
+
 	}
 
 	private determinePromptingStrategy({ isXtabUnifiedModel, isCodexV21NesUnified, useSimplifiedPrompt, useXtab275Prompting, useNes41Miniv3Prompting }: { isXtabUnifiedModel: boolean; isCodexV21NesUnified: boolean; useSimplifiedPrompt: boolean; useXtab275Prompting: boolean; useNes41Miniv3Prompting: boolean }): xtabPromptOptions.PromptingStrategy | undefined {

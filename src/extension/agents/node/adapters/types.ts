@@ -9,26 +9,27 @@ import type { IMakeChatRequestOptions } from '../../../../platform/networking/co
 import { APIUsage } from '../../../../platform/networking/common/openai';
 
 export interface IParsedRequest {
-	model?: string;
-	messages: Raw.ChatMessage[];
-	options?: IMakeChatRequestOptions['requestOptions'];
+	readonly model?: string;
+	readonly messages: readonly Raw.ChatMessage[];
+	readonly options?: IMakeChatRequestOptions['requestOptions'];
+	readonly type?: string;
 }
 
 export interface IStreamEventData {
-	event: string;
-	data: string;
+	readonly event: string;
+	readonly data: string;
 }
 
 export interface IAgentTextBlock {
-	type: 'text';
-	content: string;
+	readonly type: 'text';
+	readonly content: string;
 }
 
 export interface IAgentToolCallBlock {
-	type: 'tool_call';
-	callId: string;
-	name: string;
-	input: object;
+	readonly type: 'tool_call';
+	readonly callId: string;
+	readonly name: string;
+	readonly input: object;
 }
 
 export type IAgentStreamBlock = IAgentTextBlock | IAgentToolCallBlock;
@@ -50,17 +51,17 @@ export interface IProtocolAdapter {
 	formatStreamResponse(
 		streamData: IAgentStreamBlock,
 		context: IStreamingContext
-	): IStreamEventData[];
+	): readonly IStreamEventData[];
 
 	/**
 	 * Generate the final events to close the stream
 	 */
-	generateFinalEvents(context: IStreamingContext, usage?: APIUsage): IStreamEventData[];
+	generateFinalEvents(context: IStreamingContext, usage?: APIUsage): readonly IStreamEventData[];
 
 	/**
 	 * Generate initial events to start the stream (optional, protocol-specific)
 	 */
-	generateInitialEvents?(context: IStreamingContext): IStreamEventData[];
+	generateInitialEvents?(context: IStreamingContext): readonly IStreamEventData[];
 
 	/**
 	 * Get the content type for responses
@@ -81,9 +82,9 @@ export interface IProtocolAdapterFactory {
 }
 
 export interface IStreamingContext {
-	requestId: string;
-	endpoint: {
-		modelId: string;
-		modelMaxPromptTokens: number;
+	readonly requestId: string;
+	readonly endpoint: {
+		readonly modelId: string;
+		readonly modelMaxPromptTokens: number;
 	};
 }

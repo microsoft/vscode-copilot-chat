@@ -20,14 +20,13 @@ import { ITabsAndEditorsService } from '../../../../platform/tabs/common/tabsAnd
 import { ITasksService } from '../../../../platform/tasks/common/tasksService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { basename } from '../../../../util/vs/base/common/path';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestEditedFileEventKind, Position, Range } from '../../../../vscodeTypes';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
 import { GitHubPullRequestProviders } from '../../../conversation/node/githubPullRequestProviders';
 import { ChatVariablesCollection } from '../../../prompt/common/chatVariablesCollection';
-import { GlobalContextMessageMetadata, RenderedUserMessageMetadata, Turn } from '../../../prompt/common/conversation';
+import { getGlobalContextCacheKey, GlobalContextMessageMetadata, RenderedUserMessageMetadata, Turn } from '../../../prompt/common/conversation';
 import { InternalToolReference } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { ToolName } from '../../../tools/common/toolNames';
@@ -227,7 +226,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		const globalContext = await this.getOrCreateGlobalAgentContextContent(endpoint);
 		return globalContext ?
 			renderedMessageToTsxChildren(globalContext, !!this.props.enableCacheBreakpoints) :
-			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} />;
+			<GlobalAgentContext enableCacheBreakpoints={!!this.props.enableCacheBreakpoints} availableTools={this.props.promptContext.tools?.availableTools} />;
 	}
 
 	private async getOrCreateGlobalAgentContextContent(endpoint: IChatEndpoint): Promise<Raw.ChatCompletionContentPart[] | undefined> {
@@ -235,14 +234,17 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		if (firstTurn) {
 			const metadata = firstTurn.getMetadata(GlobalContextMessageMetadata);
 			if (metadata) {
-				return metadata.renderedGlobalContext;
+				const currentCacheKey = this.instantiationService.invokeFunction(getGlobalContextCacheKey);
+				if (metadata.cacheKey === currentCacheKey) {
+					return metadata.renderedGlobalContext;
+				}
 			}
 		}
 
-		const rendered = await renderPromptElement(this.instantiationService, endpoint, GlobalAgentContext, { enableCacheBreakpoints: this.props.enableCacheBreakpoints }, undefined, undefined);
+		const rendered = await renderPromptElement(this.instantiationService, endpoint, GlobalAgentContext, { enableCacheBreakpoints: this.props.enableCacheBreakpoints, availableTools: this.props.promptContext.tools?.availableTools }, undefined, undefined);
 		const msg = rendered.messages.at(0)?.content;
 		if (msg) {
-			firstTurn?.setMetadata(new GlobalContextMessageMetadata(msg));
+			firstTurn?.setMetadata(new GlobalContextMessageMetadata(msg, this.instantiationService.invokeFunction(getGlobalContextCacheKey)));
 			return msg;
 		}
 	}
@@ -250,6 +252,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 
 interface GlobalAgentContextProps extends BasePromptElementProps {
 	readonly enableCacheBreakpoints?: boolean;
+	readonly availableTools?: readonly LanguageModelToolInformation[];
 }
 
 /**
@@ -264,7 +267,7 @@ class GlobalAgentContext extends PromptElement<GlobalAgentContextProps> {
 				<UserShellPrompt />
 			</Tag>
 			<Tag name='workspace_info'>
-				<AgentTasksInstructions />
+				<AgentTasksInstructions availableTools={this.props.availableTools} />
 				<WorkspaceFoldersHint />
 				<MultirootWorkspaceStructure maxSize={2000} excludeDotFiles={true} /><br />
 				This is the state of the context at this point in the conversation. The view of the workspace structure may be truncated. You can use tools to collect more context if needed.
@@ -388,7 +391,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 }
 
 interface FrozenMessageContentProps extends BasePromptElementProps {
-	readonly frozenContent: Raw.ChatCompletionContentPart[];
+	readonly frozenContent: readonly Raw.ChatCompletionContentPart[];
 	readonly enableCacheBreakpoints?: boolean;
 }
 
@@ -430,7 +433,7 @@ class ToolReferencesHint extends PromptElement<ToolReferencesHintProps> {
 	}
 }
 
-export function renderedMessageToTsxChildren(message: string | Raw.ChatCompletionContentPart[], enableCacheBreakpoints: boolean): PromptPieceChild[] {
+export function renderedMessageToTsxChildren(message: string | readonly Raw.ChatCompletionContentPart[], enableCacheBreakpoints: boolean): PromptPieceChild[] {
 	if (typeof message === 'string') {
 		return [message];
 	}
@@ -499,7 +502,7 @@ class CurrentDatePrompt extends PromptElement<BasePromptElementProps> {
 }
 
 interface CurrentEditorContextProps extends BasePromptElementProps {
-	endpoint: IChatEndpoint;
+	readonly endpoint: IChatEndpoint;
 }
 
 /**
@@ -629,9 +632,13 @@ class WorkspaceFoldersHint extends PromptElement<BasePromptElementProps> {
 }
 
 
-class AgentTasksInstructions extends PromptElement {
+interface AgentTasksInstructionsProps extends BasePromptElementProps {
+	readonly availableTools?: readonly LanguageModelToolInformation[];
+}
+
+export class AgentTasksInstructions extends PromptElement<AgentTasksInstructionsProps> {
 	constructor(
-		props: BasePromptElementProps,
+		props: AgentTasksInstructionsProps,
 		@ITasksService private readonly _tasksService: ITasksService,
 		@IPromptPathRepresentationService private readonly _promptPathRepresentationService: IPromptPathRepresentationService,
 	) {
@@ -639,6 +646,11 @@ class AgentTasksInstructions extends PromptElement {
 	}
 
 	render() {
+		const foundEnabledTaskTool = this.props.availableTools?.find(t => t.name === ToolName.CoreRunTask || t.name === ToolName.CoreCreateAndRunTask || t.name === ToolName.CoreGetTaskOutput);
+		if (!foundEnabledTaskTool) {
+			return 0;
+		}
+
 		const taskGroupsRaw = this._tasksService.getTasks();
 		const taskGroups = taskGroupsRaw.map(([wf, tasks]) => [wf, tasks.filter(task => (!!task.type || task.dependsOn) && !task.hide)] as const).filter(([, tasks]) => tasks.length > 0);
 		if (taskGroups.length === 0) {
@@ -716,7 +728,7 @@ export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringToo
 }
 
 export interface IKeepGoingReminderProps extends BasePromptElementProps {
-	modelFamily: string | undefined;
+	readonly modelFamily: string | undefined;
 }
 
 export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
@@ -803,27 +815,50 @@ export class EditedFileEvents extends PromptElement<EditedFileEventsProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const events = this.props.editedFileEvents;
 
-		const eventStrs = events && coalesce(events.map(event => this.editedFileEventToString(event)));
-		if (eventStrs && eventStrs.length > 0) {
-			return (
-				<>
-					The user has taken some actions between the last request and now:<br />
-					{eventStrs.map(str => `- ${str}`).join('\n')}<br />
-					So be sure to check the current file contents before making any new edits.
-				</>);
-		} else {
+		if (!events || events.length === 0) {
 			return undefined;
 		}
-	}
 
-	private editedFileEventToString(event: ChatRequestEditedFileEvent): string | undefined {
-		switch (event.eventKind) {
-			case ChatRequestEditedFileEventKind.Keep:
-				return undefined;
-			case ChatRequestEditedFileEventKind.Undo:
-				return `Undone your edits to ${this.promptPathRepresentationService.getFilePath(event.uri)}`;
-			case ChatRequestEditedFileEventKind.UserModification:
-				return `Made manual edits to ${this.promptPathRepresentationService.getFilePath(event.uri)}`;
+		// Group by event kind and collect file paths
+		const undoFiles: string[] = [];
+		const modFiles: string[] = [];
+		const seenUndo = new Set<string>();
+		const seenMod = new Set<string>();
+
+		for (const event of events) {
+			if (event.eventKind === ChatRequestEditedFileEventKind.Undo) {
+				const fp = this.promptPathRepresentationService.getFilePath(event.uri);
+				if (!seenUndo.has(fp)) { seenUndo.add(fp); undoFiles.push(fp); }
+			} else if (event.eventKind === ChatRequestEditedFileEventKind.UserModification) {
+				const fp = this.promptPathRepresentationService.getFilePath(event.uri);
+				if (!seenMod.has(fp)) { seenMod.add(fp); modFiles.push(fp); }
+			}
 		}
+
+		if (undoFiles.length === 0 && modFiles.length === 0) {
+			return undefined;
+		}
+
+		const sections: string[] = [];
+		if (undoFiles.length > 0) {
+			sections.push([
+				'The user undid your edits to:',
+				...undoFiles.map(f => `- ${f}`)
+			].join('\n'));
+		}
+		if (modFiles.length > 0) {
+			sections.push([
+				'Some edits were made, by the user or possibly by a formatter or another automated tool, to:',
+				...modFiles.map(f => `- ${f}`)
+			].join('\n'));
+		}
+
+		return (
+			<>
+				There have been some changes between the last request and now.<br />
+				{sections.join('\n')}<br />
+				So be sure to check the current file contents before making any new edits.
+			</>
+		);
 	}
 }

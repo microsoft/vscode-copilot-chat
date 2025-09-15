@@ -13,6 +13,7 @@ import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEdi
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { CancellationError } from '../../../util/vs/base/common/errors';
+import { Schemas } from '../../../util/vs/base/common/network';
 import { isAbsolute } from '../../../util/vs/base/common/path';
 import { isEqual, normalizePath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -98,7 +99,7 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI):
 
 	await assertFileNotContentExcluded(accessor, uri);
 
-	if (!workspaceService.getWorkspaceFolder(normalizePath(uri)) && !customInstructionsService.isExternalInstructionsFile(uri)) {
+	if (!workspaceService.getWorkspaceFolder(normalizePath(uri)) && !customInstructionsService.isExternalInstructionsFile(uri) && uri.scheme !== Schemas.untitled) {
 		const fileOpenInSomeTab = tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri));
 		if (!fileOpenInSomeTab) {
 			throw new Error(`File ${promptPathRepresentationService.getFilePath(uri)} is outside of the workspace, and not open in an editor, and can't be read`);

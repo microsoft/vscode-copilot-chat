@@ -124,7 +124,7 @@ suite('defaultIntentRequestHandler', () => {
 		command: string | undefined;
 		references: readonly ChatPromptReference[] = [];
 		toolReferences: readonly ChatLanguageModelToolReference[] = [];
-		model: LanguageModelChat = null as any;
+		model: LanguageModelChat = { family: '' } as any;
 		tools = new Map();
 		id = generateUuid();
 	}

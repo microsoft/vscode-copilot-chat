@@ -3,12 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Readable } from 'stream';
-import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { Config, ConfigKey, ExperimentBasedConfig, ExperimentBasedConfigType, IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { FetchOptions, IAbortController, IFetcherService, Response } from '../common/fetcherService';
 import { IFetcher } from '../common/networking';
+import { fetchWithFallbacks } from '../node/fetcherFallback';
 import { NodeFetcher } from '../node/nodeFetcher';
 import { NodeFetchFetcher } from '../node/nodeFetchFetcher';
 import { ElectronFetcher } from './electronFetcher';
@@ -16,24 +17,39 @@ import { ElectronFetcher } from './electronFetcher';
 export class FetcherService implements IFetcherService {
 
 	declare readonly _serviceBrand: undefined;
-	private readonly _availableFetchers: IFetcher[];
-	private _fetcher: IFetcher;
+	private _availableFetchers: readonly IFetcher[] | undefined;
+	private _experimentationService: IExperimentationService | undefined;
 
 	constructor(
 		fetcher: IFetcher | undefined,
 		@ILogService private readonly _logService: ILogService,
-		@IEnvService envService: IEnvService,
-		@IConfigurationService configurationService: IConfigurationService,
+		@IEnvService private readonly _envService: IEnvService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
-		this._availableFetchers = fetcher ? [fetcher] : this._getFetchers(configurationService, envService);
-		this._fetcher = this._availableFetchers[0];
+		this._availableFetchers = fetcher ? [fetcher] : undefined;
 	}
 
-	private _getFetchers(configurationService: IConfigurationService, envService: IEnvService): IFetcher[] {
-		const useElectronFetcher = configurationService.getConfig(ConfigKey.Shared.DebugUseElectronFetcher);
+	setExperimentationService(experimentationService: IExperimentationService) {
+		this._experimentationService = experimentationService;
+	}
+
+	private _getAvailableFetchers(): readonly IFetcher[] {
+		if (!this._availableFetchers) {
+			if (!this._experimentationService) {
+				this._logService.info('FetcherService: Experimentation service not available yet, using default fetcher configuration.');
+			} else {
+				this._logService.debug('FetcherService: Using experimentation service to determine fetcher configuration.');
+			}
+			this._availableFetchers = this._getFetchers(this._configurationService, this._experimentationService, this._envService);
+		}
+		return this._availableFetchers;
+	}
+
+	private _getFetchers(configurationService: IConfigurationService, experimentationService: IExperimentationService | undefined, envService: IEnvService): IFetcher[] {
+		const useElectronFetcher = getShadowedConfig<boolean>(configurationService, experimentationService, ConfigKey.Shared.DebugUseElectronFetcher, ConfigKey.Internal.DebugExpUseElectronFetcher);
 		const electronFetcher = ElectronFetcher.create(envService);
-		const useNodeFetcher = !(useElectronFetcher && electronFetcher) && configurationService.getConfig(ConfigKey.Shared.DebugUseNodeFetcher); // Node https wins over Node fetch. (historical order)
-		const useNodeFetchFetcher = !(useElectronFetcher && electronFetcher) && !useNodeFetcher && configurationService.getConfig(ConfigKey.Shared.DebugUseNodeFetchFetcher);
+		const useNodeFetcher = !(useElectronFetcher && electronFetcher) && getShadowedConfig<boolean>(configurationService, experimentationService, ConfigKey.Shared.DebugUseNodeFetcher, ConfigKey.Internal.DebugExpUseNodeFetcher); // Node https wins over Node fetch. (historical order)
+		const useNodeFetchFetcher = !(useElectronFetcher && electronFetcher) && !useNodeFetcher && getShadowedConfig<boolean>(configurationService, experimentationService, ConfigKey.Shared.DebugUseNodeFetchFetcher, ConfigKey.Internal.DebugExpUseNodeFetchFetcher);
 
 		const fetchers = [];
 		if (electronFetcher) {
@@ -68,108 +84,49 @@ export class FetcherService implements IFetcherService {
 	}
 
 	getUserAgentLibrary(): string {
-		return this._fetcher.getUserAgentLibrary();
+		return this._getAvailableFetchers()[0].getUserAgentLibrary();
 	}
 
 	async fetch(url: string, options: FetchOptions): Promise<Response> {
-		if (options.verifyJSONAndRetry && this._fetcher === this._availableFetchers[0] && this._availableFetchers.length > 1) {
-			let firstResponse: Response | undefined;
-			let firstError: any;
-			for (const fetcher of this._availableFetchers) {
-				try {
-					const res = await fetcher.fetch(url, options);
-					if (fetcher === this._availableFetchers[0]) {
-						firstResponse = res;
-					}
-					if (!res.ok) {
-						this._logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} failed with status: ${res.status} ${res.statusText}`);
-						continue;
-					}
-					const text = await res.text();
-					if (fetcher === this._availableFetchers[0]) {
-						// Update to unconsumed response
-						firstResponse = new Response(
-							res.status,
-							res.statusText,
-							res.headers,
-							async () => text,
-							async () => JSON.parse(text),
-							async () => Readable.from([text])
-						);
-					}
-					const json = JSON.parse(text); // Verify JSON
-					this._logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} succeeded`);
-					if (fetcher !== this._availableFetchers[0]) {
-						const retry = await this.retryFetchJSON(this._availableFetchers[0], url, options);
-						if ('res' in retry && retry.res.ok) {
-							return retry.res;
-						}
-						this._logService.info(`FetcherService: using ${fetcher.getUserAgentLibrary()} from now on`);
-						this._fetcher = fetcher;
-					}
-					return new Response(
-						res.status,
-						res.statusText,
-						res.headers,
-						async () => text,
-						async () => json,
-						async () => Readable.from([text])
-					);
-				} catch (err) {
-					if (fetcher === this._availableFetchers[0]) {
-						firstError = err;
-					}
-					this._logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} failed with error: ${err.message}`);
-				}
-			}
-			if (firstResponse) {
-				return firstResponse;
-			}
-			throw firstError;
+		const { response: res, updatedFetchers } = await fetchWithFallbacks(this._getAvailableFetchers(), url, options, this._logService);
+		if (updatedFetchers) {
+			this._availableFetchers = updatedFetchers;
 		}
-		return this._fetcher.fetch(url, options);
+		return res;
 	}
-	private async retryFetchJSON(fetcher: IFetcher, url: string, options: FetchOptions): Promise<{ res: Response } | { err: any }> {
-		try {
-			const res = await fetcher.fetch(url, options);
-			if (!res.ok) {
-				this._logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} failed with status: ${res.status} ${res.statusText}`);
-				return { res };
-			}
-			const text = await res.text();
-			const json = JSON.parse(text); // Verify JSON
-			this._logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} succeeded`);
-			return {
-				res: new Response(
-					res.status,
-					res.statusText,
-					res.headers,
-					async () => text,
-					async () => json,
-					async () => Readable.from([text])
-				)
-			};
-		} catch (err) {
-			this._logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} failed with error: ${err.message}`);
-			return { err };
-		}
-	}
+
 	disconnectAll(): Promise<unknown> {
-		return this._fetcher.disconnectAll();
+		return this._getAvailableFetchers()[0].disconnectAll();
 	}
 	makeAbortController(): IAbortController {
-		return this._fetcher.makeAbortController();
+		return this._getAvailableFetchers()[0].makeAbortController();
 	}
 	isAbortError(e: any): boolean {
-		return this._fetcher.isAbortError(e);
+		return this._getAvailableFetchers()[0].isAbortError(e);
 	}
 	isInternetDisconnectedError(e: any): boolean {
-		return this._fetcher.isInternetDisconnectedError(e);
+		return this._getAvailableFetchers()[0].isInternetDisconnectedError(e);
 	}
 	isFetcherError(e: any): boolean {
-		return this._fetcher.isFetcherError(e);
+		return this._getAvailableFetchers()[0].isFetcherError(e);
 	}
 	getUserMessageForFetcherError(err: any): string {
-		return this._fetcher.getUserMessageForFetcherError(err);
+		return this._getAvailableFetchers()[0].getUserMessageForFetcherError(err);
 	}
+}
+
+export function getShadowedConfig<T extends ExperimentBasedConfigType>(configurationService: IConfigurationService, experimentationService: IExperimentationService | undefined, configKey: Config<T>, expKey: ExperimentBasedConfig<T | undefined>): T {
+	if (!experimentationService) {
+		return configurationService.getConfig<T>(configKey);
+	}
+
+	const inspect = configurationService.inspectConfig<T>(configKey);
+	if (inspect?.globalValue !== undefined) {
+		return inspect.globalValue;
+	}
+	const expValue = configurationService.getExperimentBasedConfig(expKey, experimentationService);
+	if (expValue !== undefined) {
+		return expValue;
+	}
+	return configurationService.getConfig<T>(configKey);
 }

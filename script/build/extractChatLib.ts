@@ -411,6 +411,73 @@ class ChatLibExtractor {
 
 		await fs.promises.copyFile(srcPath, destPath);
 		console.log('Root package.json copied successfully!');
+
+		// Update chat-lib package.json dependencies
+		await this.updateChatLibDependencies();
+	}
+
+	private async updateChatLibDependencies(): Promise<void> {
+		console.log('Updating chat-lib package.json dependencies...');
+
+		const rootPackageJsonPath = path.join(REPO_ROOT, 'package.json');
+		const chatLibPackageJsonPath = path.join(CHAT_LIB_DIR, 'package.json');
+
+		// Read both package.json files
+		const rootPackageJson = JSON.parse(await fs.promises.readFile(rootPackageJsonPath, 'utf-8'));
+		const chatLibPackageJson = JSON.parse(await fs.promises.readFile(chatLibPackageJsonPath, 'utf-8'));
+
+		// Combine all dependencies and devDependencies from root
+		const rootDependencies = {
+			...(rootPackageJson.dependencies || {}),
+			...(rootPackageJson.devDependencies || {})
+		};
+
+		let updatedCount = 0;
+		let removedCount = 0;
+		const changes: string[] = [];
+
+		// Update existing dependencies in chat-lib with versions from root
+		for (const depType of ['dependencies', 'devDependencies']) {
+			if (chatLibPackageJson[depType]) {
+				const dependencyNames = Object.keys(chatLibPackageJson[depType]);
+
+				for (const depName of dependencyNames) {
+					if (rootDependencies[depName]) {
+						// Update version if it exists in root
+						const oldVersion = chatLibPackageJson[depType][depName];
+						const newVersion = rootDependencies[depName];
+
+						if (oldVersion !== newVersion) {
+							chatLibPackageJson[depType][depName] = newVersion;
+							changes.push(`  Updated ${depName}: ${oldVersion} → ${newVersion}`);
+							updatedCount++;
+						}
+					} else {
+						// Remove dependency if it no longer exists in root
+						delete chatLibPackageJson[depType][depName];
+						changes.push(`  Removed ${depName} (no longer in root package.json)`);
+						removedCount++;
+					}
+				}
+
+				// Clean up empty dependency objects
+				if (Object.keys(chatLibPackageJson[depType]).length === 0) {
+					delete chatLibPackageJson[depType];
+				}
+			}
+		}
+
+		// Write the updated chat-lib package.json
+		await fs.promises.writeFile(
+			chatLibPackageJsonPath,
+			JSON.stringify(chatLibPackageJson, null, '\t') + '\n'
+		);
+
+		console.log(`Chat-lib dependencies updated: ${updatedCount} updated, ${removedCount} removed`);
+		if (changes.length > 0) {
+			console.log('Changes made:');
+			changes.forEach(change => console.log(change));
+		}
 	}
 
 	private async compileTypeScript(): Promise<void> {

@@ -49,6 +49,7 @@ import { IntentInvocationMetadata } from './conversation';
 import { IDocumentContext } from './documentContext';
 import { IBuildPromptResult, IIntent, IIntentInvocation, IResponseProcessor } from './intents';
 import { ConversationalBaseTelemetryData, createTelemetryWithId, sendModelMessageTelemetry } from './telemetry';
+import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 
 export interface IDefaultIntentRequestHandlerOptions {
 	maxToolCallIterations: number;
@@ -551,6 +552,15 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 	protected override createPromptContext(availableTools: LanguageModelToolInformation[], outputStream: ChatResponseStream | undefined): Mutable<IBuildPromptContext> {
 		const context = super.createPromptContext(availableTools, outputStream);
 		this._handleVirtualCalls(context);
+
+		const extraVars = this.options.invocation.getAdditionalVariables?.(context);
+		if (extraVars?.hasVariables()) {
+			return {
+				...context,
+				chatVariables: ChatVariablesCollection.merge(context.chatVariables, extraVars),
+			};
+		}
+
 		return context;
 	}
 
@@ -693,6 +703,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 				conversationId: this.options.conversation.sessionId,
 				messageSource: this.options.intent?.id && this.options.intent.id !== UnknownIntent.ID ? `${messageSourcePrefix}.${this.options.intent.id}` : `${messageSourcePrefix}.user`,
 			},
+			enableRetryOnFilter: true
 		}, token);
 	}
 

@@ -90,6 +90,8 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { ExtensionTextDocumentManager } from '../../../platform/workspace/vscode/workspaceServiceImpl';
 import { IInstantiationServiceBuilder } from '../../../util/common/services';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
+import { IMergeConflictService } from '../../git/common/mergeConflictService';
+import { MergeConflictServiceImpl } from '../../git/vscode/mergeConflictServiceImpl';
 import { ILaunchConfigService } from '../../onboardDebug/common/launchConfigService';
 import { LaunchConfigService } from '../../onboardDebug/vscode/launchConfigService';
 import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
@@ -167,4 +169,5 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IEmbeddingsComputer, new SyncDescriptor(RemoteEmbeddingsComputer));
 	builder.define(IToolGroupingService, new SyncDescriptor(ToolGroupingService));
 	builder.define(IToolGroupingCache, new SyncDescriptor(ToolGroupingCache));
+	builder.define(IMergeConflictService, new SyncDescriptor(MergeConflictServiceImpl));
 }

@@ -70,10 +70,73 @@ export interface IToolsService {
 	getEnabledTools(request: vscode.ChatRequest, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[];
 }
 
+/**
+ * Navigates to a property in an object using a JSON Pointer path (RFC6901).
+ * Returns an object with the parent container and property name, or null if the path is invalid.
+ */
+function getObjectPropertyByPath(obj: any, jsonPointerPath: string): { parent: any; propertyName: string } | null {
+	// Parse the JSON Pointer path (RFC6901)
+	const pathSegments = jsonPointerPath.split('/').slice(1); // Remove empty first element from leading '/'
+
+	if (pathSegments.length === 0) {
+		return null;
+	}
+
+	// Navigate to the parent object
+	let current: any = obj;
+	for (let i = 0; i < pathSegments.length - 1; i++) {
+		const segment = pathSegments[i];
+		if (current && typeof current === 'object' && Object.prototype.hasOwnProperty.call(current, segment)) {
+			current = current[segment];
+		} else {
+			return null;
+		}
+	}
+
+	if (current && typeof current === 'object') {
+		const propertyName = pathSegments[pathSegments.length - 1];
+		return { parent: current, propertyName };
+	}
+
+	return null;
+}
+
 function ajvValidateForTool(toolName: string, fn: ValidateFunction, inputObj: unknown): IToolValidationResult {
 	// Empty output can be valid when the schema only has optional properties
 	if (fn(inputObj ?? {})) {
 		return { inputObj };
+	}
+
+	// Check if validation failed because we have JSON strings where objects are expected
+	if (fn.errors && typeof inputObj === 'object' && inputObj !== null) {
+		let hasNestedJsonStrings = false;
+		for (const error of fn.errors) {
+			// Check if the error is about expecting an object but getting a string
+			const isObjError = error.keyword === 'type' && error.params?.type === 'object' && error.instancePath;
+			if (!isObjError) {
+				continue;
+			}
+
+			const pathInfo = getObjectPropertyByPath(inputObj, error.instancePath);
+			if (pathInfo) {
+				const { parent, propertyName } = pathInfo;
+				const value = parent[propertyName];
+
+				try {
+					const parsedValue = JSON.parse(value);
+					if (typeof parsedValue === 'object' && parsedValue !== null) {
+						parent[propertyName] = parsedValue;
+						hasNestedJsonStrings = true;
+					}
+				} catch {
+					// If parsing fails, keep the original value
+				}
+			}
+		}
+
+		if (hasNestedJsonStrings) {
+			return ajvValidateForTool(toolName, fn, inputObj);
+		}
 	}
 
 	const errors = fn.errors!.map(e => e.message || `${e.instancePath} is invalid}`);

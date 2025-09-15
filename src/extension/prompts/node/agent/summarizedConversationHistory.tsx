@@ -39,7 +39,7 @@ import { AgentPrompt, AgentPromptProps, AgentUserMessage, getUserMessagePropsFro
 import { SimpleSummarizedHistory } from './simpleSummarizedHistoryPrompt';
 
 export interface ConversationHistorySummarizationPromptProps extends SummarizedAgentHistoryProps {
-	simpleMode?: boolean;
+	readonly simpleMode?: boolean;
 }
 
 const SummaryPrompt = <>
@@ -188,7 +188,7 @@ class WorkingNotebookSummary extends PromptElement<NotebookSummaryProps> {
 }
 
 export interface NotebookSummaryProps extends BasePromptElementProps {
-	notebook: NotebookDocument;
+	readonly notebook: NotebookDocument;
 }
 
 /**
@@ -489,11 +489,18 @@ class ConversationHistorySummarizer {
 				stripCacheBreakpoints(summarizationPrompt);
 			}
 
-			summaryResponse = await endpoint.makeChatRequest(`summarizeConversationHistory-${mode}`, ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt), undefined, this.token ?? CancellationToken.None, ChatLocation.Other, undefined, {
-				temperature: 0,
-				stream: false,
-				...toolOpts
-			});
+			summaryResponse = await endpoint.makeChatRequest2({
+				debugName: `summarizeConversationHistory-${mode}`,
+				messages: ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt),
+				finishedCb: undefined,
+				location: ChatLocation.Other,
+				requestOptions: {
+					temperature: 0,
+					stream: false,
+					...toolOpts
+				},
+				enableRetryOnFilter: true
+			}, this.token ?? CancellationToken.None);
 		} catch (e) {
 			this.logInfo(`Error from summarization request. ${e.message}`, mode);
 			this.sendSummarizationTelemetry('requestThrow', '', this.props.endpoint.model, mode, stopwatch.elapsed(), undefined);
@@ -634,8 +641,8 @@ function stripCacheBreakpoints(messages: ChatMessage[]): void {
 }
 
 export interface ISummarizedConversationHistoryInfo {
-	props: SummarizedAgentHistoryProps;
-	summarizedToolCallRoundId: string;
+	readonly props: SummarizedAgentHistoryProps;
+	readonly summarizedToolCallRoundId: string;
 }
 
 /**
@@ -707,8 +714,8 @@ export class SummarizedConversationHistoryPropsBuilder {
 }
 
 interface SummaryMessageProps extends BasePromptElementProps {
-	summaryText: string;
-	endpoint: IChatEndpoint;
+	readonly summaryText: string;
+	readonly endpoint: IChatEndpoint;
 }
 
 class SummaryMessageElement extends PromptElement<SummaryMessageProps> {

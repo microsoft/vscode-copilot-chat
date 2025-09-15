@@ -14,7 +14,6 @@ import { getGithubMetadataHeaders } from '../../chunking/common/chunkingEndpoint
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { EmbeddingType } from '../../embeddings/common/embeddingsComputer';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
-import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
@@ -44,7 +43,6 @@ export class GithubAvailableEmbeddingTypesManager {
 		@ILogService private readonly _logService: ILogService,
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-		@IDomainService private readonly _domainService: IDomainService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IEnvService private readonly _envService: IEnvService,
 		@IFetcherService private readonly _fetcherService: IFetcherService,
@@ -103,9 +101,7 @@ export class GithubAvailableEmbeddingTypesManager {
 		try {
 			response = await getRequest(
 				this._fetcherService,
-				this._envService,
 				this._telemetryService,
-				this._domainService,
 				this._capiClientService,
 				{ type: RequestType.EmbeddingsModels },
 				token,

@@ -35,7 +35,7 @@ import { IToolsService } from '../common/toolsService';
 import { ActionType } from './applyPatch/parser';
 import { CorrectedEditResult, healReplaceStringParams } from './editFileHealing';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
-import { EditError, NoChangeError, NoMatchError, applyEdit, createEditConfirmation } from './editFileToolUtils';
+import { EditError, NoChangeError, NoMatchError, applyEdit, canExistingFileBeEdited, createEditConfirmation } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileNotContentExcluded, resolveToolInputPath } from './toolUtils';
 
@@ -96,7 +96,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		}
 
 		// Sometimes the model replaces an empty string in a new file to create it. Allow that pattern.
-		const exists = await this.fileSystemService.stat(uri).then(() => true, () => false);
+		const exists = await this.instantiationService.invokeFunction(canExistingFileBeEdited, uri);
 		if (!exists) {
 			return {
 				uri,
