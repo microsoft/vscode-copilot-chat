@@ -37,6 +37,16 @@ function guessLineType(line: string): GuessedLineType {
 		return GuessedLineType.Code;
 	}
 
+	// If the line starts with a '#' followed by a space, it's possibly markdown header
+	// A popular exception is if the line contains C/C++ preprocessor directives
+	if (line.match(/^#+ .+$/)) {
+		const commonCppDirectives = ['# include', '# define', '# ifdef', '# ifndef', '# endif', '# pragma', '# if', '# else', '# elif', '# undef', '# error', '# line', '# warning'];
+		// If line does not contain any # directives used in C, C++.
+		if (!commonCppDirectives.some(directive => line.trim().startsWith(directive))) {
+			return GuessedLineType.NaturalLanguage;
+		}
+	}
+
 	// Natural Language Hints
 	{
 		// if the first character is upper-case
