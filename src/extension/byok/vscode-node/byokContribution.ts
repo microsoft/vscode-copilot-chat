@@ -90,6 +90,7 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			knownModels = {};
 		} else {
 			knownModels = data.modelInfo;
+			this._logService.logger.info(`BYOK: Available providers in known models: ${Object.keys(knownModels).join(', ')}`);
 		}
 		this._logService.info('BYOK: Copilot Chat known models list fetched successfully.');
 		return knownModels;
