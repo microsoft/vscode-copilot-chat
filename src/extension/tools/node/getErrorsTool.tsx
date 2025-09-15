@@ -13,8 +13,10 @@ import { IPromptPathRepresentationService } from '../../../platform/prompts/comm
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { getLanguage } from '../../../util/common/languages';
 import { isLocation } from '../../../util/common/types';
+import { coalesce } from '../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { isEqualOrParent } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { DiagnosticSeverity, ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, MarkdownString, Range } from '../../../vscodeTypes';
@@ -26,8 +28,6 @@ import { DiagnosticContext, Diagnostics } from '../../prompts/node/inline/diagno
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { checkCancellation, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
-import { coalesce } from '../../../util/vs/base/common/arrays';
-import { isEqualOrParent } from '../../../util/vs/base/common/resources';
 
 interface IGetErrorsParams {
 	// Note that empty array is not the same as absence; empty array
@@ -52,9 +52,9 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 	}
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IGetErrorsParams>, token: CancellationToken) {
-		const getAll = () => this.languageDiagnosticsService.getAllDiagnostics()
+		// Fetch and filter all diagnostics once so we don't call getAllDiagnostics multiple times
+		const allDiagnostics = this.languageDiagnosticsService.getAllDiagnostics()
 			.map(d => ({ uri: d[0], diagnostics: d[1].filter(e => e.severity <= DiagnosticSeverity.Warning) }))
-			// filter any documents w/o warnings or errors
 			.filter(d => d.diagnostics.length > 0);
 
 		const getSome = async (filePaths: string[]) => {
@@ -77,20 +77,14 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 				}
 
 				if (isDirectory) {
-					// Get all diagnostics and filter for files in this directory
+					// Filter pre-fetched diagnostics for files in this directory
 					this.logService.info(`Getting diagnostics for directory: ${filePath}`);
-					const allDiagnostics = this.languageDiagnosticsService.getAllDiagnostics();
-					
-					for (const [fileUri, fileDiagnostics] of allDiagnostics) {
-						// Check if this file is under the directory
+					for (const { uri: fileUri, diagnostics: fileDiagnostics } of allDiagnostics) {
 						if (isEqualOrParent(fileUri, uri)) {
-							const filteredDiagnostics = fileDiagnostics.filter(d => d.severity <= DiagnosticSeverity.Warning);
-							if (filteredDiagnostics.length > 0) {
-								results.push({
-									diagnostics: filteredDiagnostics,
-									uri: fileUri,
-								});
-							}
+							results.push({
+								diagnostics: fileDiagnostics,
+								uri: fileUri,
+							});
 						}
 					}
 				} else {
@@ -110,7 +104,7 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 			return results;
 		};
 
-		const ds = options.input.filePaths?.length ? await getSome(options.input.filePaths) : getAll();
+		const ds = options.input.filePaths?.length ? await getSome(options.input.filePaths) : allDiagnostics;
 
 		const diagnostics = coalesce(await Promise.all(ds.map((async ({ uri, diagnostics }) => {
 			try {
