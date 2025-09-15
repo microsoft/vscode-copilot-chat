@@ -6,7 +6,7 @@
 
 import type { CancellationToken, OpenDialogOptions, QuickPickItem, QuickPickOptions, Selection, TextEditor, Uri } from 'vscode';
 import { IInstantiationServiceBuilder, ServiceIdentifier } from '../../../util/common/services';
-import { IDisposable } from '../../../util/vs/base/common/lifecycle';
+import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { InstantiationService } from '../../../util/vs/platform/instantiation/common/instantiationService';
@@ -226,9 +226,9 @@ export function _createBaselineServices(): TestingServiceCollection {
 /**
  * @returns an accessor suitable for simulation and unit tests.
  */
-export function createPlatformServices(): TestingServiceCollection {
+export function createPlatformServices(disposables: Pick<DisposableStore, 'add'> = new DisposableStore()): TestingServiceCollection {
 	const testingServiceCollection = _createBaselineServices();
-	testingServiceCollection.define(IConfigurationService, new SyncDescriptor(InMemoryConfigurationService, [new DefaultsOnlyConfigurationService()]));
+	testingServiceCollection.define(IConfigurationService, new SyncDescriptor(InMemoryConfigurationService, [disposables.add(new DefaultsOnlyConfigurationService())]));
 	testingServiceCollection.define(IEnvService, new SyncDescriptor(NullEnvService));
 	testingServiceCollection.define(INativeEnvService, new SyncDescriptor(NullNativeEnvService));
 	testingServiceCollection.define(ITelemetryService, new SyncDescriptor(NullTelemetryService));

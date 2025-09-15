@@ -9928,9 +9928,9 @@
   {
     "name": "setupTests - recommend [panel] - goWebApp",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "setupTests - recommend [panel] - javaSpringApp",

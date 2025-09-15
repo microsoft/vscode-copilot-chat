@@ -400,6 +400,11 @@ You can run the extension from Code OSS Desktop, provided that you follow along 
       "completionsAdvancedSetting": "github.copilot.advanced",
       "completionsEnablementSetting": "github.copilot.enable",
       "nextEditSuggestionsSetting": "github.copilot.nextEditSuggestions.enabled"
+   },
+   "trustedExtensionAuthAccess": {
+      "github": [
+         "github.copilot-chat"
+      ]
    }
 }
 ```
@@ -480,6 +485,11 @@ Object.assign(product, {
 			'completionsAdvancedSetting': 'github.copilot.advanced',
 			'completionsEnablementSetting': 'github.copilot.enable',
 			'nextEditSuggestionsSetting': 'github.copilot.nextEditSuggestions.enabled'
+		},
+		trustedExtensionAuthAccess: {
+			'github': [
+				'github.copilot-chat'
+			]
 		}
 	});
 }

@@ -20,7 +20,7 @@ import { CancellationToken } from '../src/_internal/util/vs/base/common/cancella
 import { URI } from '../src/_internal/util/vs/base/common/uri';
 import { StringEdit } from '../src/_internal/util/vs/editor/common/core/edits/stringEdit';
 import { OffsetRange } from '../src/_internal/util/vs/editor/common/core/ranges/offsetRange';
-import { createNESProvider } from '../src/main';
+import { createNESProvider, ITelemetrySender } from '../src/main';
 import { ICopilotTokenManager } from '../src/_internal/platform/authentication/common/copilotTokenManager';
 import { Emitter } from '../src/_internal/util/vs/base/common/event';
 import { CopilotToken } from '../src/_internal/platform/authentication/common/copilotToken';
@@ -96,11 +96,16 @@ class TestCopilotTokenManager implements ICopilotTokenManager {
     }
 }
 
+class TestTelemetrySender implements ITelemetrySender {
+	sendTelemetryEvent(eventName: string, properties?: Record<string, string | undefined>, measurements?: Record<string, number | undefined>): void {
+		// No-op
+	}
+}
 
 describe('NESProvider Facade', () => {
 	it('should handle getNextEdit call with a document URI', async () => {
-		const obsWorkspace = new MutableObservableWorkspace();
-		const doc = obsWorkspace.addDocument({
+		const workspace = new MutableObservableWorkspace();
+		const doc = workspace.addDocument({
 			id: DocumentId.create(URI.file('/test/test.ts').toString()),
 			initialValue: outdent`
 			class Point {
@@ -116,11 +121,12 @@ describe('NESProvider Facade', () => {
 			const myPoint = new Point(0, 1);`.trimStart()
 		});
 		doc.setSelection([new OffsetRange(1, 1)], undefined);
-		const nextEditProvider = createNESProvider(
-			obsWorkspace,
-			new TestFetcher({ '/chat/completions': await fs.readFile(path.join(__dirname, 'nesProvider.reply.txt'), 'utf8') }),
-			new TestCopilotTokenManager(),
-		);
+		const nextEditProvider = createNESProvider({
+			workspace,
+			fetcher: new TestFetcher({ '/chat/completions': await fs.readFile(path.join(__dirname, 'nesProvider.reply.txt'), 'utf8') }),
+			copilotTokenManager: new TestCopilotTokenManager(),
+			telemetrySender: new TestTelemetrySender(),
+		});
 
 		doc.applyEdit(StringEdit.insert(11, '3D'));
 

@@ -10,7 +10,7 @@ import { DefaultsOnlyConfigurationService } from '../../../../platform/configura
 import { InMemoryConfigurationService } from '../../../../platform/configuration/test/common/inMemoryConfigurationService';
 import { IIgnoreService, NullIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { DocumentFilter } from '../../vscode-node/parts/vscodeWorkspace';
+import { DocumentFilter } from '../../vscode-node/parts/documentFilter';
 
 describe('DocumentFilter', () => {
 

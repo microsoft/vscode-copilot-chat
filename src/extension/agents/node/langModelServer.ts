@@ -17,8 +17,8 @@ import { AnthropicAdapterFactory } from './adapters/anthropicAdapter';
 import { IAgentStreamBlock, IProtocolAdapter, IProtocolAdapterFactory, IStreamingContext } from './adapters/types';
 
 export interface ILanguageModelServerConfig {
-	port: number;
-	nonce: string;
+	readonly port: number;
+	readonly nonce: string;
 }
 
 export class LanguageModelServer {
@@ -178,8 +178,8 @@ export class LanguageModelServer {
 
 				const userInitiatedRequest = parsedRequest.messages.at(-1)?.role === Raw.ChatRole.User;
 				const fetchResult = await selectedEndpoint.makeChatRequest2({
-					debugName: 'agentLanguageModelServer',
-					messages: parsedRequest.messages,
+					debugName: 'agentLMServer' + (parsedRequest.type ? `-${parsedRequest.type}` : ''),
+					messages: parsedRequest.messages as Raw.ChatMessage[],
 					finishedCb: async (_fullText, _index, delta) => {
 						if (tokenSource.token.isCancellationRequested) {
 							return 0; // stop
@@ -297,7 +297,10 @@ export class LanguageModelServer {
 			this.server.listen(0, '127.0.0.1', () => {
 				const address = this.server.address();
 				if (address && typeof address === 'object') {
-					this.config.port = address.port;
+					this.config = {
+						...this.config,
+						port: address.port
+					};
 					this.logService.trace(`Language Model Server started on http://localhost:${this.config.port}`);
 					resolve();
 				}

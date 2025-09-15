@@ -8,6 +8,7 @@ import { BasePromptElementProps, PromptElement, PromptPiece, PromptSizing, UserM
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { extractNotebookOutline, INotebookOutline } from '../../../util/common/notebooks';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
@@ -23,7 +24,6 @@ import { NewNotebookCodeGenerationPromptState, NewNotebookPlanningPrompt } from 
 import { NotebookXmlFormatPrompt } from '../../prompts/node/panel/notebookEditCodePrompt';
 import { ToolName } from '../common/toolNames';
 import { CopilotToolMode, ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 
 export class NewNotebookTool implements ICopilotTool<IBuildPromptContext> {
 	// Make sure this matches the name in the ToolName enum and package.json
@@ -70,13 +70,13 @@ export class NewNotebookTool implements ICopilotTool<IBuildPromptContext> {
 				}
 			);
 			outcome = 'failedToMakePlanningRequest';
-			const planningResponse = await planningEndpoint.makeChatRequest(
-				'notebookPlanning',
-				planningMessages,
-				undefined,
-				token,
-				ChatLocation.Panel
-			);
+			const planningResponse = await planningEndpoint.makeChatRequest2({
+				debugName: 'notebookPlanning',
+				messages: planningMessages,
+				finishedCb: undefined,
+				location: ChatLocation.Panel,
+				enableRetryOnFilter: true
+			}, token);
 			if (planningResponse.type !== ChatFetchResponseType.Success) {
 				this.sendTelemetry('planningFailed', options);
 				return new LanguageModelToolResult([

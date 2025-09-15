@@ -51,8 +51,7 @@ import { IRequestLogger } from '../../platform/requestLogger/node/requestLogger'
 import { ISimulationTestContext, NulSimulationTestContext } from '../../platform/simulationTestContext/common/simulationTestContext';
 import { ISnippyService, NullSnippyService } from '../../platform/snippy/common/snippyService';
 import { IExperimentationService, NullExperimentationService } from '../../platform/telemetry/common/nullExperimentationService';
-import { NullTelemetryService } from '../../platform/telemetry/common/nullTelemetryService';
-import { ITelemetryService } from '../../platform/telemetry/common/telemetry';
+import { ITelemetryService, TelemetryDestination, TelemetryEventMeasurements, TelemetryEventProperties } from '../../platform/telemetry/common/telemetry';
 import { ITokenizerProvider, TokenizerProvider } from '../../platform/tokenizer/node/tokenizer';
 import { IWorkspaceService, NullWorkspaceService } from '../../platform/workspace/common/workspaceService';
 import { InstantiationServiceBuilder } from '../../util/common/services';
@@ -61,11 +60,22 @@ import { Disposable } from '../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../util/vs/base/common/uuid';
 import { SyncDescriptor } from '../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../util/vs/platform/instantiation/common/instantiation';
+import { eventPropertiesToSimpleObject } from '../../platform/telemetry/common/telemetryData';
 
+export interface ITelemetrySender {
+	sendTelemetryEvent(eventName: string, properties?: Record<string, string | undefined>, measurements?: Record<string, number | undefined>): void;
+}
 
-export function createNESProvider(workspace: ObservableWorkspace, fetcher: IFetcher, copilotTokenManager: ICopilotTokenManager): INESProvider {
-	const instantiationService = setupServices(fetcher, copilotTokenManager);
-	return instantiationService.createInstance(NESProvider, workspace);
+export interface INESProviderOptions {
+	readonly workspace: ObservableWorkspace;
+	readonly fetcher: IFetcher;
+	readonly copilotTokenManager: ICopilotTokenManager;
+	readonly telemetrySender: ITelemetrySender;
+}
+
+export function createNESProvider(options: INESProviderOptions): INESProvider {
+	const instantiationService = setupServices(options);
+	return instantiationService.createInstance(NESProvider, options);
 }
 
 class NESProvider extends Disposable implements INESProvider {
@@ -73,7 +83,7 @@ class NESProvider extends Disposable implements INESProvider {
 	private readonly _debugRecorder: DebugRecorder;
 
 	constructor(
-		private _workspace: ObservableWorkspace,
+		private _options: INESProviderOptions,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
@@ -82,12 +92,12 @@ class NESProvider extends Disposable implements INESProvider {
 		super();
 		const statelessNextEditProvider = instantiationService.createInstance(XtabProvider);
 		const git = instantiationService.createInstance(ObservableGit);
-		const historyContextProvider = new NesHistoryContextProvider(this._workspace, git);
+		const historyContextProvider = new NesHistoryContextProvider(this._options.workspace, git);
 		const xtabDiffNEntries = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffNEntries, this._expService);
-		const xtabHistoryTracker = new NesXtabHistoryTracker(this._workspace, xtabDiffNEntries);
-		this._debugRecorder = this._register(new DebugRecorder(this._workspace));
+		const xtabHistoryTracker = new NesXtabHistoryTracker(this._options.workspace, xtabDiffNEntries);
+		this._debugRecorder = this._register(new DebugRecorder(this._options.workspace));
 
-		this._nextEditProvider = instantiationService.createInstance(NextEditProvider, this._workspace, statelessNextEditProvider, historyContextProvider, xtabHistoryTracker, this._debugRecorder);
+		this._nextEditProvider = instantiationService.createInstance(NextEditProvider, this._options.workspace, statelessNextEditProvider, historyContextProvider, xtabHistoryTracker, this._debugRecorder);
 	}
 
 	getId(): string {
@@ -125,7 +135,7 @@ class NESProvider extends Disposable implements INESProvider {
 		// Create log context
 		const logContext = new InlineEditRequestLogContext(documentUri.toString(), 1, context);
 
-		const document = this._workspace.getDocument(docId);
+		const document = this._options.workspace.getDocument(docId);
 		if (!document) {
 			throw new Error('DocumentNotFound');
 		}
@@ -155,7 +165,8 @@ export interface INESProvider {
 	dispose(): void;
 }
 
-function setupServices(fetcher: IFetcher, copilotTokenManager: ICopilotTokenManager) {
+function setupServices(options: INESProviderOptions) {
+	const { fetcher, copilotTokenManager, telemetrySender } = options;
 	const builder = new InstantiationServiceBuilder();
 	builder.define(IConfigurationService, new SyncDescriptor(DefaultsOnlyConfigurationService));
 	builder.define(IExperimentationService, new SyncDescriptor(NullExperimentationService));
@@ -173,7 +184,7 @@ function setupServices(fetcher: IFetcher, copilotTokenManager: ICopilotTokenMana
 	builder.define(ICopilotTokenStore, new SyncDescriptor(CopilotTokenStore));
 	builder.define(IEnvService, new SyncDescriptor(NullEnvService));
 	builder.define(IFetcherService, new SyncDescriptor(SingleFetcherService, [fetcher]));
-	builder.define(ITelemetryService, new SyncDescriptor(NullTelemetryService));
+	builder.define(ITelemetryService, new SyncDescriptor(SimpleTelemetryService, [telemetrySender]));
 	builder.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [getStaticGitHubToken]));
 	builder.define(ICopilotTokenManager, copilotTokenManager);
 	builder.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
@@ -223,5 +234,56 @@ class SingleFetcherService implements IFetcherService {
 	}
 	getUserMessageForFetcherError(err: any): string {
 		return this._fetcher.getUserMessageForFetcherError(err);
+	}
+}
+
+class SimpleTelemetryService implements ITelemetryService {
+	declare readonly _serviceBrand: undefined;
+
+	constructor(private readonly _telemetrySender: ITelemetrySender) { }
+
+	dispose(): void {
+		return;
+	}
+
+	sendInternalMSFTTelemetryEvent(eventName: string, properties?: TelemetryEventProperties | undefined, measurements?: TelemetryEventMeasurements | undefined): void {
+		return;
+	}
+	sendMSFTTelemetryEvent(eventName: string, properties?: TelemetryEventProperties | undefined, measurements?: TelemetryEventMeasurements | undefined): void {
+		return;
+	}
+	sendMSFTTelemetryErrorEvent(eventName: string, properties?: TelemetryEventProperties | undefined, measurements?: TelemetryEventMeasurements | undefined): void {
+		return;
+	}
+	sendGHTelemetryEvent(eventName: string, properties?: TelemetryEventProperties | undefined, measurements?: TelemetryEventMeasurements | undefined): void {
+		this._telemetrySender.sendTelemetryEvent(eventName, eventPropertiesToSimpleObject(properties), measurements);
+	}
+	sendGHTelemetryErrorEvent(eventName: string, properties?: TelemetryEventProperties | undefined, measurements?: TelemetryEventMeasurements | undefined): void {
+		return;
+	}
+	sendGHTelemetryException(maybeError: unknown, origin: string): void {
+		return;
+	}
+	sendTelemetryEvent(eventName: string, destination: TelemetryDestination, properties?: TelemetryEventProperties | undefined, measurements?: TelemetryEventMeasurements | undefined): void {
+		return;
+	}
+	sendTelemetryErrorEvent(eventName: string, destination: TelemetryDestination, properties?: TelemetryEventProperties | undefined, measurements?: TelemetryEventMeasurements | undefined): void {
+		return;
+	}
+	setSharedProperty(name: string, value: string): void {
+		return;
+	}
+	setAdditionalExpAssignments(expAssignments: string[]): void {
+		return;
+	}
+	postEvent(eventName: string, props: Map<string, string>): void {
+		return;
+	}
+
+	sendEnhancedGHTelemetryEvent(eventName: string, properties?: TelemetryEventProperties | undefined, measurements?: TelemetryEventMeasurements | undefined): void {
+		return;
+	}
+	sendEnhancedGHTelemetryErrorEvent(eventName: string, properties?: TelemetryEventProperties | undefined, measurements?: TelemetryEventMeasurements | undefined): void {
+		return;
 	}
 }

@@ -744,6 +744,10 @@ export class TestingGitService implements IGitService {
 	async fetch(uri: URI, remote?: string, ref?: string, depth?: number): Promise<void> {
 		return;
 	}
+
+	async getMergeBase(uri: URI, ref1: string, ref2: string): Promise<string | undefined> {
+		return undefined;
+	}
 }
 
 export class TestingTerminalService extends Disposable implements ITerminalService {

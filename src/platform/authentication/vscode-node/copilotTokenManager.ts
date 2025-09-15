@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { window } from 'vscode';
+import { env, window } from 'vscode';
 import { TaskSingler } from '../../../util/common/taskSingler';
 import { IConfigurationService } from '../../configuration/common/configurationService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
@@ -58,19 +58,34 @@ export class VSCodeCopilotTokenManager extends BaseCopilotTokenManager {
 	}
 
 	private async _auth(): Promise<TokenInfoOrError> {
+		const allowNoAuthAccess = this.configurationService.getNonExtensionConfig<boolean>('chat.allowAnonymousAccess');
 		const session = await getAnyAuthSession(this.configurationService, { silent: true });
-		if (!session) {
+		if (!session && !allowNoAuthAccess) {
 			this._logService.warn('GitHub login failed');
 			this._telemetryService.sendGHTelemetryErrorEvent('auth.github_login_failed');
 			return { kind: 'failure', reason: 'GitHubLoginFailed' };
 		}
-		// Log the steps by default, but only log actual token values when the log level is set to debug.
-		this._logService.info(`Logged in as ${session.account.label}`);
-		const tokenResult = await this.authFromGitHubToken(session.accessToken, session.account.label);
-		if (tokenResult.kind === 'success') {
-			this._logService.info(`Got Copilot token for ${session.account.label}`);
+		if (session) {
+			// Log the steps by default, but only log actual token values when the log level is set to debug.
+			this._logService.info(`Logged in as ${session.account.label}`);
+			const tokenResult = await this.authFromGitHubToken(session.accessToken, session.account.label);
+			if (tokenResult.kind === 'success') {
+				this._logService.info(`Got Copilot token for ${session.account.label}`);
+				this._logService.info(`Copilot Chat: ${this._envService.getVersion()}, VS Code: ${this._envService.vscodeVersion}`);
+			}
+			return tokenResult;
+		} else {
+			this._logService.info(`Allowing anonymous access with devDeviceId`);
+			const tokenResult = await this.authFromDevDeviceId(env.devDeviceId);
+			if (tokenResult.kind === 'success') {
+				this._logService.info(`Got Copilot token for devDeviceId`);
+				this._logService.info(`Copilot Chat: ${this._envService.getVersion()}, VS Code: ${this._envService.vscodeVersion}`);
+			} else {
+				this._logService.warn('GitHub login failed');
+				return { kind: 'failure', reason: 'GitHubLoginFailed' };
+			}
+			return tokenResult;
 		}
-		return tokenResult;
 	}
 
 	private async _authShowWarnings(): Promise<ExtendedTokenInfo> {

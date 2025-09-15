@@ -18,11 +18,12 @@ import * as glob from '../../../util/vs/base/common/glob';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { isWindows } from '../../../util/vs/base/common/platform';
-import { normalizePath, relativePath } from '../../../util/vs/base/common/resources';
+import { extUriBiasedIgnorePathCase, normalizePath, relativePath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
 import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { EndOfLine, MarkdownString, Position, Range, TextEdit } from '../../../vscodeTypes';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 
 // Simplified Hunk type for the patch
 interface Hunk {
@@ -589,7 +590,7 @@ function makeUriConfirmationChecker(configuration: IConfigurationService, worksp
 
 	function checkUri(uri: URI) {
 		const workspaceFolder = workspaceService.getWorkspaceFolder(uri);
-		if (!workspaceFolder && !customInstructionsService.isExternalInstructionsFile(uri)) {
+		if (!workspaceFolder && !customInstructionsService.isExternalInstructionsFile(uri) && uri.scheme !== Schemas.untitled) {
 			return ConfirmationCheckResult.OutsideWorkspace;
 		}
 
@@ -655,4 +656,15 @@ export async function createEditConfirmation(accessor: ServicesAccessor, uris: r
 			),
 		}
 	};
+}
+
+/** Returns whether the file can be edited. This is true if the file exists or it's opened (e.g. untitled files) */
+export function canExistingFileBeEdited(accessor: ServicesAccessor, uri: URI): Promise<boolean> {
+	const workspace = accessor.get(IWorkspaceService);
+	if (workspace.textDocuments.some(d => extUriBiasedIgnorePathCase.isEqual(d.uri, uri))) {
+		return Promise.resolve(true);
+	}
+
+	const fileSystemService = accessor.get(IFileSystemService);
+	return fileSystemService.stat(uri).then(() => true, () => false);
 }

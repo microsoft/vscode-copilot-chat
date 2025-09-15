@@ -77,6 +77,10 @@ export class ClaudeChatSessionItemProvider extends Disposable implements vscode.
 		super();
 	}
 
+	public refresh(): void {
+		this._onDidChangeChatSessionItems.fire();
+	}
+
 	public async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
 		const sessions = await this.claudeCodeSessionService.getAllSessions(token);
 		// const newSessions: vscode.ChatSessionItem[] = Array.from(this.sessionStore.getUnresolvedSessions().values()).map(session => ({

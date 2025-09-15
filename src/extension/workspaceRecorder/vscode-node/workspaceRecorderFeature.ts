@@ -21,7 +21,7 @@ import { Schemas } from '../../../util/vs/base/common/network';
 import { autorun, autorunWithStore, derived, observableFromEvent, observableSignal, waitForState } from '../../../util/vs/base/common/observable';
 import { basename, join } from '../../../util/vs/base/common/path';
 import { startsWithIgnoreCase } from '../../../util/vs/base/common/strings';
-import { editFromTextDocumentContentChangeEvents } from '../../inlineEdits/vscode-node/parts/vscodeWorkspace';
+import { editFromTextDocumentContentChangeEvents } from '../../inlineEdits/vscode-node/parts/common';
 import { VirtualTextDocumentProvider } from '../../inlineEdits/vscode-node/utils/virtualTextDocumentProvider';
 import { JSONL } from '../common/jsonlUtil';
 import { IRecordableEditorLogEntry, IRecordableLogEntry, IWorkspaceListenerService } from '../common/workspaceListenerService';

@@ -14,6 +14,8 @@ import { IVSCodeExtensionContext } from '../../extContext/common/extensionContex
 import { ILogService } from '../../log/common/logService';
 import { ITelemetryService } from '../common/telemetry';
 import { BaseExperimentationService, UserInfoStore } from '../node/baseExperimentationService';
+import { IFetcherService } from '../../networking/common/fetcherService';
+import { FetcherService } from '../../networking/vscode-node/fetcherServiceImpl';
 
 function getTargetPopulation(isPreRelease: boolean): TargetPopulation {
 	if (isPreRelease) {
@@ -141,6 +143,7 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 		@IEnvService envService: IEnvService,
 		@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore,
 		@IConfigurationService configurationService: IConfigurationService,
+		@IFetcherService fetcherService: IFetcherService,
 		@ILogService logService: ILogService
 	) {
 
@@ -167,6 +170,10 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 		super(delegateFn, context, copilotTokenStore, configurationService, logService);
 
 		self = this; // This is now fully initialized.
+
+		if (fetcherService instanceof FetcherService) {
+			fetcherService.setExperimentationService(this);
+		}
 	}
 }
 
