@@ -12,7 +12,7 @@ import {
 	ToolChoice,
 	ToolConfiguration,
 } from '@aws-sdk/client-bedrock-runtime';
-import { fromIni } from '@aws-sdk/credential-providers';
+import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
 import {
 	CancellationToken,
 	LanguageModelChatInformation,
@@ -25,6 +25,7 @@ import {
 	ProvideLanguageModelChatResponseOptions,
 } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { APIUsage } from '../../../platform/networking/common/openai';
@@ -44,6 +45,16 @@ import {
 	bedrockMessagesToRawMessagesForLogging,
 } from './bedrockMessageConverter';
 
+interface BedrockProviderSettings {
+	region?: string;
+	profile?: string;
+	endpoint?: string;
+}
+
+interface BedrockModelSettings extends BedrockProviderSettings {
+	// Model-level overrides inherit from provider settings
+}
+
 export class BedrockLMProvider implements BYOKModelProvider<LanguageModelChatInformation> {
 	public static readonly providerName = 'Bedrock';
 	public readonly authType: BYOKAuthType = BYOKAuthType.None;
@@ -52,17 +63,55 @@ export class BedrockLMProvider implements BYOKModelProvider<LanguageModelChatInf
 	constructor(
 		private readonly _knownModels: BYOKKnownModels | undefined,
 		@ILogService private readonly _logService: ILogService,
-		@IRequestLogger private readonly _requestLogger: IRequestLogger
+		@IRequestLogger private readonly _requestLogger: IRequestLogger,
+		@IConfigurationService private readonly _configurationService: IConfigurationService
 	) { }
+
+	private getProviderSettings(): BedrockProviderSettings {
+		const providerConfig = this._configurationService.getConfig(ConfigKey.BedrockProvider);
+		return {
+			region: providerConfig.region || 'us-west-2',
+			profile: providerConfig.profile || 'bedrock',
+			endpoint: providerConfig.endpoint
+		};
+	}
+
+	private getModelSettings(modelId?: string): BedrockModelSettings {
+		const providerSettings = this.getProviderSettings();
+
+		if (!modelId) {
+			return providerSettings;
+		}
+
+		// Check for model-level overrides
+		const modelConfig = this._configurationService.getConfig(ConfigKey.BedrockModels);
+		const modelOverrides = modelConfig[modelId] || {};
+
+		return {
+			region: modelOverrides.region || providerSettings.region,
+			profile: modelOverrides.profile || providerSettings.profile,
+			endpoint: modelOverrides.endpoint || providerSettings.endpoint
+		};
+	}
+
+	private getBedrockClient(modelId?: string): BedrockRuntimeClient {
+		const settings = this.getModelSettings(modelId);
+		const clientConfig: any = {
+			region: settings.region,
+			credentials: fromNodeProviderChain({ profile: settings.profile, ignoreCache: true }),
+		};
+
+		// Add custom endpoint if specified
+		if (settings.endpoint) {
+			clientConfig.endpoint = settings.endpoint;
+		}
+
+		this._bedrockClient = new BedrockRuntimeClient(clientConfig);
+		return this._bedrockClient;
+	}
 
 	// Filters the byok known models based on what's available in Bedrock
 	private async getAllModels(): Promise<BYOKKnownModels> {
-		if (!this._bedrockClient) {
-			this._bedrockClient = new BedrockRuntimeClient({
-				region: 'us-west-2',
-				credentials: fromIni({ profile: 'bedrock' }),
-			});
-		}
 		try {
 			// For Bedrock, we'll use the known models since we can't easily list all available models
 			// In a real implementation, you might want to call ListFoundationModels API
@@ -120,7 +169,7 @@ export class BedrockLMProvider implements BYOKModelProvider<LanguageModelChatInf
 		// This method is required by the interface but is a no-op for Bedrock
 	}
 
-	async provideLanguageModelChatInformation(options: { silent: boolean }, token: CancellationToken): Promise<LanguageModelChatInformation[]> {
+	async provideLanguageModelChatInformation(_options: { silent: boolean }, _token: CancellationToken): Promise<LanguageModelChatInformation[]> {
 		try {
 			return byokKnownModelsToAPIInfo(BedrockLMProvider.providerName, await this.getAllModels());
 		} catch {
@@ -134,9 +183,6 @@ export class BedrockLMProvider implements BYOKModelProvider<LanguageModelChatInf
 		progress: Progress<LanguageModelResponsePart2>,
 		token: CancellationToken,
 	): Promise<any> {
-		if (!this._bedrockClient) {
-			return;
-		}
 		// Convert the messages from the API format into messages that we can use against bedrock
 		const { system, messages: convertedMessages } = apiMessageToBedrockMessage(messages as LanguageModelChatMessage[]);
 
@@ -198,7 +244,7 @@ export class BedrockLMProvider implements BYOKModelProvider<LanguageModelChatInf
 		}
 
 		try {
-			const result = await this._makeRequest(progress, params, token);
+			const result = await this._makeRequest(model, progress, params, token);
 			if (result.ttft) {
 				pendingLoggedChatRequest.markTimeToFirstToken(result.ttft);
 			}
@@ -239,18 +285,16 @@ export class BedrockLMProvider implements BYOKModelProvider<LanguageModelChatInf
 		}
 	}
 
-	async provideTokenCount(model: LanguageModelChatInformation, text: string | LanguageModelChatMessage | LanguageModelChatMessage2, token: CancellationToken): Promise<number> {
+	async provideTokenCount(_model: LanguageModelChatInformation, text: string | LanguageModelChatMessage | LanguageModelChatMessage2, _token: CancellationToken): Promise<number> {
 		// Simple estimation - actual token count would require Claude's tokenizer
 		return Math.ceil(text.toString().length / 4);
 	}
 
-	private async _makeRequest(progress: Progress<LanguageModelResponsePart2>, params: ConverseStreamCommandInput, token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
-		if (!this._bedrockClient) {
-			return { ttft: undefined, usage: undefined };
-		}
+	private async _makeRequest(model: LanguageModelChatInformation, progress: Progress<LanguageModelResponsePart2>, params: ConverseStreamCommandInput, token: CancellationToken): Promise<{ ttft: number | undefined; usage: APIUsage | undefined }> {
+		const client = this.getBedrockClient(model.id);
 		const start = Date.now();
 		let ttft: number | undefined;
-		const response = await this._bedrockClient.send(new ConverseStreamCommand(params));
+		const response = await client.send(new ConverseStreamCommand(params));
 		let usage: APIUsage | undefined;
 		const pendingToolUses = new Map<number, { id: string; name: string; input: string }>();
 
