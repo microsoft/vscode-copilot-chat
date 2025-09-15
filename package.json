@@ -2337,12 +2337,12 @@
 						"type": "boolean",
 						"default": true,
 						"description": "%github.copilot.config.customInstructionsInSystemMessage%"
+					},
+					"github.copilot.chat.agent.currentEditorContext.enabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
 					}
-				},
-				"github.copilot.chat.agent.currentEditorContext.enabled": {
-					"type": "boolean",
-					"default": true,
-					"description": "%github.copilot.config.agent.currentEditorContext.enabled%"
 				}
 			},
 			{
