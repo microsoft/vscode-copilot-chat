@@ -5,6 +5,8 @@
 
 import {
 	Message as BedrockMessage,
+	CachePointBlock,
+	CachePointType,
 	ContentBlock,
 	SystemContentBlock,
 } from '@aws-sdk/client-bedrock-runtime';
@@ -21,11 +23,6 @@ import {
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 
-// Define CachePoint type since it may not be exported from the AWS SDK
-interface CachePoint {
-	type: 'ephemeral';
-}
-
 export function apiMessageToBedrockMessage(messages: LanguageModelChatMessage[]): {
 	messages: BedrockMessage[];
 	system?: SystemContentBlock[];
@@ -35,10 +32,10 @@ export function apiMessageToBedrockMessage(messages: LanguageModelChatMessage[])
 
 	for (const message of messages) {
 		if (message.role === LanguageModelChatMessageRole.Assistant) {
-			let cachePoint: CachePoint | undefined;
+			let cachePoint: CachePointBlock | undefined;
 			const content: ContentBlock[] = (message.content || [])
 				.map(p => {
-					if (p instanceof LanguageModelTextPart) {
+					if (p instanceof LanguageModelTextPart && p.value) {
 						return { text: p.value } as ContentBlock;
 					}
 					if (p instanceof LanguageModelDataPart && p.mimeType.startsWith('image/')) {
@@ -63,7 +60,7 @@ export function apiMessageToBedrockMessage(messages: LanguageModelChatMessage[])
 						p.mimeType === CustomDataPartMimeTypes.CacheControl &&
 						p.data.toString() === 'ephemeral'
 					) {
-						cachePoint = { type: 'ephemeral' };
+						cachePoint = { type: CachePointType.DEFAULT };
 					}
 					return undefined;
 				})
@@ -74,10 +71,10 @@ export function apiMessageToBedrockMessage(messages: LanguageModelChatMessage[])
 			}
 			convertedMessages.push(bedrockMessage);
 		} else if (message.role === LanguageModelChatMessageRole.User) {
-			let cachePoint: CachePoint | undefined;
+			let cachePoint: CachePointBlock | undefined;
 			const content: ContentBlock[] = (message.content || [])
 				.map(p => {
-					if (p instanceof LanguageModelTextPart) {
+					if (p instanceof LanguageModelTextPart && p) {
 						return { text: p.value } as ContentBlock;
 					}
 					if (p instanceof LanguageModelDataPart && p.mimeType.startsWith('image/')) {
@@ -97,7 +94,7 @@ export function apiMessageToBedrockMessage(messages: LanguageModelChatMessage[])
 								toolUseId: p.callId,
 								content: p.content
 									.map(part => {
-										if (part instanceof LanguageModelTextPart) {
+										if (part instanceof LanguageModelTextPart && part.value) {
 											return { text: part.value } as ContentBlock;
 										}
 										if (
@@ -121,9 +118,9 @@ export function apiMessageToBedrockMessage(messages: LanguageModelChatMessage[])
 					if (
 						p instanceof LanguageModelDataPart &&
 						p.mimeType === CustomDataPartMimeTypes.CacheControl &&
-						p.data.toString() === 'ephemeral'
+						p.data.toString() === CachePointType.DEFAULT
 					) {
-						cachePoint = { type: 'ephemeral' };
+						cachePoint = { type: CachePointType.DEFAULT };
 					}
 					return undefined;
 				})
@@ -136,16 +133,16 @@ export function apiMessageToBedrockMessage(messages: LanguageModelChatMessage[])
 		} else {
 			// system or other roles
 			let text = '';
-			let cachePoint: CachePoint | undefined;
+			let cachePoint: CachePointBlock | undefined;
 			for (const p of message.content) {
-				if (p instanceof LanguageModelTextPart) {
+				if (p instanceof LanguageModelTextPart && p) {
 					text += p.value;
 				} else if (
 					p instanceof LanguageModelDataPart &&
 					p.mimeType === CustomDataPartMimeTypes.CacheControl &&
-					p.data.toString() === 'ephemeral'
+					p.data.toString() === CachePointType.DEFAULT
 				) {
-					cachePoint = { type: 'ephemeral' };
+					cachePoint = { type: CachePointType.DEFAULT };
 				}
 			}
 			if (!system) {

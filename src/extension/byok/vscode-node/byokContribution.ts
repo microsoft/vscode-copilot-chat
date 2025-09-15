@@ -11,10 +11,11 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { BYOKKnownModels, BYOKModelProvider, isBYOKEnabled } from '../../byok/common/byokProvider';
+import { BYOKKnownModels, BYOKModelCapabilities, BYOKModelProvider, isBYOKEnabled } from '../../byok/common/byokProvider';
 import { IExtensionContribution } from '../../common/contributions';
 import { AnthropicLMProvider } from './anthropicProvider';
 import { AzureBYOKModelProvider } from './azureProvider';
+import { BedrockLMProvider } from './bedrockProvider';
 import { BYOKStorageService, IBYOKStorageService } from './byokStorageService';
 import { CustomOAIModelConfigurator } from './customOAIModelConfigurator';
 import { CustomOAIBYOKModelProvider } from './customOAIProvider';
@@ -76,6 +77,7 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			this._providers.set(OpenRouterLMProvider.providerName.toLowerCase(), instantiationService.createInstance(OpenRouterLMProvider, this._byokStorageService));
 			this._providers.set(AzureBYOKModelProvider.providerName.toLowerCase(), instantiationService.createInstance(AzureBYOKModelProvider, this._byokStorageService));
 			this._providers.set(CustomOAIBYOKModelProvider.providerName.toLowerCase(), instantiationService.createInstance(CustomOAIBYOKModelProvider, this._byokStorageService));
+			this._providers.set(BedrockLMProvider.providerName.toLowerCase(), instantiationService.createInstance(BedrockLMProvider, knownModels[BedrockLMProvider.providerName]));
 
 			for (const [providerName, provider] of this._providers) {
 				this._store.add(lm.registerLanguageModelChatProvider(providerName, provider));
@@ -90,8 +92,49 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			knownModels = {};
 		} else {
 			knownModels = data.modelInfo;
-			this._logService.logger.info(`BYOK: Available providers in known models: ${Object.keys(knownModels).join(', ')}`);
+			this._logService.info(`BYOK: Available providers in known models: ${Object.keys(knownModels).join(', ')}`);
 		}
+
+		// HACK: Add hardcoded Bedrock models for testing purposes
+		// These should be removed once Bedrock is officially supported and available via the CDN list
+		knownModels['Bedrock'] = {
+			'us.anthropic.claude-sonnet-4-20250514-v1:0': {
+				name: 'Claude Sonnet 4',
+				maxInputTokens: 200000,
+				maxOutputTokens: 8192,
+				toolCalling: true,
+				vision: true,
+			} as BYOKModelCapabilities,
+			'us.anthropic.claude-3-5-sonnet-20241022-v2:0': {
+				name: 'Claude 3.5 Sonnet',
+				maxInputTokens: 200000,
+				maxOutputTokens: 8192,
+				toolCalling: true,
+				vision: true,
+			} as BYOKModelCapabilities,
+			'us.anthropic.claude-3-7-sonnet-20250219-v1:0': {
+				name: 'Claude 3.7 Sonnet',
+				maxInputTokens: 200000,
+				maxOutputTokens: 8192,
+				toolCalling: true,
+				vision: true,
+			} as BYOKModelCapabilities,
+			'us.amazon.nova-pro-v1:0': {
+				name: 'Amazon Nova Pro',
+				maxInputTokens: 300000,
+				maxOutputTokens: 5000,
+				toolCalling: true,
+				vision: true,
+			} as BYOKModelCapabilities,
+			'us.anthropic.claude-3-haiku-20240307-v1:0': {
+				name: 'Claude 3 Haiku',
+				maxInputTokens: 200000,
+				maxOutputTokens: 4096,
+				toolCalling: true,
+				vision: false,
+			} as BYOKModelCapabilities
+		};
+
 		this._logService.info('BYOK: Copilot Chat known models list fetched successfully.');
 		return knownModels;
 	}
