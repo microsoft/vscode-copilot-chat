@@ -60,46 +60,44 @@ export class MergeConflictServiceImpl extends Disposable implements IMergeConfli
 
 			// Get merge base
 			const mergeBase = await this.gitService.getMergeBase(resource, currentName, incomingName);
-			if (!mergeBase) {
-				continue;
+			if (mergeBase) {
+				// Attach merge base
+				attachHistoryItemChanges.push({
+					uri: toGitUri(resource, mergeBase),
+					historyItemId: mergeBase
+				});
+
+				// Attach merge base -> current
+				attachHistoryItemChangeRanges.push({
+					start: {
+						uri: toGitUri(resource, mergeBase),
+						historyItemId: mergeBase
+					},
+					end: {
+						uri: toGitUri(resource, currentName),
+						historyItemId: currentName
+					}
+				});
+
+				// Attach merge base -> incoming
+				attachHistoryItemChangeRanges.push({
+					start: {
+						uri: toGitUri(resource, mergeBase),
+						historyItemId: mergeBase
+					},
+					end: {
+						uri: toGitUri(resource, incomingName),
+						historyItemId: incomingName
+					}
+				});
 			}
-
-			// Attach merge base
-			attachHistoryItemChanges.push({
-				uri: toGitUri(resource, mergeBase),
-				historyItemId: mergeBase
-			});
-
-			// Attach merge base -> current
-			attachHistoryItemChangeRanges.push({
-				start: {
-					uri: toGitUri(resource, mergeBase),
-					historyItemId: mergeBase
-				},
-				end: {
-					uri: toGitUri(resource, currentName),
-					historyItemId: currentName
-				}
-			});
-
-			// Attach merge base -> incoming
-			attachHistoryItemChangeRanges.push({
-				start: {
-					uri: toGitUri(resource, mergeBase),
-					historyItemId: mergeBase
-				},
-				end: {
-					uri: toGitUri(resource, incomingName),
-					historyItemId: incomingName
-				}
-			});
 		}
 
 		if (cancellationToken?.isCancellationRequested) {
 			return;
 		}
 
-		if (attachFiles.length > 0 && attachHistoryItemChanges.length > 0 && attachHistoryItemChangeRanges.length > 0) {
+		if (attachFiles.length > 0) {
 			await vscode.commands.executeCommand('workbench.action.chat.open', {
 				mode: 'agent',
 				attachFiles,
