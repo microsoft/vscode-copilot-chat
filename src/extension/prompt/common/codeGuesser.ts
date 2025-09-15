@@ -19,6 +19,9 @@ const enum GuessedLineType {
 	NaturalLanguage
 }
 
+const commonCppDirectives = ['# include', '# define', '# ifdef', '# ifndef', '# endif', '# pragma', '# if', '# else', '# elif', '# undef', '# error', '# line', '# warning'];
+
+
 function guessLineType(line: string): GuessedLineType {
 	if (line.length === 0) {
 		return GuessedLineType.Unknown;
@@ -37,10 +40,9 @@ function guessLineType(line: string): GuessedLineType {
 		return GuessedLineType.Code;
 	}
 
-	// If the line starts with a '#' followed by a space, it's possibly markdown header
+	// If the line starts with '#'s followed by a space, it's possibly markdown header
 	// A popular exception is if the line contains C/C++ preprocessor directives
 	if (line.match(/^#+ .+$/)) {
-		const commonCppDirectives = ['# include', '# define', '# ifdef', '# ifndef', '# endif', '# pragma', '# if', '# else', '# elif', '# undef', '# error', '# line', '# warning'];
 		// If line does not contain any # directives used in C, C++.
 		if (!commonCppDirectives.some(directive => line.trim().startsWith(directive))) {
 			return GuessedLineType.NaturalLanguage;
