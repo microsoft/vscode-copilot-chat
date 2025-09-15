@@ -10,8 +10,8 @@ import { OffsetLineColumnConverter } from '../../../platform/editing/common/offs
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ISearchService } from '../../../platform/search/common/searchService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { raceTimeoutAndReject } from '../../../util/common/async';
 import { asArray } from '../../../util/vs/base/common/arrays';
-import { raceTimeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { count } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -34,8 +34,8 @@ interface IFindTextInFilesToolParams {
 
 const MaxResultsCap = 200;
 
-/** Timeout for text search operations in milliseconds (30 seconds) */
-const SEARCH_TIMEOUT_MS = 30_000;
+/** Timeout for text search operations in milliseconds (20 seconds) */
+const SEARCH_TIMEOUT_MS = 20_000;
 
 export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolParams> {
 	public static readonly toolName = ToolName.FindTextInFiles;
@@ -104,21 +104,10 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 			return results;
 		};
 
-		const timeoutResult = await raceTimeout(
+		return await raceTimeoutAndReject(
 			searchOperation(),
-			SEARCH_TIMEOUT_MS,
-			() => {
-				// Log timeout occurrence for debugging
-				console.warn(`FindTextInFiles search operation timed out after ${SEARCH_TIMEOUT_MS}ms for query: ${query}`);
-			}
+			SEARCH_TIMEOUT_MS
 		);
-
-		// If timeout occurred, return empty results
-		if (timeoutResult === undefined) {
-			return [];
-		}
-
-		return timeoutResult;
 	}
 
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IFindTextInFilesToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
