@@ -44,11 +44,11 @@ export class ClaudeAgentManager extends Disposable {
 		super();
 	}
 
-	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
+	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken, customWorkingDirectory?: string): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
 		try {
 			// Get server config, start server if needed
 			const serverConfig = (await this.getLangModelServer()).getConfig();
-			const session = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, claudeSessionId);
+			const session = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, claudeSessionId, customWorkingDirectory);
 			await session.invoke(
 				this.resolvePrompt(request),
 				request.toolInvocationToken,
@@ -104,6 +104,7 @@ class ClaudeCodeSession {
 	constructor(
 		private readonly serverConfig: ILanguageModelServerConfig,
 		public sessionId: string | undefined,
+		private readonly _customWorkingDirectory: string | undefined,
 		@ILogService private readonly logService: ILogService,
 		@IConfigurationService private readonly configService: IConfigurationService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
@@ -129,7 +130,7 @@ class ClaudeCodeSession {
 		this.logService.trace(`appRoot: ${this.envService.appRoot}`);
 		const pathSep = isWindows ? ';' : ':';
 		const options: Options = {
-			cwd: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
+			cwd: this._customWorkingDirectory || this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
 			abortController,
 			executable: process.execPath as 'node', // get it to fork the EH node process
 			env: {

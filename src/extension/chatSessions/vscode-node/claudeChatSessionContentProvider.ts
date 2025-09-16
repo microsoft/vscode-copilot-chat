@@ -13,7 +13,7 @@ import { ClaudeToolNames, IExitPlanModeInput } from '../../agents/claude/common/
 import { createFormattedToolInvocation } from '../../agents/claude/common/toolInvocationFormatter';
 import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
 import { IClaudeCodeSession, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
-import { ClaudeSessionDataStore } from './claudeChatSessionItemProvider';
+import { ClaudeChatRequest, ClaudeSessionDataStore } from './claudeChatSessionItemProvider';
 
 interface ToolContext {
 	unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>;
@@ -47,17 +47,17 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 				async (stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => {
 					this._log(`Starting activeResponseCallback, internalID: ${internalSessionId}`);
 					const request = this._createInitialChatRequest(initialRequest, internalSessionId);
-					const result = await this.claudeAgentManager.handleRequest(undefined, request, { history: [] }, stream, token);
+					const result = await this.claudeAgentManager.handleRequest(undefined, request, { history: [] }, stream, token, initialRequest.workingDirectory);
 					if (result.claudeSessionId) {
 						this._log(`activeResponseCallback, setClaudeSessionId: ${internalSessionId} -> ${result.claudeSessionId}`);
 						this.sessionStore.setClaudeSessionId(internalSessionId, result.claudeSessionId);
 					}
 				} :
 				undefined,
-			requestHandler: async (request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => {
+			requestHandler: async (request: ClaudeChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => {
 				const claudeSessionId = this.sessionStore.getSessionId(internalSessionId);
 				this._log(`requestHandler, internalID: ${internalSessionId}, claudeID: ${claudeSessionId}`);
-				const result = await this.claudeAgentManager.handleRequest(claudeSessionId, request, context, stream, token);
+				const result = await this.claudeAgentManager.handleRequest(claudeSessionId, request, context, stream, token, request.workingDirectory);
 				if (result.claudeSessionId) {
 					this.sessionStore.setClaudeSessionId(internalSessionId, result.claudeSessionId);
 				}
