@@ -77,11 +77,6 @@ async function main() {
 		'node_modules/@vscode/tree-sitter-wasm/wasm/tree-sitter.wasm',
 	], 'dist');
 
-	// Copy our local BYOK model definitions to dist root (where bundled code runs from)
-	const byokLocalJsonSrc = path.join(REPO_ROOT, 'src/extension/byok/vscode-node/copilotChat-local.json');
-	const byokLocalJsonDest = path.join(REPO_ROOT, 'dist/copilotChat-local.json');
-	await fs.promises.copyFile(byokLocalJsonSrc, byokLocalJsonDest);
-
 	await downloadZMQ();
 
 	// Check if the base cache file exists

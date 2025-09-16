@@ -26,6 +26,8 @@ import { OAIBYOKLMProvider } from './openAIProvider';
 import { OpenRouterLMProvider } from './openRouterProvider';
 import { XAIBYOKLMProvider } from './xAIProvider';
 
+const BYOKProviders = { AnthropicLMProvider, AzureBYOKModelProvider, BedrockLMProvider, CustomOAIBYOKModelProvider, GeminiBYOKLMProvider, GroqBYOKLMProvider, OllamaLMProvider, OAIBYOKLMProvider, OpenRouterLMProvider, XAIBYOKLMProvider };
+
 export class BYOKContrib extends Disposable implements IExtensionContribution {
 	public readonly id: string = 'byok-contribution';
 	private readonly _byokStorageService: IBYOKStorageService;
@@ -68,16 +70,27 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			this._byokProvidersRegistered = true;
 			// Update known models list from CDN so all providers have the same list
 			const knownModels = await this.fetchKnownModelList(this._fetcherService);
-			this._providers.set(OllamaLMProvider.providerName.toLowerCase(), instantiationService.createInstance(OllamaLMProvider, this._configurationService.getConfig(ConfigKey.OllamaEndpoint), this._byokStorageService));
-			this._providers.set(AnthropicLMProvider.providerName.toLowerCase(), instantiationService.createInstance(AnthropicLMProvider, knownModels[AnthropicLMProvider.providerName], this._byokStorageService));
-			this._providers.set(GroqBYOKLMProvider.providerName.toLowerCase(), instantiationService.createInstance(GroqBYOKLMProvider, knownModels[GroqBYOKLMProvider.providerName], this._byokStorageService));
-			this._providers.set(GeminiBYOKLMProvider.providerName.toLowerCase(), instantiationService.createInstance(GeminiBYOKLMProvider, knownModels[GeminiBYOKLMProvider.providerName], this._byokStorageService));
-			this._providers.set(XAIBYOKLMProvider.providerName.toLowerCase(), instantiationService.createInstance(XAIBYOKLMProvider, knownModels[XAIBYOKLMProvider.providerName], this._byokStorageService));
-			this._providers.set(OAIBYOKLMProvider.providerName.toLowerCase(), instantiationService.createInstance(OAIBYOKLMProvider, knownModels[OAIBYOKLMProvider.providerName], this._byokStorageService));
-			this._providers.set(OpenRouterLMProvider.providerName.toLowerCase(), instantiationService.createInstance(OpenRouterLMProvider, this._byokStorageService));
-			this._providers.set(AzureBYOKModelProvider.providerName.toLowerCase(), instantiationService.createInstance(AzureBYOKModelProvider, this._byokStorageService));
-			this._providers.set(CustomOAIBYOKModelProvider.providerName.toLowerCase(), instantiationService.createInstance(CustomOAIBYOKModelProvider, this._byokStorageService));
-			this._providers.set(BedrockLMProvider.providerName.toLowerCase(), instantiationService.createInstance(BedrockLMProvider, knownModels[BedrockLMProvider.providerName]));
+
+			for (const ProviderClass of Object.values(BYOKProviders)) {
+				const providerName = ProviderClass.providerName.toLowerCase();
+				let providerInstance;
+
+				// Handle special instantiation cases
+				if (ProviderClass === OllamaLMProvider) {
+					providerInstance = instantiationService.createInstance(ProviderClass, this._configurationService.getConfig(ConfigKey.OllamaEndpoint), this._byokStorageService);
+				} else if (ProviderClass === AzureBYOKModelProvider || ProviderClass === CustomOAIBYOKModelProvider || ProviderClass === OpenRouterLMProvider) {
+					// These providers don't need knownModels
+					providerInstance = instantiationService.createInstance(ProviderClass, this._byokStorageService);
+				} else if (ProviderClass === BedrockLMProvider) {
+					// Bedrock doesn't use byokStorageService
+					providerInstance = instantiationService.createInstance(ProviderClass, knownModels[ProviderClass.providerName]);
+				} else {
+					// Standard providers that need knownModels and byokStorageService
+					providerInstance = instantiationService.createInstance(ProviderClass, knownModels[ProviderClass.providerName], this._byokStorageService);
+				}
+
+				this._providers.set(providerName, providerInstance);
+			}
 
 			for (const [providerName, provider] of this._providers) {
 				this._store.add(lm.registerLanguageModelChatProvider(providerName, provider));
@@ -85,57 +98,80 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 		}
 	}
 	private async fetchKnownModelList(fetcherService: IFetcherService): Promise<Record<string, BYOKKnownModels>> {
-		const data = await (await fetcherService.fetch('https://main.vscode-cdn.net/extensions/copilotChat.json', { method: "GET" })).json();
-		let knownModels: Record<string, BYOKKnownModels>;
-		if (data.version !== 1) {
-			this._logService.warn('BYOK: Copilot Chat known models list is not in the expected format. Defaulting to empty list.');
-			knownModels = {};
-		} else {
-			knownModels = data.modelInfo;
-			this._logService.info(`BYOK: Available providers in known models: ${Object.keys(knownModels).join(', ')}`);
+		let knownModels: Record<string, BYOKKnownModels> = {};
+
+		try {
+			const data = await (await fetcherService.fetch('https://main.vscode-cdn.net/extensions/copilotChat.json', { method: "GET" })).json();
+			if (data.version !== 1) {
+				this._logService.warn('BYOK: Copilot Chat known models list is not in the expected format. Falling back to configuration-based models.');
+			} else {
+				knownModels = data.modelInfo;
+				this._logService.info(`BYOK: Available providers in known models: ${Object.keys(knownModels).join(', ')}`);
+			}
+		} catch (error) {
+			this._logService.warn(`BYOK: Failed to fetch known models from CDN. Falling back to configuration-based models. Error: ${error}`);
 		}
 
-		// HACK: Add hardcoded Bedrock models for testing purposes
-		// These should be removed once Bedrock is officially supported and available via the CDN list
-		knownModels['Bedrock'] = {
-			'us.anthropic.claude-sonnet-4-20250514-v1:0': {
-				name: 'Claude Sonnet 4',
-				maxInputTokens: 200000,
-				maxOutputTokens: 8192,
-				toolCalling: true,
-				vision: true,
-			} as BYOKModelCapabilities,
-			'us.anthropic.claude-3-5-sonnet-20241022-v2:0': {
-				name: 'Claude 3.5 Sonnet',
-				maxInputTokens: 200000,
-				maxOutputTokens: 8192,
-				toolCalling: true,
-				vision: true,
-			} as BYOKModelCapabilities,
-			'us.anthropic.claude-3-7-sonnet-20250219-v1:0': {
-				name: 'Claude 3.7 Sonnet',
-				maxInputTokens: 200000,
-				maxOutputTokens: 8192,
-				toolCalling: true,
-				vision: true,
-			} as BYOKModelCapabilities,
-			'us.amazon.nova-pro-v1:0': {
-				name: 'Amazon Nova Pro',
-				maxInputTokens: 300000,
-				maxOutputTokens: 5000,
-				toolCalling: true,
-				vision: true,
-			} as BYOKModelCapabilities,
-			'us.anthropic.claude-3-haiku-20240307-v1:0': {
-				name: 'Claude 3 Haiku',
-				maxInputTokens: 200000,
-				maxOutputTokens: 4096,
-				toolCalling: true,
-				vision: false,
-			} as BYOKModelCapabilities
+		// Fallback: Add models from configuration for providers that don't have models from CDN
+		// Useful for local testing of new BYOK providers or if CDN is unreachable
+		this._addConfiguredModelsToKnownList(knownModels);
+
+		this._logService.info('BYOK: Copilot Chat known models list processed successfully.');
+		return knownModels;
+	}
+
+	private _addConfiguredModelsToKnownList(knownModels: Record<string, BYOKKnownModels>): void {
+		// Mapping of provider names to their config keys
+		const providerConfigKeys: Record<string, any> = {
+			[BYOKProviders.AzureBYOKModelProvider.providerName]: ConfigKey.AzureModels,
+			[BYOKProviders.CustomOAIBYOKModelProvider.providerName]: ConfigKey.CustomOAIModels,
+			[BYOKProviders.BedrockLMProvider.providerName]: ConfigKey.BedrockModels,
+			// Add more providers here as needed for local testing
 		};
 
-		this._logService.info('BYOK: Copilot Chat known models list fetched successfully.');
-		return knownModels;
+		for (const ProviderClass of Object.values(BYOKProviders)) {
+			const providerName = ProviderClass.providerName;
+
+			// Initialize models object if it doesn't exist
+			if (!knownModels[providerName]) {
+				knownModels[providerName] = {};
+			}
+
+			// Check if this provider has a corresponding config key
+			const configKey = providerConfigKeys[providerName];
+			if (!configKey) {
+				continue;
+			}
+
+			const configuredModels = this._configurationService.getConfig(configKey);
+			if (configuredModels && Object.keys(configuredModels).length > 0) {
+				let addedCount = 0;
+
+				for (const [modelId, modelConfig] of Object.entries(configuredModels)) {
+					// Skip if model already exists from CDN (don't override)
+					if (knownModels[providerName][modelId]) {
+						continue;
+					}
+
+					addedCount++;
+					// Use standard model config format if available, otherwise provide defaults
+					if (typeof modelConfig === 'object' && modelConfig.name) {
+						// Standard format with all properties specified
+						knownModels[providerName][modelId] = {
+							name: modelConfig.name,
+							maxInputTokens: modelConfig.maxInputTokens || 200000,
+							maxOutputTokens: modelConfig.maxOutputTokens || 8192,
+							toolCalling: modelConfig.toolCalling ?? true,
+							vision: modelConfig.vision ?? false,
+							thinking: modelConfig.thinking
+						} as BYOKModelCapabilities;
+					}
+				}
+
+				if (addedCount > 0) {
+					this._logService.info(`BYOK: Added ${addedCount} ${providerName} models from configuration.`);
+				}
+			}
+		}
 	}
 }
