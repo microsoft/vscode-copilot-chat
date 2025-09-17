@@ -368,7 +368,7 @@ export class ToolResultMetadata extends PromptMetadata {
 }
 
 // Some MCP servers return a ton of resources as a 'download' action.
-// Only include them all eagerly if we have a managable number.
+// Only include them all eagerly if we have a manageable number.
 const DONT_INCLUDE_RESOURCE_CONTENT_IF_TOOL_HAS_MORE_THAN = 9;
 
 class McpLinkedResourceToolResult extends PromptElement<{ resourceUri: URI; mimeType: string | undefined; count: number } & BasePromptElementProps> {
