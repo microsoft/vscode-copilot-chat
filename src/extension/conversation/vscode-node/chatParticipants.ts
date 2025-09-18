@@ -19,6 +19,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { ChatRequest } from '../../../vscodeTypes';
 import { Intent, agentsToCommands } from '../../common/constants';
 import { ChatParticipantRequestHandler } from '../../prompt/node/chatParticipantRequestHandler';
+import { ChatCodeExplanationProvider } from '../../prompt/node/codeExplanation';
 import { IFeedbackReporter } from '../../prompt/node/feedbackReporter';
 import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { ChatTitleProvider } from '../../prompt/node/title';
@@ -168,6 +169,7 @@ class ChatAgents implements IDisposable {
 		editingAgent.iconPath = new vscode.ThemeIcon('copilot');
 		editingAgent.additionalWelcomeMessage = this.additionalWelcomeMessage;
 		editingAgent.titleProvider = this.instantiationService.createInstance(ChatTitleProvider);
+		editingAgent.codeExplanationProvider = this.instantiationService.createInstance(ChatCodeExplanationProvider);
 		return editingAgent;
 	}
 
@@ -183,6 +185,7 @@ class ChatAgents implements IDisposable {
 		editingAgent.iconPath = new vscode.ThemeIcon('copilot');
 		editingAgent.additionalWelcomeMessage = this.additionalWelcomeMessage;
 		editingAgent.titleProvider = this.instantiationService.createInstance(ChatTitleProvider);
+		editingAgent.codeExplanationProvider = this.instantiationService.createInstance(ChatCodeExplanationProvider);
 		return editingAgent;
 	}
 
@@ -191,6 +194,7 @@ class ChatAgents implements IDisposable {
 		editingAgent.iconPath = new vscode.ThemeIcon('tools');
 		editingAgent.additionalWelcomeMessage = this.additionalWelcomeMessage;
 		editingAgent.titleProvider = this.instantiationService.createInstance(ChatTitleProvider);
+		editingAgent.codeExplanationProvider = this.instantiationService.createInstance(ChatCodeExplanationProvider);
 		return editingAgent;
 	}
 
@@ -224,6 +228,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 
 		defaultAgent.additionalWelcomeMessage = this.additionalWelcomeMessage;
 		defaultAgent.titleProvider = this.instantiationService.createInstance(ChatTitleProvider);
+		defaultAgent.codeExplanationProvider = this.instantiationService.createInstance(ChatCodeExplanationProvider);
 		defaultAgent.summarizer = this.instantiationService.createInstance(ChatSummarizerProvider);
 
 		return defaultAgent;
