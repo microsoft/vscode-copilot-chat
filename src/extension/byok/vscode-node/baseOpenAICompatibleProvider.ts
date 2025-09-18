@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
-import { IChatModelInformation, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
+import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -94,9 +94,7 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 
 	private async getEndpointImpl(model: LanguageModelChatInformation): Promise<OpenAIEndpoint> {
 		const modelInfo: IChatModelInformation = await this.getModelInfo(model.id, this._apiKey);
-		const url = modelInfo.supported_endpoints?.includes(ModelSupportedEndpoint.Responses) ?
-			`${this._baseUrl}/responses` :
-			`${this._baseUrl}/chat/completions`;
+		const url = `${this._baseUrl}/chat/completions`;
 		return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, this._apiKey ?? '', url);
 	}
 

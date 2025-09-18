@@ -79,6 +79,10 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		);
 	}
 
+	protected override get useResponsesApi(): boolean {
+		return false;
+	}
+
 	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
 		if (this.useResponsesApi) {
 			// Handle Responses API: customize the body directly
