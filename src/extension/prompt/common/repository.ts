@@ -7,3 +7,11 @@ export interface RecentCommitMessages {
 	readonly repository: string[];
 	readonly user: string[];
 }
+
+export interface GitCommitRepoContext {
+	readonly repositoryName?: string;
+	readonly owner?: string;
+	readonly headBranchName?: string;
+	readonly defaultBranch?: string;
+	readonly pullRequest?: { title: string; url: string };
+}
