@@ -22,7 +22,7 @@ export function getRequestId(response: Response, json?: any): RequestId {
 	return {
 		headerRequestId: response.headers.get('x-request-id') || '',
 		completionId: json && json.id ? json.id : '',
-		created: json && json.created ? json.created : 0,
+		created: json ? (json.created || Date.now()) : 0,
 		serverExperiments: response.headers.get('X-Copilot-Experiment') || '',
 		deploymentId: response.headers.get('azureml-model-deployment') || '',
 	};

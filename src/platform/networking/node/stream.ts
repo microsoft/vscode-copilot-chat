@@ -385,10 +385,6 @@ export class SSEProcessor {
 				if (this.requestId.created === 0) {
 					// Would only be 0 if we're the first actual response chunk
 					this.requestId = getRequestId(this.response, json);
-					if (this.requestId.created === 0 && json.choices?.length) { // An initial chunk is sent with an empty choices array and no id, to hold `prompt_filter_results`
-						this.logService.error(`Request id invalid, should have "completionId" and "created": ${JSON.stringify(this.requestId)} ${this.requestId}`);
-						sendCommunicationErrorTelemetry(this.telemetryService, `Request id invalid, should have "completionId" and "created": ${JSON.stringify(this.requestId)}`, this.requestId);
-					}
 				}
 
 				for (let i = 0; i < json.choices.length; i++) {
