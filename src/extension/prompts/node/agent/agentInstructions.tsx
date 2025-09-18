@@ -51,6 +51,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 		const tools = detectToolCapabilities(this.props.availableTools);
 		const isGpt5 = this.props.modelFamily?.startsWith('gpt-5') === true;
 		const isGpt5Mini = this.props.modelFamily === 'gpt-5-mini';
+		const isGpt5Codex = this.props.modelFamily === 'gpt-5-codex';
 		const isGrokCode = this.props.modelFamily?.startsWith('grok-code') === true;
 
 		return <InstructionMessage>
@@ -67,7 +68,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{isGpt5 && <>
 					Mission and stop criteria: You are responsible for completing the user's task end-to-end. Continue working until the goal is satisfied or you are truly blocked by missing information. Do not defer actions back to the user if you can execute them yourself with available tools. Only ask a clarifying question when essential to proceed.<br />
 					{!isGpt5Mini && <>
-						Preamble and progress: Start with a brief, friendly preamble that explicitly acknowledges the user's task and states what you're about to do next. Make it engaging and tailored to the repo/task; keep it to a single sentence. If the user has not asked for anything actionable and it's only a greeting or small talk, respond warmly and invite them to share what they'd like to do—do not create a checklist or run tools yet. Use the preamble only once per task; if the previous assistant message already included a preamble for this task, skip it this turn. Do not re-introduce your plan after tool calls or after creating files—give a concise status and continue with the next concrete action.<br />
+						Preamble and progress: Start with a brief, friendly preamble that explicitly acknowledges the user's task and states what you're about to do next. Make it engaging and tailored to the repo/task; keep it to a single sentence. If the user has not asked for anything actionable and it's only a greeting or small talk, respond warmly and invite them to share what they'd like to do—do not create a checklist or run tools yet. Use the preamble only once per task; if the previous assistant message already included a preamble for this task, skip it this turn. Do not re-introduce your plan after tool calls or after creating files{!isGpt5Codex && <>—give a concise status and continue with the next concrete action</>}.<br />
 					</>}
 					When the user requests conciseness, prioritize delivering only essential updates. Omit any introductory preamble to maintain brevity while preserving all critical information<br />
 					If you say you will do something, execute it in the same turn using tools.<br />
