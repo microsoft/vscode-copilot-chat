@@ -28,9 +28,9 @@ const onnxOptions = {
  * Classifier for determining whether inline completion should proceed
  */
 export class InlineCompletionClassifier {
-	static modelPath = "models/google_mobile_bert/model.onnx";
-	static tokenizerPath = "models/google_mobile_bert/tokenizer.json";
-	static tokenizerCfgPath = "models/google_mobile_bert/tokenizer_config.json";
+	static modelPath = "models/graph_code_bert_finetuned/model.onnx";
+	static tokenizerPath = "models/graph_code_bert_finetuned/tokenizer.json";
+	static tokenizerCfgPath = "models/graph_code_bert_finetuned/tokenizer_config.json";
 
 	private isInitialized = false;
 	private session: ort.InferenceSession | null = null;
@@ -72,6 +72,21 @@ export class InlineCompletionClassifier {
 
 			this.tokenizer = new PreTrainedTokenizer(tokenizerJson, tokenizerConfig);
 			this._logService.info('[InlineCompletionClassifier] Tokenizer loaded successfully');
+			// this._logService.info(`[InlineCompletionClassifier] Session running on execution providers: ${this.session.executionProviders().join(', ')}`);
+
+			try {
+				this._logService.info('[InlineCompletionClassifier] Performing warm-up run...');
+				const dummyFeeds = await this.tokenizer!('warm-up', {
+					truncation: true,
+					return_tensors: 'pt',
+					return_token_type_ids: true,
+				});
+				await this.session!.run(dummyFeeds);
+				this._logService.info('[InlineCompletionClassifier] Warm-up run completed.');
+			} catch (error) {
+				this._logService.error('[InlineCompletionClassifier] Warm-up run failed', error);
+				// Initialization can still be considered successful
+			}
 
 			this.isInitialized = true;
 			this._logService.info('[InlineCompletionClassifier] Classifier initialized successfully');
@@ -99,23 +114,28 @@ export class InlineCompletionClassifier {
 			const kContextRadius = 2;
 			const begLine = Math.max(0, position.line - kContextRadius);
 			const endLine = Math.min(document.lineCount, position.line + kContextRadius);
-			const range = new Range(new Position(begLine, 0), new Position(endLine, 0));
-			const context = document.getText(range);
-			this._logService.info(`[InlineCompletionClassifier] Extracted context: "${context}"`);
 
+			const rangeStart = new Position(begLine, 0);
+			const rangeEnd = new Position(endLine, document.lineAt(endLine).text.length);
 
-			const startTimeTokenizer = Date.now();
+			const contextBeforeCursor = document.getText(new Range(rangeStart, position));
+			const contextAfterCursor = document.getText(new Range(position, rangeEnd));
+			// this._logService.info(`[InlineCompletionClassifier] Extracted before context: "${contextBeforeCursor}"`);
+			// this._logService.info(`[InlineCompletionClassifier] Extracted after context: "${contextAfterCursor}"`);
+			const startTimeTokenizer = Number(process.hrtime.bigint()) / 1_000_000;
 			const tokenizerOpts = {
-				// padding: 'max_length', // TODO: returns a BigInt error
-				add_special_tokens: false,
+				add_special_tokens: true,
 				truncation: true,
 				// max_length: 256,       // TODO: combined with padding returns a BigInt error
-				return_tensors: true,
+				return_tensors: 'ort',
 				return_token_type_ids: true,
 			};
-			const feeds = await this.tokenizer!(context, tokenizerOpts);
-			this._logService.info(`[InlineCompletionClassifier] numTokens: "${feeds.input_ids.dims}"`);
-			const endTimeTokenizer = Date.now();
+
+			const feeds = await this.tokenizer!(contextBeforeCursor, contextAfterCursor, tokenizerOpts);
+			// this._logService.info(`[InlineCompletionClassifier] numTokens: "${feeds.input_ids.dims}"`);
+			// Use high-resolution time (nanoseconds) and convert to milliseconds with microsecond precision
+			const endTimeTokenizer =
+				Number(process.hrtime.bigint()) / 1_000_000;
 
 			const startTimeInference = Date.now();
 			const results = await this.session!.run(feeds);
@@ -126,10 +146,10 @@ export class InlineCompletionClassifier {
 			const exps = logits.map(x => Math.exp(x - maxLogit));
 			const sumExps = exps.reduce((a, b) => a + b, 0);
 			const probs = exps.map(x => x / sumExps);
-			this._logService.info(`[InlineCompletionClassifier] Probabilities=${probs}`);
+			// this._logService.info(`[InlineCompletionClassifier] Probabilities=${probs}`);
 
 			const probability = probs[1];
-			this._logService.info(`[InlineCompletionClassifier] Classification result: confidence=${probability.toFixed(3)}, tokenizer=${endTimeTokenizer - startTimeTokenizer}ms, inference=${endTimeInference - startTimeInference}ms`);
+			this._logService.info(`[InlineCompletionClassifier] Classification result=${probability.toFixed(3)}, inference=${endTimeInference - startTimeInference}ms`);
 
 			return {
 				confidence: probability,

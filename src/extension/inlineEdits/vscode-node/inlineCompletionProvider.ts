@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, Position, Range, TextDocument, TextDocumentShowOptions, l10n, Event as vscodeEvent, window, workspace } from 'vscode';
+import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, Position, Range, StatusBarAlignment, StatusBarItem, TextDocument, TextDocumentShowOptions, ThemeColor, l10n, Event as vscodeEvent, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
@@ -101,6 +101,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 	private readonly _tracer: ITracer;
 	private readonly _classifier: InlineCompletionClassifier;
+	private readonly _statusBarItem: StatusBarItem;
 
 	public readonly onDidChange: vscodeEvent<void> | undefined = Event.fromObservableLight(this.model.onChange);
 	private readonly _displayNextEditorNES: boolean;
@@ -129,6 +130,9 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		this._classifier.initialize().catch(error => {
 			this._logService.error('[InlineCompletionProvider] Failed to initialize classifier:', error);
 		});
+
+		this._statusBarItem = window.createStatusBarItem(StatusBarAlignment.Right, 100);
+		this._statusBarItem.show();
 	}
 
 	// copied from `vscodeWorkspace.ts` `DocumentFilter#_enabledLanguages`
@@ -164,6 +168,13 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 		// TODO(cecagnia): Run classifier first to determine if we should proceed
 		const classificationResult = await this._classifier.classify(document, position);
+		this._statusBarItem.text = `$(chip) Classifier: ${classificationResult.processingTime}ms`;
+		if (classificationResult.confidence! > 0.5) {
+			this._statusBarItem.backgroundColor = new ThemeColor('statusBarItem.prominentBackground');
+		}
+		else {
+			this._statusBarItem.backgroundColor = new ThemeColor('statusBarItem.warningBackground');
+		}
 		console.log(`[InlineCompletionProvider] Classifier result: confidence=${classificationResult.confidence?.toFixed(3)}, processingTime=${classificationResult.processingTime}ms`);
 
 		const doc = this.model.workspace.getDocumentByTextDocument(document);
@@ -544,6 +555,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 	public dispose(): void {
 		this._classifier.dispose();
+		this._statusBarItem.dispose();
 	}
 }
 
