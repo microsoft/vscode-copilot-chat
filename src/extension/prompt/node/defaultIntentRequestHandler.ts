@@ -31,7 +31,7 @@ import { mixin } from '../../../util/vs/base/common/objects';
 import { assertType, Mutable } from '../../../util/vs/base/common/types';
 import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEditPart, LanguageModelToolResult2 } from '../../../vscodeTypes';
+import { ChatResponseCommandButtonPart, ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEditPart, LanguageModelToolResult2 } from '../../../vscodeTypes';
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
 import { CopilotInteractiveEditorResponse, InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
 import { PauseController } from '../../intents/node/pauseController';
@@ -42,6 +42,7 @@ import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/
 import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { IToolGrouping, IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
+import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 import { Conversation, getUniqueReferences, GlobalContextMessageMetadata, IResultMetadata, RenderedUserMessageMetadata, RequestDebugInformation, ResponseStreamParticipant, Turn, TurnStatus } from '../common/conversation';
 import { IBuildPromptContext, IToolCallRound } from '../common/intents';
 import { ChatTelemetry, ChatTelemetryBuilder } from './chatParticipantTelemetry';
@@ -49,7 +50,6 @@ import { IntentInvocationMetadata } from './conversation';
 import { IDocumentContext } from './documentContext';
 import { IBuildPromptResult, IIntent, IIntentInvocation, IResponseProcessor } from './intents';
 import { ConversationalBaseTelemetryData, createTelemetryWithId, sendModelMessageTelemetry } from './telemetry';
-import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 
 export interface IDefaultIntentRequestHandlerOptions {
 	maxToolCallIterations: number;
@@ -229,13 +229,15 @@ export class DefaultIntentRequestHandler {
 			});
 		}
 
-
 		// 3. Track the survival of other(?) interactions
 		// todo@connor4312: can these two streams be combined?
 		const interactionOutcomeComputer = new InteractionOutcomeComputer(this.documentContext?.document.uri);
 		participants.push(stream => interactionOutcomeComputer.spyOnStream(stream));
 
-		// 4. Linkify the stream unless told otherwise
+		// 4. Process parallel task buttons (disabled - HTML comments are stripped by VS Code)
+		// Parallel task buttons are now processed directly from tool results in _onDidReceiveResponse
+
+		// 5. Linkify the stream unless told otherwise
 		if (!intentInvocation.linkification?.disable) {
 			participants.push(stream => {
 				const linkStream = this._instantiationService.createInstance(ResponseStreamWithLinkification, { requestId: this.turn.id, references: this.turn.references }, stream, intentInvocation.linkification?.additionaLinkifiers ?? [], this.token);
@@ -245,7 +247,7 @@ export class DefaultIntentRequestHandler {
 			});
 		}
 
-		// 5. General telemetry on emitted components
+		// 6. General telemetry on emitted components
 		participants.push(stream => ChatResponseStreamImpl.spy(stream, (part) => {
 			if (part instanceof ChatResponseMarkdownPart) {
 				this._loop.telemetry.markEmittedMarkdown(part.value);
@@ -258,9 +260,204 @@ export class DefaultIntentRequestHandler {
 		return participants;
 	}
 
-	private async _onDidReceiveResponse({ response, toolCalls, interactionOutcome }: IToolCallingResponseEvent) {
+	private processParallelTaskButtons(toolCalls: any[], toolCallResults: Record<string, any>): void {
+		console.log('processParallelTaskButtons called with:', {
+			toolCallsLength: toolCalls?.length || 0,
+			toolCallNames: toolCalls?.map(call => call.name) || [],
+			toolCallResultsLength: Object.keys(toolCallResults || {}).length
+		});
+
+		// Check if any suggest_parallel_tasks tool was called
+		const parallelTaskCalls = toolCalls?.filter(call => call.name === 'suggest_parallel_tasks') || [];
+
+		console.log('Found parallel task calls:', parallelTaskCalls);
+
+		if (parallelTaskCalls.length > 0) {
+			console.log('Processing suggest_parallel_tasks tool calls:', parallelTaskCalls);
+
+			// Get the tool results directly from the parameter
+			for (const call of parallelTaskCalls) {
+				console.log('Processing call:', call);
+
+				// Get the tool result directly
+				const toolResult = toolCallResults?.[call.id];
+
+				if (!toolResult) {
+					console.log('Could not find tool result for call ID:', call.id);
+					console.log('Available tool result IDs:', Object.keys(toolCallResults || {}));
+
+					// Tool result not available yet, try multiple times with increasing delays
+					this.retryParallelTaskProcessing(call, 1);
+					continue;
+				}
+
+				console.log('Processing tool result for call', call.id, ':', toolResult);
+
+				// Extract the text content from the tool result
+				this.processToolResultForButtons(toolResult);
+			}
+		} else {
+			console.log('No suggest_parallel_tasks tool calls found');
+		}
+	}
+
+	private retryParallelTaskProcessing(call: any, attempt: number): void {
+		const maxAttempts = 5;
+		const delay = attempt * 200; // 200ms, 400ms, 600ms, 800ms, 1000ms
+
+		console.log(`Retry attempt ${attempt}/${maxAttempts} for call ${call.id} after ${delay}ms`);
+
+		setTimeout(() => {
+			// Check if the tool calling loop has the result now
+			if (this._loop && (this._loop as any).toolCallResults) {
+				const toolResult = (this._loop as any).toolCallResults[call.id];
+				if (toolResult) {
+					console.log(`Found tool result on retry attempt ${attempt} for call ${call.id}`);
+					this.processToolResultForButtons(toolResult);
+					return;
+				}
+			}
+
+			// If still not found and we haven't exhausted attempts, try again
+			if (attempt < maxAttempts) {
+				this.retryParallelTaskProcessing(call, attempt + 1);
+			} else {
+				console.log(`Failed to find tool result for call ${call.id} after ${maxAttempts} attempts`);
+			}
+		}, delay);
+	}
+
+	private processToolResultForButtons(toolResult: any): void {
+		// Extract the text content from the tool result
+		let toolContent = '';
+		if (toolResult.content && Array.isArray(toolResult.content)) {
+			for (const part of toolResult.content) {
+				if (part && typeof part === 'object' && 'value' in part && typeof part.value === 'string') {
+					toolContent += part.value;
+				}
+			}
+		} else if (typeof toolResult === 'string') {
+			toolContent = toolResult;
+		} else if (toolResult && typeof toolResult === 'object' && 'value' in toolResult && typeof toolResult.value === 'string') {
+			toolContent = toolResult.value;
+		}
+
+		console.log('Extracted tool content length:', toolContent.length);
+		console.log('Tool content preview:', toolContent.substring(0, 500));
+
+		// Extract button data from the tool content
+		this.extractAndRenderButtons(toolContent);
+	}
+
+	private processPostLoopParallelTaskButtons(toolCallRounds: any[], toolCallResults: Record<string, any>): void {
+		console.log('processPostLoopParallelTaskButtons called with:', {
+			roundsLength: toolCallRounds?.length || 0,
+			toolCallResultsLength: Object.keys(toolCallResults || {}).length
+		});
+
+		// Find all suggest_parallel_tasks tool calls across all rounds
+		const allParallelTaskCalls = [];
+		for (const round of toolCallRounds || []) {
+			const parallelTaskCalls = round.toolCalls?.filter((call: any) => call.name === 'suggest_parallel_tasks') || [];
+			allParallelTaskCalls.push(...parallelTaskCalls);
+		}
+
+		console.log('Found parallel task calls in all rounds:', allParallelTaskCalls);
+
+		if (allParallelTaskCalls.length > 0) {
+			console.log('Processing post-loop suggest_parallel_tasks tool calls:', allParallelTaskCalls);
+
+			// Process each parallel task call
+			for (const call of allParallelTaskCalls) {
+				console.log('Processing post-loop call:', call);
+
+				// Get the tool result
+				const toolResult = toolCallResults?.[call.id];
+
+				if (!toolResult) {
+					console.log('Could not find tool result for call ID:', call.id);
+					console.log('Available tool result IDs:', Object.keys(toolCallResults || {}));
+					continue;
+				}
+
+				console.log('Processing post-loop tool result for call', call.id, ':', toolResult);
+
+				// Extract the text content from the tool result
+				this.processToolResultForButtons(toolResult);
+			}
+		} else {
+			console.log('No suggest_parallel_tasks tool calls found in any round');
+		}
+	}
+
+	private extractAndRenderButtons(toolContent: string): void {
+		// Look for BUTTON_DATA comments in the tool content
+		const buttonDataMatches = toolContent.match(/<!-- BUTTON_DATA: (\{.*?\}) -->/gs);
+
+		if (buttonDataMatches) {
+			console.log('Found button data in tool content:', buttonDataMatches);
+
+			for (const match of buttonDataMatches) {
+				try {
+					// Extract JSON from the comment
+					const jsonMatch = match.match(/<!-- BUTTON_DATA: (\{.*?\}) -->/s);
+					if (!jsonMatch) {
+						console.warn('Could not extract JSON from button data comment:', match);
+						continue;
+					}
+
+					const jsonData = jsonMatch[1];
+					console.log('Extracted JSON data:', jsonData);
+					const buttonData = JSON.parse(jsonData);
+
+					// Create and render the button
+					const taskArg = buttonData.arguments[0];
+					const getPriorityIcon = (priority: string) => {
+						switch (priority) {
+							case 'High': return '🔴';
+							case 'Medium': return '🟡';
+							case 'Low': return '🟢';
+							default: return '';
+						}
+					};
+					const priorityIcon = getPriorityIcon(taskArg.priority);
+					const backgroundIcon = taskArg.canRunInBackground ? '🔄' : '⚪';
+
+					const command = {
+						title: `${priorityIcon} ${taskArg.title} ${backgroundIcon}`,
+						command: buttonData.command,
+						arguments: buttonData.arguments,
+						tooltip: `${taskArg.description} (${taskArg.estimatedDuration})`
+					};
+
+					// Add the button directly to the stream
+					console.log('Creating button with command:', command);
+					this.stream.push(new ChatResponseCommandButtonPart(command));
+					console.log('Button successfully added to stream');
+				} catch (error) {
+					console.warn('Failed to parse parallel task button data:', error);
+					console.warn('Failed match was:', match);
+				}
+			}
+		} else {
+			console.log('No button data found in tool content');
+		}
+	}
+
+	private async _onDidReceiveResponse({ response, toolCalls, interactionOutcome, toolCallResults }: IToolCallingResponseEvent) {
 		const responseMessage = (response.type === ChatFetchResponseType.Success ? response.value : '');
 		await this._loop.telemetry.sendTelemetry(response.requestId, response.type, responseMessage, interactionOutcome.interactionOutcome, toolCalls);
+
+		// Debug: Log all tool calls
+		console.log('_onDidReceiveResponse called with:', {
+			toolCallsLength: toolCalls?.length || 0,
+			toolCallNames: toolCalls?.map(call => call.name) || [],
+			interactionOutcome: interactionOutcome,
+			toolCallResultsLength: Object.keys(toolCallResults || {}).length
+		});
+
+		// Process parallel task tool results and add buttons
+		this.processParallelTaskButtons(toolCalls, toolCallResults);
 
 		if (this.documentContext) {
 			this.turn.setMetadata(new CopilotInteractiveEditorResponse(
@@ -327,7 +524,15 @@ export class DefaultIntentRequestHandler {
 		const pauseCtrl = store.add(new PauseController(this.onPaused, this.token));
 
 		try {
+			console.log('Starting tool calling loop...');
 			const result = await loop.run(this.stream, pauseCtrl);
+			console.log('Tool calling loop completed. Result:', {
+				hasRounds: !!result.toolCallRounds,
+				roundsLength: result.toolCallRounds?.length || 0,
+				hasToolCallResults: !!result.toolCallResults,
+				toolCallResultsLength: Object.keys(result.toolCallResults || {}).length
+			});
+
 			if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
 				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableTools, this.token.isCancellationRequested ? 'cancelled' : result.response.type);
 			}
@@ -335,6 +540,10 @@ export class DefaultIntentRequestHandler {
 			if ((result.chatResult.metadata as IResultMetadata)?.maxToolCallsExceeded) {
 				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableTools, 'maxToolCalls');
 			}
+
+			// Process parallel task buttons now that all tool results are available
+			console.log('Post-loop: Processing parallel task buttons with complete tool results');
+			this.processPostLoopParallelTaskButtons(result.toolCallRounds, result.toolCallResults);
 
 			// TODO need proper typing for all chat metadata and a better pattern to build it up from random places
 			result.chatResult = this.resultWithMetadatas(result.chatResult);

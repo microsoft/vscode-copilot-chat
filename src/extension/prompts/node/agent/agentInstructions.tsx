@@ -135,6 +135,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{!tools[ToolName.CoreRunInTerminal] && <>You don't currently have any tools available for running terminal commands. If the user asks you to run a terminal command, you can ask the user to enable terminal tools or print a codeblock with the suggested command.<br /></>}
 				Tools can be disabled by the user. You may see tools used previously in the conversation that are not currently available. Be careful to only use the tools that are currently available to you.
 			</Tag>
+			{<ParallelTaskInstructions {...this.props} />}
 			{this.props.codesearchMode && <CodesearchModeInstructions {...this.props} />}
 			{tools[ToolName.EditFile] && !tools[ToolName.ApplyPatch] && <Tag name='editFileInstructions'>
 				{tools[ToolName.ReplaceString] ?
@@ -412,6 +413,7 @@ export class CodexStyleGPTPrompt extends PromptElement<DefaultAgentPromptProps> 
 				</Tag>
 				<MathIntegrationRules />
 			</Tag>
+			{<ParallelTaskInstructions {...this.props} />}
 			<ResponseTranslationRules />
 		</InstructionMessage>;
 	}
@@ -434,6 +436,7 @@ export class DefaultAgentPromptV2 extends PromptElement<DefaultAgentPromptProps>
 				- Never stop or hand back to the user when you encounter uncertainty — research or deduce the most reasonable approach and continue.<br />
 				- Do not ask the human to confirm or clarify assumptions, as you can always adjust later — decide what the most reasonable assumption is, proceed with it, and document it for the user's reference after you finish acting<br />
 			</Tag>
+			{<ParallelTaskInstructions {...this.props} />}
 			<Tag name='coding_agent_instructions'>
 				# Context and Attachments<br />
 				- You will be given some context and attachments along with the user prompt. Use them if they are relevant to the task and ignore them if not. Some attachments may be summarized with omitted sections like `/* Lines 123-456 omitted */`. You can use the {ToolName.ReadFile} tool to read more context if needed. Never pass this omitted line marker to an edit tool.<br />
@@ -592,6 +595,7 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 				Do not repeat yourself after tool calls; continue from where you left off.<br />
 				You must use {ToolName.FetchWebPage} tool to recursively gather all information from URL's provided to you by the user, as well as any links you find in the content of those pages.
 			</Tag>
+			{<ParallelTaskInstructions {...this.props} />}
 			<Tag name='structuredWorkflow'>
 				# Workflow<br />
 				1. Understand the problem deeply. Carefully read the issue and think critically about what is required.<br />
@@ -813,6 +817,7 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 				6. MUST DO: Before making your final summary, you must use `git diff` command to review all files you have edited to verify that the final successful fix validated by reproducing script has been correctly applied to all the corresponding files.<br />
 				7. Never give up your attempts until you find a successful fix validated by both your reproduction script and `git diff` comparisons.<br />
 			</Tag>
+			{<ParallelTaskInstructions {...this.props} />}
 			<Tag name='agentInstructions'>
 				You are a highly sophisticated automated coding agent with expert-level knowledge across many different programming languages and frameworks.<br />
 				The user will ask a question, or ask you to perform a task, and it may require extensive research to answer correctly. There is a selection of tools that let you perform actions or retrieve helpful context to answer the user's question.<br />
@@ -1090,6 +1095,67 @@ class TodoListToolInstructions extends PromptElement<DefaultAgentPromptProps> {
 			- Before ending your turn or declaring completion: ensure EVERY todo is explicitly marked (`not-started`, `in-progress`, or `completed`). If the work is finished, ALL todos must be marked `completed`. Never leave items unchecked or ambiguous.<br />
 			<br />
 			The content of your plan should not involve doing anything that you aren't capable of doing (i.e. don't try to test things that you can't test). Do not use plans for simple or single-step queries that you can just do or answer immediately.<br />
+			<br />
+		</Tag>;
+	}
+}
+
+class ParallelTaskInstructions extends PromptElement<DefaultAgentPromptProps> {
+	render() {
+		return <Tag name='parallel_task_instructions'>
+			🚨 **CRITICAL: ALWAYS CONSIDER PARALLEL TASKS** 🚨<br />
+			You MUST use the parallel task tools ({ToolName.SuggestParallelTasks} and {ToolName.ExecuteBackgroundTasks}) whenever implementing multi-step features or complex changes. This is MANDATORY for agent efficiency.<br />
+			<br />
+			**🔥 FOR EVERY COMPLEX TASK, IMMEDIATELY:**<br />
+			1. **FIRST** → Use {ToolName.SuggestParallelTasks} with the main task description<br />
+			2. **SECOND** → Present suggestions to user<br />
+			3. **THIRD** → Use {ToolName.ExecuteBackgroundTasks} if user approves<br />
+			4. **THEN** → Continue with main implementation<br />
+			<br />
+			**⚡ ALWAYS SUGGEST PARALLEL TASKS FOR:**<br />
+			- **Authentication/Auth systems** → Suggest testing, security analysis, documentation, logging setup<br />
+			- **API implementations** → Suggest test creation, documentation, error handling, validation<br />
+			- **Database changes** → Suggest migration scripts, backup procedures, performance testing<br />
+			- **UI components** → Suggest accessibility testing, responsive design checks, unit tests<br />
+			- **Feature implementations** → Suggest integration tests, performance analysis, documentation<br />
+			- **Refactoring** → Suggest test verification, code quality analysis, dependency updates<br />
+			- **New projects** → Suggest CI/CD setup, linting configuration, testing framework setup<br />
+			<br />
+			**📋 STANDARD PARALLEL TASK CATEGORIES:**<br />
+			- **Testing**: Unit tests, integration tests, end-to-end testing<br />
+			- **Documentation**: README updates, API docs, inline comments, usage examples<br />
+			- **Analysis**: Security audits, performance profiling, dependency vulnerability checks<br />
+			- **Setup**: Development tools, linting, formatting, CI/CD pipelines<br />
+			- **Quality**: Code review automation, test coverage analysis, accessibility checks<br />
+			- **Research**: Best practices lookup, performance optimization research<br />
+			<br />
+			**⚠️ EXECUTION STRATEGY:**<br />
+			- Use `immediate` mode for non-conflicting background work (documentation, analysis)<br />
+			- Use `queued` mode (default) for tasks that might interfere with main work<br />
+			- Use `user-approval` mode when unsure about user preferences<br />
+			<br />
+			**Example for authentication implementation:**<br />
+			"Let me first identify parallel work opportunities for this authentication implementation..."<br />
+			→ Call {ToolName.SuggestParallelTasks} with "implement user authentication in Express.js app"<br />
+			→ Present: "I found 5 parallel tasks: API testing, security analysis, session management docs, rate limiting setup, and logging configuration"<br />
+			→ Execute approved tasks with {ToolName.ExecuteBackgroundTasks}<br />
+			<br />
+			**🎯 SUCCESS METRIC: If you complete a complex task without suggesting parallel work, you have FAILED to maximize productivity.**<br />
+			<br />
+			**🎨 UI RENDERING: When parallel tasks are suggested:**<br />
+			1. After calling {ToolName.SuggestParallelTasks}, present the task descriptions clearly<br />
+			2. Look for BUTTON_DATA comments in the tool response to extract command information<br />
+			3. Create interactive buttons using stream.button() with the extracted command data<br />
+			4. Present buttons in a clean layout grouped by task category<br />
+			5. Include priority indicators (🔴 High, 🟡 Medium, 🟢 Low) and background capability (🔄 Background, ⚪ Foreground)<br />
+			6. Always explain what each button will do before presenting them<br />
+			<br />
+			**EXAMPLE UI FLOW:**<br />
+			"I found 5 parallel task opportunities for authentication implementation:"<br />
+			→ Display task descriptions with categories<br />
+			→ Present interactive execution buttons for each task<br />
+			→ Group by Testing, Documentation, Security, etc.<br />
+			→ Wait for user selection before executing tasks<br />
 			<br />
 		</Tag>;
 	}

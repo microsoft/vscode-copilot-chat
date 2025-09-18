@@ -35,8 +35,13 @@ import './searchWorkspaceSymbolsTool';
 import './simpleBrowserTool';
 import './testFailureTool';
 import './thinkTool';
+import './toolReplayTool';
 import './usagesTool';
 import './userPreferencesTool';
 import './vscodeAPITool';
 import './vscodeCmdTool';
-import './toolReplayTool';
+
+// Import parallel task tools
+import '../../agents/parallelTasks/node/backgroundTaskExecuteTool';
+import '../../agents/parallelTasks/node/parallelTaskSuggestTool';
+

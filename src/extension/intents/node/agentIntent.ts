@@ -104,6 +104,10 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 		allowTools[ToolName.RunTests] = await testService.hasAnyTests();
 		allowTools[ToolName.CoreRunTask] = tasksService.getTasks().length > 0;
 
+		// Enable parallel task tools for agents
+		allowTools[ToolName.SuggestParallelTasks] = true;
+		allowTools[ToolName.ExecuteBackgroundTasks] = true;
+
 		if (request.tools.get(ContributedToolName.EditFilesPlaceholder) === false) {
 			allowTools[ToolName.ApplyPatch] = false;
 			allowTools[ToolName.EditFile] = false;

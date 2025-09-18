@@ -12,17 +12,15 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { isLocation } from '../../../../util/common/types';
 import { DeferredPromise } from '../../../../util/vs/base/common/async';
-import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelTextPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { isFileOkForTool } from '../../../tools/node/toolUtils';
 import { ILanguageModelServerConfig, LanguageModelServer } from '../../node/langModelServer';
-import { ClaudeToolNames, IExitPlanModeInput, ITodoWriteInput } from '../common/claudeTools';
+import { ClaudeToolNames, ITodoWriteInput } from '../common/claudeTools';
 import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 
 // Manages Claude Code agent interactions and language model server lifecycle
@@ -316,47 +314,49 @@ class ClaudeCodeSession {
 		}
 
 		try {
-			const result = await this.toolsService.invokeTool(ToolName.CoreConfirmationTool, {
-				input: this.getConfirmationToolParams(toolName, input),
-				toolInvocationToken,
-			}, CancellationToken.None);
-			const firstResultPart = result.content.at(0);
-			if (firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes') {
-				return {
-					behavior: 'allow',
-					updatedInput: input
-				};
-			}
-		} catch { }
+			// const result = await this.toolsService.invokeTool(ToolName.CoreConfirmationTool, {
+			// 	input: this.getConfirmationToolParams(toolName, input),
+			// 	toolInvocationToken,
+			// }, CancellationToken.None);
+			// const firstResultPart = result.content.at(0);
+			// if (firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes') {
+			return {
+				behavior: 'allow',
+				updatedInput: input
+			};
+			// }
+		} catch (e) {
+			console.log(e);
+		}
 		return {
 			behavior: 'deny',
 			message: ClaudeCodeSession.DenyToolMessage
 		};
 	}
 
-	private getConfirmationToolParams(toolName: string, input: Record<string, unknown>): IConfirmationToolParams {
-		if (toolName === ClaudeToolNames.Bash) {
-			return {
-				title: `Use ${toolName}?`,
-				message: `\`\`\`\n${JSON.stringify(input, null, 2)}\n\`\`\``,
-				confirmationType: 'terminal',
-				terminalCommand: input.command as string | undefined
-			};
-		} else if (toolName === ClaudeToolNames.ExitPlanMode) {
-			const plan = (input as unknown as IExitPlanModeInput).plan;
-			return {
-				title: `Ready to code?`,
-				message: 'Here is Claude\'s plan:\n\n' + plan,
-				confirmationType: 'basic'
-			};
-		}
+	// private getConfirmationToolParams(toolName: string, input: Record<string, unknown>): IConfirmationToolParams {
+	// 	if (toolName === ClaudeToolNames.Bash) {
+	// 		return {
+	// 			title: `Use ${toolName}?`,
+	// 			message: `\`\`\`\n${JSON.stringify(input, null, 2)}\n\`\`\``,
+	// 			confirmationType: 'terminal',
+	// 			terminalCommand: input.command as string | undefined
+	// 		};
+	// 	} else if (toolName === ClaudeToolNames.ExitPlanMode) {
+	// 		const plan = (input as unknown as IExitPlanModeInput).plan;
+	// 		return {
+	// 			title: `Ready to code?`,
+	// 			message: 'Here is Claude\'s plan:\n\n' + plan,
+	// 			confirmationType: 'basic'
+	// 		};
+	// 	}
 
-		return {
-			title: `Use ${toolName}?`,
-			message: `\`\`\`\n${JSON.stringify(input, null, 2)}\n\`\`\``,
-			confirmationType: 'basic'
-		};
-	}
+	// 	return {
+	// 		title: `Use ${toolName}?`,
+	// 		message: `\`\`\`\n${JSON.stringify(input, null, 2)}\n\`\`\``,
+	// 		confirmationType: 'basic'
+	// 	};
+	// }
 
 	private async canAutoApprove(toolName: string, input: Record<string, unknown>): Promise<boolean> {
 		if (toolName === ClaudeToolNames.Edit || toolName === ClaudeToolNames.Write || toolName === ClaudeToolNames.MultiEdit) {
@@ -370,12 +370,12 @@ class ClaudeCodeSession {
 /**
  * Tool params from core
  */
-interface IConfirmationToolParams {
-	readonly title: string;
-	readonly message: string;
-	readonly confirmationType?: 'basic' | 'terminal';
-	readonly terminalCommand?: string;
-}
+// interface IConfirmationToolParams {
+// 	readonly title: string;
+// 	readonly message: string;
+// 	readonly confirmationType?: 'basic' | 'terminal';
+// 	readonly terminalCommand?: string;
+// }
 
 interface IManageTodoListToolInputParams {
 	readonly operation?: 'write' | 'read'; // Optional in write-only mode

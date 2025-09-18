@@ -55,7 +55,9 @@ export enum ToolName {
 	EditFilesPlaceholder = 'edit_files',
 	ExecutePrompt = 'execute_prompt',
 	ExecuteTask = 'execute_task',
-	CoreConfirmationTool = 'vscode_get_confirmation'
+	CoreConfirmationTool = 'vscode_get_confirmation',
+	SuggestParallelTasks = 'suggest_parallel_tasks',
+	ExecuteBackgroundTasks = 'execute_background_tasks'
 }
 
 export enum ContributedToolName {

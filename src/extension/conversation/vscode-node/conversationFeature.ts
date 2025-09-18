@@ -17,11 +17,18 @@ import { IGitCommitMessageService } from '../../../platform/git/common/gitCommit
 import { ILogService } from '../../../platform/log/common/logService';
 import { ISettingsEditorSearchService } from '../../../platform/settingsEditor/common/settingsEditorSearchService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { DeferredPromise } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { DisposableStore, IDisposable, combinedDisposable } from '../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../util/vs/base/common/uri';
+import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ServiceCollection } from '../../../util/vs/platform/instantiation/common/serviceCollection';
+import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
+import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
+import { ClaudeChatSessionContentProvider } from '../../chatSessions/vscode-node/claudeChatSessionContentProvider';
+import { ClaudeChatSessionItemProvider, ClaudeSessionDataStore } from '../../chatSessions/vscode-node/claudeChatSessionItemProvider';
 import { ContributionCollection, IExtensionContribution } from '../../common/contributions';
 import { vscodeNodeChatContributions } from '../../extension/vscode-node/contributions';
 import { IMergeConflictService } from '../../git/common/mergeConflictService';
@@ -274,6 +281,96 @@ export class ConversationFeature implements IExtensionContribution {
 			registerNewWorkspaceIntentCommand(this.newWorkspacePreviewContentManager, this.logService, options),
 			registerGitHubPullRequestTitleAndDescriptionProvider(this.instantiationService),
 			registerSearchIntentCommand(),
+			vscode.commands.registerCommand('github.copilot.executeParallelTask', async (taskData: any) => {
+				// Create a new Claude Code chat session for the parallel task by calling provideNewChatSessionItem
+				try {
+					if (!taskData || typeof taskData !== 'object') {
+						vscode.window.showErrorMessage('Invalid task data provided');
+						return;
+					}
+
+					// Create the Claude chat session provider with proper service setup
+					// This replicates the setup from chatSessions.ts
+					const claudeAgentInstaService = this.instantiationService.createChild(
+						new ServiceCollection(
+							[IClaudeCodeSessionService, new SyncDescriptor(ClaudeCodeSessionService)]));
+
+					const sessionStore = claudeAgentInstaService.createInstance(ClaudeSessionDataStore);
+					const claudeProvider = claudeAgentInstaService.createInstance(ClaudeChatSessionItemProvider, sessionStore);
+
+					// Create a descriptive session label and prompt for the parallel task
+					const sessionLabel = `${taskData.title} - ${taskData.category}`;
+					const taskPrompt = `Work on: ${taskData.title}\n\n${taskData.description}\n\nCategory: ${taskData.category}\nPriority: ${taskData.priority}\nEstimated Duration: ${taskData.estimatedDuration}`;
+
+					// Create a basic chat request for the task (simplified structure)
+					const chatRequest = {
+						prompt: taskPrompt,
+						command: undefined,
+						references: []
+					} as Partial<vscode.ChatRequest>;
+
+					// Call provideNewChatSessionItem directly
+					const workingDirectory = await vscode.commands.executeCommand('git.createWorktreeWithDefaults');
+					const newSession = await claudeProvider.provideNewChatSessionItem({
+						request: chatRequest as vscode.ChatRequest,
+						prompt: sessionLabel,
+						history: [],
+						workingDirectory: workingDirectory as string | undefined,
+						metadata: {
+							parallelTask: true,
+							originalTask: taskData,
+							createdAt: new Date().toISOString()
+						}
+					}, new vscode.CancellationTokenSource().token);
+
+					// Now trigger the actual execution by creating and using the content provider
+					const claudeAgentManager = claudeAgentInstaService.createInstance(ClaudeAgentManager);
+					const contentProvider = claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider, claudeAgentManager, sessionStore);
+
+					// Get the session content which will trigger execution if there's an initialRequest
+					const sessionContent = await contentProvider.provideChatSessionContent(newSession.id, new vscode.CancellationTokenSource().token);
+
+					// If there's an activeResponseCallback (meaning there was an initialRequest), execute it manually
+					if (sessionContent.activeResponseCallback) {
+						// Create a simple response stream for background execution
+						const responseStream = new ChatResponseStreamImpl(() => { }, () => { });
+
+						// Execute the parallel task in the background
+						try {
+							await sessionContent.activeResponseCallback(responseStream, new vscode.CancellationTokenSource().token);
+							vscode.window.showInformationMessage(
+								`✅ Parallel task completed: ${taskData.title}`
+							);
+						} catch (error: any) {
+							console.error('Parallel task execution failed:', error);
+							vscode.window.showErrorMessage(
+								`❌ Parallel task failed: ${taskData.title} - ${error.message || String(error)}`
+							);
+						}
+
+						// Show that execution started
+						vscode.window.showInformationMessage(
+							`🚀 Started parallel task: ${taskData.title}`
+						);
+					}
+
+					// Refresh the Claude sessions list to show the new session
+					vscode.commands.executeCommand('github.copilot.claude.sessions.refresh');
+					contentProvider.provideChatSessionContent(newSession.id, new vscode.CancellationTokenSource().token);
+
+					// Show success notification
+					vscode.window.showInformationMessage(
+						`🚀 Started Claude Code task: ${newSession.label}`
+					);
+
+					// Optionally open the session to see progress
+					// await vscode.commands.executeCommand('workbench.action.chat.openSession', newSession.id);
+
+				} catch (error) {
+					console.error('Failed to create parallel task session:', error);
+					vscode.window.showErrorMessage(`Failed to create parallel task session: ${error instanceof Error ? error.message : String(error)}`);
+				}
+			}),
 		].forEach(d => disposables.add(d));
 		return disposables;
 	}

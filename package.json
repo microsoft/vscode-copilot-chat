@@ -1125,6 +1125,96 @@
 				"icon": "$(pencil)",
 				"displayName": "Edit Files",
 				"toolReferenceName": "editFiles"
+			},
+			{
+				"name": "suggest_parallel_tasks",
+				"toolReferenceName": "suggestParallelTasks",
+				"displayName": "Suggest Parallel Tasks",
+				"icon": "$(multiple-windows)",
+				"userDescription": "Suggest independent tasks that can be executed in parallel",
+				"modelDescription": "Suggests independent tasks that can be executed in parallel while working on the main task. Analyzes the workspace and current task to identify complementary work like testing, documentation, refactoring, or analysis that can run in the background.",
+				"tags": [
+					"productivity",
+					"parallel",
+					"background"
+				],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"mainTaskDescription": {
+							"type": "string",
+							"description": "Description of the main task being worked on"
+						},
+						"workspaceType": {
+							"type": "string",
+							"enum": ["typescript", "javascript", "react", "node", "python", "java", "csharp", "other"],
+							"description": "Type of workspace/project"
+						},
+						"includeCategories": {
+							"type": "array",
+							"items": {
+								"type": "string",
+								"enum": ["testing", "documentation", "refactoring", "analysis", "setup", "research", "codeGeneration"]
+							},
+							"description": "Categories of tasks to include in suggestions"
+						},
+						"maxSuggestions": {
+							"type": "number",
+							"default": 5,
+							"description": "Maximum number of suggestions to return"
+						}
+					},
+					"required": ["mainTaskDescription"]
+				}
+			},
+			{
+				"name": "execute_background_tasks",
+				"toolReferenceName": "executeBackgroundTasks",
+				"displayName": "Execute Background Tasks",
+				"icon": "$(play)",
+				"userDescription": "Execute suggested tasks in the background",
+				"modelDescription": "Executes suggested tasks in the background while the agent continues with the main task. Supports different execution modes: immediate, queued, or user-approval. Tasks run independently and notify when complete.",
+				"tags": [
+					"execution",
+					"background",
+					"parallel"
+				],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"taskSuggestions": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"properties": {
+									"id": {"type": "string"},
+									"title": {"type": "string"},
+									"description": {"type": "string"},
+									"category": {"type": "string"},
+									"priority": {"type": "string"},
+									"estimatedDuration": {"type": "string"},
+									"constraints": {"type": "array", "items": {"type": "string"}},
+									"dependencies": {"type": "array", "items": {"type": "string"}},
+									"canRunInBackground": {"type": "boolean"},
+									"suggestedTrigger": {"type": "string"}
+								}
+							},
+							"description": "Array of task suggestions to execute"
+						},
+						"executionMode": {
+							"type": "string",
+							"enum": ["immediate", "queued", "user-approval"],
+							"default": "queued",
+							"description": "How to execute the tasks"
+						},
+						"notifyOnCompletion": {
+							"type": "boolean",
+							"default": "true",
+							"description": "Whether to notify when tasks complete"
+						}
+					},
+					"required": ["taskSuggestions"]
+				}
 			}
 		],
 		"languageModelToolSets": [

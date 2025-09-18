@@ -74,6 +74,7 @@ export interface IToolCallingResponseEvent {
 	response: ChatResponse;
 	interactionOutcome: InteractionOutcomeComputer;
 	toolCalls: IToolCall[];
+	toolCallResults: Record<string, LanguageModelToolResult2>;
 }
 
 export interface IToolCallingBuiltPromptEvent {
@@ -479,7 +480,12 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		}
 
 		await finalizeStreams(streamParticipants);
-		this._onDidReceiveResponse.fire({ interactionOutcome: interactionOutcomeComputer, response: fetchResult, toolCalls });
+		this._onDidReceiveResponse.fire({
+			interactionOutcome: interactionOutcomeComputer,
+			response: fetchResult,
+			toolCalls,
+			toolCallResults: this.toolCallResults
+		});
 
 		this.turn.setMetadata(interactionOutcomeComputer.interactionOutcome);
 		const toolInputRetry = isToolInputFailure ? (this.toolCallRounds.at(-1)?.toolInputRetry || 0) + 1 : 0;
