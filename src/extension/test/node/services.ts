@@ -33,6 +33,10 @@ import { ITestProvider } from '../../../platform/testing/common/testProvider';
 import { IWorkspaceChunkSearchService, NullWorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
+import { IClaudeCodeSdkService } from '../../agents/claude/node/claudeCodeSdkService';
+import { MockClaudeCodeSdkService } from '../../agents/claude/node/test/mockClaudeCodeSdkService';
+import { ILanguageModelServer } from '../../agents/node/langModelServer';
+import { MockLanguageModelServer } from '../../agents/node/test/mockLanguageModelServer';
 import { CommandServiceImpl, ICommandService } from '../../commands/node/commandService';
 import { ILinkifyService, LinkifyService } from '../../linkify/common/linkifyService';
 import { IFeedbackReporter, NullFeedbackReporterImpl } from '../../prompt/node/feedbackReporter';
@@ -79,6 +83,7 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IFeedbackReporter, new SyncDescriptor(NullFeedbackReporterImpl));
 	testingServiceCollection.define(IChatMLFetcher, new SyncDescriptor(MockChatMLFetcher));
 	testingServiceCollection.define(IToolsService, new SyncDescriptor(TestToolsService, [new Set()]));
+	testingServiceCollection.define(IClaudeCodeSdkService, new SyncDescriptor(MockClaudeCodeSdkService));
 	testingServiceCollection.define(IEditLogService, new SyncDescriptor(EditLogService));
 	testingServiceCollection.define(IMultiFileEditInternalTelemetryService, new SyncDescriptor(MultiFileEditInternalTelemetryService));
 	testingServiceCollection.define(ICodeMapperService, new SyncDescriptor(CodeMapperService));
@@ -94,5 +99,6 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(IToolGroupingService, new SyncDescriptor(ToolGroupingService));
 	testingServiceCollection.define(IEmbeddingsComputer, new SyncDescriptor(RemoteEmbeddingsComputer));
 	testingServiceCollection.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
+	testingServiceCollection.define(ILanguageModelServer, new SyncDescriptor(MockLanguageModelServer));
 	return testingServiceCollection;
 }

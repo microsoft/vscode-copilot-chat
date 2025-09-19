@@ -9,6 +9,7 @@ import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/d
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../util/vs/platform/instantiation/common/serviceCollection';
 import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
+import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
 import { IExtensionContribution } from '../../common/contributions';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
@@ -24,7 +25,9 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 
 		const claudeAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
-				[IClaudeCodeSessionService, new SyncDescriptor(ClaudeCodeSessionService)]));
+				[IClaudeCodeSessionService, new SyncDescriptor(ClaudeCodeSessionService)],
+				[ILanguageModelServer, new SyncDescriptor(LanguageModelServer)],
+			));
 
 		const sessionStore = claudeAgentInstaService.createInstance(ClaudeSessionDataStore);
 		const sessionItemProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionItemProvider, sessionStore));
