@@ -10,6 +10,7 @@ import { IChatMLFetcher } from '../../../../../platform/chat/common/chatMLFetche
 import { IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../../../platform/endpoint/common/domainService';
+import { ModelSupportedEndpoint } from '../../../../../platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../../../../platform/env/common/envService';
 import { ILogService } from '../../../../../platform/log/common/logService';
 import { IFetcherService } from '../../../../../platform/networking/common/fetcherService';
@@ -93,14 +94,16 @@ describe('OpenAICompatibleTestEndpoint - Reasoning Properties', () => {
 					streaming: true,
 					tool_calls: true,
 					vision: false,
-					prediction: false
+					prediction: false,
+					thinking: false
 				},
 				limits: {
 					max_prompt_tokens: 4096,
 					max_output_tokens: 2048,
 					max_context_window_tokens: 6144
 				}
-			}
+			},
+			supported_endpoints: [ModelSupportedEndpoint.ChatCompletions]
 		};
 	});
 
