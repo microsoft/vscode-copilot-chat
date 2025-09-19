@@ -55,7 +55,6 @@ async function fetchSecrets(): Promise<{ [key: string]: string | undefined }> {
 
 	const secrets: { [key: string]: string | undefined } = {};
 	secrets["HMAC_SECRET"] = await fetchSecret(developmentSecretClient, "hmac-secret");
-	secrets["XTAB_KEY"] = await fetchSecret(developmentSecretClient, "xtab-mass-swc");
 
 	if (!process.stdin.isTTY) { // only in automation
 		const automationVaultClient = await setupSecretClient("https://copilot-automation.vault.azure.net/");
