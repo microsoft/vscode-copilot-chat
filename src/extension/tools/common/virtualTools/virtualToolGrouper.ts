@@ -72,6 +72,10 @@ export class VirtualToolGrouper implements IToolCategorization {
 			}
 		}
 
+		const virtualToolEmbeddingRankingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.VirtualToolEmbeddingRanking, this._expService);
+		const predictedToolsSw = new StopWatch();
+		const predictedToolsPromise = virtualToolEmbeddingRankingEnabled && this._getPredictedTools(query, tools, token).then(tools => ({ tools, durationMs: predictedToolsSw.elapsed() }));
+
 		const grouped = await Promise.all(Object.entries(byToolset).map(([key, tools]) => {
 			if (key === BUILT_IN_GROUP) {
 				return tools;
@@ -94,16 +98,43 @@ export class VirtualToolGrouper implements IToolCategorization {
 			}
 		}
 
-		const virtualToolEmbeddingRankingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.VirtualToolEmbeddingRanking, this._expService);
+		await this._reExpandTools(root, predictedToolsPromise);
+	}
 
-		if (virtualToolEmbeddingRankingEnabled) {
-			const predictedTools = await this._getPredictedTools(query, tools, token);
-
+	private async _reExpandTools(root: VirtualTool, predictedToolsPromise: Promise<{ tools: LanguageModelToolInformation[]; durationMs: number }> | false): Promise<void> {
+		if (predictedToolsPromise) {
 			// Aggressively expand groups with predicted tools up to hard limit
-			this._reExpandToolsToHitBudget(root, g => this._getGroupPredictedRelevancy(g, predictedTools), HARD_TOOL_LIMIT);
-		} else {
-			this._reExpandToolsToHitBudget(root, g => g.contents.length);
+			const sw = new StopWatch();
+			let error: Error | undefined;
+			let computeMs: number | undefined;
+			try {
+				const { tools, durationMs } = await predictedToolsPromise;
+				computeMs = durationMs;
+				this._reExpandToolsToHitBudget(root, g => this._getGroupPredictedRelevancy(g, tools), HARD_TOOL_LIMIT);
+				return;
+			} catch (e) {
+				error = e;
+			} finally {
+				// Telemetry for predicted tool re-expansion
+				/* __GDPR__
+					"virtualTools.expandEmbedding" : {
+						"owner": "connor4312",
+						"comment": "Expansion of virtual tool groups using embedding-based ranking.",
+						"error": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "Error message if expansion failed" },
+						"blockingMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Blocking duration of the expansion operation in milliseconds", "isMeasurement": true },
+						"computeMs": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Duration of the expansion operation in milliseconds", "isMeasurement": true },
+						"hadError": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the operation had an error", "isMeasurement": true }
+					}
+				*/
+				this._telemetryService.sendMSFTTelemetryEvent('virtualTools.expandEmbedding', { error: error ? error.message : undefined }, {
+					blockingMs: sw.elapsed(),
+					computeMs,
+					hadError: error ? 1 : 0,
+				});
+			}
 		}
+
+		this._reExpandToolsToHitBudget(root, g => g.contents.length);
 	}
 
 	public static deduplicateGroups(grouped: readonly (VirtualTool | LanguageModelToolInformation)[]) {

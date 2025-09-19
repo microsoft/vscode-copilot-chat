@@ -367,12 +367,16 @@ export class ToolResultMetadata extends PromptMetadata {
 	}
 }
 
-class McpLinkedResourceToolResult extends PromptElement<{ resourceUri: URI; mimeType: string | undefined } & BasePromptElementProps> {
+// Some MCP servers return a ton of resources as a 'download' action.
+// Only include them all eagerly if we have a manageable number.
+const DONT_INCLUDE_RESOURCE_CONTENT_IF_TOOL_HAS_MORE_THAN = 9;
+
+class McpLinkedResourceToolResult extends PromptElement<{ resourceUri: URI; mimeType: string | undefined; count: number } & BasePromptElementProps> {
 	public static readonly mimeType = 'application/vnd.code.resource-link';
 	private static MAX_PREVIEW_LINES = 500;
 
 	constructor(
-		props: { resourceUri: URI; mimeType: string | undefined } & BasePromptElementProps,
+		props: { resourceUri: URI; mimeType: string | undefined; count: number } & BasePromptElementProps,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 	) {
@@ -382,6 +386,10 @@ class McpLinkedResourceToolResult extends PromptElement<{ resourceUri: URI; mime
 	async render() {
 		if (await this.ignoreService.isCopilotIgnored(this.props.resourceUri)) {
 			return null;
+		}
+
+		if (this.props.count > DONT_INCLUDE_RESOURCE_CONTENT_IF_TOOL_HAS_MORE_THAN) {
+			return <Tag name='resource' attrs={{ uri: this.props.resourceUri.toString() }} />;
 		}
 
 		const contents = await this.fileSystemService.readFile(this.props.resourceUri);
@@ -401,6 +409,7 @@ interface IPrimitiveToolResultProps extends BasePromptElementProps {
 }
 
 class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptElement<T> {
+	protected readonly linkedResources: LanguageModelDataPart[];
 
 	constructor(
 		props: T,
@@ -412,10 +421,10 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 		@IExperimentationService private readonly experimentationService?: IExperimentationService
 	) {
 		super(props);
+		this.linkedResources = this.props.content.filter((c): c is LanguageModelDataPart => c instanceof LanguageModelDataPart && c.mimeType === McpLinkedResourceToolResult.mimeType);
 	}
 
 	async render(): Promise<PromptPiece | undefined> {
-		const hasLinkedResource = this.props.content.some(c => c instanceof LanguageModelDataPart && c.mimeType === McpLinkedResourceToolResult.mimeType);
 
 		return (
 			<>
@@ -431,7 +440,7 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 							return await this.onData(part);
 						}
 					}))}
-					{hasLinkedResource && `Hint: you can read the full contents of any truncated resources by passing their URIs as the absolutePath to the ${ToolName.ReadFile}.\n`}
+					{this.linkedResources.length > 0 && `Hint: you can read the full contents of any ${this.linkedResources.length > DONT_INCLUDE_RESOURCE_CONTENT_IF_TOOL_HAS_MORE_THAN ? '' : 'truncated '}resources by passing their URIs as the absolutePath to the ${ToolName.ReadFile}.\n`}
 				</IfEmpty>
 			</>
 		);
@@ -535,7 +544,7 @@ export class ToolResult extends PrimitiveToolResult<IToolResultProps> {
 			return null;
 		}
 
-		return <McpLinkedResourceToolResult resourceUri={URI.revive(parsed.uri)} mimeType={parsed.underlyingMimeType} />;
+		return <McpLinkedResourceToolResult resourceUri={URI.revive(parsed.uri)} mimeType={parsed.underlyingMimeType} count={this.linkedResources.length} />;
 	}
 }
 
