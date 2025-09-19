@@ -23,6 +23,7 @@ import { DisposableStore, IDisposable, combinedDisposable } from '../../../util/
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ContributionCollection, IExtensionContribution } from '../../common/contributions';
+import { registerExportChatCommands } from '../../exportChat/vscode-node/exportChatCommands';
 import { vscodeNodeChatContributions } from '../../extension/vscode-node/contributions';
 import { IMergeConflictService } from '../../git/common/mergeConflictService';
 import { registerInlineChatCommands } from '../../inlineChat/vscode-node/inlineChatCommands';
@@ -270,6 +271,7 @@ export class ConversationFeature implements IExtensionContribution {
 				create: () => disposables.add(this.instantiationService.createInstance(NotebookCellLinkifier))
 			}),
 			this.instantiationService.invokeFunction(registerInlineChatCommands),
+			this.instantiationService.invokeFunction(registerExportChatCommands),
 			this.registerTerminalQuickFixProviders(),
 			registerNewWorkspaceIntentCommand(this.newWorkspacePreviewContentManager, this.logService, options),
 			registerGitHubPullRequestTitleAndDescriptionProvider(this.instantiationService),

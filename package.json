@@ -2041,6 +2041,13 @@
 				"category": "GitHub Copilot"
 			},
 			{
+				   "command": "github.copilot.chat.exportChat",
+				   "title": "%github.copilot.command.exportChat%",
+				   "icon": "$(export)",
+				   "category": "GitHub Copilot",
+				   "enablement": "!github.copilot.interactiveSession.disabled"
+			},
+			{
 				"command": "github.copilot.debug.collectDiagnostics",
 				"title": "%github.copilot.command.collectDiagnostics%",
 				"category": "Developer"
@@ -3334,6 +3341,10 @@
 				{
 					"command": "github.copilot.chat.mcp.setup.flow",
 					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.exportChat",
+					"when": "github.copilot-chat.activated && !github.copilot.interactiveSession.disabled"
 				}
 			],
 			"view/title": [
@@ -3356,6 +3367,11 @@
 					"command": "github.copilot.debug.showChatLogView",
 					"when": "view == workbench.panel.chat.view.copilot",
 					"group": "3_show"
+				},
+				{
+					"command": "github.copilot.chat.exportChat",
+					"when": "view == workbench.panel.chat.view.copilot && github.copilot-chat.activated && !github.copilot.interactiveSession.disabled",
+					"group": "navigation@2"
 				}
 			],
 			"view/item/context": [
