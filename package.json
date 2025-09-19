@@ -1215,6 +1215,122 @@
 					},
 					"required": ["taskSuggestions"]
 				}
+			},
+			{
+				"name": "manage_parallel_tasks",
+				"toolReferenceName": "manageParallelTasks",
+				"displayName": "Manage Parallel Tasks",
+				"icon": "$(checklist)",
+				"userDescription": "Manage parallel tasks that can run in the background while working on a main task",
+				"modelDescription": "Manage parallel tasks that can run in the background while working on a main task. Use this tool to discover, execute, and track tasks that can improve productivity by running alongside primary development work.\\n\\n**When to use this tool:**\\n- When working on a complex feature that could benefit from parallel background work\\n- To identify testing, documentation, analysis, or setup tasks that can run concurrently\\n- When you want to maximize development efficiency by utilizing background processing\\n- To track and monitor ongoing parallel tasks\\n\\n**Operations:**\\n1. **suggest** - Analyze the current context and suggest relevant parallel tasks\\n2. **execute** - Start executing selected parallel tasks in the background\\n3. **status** - Check the progress of currently running parallel tasks\\n\\n**Workflow:**\\n1. Use \\\"suggest\\\" operation with mainTaskDescription to get relevant parallel task suggestions\\n2. Review the suggestions and select appropriate tasks\\n3. Use \\\"execute\\\" operation with the selected taskSuggestions to start background execution\\n4. Use \\\"status\\\" operation periodically to monitor progress\\n\\n**The model should:**\\n- Suggest tasks that truly add value and don't interfere with the main work\\n- Consider the workspace context, file types, and frameworks in use\\n- Prioritize tasks based on impact and ease of parallel execution\\n- Provide clear reasoning for why each task is suggested\\n- Specify realistic time estimates and execution requirements",
+				"tags": [
+					"productivity",
+					"parallel",
+					"background",
+					"management"
+				],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"operation": {
+							"type": "string",
+							"enum": ["suggest", "execute", "status"],
+							"description": "The operation to perform: suggest (analyze and recommend tasks), execute (start background tasks), or status (check running tasks)"
+						},
+						"mainTaskDescription": {
+							"type": "string",
+							"description": "Description of the main task being worked on (required for suggest operation)"
+						},
+						"workspaceContext": {
+							"type": "object",
+							"description": "Context about the current workspace",
+							"properties": {
+								"projectType": {
+									"type": "string",
+									"description": "Type of project (e.g., \\\"typescript\\\", \\\"react\\\", \\\"node\\\", \\\"python\\\")"
+								},
+								"frameworksUsed": {
+									"type": "array",
+									"items": { "type": "string" },
+									"description": "List of frameworks and technologies in use"
+								},
+								"recentChanges": {
+									"type": "array",
+									"items": { "type": "string" },
+									"description": "File paths that have been recently modified"
+								},
+								"selectedFiles": {
+									"type": "array",
+									"items": { "type": "string" },
+									"description": "File paths that are currently selected or being worked on"
+								}
+							}
+						},
+						"taskSuggestions": {
+							"type": "array",
+							"description": "Array of task definitions to execute (required for execute operation)",
+							"items": {
+								"type": "object",
+								"properties": {
+									"id": {
+										"type": "string",
+										"description": "Unique identifier for the task"
+									},
+									"title": {
+										"type": "string",
+										"description": "Brief, action-oriented title for the task"
+									},
+									"description": {
+										"type": "string",
+										"description": "Detailed description of what the task will accomplish"
+									},
+									"category": {
+										"type": "string",
+										"description": "Optional category (e.g., \\\"testing\\\", \\\"documentation\\\", \\\"analysis\\\")"
+									},
+									"priority": {
+										"type": "string",
+										"enum": ["high", "medium", "low"],
+										"description": "Priority level of the task"
+									},
+									"estimatedDuration": {
+										"type": "string",
+										"description": "Estimated time to complete (e.g., \\\"5-10 minutes\\\")"
+									},
+									"reasoning": {
+										"type": "string",
+										"description": "Why this task is being suggested"
+									},
+									"expectedOutcome": {
+										"type": "string",
+										"description": "What the task should achieve"
+									},
+									"canRunInBackground": {
+										"type": "boolean",
+										"description": "Whether this task can run without user interaction"
+									},
+									"suggestedTrigger": {
+										"type": "string",
+										"enum": ["immediate", "after-main-task", "on-user-approval"],
+										"description": "When the task should be executed"
+									},
+									"toolsRequired": {
+										"type": "array",
+										"items": { "type": "string" },
+										"description": "List of tools/APIs needed to execute this task"
+									}
+								},
+								"required": ["id", "title", "description", "priority", "estimatedDuration", "canRunInBackground", "suggestedTrigger"]
+							}
+						},
+						"selectedTaskIds": {
+							"type": "array",
+							"items": { "type": "string" },
+							"description": "Array of task IDs to execute (alternative to taskSuggestions)"
+						}
+					},
+					"required": ["operation"]
+				}
 			}
 		],
 		"languageModelToolSets": [

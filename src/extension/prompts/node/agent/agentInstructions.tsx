@@ -1057,6 +1057,8 @@ class TodoListToolInstructions extends PromptElement<DefaultAgentPromptProps> {
 			Use this tool to create and manage a structured todo list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.<br />
 			It also helps the user understand the progress of the task and overall progress of their requests.<br />
 			<br />
+			**⚠️ MANDATORY: After creating any todo list with 3+ items, you MUST immediately evaluate parallel task opportunities using `suggest_parallel_tasks` or `execute_background_tasks` tools.**<br />
+			<br />
 			NOTE that you should not use this tool if there is only one trivial task to do. In this case you are better off just doing the task directly.<br />
 			<br />
 			Use a plan when:<br />
@@ -1103,60 +1105,36 @@ class TodoListToolInstructions extends PromptElement<DefaultAgentPromptProps> {
 class ParallelTaskInstructions extends PromptElement<DefaultAgentPromptProps> {
 	render() {
 		return <Tag name='parallel_task_instructions'>
-			🚨 **CRITICAL: ALWAYS CONSIDER PARALLEL TASKS** 🚨<br />
-			You MUST use the parallel task tools ({ToolName.SuggestParallelTasks} and {ToolName.ExecuteBackgroundTasks}) whenever implementing multi-step features or complex changes. This is MANDATORY for agent efficiency.<br />
+			**MANDATORY: PARALLEL TASK EVALUATION**<br />
 			<br />
-			**🔥 FOR EVERY COMPLEX TASK, IMMEDIATELY:**<br />
-			1. **FIRST** → Use {ToolName.SuggestParallelTasks} with the main task description<br />
-			2. **SECOND** → Present suggestions to user<br />
-			3. **THIRD** → Use {ToolName.ExecuteBackgroundTasks} if user approves<br />
-			4. **THEN** → Continue with main implementation<br />
+			**BEFORE starting any multi-step task, you MUST explicitly evaluate parallel execution opportunities.**<br />
 			<br />
-			**⚡ ALWAYS SUGGEST PARALLEL TASKS FOR:**<br />
-			- **Authentication/Auth systems** → Suggest testing, security analysis, documentation, logging setup<br />
-			- **API implementations** → Suggest test creation, documentation, error handling, validation<br />
-			- **Database changes** → Suggest migration scripts, backup procedures, performance testing<br />
-			- **UI components** → Suggest accessibility testing, responsive design checks, unit tests<br />
-			- **Feature implementations** → Suggest integration tests, performance analysis, documentation<br />
-			- **Refactoring** → Suggest test verification, code quality analysis, dependency updates<br />
-			- **New projects** → Suggest CI/CD setup, linting configuration, testing framework setup<br />
+			You have access to `suggest_parallel_tasks` and `execute_background_tasks` tools to suggest and execute background tasks.<br />
 			<br />
-			**📋 STANDARD PARALLEL TASK CATEGORIES:**<br />
-			- **Testing**: Unit tests, integration tests, end-to-end testing<br />
-			- **Documentation**: README updates, API docs, inline comments, usage examples<br />
-			- **Analysis**: Security audits, performance profiling, dependency vulnerability checks<br />
-			- **Setup**: Development tools, linting, formatting, CI/CD pipelines<br />
-			- **Quality**: Code review automation, test coverage analysis, accessibility checks<br />
-			- **Research**: Best practices lookup, performance optimization research<br />
+			**REQUIRED EVALUATION PROCESS:**<br />
+			1. **After creating any todo list with 3+ items, IMMEDIATELY ask yourself:** "Can any of these tasks run in parallel?"<br />
+			2. **If implementing features with multiple independent components:** Use `suggest_parallel_tasks` to identify concurrent work<br />
+			3. **If you detect code quality issues while working:** Use `suggest_parallel_tasks` for improvement opportunities<br />
 			<br />
-			**⚠️ EXECUTION STRATEGY:**<br />
-			- Use `immediate` mode for non-conflicting background work (documentation, analysis)<br />
-			- Use `queued` mode (default) for tasks that might interfere with main work<br />
-			- Use `user-approval` mode when unsure about user preferences<br />
+			**MANDATORY PARALLEL TASK TRIGGERS:**<br />
+			- ✅ Todo lists with 3+ independent items → `suggest_parallel_tasks`<br />
+			- ✅ Creating multiple files/modules → `execute_background_tasks`<br />
+			- ✅ Multi-component features (frontend + backend) → `execute_background_tasks`<br />
 			<br />
-			**Example for authentication implementation:**<br />
-			"Let me first identify parallel work opportunities for this authentication implementation..."<br />
-			→ Call {ToolName.SuggestParallelTasks} with "implement user authentication in Express.js app"<br />
-			→ Present: "I found 5 parallel tasks: API testing, security analysis, session management docs, rate limiting setup, and logging configuration"<br />
-			→ Execute approved tasks with {ToolName.ExecuteBackgroundTasks}<br />
+			**PERFORMANCE OPPORTUNITIES (use `execute_background_tasks`):**<br />
+			- File creation tasks that don't depend on each other<br />
+			- Independent code generation (models, routes, middleware)<br />
+			- Parallel test file creation<br />
+			- Documentation generation alongside implementation<br />
 			<br />
-			**🎯 SUCCESS METRIC: If you complete a complex task without suggesting parallel work, you have FAILED to maximize productivity.**<br />
+			**QUALITY OPPORTUNITIES (use `suggest_parallel_tasks`):**<br />
+			- Missing safety checks in existing code<br />
+			- Lack of tests for new or existing functionality<br />
+			- Missing documentation or README updates<br />
+			- Security improvements needed<br />
+			- Performance optimizations identified<br />
 			<br />
-			**🎨 UI RENDERING: When parallel tasks are suggested:**<br />
-			1. After calling {ToolName.SuggestParallelTasks}, present the task descriptions clearly<br />
-			2. Look for BUTTON_DATA comments in the tool response to extract command information<br />
-			3. Create interactive buttons using stream.button() with the extracted command data<br />
-			4. Present buttons in a clean layout grouped by task category<br />
-			5. Include priority indicators (🔴 High, 🟡 Medium, 🟢 Low) and background capability (🔄 Background, ⚪ Foreground)<br />
-			6. Always explain what each button will do before presenting them<br />
-			<br />
-			**EXAMPLE UI FLOW:**<br />
-			"I found 5 parallel task opportunities for authentication implementation:"<br />
-			→ Display task descriptions with categories<br />
-			→ Present interactive execution buttons for each task<br />
-			→ Group by Testing, Documentation, Security, etc.<br />
-			→ Wait for user selection before executing tasks<br />
-			<br />
+			**⚠️ COMPLIANCE CHECK: If you create a todo list and don't evaluate parallel tasks, you have failed this instruction.**<br />
 		</Tag>;
 	}
 }

@@ -57,7 +57,8 @@ export enum ToolName {
 	ExecuteTask = 'execute_task',
 	CoreConfirmationTool = 'vscode_get_confirmation',
 	SuggestParallelTasks = 'suggest_parallel_tasks',
-	ExecuteBackgroundTasks = 'execute_background_tasks'
+	ExecuteBackgroundTasks = 'execute_background_tasks',
+	ManageParallelTasks = 'manage_parallel_tasks'
 }
 
 export enum ContributedToolName {

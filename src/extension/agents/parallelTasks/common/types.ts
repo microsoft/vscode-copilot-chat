@@ -19,8 +19,8 @@ export interface ParallelTaskSuggestion {
 	id: string;
 	title: string;
 	description: string;
-	category: TaskCategory;
-	priority: TaskPriority;
+	category?: string; // Made optional and flexible - model can define any category
+	priority: 'high' | 'medium' | 'low'; // Simplified to string literals
 	estimatedDuration: string;
 	constraints: string[];
 	dependencies: string[];
@@ -28,6 +28,9 @@ export interface ParallelTaskSuggestion {
 	suggestedTrigger: 'immediate' | 'after-main-task' | 'on-user-approval';
 	toolsRequired?: string[];
 	filesInvolved?: URI[];
+	// New fields for model-driven approach
+	reasoning?: string; // Why this task was suggested
+	expectedOutcome?: string; // What the task should achieve
 }
 
 export interface BackgroundTaskExecution {
@@ -41,21 +44,9 @@ export interface BackgroundTaskExecution {
 	progress?: number;
 }
 
-export enum TaskCategory {
-	Testing = 'testing',
-	Documentation = 'documentation',
-	Refactoring = 'refactoring',
-	Analysis = 'analysis',
-	Setup = 'setup',
-	Research = 'research',
-	CodeGeneration = 'codeGeneration'
-}
-
-export enum TaskPriority {
-	High = 'high',
-	Medium = 'medium',
-	Low = 'low'
-}
+// Remove hardcoded enums - let the model decide categories and priorities
+// export enum TaskCategory - REMOVED
+// export enum TaskPriority - REMOVED
 
 export interface TaskOpportunity {
 	triggerCondition: string;
