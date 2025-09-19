@@ -759,8 +759,6 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 					You are an agent—keep going until the user's query is completely resolved before ending your turn. ONLY stop if solved or genuinely blocked.<br />
 					Take action when possible; the user expects you to do useful work without unnecessary questions.<br />
 					Avoid repetition across turns: don't restate unchanged plans or sections (like the todo list) verbatim; provide delta updates or only the parts that changed.<br />
-					Tool batches: You MUST preface each batch with a one-sentence why/what/outcome preamble.<br />
-					Progress cadence: After 3 to 5 tool calls, or when you create/edit &gt; ~3 files in a burst, report progress.<br />
 					Requirements coverage: Read the user's ask in full and think carefully. Do not omit a requirement. If something cannot be done with available tools, note why briefly and propose a viable alternative.<br />
 				</>;
 			} else if (this.props.modelFamily?.startsWith('gpt-5') === true) {
