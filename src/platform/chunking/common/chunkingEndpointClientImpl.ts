@@ -18,7 +18,6 @@ import { Range } from '../../../util/vs/editor/common/core/range';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Embedding, EmbeddingType, EmbeddingVector } from '../../embeddings/common/embeddingsComputer';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
-import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
 import { logExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
@@ -300,7 +299,6 @@ export class ChunkingEndpointClientImpl extends Disposable implements IChunkingE
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
-		@IDomainService private readonly _domainService: IDomainService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IEnvService private readonly _envService: IEnvService,
 		@IFetcherService private readonly _fetcherService: IFetcherService,
@@ -346,9 +344,7 @@ export class ChunkingEndpointClientImpl extends Disposable implements IChunkingE
 			const makeRequest = async (attempt: number) => {
 				return logExecTime(this._logService, `ChunksEndpointEmbeddingComputer.fetchChunksRequest(${content.uri}, attempt=${attempt})`, () => postRequest(
 					this._fetcherService,
-					this._envService,
 					this._telemetryService,
-					this._domainService,
 					this._capiClientService,
 					{ type: RequestType.Chunks },
 					authToken,

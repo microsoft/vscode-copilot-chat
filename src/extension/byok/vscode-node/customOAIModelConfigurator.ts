@@ -3,9 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { InputBoxOptions, QuickInputButtons, QuickPickItem, window } from 'vscode';
+import { InputBoxOptions, LanguageModelChatInformation, QuickInputButtons, QuickPickItem, window } from 'vscode';
 import { Config, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
+import { BYOKModelProvider } from '../common/byokProvider';
 
 interface ModelConfig {
 	name: string;
@@ -29,41 +30,76 @@ function isBackButtonClick(value: unknown): value is BackButtonClick {
 	return typeof value === 'object' && (value as BackButtonClick)?.back === true;
 }
 
-/**
- * CustomOAIModelConfigurator provides a VS Code QuickPick-based interface
- * for managing Custom OpenAI-compatible models. It follows VS Code QuickPick
- * best practices with proper icons, descriptions, multi-step workflows,
- * and automatic settings updates.
- *
- * Features:
- * - Add new custom OAI models with full configuration
- * - Edit existing model configurations
- * - Delete models with confirmation
- * - Multi-step input validation
- * - Automatic settings persistence
- * - Proper back button navigation
- * - Capability selection with visual feedback
- *
- * Usage:
- * ```typescript
- * const configurator = instantiationService.createInstance(CustomOAIModelConfigurator);
- * await configurator.configure();
- * ```
- */
 export class CustomOAIModelConfigurator {
+	private readonly _configKey: Config<Record<string, ModelConfig>> = ConfigKey.CustomOAIModels;
+	private readonly _forceRequiresAPIKey: boolean = false;
 	constructor(
 		private readonly _configurationService: IConfigurationService,
-		private readonly _configKey: Config<Record<string, ModelConfig>> = ConfigKey.CustomOAIModels,
-		private readonly _forceRequiresAPIKey: boolean = false
-	) { }
+		private readonly _vendor: string,
+		private readonly _provider: BYOKModelProvider<LanguageModelChatInformation>
+
+	) {
+		if (_vendor === 'azure') {
+			this._forceRequiresAPIKey = true;
+			this._configKey = ConfigKey.AzureModels;
+		}
+	}
+
+	async configureModelOrUpdateAPIKey(): Promise<void> {
+		interface BYOKQuickPickItem {
+			label: string;
+			detail: string;
+			action: 'apiKey' | 'configureModels';
+		}
+
+		const options: BYOKQuickPickItem[] = [
+			{
+				label: '$(key) Manage API Key',
+				detail: 'Update or configure the API key for this provider',
+				action: 'apiKey'
+			},
+			{
+				label: '$(settings-gear) Configure Models',
+				detail: 'Add, edit, or remove model configurations',
+				action: 'configureModels'
+			}
+		];
+
+		const quickPick = window.createQuickPick<BYOKQuickPickItem>();
+		quickPick.title = `Manage ${this._vendor === 'azure' ? 'Azure' : 'Custom OpenAI'} Provider`;
+		quickPick.placeholder = 'Choose an action';
+		quickPick.items = options;
+		quickPick.ignoreFocusOut = true;
+
+		const selected = await new Promise<BYOKQuickPickItem | undefined>((resolve) => {
+			quickPick.onDidAccept(() => {
+				const selectedItem = quickPick.selectedItems[0];
+				resolve(selectedItem);
+				quickPick.hide();
+			});
+
+			quickPick.onDidHide(() => {
+				resolve(undefined);
+			});
+
+			quickPick.show();
+		});
+		if (selected?.action === 'apiKey') {
+			return this._provider.updateAPIKey();
+		} else if (selected?.action === 'configureModels') {
+			return this.configure(false);
+		}
+	}
 
 	/**
 	 * Main entry point for configuring Custom OAI models
 	 */
-	async configure(): Promise<void> {
-		const models = this._configurationService.getConfig(this._configKey);
+	async configure(isProvideLMInfoCall: boolean): Promise<void> {
 
 		while (true) {
+			const models = this._configurationService.getConfig(this._configKey);
+
+
 			const items: ModelQuickPickItem[] = [];
 
 			// Add existing models
@@ -75,6 +111,15 @@ export class CustomOAIModelConfigurator {
 					modelId,
 					action: 'edit'
 				});
+			}
+
+			if (items.length === 0 && isProvideLMInfoCall) {
+				const newModel = await this._configureModel();
+				if (newModel) {
+					const updatedModels = { ...models, [newModel.id]: newModel.config };
+					await this._configurationService.setConfig(this._configKey, updatedModels);
+				}
+				return;
 			}
 
 			// Add separator and actions
@@ -128,7 +173,6 @@ export class CustomOAIModelConfigurator {
 				if (newModel) {
 					const updatedModels = { ...models, [newModel.id]: newModel.config };
 					await this._configurationService.setConfig(this._configKey, updatedModels);
-					Object.assign(models, updatedModels);
 				}
 			} else if (selected.action === 'edit' && selected.modelId) {
 				const result = await this._editModel(selected.modelId, models[selected.modelId]);
@@ -136,12 +180,10 @@ export class CustomOAIModelConfigurator {
 					if (result.action === 'update') {
 						const updatedModels = { ...models, [result.id]: result.config };
 						await this._configurationService.setConfig(this._configKey, updatedModels);
-						Object.assign(models, updatedModels);
 					} else if (result.action === 'delete') {
 						const updatedModels = { ...models };
 						delete updatedModels[selected.modelId];
 						await this._configurationService.setConfig(this._configKey, updatedModels);
-						Object.assign(models, updatedModels);
 					}
 				}
 			}

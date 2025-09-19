@@ -56,7 +56,7 @@ function toStream(strings: string[] | { chunk: string; shouldCancelStream: boole
 	}
 }
 
-class FakeHeaders implements IHeaders {
+export class FakeHeaders implements IHeaders {
 	private readonly headers: Map<string, string> = new Map();
 
 	get(name: string): string | null {

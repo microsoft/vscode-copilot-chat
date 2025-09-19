@@ -24,6 +24,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ContributionCollection, IExtensionContribution } from '../../common/contributions';
 import { vscodeNodeChatContributions } from '../../extension/vscode-node/contributions';
+import { IMergeConflictService } from '../../git/common/mergeConflictService';
 import { registerInlineChatCommands } from '../../inlineChat/vscode-node/inlineChatCommands';
 import { INewWorkspacePreviewContentManager } from '../../intents/node/newIntent';
 import { FindInFilesArgs } from '../../intents/node/searchIntent';
@@ -73,6 +74,7 @@ export class ConversationFeature implements IExtensionContribution {
 		@ICombinedEmbeddingIndex private readonly embeddingIndex: ICombinedEmbeddingIndex,
 		@IDevContainerConfigurationService private readonly devContainerConfigurationService: IDevContainerConfigurationService,
 		@IGitCommitMessageService private readonly gitCommitMessageService: IGitCommitMessageService,
+		@IMergeConflictService private readonly mergeConflictService: IMergeConflictService,
 		@ILinkifyService private readonly linkifyService: ILinkifyService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@INewWorkspacePreviewContentManager private readonly newWorkspacePreviewContentManager: INewWorkspacePreviewContentManager,
@@ -245,6 +247,9 @@ export class ConversationFeature implements IExtensionContribution {
 				if (commitMessage) {
 					repository.inputBox.value = commitMessage;
 				}
+			}),
+			vscode.commands.registerCommand('github.copilot.git.resolveMergeConflicts', async (...resourceStates: vscode.SourceControlResourceState[]) => {
+				await this.mergeConflictService.resolveMergeConflicts(resourceStates.map(r => r.resourceUri), undefined);
 			}),
 			vscode.commands.registerCommand('github.copilot.devcontainer.generateDevContainerConfig', async (args: DevContainerConfigGeneratorArguments, cancellationToken = new vscode.CancellationTokenSource().token) => {
 				return this.devContainerConfigurationService.generateConfiguration(args, cancellationToken);

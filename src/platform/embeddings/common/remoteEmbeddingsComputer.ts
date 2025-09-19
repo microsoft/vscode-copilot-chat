@@ -12,7 +12,6 @@ import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { getGithubMetadataHeaders } from '../../chunking/common/chunkingEndpointClientImpl';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
-import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
 import { logExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
@@ -31,7 +30,6 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 	constructor(
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
-		@IDomainService private readonly _domainService: IDomainService,
 		@IEnvService private readonly _envService: IEnvService,
 		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@ILogService private readonly _logService: ILogService,
@@ -69,9 +67,7 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 				};
 				const response = await postRequest(
 					this._fetcherService,
-					this._envService,
 					this._telemetryService,
-					this._domainService,
 					this._capiClientService,
 					{ type: RequestType.DotcomEmbeddings },
 					token,

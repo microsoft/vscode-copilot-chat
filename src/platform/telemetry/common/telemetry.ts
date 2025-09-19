@@ -107,6 +107,8 @@ export interface ITelemetryService extends IExperimentationTelemetry, IDisposabl
 	sendTelemetryEvent(eventName: string, destination: TelemetryDestination, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void;
 	sendTelemetryEvent<TTelemetryEvent extends ITelemetryEvent>(eventName: TTelemetryEvent['eventName'], destination: TelemetryDestination, properties?: TTelemetryEvent['properties'], measurements?: TTelemetryEvent['measurements']): void;
 	sendTelemetryErrorEvent(eventName: string, destination: TelemetryDestination, properties?: TelemetryEventProperties, measurements?: TelemetryEventMeasurements): void;
+
+	setAdditionalExpAssignments(expAssignments: string[]): void;
 }
 
 export interface ITelemetryEvent {

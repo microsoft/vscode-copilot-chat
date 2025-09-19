@@ -9,7 +9,7 @@ import { promisify } from 'util';
 import type * as vscode from 'vscode';
 import * as glob from '../../../util/common/glob';
 import { getLanguageForResource } from '../../../util/common/languages';
-import { ExtHostDocumentData } from '../../../util/common/test/shims/textDocument';
+import { createTextDocumentData } from '../../../util/common/test/shims/textDocument';
 import { asArray, coalesce } from '../../../util/vs/base/common/arrays';
 import { AsyncIterableSource, raceTimeout } from '../../../util/vs/base/common/async';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
@@ -75,7 +75,7 @@ export class SimulationWorkspaceService extends AbstractWorkspaceService {
 		if (uri.scheme === 'file') {
 			const fileContents = await fs.readFile(this.workspace.mapLocation(uri).fsPath, 'utf8');
 			const language = getLanguageForResource(uri);
-			const doc = ExtHostDocumentData.create(uri, fileContents, language.languageId);
+			const doc = createTextDocumentData(uri, fileContents, language.languageId);
 			this.workspace.addDocument(doc);
 			return doc.document;
 		}
@@ -743,6 +743,10 @@ export class TestingGitService implements IGitService {
 
 	async fetch(uri: URI, remote?: string, ref?: string, depth?: number): Promise<void> {
 		return;
+	}
+
+	async getMergeBase(uri: URI, ref1: string, ref2: string): Promise<string | undefined> {
+		return undefined;
 	}
 }
 

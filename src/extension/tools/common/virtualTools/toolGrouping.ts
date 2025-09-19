@@ -122,19 +122,19 @@ export class ToolGrouping implements IToolGrouping {
 		this._expandOnNext.add(toolName);
 	}
 
-	async compute(token: CancellationToken): Promise<LanguageModelToolInformation[]> {
-		await this._doCompute(token);
+	async compute(query: string, token: CancellationToken): Promise<LanguageModelToolInformation[]> {
+		await this._doCompute(query, token);
 		return [...this._root.tools()];
 	}
 
-	async computeAll(token: CancellationToken): Promise<(LanguageModelToolInformation | VirtualTool)[]> {
-		await this._doCompute(token);
+	async computeAll(query: string, token: CancellationToken): Promise<(LanguageModelToolInformation | VirtualTool)[]> {
+		await this._doCompute(query, token);
 		return this._root.contents;
 	}
 
-	private async _doCompute(token: CancellationToken) {
+	private async _doCompute(query: string, token: CancellationToken) {
 		if (this._didToolsChange) {
-			await this._grouper.addGroups(this._root, this._tools.slice(), token);
+			await this._grouper.addGroups(query, this._root, this._tools.slice(), token);
 			this._didToolsChange = false;
 		}
 

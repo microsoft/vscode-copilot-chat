@@ -52,7 +52,10 @@ export enum ToolName {
 	CoreGetTaskOutput = 'get_task_output',
 	CoreRunTest = 'runTests',
 	ToolReplay = 'tool_replay',
-	EditFilesPlaceholder = 'edit_files'
+	EditFilesPlaceholder = 'edit_files',
+	ExecutePrompt = 'execute_prompt',
+	ExecuteTask = 'execute_task',
+	CoreConfirmationTool = 'vscode_get_confirmation'
 }
 
 export enum ContributedToolName {
@@ -95,7 +98,9 @@ export enum ContributedToolName {
 	CreateDirectory = 'copilot_createDirectory',
 	RunVscodeCmd = 'copilot_runVscodeCommand',
 	ToolReplay = 'copilot_toolReplay',
-	EditFilesPlaceholder = 'copilot_editFiles'
+	EditFilesPlaceholder = 'copilot_editFiles',
+	ExecutePrompt = 'execute_prompt',
+	ExecuteTask = 'execute_task',
 }
 
 const toolNameToContributedToolNames = new Map<ToolName, ContributedToolName>();

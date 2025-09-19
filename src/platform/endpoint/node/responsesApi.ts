@@ -25,10 +25,11 @@ import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { IChatModelInformation } from '../common/endpointProvider';
 import { getStatefulMarkerAndIndex } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 
 export function createResponsesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, modelInfo: IChatModelInformation): IEndpointBody {
 	const configService = accessor.get(IConfigurationService);
-	const logService = accessor.get(ILogService);
+	const expService = accessor.get(IExperimentationService);
 	const body: IEndpointBody = {
 		model,
 		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
@@ -53,18 +54,15 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	body.truncation = configService.getConfig(ConfigKey.Internal.UseResponsesApiTruncation) ?
 		'auto' :
 		'disabled';
-	const reasoningConfig = configService.getConfig(ConfigKey.Internal.ResponsesApiReasoning);
-	if (reasoningConfig === true) {
+	const effortConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningEffort, expService);
+	const summaryConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningSummary, expService);
+	const effort = effortConfig === 'default' ? undefined : effortConfig;
+	const summary = summaryConfig === 'off' ? undefined : summaryConfig;
+	if (effort || summary) {
 		body.reasoning = {
-			'effort': 'high',
-			'summary': 'detailed'
+			...(effort ? { effort } : {}),
+			...(summary ? { summary } : {})
 		};
-	} else if (typeof reasoningConfig === 'string') {
-		try {
-			body.reasoning = JSON.parse(reasoningConfig);
-		} catch (e) {
-			logService.error(e, 'Failed to parse responses reasoning setting');
-		}
 	}
 
 	body.include = ['reasoning.encrypted_content'];
@@ -197,6 +195,10 @@ export async function processResponseFromChatEndpoint(instantiationService: IIns
 	});
 }
 
+interface CapiResponsesTextDeltaEvent extends Omit<OpenAI.Responses.ResponseTextDeltaEvent, 'logprobs'> {
+	logprobs: Array<OpenAI.Responses.ResponseTextDeltaEvent.Logprob> | undefined;
+}
+
 class OpenAIResponsesProcessor {
 	private textAccumulator: string = '';
 	private hasReceivedReasoningSummary = false;
@@ -216,10 +218,16 @@ class OpenAIResponsesProcessor {
 			case 'error':
 				return onProgress({ text: '', copilotErrors: [{ agent: 'openai', code: chunk.code || 'unknown', message: chunk.message, type: 'error', identifier: chunk.param || undefined }] });
 			case 'response.output_text.delta': {
-				const haystack = new Lazy(() => new TextEncoder().encode(chunk.delta));
+				const capiChunk: CapiResponsesTextDeltaEvent = chunk;
+				const haystack = new Lazy(() => new TextEncoder().encode(capiChunk.delta));
 				return onProgress({
-					text: chunk.delta,
-					logprobs: { content: chunk.logprobs.map(lp => ({ ...mapLogProp(haystack, lp), top_logprobs: lp.top_logprobs?.map(l => mapLogProp(haystack, l)) || [] })) },
+					text: capiChunk.delta,
+					logprobs: capiChunk.logprobs && {
+						content: capiChunk.logprobs.map(lp => ({
+							...mapLogProp(haystack, lp),
+							top_logprobs: lp.top_logprobs?.map(l => mapLogProp(haystack, l)) || []
+						}))
+					},
 				});
 			}
 			case 'response.output_item.added':

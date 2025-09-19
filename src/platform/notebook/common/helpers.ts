@@ -131,6 +131,19 @@ export function normalizeCellId(cellId: string): string {
 	return cellId.length === CELL_ID_HASH_LENGTH ? `${CELL_ID_PREFIX}${cellId}` : cellId;
 }
 
+const notebookIdCache = new WeakMap<NotebookDocument, string>();
+export function getNotebookId(notebook: NotebookDocument): string {
+	let id = notebookIdCache.get(notebook);
+	if (id) {
+		return id;
+	}
+	const hash = new StringSHA1();
+	hash.update(notebook.uri.toString());
+	id = hash.digest();
+	notebookIdCache.set(notebook, id);
+	return id;
+}
+
 /**
  * Given a Notebook cell returns a unique identifier for the cell.
  * The identifier is based on the cell's URI and is cached for performance.

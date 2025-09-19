@@ -4,11 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { RequestMetadata } from '@vscode/copilot-api';
-import { ChatMessage } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
+import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
 import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
-import { Source } from '../../chat/common/chatMLFetcher';
+import { IAuthenticationService } from '../../authentication/common/authentication';
+import { IChatMLFetcher, Source } from '../../chat/common/chatMLFetcher';
 import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
@@ -47,12 +48,17 @@ export class AutoChatEndpoint implements IChatEndpoint {
 
 	constructor(
 		private readonly _wrappedEndpoint: IChatEndpoint,
+		private readonly _chatMLFetcher: IChatMLFetcher,
 		private readonly _sessionToken: string,
 		private readonly _discountPercent: number
 	) {
 		// Calculate the multiplier including the discount percent, rounding to two decimal places
 		const baseMultiplier = this._wrappedEndpoint.multiplier ?? 1;
 		this.multiplier = Math.round(baseMultiplier * (1 - this._discountPercent) * 100) / 100;
+	}
+
+	public get apiType(): string | undefined {
+		return this._wrappedEndpoint.apiType;
 	}
 
 	getExtraHeaders(): Record<string, string> {
@@ -79,11 +85,27 @@ export class AutoChatEndpoint implements IChatEndpoint {
 		return this._wrappedEndpoint.acquireTokenizer();
 	}
 
-	async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
-		return this._wrappedEndpoint.makeChatRequest2(options, token);
+	public async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
+		return this._chatMLFetcher.fetchOne({
+			requestOptions: {},
+			...options,
+			endpoint: this,
+			// TODO https://github.com/microsoft/vscode/issues/266410
+			ignoreStatefulMarker: options.ignoreStatefulMarker ?? true
+		}, token);
 	}
 
-	async makeChatRequest(debugName: string, messages: ChatMessage[], finishedCb: FinishedCallback | undefined, token: CancellationToken, location: ChatLocation, source?: Source, requestOptions?: Omit<OptionalChatRequestParams, 'n'>, userInitiatedRequest?: boolean, telemetryProperties?: TelemetryProperties): Promise<ChatResponse> {
+	public async makeChatRequest(
+		debugName: string,
+		messages: Raw.ChatMessage[],
+		finishedCb: FinishedCallback | undefined,
+		token: CancellationToken,
+		location: ChatLocation,
+		source?: Source,
+		requestOptions?: Omit<OptionalChatRequestParams, 'n'>,
+		userInitiatedRequest?: boolean,
+		telemetryProperties?: TelemetryProperties,
+	): Promise<ChatResponse> {
 		return this.makeChatRequest2({
 			debugName,
 			messages,
@@ -103,6 +125,31 @@ export class AutoChatEndpoint implements IChatEndpoint {
  * @param envService The environment service to use to check if the auto mode is enabled
  * @returns True if the auto mode is enabled, false otherwise
  */
-export function isAutoModeEnabled(expService: IExperimentationService, envService: IEnvService): boolean {
-	return !!expService.getTreatmentVariable<boolean>('copilotchatcapiautomode') || envService.isPreRelease();
+export async function isAutoModelEnabled(expService: IExperimentationService, envService: IEnvService, authService: IAuthenticationService): Promise<boolean> {
+	if (envService.isPreRelease() || authService.copilotToken?.isNoAuthUser) {
+		return true;
+	}
+
+	if (!!expService.getTreatmentVariable<boolean>('autoModelEnabled')) {
+		try {
+			(await authService.getCopilotToken()).isEditorPreviewFeaturesEnabled();
+		} catch (e) {
+			return false;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Checks if the auto chat model is the default model
+ * @param expService The experimentation service to use to check if the auto model is the default
+ * @param authService The authentication service to use to check if the auto model is the default
+ * @returns True if the auto model is the default, false otherwise
+ */
+export function isAutoModelDefault(expService: IExperimentationService, authService: IAuthenticationService) {
+	if (authService.copilotToken?.isNoAuthUser) {
+		return true;
+	}
+	return !!expService.getTreatmentVariable<boolean>('autoModelDefault');
 }

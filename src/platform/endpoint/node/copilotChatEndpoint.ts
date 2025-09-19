@@ -40,7 +40,6 @@ export class CopilotChatEndpoint extends ChatEndpoint {
 			domainService,
 			capiClientService,
 			fetcherService,
-			envService,
 			telemetryService,
 			authService,
 			chatMLFetcher,
@@ -52,11 +51,11 @@ export class CopilotChatEndpoint extends ChatEndpoint {
 		);
 	}
 
-	protected override getCapiCallback(): RawMessageConversionCallback | undefined {
+	protected override getCompletionsCallback(): RawMessageConversionCallback | undefined {
 		return (out, data) => {
 			if (data && data.id) {
 				out.reasoning_opaque = data.id;
-				out.reasoning_text = data.text;
+				out.reasoning_text = Array.isArray(data.text) ? data.text.join('') : data.text;
 			}
 		};
 	}

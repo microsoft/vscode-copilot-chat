@@ -10,8 +10,6 @@ import { CancellationError, isCancellationError } from '../../../util/vs/base/co
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
-import { IDomainService } from '../../endpoint/common/domainService';
-import { IEnvService } from '../../env/common/envService';
 import { LogExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
@@ -57,12 +55,10 @@ export class DocsSearchClient implements IDocsSearchClient {
 	private readonly slug = 'docs';
 
 	constructor(
-		@IDomainService private readonly _domainService: IDomainService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IFetcherService private readonly _fetcherService: IFetcherService,
-		@IEnvService private readonly _envService: IEnvService,
 		@ILogService private readonly _logService: ILogService,
 	) { }
 
@@ -198,9 +194,7 @@ export class DocsSearchClient implements IDocsSearchClient {
 		};
 		const response = await postRequest(
 			this._fetcherService,
-			this._envService,
 			this._telemetryService,
-			this._domainService,
 			this._capiClientService,
 			endpointInfo,
 			authToken ?? '',

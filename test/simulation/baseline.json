@@ -9928,9 +9928,9 @@
   {
     "name": "setupTests - recommend [panel] - goWebApp",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "setupTests - recommend [panel] - javaSpringApp",
@@ -11879,26 +11879,5 @@
     "passCount": 0,
     "failCount": 10,
     "score": 0
-  },
-  {
-    "name": "vscode (metaprompt) [panel] - enable word wrap in editer",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "vscode (metaprompt) [panel] - how do I change font size setting",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "vscode (metaprompt) [panel] - how to opne command pallete",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
   }
 ]

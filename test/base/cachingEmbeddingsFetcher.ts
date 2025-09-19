@@ -7,7 +7,6 @@ import { IAuthenticationService } from '../../src/platform/authentication/common
 import { ComputeEmbeddingsOptions, Embedding, EmbeddingType, EmbeddingVector, Embeddings, LEGACY_EMBEDDING_MODEL_ID, getWellKnownEmbeddingTypeInfo } from '../../src/platform/embeddings/common/embeddingsComputer';
 import { RemoteEmbeddingsComputer } from '../../src/platform/embeddings/common/remoteEmbeddingsComputer';
 import { ICAPIClientService } from '../../src/platform/endpoint/common/capiClient';
-import { IDomainService } from '../../src/platform/endpoint/common/domainService';
 import { IEnvService } from '../../src/platform/env/common/envService';
 import { ILogService } from '../../src/platform/log/common/logService';
 import { IFetcherService } from '../../src/platform/networking/common/fetcherService';
@@ -47,7 +46,6 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 		private readonly cache: IEmbeddingsCache,
 		@IAuthenticationService authService: IAuthenticationService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
-		@IDomainService domainService: IDomainService,
 		@IEnvService envService: IEnvService,
 		@IFetcherService fetcherService: IFetcherService,
 		@ILogService logService: ILogService,
@@ -56,7 +54,6 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 		super(
 			authService,
 			capiClientService,
-			domainService,
 			envService,
 			fetcherService,
 			logService,

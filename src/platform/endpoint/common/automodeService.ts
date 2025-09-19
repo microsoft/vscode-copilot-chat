@@ -8,6 +8,7 @@ import type { ChatRequest } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { TaskSingler } from '../../../util/common/taskSingler';
 import { IAuthenticationService } from '../../authentication/common/authentication';
+import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
 import { ILogService } from '../../log/common/logService';
 import { IChatEndpoint } from '../../networking/common/networking';
 import { AutoChatEndpoint } from './autoChatEndpoint';
@@ -39,6 +40,7 @@ export class AutomodeService implements IAutomodeService {
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@ILogService private readonly _logService: ILogService,
+		@IChatMLFetcher private readonly _chatMLFetcher: IChatMLFetcher,
 	) {
 		this._serviceBrand = undefined;
 	}
@@ -46,13 +48,15 @@ export class AutomodeService implements IAutomodeService {
 	private async _updateAutoEndpointCache(chatRequest: ChatRequest | undefined, knownEndpoints: IChatEndpoint[]): Promise<IChatEndpoint> {
 		const startTime = Date.now();
 		const conversationId = getConversationId(chatRequest);
-		const existingToken = this._autoModelCache.get(conversationId)?.autoModeToken;
+		const cacheEntry = this._autoModelCache.get(conversationId);
+		const existingToken = cacheEntry?.autoModeToken;
+		const isExpired = cacheEntry && (cacheEntry.expiration <= Date.now());
 		const authToken = (await this._authService.getCopilotToken()).token;
 		const headers: Record<string, string> = {
 			'Content-Type': 'application/json',
 			'Authorization': `Bearer ${authToken}`
 		};
-		if (existingToken) {
+		if (existingToken && !isExpired) {
 			headers['Copilot-Session-Token'] = existingToken;
 		}
 		const response = await this._capiClientService.makeRequest<Response>({
@@ -64,7 +68,7 @@ export class AutomodeService implements IAutomodeService {
 		}, { type: RequestType.AutoModels });
 		const data: AutoModeAPIResponse = await response.json() as AutoModeAPIResponse;
 		const selectedModel = knownEndpoints.find(e => e.model === data.selected_model) || knownEndpoints[0];
-		const autoEndpoint = new AutoChatEndpoint(selectedModel, data.session_token, data.discounted_costs?.[selectedModel.model] || 0);
+		const autoEndpoint = new AutoChatEndpoint(selectedModel, this._chatMLFetcher, data.session_token, data.discounted_costs?.[selectedModel.model] || 0);
 		this._autoModelCache.set(conversationId, {
 			endpoint: autoEndpoint,
 			expiration: data.expires_at * 1000,

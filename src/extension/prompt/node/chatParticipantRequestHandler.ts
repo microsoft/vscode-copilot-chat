@@ -5,6 +5,7 @@
 
 import * as l10n from '@vscode/l10n';
 import type { ChatRequest, ChatRequestTurn2, ChatResponseStream, ChatResult, Location } from 'vscode';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { getChatParticipantIdFromName, getChatParticipantNameFromId, workspaceAgentName } from '../../../platform/chat/common/chatAgents';
 import { CanceledMessage, ChatLocation } from '../../../platform/chat/common/commonTypes';
@@ -34,7 +35,7 @@ import { IIntentService } from '../../intents/node/intentService';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ContributedToolName } from '../../tools/common/toolNames';
 import { ChatVariablesCollection } from '../common/chatVariablesCollection';
-import { Conversation, GlobalContextMessageMetadata, ICopilotChatResult, ICopilotChatResultIn, normalizeSummariesOnRounds, RenderedUserMessageMetadata, Turn, TurnStatus } from '../common/conversation';
+import { Conversation, getGlobalContextCacheKey, GlobalContextMessageMetadata, ICopilotChatResult, ICopilotChatResultIn, normalizeSummariesOnRounds, RenderedUserMessageMetadata, Turn, TurnStatus } from '../common/conversation';
 import { InternalToolReference } from '../common/intents';
 import { ChatTelemetryBuilder } from './chatParticipantTelemetry';
 import { DefaultIntentRequestHandler } from './defaultIntentRequestHandler';
@@ -81,6 +82,7 @@ export class ChatParticipantRequestHandler {
 		@IConversationStore private readonly _conversationStore: IConversationStore,
 		@ITabsAndEditorsService tabsAndEditorsService: ITabsAndEditorsService,
 		@ILogService private readonly _logService: ILogService,
+		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService,
 	) {
 		this.location = this.getLocation(request);
@@ -119,13 +121,9 @@ export class ChatParticipantRequestHandler {
 			this.request
 		);
 
-		const latestTurn = new Turn(
+		const latestTurn = Turn.fromRequest(
 			this.chatTelemetry.telemetryMessageId,
-			{ message: request.prompt, type: 'user' },
-			new ChatVariablesCollection(request.references),
-			request.toolReferences.map(InternalToolReference.from),
-			request.editedFileEvents,
-		);
+			this.request);
 
 		this.conversation = new Conversation(actualSessionId, turns.concat(latestTurn));
 
@@ -256,7 +254,9 @@ export class ChatParticipantRequestHandler {
 
 				result = await chatResult;
 				const endpoint = await this._endpointProvider.getChatEndpoint(this.request);
-				result.details = `${endpoint.name} • ${endpoint.multiplier ?? 0}x`;
+				result.details = this._authService.copilotToken?.isNoAuthUser ?
+					`${endpoint.name}` :
+					`${endpoint.name} • ${endpoint.multiplier ?? 0}x`;
 			}
 
 			this._conversationStore.addConversation(this.turn.id, this.conversation);
@@ -325,9 +325,7 @@ export class ChatParticipantRequestHandler {
 
 
 export function addHistoryToConversation(accessor: ServicesAccessor, history: ReadonlyArray<ChatRequestTurn | ChatResponseTurn>): { turns: Turn[]; sessionId: string | undefined } {
-	const commandService = accessor.get(ICommandService);
-	const conversationStore = accessor.get(IConversationStore);
-	const workspaceService = accessor.get(IWorkspaceService);
+	const instaService = accessor.get(IInstantiationService);
 
 	const turns: Turn[] = [];
 	let sessionId: string | undefined;
@@ -339,12 +337,12 @@ export function addHistoryToConversation(accessor: ServicesAccessor, history: Re
 		if (entry instanceof ChatRequestTurn) {
 			previousChatRequestTurn = entry;
 		} else {
-			const existingTurn = findExistingTurnFromVSCodeChatHistoryTurn(conversationStore, entry);
+			const existingTurn = instaService.invokeFunction(findExistingTurnFromVSCodeChatHistoryTurn, entry);
 			if (existingTurn) {
 				turns.push(existingTurn);
 			} else {
 				if (previousChatRequestTurn) {
-					const deserializedTurn = createTurnFromVSCodeChatHistoryTurns(previousChatRequestTurn, entry, commandService, workspaceService);
+					const deserializedTurn = instaService.invokeFunction(createTurnFromVSCodeChatHistoryTurns, previousChatRequestTurn, entry);
 					previousChatRequestTurn = undefined;
 					turns.push(deserializedTurn);
 				}
@@ -363,7 +361,8 @@ export function addHistoryToConversation(accessor: ServicesAccessor, history: Re
 /**
  * Try to find an existing `Turn` instance that we created previously based on the responseId of a vscode turn.
  */
-function findExistingTurnFromVSCodeChatHistoryTurn(conversationStore: IConversationStore, turn: ChatRequestTurn | ChatResponseTurn): Turn | undefined {
+function findExistingTurnFromVSCodeChatHistoryTurn(accessor: ServicesAccessor, turn: ChatRequestTurn | ChatResponseTurn): Turn | undefined {
+	const conversationStore = accessor.get(IConversationStore);
 	const responseId = getResponseIdFromVSCodeChatHistoryTurn(turn);
 	const conversation = responseId ? conversationStore.getConversation(responseId) : undefined;
 	return conversation?.turns.find(turn => turn.id === responseId);
@@ -381,11 +380,14 @@ function getResponseIdFromVSCodeChatHistoryTurn(turn: ChatRequestTurn | ChatResp
  * Try as best as possible to create a `Turn` object from data that comes from vscode.
  */
 function createTurnFromVSCodeChatHistoryTurns(
+	accessor: ServicesAccessor,
 	chatRequestTurn: ChatRequestTurn2,
-	chatResponseTurn: ChatResponseTurn,
-	commandService: ICommandService,
-	workspaceService: IWorkspaceService
+	chatResponseTurn: ChatResponseTurn
 ): Turn {
+	const commandService = accessor.get(ICommandService);
+	const workspaceService = accessor.get(IWorkspaceService);
+	const instaService = accessor.get(IInstantiationService);
+
 	const currentTurn = new Turn(
 		undefined,
 		{ message: chatRequestTurn.prompt, type: 'user' },
@@ -428,7 +430,8 @@ function createTurnFromVSCodeChatHistoryTurns(
 	currentTurn.setResponse(status, { message: content, type: 'model', name: command?.commandId || UnknownIntent.ID }, undefined, chatResponseTurn.result);
 	const turnMetadata = (chatResponseTurn.result as ICopilotChatResultIn).metadata;
 	if (turnMetadata?.renderedGlobalContext) {
-		currentTurn.setMetadata(new GlobalContextMessageMetadata(turnMetadata?.renderedGlobalContext));
+		const cacheKey = turnMetadata.globalContextCacheKey ?? instaService.invokeFunction(getGlobalContextCacheKey);
+		currentTurn.setMetadata(new GlobalContextMessageMetadata(turnMetadata?.renderedGlobalContext, cacheKey));
 	}
 	if (turnMetadata?.renderedUserMessage) {
 		currentTurn.setMetadata(new RenderedUserMessageMetadata(turnMetadata.renderedUserMessage));

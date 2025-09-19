@@ -309,9 +309,7 @@ export class EditCodeIntentInvocation implements IIntentInvocation {
 	protected stableToolReferences = this.request.toolReferences.map(InternalToolReference.from);
 
 	public get linkification(): IntentLinkificationOptions {
-		// off by default:
-		const enabled = this.configurationService.getConfig(ConfigKey.Internal.EditLinkification) === true;
-		return { disable: !enabled };
+		return { disable: false };
 	}
 
 	public readonly codeblocksRepresentEdits: boolean = true;
@@ -416,7 +414,7 @@ export class EditCodeIntentInvocation implements IIntentInvocation {
 
 		return {
 			...result,
-			// The codebase tool is not actually called/referenced in the edit prompt, so we ned to
+			// The codebase tool is not actually called/referenced in the edit prompt, so we need to
 			// merge its metadata so that its output is not lost and it's not called repeatedly every turn
 			// todo@connor4312/joycerhl: this seems a bit janky
 			metadata: codebase ? mergeMetadata(result.metadata, codebase.metadatas) : result.metadata,

@@ -61,6 +61,12 @@ export interface IEnvService {
 	openExternal(target: URI): Promise<boolean>;
 }
 
+export const INativeEnvService = createServiceIdentifier<INativeEnvService>('INativeEnvService');
+export interface INativeEnvService extends IEnvService {
+	readonly _serviceBrand: undefined;
+	userHome: URI;
+}
+
 export abstract class AbstractEnvService implements IEnvService {
 	language: string | undefined;
 	declare _serviceBrand: undefined;

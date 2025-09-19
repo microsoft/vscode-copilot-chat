@@ -121,7 +121,7 @@ describe('Notebook Prompt Rendering', function () {
 			}
 
 			override getWorkspaceFolders(): URI[] {
-				throw new Error('Method not implemented.');
+				return [];
 			}
 			override getWorkspaceFolderName(workspaceFolderUri: URI): string {
 				return '';

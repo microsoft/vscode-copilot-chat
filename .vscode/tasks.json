@@ -16,7 +16,7 @@
 			"label": "ensure-deps",
 			"type": "shell",
 			"windows": {
-				"command": "if not exist node_modules npm install",
+				"command": "if not exist node_modules npm ci",
 				"options": {
 					"shell": {
 						"executable": "cmd.exe",
@@ -25,10 +25,10 @@
 				}
 			},
 			"linux": {
-				"command": "test -d node_modules || npm install"
+				"command": "test -d node_modules || npm ci"
 			},
 			"osx": {
-				"command": "test -d node_modules || npm install"
+				"command": "test -d node_modules || npm ci"
 			},
 			"group": "build",
 			"presentation": {
