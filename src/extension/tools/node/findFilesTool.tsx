@@ -19,11 +19,15 @@ import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer'
 import { ToolName } from '../common/toolNames';
 import { CopilotToolMode, ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { checkCancellation, inputGlobToPattern } from './toolUtils';
+import { raceTimeoutAndReject } from '../../../util/common/async';
 
 export interface IFindFilesToolParams {
 	query: string;
 	maxResults?: number;
 }
+
+/** Timeout for file search operations in milliseconds (20 seconds) */
+const SEARCH_TIMEOUT_MS = 20_000;
 
 export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 	public static readonly toolName = ToolName.FindFiles;
@@ -40,8 +44,15 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 		// The input _should_ be a pattern matching inside a workspace, folder, but sometimes we get absolute paths, so try to resolve them
 		const pattern = inputGlobToPattern(options.input.query, this.workspaceService);
 
-		const results = await this.searchService.findFiles(pattern, undefined, token);
+		const timeoutResult = await raceTimeoutAndReject(
+			this.searchService.findFiles(pattern, undefined, token),
+			SEARCH_TIMEOUT_MS,
+		);
+
 		checkCancellation(token);
+
+		// If timeout occurred, return empty results
+		const results = timeoutResult ?? [];
 
 		const maxResults = options.input.maxResults ?? 20;
 		const resultsToShow = results.slice(0, maxResults);

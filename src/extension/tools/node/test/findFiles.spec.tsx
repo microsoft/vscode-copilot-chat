@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { afterEach, beforeEach, expect, suite, test } from 'vitest';
+import { afterEach, beforeEach, expect, suite, test, vi } from 'vitest';
 import type * as vscode from 'vscode';
 import { RelativePattern } from '../../../../platform/filesystem/common/fileTypes';
 import { AbstractSearchService, ISearchService } from '../../../../platform/search/common/searchService';
@@ -18,6 +18,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { CopilotToolMode } from '../../common/toolsRegistry';
 import { FindFilesTool, IFindFilesToolParams } from '../findFilesTool';
+import { MarkdownString } from '../../../../util/vs/base/common/htmlContent';
 
 suite('FindFiles', () => {
 	let accessor: ITestingServicesAccessor;
@@ -97,6 +98,33 @@ suite('FindFiles', () => {
 			await testIt({ query: 'hello', maxResults: 123 }, CopilotToolMode.PartialContext);
 		});
 	});
+
+	test('handles timeout gracefully', async () => {
+		vi.useFakeTimers();
+		
+		// Use a mock search service that takes longer than the timeout
+		collection.define(ISearchService, new TimeoutTestSearchService());
+		accessor = collection.createTestingAccessor();
+
+		const tool = accessor.get(IInstantiationService).createInstance(FindFilesTool);
+		
+		// Start the search operation 
+		const resultPromise = tool.invoke({ 
+			input: { query: 'test.ts' }, 
+			toolInvocationToken: null!,
+		}, CancellationToken.None);
+
+		// Fast-forward past the timeout (30 seconds)
+		vi.advanceTimersByTime(31_000);
+
+		const result = await resultPromise;
+		
+		// Should return empty results when timeout occurs
+		expect(result.toolResultDetails).toEqual([]);
+		expect((result.toolResultMessage as any as MarkdownString).value).toContain('no matches');
+
+		vi.useRealTimers();
+	});
 });
 
 class TestSearchService extends AbstractSearchService {
@@ -115,5 +143,20 @@ class TestSearchService extends AbstractSearchService {
 	override async findFiles(filePattern: vscode.GlobPattern | vscode.GlobPattern[], options?: vscode.FindFiles2Options | undefined, token?: vscode.CancellationToken | undefined): Promise<vscode.Uri[]> {
 		expect(filePattern).toEqual(this.expectedPattern);
 		return [];
+	}
+}
+
+class TimeoutTestSearchService extends AbstractSearchService {
+	override async findTextInFiles(query: vscode.TextSearchQuery, options: vscode.FindTextInFilesOptions, progress: vscode.Progress<vscode.TextSearchResult>, token: vscode.CancellationToken): Promise<vscode.TextSearchComplete> {
+		throw new Error('Method not implemented.');
+	}
+
+	override findTextInFiles2(query: vscode.TextSearchQuery2, options?: vscode.FindTextInFilesOptions2, token?: vscode.CancellationToken): vscode.FindTextInFilesResponse {
+		throw new Error('Method not implemented.');
+	}
+
+	override async findFiles(filePattern: vscode.GlobPattern | vscode.GlobPattern[], options?: vscode.FindFiles2Options | undefined, token?: vscode.CancellationToken | undefined): Promise<vscode.Uri[]> {
+		// Simulate a hanging search that never resolves
+		return new Promise(() => { /* never resolves */ });
 	}
 }

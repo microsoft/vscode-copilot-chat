@@ -153,3 +153,13 @@ export function raceFilter<T>(promises: Promise<T>[], filter: (result: T) => boo
 		}
 	});
 }
+
+export function raceTimeoutAndReject<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+	return new Promise((resolve, reject) => {
+		const timeoutId = setTimeout(() => {
+			reject(new Error(`Operation timed out after ${timeoutMs}ms`));
+		}, timeoutMs);
+
+		promise.then(resolve, reject).finally(() => clearTimeout(timeoutId));
+	});
+}
