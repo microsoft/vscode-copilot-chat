@@ -237,6 +237,16 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 							timeDelayMs: res.timeDelayMs,
 							didBranchChange: res.didBranchChange ? 1 : 0,
 						});
+						res.telemetryService.sendGHTelemetryEvent('replaceString/trackEditSurvival', {
+							headerRequestId: this._promptContext?.requestId,
+							requestSource: 'agent',
+							mapper: 'stringReplaceTool'
+						}, {
+							survivalRateFourGram: res.fourGram,
+							survivalRateNoRevert: res.noRevert,
+							timeDelayMs: res.timeDelayMs,
+							didBranchChange: res.didBranchChange ? 1 : 0,
+						});
 					});
 				});
 
