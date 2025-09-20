@@ -48,7 +48,7 @@ import { Delayer, DelaySession } from '../../inlineEdits/common/delayer';
 import { editWouldDeleteWhatWasJustInserted } from '../../inlineEdits/common/ghNearbyNesProvider';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
-import { AREA_AROUND_END_TAG, AREA_AROUND_START_TAG, CODE_TO_EDIT_END_TAG, CODE_TO_EDIT_START_TAG, createTaggedCurrentFileContentUsingPagedClipping, CURSOR_TAG, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/promptCrafting';
+import { createTaggedCurrentFileContentUsingPagedClipping, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, nes41Miniv3SystemPrompt, PromptTags, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/promptCrafting';
 import { XtabEndpoint } from './xtabEndpoint';
 import { linesWithBackticksRemoved, toLines } from './xtabUtils';
 
@@ -230,23 +230,23 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		// Expected: editWindow.substring(activeDocument.documentAfterEdits.value) === editWindowLines.join('\n')
 
-		const doesIncludeCursorTag = editWindowLines.some(line => line.includes(CURSOR_TAG));
+		const doesIncludeCursorTag = editWindowLines.some(line => line.includes(PromptTags.CURSOR));
 		const shouldRemoveCursorTagFromResponse = !doesIncludeCursorTag; // we'd like to remove the tag only if the original edit-window didn't include the tag
 
-		const addCursorTagEdit = StringEdit.single(StringReplacement.insert(cursorOffset, CURSOR_TAG));
+		const addCursorTagEdit = StringEdit.single(StringReplacement.insert(cursorOffset, PromptTags.CURSOR));
 		const contentWithCursor = addCursorTagEdit.applyOnText(currentFileContent);
 		const contentWithCursorLines = contentWithCursor.getLines();
 
 		const editWindowWithCursorLines = contentWithCursorLines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
 
 		const areaAroundCodeToEdit = [
-			AREA_AROUND_START_TAG,
+			PromptTags.AREA_AROUND.start,
 			...contentWithCursorLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
-			CODE_TO_EDIT_START_TAG,
+			PromptTags.EDIT_WINDOW.start,
 			...editWindowWithCursorLines,
-			CODE_TO_EDIT_END_TAG,
+			PromptTags.EDIT_WINDOW.end,
 			...contentWithCursorLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
-			AREA_AROUND_END_TAG
+			PromptTags.AREA_AROUND.end
 		].join('\n');
 
 		const promptOptions = this.determinePromptOptions(activeDocument);
@@ -540,7 +540,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				tracer.trace(trace);
 
 				return opts.shouldRemoveCursorTagFromResponse
-					? v.replaceAll(CURSOR_TAG, '')
+					? v.replaceAll(PromptTags.CURSOR, '')
 					: v;
 			});
 		})();
