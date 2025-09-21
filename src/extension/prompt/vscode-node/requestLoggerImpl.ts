@@ -536,6 +536,8 @@ export class RequestLogger extends AbstractRequestLogger {
 		const tocItems: string[] = [];
 		if (hasMessages) {
 			tocItems.push(`- [Request Messages](#request-messages)`);
+			tocItems.push(`  - [System](#system)`);
+			tocItems.push(`  - [User](#user)`);
 		}
 		if (hasPredictionSection) {
 			tocItems.push(`- [Prediction](#prediction)`);
