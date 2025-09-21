@@ -389,6 +389,10 @@ export class CopilotLanguageModelWrapper extends Disposable {
 				const err = new vscode.LanguageModelError(details.message);
 				err.name = 'ChatQuotaExceeded';
 				throw err;
+			} else if (result.type === ChatFetchResponseType.RateLimited) {
+				const err = new Error(result.reason);
+				err.name = 'ChatRateLimited';
+				throw err;
 			}
 
 			throw new Error(result.reason);
