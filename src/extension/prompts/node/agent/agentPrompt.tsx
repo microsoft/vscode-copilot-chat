@@ -742,6 +742,13 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 					You MUST plan extensively before each function call, and reflect extensively on the outcomes of the previous function calls. DO NOT do this entire process by making function calls only, as this can impair your ability to solve the problem and think insightfully.<br />
 					You are a highly capable and autonomous agent, and you can definitely solve this problem without needing to ask the user for further input.<br />
 				</>;
+			} else if (this.props.modelFamily === 'gpt-5-codex') {
+				return <>
+					You are an agent—keep going until the user's query is completely resolved before ending your turn. ONLY stop if solved or genuinely blocked.<br />
+					Take action when possible; the user expects you to do useful work without unnecessary questions.<br />
+					Avoid repetition across turns: don't restate unchanged plans or sections (like the todo list) verbatim; provide delta updates or only the parts that changed.<br />
+					Requirements coverage: Read the user's ask in full and think carefully. Do not omit a requirement. If something cannot be done with available tools, note why briefly and propose a viable alternative.<br />
+				</>;
 			} else if (this.props.modelFamily?.startsWith('gpt-5') === true) {
 				return <>
 					You are an agent—keep going until the user's query is completely resolved before ending your turn. ONLY stop if solved or genuinely blocked.<br />
