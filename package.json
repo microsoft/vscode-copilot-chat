@@ -136,7 +136,8 @@
 		"dataChannels",
 		"languageModelThinkingPart",
 		"chatSessionsProvider",
-		"devDeviceId"
+		"devDeviceId",
+		"contribEditorContentMenu"
 	],
 	"contributes": {
 		"languageModelTools": [
@@ -2014,7 +2015,12 @@
 			{
 				"command": "github.copilot.git.resolveMergeConflicts",
 				"title": "%github.copilot.git.resolveMergeConflicts%",
-				"icon": "$(chat-sparkle)",
+				"enablement": "!github.copilot.interactiveSession.disabled",
+				"category": "GitHub Copilot"
+			},
+			{
+				"command": "github.copilot.git.resolveMergeConflicts2",
+				"title": "%github.copilot.git.resolveMergeConflicts2%",
 				"enablement": "!github.copilot.interactiveSession.disabled",
 				"category": "GitHub Copilot"
 			},
@@ -3188,6 +3194,10 @@
 					"when": "false"
 				},
 				{
+					"command": "github.copilot.git.resolveMergeConflicts2",
+					"when": "false"
+				},
+				{
 					"command": "github.copilot.chat.explain",
 					"when": "false"
 				},
@@ -3527,8 +3537,8 @@
 			],
 			"scm/resourceState/context": [
 				{
-					"command": "github.copilot.git.resolveMergeConflicts",
-					"when": "scmProvider == git && scmResourceGroup == merge",
+					"command": "github.copilot.git.resolveMergeConflicts2",
+					"when": "scmProvider == git && scmResourceGroup == merge && mergeConflictsCount && mergeConflictsCount != 0",
 					"group": "z_chat@1"
 				},
 				{
@@ -3609,6 +3619,13 @@
 					"command": "github.copilot.chat.notebook.disableFollowCellExecution",
 					"when": "config.github.copilot.chat.notebook.followCellExecution.enabled && github.copilot.notebookFollowInSessionEnabled && github.copilot.notebookAgentModeUsage && config.notebook.globalToolbar",
 					"group": "navigation/execute@15"
+				}
+			],
+			"editor/content": [
+				{
+					"command": "github.copilot.git.resolveMergeConflicts",
+					"group": "z_chat@1",
+					"when": "config.git.enabled && !git.missing && !isInDiffEditor && !isMergeEditor && resource in git.mergeChanges && mergeConflictsCount && mergeConflictsCount != 0"
 				}
 			]
 		},

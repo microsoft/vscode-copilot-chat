@@ -10,6 +10,7 @@ import { IEndpointProvider } from '../../../platform/endpoint/common/endpointPro
 import { ILogService } from '../../../platform/log/common/logService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { APIUsage } from '../../../platform/networking/common/openai';
+import { createServiceIdentifier } from '../../../util/common/services';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { LanguageModelError } from '../../../vscodeTypes';
@@ -21,7 +22,17 @@ export interface ILanguageModelServerConfig {
 	readonly nonce: string;
 }
 
-export class LanguageModelServer {
+export const ILanguageModelServer = createServiceIdentifier<ILanguageModelServer>('ILanguageModelServer');
+export interface ILanguageModelServer {
+	readonly _serviceBrand: undefined;
+	start(): Promise<void>;
+	stop(): void;
+	getConfig(): ILanguageModelServerConfig;
+}
+
+export class LanguageModelServer implements ILanguageModelServer {
+	declare _serviceBrand: undefined;
+
 	private server: http.Server;
 	private config: ILanguageModelServerConfig;
 	private adapterFactories: Map<string, IProtocolAdapterFactory>;
@@ -56,6 +67,7 @@ export class LanguageModelServer {
 					try {
 						// Create new adapter instance for this request
 						const adapter = adapterFactory.createAdapter();
+						const body = await this.readRequestBody(req);
 
 						// Verify nonce for authentication
 						const authKey = adapter.extractAuthKey(req.headers);
@@ -66,7 +78,6 @@ export class LanguageModelServer {
 							return;
 						}
 
-						const body = await this.readRequestBody(req);
 						await this.handleChatRequest(adapter, body, res);
 					} catch (error) {
 						res.writeHead(500, { 'Content-Type': 'application/json' });
