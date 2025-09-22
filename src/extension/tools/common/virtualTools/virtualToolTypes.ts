@@ -6,8 +6,8 @@
 import type { LanguageModelToolInformation, LanguageModelToolResult } from 'vscode';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
-import { VirtualTool } from './virtualTool';
 import { IObservable } from '../../../../util/vs/base/common/observableInternal';
+import { VirtualTool } from './virtualTool';
 
 export interface IToolGrouping {
 	/**
@@ -53,12 +53,12 @@ export interface IToolGrouping {
 	 * Returns a list of tools that should be used for the given request.
 	 * Internally re-reads the request and conversation state.
 	 */
-	compute(token: CancellationToken): Promise<LanguageModelToolInformation[]>;
+	compute(query: string, token: CancellationToken): Promise<LanguageModelToolInformation[]>;
 
 	/**
 	 * Returns the complete tree of tools, used for diagnostic purposes.
 	 */
-	computeAll(token: CancellationToken): Promise<(LanguageModelToolInformation | VirtualTool)[]>;
+	computeAll(query: string, token: CancellationToken): Promise<(LanguageModelToolInformation | VirtualTool)[]>;
 }
 
 export interface IToolGroupingService {
@@ -103,7 +103,7 @@ export interface IToolCategorization {
 	 * Called whenever new tools are added. The function should add each tool into
 	 * the appropriate virtual tool or top-level tool in the `root`.
 	 */
-	addGroups(root: VirtualTool, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<void>;
+	addGroups(query: string, root: VirtualTool, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<void>;
 }
 
 export interface ISummarizedToolCategory {

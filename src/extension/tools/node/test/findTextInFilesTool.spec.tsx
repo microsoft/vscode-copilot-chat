@@ -11,13 +11,13 @@ import { ITestingServicesAccessor, TestingServiceCollection } from '../../../../
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { MarkdownString } from '../../../../util/vs/base/common/htmlContent';
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { FindTextInFilesTool } from '../findTextInFilesTool';
-import { MarkdownString } from '../../../../util/vs/base/common/htmlContent';
 
 suite('FindTextInFiles', () => {
 	let accessor: ITestingServicesAccessor;
@@ -42,8 +42,10 @@ suite('FindTextInFiles', () => {
 			patterns.push(new RelativePattern(expected.baseUri, expected.pattern + '/**'));
 		}
 
-		collection.define(ISearchService, new TestSearchService(patterns));
+		const searchService = new TestSearchService(patterns);
+		collection.define(ISearchService, searchService);
 		accessor = collection.createTestingAccessor();
+		return searchService;
 	}
 
 	test('passes through simple query', async () => {
@@ -81,11 +83,45 @@ suite('FindTextInFiles', () => {
 		const prepared = await tool.prepareInvocation({ input: { query: 'hello `world`' }, }, CancellationToken.None);
 		expect((prepared?.invocationMessage as any as MarkdownString).value).toMatchInlineSnapshot(`"Searching text for \`\` hello \`world\` \`\`"`);
 	});
+
+	test('retries with plain text when regex yields no results', async () => {
+		const searchService = setup('*.ts');
+
+		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
+		await tool.invoke({ input: { query: '(?:hello)', includePattern: '*.ts' }, toolInvocationToken: null!, }, CancellationToken.None);
+
+		expect(searchService.calls.map(call => call.isRegExp)).toEqual([true, false]);
+		expect(searchService.calls.every(call => call.pattern === '(?:hello)')).toBe(true);
+	});
+
+	test('does not retry when text pattern is invalid regex', async () => {
+		const searchService = setup('*.ts');
+
+		const tool = accessor.get(IInstantiationService).createInstance(FindTextInFilesTool);
+		await tool.invoke({ input: { query: '[', includePattern: '*.ts', isRegexp: false }, toolInvocationToken: null!, }, CancellationToken.None);
+
+		expect(searchService.calls.map(call => call.isRegExp)).toEqual([false]);
+	});
 });
 
+interface IRecordedSearchCall {
+	readonly pattern: string;
+	readonly isRegExp: boolean | undefined;
+}
+
 class TestSearchService extends AbstractSearchService {
-	constructor(private readonly expectedIncludePattern: vscode.GlobPattern[]) {
+
+	public readonly arr1: string[] = [];
+	public arr2: readonly string[] = [];
+
+	constructor(private readonly expectedIncludePattern: readonly vscode.GlobPattern[]) {
 		super();
+	}
+
+	private readonly recordedCalls: IRecordedSearchCall[] = [];
+
+	public get calls(): readonly IRecordedSearchCall[] {
+		return this.recordedCalls;
 	}
 
 	override async findTextInFiles(query: vscode.TextSearchQuery, options: vscode.FindTextInFilesOptions, progress: vscode.Progress<vscode.TextSearchResult>, token: vscode.CancellationToken): Promise<vscode.TextSearchComplete> {
@@ -94,6 +130,10 @@ class TestSearchService extends AbstractSearchService {
 
 	override findTextInFiles2(query: vscode.TextSearchQuery2, options?: vscode.FindTextInFilesOptions2, token?: vscode.CancellationToken): vscode.FindTextInFilesResponse {
 		expect(options?.include).toEqual(this.expectedIncludePattern);
+		this.recordedCalls.push({
+			pattern: query.pattern,
+			isRegExp: query.isRegExp,
+		});
 		return {
 			complete: Promise.resolve({}),
 			results: (async function* () { })()

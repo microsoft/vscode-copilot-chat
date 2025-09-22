@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Options, SDKUserMessage } from '@anthropic-ai/claude-code';
+import { Options, Query, SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-code';
 import Anthropic from '@anthropic-ai/sdk';
 import type * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -13,7 +13,7 @@ import { IWorkspaceService } from '../../../../platform/workspace/common/workspa
 import { isLocation } from '../../../../util/common/types';
 import { DeferredPromise } from '../../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
-import { Disposable } from '../../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableMap } from '../../../../util/vs/base/common/lifecycle';
 import { isWindows } from '../../../../util/vs/base/common/platform';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -24,10 +24,13 @@ import { isFileOkForTool } from '../../../tools/node/toolUtils';
 import { ILanguageModelServerConfig, LanguageModelServer } from '../../node/langModelServer';
 import { ClaudeToolNames, IExitPlanModeInput, ITodoWriteInput } from '../common/claudeTools';
 import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
+import { IClaudeCodeSdkService } from './claudeCodeSdkService';
 
 // Manages Claude Code agent interactions and language model server lifecycle
 export class ClaudeAgentManager extends Disposable {
 	private _langModelServer: LanguageModelServer | undefined;
+	private _sessions = this._register(new DisposableMap<string, ClaudeCodeSession>());
+
 	private async getLangModelServer(): Promise<LanguageModelServer> {
 		if (!this._langModelServer) {
 			this._langModelServer = this.instantiationService.createInstance(LanguageModelServer);
@@ -44,17 +47,38 @@ export class ClaudeAgentManager extends Disposable {
 		super();
 	}
 
-	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
+	public async handleRequest(claudeSessionId: string | undefined, request: vscode.ChatRequest, _context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult & { claudeSessionId?: string }> {
 		try {
 			// Get server config, start server if needed
 			const serverConfig = (await this.getLangModelServer()).getConfig();
-			const session = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, claudeSessionId);
+
+			const sessionIdForLog = claudeSessionId ?? 'new';
+			this.logService.trace(`[ClaudeAgentManager] Handling request for sessionId=${sessionIdForLog}.`);
+			let session: ClaudeCodeSession;
+			if (claudeSessionId && this._sessions.has(claudeSessionId)) {
+				this.logService.trace(`[ClaudeAgentManager] Reusing Claude session ${claudeSessionId}.`);
+				session = this._sessions.get(claudeSessionId)!;
+			} else {
+				this.logService.trace(`[ClaudeAgentManager] Creating Claude session for sessionId=${sessionIdForLog}.`);
+				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, claudeSessionId);
+				if (newSession.sessionId) {
+					this._sessions.set(newSession.sessionId, newSession);
+				}
+				session = newSession;
+			}
+
 			await session.invoke(
 				this.resolvePrompt(request),
 				request.toolInvocationToken,
 				stream,
 				token
 			);
+
+			// Store the session if sessionId was assigned during invoke
+			if (session.sessionId && !this._sessions.has(session.sessionId)) {
+				this.logService.trace(`[ClaudeAgentManager] Tracking Claude session ${claudeSessionId} -> ${session.sessionId}`);
+				this._sessions.set(session.sessionId, session);
+			}
 
 			return {
 				claudeSessionId: session.sessionId
@@ -98,8 +122,33 @@ export class ClaudeAgentManager extends Disposable {
 
 class KnownClaudeError extends Error { }
 
-class ClaudeCodeSession {
-	private static DenyToolMessage = 'The user declined to run the tool';
+/**
+ * Represents a queued chat request waiting to be processed by the Claude session
+ */
+interface QueuedRequest {
+	readonly prompt: string;
+	readonly stream: vscode.ChatResponseStream;
+	readonly toolInvocationToken: vscode.ChatParticipantToolToken;
+	readonly token: vscode.CancellationToken;
+	readonly deferred: DeferredPromise<void>;
+}
+
+/**
+ * Represents the currently active request being processed
+ */
+interface CurrentRequest {
+	readonly stream: vscode.ChatResponseStream;
+	readonly toolInvocationToken: vscode.ChatParticipantToolToken;
+	readonly token: vscode.CancellationToken;
+}
+
+export class ClaudeCodeSession extends Disposable {
+	private static readonly DenyToolMessage = 'The user declined to run the tool';
+	private _queryGenerator: Query | undefined;
+	private _promptQueue: QueuedRequest[] = [];
+	private _currentRequest: CurrentRequest | undefined;
+	private _pendingPrompt: DeferredPromise<QueuedRequest> | undefined;
+	private _abortController = new AbortController();
 
 	constructor(
 		private readonly serverConfig: ILanguageModelServerConfig,
@@ -109,20 +158,77 @@ class ClaudeCodeSession {
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IEnvService private readonly envService: IEnvService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
-		@IToolsService private readonly toolsService: IToolsService
-	) { }
+		@IToolsService private readonly toolsService: IToolsService,
+		@IClaudeCodeSdkService private readonly claudeCodeService: IClaudeCodeSdkService
+	) {
+		super();
+	}
 
+	public override dispose(): void {
+		this._abortController.abort();
+		this._promptQueue.forEach(req => req.deferred.error(new Error('Session disposed')));
+		this._promptQueue = [];
+		this._pendingPrompt?.error(new Error('Session disposed'));
+		this._pendingPrompt = undefined;
+		super.dispose();
+	}
+
+	/**
+	 * Invokes the Claude Code session with a user prompt
+	 * @param prompt The user's prompt text
+	 * @param toolInvocationToken Token for invoking tools
+	 * @param stream Response stream for sending results back to VS Code
+	 * @param token Cancellation token for request cancellation
+	 */
 	public async invoke(
 		prompt: string,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken
 	): Promise<void> {
-		const abortController = new AbortController();
+		if (this._store.isDisposed) {
+			throw new Error('Session disposed');
+		}
+
+		if (!this._queryGenerator) {
+			await this._startSession();
+		}
+
+		// Add this request to the queue and wait for completion
+		const deferred = new DeferredPromise<void>();
+		const request: QueuedRequest = {
+			prompt,
+			stream,
+			toolInvocationToken,
+			token,
+			deferred
+		};
+
+		this._promptQueue.push(request);
+
+		// Handle cancellation
 		token.onCancellationRequested(() => {
-			abortController.abort();
+			const index = this._promptQueue.indexOf(request);
+			if (index !== -1) {
+				this._promptQueue.splice(index, 1);
+				deferred.error(new Error('Request was cancelled'));
+			}
 		});
 
+		// If there's a pending prompt request, fulfill it immediately
+		if (this._pendingPrompt) {
+			const pendingPrompt = this._pendingPrompt;
+			this._pendingPrompt = undefined;
+			pendingPrompt.complete(request);
+		}
+
+		return deferred.p;
+	}
+
+	/**
+	 * Starts a new Claude Code session with the configured options
+	 */
+	private async _startSession(): Promise<void> {
 		// Build options for the Claude Code SDK
 		// process.env.DEBUG = '1'; // debug messages from sdk.mjs
 		const isDebugEnabled = this.configService.getConfig(ConfigKey.Internal.ClaudeCodeDebugEnabled);
@@ -130,7 +236,7 @@ class ClaudeCodeSession {
 		const pathSep = isWindows ? ';' : ':';
 		const options: Options = {
 			cwd: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
-			abortController,
+			abortController: this._abortController,
 			executable: process.execPath as 'node', // get it to fork the EH node process
 			env: {
 				...process.env,
@@ -142,48 +248,102 @@ class ClaudeCodeSession {
 				PATH: `${this.envService.appRoot}/node_modules/@vscode/ripgrep/bin${pathSep}${process.env.PATH}`
 			},
 			resume: this.sessionId,
-			// permissionMode: 'acceptEdits',
-			canUseTool: async (name, input, opts) => {
-				return this.canUseTool(name, input, toolInvocationToken);
+			canUseTool: async (name, input) => {
+				return this._currentRequest ?
+					this.canUseTool(name, input, this._currentRequest.toolInvocationToken) :
+					{ behavior: 'deny', message: 'No active request' };
 			},
 			appendSystemPrompt: 'Your responses will be rendered as markdown, so please reply with properly formatted markdown when appropriate. When replying with code or the name of a symbol, wrap it in backticks.'
 		};
 
 		this.logService.trace(`Claude CLI SDK: Starting query with options: ${JSON.stringify(options)}`);
-		const { query } = await import('@anthropic-ai/claude-code');
-		const def = new DeferredPromise<void>();
-		async function* createPromptIterable(promptText: string, sessionId?: string): AsyncIterable<SDKUserMessage> {
+		this._queryGenerator = await this.claudeCodeService.query({
+			prompt: this._createPromptIterable(),
+			options
+		});
+
+		// Start the message processing loop
+		this._processMessages();
+	}
+
+	private async *_createPromptIterable(): AsyncIterable<SDKUserMessage> {
+		while (true) {
+			// Wait for a request to be available
+			const request = await this._getNextRequest();
+
+			this._currentRequest = {
+				stream: request.stream,
+				toolInvocationToken: request.toolInvocationToken,
+				token: request.token
+			};
+
 			yield {
 				type: 'user',
 				message: {
 					role: 'user',
-					content: promptText
+					content: request.prompt
 				},
 				parent_tool_use_id: null,
-				session_id: sessionId ?? ''
+				session_id: this.sessionId ?? ''
 			};
 
-			// Workaround https://github.com/anthropics/claude-code/issues/4775
-			await def.p;
+			// Wait for this request to complete before yielding the next one
+			await request.deferred.p;
+		}
+	}
+
+	/**
+	 * Gets the next request from the queue or waits for one to be available
+	 * @returns Promise that resolves with the next queued request
+	 */
+	private async _getNextRequest(): Promise<QueuedRequest> {
+		if (this._promptQueue.length > 0) {
+			return this._promptQueue[0]; // Don't shift yet, keep for resolution
 		}
 
-		const unprocessedToolCalls = new Map<string, Anthropic.ToolUseBlock>();
-		for await (const message of query({
-			prompt: createPromptIterable(prompt, this.sessionId),
-			options
-		})) {
-			this.logService.trace(`Claude CLI SDK Message: ${JSON.stringify(message, null, 2)}`);
-			if (message.session_id) {
-				this.sessionId = message.session_id;
-			}
+		// Wait for a request to be queued
+		this._pendingPrompt = new DeferredPromise<QueuedRequest>();
+		return this._pendingPrompt.p;
+	}
 
-			if (message.type === 'assistant') {
-				this.handleAssistantMessage(message, stream, unprocessedToolCalls);
-			} else if (message.type === 'user') {
-				this.handleUserMessage(message, stream, unprocessedToolCalls, toolInvocationToken, token);
-			} else if (message.type === 'result') {
-				this.handleResultMessage(message, stream, def);
+	/**
+	 * Processes messages from the Claude Code query generator
+	 * Routes messages to appropriate handlers and manages request completion
+	 */
+	private async _processMessages(): Promise<void> {
+		try {
+			const unprocessedToolCalls = new Map<string, Anthropic.ToolUseBlock>();
+			for await (const message of this._queryGenerator!) {
+				// Check if current request was cancelled
+				if (this._currentRequest?.token.isCancellationRequested) {
+					throw new Error('Request was cancelled');
+				}
+
+				this.logService.trace(`Claude CLI SDK Message: ${JSON.stringify(message, null, 2)}`);
+				if (message.session_id) {
+					this.sessionId = message.session_id;
+				}
+
+				if (message.type === 'assistant') {
+					this.handleAssistantMessage(message, this._currentRequest!.stream, unprocessedToolCalls);
+				} else if (message.type === 'user') {
+					this.handleUserMessage(message, this._currentRequest!.stream, unprocessedToolCalls, this._currentRequest!.toolInvocationToken, this._currentRequest!.token);
+				} else if (message.type === 'result') {
+					this.handleResultMessage(message, this._currentRequest!.stream);
+					// Resolve and remove the completed request
+					if (this._promptQueue.length > 0) {
+						const completedRequest = this._promptQueue.shift()!;
+						completedRequest.deferred.complete();
+					}
+					this._currentRequest = undefined;
+				}
 			}
+		} catch (error) {
+			// Reject all pending requests
+			this._promptQueue.forEach(req => req.deferred.error(error as Error));
+			this._promptQueue = [];
+			this._pendingPrompt?.error(error as Error);
+			this._pendingPrompt = undefined;
 		}
 	}
 
@@ -191,7 +351,7 @@ class ClaudeCodeSession {
 	 * Handles assistant messages containing text content and tool use blocks
 	 */
 	private handleAssistantMessage(
-		message: any, // Use any to avoid complex type issues with SDK types
+		message: SDKAssistantMessage,
 		stream: vscode.ChatResponseStream,
 		unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>
 	): void {
@@ -212,7 +372,7 @@ class ClaudeCodeSession {
 	 * Handles user messages containing tool results
 	 */
 	private handleUserMessage(
-		message: any, // Use any to avoid complex type issues with SDK types
+		message: SDKUserMessage,
 		stream: vscode.ChatResponseStream,
 		unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
@@ -231,7 +391,7 @@ class ClaudeCodeSession {
 	 * Processes individual tool results and handles special tool types
 	 */
 	private processToolResult(
-		toolResult: any, // Use any to avoid complex type issues with Anthropic SDK types
+		toolResult: Anthropic.Messages.ToolResultBlockParam,
 		stream: vscode.ChatResponseStream,
 		unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
@@ -288,11 +448,9 @@ class ClaudeCodeSession {
 	 * Handles result messages that indicate completion or errors
 	 */
 	private handleResultMessage(
-		message: any, // Use any to avoid complex type issues with SDK types
-		stream: vscode.ChatResponseStream,
-		def: DeferredPromise<void>
+		message: SDKResultMessage,
+		stream: vscode.ChatResponseStream
 	): void {
-		def.complete();
 		if (message.subtype === 'error_max_turns') {
 			stream.progress(`⚠️ Maximum turns reached (${message.num_turns})`);
 		} else if (message.subtype === 'error_during_execution') {

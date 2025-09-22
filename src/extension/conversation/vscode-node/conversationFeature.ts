@@ -248,8 +248,12 @@ export class ConversationFeature implements IExtensionContribution {
 					repository.inputBox.value = commitMessage;
 				}
 			}),
-			vscode.commands.registerCommand('github.copilot.git.resolveMergeConflicts', async (...resourceStates: vscode.SourceControlResourceState[]) => {
-				await this.mergeConflictService.resolveMergeConflicts(resourceStates.map(r => r.resourceUri), undefined);
+			vscode.commands.registerCommand('github.copilot.git.resolveMergeConflicts', async (uri: vscode.Uri) => {
+				await this.mergeConflictService.resolveMergeConflicts([uri], undefined);
+			}),
+			vscode.commands.registerCommand('github.copilot.git.resolveMergeConflicts2', async (...resourceStates: vscode.SourceControlResourceState[]) => {
+				const resources = resourceStates.map(r => r.resourceUri);
+				await this.mergeConflictService.resolveMergeConflicts(resources, undefined);
 			}),
 			vscode.commands.registerCommand('github.copilot.devcontainer.generateDevContainerConfig', async (args: DevContainerConfigGeneratorArguments, cancellationToken = new vscode.CancellationTokenSource().token) => {
 				return this.devContainerConfigurationService.generateConfiguration(args, cancellationToken);

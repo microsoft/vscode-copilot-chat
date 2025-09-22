@@ -26,7 +26,7 @@ import { ChatRequestEditedFileEventKind, Position, Range } from '../../../../vsc
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
 import { GitHubPullRequestProviders } from '../../../conversation/node/githubPullRequestProviders';
 import { ChatVariablesCollection } from '../../../prompt/common/chatVariablesCollection';
-import { GlobalContextMessageMetadata, RenderedUserMessageMetadata, Turn } from '../../../prompt/common/conversation';
+import { getGlobalContextCacheKey, GlobalContextMessageMetadata, RenderedUserMessageMetadata, Turn } from '../../../prompt/common/conversation';
 import { InternalToolReference } from '../../../prompt/common/intents';
 import { IPromptVariablesService } from '../../../prompt/node/promptVariablesService';
 import { ToolName } from '../../../tools/common/toolNames';
@@ -234,14 +234,17 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		if (firstTurn) {
 			const metadata = firstTurn.getMetadata(GlobalContextMessageMetadata);
 			if (metadata) {
-				return metadata.renderedGlobalContext;
+				const currentCacheKey = this.instantiationService.invokeFunction(getGlobalContextCacheKey);
+				if (metadata.cacheKey === currentCacheKey) {
+					return metadata.renderedGlobalContext;
+				}
 			}
 		}
 
 		const rendered = await renderPromptElement(this.instantiationService, endpoint, GlobalAgentContext, { enableCacheBreakpoints: this.props.enableCacheBreakpoints, availableTools: this.props.promptContext.tools?.availableTools }, undefined, undefined);
 		const msg = rendered.messages.at(0)?.content;
 		if (msg) {
-			firstTurn?.setMetadata(new GlobalContextMessageMetadata(msg));
+			firstTurn?.setMetadata(new GlobalContextMessageMetadata(msg, this.instantiationService.invokeFunction(getGlobalContextCacheKey)));
 			return msg;
 		}
 	}
@@ -750,6 +753,13 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 					Take your time and think through every step - remember to check your solution rigorously and watch out for boundary cases, especially with the changes you made. Your solution must be perfect. If not, continue working on it. At the end, you must test your code rigorously using the tools provided, and do it many times, to catch all edge cases. If it is not robust, iterate more and make it perfect. Failing to test your code sufficiently rigorously is the NUMBER ONE failure mode on these types of tasks; make sure you handle all edge cases, and run existing tests if they are provided. <br />
 					You MUST plan extensively before each function call, and reflect extensively on the outcomes of the previous function calls. DO NOT do this entire process by making function calls only, as this can impair your ability to solve the problem and think insightfully.<br />
 					You are a highly capable and autonomous agent, and you can definitely solve this problem without needing to ask the user for further input.<br />
+				</>;
+			} else if (this.props.modelFamily === 'gpt-5-codex') {
+				return <>
+					You are an agent—keep going until the user's query is completely resolved before ending your turn. ONLY stop if solved or genuinely blocked.<br />
+					Take action when possible; the user expects you to do useful work without unnecessary questions.<br />
+					Avoid repetition across turns: don't restate unchanged plans or sections (like the todo list) verbatim; provide delta updates or only the parts that changed.<br />
+					Requirements coverage: Read the user's ask in full and think carefully. Do not omit a requirement. If something cannot be done with available tools, note why briefly and propose a viable alternative.<br />
 				</>;
 			} else if (this.props.modelFamily?.startsWith('gpt-5') === true) {
 				return <>

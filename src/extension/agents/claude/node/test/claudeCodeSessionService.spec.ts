@@ -46,6 +46,7 @@ describe('ClaudeCodeSessionService', () => {
 		testingServiceCollection.set(IWorkspaceService, workspaceService);
 
 		const accessor = testingServiceCollection.createTestingAccessor();
+		mockFs = accessor.get(IFileSystemService) as MockFileSystemService;
 		const instaService = accessor.get(IInstantiationService);
 		const nativeEnvService = accessor.get(INativeEnvService);
 		dirUri = URI.joinPath(nativeEnvService.userHome, '.claude', 'projects', slug);
