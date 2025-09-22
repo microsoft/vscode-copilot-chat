@@ -149,9 +149,15 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			}
 
 			const baseCount = await PromptRenderer.create(this._instantiationService, endpoint, LanguageModelAccessPrompt, { noSafety: false, messages: [] }).countTokens();
-			let multiplierString = endpoint.multiplier !== undefined ? `${endpoint.multiplier}x` : undefined;
+			let modelDetail = endpoint.multiplier !== undefined ? `${endpoint.multiplier}x` : undefined;
 			if (endpoint.model === AutoChatEndpoint.id) {
-				multiplierString = 'Variable';
+				modelDetail = 'Variable';
+			}
+
+			if (endpoint.customModel) {
+				modelDetail = endpoint.customModel.orgName;
+				modelDescription = endpoint.customModel.keyName;
+				modelCategory = { label: localize('languageModelHeader.custom_models', "Custom Models"), order: 1 };
 			}
 
 			const session = this._authenticationService.anyGitHubSession;
@@ -161,7 +167,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				name: endpoint.model === AutoChatEndpoint.id ? 'Auto' : endpoint.name,
 				family: endpoint.family,
 				tooltip: modelDescription,
-				detail: multiplierString,
+				detail: modelDetail,
 				category: modelCategory,
 				version: endpoint.version,
 				maxInputTokens: endpoint.modelMaxPromptTokens - baseCount - BaseTokensPerCompletion,

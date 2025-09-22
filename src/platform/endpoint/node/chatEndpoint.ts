@@ -154,6 +154,7 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly isPremium?: boolean | undefined;
 	public readonly multiplier?: number | undefined;
 	public readonly restrictedToSkus?: string[] | undefined;
+	public readonly customModel?: ICustomModel | undefined;
 
 	private readonly _supportsStreaming: boolean;
 	private _policyDetails: ModelPolicy | undefined;
@@ -192,6 +193,12 @@ export class ChatEndpoint implements IChatEndpoint {
 		this.supportsPrediction = !!_modelMetadata.capabilities.supports.prediction;
 		this._supportsStreaming = !!_modelMetadata.capabilities.supports.streaming;
 		this._policyDetails = _modelMetadata.policy;
+		if (_modelMetadata.custom_model) {
+			this.customModel = {
+				keyName: _modelMetadata.custom_model.key_name,
+				orgName: _modelMetadata.custom_model.org_name,
+			};
+		}
 	}
 
 	public get modelMaxPromptTokens(): number {

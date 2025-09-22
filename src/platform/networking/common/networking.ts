@@ -147,6 +147,11 @@ export interface ICreateEndpointBodyOptions extends IMakeChatRequestOptions {
 	postOptions: OptionalChatRequestParams;
 }
 
+export interface ICustomModel {
+	readonly keyName: string;
+	readonly orgName: string;
+}
+
 export interface IChatEndpoint extends IEndpoint {
 	readonly maxOutputTokens: number;
 	/** The model ID- this may change and will be `copilot-base` for the base model. Use `family` to switch behavior based on model type. */
@@ -162,6 +167,7 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly restrictedToSkus?: string[];
 	readonly isDefault: boolean;
 	readonly isFallback: boolean;
+	readonly customModel?: ICustomModel;
 	readonly policy: 'enabled' | { terms: string };
 	/**
 	 * Handles processing of responses from a chat endpoint. Each endpoint can have different response formats.
