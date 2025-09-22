@@ -45,7 +45,7 @@ import { UserPreferences } from '../panel/preferences';
 import { ChatToolCalls } from '../panel/toolCalling';
 import { MultirootWorkspaceStructure } from '../panel/workspace/workspaceStructure';
 import { AgentConversationHistory } from './agentConversationHistory';
-import { AlternateGPTPrompt, CodexStyleGPTPrompt, DefaultAgentPrompt, DefaultAgentPromptV2, SweBenchAgentPrompt } from './agentInstructions';
+import { AlternateGPTPrompt, CodexStyleGPT5CodexPrompt, CodexStyleGPTPrompt, DefaultAgentPrompt, DefaultAgentPromptV2, SweBenchAgentPrompt } from './agentInstructions';
 import { SummarizedConversationHistory } from './summarizedConversationHistory';
 
 export interface AgentPromptProps extends GenericBasePromptElementProps {
@@ -147,11 +147,19 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			const promptType = this.configurationService.getExperimentBasedConfig(ConfigKey.Gpt5AlternatePrompt, this.experimentationService);
 			switch (promptType) {
 				case 'codex':
-					return <CodexStyleGPTPrompt
-						availableTools={this.props.promptContext.tools?.availableTools}
-						modelFamily={this.props.endpoint.family}
-						codesearchMode={this.props.codesearchMode}
-					/>;
+					if (this.props.endpoint.model === 'gpt-5-codex') {
+						return <CodexStyleGPT5CodexPrompt
+							availableTools={this.props.promptContext.tools?.availableTools}
+							modelFamily={this.props.endpoint.family}
+							codesearchMode={this.props.codesearchMode}
+						/>;
+					} else {
+						return <CodexStyleGPTPrompt
+							availableTools={this.props.promptContext.tools?.availableTools}
+							modelFamily={this.props.endpoint.family}
+							codesearchMode={this.props.codesearchMode}
+						/>;
+					}
 				case 'v2':
 					return <DefaultAgentPromptV2
 						availableTools={this.props.promptContext.tools?.availableTools}
