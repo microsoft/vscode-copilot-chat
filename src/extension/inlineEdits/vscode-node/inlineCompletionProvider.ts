@@ -169,14 +169,15 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 		// TODO(cecagnia): Run classifier first to determine if we should proceed
 		const classificationResult = await this._classifier.classify(document, position);
-		this._statusBarItem.text = `$(chip) Classifier: ${classificationResult.processingTime}ms`;
-		if (classificationResult.confidence! > 0.5) {
-			this._statusBarItem.backgroundColor = new ThemeColor('statusBarItem.prominentBackground');
-		}
-		else {
-			this._statusBarItem.backgroundColor = new ThemeColor('statusBarItem.warningBackground');
-		}
-		console.log(`[InlineCompletionProvider] Classifier result: confidence=${classificationResult.confidence?.toFixed(3)}, processingTime=${classificationResult.processingTime}ms`);
+		this._statusBarItem.text = `$(chip) Classifier: ${classificationResult.confidence?.toFixed(3)}, ${classificationResult.processingTime.toFixed(3)}ms`;
+		this._statusBarItem.backgroundColor = classificationResult.confidence! > 0.5 ?
+			new ThemeColor('statusBarItem.prominentBackground')
+			: new ThemeColor('statusBarItem.warningBackground');
+		console.log([
+			`[InlineCompletionProvider] Classifier result: `,
+			`confidence=${classificationResult.confidence?.toFixed(3)}`,
+			`processingTime=${classificationResult.processingTime?.toFixed(3)}ms`
+		].join(', '));
 
 		const doc = this.model.workspace.getDocumentByTextDocument(document);
 		if (!doc) {

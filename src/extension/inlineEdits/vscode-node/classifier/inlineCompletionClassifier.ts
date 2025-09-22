@@ -10,23 +10,30 @@ import { IFileSystemService } from '../../../../platform/filesystem/common/fileS
 import { ILogService } from '../../../../platform/log/common/logService';
 import { join } from '../../../../util/vs/base/common/path';
 
+const onnxOptions: ort.InferenceSession.SessionOptions = {
+	executionProviders: [
+		// "cpu",
+		// "dml",
+	],
+	// intraOpNumThreads: 16,
+	// interOpNumThreads: 16,
+	graphOptimizationLevel: "all",
+	// logSeverityLevel: 4,
+};
+
+const tokenizerOpts = {
+	add_special_tokens: true,
+	truncation: true,
+	// max_length: 256,       // TODO: combined with padding returns a BigInt error
+	return_tensors: 'ort',
+	return_token_type_ids: true,
+};
+
 export interface ClassificationResult {
 	confidence: number | null;
 	processingTime: number;
 }
 
-const onnxOptions = {
-	executionProviders: [
-		// {
-		// 	name: 'webgpu',
-		// }
-	],
-	logLevel: 'verbose',
-};
-
-/**
- * Classifier for determining whether inline completion should proceed
- */
 export class InlineCompletionClassifier {
 	static modelPath = "models/graph_code_bert_finetuned/model.onnx";
 	static tokenizerPath = "models/graph_code_bert_finetuned/tokenizer.json";
@@ -51,15 +58,14 @@ export class InlineCompletionClassifier {
 		}
 
 		try {
-			this._logService.trace('[InlineCompletionClassifier] Initializing classifier...');
-			this._logService.info(`[InlineCompletionClassifier] dirname is... ${__dirname}`);
+			this._logService.info('[InlineCompletionClassifier] Initializing classifier...');
 
 			const absoluteModelPath = Uri.file(join(__dirname, InlineCompletionClassifier.modelPath));
 			const absoluteTokenizerPath = Uri.file(join(__dirname, InlineCompletionClassifier.tokenizerPath));
 			const absoluteTokenizerCfgPath = Uri.file(join(__dirname, InlineCompletionClassifier.tokenizerCfgPath));
 
-			const absoluteModelU8Array = await this._fileSystemService.readFile(absoluteModelPath, /*disableLimit=*/true);
-			this.session = await ort.InferenceSession.create(absoluteModelU8Array, onnxOptions);
+			const modelU8Array = await this._fileSystemService.readFile(absoluteModelPath, /*disableLimit=*/true);
+			this.session = await ort.InferenceSession.create(modelU8Array, onnxOptions);
 			this._logService.info('[InlineCompletionClassifier] ONNX model loaded successfully');
 
 			const tokenizerJsonU8Array = await this._fileSystemService.readFile(absoluteTokenizerPath);
@@ -72,7 +78,6 @@ export class InlineCompletionClassifier {
 
 			this.tokenizer = new PreTrainedTokenizer(tokenizerJson, tokenizerConfig);
 			this._logService.info('[InlineCompletionClassifier] Tokenizer loaded successfully');
-			// this._logService.info(`[InlineCompletionClassifier] Session running on execution providers: ${this.session.executionProviders().join(', ')}`);
 
 			try {
 				this._logService.info('[InlineCompletionClassifier] Performing warm-up run...');
@@ -101,12 +106,13 @@ export class InlineCompletionClassifier {
 	 */
 	async classify(document: TextDocument, position: Position): Promise<ClassificationResult> {
 		const startTime = performance.now();
+		const timer = () => performance.now() - startTime;
 
 		if (!this.isInitialized) {
 			this._logService.warn('[InlineCompletionClassifier] Classifier not initialized, proceeding by default');
 			return {
 				confidence: null,
-				processingTime: performance.now() - startTime
+				processingTime: timer(),
 			};
 		}
 
@@ -114,29 +120,20 @@ export class InlineCompletionClassifier {
 			const kContextLineRadius = 5;
 			const begLine = Math.max(0, position.line - kContextLineRadius);
 			const endLine = Math.min(document.lineCount, position.line + kContextLineRadius);
-
 			const rangeStart = new Position(begLine, 0);
 			const rangeEnd = new Position(endLine, document.lineAt(endLine).text.length);
-
 			const contextBeforeCursor = document.getText(new Range(rangeStart, position));
 			const contextAfterCursor = document.getText(new Range(position, rangeEnd));
 
-			const startTimeTokenizer = performance.now();
-			const tokenizerOpts = {
-				add_special_tokens: true,
-				truncation: true,
-				// max_length: 256,       // TODO: combined with padding returns a BigInt error
-				return_tensors: 'ort',
-				return_token_type_ids: true,
-			};
-
+			const startTimeTokenizer = timer();
 			const feeds = await this.tokenizer!(contextBeforeCursor, contextAfterCursor, tokenizerOpts);
-			const endTimeTokenizer = performance.now();
+			const endTimeTokenizer = timer();
 
-			const startTimeInference = performance.now();
+			const startTimeInference = timer();
 			const results = await this.session!.run(feeds);
-			const endTimeInference = performance.now();
+			const endTimeInference = timer();
 
+			// The network was trained with [0="empty", 1="non-empty"]
 			const logits = results.logits.data as Float32Array;
 			const maxLogit = Math.max(...logits);
 			const exps = logits.map(x => Math.exp(x - maxLogit));
@@ -153,15 +150,15 @@ export class InlineCompletionClassifier {
 
 			return {
 				confidence: probability,
-				processingTime: performance.now() - startTime
-			};
+				processingTime: timer(),
+			} as ClassificationResult;
 
 		} catch (error) {
 			this._logService.error('[InlineCompletionClassifier] Classification failed:', error);
 			return {
 				confidence: null,
-				processingTime: performance.now() - startTime
-			};
+				processingTime: timer(),
+			} as ClassificationResult;
 		}
 	}
 
@@ -175,6 +172,6 @@ export class InlineCompletionClassifier {
 		}
 		this.tokenizer = null;
 		this.isInitialized = false;
-		this._logService.trace('[InlineCompletionClassifier] Classifier disposed');
+		this._logService.info('[InlineCompletionClassifier] Classifier disposed');
 	}
 }
