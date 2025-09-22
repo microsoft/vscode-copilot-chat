@@ -3060,7 +3060,7 @@
 					},
 					"github.copilot.chat.responsesApiReasoningSummary": {
 						"type": "string",
-						"default": "off",
+						"default": "detailed",
 						"markdownDescription": "%github.copilot.config.responsesApiReasoningSummary%",
 						"tags": [
 							"experimental",
