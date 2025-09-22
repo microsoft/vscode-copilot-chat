@@ -52,16 +52,20 @@ export class ClaudeAgentManager extends Disposable {
 			// Get server config, start server if needed
 			const serverConfig = (await this.getLangModelServer()).getConfig();
 
-			// Reuse existing session or create a new one
-			const session = claudeSessionId && this._sessions.has(claudeSessionId)
-				? this._sessions.get(claudeSessionId)!
-				: (() => {
-					const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, claudeSessionId);
-					if (newSession.sessionId) {
-						this._sessions.set(newSession.sessionId, newSession);
-					}
-					return newSession;
-				})();
+			const sessionIdForLog = claudeSessionId ?? 'new';
+			this.logService.trace(`[ClaudeAgentManager] Handling request for sessionId=${sessionIdForLog}.`);
+			let session: ClaudeCodeSession;
+			if (claudeSessionId && this._sessions.has(claudeSessionId)) {
+				this.logService.trace(`[ClaudeAgentManager] Reusing Claude session ${claudeSessionId}.`);
+				session = this._sessions.get(claudeSessionId)!;
+			} else {
+				this.logService.trace(`[ClaudeAgentManager] Creating Claude session for sessionId=${sessionIdForLog}.`);
+				const newSession = this.instantiationService.createInstance(ClaudeCodeSession, serverConfig, claudeSessionId);
+				if (newSession.sessionId) {
+					this._sessions.set(newSession.sessionId, newSession);
+				}
+				session = newSession;
+			}
 
 			await session.invoke(
 				this.resolvePrompt(request),
@@ -72,6 +76,7 @@ export class ClaudeAgentManager extends Disposable {
 
 			// Store the session if sessionId was assigned during invoke
 			if (session.sessionId && !this._sessions.has(session.sessionId)) {
+				this.logService.trace(`[ClaudeAgentManager] Tracking Claude session ${claudeSessionId} -> ${session.sessionId}`);
 				this._sessions.set(session.sessionId, session);
 			}
 
