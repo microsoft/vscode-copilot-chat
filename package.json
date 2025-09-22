@@ -2041,9 +2041,13 @@
 				"title": "%github.copilot.command.fixTestFailure%"
 			},
 			{
+				"command": "github.copilot.chat.attachFile",
+				"title": "%github.copilot.chat.attachFile%",
+				"category": "GitHub Copilot"
+			},
+			{
 				"command": "github.copilot.chat.attachSelection",
 				"title": "%github.copilot.chat.attachSelection%",
-				"icon": "$(comment-discussion)",
 				"category": "GitHub Copilot"
 			},
 			{
