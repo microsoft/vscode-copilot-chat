@@ -67,6 +67,7 @@ export class LanguageModelServer implements ILanguageModelServer {
 					try {
 						// Create new adapter instance for this request
 						const adapter = adapterFactory.createAdapter();
+						const body = await this.readRequestBody(req);
 
 						// Verify nonce for authentication
 						const authKey = adapter.extractAuthKey(req.headers);
@@ -77,7 +78,6 @@ export class LanguageModelServer implements ILanguageModelServer {
 							return;
 						}
 
-						const body = await this.readRequestBody(req);
 						await this.handleChatRequest(adapter, body, res);
 					} catch (error) {
 						res.writeHead(500, { 'Content-Type': 'application/json' });
