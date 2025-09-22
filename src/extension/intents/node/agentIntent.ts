@@ -184,7 +184,7 @@ export class AgentIntent extends EditCodeIntent {
 			}
 		}
 
-		const tools = await grouping.computeAll(token);
+		const tools = await grouping.computeAll(request.prompt, token);
 		tools.forEach(t => printTool(t));
 		stream.markdown(str);
 

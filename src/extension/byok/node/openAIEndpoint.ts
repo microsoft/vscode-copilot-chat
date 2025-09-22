@@ -86,6 +86,11 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			body.stream_options = undefined;
 			if (!this.modelMetadata.capabilities.supports.thinking) {
 				body.reasoning = undefined;
+				body.include = undefined;
+			}
+			if (body.previous_response_id && !body.previous_response_id.startsWith('resp_')) {
+				// Don't use a response ID from CAPI
+				body.previous_response_id = undefined;
 			}
 			return body;
 		} else {
