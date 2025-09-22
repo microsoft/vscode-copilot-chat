@@ -9,7 +9,7 @@ permissions:
 jobs:
   setup-environment:
     name: Setup Development Environment
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-4-cores
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
