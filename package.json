@@ -4153,7 +4153,6 @@
 	"dependencies": {
 		"@anthropic-ai/claude-code": "1.0.93",
 		"@anthropic-ai/sdk": "^0.56.0",
-		"@huggingface/transformers": "^3.7.2",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@vscode/copilot-api": "^0.1.8",
@@ -4171,7 +4170,6 @@
 		"lru-cache": "^11.1.0",
 		"markdown-it": "^14.1.0",
 		"minimatch": "^10.0.3",
-		"onnxruntime-node": "^1.22.0-rev",
 		"undici": "^7.11.0",
 		"vscode-tas-client": "^0.1.84",
 		"web-tree-sitter": "^0.23.0"
