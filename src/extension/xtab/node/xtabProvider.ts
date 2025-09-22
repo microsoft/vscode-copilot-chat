@@ -52,8 +52,6 @@ import { createTaggedCurrentFileContentUsingPagedClipping, getUserPrompt, N_LINE
 import { XtabEndpoint } from './xtabEndpoint';
 import { linesWithBackticksRemoved, toLines } from './xtabUtils';
 
-export const IGNORE_TEXT_BEFORE = /```[^\n]*\n/;
-
 namespace ResponseTags {
 	export const NO_CHANGE = {
 		start: '<NO_CHANGE>'
