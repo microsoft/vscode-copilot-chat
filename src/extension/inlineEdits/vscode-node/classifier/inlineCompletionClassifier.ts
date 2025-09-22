@@ -17,9 +17,9 @@ export interface ClassificationResult {
 
 const onnxOptions = {
 	executionProviders: [
-		{
-			name: 'webgpu',
-		}
+		// {
+		// 	name: 'webgpu',
+		// }
 	],
 	logLevel: 'verbose',
 };
@@ -100,29 +100,28 @@ export class InlineCompletionClassifier {
 	 * Classify whether inline completion should proceed based on document content
 	 */
 	async classify(document: TextDocument, position: Position): Promise<ClassificationResult> {
-		const startTime = Date.now();
+		const startTime = performance.now();
 
 		if (!this.isInitialized) {
 			this._logService.warn('[InlineCompletionClassifier] Classifier not initialized, proceeding by default');
 			return {
 				confidence: null,
-				processingTime: Date.now() - startTime
+				processingTime: performance.now() - startTime
 			};
 		}
 
 		try {
-			const kContextRadius = 2;
-			const begLine = Math.max(0, position.line - kContextRadius);
-			const endLine = Math.min(document.lineCount, position.line + kContextRadius);
+			const kContextLineRadius = 5;
+			const begLine = Math.max(0, position.line - kContextLineRadius);
+			const endLine = Math.min(document.lineCount, position.line + kContextLineRadius);
 
 			const rangeStart = new Position(begLine, 0);
 			const rangeEnd = new Position(endLine, document.lineAt(endLine).text.length);
 
 			const contextBeforeCursor = document.getText(new Range(rangeStart, position));
 			const contextAfterCursor = document.getText(new Range(position, rangeEnd));
-			// this._logService.info(`[InlineCompletionClassifier] Extracted before context: "${contextBeforeCursor}"`);
-			// this._logService.info(`[InlineCompletionClassifier] Extracted after context: "${contextAfterCursor}"`);
-			const startTimeTokenizer = Number(process.hrtime.bigint()) / 1_000_000;
+
+			const startTimeTokenizer = performance.now();
 			const tokenizerOpts = {
 				add_special_tokens: true,
 				truncation: true,
@@ -132,35 +131,36 @@ export class InlineCompletionClassifier {
 			};
 
 			const feeds = await this.tokenizer!(contextBeforeCursor, contextAfterCursor, tokenizerOpts);
-			// this._logService.info(`[InlineCompletionClassifier] numTokens: "${feeds.input_ids.dims}"`);
-			// Use high-resolution time (nanoseconds) and convert to milliseconds with microsecond precision
-			const endTimeTokenizer =
-				Number(process.hrtime.bigint()) / 1_000_000;
+			const endTimeTokenizer = performance.now();
 
-			const startTimeInference = Date.now();
+			const startTimeInference = performance.now();
 			const results = await this.session!.run(feeds);
-			const endTimeInference = Date.now();
+			const endTimeInference = performance.now();
 
 			const logits = results.logits.data as Float32Array;
 			const maxLogit = Math.max(...logits);
 			const exps = logits.map(x => Math.exp(x - maxLogit));
 			const sumExps = exps.reduce((a, b) => a + b, 0);
 			const probs = exps.map(x => x / sumExps);
-			// this._logService.info(`[InlineCompletionClassifier] Probabilities=${probs}`);
-
 			const probability = probs[1];
-			this._logService.info(`[InlineCompletionClassifier] Classification result=${probability.toFixed(3)}, inference=${endTimeInference - startTimeInference}ms`);
+
+			this._logService.info([
+				`[InlineCompletionClassifier] result=${probability.toFixed(3)}`,
+				`numTokens=${feeds.input_ids.dims}`,
+				`tokenization=${endTimeTokenizer - startTimeTokenizer}ms`,
+				`inference=${endTimeInference - startTimeInference}ms`,
+			].join(", "));
 
 			return {
 				confidence: probability,
-				processingTime: Date.now() - startTime
+				processingTime: performance.now() - startTime
 			};
 
 		} catch (error) {
 			this._logService.error('[InlineCompletionClassifier] Classification failed:', error);
 			return {
 				confidence: null,
-				processingTime: Date.now() - startTime
+				processingTime: performance.now() - startTime
 			};
 		}
 	}
