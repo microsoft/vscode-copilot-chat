@@ -185,12 +185,32 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
 		retryState: RetryState,
 	): Promise<Result<void, NoNextEditReason>> {
+		return this.doGetNextEditWithSelection(
+			request,
+			getOrDeduceSelectionFromLastEdit(request.getActiveDocument()),
+			pushEdit,
+			delaySession,
+			logContext,
+			cancellationToken,
+			telemetryBuilder,
+			retryState,
+		);
+	}
 
-		const tracer = this.tracer.sub('doGetNextEdit');
+	private async doGetNextEditWithSelection(
+		request: StatelessNextEditRequest,
+		selection: Range | null,
+		pushEdit: PushEdit,
+		delaySession: DelaySession,
+		logContext: InlineEditRequestLogContext,
+		cancellationToken: CancellationToken,
+		telemetryBuilder: StatelessNextEditTelemetryBuilder,
+		retryState: RetryState,
+	): Promise<Result<void, NoNextEditReason>> {
+
+		const tracer = this.tracer.sub('doGetNextEditWithSelection');
 
 		const activeDocument = request.getActiveDocument();
-
-		const selection = getOrDeduceSelectionFromLastEdit(activeDocument);
 
 		if (selection === null) {
 			return Result.error(new NoNextEditReason.Uncategorized(new Error('NoSelection')));
