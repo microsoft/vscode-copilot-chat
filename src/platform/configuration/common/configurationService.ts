@@ -750,7 +750,7 @@ export namespace ConfigKey {
 	/** Configure reasoning effort sent to Responses API */
 	export const ResponsesApiReasoningEffort = defineExpSetting<'low' | 'medium' | 'high' | 'default'>('chat.responsesApiReasoningEffort', 'default');
 	/** Configure reasoning summary style sent to Responses API */
-	export const ResponsesApiReasoningSummary = defineExpSetting<'off' | 'detailed'>('chat.responsesApiReasoningSummary', 'off');
+	export const ResponsesApiReasoningSummary = defineExpSetting<'off' | 'detailed'>('chat.responsesApiReasoningSummary', 'detailed');
 	export const EnableChatImageUpload = defineExpSetting<boolean>('chat.imageUpload.enabled', true);
 
 	/** Add context from recently used files */
