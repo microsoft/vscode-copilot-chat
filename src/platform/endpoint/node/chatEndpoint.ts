@@ -212,7 +212,10 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	protected get useResponsesApi(): boolean {
-		if (this._modelMetadata.supported_endpoints?.length === 1 && this._modelMetadata.supported_endpoints[0] === ModelSupportedEndpoint.Responses) {
+		if (this._modelMetadata.supported_endpoints
+			&& !this._modelMetadata.supported_endpoints.includes(ModelSupportedEndpoint.ChatCompletions)
+			&& this._modelMetadata.supported_endpoints.includes(ModelSupportedEndpoint.Responses)
+		) {
 			return true;
 		}
 
