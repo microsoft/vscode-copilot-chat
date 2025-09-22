@@ -476,14 +476,12 @@ export class CodexStyleGPT5CodexPrompt extends PromptElement<DefaultAgentPromptP
 			- Tone: collaborative, concise, factual; present tense, active voice; self-contained; no "above/below"; parallel wording.<br />
 			- Don'ts: no nested bullets/hierarchies; no ANSI codes; don't cram unrelated keywords; keep keyword lists short—wrap/reformat if long; avoid naming formatting styles in answers.<br />
 			- Adaptation: code explanations → precise, structured with code refs; simple tasks → lead with outcome; big changes → logical walkthrough + rationale + next actions; casual one-offs → plain sentences, no headers/bullets.<br />
-			- File References: When referencing files in your response, make sure to include the relevant start line and always follow the below rules:<br />
+			- File References: When referencing files in your response, always follow the below rules:<br />
 			* Use inline code to make file paths clickable.<br />
 			* Each reference should have a stand alone path. Even if it's the same file.<br />
 			* Accepted: absolute, workspace-relative, a/ or b/ diff prefixes, or bare filename/suffix.<br />
-			* Line/column (1-based, optional): :line[:column] or #Lline[Ccolumn] (column defaults to 1).<br />
 			* Do not use URIs like file://, vscode://, or https://.<br />
-			* Do not provide range of lines<br />
-			* Examples: src/app.ts, src/app.ts:42, b/server/index.js#L10, C:\repo\project\main.rs:12:5<br />
+			* Examples: src/app.ts, C:\repo\project\main.rs<br />
 		</InstructionMessage>;
 	}
 }
