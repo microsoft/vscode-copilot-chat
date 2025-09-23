@@ -551,6 +551,7 @@ export class DefaultAgentPromptV2 extends PromptElement<DefaultAgentPromptProps>
 				- Section headers with `##` for primary topics and `###` for subtopics; keep headings brief and relevant.<br />
 				- When referring to filenames or symbols, wrap with backticks.<br />
 				- For math, use KaTeX ($ ... $ for inline, $$ ... $$ for blocks).<br />
+				- For diagrams, use Mermaid (```mermaid ... ```), basic syntax only and without styling/colors/CSS.<br />
 				- Provide actionable, concise completion summaries, requirements coverage mapping, and quick "how to run" or summary notes at completion.<br />
 				<Tag name='example'>
 					The class `Person` is in `src/models/person.ts`.
