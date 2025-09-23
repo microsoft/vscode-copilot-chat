@@ -155,9 +155,11 @@ export class TelemetryData {
 
 	updateTimeSinceIssuedAndDisplayed(): void {
 		const timeSinceIssued = Date.now() - this.issuedTime;
-		this.measurements.timeSinceIssuedMs = timeSinceIssued;
+		if (this.measurements.timeSinceIssuedMs === undefined) {
+			this.measurements.timeSinceIssuedMs = timeSinceIssued;
+		}
 
-		if (this.displayedTime !== undefined) {
+		if (this.measurements.timeSinceDisplayedMs === undefined && this.displayedTime !== undefined) {
 			const timeSinceDisplayed = Date.now() - this.displayedTime;
 			this.measurements.timeSinceDisplayedMs = timeSinceDisplayed;
 		}

@@ -490,36 +490,38 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		logContext.setFetchStartTime();
 
 		// we must not await this promise because we want to stream edits as they come in
-		const fetchResultPromise = endpoint.makeChatRequest(
-			XtabProvider.ID,
-			messages,
-			async (text, _, delta) => {
-				if (!firstTokenReceived.isSettled) {
-					firstTokenReceived.complete();
-				}
-				if (ttft === undefined) {
-					ttft = fetchRequestStopWatch.elapsed();
-					logContext.addLog(`TTFT ${ttft} ms`);
-				}
+		const fetchResultPromise = endpoint.makeChatRequest2(
+			{
+				debugName: XtabProvider.ID,
+				messages,
+				finishedCb: async (text, _, delta) => {
+					if (!firstTokenReceived.isSettled) {
+						firstTokenReceived.complete();
+					}
+					if (ttft === undefined) {
+						ttft = fetchRequestStopWatch.elapsed();
+						logContext.addLog(`TTFT ${ttft} ms`);
+					}
 
-				fetchStreamSource.update(text, delta);
-				responseSoFar = text;
-				logContext.setResponse(responseSoFar);
-				return undefined;
+					fetchStreamSource.update(text, delta);
+					responseSoFar = text;
+					logContext.setResponse(responseSoFar);
+					return undefined;
+				},
+				location: ChatLocation.Other,
+				source: undefined,
+				requestOptions: {
+					temperature: 0,
+					stream: true,
+					prediction,
+				} satisfies OptionalChatRequestParams,
+				userInitiatedRequest: undefined,
+				telemetryProperties: {
+					requestId: request.id,
+				},
+				isFilterRetry: true, // poorly named flag -- forces ChatMLFetcher to think it's already retried and not do its own retry
 			},
 			cancellationToken,
-			ChatLocation.Other,
-			undefined,
-			{
-				temperature: 0,
-				// max_tokens: 256, // `max_tokens` is not supported along with `prediction` - https://platform.openai.com/docs/guides/predicted-outputs#limitations
-				stream: true,
-				prediction,
-			} satisfies OptionalChatRequestParams,
-			undefined,
-			{
-				requestId: request.id,
-			}
 		);
 
 		telemetryBuilder.setResponse(fetchResultPromise.then((response) => ({ response, ttft })));
@@ -541,6 +543,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			.then((response) => {
 				// this's a way to signal the edit-pushing code to know if the request failed and
 				// 	it shouldn't push edits constructed from an erroneous response
+				tracer.trace(`fetch error happened: ${response.type}`);
 				chatResponseFailure = response.type !== ChatFetchResponseType.Success ? response : undefined;
 			})
 			.catch((err: unknown) => {

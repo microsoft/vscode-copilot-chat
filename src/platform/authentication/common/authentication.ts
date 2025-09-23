@@ -120,10 +120,11 @@ export interface IAuthenticationService {
 	 * necessary.
 	 *
 	 * @param force will force a refresh of the token, even if not expired
+	 * @param fast will skip waiting for the GitHub session to be fetched before getting the Copilot token.
 	 * @returns a Copilot token or throws an error if none is found.
 	 * @note For best practice of handling of the user's authentication state, you should react to {@link onDidAuthenticationChange}.
 	 */
-	getCopilotToken(force?: boolean): Promise<CopilotToken>;
+	getCopilotToken(force?: boolean, fast?: boolean): Promise<CopilotToken>;
 
 	/**
 	 * Drop the current Copilot token as we received an HTTP error while trying
@@ -212,9 +213,11 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 	get copilotToken(): CopilotToken | undefined {
 		return this._tokenStore.copilotToken;
 	}
-	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
+	async getCopilotToken(force?: boolean, fast?: boolean): Promise<CopilotToken> {
 		try {
-			await this.getAnyGitHubSession({ silent: true });
+			if (!fast) {
+				await this.getAnyGitHubSession({ silent: true });
+			}
 			// TODO: could this take in an auth session?
 			const token = await this._tokenManager.getCopilotToken(force);
 			this._tokenStore.copilotToken = token;
