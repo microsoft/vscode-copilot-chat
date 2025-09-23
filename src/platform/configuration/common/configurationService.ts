@@ -750,7 +750,7 @@ export namespace ConfigKey {
 	/** Configure reasoning effort sent to Responses API */
 	export const ResponsesApiReasoningEffort = defineExpSetting<'low' | 'medium' | 'high' | 'default'>('chat.responsesApiReasoningEffort', 'default');
 	/** Configure reasoning summary style sent to Responses API */
-	export const ResponsesApiReasoningSummary = defineExpSetting<'off' | 'detailed'>('chat.responsesApiReasoningSummary', 'off');
+	export const ResponsesApiReasoningSummary = defineExpSetting<'off' | 'detailed'>('chat.responsesApiReasoningSummary', 'detailed');
 	export const EnableChatImageUpload = defineExpSetting<boolean>('chat.imageUpload.enabled', true);
 
 	/** Add context from recently used files */
@@ -806,6 +806,7 @@ export namespace ConfigKey {
 
 	export const EnableAlternateGptPrompt = defineExpSetting<boolean>('chat.alternateGptPrompt.enabled', false);
 	export const Gpt5AlternatePrompt = defineExpSetting<string>('chat.gpt5AlternatePrompt', 'default');
+	export const Gpt5CodexAlternatePrompt = defineExpSetting<'default' | 'codex'>('chat.gpt5CodexAlternatePrompt', 'default');
 	export const GrokCodeAlternatePrompt = defineExpSetting<string>('chat.grokCodeAlternatePrompt', 'default');
 }
 

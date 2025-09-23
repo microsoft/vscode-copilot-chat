@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Readable } from 'stream';
-import { ReadableStream } from 'stream/web';
 import { IEnvService } from '../../env/common/envService';
 import { FetchOptions, IAbortController, Response } from '../common/fetcherService';
 import { IFetcher, userAgentLibraryHeader } from '../common/networking';
@@ -59,10 +58,7 @@ export abstract class BaseFetchFetcher implements IFetcher {
 				if (!resp.body) {
 					return Readable.from([]);
 				}
-				// Careful here! The ReadableStream from undici cannot be passed in
-				// to nodejs utility methods because it confuses them so we need
-				// to create a Readable that is driven manually.
-				return convertReadableStreamToReadable(resp.body);
+				return Readable.fromWeb(resp.body);
 			}
 		);
 	}
@@ -82,45 +78,4 @@ export abstract class BaseFetchFetcher implements IFetcher {
 	getUserMessageForFetcherError(err: any): string {
 		return `Please check your firewall rules and network connection then try again. Error Code: ${err.message}.`;
 	}
-}
-
-/**
- * Converts an undici/Web ReadableStream to a Node.js Readable stream
- * @param readableStream - The undici/Web ReadableStream to convert
- * @returns A Node.js Readable stream
-*/
-function convertReadableStreamToReadable(readableStream: ReadableStream<any>) {
-	// Create a new Node.js Readable stream
-	const nodeStream = new Readable({
-		// Implementation of the _read method is required
-		read() { }
-	});
-	// Create a reader from the stream
-	const reader = readableStream.getReader();
-	// Function to push data from reader to Node stream
-	async function pushData() {
-		try {
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) {
-					nodeStream.push(null); // Signal end of stream
-					break;
-				}
-				// Push data chunks to the Node stream
-				// If it's a Uint8Array, push it directly
-				if (value instanceof Uint8Array) {
-					nodeStream.push(value);
-				} else {
-					// If it's not a Uint8Array, convert it to Buffer
-					nodeStream.push(Buffer.from(value));
-				}
-			}
-		} catch (error) {
-			nodeStream.emit('error', error);
-		}
-	}
-	// Start pushing data
-	pushData();
-	// Return the Node.js Readable stream
-	return nodeStream;
 }
