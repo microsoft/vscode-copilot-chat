@@ -189,9 +189,27 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				};
 
 				this.toolCallRounds.push(result.round);
-				if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
+				if (result.response.type !== ChatFetchResponseType.Success) {
 					lastResult = lastResult;
 					break;
+				}
+
+				// Check if this was an empty response vs intentional completion
+				const responseText = result.response.type === ChatFetchResponseType.Success ? result.response.value : '';
+				const hasContent = responseText.trim().length > 0;
+
+				// Only break if there are no tool calls AND there was actual content 
+				// (indicating the model intentionally finished)
+				if (!result.round.toolCalls.length && hasContent) {
+					lastResult = lastResult;
+					break;
+				}
+
+				// If there's no content and no tool calls, continue the loop to try again
+				if (!result.round.toolCalls.length && !hasContent) {
+					// Log the empty response for debugging
+					this._logService.warn(`Received empty response in iteration ${i}, continuing...`);
+					continue;
 				}
 			} catch (e) {
 				if (isCancellationError(e) && lastResult) {
