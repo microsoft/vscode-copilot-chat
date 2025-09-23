@@ -69,8 +69,8 @@ export class StaticGitHubAuthenticationService extends BaseAuthenticationService
 		return Promise.resolve(this._permissiveGitHubSession);
 	}
 
-	override async getCopilotToken(force?: boolean): Promise<CopilotToken> {
-		return await super.getCopilotToken(force);
+	override async getCopilotToken(force?: boolean, fast?: boolean): Promise<CopilotToken> {
+		return await super.getCopilotToken(force, fast);
 	}
 
 	setCopilotToken(token: CopilotToken): void {
