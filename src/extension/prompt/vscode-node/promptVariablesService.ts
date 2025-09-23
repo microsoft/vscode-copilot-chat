@@ -24,7 +24,7 @@ export class PromptVariablesServiceImpl implements IPromptVariablesService {
 		let previousRange: [start: number, end: number] | undefined;
 		for (const toolReference of this._reverseSortRefsWithRange(toolReferences)) {
 			// Tool sets are passed as all the tools as references with the same ranges. For now, just ignore tool references that have the same range.
-			// The tools are soreted by range, so we only need to look at the previous one.
+			// The tools are sorted by range, so we only need to look at the previous one.
 			const range = toolReference.range;
 			if (previousRange && range[0] === previousRange[0] && range[1] === previousRange[1]) {
 				continue;
