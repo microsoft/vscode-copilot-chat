@@ -95,6 +95,10 @@ export class ClaudeAgentManager extends Disposable {
 	}
 
 	private resolvePrompt(request: vscode.ChatRequest): string {
+		if (request.prompt.startsWith('/')) {
+			return request.prompt; // likely a slash command, don't modify
+		}
+
 		const extraRefsTexts: string[] = [];
 		let prompt = request.prompt;
 		request.references.forEach(ref => {
