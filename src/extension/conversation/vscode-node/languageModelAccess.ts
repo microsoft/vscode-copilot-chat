@@ -126,6 +126,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			seenFamilies.add(endpoint.family);
 
 			const sanitizedModelName = endpoint.name.replace(/\(Preview\)/g, '').trim();
+
 			let modelDescription: string | undefined;
 			if (endpoint.model === AutoChatEndpoint.id) {
 				modelDescription = localize('languageModel.autoTooltip', 'Auto selects the best model for your request based on capacity and performance. Counted at 0x-0.9x the request rate, depending on the model.');
@@ -154,17 +155,20 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				modelDetail = 'Variable';
 			}
 
+			let modelName = endpoint.name;
 			if (endpoint.customModel) {
-				modelDetail = endpoint.customModel.orgName;
+				modelDetail = endpoint.customModel.ownerName;
 				modelDescription = endpoint.customModel.keyName;
 				modelCategory = { label: localize('languageModelHeader.custom_models', "Custom Models"), order: 1 };
+
+				modelName = endpoint.name.replace(` · ${endpoint.customModel.keyName}`, '');
 			}
 
 			const session = this._authenticationService.anyGitHubSession;
 
 			const model: vscode.LanguageModelChatInformation = {
 				id: endpoint.model,
-				name: endpoint.model === AutoChatEndpoint.id ? 'Auto' : endpoint.name,
+				name: endpoint.model === AutoChatEndpoint.id ? 'Auto' : modelName,
 				family: endpoint.family,
 				tooltip: modelDescription,
 				detail: modelDetail,
