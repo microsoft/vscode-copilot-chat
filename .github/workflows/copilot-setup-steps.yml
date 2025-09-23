@@ -37,14 +37,32 @@ jobs:
         with:
           dotnet-version: '10.0'
 
-      - name: Install Python setuptools
+      - name: Install setuptools
         run: pip install setuptools
 
+      - name: Restore build cache
+        uses: actions/cache/restore@v4
+        id: build-cache
+        with:
+          key: build_cache-${{ hashFiles('build/.cachesalt', 'package-lock.json') }}
+          path: .build/build_cache
+
+      - name: Extract build cache
+        if: steps.build-cache.outputs.cache-hit == 'true'
+        run: tar -xzf .build/build_cache/cache.tgz
+
       - name: Install dependencies
+        if: steps.build-cache.outputs.cache-hit != 'true'
         run: npm ci
 
-      - name: Check environment requirements
-        run: npm run check-env
+      - name: Create build cache archive
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        run: |
+          set -e
+          mkdir -p .build
+          node build/listBuildCacheFiles.js .build/build_cache_list.txt
+          mkdir -p .build/build_cache
+          tar -czf .build/build_cache/cache.tgz --files-from .build/build_cache_list.txt
 
       - name: Verify installation
         run: |
