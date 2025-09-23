@@ -214,8 +214,6 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 	}
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
 		try {
-			await this.getAnyGitHubSession({ silent: true });
-			// TODO: could this take in an auth session?
 			const token = await this._tokenManager.getCopilotToken(force);
 			this._tokenStore.copilotToken = token;
 			this._copilotTokenError = undefined;
