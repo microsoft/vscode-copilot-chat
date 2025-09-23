@@ -3,13 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { ChatPromptReference } from 'vscode';
+import type { ChatLanguageModelToolReference, ChatPromptReference } from 'vscode';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { createFencedCodeBlock } from '../../../util/common/markdown';
 import { isEqual } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
-import { InternalToolReference } from '../common/intents';
 import { IPromptVariablesService } from '../node/promptVariablesService';
 
 export class PromptVariablesServiceImpl implements IPromptVariablesService {
@@ -46,20 +45,21 @@ export class PromptVariablesServiceImpl implements IPromptVariablesService {
 		return { message };
 	}
 
-	async resolveToolReferencesInPrompt(message: string, toolReferences: InternalToolReference[]): Promise<string> {
+	async resolveToolReferencesInPrompt(message: string, toolReferences: ChatLanguageModelToolReference[]): Promise<string> {
 		// It's part of the extension API contract that these are in reverse order by range
-		for (const toolReference of toolReferences) {
-			if (toolReference.range) {
-				// Tool sets are passed as all the tools as references with the same ranges. For now, just ignore tool references that have the same range.
-				const isDuplicateRange = toolReferences.some(otherToolReference =>
-					otherToolReference !== toolReference && otherToolReference.range &&
-					otherToolReference.range[0] === toolReference.range![0] &&
-					otherToolReference.range[1] === toolReference.range![1]
-				);
-				if (!isDuplicateRange) {
-					message = message.slice(0, toolReference.range[0]) + `#${toolReference.name}` + message.slice(toolReference.range[1]);
-				}
+		let toolReferencesWithRange = toolReferences.filter(tr => !!tr.range) as Required<ChatLanguageModelToolReference>[];
+		toolReferencesWithRange = toolReferencesWithRange.sort((a, b) => b.range[0] - a.range[0]);
+
+		let previousRange: [start: number, end: number] | undefined;
+		for (const toolReference of toolReferencesWithRange) {
+			// Tool sets are passed as all the tools as references with the same ranges. For now, just ignore tool references that have the same range.
+			// The tools are soreted by range, so we only need to look at the previous one.
+			const range = toolReference.range;
+			if (previousRange && range[0] === previousRange[0] && range[1] === previousRange[1]) {
+				continue;
 			}
+			message = message.slice(0, toolReference.range[0]) + `#${toolReference.name}` + message.slice(toolReference.range[1]);
+			previousRange = range;
 		}
 		return message;
 	}

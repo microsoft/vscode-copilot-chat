@@ -57,7 +57,7 @@ export interface IBuildPromptContext {
 		readonly toolInvocationToken: vscode.ChatParticipantToolToken;
 		readonly availableTools: readonly vscode.LanguageModelToolInformation[];
 	};
-	readonly modeInstructions?: string;
+	readonly modeInstructions?: vscode.ChatRequestModeInstructions;
 
 	/**
 	 * The accumulated tool call rounds for the current ongoing response.

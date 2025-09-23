@@ -7,6 +7,7 @@ import * as l10n from '@vscode/l10n';
 import type * as vscode from 'vscode';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
+import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseMarkdownPart, ExtendedLanguageModelToolResult, LanguageModelTextPart, MarkdownString } from '../../../vscodeTypes';
 import { Conversation, Turn } from '../../prompt/common/conversation';
@@ -15,7 +16,6 @@ import { ExecutePromptToolCallingLoop } from '../../prompt/node/executePromptToo
 import { ToolName } from '../common/toolNames';
 import { CopilotToolMode, ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { assertFileOkForTool, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
-import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 
 export interface IExecutePromptParams {
 	filePath: string;
@@ -49,7 +49,7 @@ class ExecutePromptTool implements ICopilotTool<IExecutePromptParams> {
 				references: [],
 				prompt: promptText,
 				toolReferences: [],
-				modeInstructions: '',
+				modeInstructions2: { content: '' },
 				editedFileEvents: []
 			},
 			location: this._inputContext!.request!.location,

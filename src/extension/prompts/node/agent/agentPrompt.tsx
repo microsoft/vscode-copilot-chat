@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { BasePromptElementProps, Chunk, Image, PromptElement, PromptPieceChild, PromptSizing, Raw, SystemMessage, TokenLimit, UserMessage } from '@vscode/prompt-tsx';
+import { BasePromptElementProps, Chunk, Image, PromptElement, PromptPiece, PromptPieceChild, PromptSizing, Raw, SystemMessage, TokenLimit, UserMessage } from '@vscode/prompt-tsx';
 import { isDefined } from '@vscode/test-electron/out/util';
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
@@ -77,6 +77,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
+		@IPromptVariablesService private readonly promptVariablesService: IPromptVariablesService,
 		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint,
 	) {
 		super(props);
@@ -105,7 +106,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		</>;
 		const baseInstructions = <>
 			{!omitBaseAgentInstructions && baseAgentInstructions}
-			{this.getAgentCustomInstructions()}
+			{await this.getAgentCustomInstructions()}
 			<UserMessage>
 				{await this.getOrCreateGlobalAgentContext(this.props.endpoint)}
 			</UserMessage>
@@ -218,26 +219,32 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		/>;
 	}
 
-	private getAgentCustomInstructions() {
+	private async getAgentCustomInstructions() {
 		const putCustomInstructionsInSystemMessage = this.configurationService.getConfig(ConfigKey.CustomInstructionsInSystemMessage);
-		const customInstructionsBody = <>
+		const customInstructionsBodyParts: PromptPiece[] = [];
+		customInstructionsBodyParts.push(
 			<CustomInstructions
 				languageId={undefined}
 				chatVariables={this.props.promptContext.chatVariables}
 				includeSystemMessageConflictWarning={!putCustomInstructionsInSystemMessage}
 				customIntroduction={putCustomInstructionsInSystemMessage ? '' : undefined} // If in system message, skip the "follow these user-provided coding instructions" intro
 			/>
-			{
-				this.props.promptContext.modeInstructions && <Tag name='customInstructions'>
+		);
+		if (this.props.promptContext.modeInstructions) {
+			const { content, toolReferences } = this.props.promptContext.modeInstructions;
+			const resolvedContent = toolReferences && toolReferences.length > 0 ? await this.promptVariablesService.resolveToolReferencesInPrompt(content, toolReferences) : content;
+
+			customInstructionsBodyParts.push(
+				<Tag name='customInstructions'>
 					Below are some additional instructions from the user.<br />
 					<br />
-					{this.props.promptContext.modeInstructions}
+					{resolvedContent}
 				</Tag>
-			}
-		</>;
+			);
+		}
 		return putCustomInstructionsInSystemMessage ?
-			<SystemMessage>{customInstructionsBody}</SystemMessage> :
-			<UserMessage>{customInstructionsBody}</UserMessage>;
+			<SystemMessage>{customInstructionsBodyParts}</SystemMessage> :
+			<UserMessage>{customInstructionsBodyParts}</UserMessage>;
 	}
 
 	private async getOrCreateGlobalAgentContext(endpoint: IChatEndpoint): Promise<PromptPieceChild[]> {
