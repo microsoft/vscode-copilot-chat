@@ -437,8 +437,9 @@ class ConversationHistorySummarizer {
 	private async getSummary(mode: SummaryMode, propsInfo: ISummarizedConversationHistoryInfo): Promise<FetchSuccess<string>> {
 		const stopwatch = new StopWatch(false);
 		const forceGpt41 = this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.AgentHistorySummarizationForceGpt41, this.experimentationService);
-		const endpoint = forceGpt41 ?
-			await this.endpointProvider.getChatEndpoint('gpt-4.1') :
+		const gpt41Endpoint = await this.endpointProvider.getChatEndpoint('gpt-4.1');
+		const endpoint = forceGpt41 && (gpt41Endpoint.modelMaxPromptTokens >= this.props.endpoint.modelMaxPromptTokens) ?
+			gpt41Endpoint :
 			this.props.endpoint;
 
 		let summarizationPrompt: ChatMessage[];
