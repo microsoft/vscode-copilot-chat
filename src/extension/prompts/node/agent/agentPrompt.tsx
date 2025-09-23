@@ -144,6 +144,14 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		}
 
 		if (this.props.endpoint.family.startsWith('gpt-5')) {
+			if (this.props.endpoint.family === 'gpt-5-codex') {
+				return <DefaultAgentPrompt
+					availableTools={this.props.promptContext.tools?.availableTools}
+					modelFamily={this.props.endpoint.family}
+					codesearchMode={this.props.codesearchMode}
+				/>;
+			}
+
 			const promptType = this.configurationService.getExperimentBasedConfig(ConfigKey.Gpt5AlternatePrompt, this.experimentationService);
 			switch (promptType) {
 				case 'codex':
