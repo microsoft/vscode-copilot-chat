@@ -143,31 +143,33 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			return <SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} />;
 		}
 
-		if (this.props.endpoint.family.startsWith('gpt-5')) {
-			if (this.props.endpoint.family === 'gpt-5-codex') {
-				return <DefaultAgentPrompt
-					availableTools={this.props.promptContext.tools?.availableTools}
-					modelFamily={this.props.endpoint.family}
-					codesearchMode={this.props.codesearchMode}
-				/>;
+		if (this.props.endpoint.family === 'gpt-5-codex') {
+			const promptType = this.configurationService.getExperimentBasedConfig(ConfigKey.Gpt5CodexAlternatePrompt, this.experimentationService);
+			switch (promptType) {
+				case 'codex':
+					return <CodexStyleGPT5CodexPrompt
+						availableTools={this.props.promptContext.tools?.availableTools}
+						modelFamily={this.props.endpoint.family}
+						codesearchMode={this.props.codesearchMode}
+					/>;
+				default:
+					return <DefaultAgentPrompt
+						availableTools={this.props.promptContext.tools?.availableTools}
+						modelFamily={this.props.endpoint.family}
+						codesearchMode={this.props.codesearchMode}
+					/>;
 			}
+		}
 
+		if (this.props.endpoint.family.startsWith('gpt-5')) {
 			const promptType = this.configurationService.getExperimentBasedConfig(ConfigKey.Gpt5AlternatePrompt, this.experimentationService);
 			switch (promptType) {
 				case 'codex':
-					if (this.props.endpoint.model === 'gpt-5-codex') {
-						return <CodexStyleGPT5CodexPrompt
-							availableTools={this.props.promptContext.tools?.availableTools}
-							modelFamily={this.props.endpoint.family}
-							codesearchMode={this.props.codesearchMode}
-						/>;
-					} else {
-						return <CodexStyleGPTPrompt
-							availableTools={this.props.promptContext.tools?.availableTools}
-							modelFamily={this.props.endpoint.family}
-							codesearchMode={this.props.codesearchMode}
-						/>;
-					}
+					return <CodexStyleGPTPrompt
+						availableTools={this.props.promptContext.tools?.availableTools}
+						modelFamily={this.props.endpoint.family}
+						codesearchMode={this.props.codesearchMode}
+					/>;
 				case 'v2':
 					return <DefaultAgentPromptV2
 						availableTools={this.props.promptContext.tools?.availableTools}
@@ -368,7 +370,8 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		const hasEditFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
 		const hasEditNotebookTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditNotebook);
 		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreRunInTerminal);
-		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1' || this.props.endpoint.family.startsWith('gpt-5')) && this.props.chatVariables.hasVariables() ?
+		const isGpt5 = this.props.endpoint.family.startsWith('gpt-5') && this.props.endpoint.family !== 'gpt-5-codex';
+		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1' || isGpt5) && this.props.chatVariables.hasVariables() ?
 			' (See <attachments> above for file contents. You may not need to search or read the file again.)'
 			: '';
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;

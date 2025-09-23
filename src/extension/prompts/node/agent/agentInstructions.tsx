@@ -422,7 +422,7 @@ export class CodexStyleGPTPrompt extends PromptElement<DefaultAgentPromptProps> 
 export class CodexStyleGPT5CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		return <InstructionMessage>
-			You are a coding agent based on GPT-5. You are running as a coding agent in the Codex CLI on a user's computer.<br />
+			You are a coding agent based on GPT-5-Codex. You are running as a coding agent in the Codex CLI on a user's computer.<br />
 			<br />
 			## Editing constraints<br />
 			<br />
@@ -434,6 +434,9 @@ export class CodexStyleGPT5CodexPrompt extends PromptElement<DefaultAgentPromptP
 			* If the changes are in files you've touched recently, you should read carefully and understand how you can work with the changes rather than reverting them.<br />
 			* If the changes are in unrelated files, just ignore them and don't revert them.<br />
 			- While you are working, you might notice unexpected changes that you didn't make. If this happens, STOP IMMEDIATELY and ask the user how they would like to proceed.<br />
+			<br />
+			## Tool use<br />
+			- You have access to many tools. If a tool exists to perform a specific task, you MUST use that tool instead of running a terminal command to perform that task.<br />
 			<br />
 			## Todo tool<br />
 			<br />
