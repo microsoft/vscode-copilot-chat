@@ -16,22 +16,25 @@ import { promptForAPIKey } from './byokUIService';
 import { CustomOAIModelConfigurator } from './customOAIModelConfigurator';
 
 export function resolveCustomOAIUrl(modelId: string, url: string): string {
-	// The fully resolved url was already passed in
-	if (url.includes('/chat/completions')) {
-		return url;
+	// Normalize whitespace
+	url = url.trim();
+
+	// If the user already supplied a full endpoint (either /chat/completions or /responses),
+	// return it verbatim (except trimming a trailing slash) so we don't append again.
+	const fullEndpointPattern = /(\/(chat\/completions|responses))(?:\/?)(?:\?.*)?$/i;
+	if (fullEndpointPattern.test(url)) {
+		return url.replace(/\/$/, '');
 	}
 
-	// Remove the trailing slash
-	if (url.endsWith('/')) {
-		url = url.slice(0, -1);
-	}
-	// if url ends with `/v1` remove it
-	if (url.endsWith('/v1')) {
-		url = url.slice(0, -3);
+	// Remove the trailing slash (without mutating earlier match cases)
+	url = url.replace(/\/$/, '');
+
+	// If url ends with /v1 keep it (we will append /chat/completions below). If it does not, append /v1
+	if (!/\/v1$/i.test(url)) {
+		url = `${url}/v1`;
 	}
 
-	// For standard OpenAI-compatible endpoints, just append the standard path
-	return `${url}/v1/chat/completions`;
+	return `${url}/chat/completions`;
 }
 
 interface CustomOAIModelInfo extends LanguageModelChatInformation {

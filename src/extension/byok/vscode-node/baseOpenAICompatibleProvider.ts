@@ -94,10 +94,21 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 
 	private async getEndpointImpl(model: LanguageModelChatInformation): Promise<OpenAIEndpoint> {
 		const modelInfo: IChatModelInformation = await this.getModelInfo(model.id, this._apiKey);
-		const url = modelInfo.supported_endpoints?.includes(ModelSupportedEndpoint.Responses) ?
-			`${this._baseUrl}/responses` :
-			`${this._baseUrl}/chat/completions`;
-		return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, this._apiKey ?? '', url);
+
+		// Normalize the base URL (strip trailing slash)
+		const baseUrl = this._baseUrl.replace(/\/+$/, '');
+
+		// If the user-provided base URL already targets a specific endpoint (/responses or /chat/completions),
+		// honor it verbatim and do NOT append another path segment. This enables advanced BYOK setups where
+		// the user wants to force the Responses API even if the experimental flag isn't enabled.
+		if (/\/(responses|chat\/completions)(?:\?.*)?$/i.test(baseUrl)) {
+			return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, this._apiKey ?? '', baseUrl);
+		}
+
+		// Otherwise, decide which path to append based on supported endpoints
+		const useResponses = modelInfo.supported_endpoints?.includes(ModelSupportedEndpoint.Responses);
+		const finalUrl = `${baseUrl}/${useResponses ? 'responses' : 'chat/completions'}`;
+		return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, this._apiKey ?? '', finalUrl);
 	}
 
 	async updateAPIKey(): Promise<void> {
