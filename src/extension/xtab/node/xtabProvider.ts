@@ -340,7 +340,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		logContext.setPrompt(messages);
 		telemetryBuilder.setPrompt(messages);
 
-		const secret = (await this.authenticationService.getCopilotToken(undefined, true)).token;
+		const secretKey = (await this.authenticationService.getCopilotToken(undefined, true)).token;
 		await this.debounce(delaySession, telemetryBuilder);
 		if (cancellationToken.isCancellationRequested) {
 			return Result.error(new NoNextEditReason.GotCancelled('afterDebounce'));
@@ -366,7 +366,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				retryState,
 			},
 			{
-				secretKey: secret,
+				secretKey,
 			},
 			delaySession,
 			tracer,
