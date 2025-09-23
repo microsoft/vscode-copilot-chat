@@ -149,7 +149,7 @@ export interface ICreateEndpointBodyOptions extends IMakeChatRequestOptions {
 
 export interface ICustomModel {
 	readonly keyName: string;
-	readonly orgName: string;
+	readonly ownerName: string;
 }
 
 export interface IChatEndpoint extends IEndpoint {

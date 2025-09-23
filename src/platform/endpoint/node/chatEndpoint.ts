@@ -196,7 +196,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		if (_modelMetadata.custom_model) {
 			this.customModel = {
 				keyName: _modelMetadata.custom_model.key_name,
-				orgName: _modelMetadata.custom_model.org_name,
+				ownerName: _modelMetadata.custom_model.owner_name,
 			};
 		}
 	}
