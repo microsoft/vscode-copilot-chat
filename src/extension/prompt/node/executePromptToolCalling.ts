@@ -73,7 +73,8 @@ export class ExecutePromptToolCallingLoop extends ToolCallingLoop<IExecutePrompt
 	}
 
 	protected async getAvailableTools(): Promise<LanguageModelToolInformation[]> {
-		const excludedTools = new Set([ToolName.ExecutePrompt, ToolName.ExecuteTask, ToolName.CoreManageTodoList]);
+		// Exclude the todo list tool because there's only one todo list. We don't want a sub agent messing with it.
+		const excludedTools = new Set([ToolName.CoreManageTodoList]);
 		return (await getAgentTools(this.instantiationService, this.options.request))
 			.filter(tool => !excludedTools.has(tool.name as ToolName))
 			// TODO can't do virtual tools at this level
