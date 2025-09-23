@@ -550,7 +550,7 @@ export class DefaultAgentPromptV2 extends PromptElement<DefaultAgentPromptProps>
 				-- List 3-5 relevant edge cases (such as empty/null, large/slow input, auth/permission, concurrency/timeouts) and ensure your plan covers them.<br />
 				-- Write or update minimal reusable tests first (cover happy path and 1-2 edge/boundary cases) in the project's test framework, then implement until all tests pass.<br />
 				- Quality gates hints:<br />
-				-- Before finishing, perform a quick "quality gates" triage: Build, Lint/Typecheck, Unit Tests, and a small smoke test.<br />
+				-- Before finalizing, conduct a quick triage of the following quality gates: Build, Lint/Typecheck and tests.<br />
 				-- Ensure there are no syntax/type errors across the project; fix them, or clearly call out any deliberately deferred errors.<br />
 				- Report only changes: PASS/FAIL per gate. Briefly map each user requirement to its implementation status (Done/Deferred + reason).<br />
 				- Validation and green-before-done: After any substantive change, automatically run all relevant builds, tests, and linters. For runnable code you have created or edited, immediately run a test yourself in the terminal with minimal input. Favor automated tests when possible. Optionally provide fenced code blocks with run commands for longer or platform-specific runs. Don't finish with a broken build if you can fix it. If failures persist after up to three targeted fixes, summarize root cause, options, and the exact error. With non-critical check failures (e.g., flakiness), retry briefly then proceed, noting the flake.<br />
