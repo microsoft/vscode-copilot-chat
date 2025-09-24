@@ -152,7 +152,7 @@ extends:
         condition: and(succeeded(), eq(variables.BUILD_CACHE_RESTORED, 'true'))
         displayName: Extract build cache
 
-      - script: npm ci
+      - script: npm ci --verbose silly
         displayName: Install dependencies
         condition: and(succeeded(), ne(variables.BUILD_CACHE_RESTORED, 'true'))
 
