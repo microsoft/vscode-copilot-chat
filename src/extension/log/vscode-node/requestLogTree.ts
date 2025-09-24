@@ -26,6 +26,7 @@ const exportPromptArchiveCommand = 'github.copilot.chat.debug.exportPromptArchiv
 const exportPromptLogsAsJsonCommand = 'github.copilot.chat.debug.exportPromptLogsAsJson';
 const exportAllPromptLogsAsJsonCommand = 'github.copilot.chat.debug.exportAllPromptLogsAsJson';
 const saveCurrentMarkdownCommand = 'github.copilot.chat.debug.saveCurrentMarkdown';
+const showRawRequestBodyCommand = 'github.copilot.chat.debug.showRawRequestBody';
 
 export class RequestLogTree extends Disposable implements IExtensionContribution {
 	readonly id = 'requestLogTree';
@@ -487,6 +488,15 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 			} catch (error) {
 				vscode.window.showErrorMessage(`Failed to export all prompt logs as JSON: ${error}`);
 			}
+		}));
+
+		this._register(vscode.commands.registerCommand(showRawRequestBodyCommand, async (arg?: ChatPromptItem) => {
+			const requestId = arg?.id;
+			if (!requestId) {
+				return;
+			}
+
+			await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(ChatRequestScheme.buildUri({ kind: 'request', id: requestId }, 'rawrequest')));
 		}));
 	}
 }

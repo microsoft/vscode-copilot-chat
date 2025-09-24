@@ -287,6 +287,8 @@ export class RequestLogger extends AbstractRequestLogger {
 
 				if (format === 'json') {
 					return this._renderToJson(entry);
+				} else if (format === 'rawrequest') {
+					return this._renderRawRequestToJson(entry);
 				} else {
 					// Existing markdown logic
 					switch (entry.kind) {
@@ -707,5 +709,22 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(this._renderMarkdownStyles());
 
 		return result.join('\n');
+	}
+
+	private _renderRawRequestToJson(entry: LoggedInfo): string {
+		if (entry.kind !== LoggedInfoKind.Request) {
+			return 'Not available';
+		}
+
+		const req = entry.entry;
+		if (req.type === LoggedRequestKind.MarkdownContentRequest || !('body' in req.chatParams) || !req.chatParams.body) {
+			return 'Not available';
+		}
+
+		try {
+			return JSON.stringify(req.chatParams.body, null, 2);
+		} catch (e) {
+			return `Failed to render body: ${e}`;
+		}
 	}
 }

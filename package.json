@@ -2161,6 +2161,10 @@
 				"title": "Hide NES Requests"
 			},
 			{
+				"command": "github.copilot.chat.debug.showRawRequestBody",
+				"title": "Show Raw Request Body"
+			},
+			{
 				"command": "github.copilot.chat.debug.exportLogItem",
 				"title": "Export as...",
 				"icon": "$(export)"
@@ -3347,6 +3351,10 @@
 				{
 					"command": "github.copilot.chat.mcp.setup.flow",
 					"when": "false"
+				},
+				{
+					"command": "github.copilot.chat.debug.showRawRequestBody",
+					"when": "false"
 				}
 			],
 			"view/title": [
@@ -3372,6 +3380,11 @@
 				}
 			],
 			"view/item/context": [
+				{
+					"command": "github.copilot.chat.debug.showRawRequestBody",
+					"when": "view == copilot-chat && viewItem == request",
+					"group": "export@0"
+				},
 				{
 					"command": "github.copilot.chat.debug.exportLogItem",
 					"when": "view == copilot-chat && (viewItem == toolcall || viewItem == request)",
