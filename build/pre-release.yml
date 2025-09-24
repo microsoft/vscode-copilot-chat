@@ -141,15 +141,15 @@ extends:
       #    cacheHitVar: BUILD_CACHE_RESTORED
       #  displayName: Restore build cache (node modules, python packages)
 
-      - script: ./build/setup-emsdk.sh
-        displayName: Setup emsdk
-        condition: and(succeeded(), ne(variables.BUILD_CACHE_RESTORED, 'true'))
-      - script: echo '##vso[task.prependpath]/opt/dev/emsdk/upstream/emscripten'
-        displayName: Setup emsdk path 1
-        condition: and(succeeded(), ne(variables.BUILD_CACHE_RESTORED, 'true'))
-      - script: echo '##vso[task.prependpath]/opt/dev/emsdk'
-        displayName: Setup emsdk path 2
-        condition: and(succeeded(), ne(variables.BUILD_CACHE_RESTORED, 'true'))
+      #- script: ./build/setup-emsdk.sh
+      #  displayName: Setup emsdk
+      #  condition: and(succeeded(), ne(variables.BUILD_CACHE_RESTORED, 'true'))
+      #- script: echo '##vso[task.prependpath]/opt/dev/emsdk/upstream/emscripten'
+      #  displayName: Setup emsdk path 1
+      #  condition: and(succeeded(), ne(variables.BUILD_CACHE_RESTORED, 'true'))
+      #- script: echo '##vso[task.prependpath]/opt/dev/emsdk'
+      #  displayName: Setup emsdk path 2
+      #  condition: and(succeeded(), ne(variables.BUILD_CACHE_RESTORED, 'true'))
 
       #- script: tar -xzf .build/build_cache/cache.tgz
       #  condition: and(succeeded(), eq(variables.BUILD_CACHE_RESTORED, 'true'))
@@ -158,6 +158,8 @@ extends:
       - script: |
           set -e
           npm config ls
+          cat package.json
+          cat package-lock.json
           npm ls --all --package-lock-only
           npm cache clean --force
           npm ci --loglevel silly
