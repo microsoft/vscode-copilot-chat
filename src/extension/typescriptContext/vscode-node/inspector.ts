@@ -344,7 +344,7 @@ class TreeYielded {
 		this.contextItemSummary = new ContextItemResultBuilder(0);
 		for (const runnable of runnables) {
 			for (const converted of this.contextItemSummary.update(runnable)) {
-				items.push(converted);
+				items.push(converted.item);
 			}
 		}
 		this.items = items;
@@ -377,7 +377,7 @@ class TreeYielded {
 class TreeContextRequest {
 
 	private readonly label: string;
-
+	characterBudget: number;
 	private readonly document: string;
 	private readonly position: vscode.Position;
 	private readonly items: ReadonlyArray<ResolvedRunnableResult>;

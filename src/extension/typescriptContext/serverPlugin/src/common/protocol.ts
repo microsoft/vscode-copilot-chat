@@ -395,8 +395,9 @@ export type ContextRequestResult = {
 
 export interface ComputeContextRequestArgs extends tt.server.protocol.FileLocationRequestArgs {
 	startTime: number;
-	timeBudget?: number;
-	tokenBudget?: number;
+	timeBudget: number;
+	primaryCharacterBudget: number;
+	secondaryCharacterBudget: number;
 	neighborFiles?: FilePath[];
 	clientSideRunnableResults?: CachedContextRunnableResult[];
 }

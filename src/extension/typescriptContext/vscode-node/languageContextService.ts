@@ -21,6 +21,8 @@ import { InspectorDataProvider } from './inspector';
 import { ThrottledDebouncer } from './throttledDebounce';
 import { ContextItemResultBuilder, ContextItemSummary, ResolvedRunnableResult, type OnCachePopulatedEvent, type OnContextComputedEvent, type OnContextComputedOnTimeoutEvent } from './types';
 
+const currentTokenBudget: number = 8 * 1024;
+
 enum ExecutionTarget {
 	Semantic,
 	Syntax
@@ -1019,15 +1021,10 @@ class NeighborFileModel implements vscode.Disposable {
 	}
 }
 
-type ComputeContextRequestArgs = {
+type ComputeContextRequestArgs = Omit<protocol.ComputeContextRequestArgs, 'file' | 'projectFileName' | 'line' | 'offset'> & {
 	file: vscode.Uri;
 	line: number;
 	offset: number;
-	startTime: number;
-	timeBudget?: number;
-	tokenBudget?: number;
-	neighborFiles?: readonly string[];
-	clientSideRunnableResults?: readonly protocol.CachedContextRunnableResult[];
 	$traceId?: string;
 };
 namespace ComputeContextRequestArgs {
@@ -1038,7 +1035,8 @@ namespace ComputeContextRequestArgs {
 			offset: position.character + 1,
 			startTime: startTime,
 			timeBudget: timeBudget,
-			tokenBudget: context.tokenBudget ?? 7 * 1024,
+			primaryCharacterBudget: (context.tokenBudget ?? 7 * 1024) * 4,
+			secondaryCharacterBudget: (currentTokenBudget * 4),
 			neighborFiles: neighborFiles !== undefined && neighborFiles.length > 0 ? neighborFiles : undefined,
 			clientSideRunnableResults: clientSideRunnableResults,
 			$traceId: willLogRequestTelemetry ? context.requestId : undefined
@@ -1255,8 +1253,8 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				if (resolved.length > 0) {
 					// Update the stats for telemetry.
 					for (const runnableResult of resolved) {
-						for (const item of contextItemResult.update(runnableResult)) {
-							forDebugging?.push(item);
+						for (const converted of contextItemResult.update(runnableResult)) {
+							forDebugging?.push(converted.item);
 						}
 					}
 				}
@@ -1314,9 +1312,14 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 		const forDebugging: ContextItem[] | undefined = isDebugging ? [] : undefined;
 		const contextItemResult = new ContextItemResultBuilder(afterInflightJoin);
 		const runnableResults = this.runnableResultManager.getCachedRunnableResults(document, position);
-		for (const runnableResult of runnableResults) {
-			for (const item of contextItemResult.update(runnableResult, true)) {
+		let characterBudget = (context.tokenBudget ?? currentTokenBudget) * 4;
+		outer: for (const runnableResult of runnableResults) {
+			for (const { item, size } of contextItemResult.update(runnableResult, true)) {
 				forDebugging?.push(item);
+				characterBudget -= size;
+				if (characterBudget < 0) {
+					break outer;
+				}
 				yield item;
 			}
 			if (token.isCancellationRequested) {
@@ -1807,7 +1810,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 	}
 
 	public getTokenBudget(document: vscode.TextDocument): number {
-		return Math.trunc((8 * 1024) - (document.getText().length / 4) - 256);
+		return Math.trunc((currentTokenBudget) - (document.getText().length / 4) - 256);
 	}
 
 	private getSampleTelemetry(activeExperiments: Map<string, string | number | boolean | string[]>): number {

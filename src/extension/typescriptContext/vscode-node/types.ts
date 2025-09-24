@@ -169,7 +169,7 @@ export class ContextItemResultBuilder implements ContextItemSummary {
 		this.cancelled = token.isCancellationRequested;
 	}
 
-	public *update(runnableResult: ResolvedRunnableResult, fromCache: boolean = false): IterableIterator<ContextItem> {
+	public *update(runnableResult: ResolvedRunnableResult, fromCache: boolean = false): IterableIterator<{ item: ContextItem; size: number }> {
 		if (this.seenRunnableResults.has(runnableResult.id)) {
 			return;
 		}
@@ -187,7 +187,7 @@ export class ContextItemResultBuilder implements ContextItemSummary {
 				continue;
 			}
 			Stats.yielded(this.stats);
-			yield converted;
+			yield { item: converted, size: protocol.ContextItem.sizeInChars(item) };
 		}
 	}
 
