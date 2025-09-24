@@ -165,6 +165,8 @@ extends:
           rm -rf /home/cloudtest/.npm
           npm ci --loglevel silly --no-audit
         displayName: Install dependencies
+        env:
+          NODE_OPTIONS: "--max-old-space-size=8192"
         condition: and(succeeded(), ne(variables.BUILD_CACHE_RESTORED, 'true'))
 
       - script: |
