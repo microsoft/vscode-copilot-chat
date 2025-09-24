@@ -3554,7 +3554,7 @@
 			"scm/resourceState/context": [
 				{
 					"command": "github.copilot.git.resolveMergeConflicts",
-					"when": "scmProvider == git && scmResourceGroup == merge && mergeConflictsCount && mergeConflictsCount != 0",
+					"when": "scmProvider == git && scmResourceGroup == merge && git.activeResourceHasMergeConflicts",
 					"group": "z_chat@1"
 				},
 				{
@@ -3641,7 +3641,7 @@
 				{
 					"command": "github.copilot.git.resolveMergeConflicts",
 					"group": "z_chat@1",
-					"when": "config.git.enabled && !git.missing && !isInDiffEditor && !isMergeEditor && resource in git.mergeChanges && mergeConflictsCount && mergeConflictsCount != 0"
+					"when": "config.git.enabled && !git.missing && !isInDiffEditor && !isMergeEditor && resource in git.mergeChanges && git.activeResourceHasMergeConflicts"
 				}
 			]
 		},
