@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { BasePromptElementProps, Chunk, Image, PromptElement, PromptPieceChild, PromptSizing, Raw, SystemMessage, TokenLimit, UserMessage } from '@vscode/prompt-tsx';
+import { BasePromptElementProps, Chunk, Image, PromptElement, PromptPiece, PromptPieceChild, PromptSizing, Raw, SystemMessage, TokenLimit, UserMessage } from '@vscode/prompt-tsx';
 import { isDefined } from '@vscode/test-electron/out/util';
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
@@ -45,7 +45,7 @@ import { UserPreferences } from '../panel/preferences';
 import { ChatToolCalls } from '../panel/toolCalling';
 import { MultirootWorkspaceStructure } from '../panel/workspace/workspaceStructure';
 import { AgentConversationHistory } from './agentConversationHistory';
-import { AlternateGPTPrompt, CodexStyleGPTPrompt, DefaultAgentPrompt, DefaultAgentPromptV2, SweBenchAgentPrompt } from './agentInstructions';
+import { AlternateGPTPrompt, CodexStyleGPT5CodexPrompt, CodexStyleGPTPrompt, DefaultAgentPrompt, DefaultAgentPromptV2, SweBenchAgentPrompt } from './agentInstructions';
 import { SummarizedConversationHistory } from './summarizedConversationHistory';
 
 export interface AgentPromptProps extends GenericBasePromptElementProps {
@@ -77,6 +77,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
+		@IPromptVariablesService private readonly promptVariablesService: IPromptVariablesService,
 		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint,
 	) {
 		super(props);
@@ -105,7 +106,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		</>;
 		const baseInstructions = <>
 			{!omitBaseAgentInstructions && baseAgentInstructions}
-			{this.getAgentCustomInstructions()}
+			{await this.getAgentCustomInstructions()}
 			<UserMessage>
 				{await this.getOrCreateGlobalAgentContext(this.props.endpoint)}
 			</UserMessage>
@@ -141,6 +142,24 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	private getInstructions() {
 		if (this.configurationService.getConfig(ConfigKey.Internal.SweBenchAgentPrompt)) {
 			return <SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} />;
+		}
+
+		if (this.props.endpoint.family === 'gpt-5-codex') {
+			const promptType = this.configurationService.getExperimentBasedConfig(ConfigKey.Gpt5CodexAlternatePrompt, this.experimentationService);
+			switch (promptType) {
+				case 'codex':
+					return <CodexStyleGPT5CodexPrompt
+						availableTools={this.props.promptContext.tools?.availableTools}
+						modelFamily={this.props.endpoint.family}
+						codesearchMode={this.props.codesearchMode}
+					/>;
+				default:
+					return <DefaultAgentPrompt
+						availableTools={this.props.promptContext.tools?.availableTools}
+						modelFamily={this.props.endpoint.family}
+						codesearchMode={this.props.codesearchMode}
+					/>;
+			}
 		}
 
 		if (this.props.endpoint.family.startsWith('gpt-5')) {
@@ -200,26 +219,32 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		/>;
 	}
 
-	private getAgentCustomInstructions() {
+	private async getAgentCustomInstructions() {
 		const putCustomInstructionsInSystemMessage = this.configurationService.getConfig(ConfigKey.CustomInstructionsInSystemMessage);
-		const customInstructionsBody = <>
+		const customInstructionsBodyParts: PromptPiece[] = [];
+		customInstructionsBodyParts.push(
 			<CustomInstructions
 				languageId={undefined}
 				chatVariables={this.props.promptContext.chatVariables}
 				includeSystemMessageConflictWarning={!putCustomInstructionsInSystemMessage}
 				customIntroduction={putCustomInstructionsInSystemMessage ? '' : undefined} // If in system message, skip the "follow these user-provided coding instructions" intro
 			/>
-			{
-				this.props.promptContext.modeInstructions && <Tag name='customInstructions'>
+		);
+		if (this.props.promptContext.modeInstructions) {
+			const { content, toolReferences } = this.props.promptContext.modeInstructions;
+			const resolvedContent = toolReferences && toolReferences.length > 0 ? await this.promptVariablesService.resolveToolReferencesInPrompt(content, toolReferences) : content;
+
+			customInstructionsBodyParts.push(
+				<Tag name='customInstructions'>
 					Below are some additional instructions from the user.<br />
 					<br />
-					{this.props.promptContext.modeInstructions}
+					{resolvedContent}
 				</Tag>
-			}
-		</>;
+			);
+		}
 		return putCustomInstructionsInSystemMessage ?
-			<SystemMessage>{customInstructionsBody}</SystemMessage> :
-			<UserMessage>{customInstructionsBody}</UserMessage>;
+			<SystemMessage>{customInstructionsBodyParts}</SystemMessage> :
+			<UserMessage>{customInstructionsBodyParts}</UserMessage>;
 	}
 
 	private async getOrCreateGlobalAgentContext(endpoint: IChatEndpoint): Promise<PromptPieceChild[]> {
@@ -352,7 +377,8 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		const hasEditFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
 		const hasEditNotebookTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditNotebook);
 		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreRunInTerminal);
-		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1' || this.props.endpoint.family.startsWith('gpt-5')) && this.props.chatVariables.hasVariables() ?
+		const isGpt5 = this.props.endpoint.family.startsWith('gpt-5') && this.props.endpoint.family !== 'gpt-5-codex';
+		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1' || isGpt5) && this.props.chatVariables.hasVariables() ?
 			' (See <attachments> above for file contents. You may not need to search or read the file again.)'
 			: '';
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;

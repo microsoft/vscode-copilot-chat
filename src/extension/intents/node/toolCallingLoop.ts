@@ -152,7 +152,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				availableTools
 			},
 			isContinuation,
-			modeInstructions: this.options.request.modeInstructions,
+			modeInstructions: this.options.request.modeInstructions2,
 		};
 	}
 

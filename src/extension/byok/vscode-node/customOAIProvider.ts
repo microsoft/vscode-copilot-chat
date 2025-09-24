@@ -25,9 +25,11 @@ export function resolveCustomOAIUrl(modelId: string, url: string): string {
 	if (url.endsWith('/')) {
 		url = url.slice(0, -1);
 	}
-	// if url ends with `/v1` remove it
-	if (url.endsWith('/v1')) {
-		url = url.slice(0, -3);
+
+	// Check if URL already contains any version pattern like /v1, /v2, etc
+	const versionPattern = /\/v\d+$/;
+	if (versionPattern.test(url)) {
+		return `${url}/chat/completions`;
 	}
 
 	// For standard OpenAI-compatible endpoints, just append the standard path

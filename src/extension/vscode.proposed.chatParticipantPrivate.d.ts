@@ -182,6 +182,8 @@ declare module 'vscode' {
 
 		isQuotaExceeded?: boolean;
 
+		isRateLimited?: boolean;
+
 		level?: ChatErrorLevel;
 
 		code?: string;

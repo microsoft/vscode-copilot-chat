@@ -496,7 +496,7 @@ function listTests(allSuites: readonly SimulationSuite[], opts: SimulationOption
 }
 
 async function listChatModels(skipCache: boolean = false) {
-	const accessor = createExtensionUnitTestingServices(undefined, { skipModelMetadataCache: skipCache }).createTestingAccessor();
+	const accessor = createExtensionUnitTestingServices(undefined, undefined, { skipModelMetadataCache: skipCache }).createTestingAccessor();
 	const endpointProvider = accessor.get(IEndpointProvider);
 	const chatEndpoints = await endpointProvider.getAllChatEndpoints();
 	console.log('Available Chat Models:\n');

@@ -91,7 +91,6 @@ export const IEmbeddingsComputer = createServiceIdentifier<IEmbeddingsComputer>(
 
 export type ComputeEmbeddingsOptions = {
 	readonly inputType?: 'document' | 'query';
-	readonly parallelism?: number;
 };
 
 export interface IEmbeddingsComputer {
