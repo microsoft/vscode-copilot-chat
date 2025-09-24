@@ -155,8 +155,8 @@ export class RenameSuggestionsProvider implements vscode.NewSymbolNamesProvider 
 						);
 						const fetchTime = sw.elapsed();
 
-						if (fetchResult.type === ChatFetchResponseType.QuotaExceeded) {
-							await this._notificationService.showQuotaExceededDialog();
+						if (fetchResult.type === ChatFetchResponseType.QuotaExceeded || (fetchResult.type === ChatFetchResponseType.RateLimited && this._authService.copilotToken?.isNoAuthUser)) {
+							await this._notificationService.showQuotaExceededDialog({ isNoAuthUser: this._authService.copilotToken?.isNoAuthUser ?? false });
 						}
 
 						if (token.isCancellationRequested) {
