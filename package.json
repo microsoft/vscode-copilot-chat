@@ -4123,5 +4123,8 @@
 		"string_decoder": "npm:string_decoder@1.2.0",
 		"node-gyp": "npm:node-gyp@10.3.1",
 		"@typescript-eslint/visitor-keys": "=8.44.0"
+	},
+	"resolutions": {
+		"@typescript-eslint/visitor-keys": "8.44.0"
 	}
 }
