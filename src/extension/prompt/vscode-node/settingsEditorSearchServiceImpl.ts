@@ -81,7 +81,7 @@ export class SettingsEditorSearchServiceImpl implements ISettingsEditorSearchSer
 		}
 
 		const copilotToken = await this.authenticationService.getCopilotToken();
-		if (embeddingSettings.length === 0 || copilotToken.isFreeUser) {
+		if (embeddingSettings.length === 0 || copilotToken.isFreeUser || copilotToken.isNoAuthUser) {
 			progress.report({
 				query,
 				kind: SettingsSearchResultKind.LLM_RANKED,

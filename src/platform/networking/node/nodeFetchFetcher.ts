@@ -6,6 +6,7 @@
 import * as undici from 'undici';
 import { IEnvService } from '../../env/common/envService';
 import { BaseFetchFetcher } from './baseFetchFetcher';
+import { Lazy } from '../../../util/vs/base/common/lazy';
 
 export class NodeFetchFetcher extends BaseFetchFetcher {
 
@@ -32,6 +33,9 @@ export class NodeFetchFetcher extends BaseFetchFetcher {
 function getFetch(): typeof globalThis.fetch {
 	const fetch = (globalThis as any).__vscodePatchedFetch || globalThis.fetch;
 	return function (input: string | URL | globalThis.Request, init?: RequestInit) {
-		return fetch(input, { dispatcher: new undici.Agent({ allowH2: true }), ...init });
+		return fetch(input, { dispatcher: agent.value, ...init });
 	};
 }
+
+// Cache agent to reuse connections.
+const agent = new Lazy(() => new undici.Agent({ allowH2: true }));

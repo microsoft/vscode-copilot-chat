@@ -528,16 +528,11 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 		// We could consider object literals here as well. However they don't usually have a this
 		// and all things a public in an literal. So we skip them for now.
 		const containerDeclaration = this.declaration.parent;
-		const isClassDeclaration = ts.isClassDeclaration(containerDeclaration);
-		if (!isClassDeclaration) {
+		if (!ts.isClassDeclaration(containerDeclaration)) {
 			return;
 		}
 		const program = this.getProgram();
 		const symbols = this.context.getSymbols(program);
-		const methodSymbol = symbols.getLeafSymbolAtLocation(this.declaration.name ? this.declaration.name : this.declaration);
-		if (methodSymbol === undefined || !Symbols.isMethod(methodSymbol)) {
-			return;
-		}
 		const containerSymbol = symbols.getLeafSymbolAtLocation(containerDeclaration.name ? containerDeclaration.name : containerDeclaration);
 		if (containerSymbol === undefined || !Symbols.isClass(containerSymbol)) {
 			return;
@@ -545,9 +540,6 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 		if (containerSymbol.members !== undefined) {
 			for (const member of containerSymbol.members.values()) {
 				token.throwIfCancellationRequested();
-				if (member === methodSymbol) {
-					continue;
-				}
 				if (!this.handleMember(result, member, symbols, ts.ModifierFlags.Private | ts.ModifierFlags.Protected)) {
 					return;
 				}
@@ -561,7 +553,7 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 			}
 			for (const member of type.members.values()) {
 				token.throwIfCancellationRequested();
-				if (!this.handleMember(result, member, symbols, ts.ModifierFlags.Protected)) {
+				if (!this.handleMember(result, member, symbols, ts.ModifierFlags.Public | ts.ModifierFlags.Protected)) {
 					return;
 				}
 			}

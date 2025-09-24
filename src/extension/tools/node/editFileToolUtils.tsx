@@ -11,6 +11,7 @@ import { IConfigurationService } from '../../../platform/configuration/common/co
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 import { OffsetLineColumnConverter } from '../../../platform/editing/common/offsetLineColumnConverter';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -23,7 +24,6 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
 import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { EndOfLine, MarkdownString, Position, Range, TextEdit } from '../../../vscodeTypes';
-import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 
 // Simplified Hunk type for the patch
 interface Hunk {
@@ -349,42 +349,47 @@ function trySimilarityMatch(text: string, oldStr: string, newStr: string, eol: s
 		return { text, editPosition: [], type: 'none' };
 	}
 
-	let bestMatch = { index: -1, similarity: 0, length: 0 };
+	let bestMatch = { startLine: -1, startOffset: 0, oldLength: 0, similarity: 0 };
+	let startOffset = 0;
 
 	// Sliding window approach to find the best matching section
 	for (let i = 0; i <= lines.length - oldLines.length; i++) {
 		let totalSimilarity = 0;
+		let oldLength = 0;
 
 		// Calculate similarity for each line in the window
 		for (let j = 0; j < oldLines.length; j++) {
 			const similarity = calculateSimilarity(oldLines[j], lines[i + j]);
 			totalSimilarity += similarity;
+			oldLength += lines[i + j].length;
 		}
 
 		const avgSimilarity = totalSimilarity / oldLines.length;
 		if (avgSimilarity > threshold && avgSimilarity > bestMatch.similarity) {
-			bestMatch = { index: i, similarity: avgSimilarity, length: oldLines.length };
+			bestMatch = { startLine: i, startOffset, similarity: avgSimilarity, oldLength: oldLength + (oldLines.length - 1) * eol.length };
 		}
+
+		startOffset += lines[i].length + eol.length;
 	}
 
-	if (bestMatch.index !== -1) {
-		// Found a match with similarity above the threshold
-		const startIndex = bestMatch.index;
-
-		// Replace the matched section
-		const newLines = [...lines];
-		newLines.splice(startIndex, bestMatch.length, ...newStr.split(eol));
-
-		return {
-			text: newLines.join(eol),
-			type: 'similarity',
-			editPosition: [[startIndex, startIndex + bestMatch.length]],
-			similarity: bestMatch.similarity,
-			suggestion: `Used similarity matching (${(bestMatch.similarity * 100).toFixed(1)}% similar). Verify the replacement.`
-		};
+	if (bestMatch.startLine === -1) {
+		return { text, editPosition: [], type: 'none' };
 	}
 
-	return { text, editPosition: [], type: 'none' };
+	// Replace the matched section
+	const newLines = [
+		...lines.slice(0, bestMatch.startLine),
+		...newStr.split(eol),
+		...lines.slice(bestMatch.startLine + oldLines.length)
+	];
+
+	return {
+		text: newLines.join(eol),
+		type: 'similarity',
+		editPosition: [[bestMatch.startOffset, bestMatch.startOffset + bestMatch.oldLength]],
+		similarity: bestMatch.similarity,
+		suggestion: `Used similarity matching (${(bestMatch.similarity * 100).toFixed(1)}% similar). Verify the replacement.`
+	};
 }
 
 // Function to generate a simple patch

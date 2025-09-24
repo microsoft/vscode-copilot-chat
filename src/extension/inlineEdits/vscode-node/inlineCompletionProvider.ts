@@ -39,6 +39,7 @@ import { InlineEditLogger } from './parts/inlineEditLogger';
 import { IVSCodeObservableDocument } from './parts/vscodeWorkspace';
 import { toExternalRange } from './utils/translations';
 import { getNotebookId } from '../../../platform/notebook/common/helpers';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 
 const learnMoreAction: Command = {
 	title: l10n.t('Learn More'),
@@ -119,6 +120,7 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
 		@INotebookService private readonly _notebookService: INotebookService,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 	) {
 		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
 		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, this._expService);
@@ -152,6 +154,12 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 		if (!isInlineEditsEnabled && !serveAsCompletionsProvider) {
 			tracer.returns('inline edits disabled');
+			return undefined;
+		}
+
+		if (this.authenticationService.copilotToken?.isNoAuthUser) {
+			// TODO@bpasero revisit this in the future
+			tracer.returns('inline edits disabled for anonymous users');
 			return undefined;
 		}
 
