@@ -1803,7 +1803,8 @@
 			{
 				"command": "github.copilot.chat.replay",
 				"title": "Start Chat Replay",
-				"icon": "$(debug-line-by-line)"
+				"icon": "$(debug-line-by-line)",
+				"enablement": "resourceLangId == chatReplay && !inDebugMode"
 			},
 			{
 				"command": "github.copilot.chat.replay.enableWorkspaceEditTracing",
