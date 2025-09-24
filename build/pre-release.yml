@@ -160,7 +160,7 @@ extends:
           npm config ls -l
           cat package.json
           cat package-lock.json
-          npm ls --all --package-lock-only
+          #npm ls --all --package-lock-only
           npm cache clean --force
           rm -rf /home/cloudtest/.npm
           npm ci --loglevel silly --no-audit
