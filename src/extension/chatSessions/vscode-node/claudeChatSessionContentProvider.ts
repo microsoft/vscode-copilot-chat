@@ -47,7 +47,7 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 				async (stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => {
 					this._log(`Starting activeResponseCallback, internalID: ${internalSessionId}`);
 					const request = this._createInitialChatRequest(initialRequest, internalSessionId);
-					const result = await this.claudeAgentManager.handleRequest(undefined, request, { history: [] }, stream, token);
+					const result = await this.claudeAgentManager.handleRequest(undefined, request, { history: [] }, stream, token, initialRequest.metadata?.workingDirectory);
 					if (result.claudeSessionId) {
 						this._log(`activeResponseCallback, setClaudeSessionId: ${internalSessionId} -> ${result.claudeSessionId}`);
 						this.sessionStore.setClaudeSessionId(internalSessionId, result.claudeSessionId);

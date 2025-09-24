@@ -10,9 +10,13 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
 
+export interface ClaudeChatRequest extends vscode.ChatRequest {
+	metadata?: Record<string, any>;
+}
+
 export class ClaudeSessionDataStore {
 	private static StorageKey = 'claudeSessionIds';
-	private _internalSessionToInitialRequest: Map<string, vscode.ChatRequest> = new Map();
+	private _internalSessionToInitialRequest: Map<string, ClaudeChatRequest> = new Map();
 	private _unresolvedNewSessions = new Map<string, { id: string; label: string }>();
 
 	constructor(
@@ -43,11 +47,11 @@ export class ClaudeSessionDataStore {
 		return id;
 	}
 
-	public setInitialRequest(internalSessionId: string, request: vscode.ChatRequest) {
+	public setInitialRequest(internalSessionId: string, request: ClaudeChatRequest) {
 		this._internalSessionToInitialRequest.set(internalSessionId, request);
 	}
 
-	public getAndConsumeInitialRequest(sessionId: string): vscode.ChatRequest | undefined {
+	public getAndConsumeInitialRequest(sessionId: string): ClaudeChatRequest | undefined {
 		const prompt = this._internalSessionToInitialRequest.get(sessionId);
 		this._internalSessionToInitialRequest.delete(sessionId);
 		return prompt;
@@ -116,7 +120,7 @@ export class ClaudeChatSessionItemProvider extends Disposable implements vscode.
 		const internal = this.sessionStore.registerNewSession(label);
 		this._onDidChangeChatSessionItems.fire();
 		if (options.request) {
-			this.sessionStore.setInitialRequest(internal, options.request);
+			this.sessionStore.setInitialRequest(internal, { ...options.request, metadata: options.metadata });
 		}
 
 		return {
