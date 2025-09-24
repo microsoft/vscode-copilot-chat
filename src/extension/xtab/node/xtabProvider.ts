@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { FetchStreamSource } from '../../../platform/chat/common/chatMLFetcher';
 import { ChatFetchError, ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { toTextParts } from '../../../platform/chat/common/globalStringUtils';
@@ -98,6 +99,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		@ILanguageContextProviderService private readonly langCtxService: ILanguageContextProviderService,
 		@ILanguageDiagnosticsService private readonly langDiagService: ILanguageDiagnosticsService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
+		@IAuthenticationService private readonly authService: IAuthenticationService,
 	) {
 		this.delayer = new Delayer(this.configService, this.expService);
 		this.tracer = createTracer(['NES', 'XtabProvider'], (s) => this.logService.trace(s));
@@ -338,6 +340,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		logContext.setPrompt(messages);
 		telemetryBuilder.setPrompt(messages);
 
+		let secretKey;
+		if (!this.simulationCtx.isInSimulationTests) {
+			try {
+				secretKey = (await this.authService.getCopilotToken(undefined, true)).token;
+			} catch { }
+		}
 		await this.debounce(delaySession, telemetryBuilder);
 		if (cancellationToken.isCancellationRequested) {
 			return Result.error(new NoNextEditReason.GotCancelled('afterDebounce'));
@@ -361,6 +369,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				shouldRemoveCursorTagFromResponse,
 				promptingStrategy: promptOptions.promptingStrategy,
 				retryState,
+			},
+			{
+				secretKey,
 			},
 			delaySession,
 			tracer,
@@ -466,6 +477,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			shouldRemoveCursorTagFromResponse: boolean;
 			retryState: RetryState;
 		},
+		requestOpts: {
+			secretKey?: string;
+		},
 		delaySession: DelaySession,
 		parentTracer: ITracer,
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
@@ -514,6 +528,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 					temperature: 0,
 					stream: true,
 					prediction,
+					secretKey: requestOpts.secretKey,
 				} satisfies OptionalChatRequestParams,
 				userInitiatedRequest: undefined,
 				telemetryProperties: {
