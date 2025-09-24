@@ -32,6 +32,15 @@ export class NodeFetchFetcher extends BaseFetchFetcher {
 function getFetch(): typeof globalThis.fetch {
 	const fetch = (globalThis as any).__vscodePatchedFetch || globalThis.fetch;
 	return function (input: string | URL | globalThis.Request, init?: RequestInit) {
-		return fetch(input, { dispatcher: new undici.Agent({ allowH2: true }), ...init });
+		return fetch(input, { dispatcher: getAgent(), ...init });
 	};
+}
+
+// Cache agent to reuse connections.
+let agent: undici.Agent | undefined = undefined;
+function getAgent(): undici.Agent {
+	if (!agent) {
+		agent = new undici.Agent({ allowH2: true });
+	}
+	return agent;
 }
