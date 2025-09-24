@@ -166,7 +166,7 @@ extends:
           npm ci --loglevel silly --no-audit
         displayName: Install dependencies
         env:
-          NODE_OPTIONS: "--max-old-space-size=8192"
+          NODE_OPTIONS: "--max-old-space-size=16384"
         condition: and(succeeded(), ne(variables.BUILD_CACHE_RESTORED, 'true'))
 
       - script: |
