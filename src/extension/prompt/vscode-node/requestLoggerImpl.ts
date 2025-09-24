@@ -326,8 +326,7 @@ export class RequestLogger extends AbstractRequestLogger {
 	public override logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void {
 		const edits = this._workspaceEditRecorder?.getEditsAndReset();
 		// Extract toolMetadata from response if it exists
-		const extendedResponse = response as ExtendedLanguageModelToolResult;
-		const toolMetadata = extendedResponse.toolMetadata || undefined;
+		const toolMetadata = 'toolMetadata' in response ? (response as ExtendedLanguageModelToolResult).toolMetadata : undefined;
 		this._addEntry(new LoggedToolCall(
 			id,
 			name,
