@@ -5,7 +5,7 @@
 
 import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { HTMLTracer, IChatEndpointInfo, RenderPromptResult } from '@vscode/prompt-tsx';
-import { CancellationToken, DocumentLink, DocumentLinkProvider, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult2, languages, Range, TextDocument, Uri, workspace } from 'vscode';
+import { CancellationToken, DocumentLink, DocumentLinkProvider, ExtendedLanguageModelToolResult, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult2, languages, Range, TextDocument, Uri, workspace } from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
 import { IModelAPIResponse } from '../../../platform/endpoint/common/endpointProvider';
@@ -229,6 +229,7 @@ class LoggedToolCall implements ILoggedToolCall {
 		public readonly time: number,
 		public readonly thinking?: ThinkingData,
 		public readonly edits?: { path: string; edits: string }[],
+		public readonly toolMetadata?: any,
 	) { }
 
 	async toJSON(): Promise<object> {
@@ -256,7 +257,8 @@ class LoggedToolCall implements ILoggedToolCall {
 			time: new Date(this.time).toISOString(),
 			response: responseData,
 			thinking: thinking,
-			edits: this.edits ? this.edits.map(edit => ({ path: edit.path, edits: JSON.parse(edit.edits) })) : undefined
+			edits: this.edits ? this.edits.map(edit => ({ path: edit.path, edits: JSON.parse(edit.edits) })) : undefined,
+			toolMetadata: this.toolMetadata
 		};
 	}
 }
@@ -323,6 +325,9 @@ export class RequestLogger extends AbstractRequestLogger {
 
 	public override logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void {
 		const edits = this._workspaceEditRecorder?.getEditsAndReset();
+		// Extract toolMetadata from response if it exists
+		const extendedResponse = response as ExtendedLanguageModelToolResult;
+		const toolMetadata = extendedResponse.toolMetadata || undefined;
 		this._addEntry(new LoggedToolCall(
 			id,
 			name,
@@ -331,7 +336,8 @@ export class RequestLogger extends AbstractRequestLogger {
 			this.currentRequest,
 			Date.now(),
 			thinking,
-			edits
+			edits,
+			toolMetadata
 		));
 	}
 
