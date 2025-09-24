@@ -134,12 +134,12 @@ extends:
         inputs:
           versionSpec: '22.14.x'
 
-      - task: Cache@2
-        inputs:
-          key: '"release_build_cache" | build/.cachesalt | build/setup-emsdk.sh | package-lock.json'
-          path: .build/build_cache
-          cacheHitVar: BUILD_CACHE_RESTORED
-        displayName: Restore build cache (node modules, python packages)
+      #- task: Cache@2
+      #  inputs:
+      #    key: '"release_build_cache" | build/.cachesalt | build/setup-emsdk.sh | package-lock.json'
+      #    path: .build/build_cache
+      #    cacheHitVar: BUILD_CACHE_RESTORED
+      #  displayName: Restore build cache (node modules, python packages)
 
       - script: ./build/setup-emsdk.sh
         displayName: Setup emsdk
