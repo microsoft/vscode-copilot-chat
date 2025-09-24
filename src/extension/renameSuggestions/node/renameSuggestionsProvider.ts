@@ -70,7 +70,7 @@ export class RenameSuggestionsProvider implements vscode.NewSymbolNamesProvider 
 	protected isEnabled(triggerKind: NewSymbolNameTriggerKind) {
 		if (triggerKind === NewSymbolNameTriggerKind.Invoke) {
 			return true;
-		} else if (this._authService.copilotToken?.isFreeUser) {
+		} else if (this._authService.copilotToken?.isFreeUser || this._authService.copilotToken?.isNoAuthUser) {
 			return false;
 		} else {
 			return this._configurationService.getConfig(ConfigKey.AutomaticRenameSuggestions);
