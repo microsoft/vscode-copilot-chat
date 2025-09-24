@@ -229,7 +229,7 @@ class LoggedToolCall implements ILoggedToolCall {
 		public readonly time: number,
 		public readonly thinking?: ThinkingData,
 		public readonly edits?: { path: string; edits: string }[],
-		public readonly toolMetadata?: any,
+		public readonly toolMetadata?: unknown,
 	) { }
 
 	async toJSON(): Promise<object> {
