@@ -162,6 +162,7 @@ extends:
           cat package-lock.json
           npm ls --all --package-lock-only
           npm cache clean --force
+          rm -rf /home/cloudtest/.npm
           npm ci --loglevel silly
         displayName: Install dependencies
         condition: and(succeeded(), ne(variables.BUILD_CACHE_RESTORED, 'true'))
