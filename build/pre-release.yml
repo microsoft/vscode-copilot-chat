@@ -62,11 +62,14 @@ extends:
         displayName: Setup emsdk path 2
         condition: and(succeeded(), ne(variables.BUILD_CACHE_RESTORED, 'true'))
 
-      - script: tar -xzf .build/build_cache/cache.tgz
-        condition: and(succeeded(), eq(variables.BUILD_CACHE_RESTORED, 'true'))
-        displayName: Extract build cache
+      #- script: tar -xzf .build/build_cache/cache.tgz
+      #  condition: and(succeeded(), eq(variables.BUILD_CACHE_RESTORED, 'true'))
+      #  displayName: Extract build cache
 
-      - script: npm ci
+      - script: |
+          set -e
+          npm ls --all --package-lock-only
+          npm ci --loglevel silly
         displayName: Install dependencies
         condition: and(succeeded(), ne(variables.BUILD_CACHE_RESTORED, 'true'))
 
@@ -129,7 +132,7 @@ extends:
 
       - task: NodeTool@0
         inputs:
-          versionSpec: '22.x'
+          versionSpec: '22.14.x'
 
       - task: Cache@2
         inputs:
