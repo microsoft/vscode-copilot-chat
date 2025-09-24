@@ -157,7 +157,9 @@ extends:
 
       - script: |
           set -e
+          npm config ls
           npm ls --all --package-lock-only
+          npm cache clean --force
           npm ci --loglevel silly
         displayName: Install dependencies
         condition: and(succeeded(), ne(variables.BUILD_CACHE_RESTORED, 'true'))
