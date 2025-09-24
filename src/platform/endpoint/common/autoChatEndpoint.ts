@@ -132,7 +132,7 @@ export async function isAutoModelEnabled(expService: IExperimentationService, en
 
 	if (!!expService.getTreatmentVariable<boolean>('autoModelEnabled')) {
 		try {
-			(await authService.getCopilotToken()).isEditorPreviewFeaturesEnabled();
+			return (await authService.getCopilotToken()).isEditorPreviewFeaturesEnabled();
 		} catch (e) {
 			return false;
 		}

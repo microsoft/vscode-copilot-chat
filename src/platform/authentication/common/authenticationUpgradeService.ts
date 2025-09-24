@@ -68,7 +68,7 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 				return false;
 			}
 			// The user is not signed in at all
-			if (!this._authenticationService.getAnyGitHubSession({ silent: true })) {
+			if (!(await this._authenticationService.getAnyGitHubSession({ silent: true }))) {
 				reason = 'false - not signed in';
 				return false;
 			}

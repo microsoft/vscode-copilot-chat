@@ -372,6 +372,16 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 							timeDelayMs: res.timeDelayMs,
 							didBranchChange: res.didBranchChange ? 1 : 0,
 						});
+						res.telemetryService.sendGHTelemetryEvent('applyPatch/trackEditSurvival', {
+							headerRequestId: this._promptContext?.requestId,
+							requestSource: 'agent',
+							mapper: 'applyPatchTool'
+						}, {
+							survivalRateFourGram: res.fourGram,
+							survivalRateNoRevert: res.noRevert,
+							timeDelayMs: res.timeDelayMs,
+							didBranchChange: res.didBranchChange ? 1 : 0,
+						});
 					});
 				}
 			});
