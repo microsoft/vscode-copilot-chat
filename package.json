@@ -4121,6 +4121,7 @@
 	"overrides": {
 		"@aminya/node-gyp-build": "npm:node-gyp-build@4.8.1",
 		"string_decoder": "npm:string_decoder@1.2.0",
-		"node-gyp": "npm:node-gyp@10.3.1"
+		"node-gyp": "npm:node-gyp@10.3.1",
+		"@typescript-eslint/visitor-keys": "8.44.0"
 	}
 }
