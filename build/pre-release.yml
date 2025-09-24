@@ -157,13 +157,13 @@ extends:
 
       - script: |
           set -e
-          npm config ls
+          npm config ls -l
           cat package.json
           cat package-lock.json
           npm ls --all --package-lock-only
           npm cache clean --force
           rm -rf /home/cloudtest/.npm
-          npm ci --loglevel silly
+          npm ci --loglevel silly --no-audit
         displayName: Install dependencies
         condition: and(succeeded(), ne(variables.BUILD_CACHE_RESTORED, 'true'))
 
