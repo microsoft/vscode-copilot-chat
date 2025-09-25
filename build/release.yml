@@ -82,8 +82,6 @@ extends:
         displayName: Create build cache archive
 
       - pwsh: |
-          $ErrorActionPreference = "Stop"
-
           # Get the OAuth token from the git config
           $result = git config --get-regexp .*extraheader ^AUTHORIZATION:
           $basicToken = $result -split "AUTHORIZATION: basic " | Select-Object -Last 1
