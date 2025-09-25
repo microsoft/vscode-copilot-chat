@@ -22,7 +22,6 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
-import { ClaudeAgentManager } from '../../../agents/claude/node/claudeCodeAgent';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../../agents/claude/node/claudeCodeSessionService';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { ClaudeChatSessionContentProvider } from '../claudeChatSessionContentProvider';
@@ -37,7 +36,6 @@ interface MockClaudeSession {
 }
 
 describe('ChatSessionContentProvider', () => {
-	let mockClaudeAgentManager: ClaudeAgentManager;
 	let mockSessionService: IClaudeCodeSessionService;
 	let provider: ClaudeChatSessionContentProvider;
 	const store = new DisposableStore();
@@ -45,10 +43,6 @@ describe('ChatSessionContentProvider', () => {
 	const workspaceFolderUri = URI.file('/project');
 
 	beforeEach(() => {
-		mockClaudeAgentManager = {
-			handleRequest: vi.fn().mockResolvedValue({ claudeSessionId: 'test-claude-session' })
-		} as any;
-
 		mockSessionService = {
 			getSession: vi.fn()
 		} as any;
