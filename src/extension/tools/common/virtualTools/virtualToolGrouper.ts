@@ -379,7 +379,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 		return virtualTools.concat(uncategorized);
 	}
 
-	/** Creates predefined groups for built-in tools */
+	/** Creates groups for built-in tools based on the pre-defined enum above*/
 	private _createBuiltInToolGroups(tools: LanguageModelToolInformation[]): (VirtualTool | LanguageModelToolInformation)[] {
 		// If there are too few tools, don't group them
 		if (tools.length <= Constant.MIN_TOOLSET_SIZE_TO_GROUP) {
@@ -399,7 +399,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 				.filter((tool): tool is LanguageModelToolInformation => tool !== undefined);
 
 			if (groupTools.length > 0) {
-				// Mark these tools as used
+				// Mark each tool that has already been added to a group
 				groupTools.forEach(tool => usedTools.add(tool.name));
 
 				// Create the virtual tool group
