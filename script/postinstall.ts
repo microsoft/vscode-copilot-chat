@@ -129,7 +129,7 @@ async function main() {
 	], 'dist');
 
 	// Clone zeromq.js from specific commit
-	await cloneZeroMQ('a19e8e373b3abc677f91b936d3f00d49b1b61792');
+	await cloneZeroMQ('1cbebce3e17801bea63a4dcc975b982923cb4592');
 
 	await downloadZMQ();
 
