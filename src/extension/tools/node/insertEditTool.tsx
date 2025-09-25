@@ -117,7 +117,7 @@ export class EditFileTool implements ICopilotTool<IEditFileParams> {
 		return input;
 	}
 
-	private recordEditSuccess(options: vscode.LanguageModelToolInvocationOptions<IEditFileParams>, tool: EditTools, success: boolean) {
+	private recordEditSuccess(options: vscode.LanguageModelToolInvocationOptions<IEditFileParams>, success: boolean) {
 		if (options.model) {
 			this.editToolLearningService.didMakeEdit(options.model, ToolName.EditFile, success);
 		}
