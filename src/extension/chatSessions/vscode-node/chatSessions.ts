@@ -17,7 +17,7 @@ import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProv
 import { ClaudeChatSessionItemProvider, ClaudeSessionDataStore } from './claudeChatSessionItemProvider';
 
 export class ChatSessionsContrib extends Disposable implements IExtensionContribution {
-	readonly id = 'chatSessions';
+	readonly chatSessionType = 'claude-code';
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
@@ -33,9 +33,17 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 
 		const sessionStore = claudeAgentInstaService.createInstance(ClaudeSessionDataStore);
 		const sessionItemProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionItemProvider, sessionStore));
-		this._register(vscode.chat.registerChatSessionItemProvider('claude-code', sessionItemProvider));
+		this._register(vscode.chat.registerChatSessionItemProvider(this.chatSessionType, sessionItemProvider));
 		this._register(vscode.commands.registerCommand('github.copilot.claude.sessions.refresh', () => {
 			sessionItemProvider.refresh();
+		}));
+		this._register(vscode.commands.registerCommand('github.copilot.claude.sessions.create.worktree', async () => {
+			const workingDirectory = await vscode.commands.executeCommand('git.createWorktreeWithDefaults');
+			const metadata: Record<string, any> = {};
+			if (workingDirectory) {
+				metadata.workingDirectory = workingDirectory;
+			}
+			await vscode.commands.executeCommand('workbench.action.chat.openNewSessionEditorWithMetadata', this.chatSessionType, metadata);
 		}));
 
 		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
