@@ -49,6 +49,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 	private _currentModels: vscode.LanguageModelChatInformation[] = []; // Store current models for reference
 	private _chatEndpoints: IChatEndpoint[] = [];
 	private _lmWrapper: CopilotLanguageModelWrapper;
+	private _promptBaseCountCache: LanguageModelAccessPromptBaseCountCache;
 
 	constructor(
 		@ILogService private readonly _logService: ILogService,
@@ -64,6 +65,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		super();
 
 		this._lmWrapper = this._instantiationService.createInstance(CopilotLanguageModelWrapper);
+		this._promptBaseCountCache = this._instantiationService.createInstance(LanguageModelAccessPromptBaseCountCache);
 
 		if (this._vsCodeExtensionContext.extensionMode === ExtensionMode.Test && !isScenarioAutomation) {
 			this._logService.warn('[LanguageModelAccess] LanguageModels and Embeddings are NOT AVAILABLE in test mode.');
@@ -148,7 +150,9 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				modelCategory = { label: localize('languageModelHeader.standard', "Standard Models"), order: 0 };
 			}
 
-			const baseCount = await PromptRenderer.create(this._instantiationService, endpoint, LanguageModelAccessPrompt, { noSafety: false, messages: [] }).countTokens();
+			// Counting tokens requires instantiating the tokenizers, which makes this process use a lot of memory.
+			// Let's cache the results across extension activations
+			const baseCount = await this._promptBaseCountCache.getBaseCount(endpoint);
 			let multiplierString = endpoint.multiplier !== undefined ? `${endpoint.multiplier}x` : undefined;
 			if (endpoint.model === AutoChatEndpoint.id) {
 				multiplierString = 'Variable';
@@ -256,6 +260,40 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			return undefined;
 		}
 	}
+}
+
+class LanguageModelAccessPromptBaseCountCache {
+	constructor(
+		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IEnvService private readonly _envService: IEnvService
+	) { }
+
+	public async getBaseCount(endpoint: IChatEndpoint): Promise<number> {
+		const key = `lmBaseCount/${endpoint.model}`;
+		const cached = this._extensionContext.globalState.get<{ extensionVersion: string; baseCount: number }>(key);
+		if (cached && cached.extensionVersion === this._envService.getVersion() && typeof cached.baseCount === 'number') {
+			return cached.baseCount;
+		}
+
+		const baseCount = await this._computeBaseCount(endpoint);
+		// Store the computed value along with the extension version so we can
+		// invalidate the cache when the extension is updated.
+		try {
+			await this._extensionContext.globalState.update(key, { extensionVersion: this._envService.getVersion(), baseCount });
+		} catch (err) {
+			// Best-effort cache update — don't fail the caller if persisting the
+			// cache entry fails for any reason.
+		}
+
+		return baseCount;
+	}
+
+	private async _computeBaseCount(endpoint: IChatEndpoint): Promise<number> {
+		const baseCount = await PromptRenderer.create(this._instantiationService, endpoint, LanguageModelAccessPrompt, { noSafety: false, messages: [] }).countTokens();
+		return baseCount;
+	}
+
 }
 
 /**
