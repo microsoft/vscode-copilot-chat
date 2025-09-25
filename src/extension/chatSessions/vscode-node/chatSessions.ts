@@ -55,7 +55,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 					/* New, empty session */
 					const claudeSessionId = await create();
 					if (claudeSessionId) {
-						// Tell UI to replace with claude-backed sesssion
+						// Tell UI to replace with claude-backed session
 						sessionItemProvider.swap(chatSessionContext.chatSessionItem, { id: claudeSessionId, label: request.prompt ?? 'Claude Code' });
 					}
 					return {};
