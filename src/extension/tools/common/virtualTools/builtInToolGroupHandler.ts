@@ -95,7 +95,6 @@ export class BuiltInToolGroupHandler {
 			return tools;
 		}
 
-		// Create a map of tool names to tool objects for easy lookup
 		const toolMap = new Map(tools.map(tool => [tool.name, tool]));
 
 		const virtualTools: VirtualTool[] = [];
@@ -111,7 +110,6 @@ export class BuiltInToolGroupHandler {
 				// Mark each tool that has already been added to a group
 				groupTools.forEach(tool => usedTools.add(tool.name));
 
-				// Create the virtual tool group
 				const virtualTool = new VirtualTool(
 					VIRTUAL_TOOL_NAME_PREFIX + groupName.toLowerCase().replace(/\s+/g, '_'),
 					SUMMARY_PREFIX + groupDef.summary + SUMMARY_SUFFIX,
@@ -132,16 +130,6 @@ export class BuiltInToolGroupHandler {
 
 		// Send telemetry for built-in tool grouping
 		this._telemetryService.sendMSFTTelemetryEvent('virtualTools.generate', {
-			groupKey: BUILT_IN_GROUP,
-		}, {
-			uncategorized: uncategorizedTools.length,
-			toolsBefore: tools.length,
-			toolsAfter: virtualTools.length,
-			retries: 0, // No retries for predefined groups
-			durationMs: 0, // Instant for predefined groups
-		});
-
-		this._telemetryService.sendEnhancedGHTelemetryEvent('virtualTools.generate', {
 			groupKey: BUILT_IN_GROUP,
 		}, {
 			uncategorized: uncategorizedTools.length,
