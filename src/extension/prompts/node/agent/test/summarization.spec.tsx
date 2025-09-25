@@ -15,7 +15,7 @@ import { IResponseDelta } from '../../../../../platform/networking/common/fetch'
 import { ITestingServicesAccessor } from '../../../../../platform/test/node/services';
 import { TestWorkspaceService } from '../../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
-import { ExtHostDocumentData } from '../../../../../util/common/test/shims/textDocument';
+import { createTextDocumentData } from '../../../../../util/common/test/shims/textDocument';
 import { URI } from '../../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
@@ -39,7 +39,7 @@ suite('Agent Summarization', () => {
 	let conversation: Conversation;
 
 	beforeAll(() => {
-		const testDoc = ExtHostDocumentData.create(fileTsUri, 'line 1\nline 2\n\nline 4\nline 5', 'ts').document;
+		const testDoc = createTextDocumentData(fileTsUri, 'line 1\nline 2\n\nline 4\nline 5', 'ts').document;
 
 		const services = createExtensionUnitTestingServices();
 		services.define(IWorkspaceService, new SyncDescriptor(
@@ -74,7 +74,7 @@ suite('Agent Summarization', () => {
 
 	async function agentPromptToString(accessor: ITestingServicesAccessor, promptContext: IBuildPromptContext, otherProps?: Partial<AgentPromptProps>, promptType: TestPromptType = TestPromptType.Agent): Promise<string> {
 		const instaService = accessor.get(IInstantiationService);
-		const endpoint = instaService.createInstance(MockEndpoint);
+		const endpoint = instaService.createInstance(MockEndpoint, undefined);
 		normalizeSummariesOnRounds(promptContext.history);
 		if (!promptContext.conversation) {
 			promptContext = { ...promptContext, conversation };
@@ -111,7 +111,7 @@ suite('Agent Summarization', () => {
 		addCacheBreakpoints(r.messages);
 		return r.messages
 			.filter(message => message.role !== Raw.ChatRole.System)
-			.map(messageToMarkdown)
+			.map(m => messageToMarkdown(m))
 			.join('\n\n')
 			.replace(/\\+/g, '/')
 			.replace(/The current date is.*/g, '(Date removed from snapshot)');

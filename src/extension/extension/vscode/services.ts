@@ -28,7 +28,7 @@ import { IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddi
 import { RemoteEmbeddingsComputer } from '../../../platform/embeddings/common/remoteEmbeddingsComputer';
 import { ICombinedEmbeddingIndex, VSCodeCombinedIndexImpl } from '../../../platform/embeddings/common/vscodeIndex';
 import { AutomodeService, IAutomodeService } from '../../../platform/endpoint/common/automodeService';
-import { IEnvService } from '../../../platform/env/common/envService';
+import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { EnvServiceImpl } from '../../../platform/env/vscode/envServiceImpl';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IExtensionsService } from '../../../platform/extensions/common/extensionsService';
@@ -90,6 +90,8 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { ExtensionTextDocumentManager } from '../../../platform/workspace/vscode/workspaceServiceImpl';
 import { IInstantiationServiceBuilder } from '../../../util/common/services';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
+import { IMergeConflictService } from '../../git/common/mergeConflictService';
+import { MergeConflictServiceImpl } from '../../git/vscode/mergeConflictServiceImpl';
 import { ILaunchConfigService } from '../../onboardDebug/common/launchConfigService';
 import { LaunchConfigService } from '../../onboardDebug/vscode/launchConfigService';
 import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
@@ -123,8 +125,8 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ITabsAndEditorsService, new TabsAndEditorsServiceImpl());
 	builder.define(ITerminalService, new SyncDescriptor(TerminalServiceImpl));
 	builder.define(ITestProvider, new SyncDescriptor(TestProvider));
-	builder.define(IUrlOpener, isTestMode ? new NullUrlOpener() : new RealUrlOpener());
-	builder.define(INotificationService, isTestMode ? new NullNotificationService() : new NotificationService());
+	builder.define(IUrlOpener, isTestMode && !isScenarioAutomation ? new NullUrlOpener() : new RealUrlOpener());
+	builder.define(INotificationService, isTestMode && !isScenarioAutomation ? new NullNotificationService() : new NotificationService());
 	builder.define(IVSCodeExtensionContext, <any>/*force _serviceBrand*/extensionContext);
 	builder.define(IWorkbenchService, new WorkbenchServiceImpl());
 	builder.define(IConversationOptions, {
@@ -167,4 +169,5 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IEmbeddingsComputer, new SyncDescriptor(RemoteEmbeddingsComputer));
 	builder.define(IToolGroupingService, new SyncDescriptor(ToolGroupingService));
 	builder.define(IToolGroupingCache, new SyncDescriptor(ToolGroupingCache));
+	builder.define(IMergeConflictService, new SyncDescriptor(MergeConflictServiceImpl));
 }

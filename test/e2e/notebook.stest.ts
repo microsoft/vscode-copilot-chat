@@ -14,10 +14,10 @@ import { AlternativeNotebookContentEditGenerator, IAlternativeNotebookContentEdi
 import { INotebookService, VariablesResult } from '../../src/platform/notebook/common/notebookService';
 import { IFile, SimulationWorkspace } from '../../src/platform/test/node/simulationWorkspace';
 import { SimulationAlternativeNotebookContentService, SimulationNotebookService } from '../../src/platform/test/node/simulationWorkspaceServices';
-import { NotebookRange } from '../../src/util/common/test/shims/notebookDocument';
 import { ResourceMap } from '../../src/util/vs/base/common/map';
 import { assertType } from '../../src/util/vs/base/common/types';
 import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/descriptors';
+import { NotebookRange } from '../../src/util/vs/workbench/api/common/extHostTypes/notebooks';
 import { ISimulationTestRuntime, ssuite, stest } from '../base/stest';
 import { ensurePythonVEnv } from '../simulation/diagnosticProviders/python';
 import { simulateInlineChat } from '../simulation/inlineChatSimulator';

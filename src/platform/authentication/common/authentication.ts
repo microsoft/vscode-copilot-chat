@@ -214,8 +214,6 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 	}
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
 		try {
-			await this.getAnyGitHubSession({ silent: true });
-			// TODO: could this take in an auth session?
 			const token = await this._tokenManager.getCopilotToken(force);
 			this._tokenStore.copilotToken = token;
 			this._copilotTokenError = undefined;
@@ -286,9 +284,8 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 		}
 
 		if (anyAdoSessionBefore?.accessToken !== this._anyAdoSession?.accessToken) {
-			this._logService.debug('Ado auth state changed, firing event.');
+			this._logService.debug(`Ado auth state changed, firing event. Had token before: ${!!anyAdoSessionBefore?.accessToken}. Has token now: ${!!this._anyAdoSession?.accessToken}.`);
 			this._onDidAdoAuthenticationChange.fire();
-			return;
 		}
 
 		// Auth state hasn't changed, but the Copilot token might have

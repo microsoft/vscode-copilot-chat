@@ -26,6 +26,7 @@ export enum ToolName {
 	EditFile = 'insert_edit_into_file',
 	CreateFile = 'create_file',
 	ReplaceString = 'replace_string_in_file',
+	MultiReplaceString = 'multi_replace_string_in_file',
 	EditNotebook = 'edit_notebook_file',
 	RunNotebookCell = 'run_notebook_cell',
 	GetNotebookSummary = 'copilot_getNotebookSummary',
@@ -41,7 +42,6 @@ export enum ToolName {
 	SimpleBrowser = 'open_simple_browser',
 	CreateDirectory = 'create_directory',
 	RunVscodeCmd = 'run_vscode_command',
-	GetTaskOutput = 'get_task_output',
 	CoreManageTodoList = 'manage_todo_list',
 	CoreRunInTerminal = 'run_in_terminal',
 	CoreGetTerminalOutput = 'get_terminal_output',
@@ -51,6 +51,11 @@ export enum ToolName {
 	CoreRunTask = 'run_task',
 	CoreGetTaskOutput = 'get_task_output',
 	CoreRunTest = 'runTests',
+	ToolReplay = 'tool_replay',
+	EditFilesPlaceholder = 'edit_files',
+	ExecutePrompt = 'execute_prompt',
+	ExecuteTask = 'execute_task',
+	CoreConfirmationTool = 'vscode_get_confirmation'
 }
 
 export enum ContributedToolName {
@@ -76,6 +81,7 @@ export enum ContributedToolName {
 	EditFile = 'copilot_insertEdit',
 	CreateFile = 'copilot_createFile',
 	ReplaceString = 'copilot_replaceString',
+	MultiReplaceString = 'copilot_multiReplaceString',
 	EditNotebook = 'copilot_editNotebook',
 	RunNotebookCell = 'copilot_runNotebookCell',
 	GetNotebookSummary = 'copilot_getNotebookSummary',
@@ -91,6 +97,10 @@ export enum ContributedToolName {
 	SimpleBrowser = 'copilot_openSimpleBrowser',
 	CreateDirectory = 'copilot_createDirectory',
 	RunVscodeCmd = 'copilot_runVscodeCommand',
+	ToolReplay = 'copilot_toolReplay',
+	EditFilesPlaceholder = 'copilot_editFiles',
+	ExecutePrompt = 'execute_prompt',
+	ExecuteTask = 'execute_task',
 }
 
 const toolNameToContributedToolNames = new Map<ToolName, ContributedToolName>();

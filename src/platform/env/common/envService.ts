@@ -61,6 +61,12 @@ export interface IEnvService {
 	openExternal(target: URI): Promise<boolean>;
 }
 
+export const INativeEnvService = createServiceIdentifier<INativeEnvService>('INativeEnvService');
+export interface INativeEnvService extends IEnvService {
+	readonly _serviceBrand: undefined;
+	userHome: URI;
+}
+
 export abstract class AbstractEnvService implements IEnvService {
 	language: string | undefined;
 	declare _serviceBrand: undefined;
@@ -128,3 +134,7 @@ export abstract class AbstractEnvService implements IEnvService {
 
 	abstract openExternal(target: URI): Promise<boolean>;
 }
+
+// FIXME: This needs to be used in locations where the EnvService is not yet available, so it's
+//        not part of the env service itself.
+export const isScenarioAutomation = env['IS_SCENARIO_AUTOMATION'] === '1';

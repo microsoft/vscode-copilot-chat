@@ -135,7 +135,7 @@ export class CompletionsProvider extends Disposable {
 			return;
 		}
 
-		return new NextEditResult(logContext.requestId, new NextEditFetchRequest(logContext, startTime), {
+		return new NextEditResult(logContext.requestId, new NextEditFetchRequest(context.requestUuid, logContext, startTime), {
 			edit: new StringReplacement(new OffsetRange(selection.start, selection.endExclusive), choice.text),
 			documentBeforeEdits: docContents,
 			showRangePreference: ShowNextEditPreference.Always,

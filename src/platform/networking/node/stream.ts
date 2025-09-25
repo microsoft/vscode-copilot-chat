@@ -386,8 +386,7 @@ export class SSEProcessor {
 					// Would only be 0 if we're the first actual response chunk
 					this.requestId = getRequestId(this.response, json);
 					if (this.requestId.created === 0 && json.choices?.length) { // An initial chunk is sent with an empty choices array and no id, to hold `prompt_filter_results`
-						this.logService.error(`Request id invalid, should have "completionId" and "created": ${JSON.stringify(this.requestId)} ${this.requestId}`);
-						sendCommunicationErrorTelemetry(this.telemetryService, `Request id invalid, should have "completionId" and "created": ${JSON.stringify(this.requestId)}`, this.requestId);
+						this.requestId.created = Math.floor(Date.now() / 1000);
 					}
 				}
 
@@ -514,7 +513,7 @@ export class SSEProcessor {
 						this.completedFunctionCallIdxs.set(choice.index, 'tool');
 						const toolId = toolCalls.length > 0 ? toolCalls[0].id : undefined;
 						try {
-							if (await emitSolution({ toolCalls: toolCalls, thinking: (toolId && thinkingFound) ? { metadata: toolId } : undefined })) {
+							if (await emitSolution({ toolCalls: toolCalls, thinking: (toolId && thinkingFound) ? { metadata: { toolId } } : undefined })) {
 								continue;
 							}
 						} catch (error) {

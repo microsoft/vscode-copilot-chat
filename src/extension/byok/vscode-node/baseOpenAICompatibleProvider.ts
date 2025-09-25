@@ -3,15 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, ChatResponseFragment2, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatRequestHandleOptions, Progress } from 'vscode';
-import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
+import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, Progress, ProvideLanguageModelChatResponseOptions } from 'vscode';
+import { IChatModelInformation, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotLanguageModelWrapper } from '../../conversation/vscode-node/languageModelAccess';
 import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, resolveModelInfo } from '../common/byokProvider';
 import { OpenAIEndpoint } from '../node/openAIEndpoint';
-import { OpenAIResponsesEndpoint } from '../node/openAIResponsesEndpoint';
 import { IBYOKStorageService } from './byokStorageService';
 import { promptForAPIKey } from './byokUIService';
 
@@ -63,7 +62,7 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 		}
 	}
 
-	async prepareLanguageModelChat(options: { silent: boolean }, token: CancellationToken): Promise<LanguageModelChatInformation[]> {
+	async provideLanguageModelChatInformation(options: { silent: boolean }, token: CancellationToken): Promise<LanguageModelChatInformation[]> {
 		if (!this._apiKey && this.authType === BYOKAuthType.GlobalApiKey) { // If we don't have the API key it might just be in storage, so we try to read it first
 			this._apiKey = await this._byokStorageService.getAPIKey(this._name);
 		}
@@ -84,9 +83,9 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 			return [];
 		}
 	}
-	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: LanguageModelChatRequestHandleOptions, progress: Progress<ChatResponseFragment2>, token: CancellationToken): Promise<any> {
+	async provideLanguageModelChatResponse(model: LanguageModelChatInformation, messages: Array<LanguageModelChatMessage | LanguageModelChatMessage2>, options: ProvideLanguageModelChatResponseOptions, progress: Progress<LanguageModelResponsePart2>, token: CancellationToken): Promise<any> {
 		const openAIChatEndpoint = await this.getEndpointImpl(model);
-		return this._lmWrapper.provideLanguageModelResponse(openAIChatEndpoint, messages, options, options.extensionId, progress, token);
+		return this._lmWrapper.provideLanguageModelResponse(openAIChatEndpoint, messages, options, options.requestInitiator, progress, token);
 	}
 	async provideTokenCount(model: LanguageModelChatInformation, text: string | LanguageModelChatMessage | LanguageModelChatMessage2, token: CancellationToken): Promise<number> {
 		const openAIChatEndpoint = await this.getEndpointImpl(model);
@@ -95,11 +94,10 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 
 	private async getEndpointImpl(model: LanguageModelChatInformation): Promise<OpenAIEndpoint> {
 		const modelInfo: IChatModelInformation = await this.getModelInfo(model.id, this._apiKey);
-		if (modelInfo.capabilities.supports.statefulResponses) {
-			return this._instantiationService.createInstance(OpenAIResponsesEndpoint, modelInfo, this._apiKey ?? '', `${this._baseUrl}/responses`);
-		} else {
-			return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, this._apiKey ?? '', `${this._baseUrl}/chat/completions`);
-		}
+		const url = modelInfo.supported_endpoints?.includes(ModelSupportedEndpoint.Responses) ?
+			`${this._baseUrl}/responses` :
+			`${this._baseUrl}/chat/completions`;
+		return this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, this._apiKey ?? '', url);
 	}
 
 	async updateAPIKey(): Promise<void> {

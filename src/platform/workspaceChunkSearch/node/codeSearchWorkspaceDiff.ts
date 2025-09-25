@@ -10,12 +10,11 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ResourceMap, ResourceSet } from '../../../util/vs/base/common/map';
 import { isEqualOrParent } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
-import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LogExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
 import { CodeSearchDiff, CodeSearchRepoTracker, RepoEntry, RepoStatus } from '../../remoteCodeSearch/node/codeSearchRepoTracker';
 import { ISimulationTestContext } from '../../simulationTestContext/common/simulationTestContext';
-import { IWorkspaceFileIndex, shouldIndexFile } from './workspaceFileIndex';
+import { IWorkspaceFileIndex } from './workspaceFileIndex';
 
 enum RepoState {
 	Initializing,
@@ -32,6 +31,8 @@ interface RepoDiffState {
 export class CodeSearchWorkspaceDiffTracker extends Disposable {
 
 	private static readonly _diffRefreshInterval = 1000 * 60 * 2; // 2 minutes
+
+	private static readonly _maxDiffFiles = 10000;
 
 	private readonly _repos = new ResourceMap<RepoDiffState>();
 
@@ -52,7 +53,6 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 
 	constructor(
 		repoTracker: CodeSearchRepoTracker,
-		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ILogService private readonly _logService: ILogService,
 		@IWorkspaceFileIndex private readonly _workspaceFileIndex: IWorkspaceFileIndex,
 		@ISimulationTestContext private readonly _simulationTestContext: ISimulationTestContext,
@@ -91,7 +91,7 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 		this.init();
 	}
 
-	@LogExecTime(self => self._logService, 'CodeSearchWorkspaceDiff.init')
+	@LogExecTime(self => self._logService, 'CodeSearchWorkspaceDiff::init')
 	private async init() {
 		try {
 			await Promise.all([
@@ -158,16 +158,20 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 
 	private async tryGetDiffedIndexedFiles(info: RepoEntry): Promise<URI[] | undefined> {
 		const diff = await this.tryGetDiff(info);
+		this._logService.trace(`CodeSearchWorkspaceDiff::tryGetDiffedIndexedFiles() Got ${diff?.changes.length ?? 0} initially changed files for ${info.repo.rootUri}`);
 		if (!diff) {
 			return;
 		}
 
 		const initialChanges = new ResourceSet();
-		await Promise.all(diff.changes.map(async change => {
-			if (await this._instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, change.uri, CancellationToken.None))) {
+		await Promise.all(diff.changes.slice(0, CodeSearchWorkspaceDiffTracker._maxDiffFiles).map(async change => {
+			if (await this._workspaceFileIndex.shouldIndexWorkspaceFile(change.uri, CancellationToken.None)) {
 				initialChanges.add(change.uri);
 			}
 		}));
+
+		this._logService.trace(`CodeSearchWorkspaceDiff::tryGetDiffedIndexedFiles() Returning ${initialChanges} changes for ${info.repo.rootUri}`);
+
 		return Array.from(initialChanges);
 	}
 
@@ -181,11 +185,11 @@ export class CodeSearchWorkspaceDiffTracker extends Disposable {
 	}
 
 	private async refreshRepoDiff(repo: RepoDiffState) {
-		this._logService.trace(`CodeSearchWorkspaceDiff: refreshing diff for ${repo.info.repo.rootUri}.`);
+		this._logService.trace(`CodeSearchWorkspaceDiff: refreshing diff for ${repo.info.repo.rootUri}`);
 
 		if (this._simulationTestContext.isInSimulationTests) {
 			// In simulation tests, we don't want to refresh the diff
-			this._logService.trace(`CodeSearchWorkspaceDiff: Skipping diff refresh for ${repo.info.repo.rootUri} in simulation tests.`);
+			this._logService.trace(`CodeSearchWorkspaceDiff: Skipping diff refresh for ${repo.info.repo.rootUri} in simulation tests`);
 			repo.state = RepoState.Ready;
 			return;
 		}

@@ -92,7 +92,7 @@ export type ISerialisedChatResponse = {
 		prompt_tokens: number;
 		completion_tokens: number;
 		total_tokens: number;
-		prompt_tokens_details: {
+		prompt_tokens_details?: {
 			cached_tokens: number;
 		};
 	};
@@ -116,12 +116,13 @@ export class InterceptedRequest {
 		public readonly response: ISerialisedChatResponse,
 		public readonly cacheKey: string | undefined,
 		public readonly model: string | undefined,
+		public readonly duration?: number
 	) {
 		// console.log('InterceptedRequest', requestMessages, requestOptions, response, cacheKey, model);
 	}
 
 	static fromJSON(json: any): InterceptedRequest {
-		const request = new InterceptedRequest(json.requestMessages, json.requestOptions, json.response, json.cacheKey, json.model);
+		const request = new InterceptedRequest(json.requestMessages, json.requestOptions, json.response, json.cacheKey, json.model, json.duration);
 		return request;
 	}
 
@@ -132,6 +133,7 @@ export class InterceptedRequest {
 			response: this.response,
 			cacheKey: this.cacheKey,
 			model: this.model,
+			duration: this.duration
 		};
 	}
 }

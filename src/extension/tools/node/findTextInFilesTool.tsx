@@ -50,8 +50,9 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		const askedForTooManyResults = options.input.maxResults && options.input.maxResults > MaxResultsCap;
 		const maxResults = Math.min(options.input.maxResults ?? 20, MaxResultsCap);
 		const isRegExp = options.input.isRegexp ?? true;
+		const queryIsValidRegex = this.isValidRegex(options.input.query);
 		let results = await this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, token);
-		if (!results.length) {
+		if (!results.length && queryIsValidRegex) {
 			results = await this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, token);
 		}
 
@@ -76,6 +77,15 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		return result;
 	}
 
+	private isValidRegex(pattern: string): boolean {
+		try {
+			new RegExp(pattern);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
 	private async searchAndCollectResults(query: string, isRegExp: boolean, patterns: vscode.GlobPattern[] | undefined, maxResults: number, token: CancellationToken): Promise<vscode.TextSearchResult2[]> {
 		const searchResult = this.searchService.findTextInFiles2(
 			{
@@ -92,6 +102,9 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 			checkCancellation(token);
 			results.push(item);
 		}
+
+		// Necessary in case it was rejected
+		await searchResult.complete;
 
 		return results;
 	}

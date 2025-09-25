@@ -3,17 +3,16 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-
-import { OpenAI } from '@vscode/prompt-tsx';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
+import { IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
+import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
-import { IEndpointBody } from '../../networking/common/networking';
-import { CAPIChatMessage } from '../../networking/common/openai';
+import { RawMessageConversionCallback } from '../../networking/common/openai';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { IThinkingDataService } from '../../thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
@@ -22,52 +21,42 @@ import { ChatEndpoint } from './chatEndpoint';
 
 export class CopilotChatEndpoint extends ChatEndpoint {
 	constructor(
-		readonly modelMetadata: IChatModelInformation,
-		@IDomainService readonly domainService: IDomainService,
-		@ICAPIClientService readonly capiClientService: ICAPIClientService,
-		@IFetcherService readonly fetcherService: IFetcherService,
-		@IEnvService readonly envService: IEnvService,
-		@ITelemetryService readonly telemetryService: ITelemetryService,
-		@IAuthenticationService readonly authService: IAuthenticationService,
-		@IChatMLFetcher readonly chatMLFetcher: IChatMLFetcher,
-		@ITokenizerProvider readonly tokenizerProvider: ITokenizerProvider,
-		@IInstantiationService readonly instantiationService: IInstantiationService,
-		@IThinkingDataService readonly thinkingDataService: IThinkingDataService,
+		modelMetadata: IChatModelInformation,
+		@IDomainService domainService: IDomainService,
+		@ICAPIClientService capiClientService: ICAPIClientService,
+		@IFetcherService fetcherService: IFetcherService,
+		@IEnvService envService: IEnvService,
+		@ITelemetryService telemetryService: ITelemetryService,
+		@IAuthenticationService authService: IAuthenticationService,
+		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
+		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
+		@IInstantiationService instantiationService: IInstantiationService,
+		@IConfigurationService configurationService: IConfigurationService,
+		@IExperimentationService experimentService: IExperimentationService,
+		@ILogService logService: ILogService
 	) {
 		super(
 			modelMetadata,
 			domainService,
 			capiClientService,
 			fetcherService,
-			envService,
 			telemetryService,
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
-			instantiationService
+			instantiationService,
+			configurationService,
+			experimentService,
+			logService
 		);
 	}
 
-	override interceptBody(body: IEndpointBody | undefined): void {
-		super.interceptBody(body);
-
-		if (body?.messages) {
-			const newMessages: CAPIChatMessage[] = body.messages.map((message: CAPIChatMessage): CAPIChatMessage => {
-				if (message.role === OpenAI.ChatRole.Assistant && message.tool_calls && message.tool_calls.length > 0) {
-					const id = message.tool_calls[0].id;
-					const thinking = this.thinkingDataService.get(id);
-					if (thinking?.id) {
-						const newMessage = {
-							...message,
-							reasoning_opaque: thinking.id,
-							reasoning_text: thinking.text,
-						};
-						return newMessage;
-					}
-				}
-				return message;
-			});
-			body['messages'] = newMessages;
-		}
+	protected override getCompletionsCallback(): RawMessageConversionCallback | undefined {
+		return (out, data) => {
+			if (data && data.id) {
+				out.reasoning_opaque = data.id;
+				out.reasoning_text = Array.isArray(data.text) ? data.text.join('') : data.text;
+			}
+		};
 	}
 }

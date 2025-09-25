@@ -106,10 +106,6 @@ export class ProxyExperimentEndpoint implements IChatEndpoint {
 		return this.selectedEndpoint.tokenizer;
 	}
 
-	get supportsStatefulResponses() {
-		return this.selectedEndpoint.supportsStatefulResponses;
-	}
-
 	processResponseFromChatEndpoint(telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData, cancellationToken?: CancellationToken): Promise<AsyncIterableObject<ChatCompletion>> {
 		return this.selectedEndpoint.processResponseFromChatEndpoint(telemetryService, logService, response, expectedNumChoices, finishCallback, telemetryData, cancellationToken);
 	}
@@ -140,16 +136,16 @@ export class ProxyExperimentEndpoint implements IChatEndpoint {
 }
 
 
-interface ExperimentConfig {
+export interface ExperimentConfig {
 	selected: string;
 	name: string;
 	id: string;
 }
 
 export function getCustomDefaultModelExperimentConfig(expService: IExperimentationService): ExperimentConfig | undefined {
-	const selected = expService.getTreatmentVariable<string>('vscode', 'custommodel1');
-	const id = expService.getTreatmentVariable<string>('vscode', 'custommodel1.id');
-	const name = expService.getTreatmentVariable<string>('vscode', 'custommodel1.name');
+	const selected = expService.getTreatmentVariable<string>('custommodel1');
+	const id = expService.getTreatmentVariable<string>('custommodel1.id');
+	const name = expService.getTreatmentVariable<string>('custommodel1.name');
 	if (selected && id && name) {
 		return { selected, id, name };
 	}

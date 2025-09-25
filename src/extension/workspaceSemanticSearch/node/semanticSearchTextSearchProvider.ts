@@ -158,6 +158,7 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 				{
 					endpoint: await this.getEndpoint(),
 					tokenBudget: MAX_CHUNK_TOKEN_COUNT,
+					fullWorkspaceTokenBudget: MAX_CHUNK_TOKEN_COUNT,
 					maxResults: MAX_CHUNKS_RESULTS,
 				},
 				{

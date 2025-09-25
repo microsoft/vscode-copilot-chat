@@ -7,10 +7,10 @@
 
 import { compareBy, numberComparator } from './arrays';
 import { groupBy } from './collections';
-import { BugIndicatingError, onUnexpectedError } from './errors';
+import { SetMap } from './map';
 import { createSingleCallFunction } from './functional';
 import { Iterable } from './iterator';
-import { SetMap } from './map';
+import { BugIndicatingError, onUnexpectedError } from './errors';
 
 // #region Disposable Tracking
 
@@ -443,7 +443,7 @@ export class DisposableStore implements IDisposable {
 	 * Add a new {@link IDisposable disposable} to the collection.
 	 */
 	public add<T extends IDisposable>(o: T): T {
-		if (!o) {
+		if (!o || o === Disposable.None) {
 			return o;
 		}
 		if ((o as unknown as DisposableStore) === this) {
@@ -643,35 +643,6 @@ export class RefCountedDisposable {
 	}
 }
 
-/**
- * A safe disposable can be `unset` so that a leaked reference (listener)
- * can be cut-off.
- */
-export class SafeDisposable implements IDisposable {
-
-	dispose: () => void = () => { };
-	unset: () => void = () => { };
-	isset: () => boolean = () => false;
-
-	constructor() {
-		trackDisposable(this);
-	}
-
-	set(fn: Function) {
-		let callback: Function | undefined = fn;
-		this.unset = () => callback = undefined;
-		this.isset = () => callback !== undefined;
-		this.dispose = () => {
-			if (callback) {
-				callback();
-				callback = undefined;
-				markAsDisposed(this);
-			}
-		};
-		return this;
-	}
-}
-
 export interface IReference<T> extends IDisposable {
 	readonly object: T;
 }
@@ -804,6 +775,7 @@ export class DisposableMap<K, V extends IDisposable = IDisposable> implements ID
 		}
 
 		this._store.set(key, value);
+		setParentOfDisposable(value, this);
 	}
 
 	/**
@@ -820,6 +792,9 @@ export class DisposableMap<K, V extends IDisposable = IDisposable> implements ID
 	 */
 	deleteAndLeak(key: K): V | undefined {
 		const value = this._store.get(key);
+		if (value) {
+			setParentOfDisposable(value, null);
+		}
 		this._store.delete(key);
 		return value;
 	}
@@ -850,5 +825,21 @@ export function thenIfNotDisposed<T>(promise: Promise<T>, then: (result: T) => v
 	});
 	return toDisposable(() => {
 		disposed = true;
+	});
+}
+
+/**
+ * Call `then` on a promise that resolves to a {@link IDisposable}, then either register the
+ * disposable or register it to the {@link DisposableStore}, depending on whether the store is
+ * disposed or not.
+ */
+export function thenRegisterOrDispose<T extends IDisposable>(promise: Promise<T>, store: DisposableStore): Promise<T> {
+	return promise.then(disposable => {
+		if (store.isDisposed) {
+			disposable.dispose();
+		} else {
+			store.add(disposable);
+		}
+		return disposable;
 	});
 }

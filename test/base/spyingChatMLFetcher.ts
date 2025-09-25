@@ -19,6 +19,7 @@ import { IInstantiationService } from '../../src/util/vs/platform/instantiation/
 import { InterceptedRequest, ISerialisedChatResponse } from '../simulation/shared/sharedTypes';
 import { CacheInfo, TestRunCacheInfo } from '../testExecutor';
 import { ResponseWithMeta } from './cachingChatMLFetcher';
+import { StopWatch } from '../../src/util/vs/base/common/stopwatch';
 
 export class FetchRequestCollector {
 	public readonly _interceptedRequests: InterceptedRequest[] = [];
@@ -53,6 +54,8 @@ export class FetchRequestCollector {
 	}
 
 	public get usage(): APIUsage {
+		// Have to extract this to give it an explicit type or TS is confused
+		const initial: APIUsage = { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } };
 		return this.interceptedRequests.reduce((p, c): APIUsage => {
 			const initialUsage: APIUsage = { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } };
 			const cUsage = c.response.usage || initialUsage;
@@ -61,10 +64,10 @@ export class FetchRequestCollector {
 				prompt_tokens: p.prompt_tokens + cUsage.prompt_tokens,
 				total_tokens: p.total_tokens + cUsage.total_tokens,
 				prompt_tokens_details: {
-					cached_tokens: p.prompt_tokens_details.cached_tokens + (cUsage.prompt_tokens_details?.cached_tokens ?? 0),
+					cached_tokens: (p.prompt_tokens_details?.cached_tokens ?? 0) + (cUsage.prompt_tokens_details?.cached_tokens ?? 0),
 				}
 			};
-		}, { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0, prompt_tokens_details: { cached_tokens: 0 } });
+		}, initial);
 	}
 
 	public get averageRequestDuration(): number {
@@ -123,6 +126,7 @@ export class SpyingChatMLFetcher extends AbstractChatMLFetcher {
 
 		const respPromise = this.fetcher.fetchMany({ ...opts, finishedCb: captureToolCallsCb }, token);
 
+		const sw = new StopWatch(false);
 		this.requestCollector.addInterceptedRequest(respPromise.then(resp => {
 			let cacheKey: string | undefined;
 			if (typeof (resp as ResponseWithMeta).cacheKey === 'string') {
@@ -137,7 +141,7 @@ export class SpyingChatMLFetcher extends AbstractChatMLFetcher {
 					tool_calls: message.role === Raw.ChatRole.Assistant ? message.toolCalls : undefined,
 					name: message.name,
 				};
-			}), opts.requestOptions, resp, cacheKey, opts.endpoint.model);
+			}), opts.requestOptions, resp, cacheKey, opts.endpoint.model, sw.elapsed());
 		}));
 
 		return await respPromise;

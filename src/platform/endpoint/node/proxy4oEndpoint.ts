@@ -10,7 +10,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
 import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
-import { IEnvService } from '../../env/common/envService';
+import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
@@ -27,7 +27,6 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IFetcherService fetcherService: IFetcherService,
-		@IEnvService envService: IEnvService,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IAuthenticationService private readonly authService: IAuthenticationService,
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
@@ -35,6 +34,7 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
+		@ILogService logService: ILogService,
 	) {
 		const model = configurationService.getExperimentBasedConfig<string>(ConfigKey.Internal.InstantApplyModelName, experimentationService) ?? CHAT_MODEL.GPT4OPROXY;
 
@@ -61,12 +61,14 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 			domainService,
 			capiClientService,
 			fetcherService,
-			envService,
 			telemetryService,
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
-			instantiationService
+			instantiationService,
+			configurationService,
+			experimentationService,
+			logService
 		);
 	}
 

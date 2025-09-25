@@ -4227,16 +4227,16 @@
   {
     "name": "intent [inline] - call function generatexml on click of this button",
     "contentFilterCount": 0,
-    "passCount": 6,
-    "failCount": 4,
-    "score": 0.6
+    "passCount": 3,
+    "failCount": 7,
+    "score": 0.3
   },
   {
     "name": "intent [inline] - call timedelta with timestr",
     "contentFilterCount": 0,
-    "passCount": 1,
-    "failCount": 9,
-    "score": 0.1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "intent [inline] - can i just use inheritdoc here instead of a full comment?",
@@ -4297,9 +4297,9 @@
   {
     "name": "intent [inline] - change to formoat. from keras.api import x as x",
     "contentFilterCount": 0,
-    "passCount": 6,
-    "failCount": 4,
-    "score": 0.6
+    "passCount": 8,
+    "failCount": 2,
+    "score": 0.8
   },
   {
     "name": "intent [inline] - change to use c++ filesystem module",
@@ -4493,9 +4493,9 @@
   {
     "name": "intent [inline] - document with docc format",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 5,
+    "failCount": 5,
+    "score": 0.5
   },
   {
     "name": "intent [inline] - documentation",
@@ -4542,9 +4542,9 @@
   {
     "name": "intent [inline] - exaplain this",
     "contentFilterCount": 0,
-    "passCount": 6,
-    "failCount": 4,
-    "score": 0.6
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "intent [inline] - exit zen mode",
@@ -4689,9 +4689,9 @@
   {
     "name": "intent [inline] - fix to log the real error too",
     "contentFilterCount": 0,
-    "passCount": 8,
-    "failCount": 2,
-    "score": 0.8
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "intent [inline] - fix typos",
@@ -4794,9 +4794,9 @@
   {
     "name": "intent [inline] - get the name of the computer",
     "contentFilterCount": 0,
-    "passCount": 1,
-    "failCount": 9,
-    "score": 0.1
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "intent [inline] - help me continue generate the code for all column like 3 line above",
@@ -4843,9 +4843,9 @@
   {
     "name": "intent [inline] - how to set the labels to action buttons",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 1,
+    "failCount": 9,
+    "score": 0.1
   },
   {
     "name": "intent [inline] - i dont want code. i just want the hardcoded value",
@@ -4983,9 +4983,9 @@
   {
     "name": "intent [inline] - metadata_df will always contain just 1 row, is there a more efficient way to create new_row?",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 8,
+    "failCount": 2,
+    "score": 0.8
   },
   {
     "name": "intent [inline] - mock getflights in tests",
@@ -5046,9 +5046,9 @@
   {
     "name": "intent [inline] - put this in an usememo",
     "contentFilterCount": 0,
-    "passCount": 4,
-    "failCount": 6,
-    "score": 0.4
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "intent [inline] - python code to exit virtual environment",
@@ -5158,9 +5158,9 @@
   {
     "name": "intent [inline] - what does \"enabletabstermessagepaneattr\" in this codebase",
     "contentFilterCount": 0,
-    "passCount": 3,
-    "failCount": 7,
-    "score": 0.3
+    "passCount": 6,
+    "failCount": 4,
+    "score": 0.6
   },
   {
     "name": "intent [inline] - what does /m do?",
@@ -5214,9 +5214,9 @@
   {
     "name": "intent [inline] - what doest the -r tag do here",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "intent [inline] - what is .viewmodel here",
@@ -7216,9 +7216,9 @@
   {
     "name": "intent [panel] - [strict] [builtin] need to test new code in the file directsendemailprocessor.cs method publishdirec…",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 7,
+    "failCount": 3,
+    "score": 0.7
   },
   {
     "name": "intent [panel] - [strict] [builtin] newnotebook that creates four agents based on the microsoft autogen framework. th…",
@@ -7272,9 +7272,9 @@
   {
     "name": "intent [panel] - [strict] [builtin] pyhton calculator",
     "contentFilterCount": 0,
-    "passCount": 9,
-    "failCount": 1,
-    "score": 0.9
+    "passCount": 7,
+    "failCount": 3,
+    "score": 0.7
   },
   {
     "name": "intent [panel] - [strict] [builtin] remove current changes in branch with git?",
@@ -7405,9 +7405,9 @@
   {
     "name": "intent [panel] - [strict] [builtin] use the test() syntax instead of it()",
     "contentFilterCount": 0,
-    "passCount": 6,
-    "failCount": 4,
-    "score": 0.6
+    "passCount": 4,
+    "failCount": 6,
+    "score": 0.4
   },
   {
     "name": "intent [panel] - [strict] [builtin] using testng framework, write a test that reads two files, one being a sequence d…",
@@ -7447,9 +7447,9 @@
   {
     "name": "intent [panel] - [strict] [builtin] what are some best practices for unit testing the `publishdirectemail()` method i…",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 2,
+    "failCount": 8,
+    "score": 0.2
   },
   {
     "name": "intent [panel] - [strict] [builtin] What are the benefits of dynamic programming",
@@ -7531,9 +7531,9 @@
   {
     "name": "intent [panel] - [strict] [builtin] Where are on-hover chat view toolbar actions defined?",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 8,
+    "failCount": 2,
+    "score": 0.8
   },
   {
     "name": "intent [panel] - [strict] [builtin] Where is the debug session handling implemented",
@@ -7580,9 +7580,9 @@
   {
     "name": "intent [panel] - [strict] [builtin] write tests",
     "contentFilterCount": 0,
-    "passCount": 3,
-    "failCount": 7,
-    "score": 0.3
+    "passCount": 0,
+    "failCount": 10,
+    "score": 0
   },
   {
     "name": "intent [panel] - [strict] [github] delete git branch",
@@ -9172,23 +9172,23 @@
   {
     "name": "notebookEdits (bug reports - json) [panel] - Issue #13868",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "notebookEdits (bug reports - text) [panel] - Issue #13868",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "notebookEdits (bug reports - xml) [panel] - Issue #13868",
     "contentFilterCount": 0,
-    "passCount": 0,
-    "failCount": 10,
-    "score": 0
+    "passCount": 10,
+    "failCount": 0,
+    "score": 1
   },
   {
     "name": "notebookEdits (modification - json) [panel] [julia] - new julia code cells in empty notebook",
@@ -9928,9 +9928,9 @@
   {
     "name": "setupTests - recommend [panel] - goWebApp",
     "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
   },
   {
     "name": "setupTests - recommend [panel] - javaSpringApp",
@@ -11879,26 +11879,5 @@
     "passCount": 0,
     "failCount": 10,
     "score": 0
-  },
-  {
-    "name": "vscode (metaprompt) [panel] - enable word wrap in editer",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "vscode (metaprompt) [panel] - how do I change font size setting",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
-  },
-  {
-    "name": "vscode (metaprompt) [panel] - how to opne command pallete",
-    "contentFilterCount": 0,
-    "passCount": 10,
-    "failCount": 0,
-    "score": 1
   }
 ]

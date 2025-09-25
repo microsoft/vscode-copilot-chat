@@ -27,8 +27,8 @@ import { IFile, isNotebook, SimulationWorkspace } from '../../src/platform/test/
 import { ChatResponseStreamImpl } from '../../src/util/common/chatResponseStreamImpl';
 import { getLanguage, getLanguageForResource } from '../../src/util/common/languages';
 import { ChatRequestTurn, ChatResponseTurn } from '../../src/util/common/test/shims/chatTypes';
-import { ExtHostNotebookDocumentData, NotebookRange } from '../../src/util/common/test/shims/notebookDocument';
-import { ExtHostDocumentData } from '../../src/util/common/test/shims/textDocument';
+import { ExtHostNotebookDocumentData } from '../../src/util/common/test/shims/notebookDocument';
+import { createTextDocumentData, IExtHostDocumentData } from '../../src/util/common/test/shims/textDocument';
 import { CancellationToken } from '../../src/util/vs/base/common/cancellation';
 import { Event } from '../../src/util/vs/base/common/event';
 import { ResourceMap } from '../../src/util/vs/base/common/map';
@@ -37,7 +37,7 @@ import { commonPrefixLength, commonSuffixLength } from '../../src/util/vs/base/c
 import { URI } from '../../src/util/vs/base/common/uri';
 import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
-import { ChatLocation, ChatRequest, ChatRequestEditorData, ChatResponseMarkdownPart, ChatResponseNotebookEditPart, ChatResponseTextEditPart, Diagnostic, DiagnosticRelatedInformation, Location, Range, Selection, TextEdit, Uri, WorkspaceEdit } from '../../src/vscodeTypes';
+import { ChatLocation, ChatRequest, ChatRequestEditorData, ChatResponseMarkdownPart, ChatResponseNotebookEditPart, ChatResponseTextEditPart, Diagnostic, DiagnosticRelatedInformation, Location, NotebookRange, Range, Selection, TextEdit, Uri, WorkspaceEdit } from '../../src/vscodeTypes';
 import { SimulationExtHostToolsService } from '../base/extHostContext/simulationExtHostToolsService';
 import { SimulationWorkspaceExtHost } from '../base/extHostContext/simulationWorkspaceExtHost';
 import { SpyingChatMLFetcher } from '../base/spyingChatMLFetcher';
@@ -64,11 +64,12 @@ export function setupSimulationWorkspace(testingServiceCollection: TestingServic
 	return workspace;
 }
 
-export async function teardownSimulationWorkspace(accessor: ITestingServicesAccessor, _workbench: SimulationWorkspace): Promise<void> {
+export async function teardownSimulationWorkspace(accessor: ITestingServicesAccessor, workbench: SimulationWorkspace): Promise<void> {
 	const ls = accessor.get(ILanguageFeaturesService);
 	if (ls instanceof SimulationLanguageFeaturesService) {
 		await ls.teardown();
 	}
+	workbench.dispose();
 }
 
 function isDeserializedWorkspaceStateBasedScenario(scenario: IScenario): scenario is IDeserializedWorkspaceStateBasedScenario {
@@ -392,11 +393,11 @@ export async function simulateEditingScenario(
 				if (value instanceof ChatResponseTextEditPart && value.edits.length > 0) {
 					const { uri, edits } = value;
 
-					let doc: ExtHostDocumentData;
+					let doc: IExtHostDocumentData;
 					if (!workspace.hasDocument(uri)) {
 						// this is a new file
 						const language = getLanguageForResource(uri);
-						doc = ExtHostDocumentData.create(uri, '', language.languageId);
+						doc = createTextDocumentData(uri, '', language.languageId);
 						workspace.addDocument(doc);
 					} else {
 						doc = workspace.getDocument(uri);
@@ -518,13 +519,13 @@ export async function simulateEditingScenario(
 						outcomeFiles.push({
 							kind: 'relativeFile',
 							fileName: path.basename(uri.fsPath),
-							fileContents: workspace.getDocument(uri).getText()
+							fileContents: workspace.tryGetNotebook(uri)?.getText() ?? workspace.getDocument(uri).getText()
 						});
 					} else {
 						outcomeFiles.push({
 							kind: 'qualifiedFile',
 							uri: uri,
-							fileContents: workspace.getDocument(uri).getText()
+							fileContents: workspace.tryGetNotebook(uri)?.getText() ?? workspace.getDocument(uri).getText()
 						});
 					}
 					const offsetEdits = workingCopyDoc.appliedEdits;

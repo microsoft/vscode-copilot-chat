@@ -1,0 +1,126 @@
+name: 'Jupyter notebook, no open files, cursor near beginning, 1 previous cells'
+
+state:
+    current-file:
+        uri: file:///dad-jokes/src/notebook.ipynb
+        text: |-
+            {
+            "cells": [
+            {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "### Current file"
+            ]
+            },
+            {
+            "cell_type": "code",
+            "execution_count": null,
+            "metadata": {
+                "vscode": {
+                "languageId": "javascript"
+                }
+            },
+            "outputs": [],
+            "source": [
+                "export class DadJoke {\n",
+                "\n",
+                "    id;\n",
+                "    question;\n",
+                "    answer;\n",
+                "    status;\n",
+                "    rating;\n",
+                "\n",
+                "    constructor(\n",
+                "        id,\n",
+                "        question,\n",
+                "        answer,\n",
+                "        status = 'unseen',\n",
+                "        rating = 'unrated'\n",
+                "    ) {\n",
+                "        this.id = id;\n",
+                "        this.question = question;\n",
+                "        this.answer = answer;\n",
+                "        this.status = status;\n",
+                "        this.rating = rating;\n",
+                "    }\n",
+                "}"
+            ]
+            },
+            {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": [
+                "### Helper functions"
+            ]
+            },
+            {
+            "cell_type": "code",
+            "execution_count": null,
+            "metadata": {
+                "vscode": {
+                "languageId": "javascript"
+                }
+            },
+            "outputs": [],
+            "source": [
+                "export function add(a, b) {⮑\n",
+                "    return a + b;\n",
+                "}"
+            ]
+            },
+            {
+            "cell_type": "code",
+            "execution_count": null,
+            "metadata": {
+                "vscode": {
+                "languageId": "javascript"
+                }
+            },
+            "outputs": [],
+            "source": [
+                "export function multiply(a, b) {\n",
+                "    return a * b;\n",
+                "}"
+            ]
+            }
+            ],
+            "metadata": {
+            "language_info": {
+            "name": "python"
+            }
+            },
+            "nbformat": 4,
+            "nbformat_minor": 2
+            }
+
+expected-prompt:
+    prefix: |-
+        // Language: javascript
+        export class DadJoke {
+
+            id;
+            question;
+            answer;
+            status;
+            rating;
+
+            constructor(
+                id,
+                question,
+                answer,
+                status = 'unseen',
+                rating = 'unrated'
+            ) {
+                this.id = id;
+                this.question = question;
+                this.answer = answer;
+                this.status = status;
+                this.rating = rating;
+            }
+        }
+
+        export function add(a, b) {
+    suffix: |-
+        return a + b;
+        }

@@ -51,6 +51,20 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 		});
 	}
 
+	public static map(stream: ChatResponseStream, callback: (part: ExtendedChatResponsePart) => ExtendedChatResponsePart | undefined, finalize?: () => void): ChatResponseStreamImpl {
+		return new ChatResponseStreamImpl((value) => {
+			const result = callback(value);
+			if (result) {
+				stream.push(result);
+			}
+		}, (reason) => {
+			stream.clearToPreviousToolInvocation(reason);
+		}, () => {
+			finalize?.();
+			return tryFinalizeResponseStream(stream);
+		});
+	}
+
 	constructor(
 		private readonly _push: (part: ExtendedChatResponsePart) => void,
 		private readonly _clearToPreviousToolInvocation: (reason: ChatResponseClearToPreviousToolInvocationReason) => void,

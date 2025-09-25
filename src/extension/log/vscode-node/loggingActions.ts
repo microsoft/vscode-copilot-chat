@@ -14,8 +14,8 @@ import { RequestType } from '@vscode/copilot-api';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
-import { IDomainService } from '../../../platform/endpoint/common/domainService';
-import { IEnvService } from '../../../platform/env/common/envService';
+import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
+import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { collectErrorMessages, ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
@@ -23,17 +23,16 @@ import { getRequest, IFetcher } from '../../../platform/networking/common/networ
 import { NodeFetcher } from '../../../platform/networking/node/nodeFetcher';
 import { NodeFetchFetcher } from '../../../platform/networking/node/nodeFetchFetcher';
 import { ElectronFetcher } from '../../../platform/networking/vscode-node/electronFetcher';
+import { FetcherService, getShadowedConfig } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { createRequestHMAC } from '../../../util/common/crypto';
+import { shuffle } from '../../../util/vs/base/common/arrays';
 import { timeout } from '../../../util/vs/base/common/async';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../util/vs/platform/instantiation/common/serviceCollection';
-import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
-import { FetcherService } from '../../../platform/networking/vscode-node/fetcherServiceImpl';
-import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
-import { shuffle } from '../../../util/vs/base/common/arrays';
 import { EXTENSION_ID } from '../../common/constants';
 
 export interface ProxyAgentLog {
@@ -49,13 +48,18 @@ export class LoggingActionsContrib {
 		@IVSCodeExtensionContext private readonly _context: IVSCodeExtensionContext,
 		@IEnvService private envService: IEnvService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IAuthenticationService private readonly authService: IAuthenticationService,
 		@ICAPIClientService private readonly capiClientService: ICAPIClientService,
+		@IFetcherService private readonly fetcherService: IFetcherService,
 		@ILogService private logService: ILogService,
 	) {
 		this._context.subscriptions.push(vscode.commands.registerCommand('github.copilot.debug.collectDiagnostics', async () => {
 			const document = await vscode.workspace.openTextDocument({ language: 'markdown' });
 			const editor = await vscode.window.showTextDocument(document);
+			const electronConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseElectronFetcher, ConfigKey.Internal.DebugExpUseElectronFetcher);
+			const nodeConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseNodeFetcher, ConfigKey.Internal.DebugExpUseNodeFetcher);
+			const nodeFetchConfig = getShadowedConfig<boolean>(this.configurationService, this.experimentationService, ConfigKey.Shared.DebugUseNodeFetchFetcher, ConfigKey.Internal.DebugExpUseNodeFetchFetcher);
 			await appendText(editor, `## GitHub Copilot Chat
 
 - Extension Version: ${this.envService.getVersion()} (${this.envService.getBuildType()})
@@ -67,9 +71,9 @@ export class LoggingActionsContrib {
 
 User Settings:
 \`\`\`json${getNonDefaultSettings()}
-  "github.copilot.advanced.debug.useElectronFetcher": ${this.configurationService.getConfig<boolean>(ConfigKey.Shared.DebugUseElectronFetcher)},
-  "github.copilot.advanced.debug.useNodeFetcher": ${this.configurationService.getConfig<boolean>(ConfigKey.Shared.DebugUseNodeFetcher)},
-  "github.copilot.advanced.debug.useNodeFetchFetcher": ${this.configurationService.getConfig<boolean>(ConfigKey.Shared.DebugUseNodeFetchFetcher)}
+  "github.copilot.advanced.debug.useElectronFetcher": ${electronConfig},
+  "github.copilot.advanced.debug.useNodeFetcher": ${nodeConfig},
+  "github.copilot.advanced.debug.useNodeFetchFetcher": ${nodeFetchConfig}
 \`\`\`${getProxyEnvVariables()}
 `);
 			const urls = [
@@ -79,10 +83,11 @@ User Settings:
 			const isGHEnterprise = this.capiClientService.dotcomAPIURL !== 'https://api.github.com';
 			const timeoutSeconds = 10;
 			const electronFetcher = ElectronFetcher.create(this.envService);
-			const electronCurrent = !!electronFetcher && this.configurationService.getConfig<boolean>(ConfigKey.Shared.DebugUseElectronFetcher);
-			const nodeCurrent = !electronCurrent && this.configurationService.getConfig<boolean>(ConfigKey.Shared.DebugUseNodeFetcher);
-			const nodeFetchCurrent = !electronCurrent && !nodeCurrent && this.configurationService.getConfig<boolean>(ConfigKey.Shared.DebugUseNodeFetchFetcher);
+			const electronCurrent = !!electronFetcher && electronConfig;
+			const nodeCurrent = !electronCurrent && nodeConfig;
+			const nodeFetchCurrent = !electronCurrent && !nodeCurrent && nodeFetchConfig;
 			const nodeCurrentFallback = !electronCurrent && !nodeFetchCurrent;
+			const activeFetcher = this.fetcherService.getUserAgentLibrary();
 			const fetchers = {
 				['Electron fetch']: {
 					fetcher: electronFetcher,
@@ -176,7 +181,9 @@ User Settings:
 						try {
 							const result = await Promise.race([proxyConnect(httpx, probeProxyURL, url), timeout(timeoutSeconds * 1000)]);
 							if (result) {
-								await appendText(editor, `${result} (${Date.now() - start} ms)\n`);
+								const headers = Object.keys(result.headers).map(header => `\n	${header}: ${result.headers[header]}`);
+								const text = `${result.statusCode} ${result.statusMessage}${headers.join('')}`;
+								await appendText(editor, `${text} (${Date.now() - start} ms)\n`);
 							} else {
 								await appendText(editor, `timed out after ${timeoutSeconds} seconds\n`);
 							}
@@ -186,7 +193,7 @@ User Settings:
 					}
 				}
 				for (const [name, fetcher] of Object.entries(fetchers)) {
-					await appendText(editor, `- ${name}${fetcher.current ? ' (configured)' : ''}: `);
+					await appendText(editor, `- ${name}${fetcher.current ? ' (configured)' : fetcher.fetcher?.getUserAgentLibrary() === activeFetcher ? ' (active)' : ''}: `);
 					if (fetcher.fetcher) {
 						const start = Date.now();
 						try {
@@ -281,8 +288,8 @@ async function tlsConnect(tlsOrig: typeof tls, proxyURL: string, ca: (string | B
 	});
 }
 
-async function proxyConnect(httpx: typeof https | typeof http, proxyUrl: string, targetUrl: string) {
-	return new Promise<string>((resolve, reject) => {
+async function proxyConnect(httpx: typeof https | typeof http, proxyUrl: string, targetUrl: string, sanitize = false) {
+	return new Promise<{ statusCode: number | undefined; statusMessage: string | undefined; headers: Record<string, string | string[]> }>((resolve, reject) => {
 		const proxyUrlObj = new URL(proxyUrl);
 		const targetUrlObj = new URL(targetUrl);
 		const targetHost = `${targetUrlObj.hostname}:${targetUrlObj.port || (targetUrlObj.protocol === 'https:' ? 443 : 80)}`;
@@ -298,11 +305,16 @@ async function proxyConnect(httpx: typeof https | typeof http, proxyUrl: string,
 		};
 		const req = httpx.request(options);
 		req.on('connect', (res, socket, head) => {
-			const headers = ['proxy-authenticate', 'proxy-agent', 'server', 'via'].map(header => {
-				return res.headers[header] ? `\n	${header}: ${res.headers[header]}` : undefined;
-			}).filter(Boolean);
+			const headers = ['proxy-authenticate', 'proxy-agent', 'server', 'via'].reduce((acc, header) => {
+				const value = res.headers[header];
+				if (value) {
+					const doSanitize = sanitize && !['proxy-agent', 'server'].includes(header);
+					acc[header] = doSanitize ? Array.isArray(value) ? value.map(sanitizeValue) : sanitizeValue(value) : value;
+				}
+				return acc;
+			}, {} as Record<string, string | string[]>);
 			socket.end();
-			resolve(`${res.statusCode} ${res.statusMessage}${headers.join('')}`);
+			resolve({ statusCode: res.statusCode, statusMessage: res.statusMessage, headers });
 		});
 		req.on('error', reject);
 		req.end();
@@ -348,13 +360,13 @@ export function collectFetcherTelemetry(accessor: ServicesAccessor, error: any):
 	const fetcherService = accessor.get(IFetcherService);
 	const envService = accessor.get(IEnvService);
 	const telemetryService = accessor.get(ITelemetryService);
-	const domainService = accessor.get(IDomainService);
 	const logService = accessor.get(ILogService);
 	const authService = accessor.get(IAuthenticationService);
 	const configurationService = accessor.get(IConfigurationService);
 	const expService = accessor.get(IExperimentationService);
+	const capiClientService = accessor.get(ICAPIClientService);
 	const instantiationService = accessor.get(IInstantiationService);
-	if (extensionContext.extensionMode === vscode.ExtensionMode.Test) {
+	if (extensionContext.extensionMode === vscode.ExtensionMode.Test || isScenarioAutomation) {
 		return;
 	}
 
@@ -362,10 +374,11 @@ export function collectFetcherTelemetry(accessor: ServicesAccessor, error: any):
 		return;
 	}
 
-	// Once every 26 hours to account for network changes. (26 hours tries to rotate through the hours of the day.)
 	const now = Date.now();
 	const previous = extensionContext.globalState.get<number>('lastCollectFetcherTelemetryTime', 0);
-	if (now - previous < 26 * 60 * 60 * 1000) {
+	const isInsiders = vscode.env.appName.includes('Insiders');
+	const hours = isInsiders ? 5 : 26;
+	if (now - previous < hours * 60 * 60 * 1000) {
 		logService.debug(`Refetch model metadata: Skipped.`);
 		return;
 	}
@@ -383,13 +396,15 @@ export function collectFetcherTelemetry(accessor: ServicesAccessor, error: any):
 		}
 		logService.debug(`Refetch model metadata: This window won.`);
 
+		const proxy = await findProxyInfo(capiClientService);
+
 		const ext = vscode.extensions.getExtension(EXTENSION_ID);
 		const extKind = (ext ? ext.extensionKind === vscode.ExtensionKind.UI : !vscode.env.remoteName) ? 'local' : 'remote';
-		const remoteName = vscode.env.remoteName || 'none';
+		const remoteName = sanitizeValue(vscode.env.remoteName) || 'none';
 		const platform = process.platform;
 		const originalLibrary = fetcherService.getUserAgentLibrary();
-		const originalError = error ? (error.message || 'unknown') : 'none';
-		const userAgentLibraryUpdate = (library: string) => JSON.stringify({ extKind, remoteName, platform, library, originalLibrary, originalError });
+		const originalError = error ? (sanitizeValue(error.message) || 'unknown') : 'none';
+		const userAgentLibraryUpdate = (library: string) => JSON.stringify({ extKind, remoteName, platform, library, originalLibrary, originalError, proxy });
 		const fetchers = [
 			ElectronFetcher.create(envService, userAgentLibraryUpdate),
 			new NodeFetchFetcher(envService, userAgentLibraryUpdate),
@@ -410,9 +425,7 @@ export function collectFetcherTelemetry(accessor: ServicesAccessor, error: any):
 				const modifiedCapiClientService = modifiedInstaService.createInstance(CAPIClientImpl);
 				const response = await getRequest(
 					fetcher,
-					envService,
 					telemetryService,
-					domainService,
 					modifiedCapiClientService,
 					{ type: RequestType.Models },
 					copilotToken,
@@ -436,5 +449,59 @@ export function collectFetcherTelemetry(accessor: ServicesAccessor, error: any):
 		}
 	})().catch(err => {
 		logService.error(err);
+	});
+}
+
+async function findProxyInfo(capiClientService: ICAPIClientService) {
+	const timeoutSeconds = 5;
+	let proxy: { status: string;[key: string]: any };
+	try {
+		const proxyAgent = loadVSCodeModule<any>('@vscode/proxy-agent');
+		if (proxyAgent?.resolveProxyURL) {
+			const url = capiClientService.capiPingURL; // Assuming this gets the same proxy as for the models request.
+			const proxyURL = await Promise.race([proxyAgent.resolveProxyURL(url), timeoutAfter(timeoutSeconds * 1000)]);
+			if (proxyURL === 'timeout') {
+				proxy = { status: 'resolveProxyURL timeout' };
+			} else if (proxyURL) {
+				const httpx: typeof https | typeof http | undefined = proxyURL.startsWith('https:') ? (https as any).__vscodeOriginal : (http as any).__vscodeOriginal;
+				if (httpx) {
+					const result = await Promise.race([proxyConnect(httpx, proxyURL, url, true), timeout(timeoutSeconds * 1000)]);
+					if (result) {
+						proxy = { status: 'success', ...result };
+					} else {
+						proxy = { status: 'proxyConnect timeout' };
+					}
+				} else {
+					proxy = { status: 'no original http/s module' };
+				}
+			} else {
+				proxy = { status: 'no proxy' };
+			}
+		} else {
+			proxy = { status: 'no resolveProxyURL' };
+		}
+	} catch (err) {
+		proxy = { status: 'error', message: sanitizeValue(err?.message) };
+	}
+	return proxy;
+}
+
+const ids_paths = /(^|\b)[\p{L}\p{Nd}]+((=""?[^"]+""?)|(([.:=/"_-]+[\p{L}\p{Nd}]+)+))(\b|$)/giu;
+export function sanitizeValue(input: string | undefined): string {
+	return (input || '').replace(ids_paths, (m) => maskByClass(m));
+}
+
+function maskByClass(s: string): string {
+	if (/^net::[A-Z_]+$/.test(s) || ['dev-container', 'attached-container', 'k8s-container', 'ssh-remote'].includes(s)) {
+		return s;
+	}
+	return s.replace(/\p{Lu}|\p{Ll}|\p{Nd}/gu, (ch) => {
+		if (/\p{Lu}/u.test(ch)) {
+			return 'A';
+		}
+		if (/\p{Ll}/u.test(ch)) {
+			return 'a';
+		}
+		return '0';
 	});
 }

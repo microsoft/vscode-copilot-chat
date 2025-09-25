@@ -32,6 +32,7 @@ export class ExtensionTextDocumentManager extends AbstractWorkspaceService {
 	readonly onDidCloseTextDocument = workspace.onDidCloseTextDocument;
 	readonly onDidChangeWorkspaceFolders = workspace.onDidChangeWorkspaceFolders;
 	readonly onDidChangeNotebookDocument = workspace.onDidChangeNotebookDocument;
+	readonly onDidChangeTextEditorSelection = window.onDidChangeTextEditorSelection;
 
 	override async openTextDocument(uri: Uri): Promise<TextDocument> {
 		return await workspace.openTextDocument(uri);

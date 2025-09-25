@@ -199,7 +199,7 @@ export class DiagnosticsCompletionProcessor extends Disposable {
 			return providers;
 		}).recomputeInitiallyAndOnChange(this._store);
 
-		this._rejectionCollector = new RejectionCollector(this._workspace, s => this._tracer.trace(s));
+		this._rejectionCollector = this._register(new RejectionCollector(this._workspace, s => this._tracer.trace(s)));
 
 		const isValidEditor = (editor: vscode.TextEditor | undefined): editor is vscode.TextEditor => {
 			return !!editor && (isNotebookCell(editor.document.uri) || isEditorFromEditorGrid(editor));

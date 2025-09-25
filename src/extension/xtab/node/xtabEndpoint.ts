@@ -10,10 +10,10 @@ import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
-import { IEnvService } from '../../../platform/env/common/envService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -54,13 +54,13 @@ export class XtabEndpoint extends ChatEndpoint {
 		@IDomainService _domainService: IDomainService,
 		@IFetcherService _fetcherService: IFetcherService,
 		@ICAPIClientService _capiClientService: ICAPIClientService,
-		@IEnvService _envService: IEnvService,
 		@ITelemetryService _telemetryService: ITelemetryService,
 		@IAuthenticationService _authService: IAuthenticationService,
 		@IChatMLFetcher _chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider _tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService _instantiationService: IInstantiationService,
-		@IThinkingDataService _thinkingDataService: IThinkingDataService
+		@IExperimentationService _experimentationService: IExperimentationService,
+		@ILogService _logService: ILogService
 	) {
 		const chatModelInfo = _configuredModelName ? { ...XtabEndpoint.chatModelInfo, id: _configuredModelName } : XtabEndpoint.chatModelInfo;
 		super(
@@ -68,12 +68,14 @@ export class XtabEndpoint extends ChatEndpoint {
 			_domainService,
 			_capiClientService,
 			_fetcherService,
-			_envService,
 			_telemetryService,
 			_authService,
 			_chatMLFetcher,
 			_tokenizerProvider,
-			_instantiationService
+			_instantiationService,
+			_configService,
+			_experimentationService,
+			_logService
 		);
 	}
 

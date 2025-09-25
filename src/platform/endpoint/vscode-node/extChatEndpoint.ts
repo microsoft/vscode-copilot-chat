@@ -22,6 +22,7 @@ import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { CustomDataPartMimeTypes } from '../common/endpointTypes';
 import { decodeStatefulMarker, encodeStatefulMarker, rawPartAsStatefulMarker } from '../common/statefulMarkerContainer';
+import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
 
 export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	private readonly _maxTokens: number;
@@ -91,10 +92,6 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		return false;
 	}
 
-	get supportsStatefulResponses() {
-		return false; // todo@connor4312 ?
-	}
-
 	get policy(): 'enabled' | { terms: string } {
 		return 'enabled';
 	}
@@ -119,71 +116,6 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		// TODO @lramos15, this should be driven by the extension API.
 		return this._tokenizerProvider.acquireTokenizer(this);
 	}
-
-	private convertToApiChatMessage(messages: Raw.ChatMessage[]): Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2> {
-		const apiMessages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2> = [];
-		for (const message of messages) {
-			const apiContent: Array<vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart2 | vscode.LanguageModelToolCallPart | vscode.LanguageModelDataPart> = [];
-			// Easier to work with arrays everywhere, rather than string in some cases. So convert to a single text content part
-			for (const contentPart of message.content) {
-				if (contentPart.type === Raw.ChatCompletionContentPartKind.Text) {
-					apiContent.push(new vscode.LanguageModelTextPart(contentPart.text));
-				} else if (contentPart.type === Raw.ChatCompletionContentPartKind.Image) {
-					// Handle base64 encoded images
-					if (contentPart.imageUrl.url.startsWith('data:')) {
-						const dataUrlRegex = /^data:([^;]+);base64,(.*)$/;
-						const match = contentPart.imageUrl.url.match(dataUrlRegex);
-
-						if (match) {
-							const [, mimeType, base64Data] = match;
-							apiContent.push(new vscode.LanguageModelDataPart(Buffer.from(base64Data, 'base64'), mimeType as vscode.ChatImageMimeType));
-						}
-					} else {
-						// Not a base64 image
-						continue;
-					}
-				} else if (contentPart.type === Raw.ChatCompletionContentPartKind.CacheBreakpoint) {
-					apiContent.push(new vscode.LanguageModelDataPart(new TextEncoder().encode('ephemeral'), CustomDataPartMimeTypes.CacheControl));
-				} else if (contentPart.type === Raw.ChatCompletionContentPartKind.Opaque) {
-					const statefulMarker = rawPartAsStatefulMarker(contentPart);
-					if (statefulMarker) {
-						apiContent.push(new vscode.LanguageModelDataPart(encodeStatefulMarker(statefulMarker.modelId, statefulMarker.marker), CustomDataPartMimeTypes.StatefulMarker));
-					}
-				}
-			}
-
-			if (message.role === Raw.ChatRole.System || message.role === Raw.ChatRole.User) {
-				apiMessages.push({
-					role: message.role === Raw.ChatRole.System ? vscode.LanguageModelChatMessageRole.System : vscode.LanguageModelChatMessageRole.User,
-					name: message.name,
-					content: apiContent
-				});
-			} else if (message.role === Raw.ChatRole.Assistant) {
-				if (message.toolCalls) {
-					for (const toolCall of message.toolCalls) {
-						apiContent.push(new vscode.LanguageModelToolCallPart(toolCall.id, toolCall.function.name, JSON.parse(toolCall.function.arguments)));
-					}
-				}
-				apiMessages.push({
-					role: vscode.LanguageModelChatMessageRole.Assistant,
-					name: message.name,
-					content: apiContent
-				});
-			} else if (message.role === Raw.ChatRole.Tool) {
-				const toolResultPart: vscode.LanguageModelToolResultPart2 = new vscode.LanguageModelToolResultPart2(
-					message.toolCallId ?? '',
-					apiContent
-				);
-				apiMessages.push({
-					role: vscode.LanguageModelChatMessageRole.User,
-					name: '',
-					content: [toolResultPart]
-				});
-			}
-		}
-		return apiMessages;
-	}
-
 
 	async makeChatRequest(
 		debugName: string,
@@ -213,7 +145,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 		requestOptions,
 		finishedCb,
 	}: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
-		const vscodeMessages = this.convertToApiChatMessage(messages);
+		const vscodeMessages = convertToApiChatMessage(messages);
 
 		const vscodeOptions: vscode.LanguageModelChatRequestOptions = {
 			tools: ((requestOptions?.tools ?? []) as OpenAiFunctionTool[]).map(tool => ({
@@ -254,7 +186,6 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 						await finishedCb?.(text, 0, { text: '', statefulMarker: decoded.marker });
 					}
 				} else if (chunk instanceof vscode.LanguageModelThinkingPart) {
-					text += chunk.value;
 					// Call finishedCb with the current chunk of thinking text with a specific thinking field
 					if (finishedCb) {
 						await finishedCb(text, 0, {
@@ -306,4 +237,72 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 			maxInputTokens: modelMaxPromptTokens
 		});
 	}
+}
+
+export function convertToApiChatMessage(messages: Raw.ChatMessage[]): Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2> {
+	const apiMessages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2> = [];
+	for (const message of messages) {
+		const apiContent: Array<vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart2 | vscode.LanguageModelToolCallPart | vscode.LanguageModelDataPart | vscode.LanguageModelThinkingPart> = [];
+		// Easier to work with arrays everywhere, rather than string in some cases. So convert to a single text content part
+		for (const contentPart of message.content) {
+			if (contentPart.type === Raw.ChatCompletionContentPartKind.Text) {
+				apiContent.push(new vscode.LanguageModelTextPart(contentPart.text));
+			} else if (contentPart.type === Raw.ChatCompletionContentPartKind.Image) {
+				// Handle base64 encoded images
+				if (contentPart.imageUrl.url.startsWith('data:')) {
+					const dataUrlRegex = /^data:([^;]+);base64,(.*)$/;
+					const match = contentPart.imageUrl.url.match(dataUrlRegex);
+
+					if (match) {
+						const [, mimeType, base64Data] = match;
+						apiContent.push(new vscode.LanguageModelDataPart(Buffer.from(base64Data, 'base64'), mimeType as vscode.ChatImageMimeType));
+					}
+				} else {
+					// Not a base64 image
+					continue;
+				}
+			} else if (contentPart.type === Raw.ChatCompletionContentPartKind.CacheBreakpoint) {
+				apiContent.push(new vscode.LanguageModelDataPart(new TextEncoder().encode('ephemeral'), CustomDataPartMimeTypes.CacheControl));
+			} else if (contentPart.type === Raw.ChatCompletionContentPartKind.Opaque) {
+				const statefulMarker = rawPartAsStatefulMarker(contentPart);
+				if (statefulMarker) {
+					apiContent.push(new vscode.LanguageModelDataPart(encodeStatefulMarker(statefulMarker.modelId, statefulMarker.marker), CustomDataPartMimeTypes.StatefulMarker));
+				}
+				const thinkingData = rawPartAsThinkingData(contentPart);
+				if (thinkingData) {
+					apiContent.push(new vscode.LanguageModelThinkingPart(thinkingData.text, thinkingData.id, thinkingData.metadata));
+				}
+			}
+		}
+
+		if (message.role === Raw.ChatRole.System || message.role === Raw.ChatRole.User) {
+			apiMessages.push({
+				role: message.role === Raw.ChatRole.System ? vscode.LanguageModelChatMessageRole.System : vscode.LanguageModelChatMessageRole.User,
+				name: message.name,
+				content: apiContent
+			});
+		} else if (message.role === Raw.ChatRole.Assistant) {
+			if (message.toolCalls) {
+				for (const toolCall of message.toolCalls) {
+					apiContent.push(new vscode.LanguageModelToolCallPart(toolCall.id, toolCall.function.name, JSON.parse(toolCall.function.arguments)));
+				}
+			}
+			apiMessages.push({
+				role: vscode.LanguageModelChatMessageRole.Assistant,
+				name: message.name,
+				content: apiContent
+			});
+		} else if (message.role === Raw.ChatRole.Tool) {
+			const toolResultPart: vscode.LanguageModelToolResultPart2 = new vscode.LanguageModelToolResultPart2(
+				message.toolCallId ?? '',
+				apiContent
+			);
+			apiMessages.push({
+				role: vscode.LanguageModelChatMessageRole.User,
+				name: '',
+				content: [toolResultPart]
+			});
+		}
+	}
+	return apiMessages;
 }

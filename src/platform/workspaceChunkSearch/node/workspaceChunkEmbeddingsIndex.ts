@@ -27,7 +27,7 @@ import { ISimulationTestContext } from '../../simulationTestContext/common/simul
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { WorkspaceChunkSearchOptions } from '../common/workspaceChunkSearch';
 import { createWorkspaceChunkAndEmbeddingCache, IWorkspaceChunkAndEmbeddingCache } from './workspaceChunkAndEmbeddingCache';
-import { FileRepresentation, IWorkspaceFileIndex, shouldIndexFile } from './workspaceFileIndex';
+import { FileRepresentation, IWorkspaceFileIndex } from './workspaceFileIndex';
 
 
 export interface WorkspaceChunkEmbeddingsIndexState {
@@ -47,8 +47,8 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 	constructor(
 		private readonly _embeddingType: EmbeddingType,
 		@IVSCodeExtensionContext vsExtensionContext: IVSCodeExtensionContext,
+		@IInstantiationService instantiationService: IInstantiationService,
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
-		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@ILogService private readonly _logService: ILogService,
 		@ISimulationTestContext private readonly _simulationTestContext: ISimulationTestContext,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
@@ -60,7 +60,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 		this._cacheRoot = vsExtensionContext.storageUri;
 
 		this._cache = new Lazy(async () => {
-			const cache = this._register(await _instantiationService.invokeFunction(accessor => createWorkspaceChunkAndEmbeddingCache(accessor, this._embeddingType, this._cacheRoot, this._workspaceIndex)));
+			const cache = this._register(await instantiationService.invokeFunction(accessor => createWorkspaceChunkAndEmbeddingCache(accessor, this._embeddingType, this._cacheRoot, this._workspaceIndex)));
 			this._onDidChangeWorkspaceIndexState.fire();
 			return cache;
 		});
@@ -138,7 +138,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 	}
 
 	async triggerIndexingOfFile(uri: URI, telemetryInfo: TelemetryCorrelationId, token: CancellationToken): Promise<void> {
-		if (!await this._instantiationService.invokeFunction(accessor => shouldIndexFile(accessor, uri, token))) {
+		if (!await this._workspaceIndex.shouldIndexWorkspaceFile(uri, token)) {
 			return;
 		}
 
@@ -419,7 +419,7 @@ export class WorkspaceChunkEmbeddingsIndex extends Disposable {
 
 	/**
 	 * Get the chunks and embeddings for a file.
-	 */
+	*/
 	private async getChunksAndEmbeddings(authToken: string, file: FileRepresentation, batchInfo: ComputeBatchInfo, qos: EmbeddingsComputeQos, telemetryInfo: CallTracker, token: CancellationToken): Promise<readonly FileChunkWithEmbedding[] | undefined> {
 		const cache = await raceCancellationError(this._cache.value, token);
 		const existing = await raceCancellationError(cache.get(file), token);

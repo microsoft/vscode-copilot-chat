@@ -1,3 +1,335 @@
+## 0.31 (2025-09-11)
+
+GitHub Copilot updates from [September 2025](https://code.visualstudio.com/updates/v1_104):
+
+### Chat
+
+#### Auto model selection (Preview)
+
+This iteration, we're introducing auto model selection in chat. When you choose the **Auto** model in the model picker, VS Code automatically selects a model to ensure that you get the optimal performance and avoid rate limits.
+
+Auto model selection is currently in preview and we are rolling it out to all GitHub Copilot users in VS Code in the following weeks, starting with the individual Copilot plans.
+
+![Screenshot that shows the model picker in the Chat view, showing the Auto option.](https://code.visualstudio.com/assets/updates/1_104/model-dropdown-auto.png)
+
+Auto will choose between Claude Sonnet 4, GPT-5, GPT-5 mini, and GPT-4.1 and Gemini Pro 2.5, unless your organization has disabled access to these models. When using auto model selection, VS Code uses a variable model multiplier, based on the selected model. If you are a paid user, auto will apply a 10% request discount.
+
+You can view the selected model and the model multiplier by hovering over the response in the Chat view.
+
+![Screenshot of a chat response, showing the selected model on hover.](https://code.visualstudio.com/assets/updates/1_104/auto-model-multiplier.png)
+
+Learn more about [auto model selection in VS Code](https://code.visualstudio.com/docs/copilot/customization/language-models).
+
+#### Confirm edits to sensitive files
+
+**Setting**: `chat.tools.edits.autoApprove`
+
+In agent mode, the agent can autonomously make edits to files in your workspace. This might include accidentally or maliciously modifying or deleting important files such as configuration files, which could cause immediate negative side-effects on your machine. Learn more about [security considerations when using AI-powered development tools](https://code.visualstudio.com/docs/copilot/security).
+
+In this release, the agent now explicitly asks for user confirmation before making edits to certain files. This provides an additional layer of safety when using agent mode. With the `chat.tools.edits.autoApprove` setting, you can configure file patterns to indicate which files require confirmation.
+
+Common system folders, dotfiles, and files outside your workspace will require confirmation by default.
+
+![Screenshot showing the confirmation dialog for sensitive file edits in the Chat view.](https://code.visualstudio.com/assets/updates/1_104/chat-edit-sensitive-file.png)
+
+#### Support for AGENTS.md files (Experimental)
+
+**Setting**: `chat.useAgentsMdFile`
+
+An `AGENTS.md` file lets you provide context and instructions to the agent. Starting from this release, when you have an `AGENTS.md` file in your workspace root(s), it is automatically picked up as context for chat requests. This can be useful for teams that use multiple AI agents.
+
+Support for `AGENTS.md` files is enabled by default and can be controlled with the `chat.useAgentsMdFile` setting. See <https://agents.md/> for more information about `AGENTS.md` files.
+
+Learn more about [customizing chat in VS Code](https://code.visualstudio.com/docs/copilot/customization/overview) to your practices and team workflows.
+
+#### Improved changed files experience
+
+This iteration, the changed files list has been reworked with several quality-of-life features. These changes should improve your experience when working in agent mode!
+
+* The list of changed files is now collapsed by default to give more space to the chat conversation. While collapsed, you can still see the files changed count and the lines added or removed.
+
+* When you keep or accept a suggested change, the file is removed from the files changed list.
+
+* When you stage or commit a file using the Source Control view, this automatically accepts the proposed file changes.
+
+* Changes _per file_ (lines added or removed) are now shown for each item in the list.
+
+<video src="https://code.visualstudio.com/assets/updates/1_104/changed-files-list.mp4" title="Video uncollapsing the changed files list and accepting file entries to remove them from the list." autoplay loop controls muted></video>
+
+#### Use custom chat modes in prompt files
+
+Prompt files are Markdown files in which you write reusable chat prompts. To run a prompt file, type `/` followed by the prompt file name in the chat input field, or use the Play button when you have the prompt file open in the editor.
+
+You can specify which chat mode should be used for running the prompt file. Previously, you could only use built-in chat modes like `agent`, `edit`, or `ask` in your prompt files. Now, you can also reference custom chat modes in your prompt files.
+
+![Screenshot showing IntelliSense for custom chat modes in prompt files.](https://code.visualstudio.com/assets/updates/1_104/custom_modes_in_prompt_files.png)
+
+Learn more about [customizing chat in VS Code](https://code.visualstudio.com/docs/copilot/customization/overview) with prompt files, chat modes, and custom instructions.
+
+#### Configure prompt file suggestions (Experimental)
+
+**Setting**: `chat.promptFilesRecommendations`
+
+Teams often create custom prompt files to standardize AI workflows, but these prompts can be hard to discover when users need them most. You can now configure which prompt files appear as suggestions in the Chat welcome view based on contextual conditions.
+
+The new `chat.promptFilesRecommendations` setting supports both simple boolean values and when-clause expressions for context-aware suggestions.
+
+```jsonc
+{
+  "chat.promptFilesRecommendations": {
+    "plan": true,                            // Always suggest
+    "a11y-audit": "resourceExtname == .html", // Only for HTML files
+    "document": "resourceLangId == markdown", // Only for Markdown files
+    "debug": false                           // Never suggest
+  }
+}
+```
+
+This helps teams surface the right AI workflows at the right time, making custom prompts more discoverable and relevant to your workspace and file type.
+
+#### Select tools in tool sets
+
+[Tool sets](https://code.visualstudio.com/docs/copilot/chat/chat-agent-mode#_define-tool-sets) are a convenient way to group related tools together and VS Code has several built-in tool sets like `edit` or `search`.
+
+The tools picker now shows which tools are part of each tool set and you can individually enable or disable each tool. You can access the tools picker via the `Configure Tools...` button in the Chat view.
+
+![Screenshot showing the tools picker with an expanded edit tool set, listing all available tools.](https://code.visualstudio.com/assets/updates/1_104/tools_in_toolsets.png)
+
+#### Configure font used in chat
+
+**Settings**: `chat.fontFamily`, `chat.fontSize`
+
+VS Code lets you choose which font to use across the editor, however the Chat view lacked that configurability. We have now added two new settings for configuring the font family (`chat.fontFamily`) and font size (`chat.fontSize`) of chat messages.
+
+![Screenshot showing the Chat view with a custom font and font size.](https://code.visualstudio.com/assets/updates/1_104/chat-configure-font.png)
+
+> **Note**: content for lists currently does not yet honor these settings, but this is something that we are working on fixing in the upcoming releases.
+
+#### Collaborate with coding agents (Experimental)
+
+With coding agents, you delegate tasks to AI agents to be worked on in the background. You can have multiple such agents work in parallel. We're continuing to evolve the chat sessions experience to help you collaborate more effectively with coding agents.
+
+##### Chat Sessions view
+
+**Setting**: `chat.agentSessionsViewLocation`
+
+The Chat Sessions view provides a single, unified view for managing both local and contributed chat sessions. We've significantly enhanced the Chat Sessions view where you can now perform all key operations, making it easier to iterate and finalize your coding tasks.
+
+* **Status Bar tracking**: Monitor progress across multiple coding agents directly from the Status Bar.
+* **Multi-session support**: Launch and manage multiple chat sessions from the same view.
+* **Expanded context menus**: Access more actions to interact with your coding agents efficiently.
+* **Rich descriptions**: With rich description enabled, each list entry now includes detailed context to help you quickly find relevant information.
+
+##### GitHub coding agent integration
+
+We've improved the integration of [GitHub coding agents](https://code.visualstudio.com/docs/copilot/copilot-coding-agent) with chat sessions to deliver a smoother, more intuitive experience.
+
+* **Chat editor actions**: Easily view or apply code changes, and check out pull requests directly from the chat editor.
+* **Seamless transitions**: Move from local chats to GitHub agent tasks with improved continuity.
+* **Better session rendering**: Various improvements on cards and tools rendering for better visual clarity.
+* **Performance boosts**: Faster session loading for a more responsive experience.
+
+<video src="https://code.visualstudio.com/assets/updates/1_104/chat-sessions-view.mp4" title="Video showing Chat Sessions view and integration with GitHub coding agents." autoplay loop controls muted></video>
+
+##### Delegate to coding agent
+
+We continued to expand on ways to delegate local tasks in VS Code to a Copilot coding agent:
+
+* Fix todos with coding agent:
+
+    Comments starting with `TODO` now show a Code Action to quickly initiate a coding agent session.
+
+    ![Screenshot of a code action above a TODO comment called Delegate to coding agent.](https://code.visualstudio.com/assets/updates/1_104/coding-agent-todo.png)
+
+* Delegate from chat (`githubPullRequests.codingAgent.uiIntegration`):
+
+    Additional context, including file references, are now forwarded to GitHub coding agent when you perform the **Delegate to coding agent** action in chat. This enables you to precisely plan out a task before handing it off to coding agent to complete it. A new chat editor is opened with the coding agent's progress shown in real-time.
+
+    <video src="https://code.visualstudio.com/assets/updates/1_104/delegate-to-coding-agent.mp4" title="Delegating a task from sidebar chat to coding agent" autoplay loop controls muted></video>
+
+_Theme: [Sharp Solarized](https://marketplace.visualstudio.com/items?itemName=joshspicer.sharp-solarized) (preview on [vscode.dev](https://vscode.dev/editor/theme/joshspicer.sharp-solarized))_
+
+
+#### Social sign in with Google
+
+The option to sign in or sign up to GitHub Copilot with a Google account is now generally available and rolling out to all users in VS Code.
+
+![Screenshot showing the sign in dialog showing the option to use a Google account.](https://code.visualstudio.com/assets/updates/1_104/google.png)
+
+You can find more information about this in the [announcement GitHub blog post](https://github.blog/changelog/2025-07-15-social-login-with-google-is-now-generally-available).
+
+#### Terminal auto approve
+
+**Setting**: `chat.tools.terminal.enableAutoApprove`
+
+Automatically approving terminal commands can greatly streamline agent interactions, but it also comes with [security risks](https://code.visualstudio.com/docs/copilot/security). This release introduces several improvements to terminal auto approve to enhance both usability and security.
+
+* You can now enable or disable terminal auto approve with the `chat.tools.terminal.enableAutoApprove` setting. This setting can also be set by organizations via [device management](https://code.visualstudio.com/docs/setup/enterprise#_centrally-manage-vs-code-settings).
+
+* Before terminal auto approve is actually enabled, you need to explicitly opt in via a dropdown in the Chat view.
+
+    ![Screenshot of a terminal command in the Chat view, showing the Enable Auto Approve dropdown.](https://code.visualstudio.com/assets/updates/1_104/terminal-auto-approve-opt-in.png)
+
+* From the Chat view, you can conveniently add auto-approve rules for the command being run, or open the configuration setting:
+
+    ![Screenshot that shows the three standard options are presented for "foo --arg && bar".](https://code.visualstudio.com/assets/updates/1_104/terminal-auto-approve-ui.png)
+
+    _Theme: [Sapphire](https://marketplace.visualstudio.com/items?itemName=Tyriar.theme-sapphire) (preview on [vscode.dev](https://vscode.dev/editor/theme/Tyriar.theme-sapphire))_
+
+    This has some basic support for commands to suggest sub-commands where they would be more appropriate, such as suggesting an `npm test` rule rather than `npm`.
+
+* To improve transparency around auto-approved commands, we show which rule was applied in the Chat view, also enabling you to configure that rule:
+
+    ![Screenshot showing the new links added under the tool call in the Chat view for adding new auto approve rules.](https://code.visualstudio.com/assets/updates/1_104/terminal-auto-approve-new-links.png)
+
+* We improved the defaults to provide safety and reduce noise. You can see the full list of rules by viewing the setting's default value by opening your `settings.json` file, then entering `chat.tools.terminal.autoApprove` and completing it via <kbd>Tab</kbd>.
+
+* Non-regex rules that contain a backslash or forward slash character are now treated as a path and not only approve that exact path, but also allow either slash type and also a `./` prefix. When using PowerShell, all rules are forced to be case insensitive.
+
+* When agent mode wants to pull content from the internet using `curl`, `wget`, `Invoke-RestMethod`, or `Invoke-WebRequest`, we now show a warning, as this is a common vector for prompt injection attacks.
+
+Learn more about [terminal auto approve](https://code.visualstudio.com/docs/copilot/chat/chat-agent-mode#_autoapprove-terminal-commands) in our documentation.
+
+#### Global auto approve
+
+Global auto approve has been [an experimental setting since v1.99](https://code.visualstudio.com/updates/v1_99#_agent-mode-tool-approvals). What we have observed is that users have been enabling this setting without thinking deeply enough about the consequences. Additionally, some users thought that enabling the `chat.tools.autoApprove` setting was a prerequisite to enabling terminal auto approve, which was never the case.
+
+To combat these misconceptions and to further protect our users, there is now a deservedly scary-looking warning the first time global auto approve attempts to be used, so the user can easily back out and disable the setting:
+
+![Screenshot of a warning dialog that appears when global auto approve is used for the first time.](https://code.visualstudio.com/assets/updates/1_104/global-auto-approve-warning.png)
+
+The setting has also been changed to the clearer `chat.tools.global.autoApprove` without any automatic migration, so all users (accidental or intentional) need to go and explicitly set it again.
+
+#### Math rendering enabled by default
+
+**Setting**: `chat.math.enabled`
+
+Rendering of mathematical equations in chat responses is now generally available and enabled by default. You can disable this functionality with the `chat.math.enabled` setting.
+
+![Screenshot of the Chat view, showing inline and block equations in a chat response.](https://code.visualstudio.com/assets/updates/1_104/chat-math.png)
+
+This feature is powered by [KaTeX](https://katex.org) and supports both inline and block math equations. Inline math equations can be written by wrapping the markup in single dollar signs (`$...$`), while block math equations use two dollar signs (`$$...$$`).
+
+#### Chat view default visibility
+
+**Setting**: `workbench.secondarySideBar.defaultVisibility`
+
+When you first open a workspace, the Secondary Side Bar with the Chat view is visible by default, inviting you to ask questions or start an agentic session right away. You can configure this behavior with the `workbench.secondarySideBar.defaultVisibility` setting or by using the dropdown of the Chat view itself:
+
+![Screenshot showing Chat view menu with the option to set the default Secondary Side Bar visibility.](https://code.visualstudio.com/assets/updates/1_104/auxview.png)
+
+#### Improved task support
+
+* Input request detection
+
+    When you run a task or terminal command in agent mode, the agent now detects when the process requests user input, and you're prompted to respond in chat. If you type in the terminal while a prompt is present, the prompt will hide automatically. When options and descriptions are provided (such as `[Y] Yes [N] No`), these are surfaced in the confirmation prompt.
+
+    <video src="https://code.visualstudio.com/assets/updates/1_104/prompt-input-demo.mp4" title="Example of input being detected and responded to" autoplay loop controls muted></video>
+
+* Error detection for tasks with problem matchers
+
+    For tasks that use problem matchers, the agent now collects and surfaces errors based on the problem matcher results, rather than relying on the language model to evaluate output. Problems are presented in a dropdown within the chat progress message, allowing you to navigate directly to the problem location. This ensures that errors are reported only when relevant to the current task execution.
+
+* Compound task support
+
+    Agent mode now supports running compound tasks. When you run a compound task, the agent indicates progress and output for each dependent task, including any prompts for user input. This enables more complex workflows and better visibility into multi-step task execution.
+
+    In the example below, the VS Code - Build task is run. Output is assessed for each dependency task and a problem is surfaced to the user in the response and in the progress message dropdown.
+
+    <video src="https://code.visualstudio.com/assets/updates/1_104/build-task.mp4" title="Example of agent running the VS Code - Build task" autoplay loop controls muted></video>
+
+#### Improved terminal support
+
+* Moved more terminal tools to core
+
+    Like [the `runInTerminal` tool last release](https://code.visualstudio.com/updates/v1_103#_improved-reliability-and-performance-of-the-run-in-terminal-and-task-tools), the `terminalSelection` and `terminalLastCommand` tools have been moved from the extension to core, which should provide general reliability improvements.
+
+* Configurable terminal tool shell integration timeout
+
+    Whenever the `runInTerminal` tool tries to create a terminal, it waits a period for shell integration to activate. If your shell is especially slow to start up, say you have a very heavy PowerShell profile, this could cause it to wait the previously fixed 5-second timeout and still end up failing in the end. This timeout is now configurable via the `chat.tools.terminal.shellIntegrationTimeout` setting.
+
+* Prevent Command Prompt usage
+
+    Since shell integration isn't really possible in Command Prompt, at least with the capabilities that Copilot needs, Copilot now opts to use Windows PowerShell instead, which should have shell integration by default. This should improve the reliability of the `runInTerminal` tool when your default shell is Command Prompt.
+
+    If, for some reason, you want Copilot to use Command Prompt, this is currently not possible. We will likely be adding the ability to customize the terminal profile used by Copilot soon, which is tracked in [#253945](https://github.com/microsoft/vscode/issues/253945).
+
+#### Todo List tool
+
+The todo list tool helps agents break down complex multi-step tasks into smaller tasks and report progress to help you track individual items. We've made improvements to this tool, which is now enabled by default.
+
+Tool progress is displayed in the Todo control at the top of the Chat view, which automatically collapses as the todo list is worked through and shows only the current task in progress.
+
+#### Skip tool calls
+
+When the agent requests confirmation for a tool call, you can now choose to skip the tool call and let the agent continue. You can still cancel the request or enter a new request via the chat input box.
+
+#### Improvements to semantic workspace search
+
+We've upgraded the `#codebase` tool to use a new [embeddings](https://en.wikipedia.org/wiki/Embedding_(machine_learning)) model for semantic searching for code in your workspace. This new model provides better results for code searches. The new embeddings also use less storage space, requiring only 6% of our previous model's on-disk storage size for each embedding.
+
+We'll be gradually rolling out this new embeddings model over the next few weeks. Your workspace will be automatically updated to use this new embeddings model, so no action is required. VS Code Insiders is already using the new model if you want to try it out before it rolls out to you.
+
+#### Hide and disable GitHub Copilot AI features
+
+**Setting**: `chat.disableAIFeatures`
+
+We are introducing a new setting `chat.disableAIFeatures` for disabling and hiding built-in AI features provided by GitHub Copilot, including chat, code completions, and next edit suggestions.
+
+The setting has the following advantages over the previous solution we had in place:
+
+* Syncs across your devices unless you disable this explicitly
+* Disables the Copilot extensions in case they are installed
+* Configure the setting per-profile or per-workspace, making it easy to disable AI features selectively
+
+The command to "Hide AI Features" was renamed to reflect this change and will now reveal this new setting in the settings editor.
+
+> **Note**: users that were hiding AI features previously will continue to see AI features hidden. You can update the setting in addition if you want to synchronize your choice across devices.
+
+### MCP
+
+#### Support for server instructions
+
+VS Code now reads MCP server instructions and will include them in its base prompt.
+
+#### MCP auto discovery disabled by default
+
+**Setting**: `chat.mcp.discovery.enabled`
+
+VS Code supports [automatic discovery of MCP servers](https://code.visualstudio.com/docs/copilot/customization/mcp-servers#_add-an-mcp-server) installed in other apps like Claude Code. As MCP support has matured in VS Code, auto-discovery is now disabled by default, but you can re-enable it using the `chat.mcp.discovery.enabled` setting.
+
+#### Enable MCP
+
+**Setting**: `chat.mcp.access`
+
+The `chat.mcp.enabled` setting that previously controlled whether MCP servers could run in VS Code has been migrated to a new `chat.mcp.access` setting with more descriptive options:
+
+* `all`: allow all MCP servers to run (equivalent to the previous `true` value)
+* `none`: disable MCP support entirely (equivalent to the previous `false` value)
+
+### Accessibility
+
+#### Focus chat confirmation action
+
+We've added a command, **Focus Chat Confirmation**, which focuses the confirmation dialog, if present, or announces to screen reader users that confirmation is not required.
+
+### Code Editing
+
+#### Configurable inline suggestion delay
+
+**Setting**: `editor.inlineSuggest.minShowDelay`
+
+A new setting `editor.inlineSuggest.minShowDelay` enables you to configure how quickly inline suggestions can appear after you type. This can be useful if you find that suggestions are appearing too quickly and getting in the way of your typing.
+
+### Notebooks
+
+#### Improved NES suggestions (Experimental)
+
+**Setting**: `github.copilot.chat.notebook.enhancedNextEditSuggestions.enabled`
+
+We are experimenting with improving the quality of next edit suggestions for notebooks. Currently, the language model has access to the contents of the active cell when generating suggestions. With the `github.copilot.chat.notebook.enhancedNextEditSuggestions.enabled` setting enabled, the language model has access to the entire notebook, enabling it to generate more accurate and higher-quality next edit suggestions.
+
+
 ## 0.30 (2025-08-07)
 
 GitHub Copilot updates from [July 2025](https://code.visualstudio.com/updates/v1_103):

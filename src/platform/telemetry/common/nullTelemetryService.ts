@@ -39,6 +39,9 @@ export class NullTelemetryService implements ITelemetryService {
 	setSharedProperty(name: string, value: string): void {
 		return;
 	}
+	setAdditionalExpAssignments(expAssignments: string[]): void {
+		return;
+	}
 	postEvent(eventName: string, props: Map<string, string>): void {
 		return;
 	}

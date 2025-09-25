@@ -12,7 +12,7 @@ import { IConfigurationService } from '../../../platform/configuration/common/co
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
-import { IEnvService } from '../../../platform/env/common/envService';
+import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
@@ -44,7 +44,7 @@ import { ChatParticipantRequestHandler } from '../../prompt/node/chatParticipant
 import { sendReviewActionTelemetry } from '../../prompt/node/feedbackGenerator';
 import { CurrentSelection } from '../../prompts/node/panel/currentSelection';
 import { SymbolAtCursor } from '../../prompts/node/panel/symbolAtCursor';
-import { cancelReview, doReview } from '../../review/node/doReview';
+import { doReview } from '../../review/node/doReview';
 import { QuickFixesProvider, RefactorsProvider } from './inlineChatCodeActions';
 import { NotebookExectionStatusBarItemProvider } from './inlineChatNotebookActions';
 
@@ -220,7 +220,7 @@ ${message}`,
 		}
 	};
 	const extensionMode = extensionContext.extensionMode;
-	if (typeof extensionMode === 'number' && extensionMode !== vscode.ExtensionMode.Test) {
+	if (typeof extensionMode === 'number' && (extensionMode !== vscode.ExtensionMode.Test || isScenarioAutomation)) {
 		reviewService.updateContextValues();
 	}
 	const goToNextReview = (currentThread: vscode.CommentThread | undefined, direction: number) => {
@@ -311,10 +311,15 @@ ${message}`,
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.explain', doExplain));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.explain.palette', () => doExplain(undefined, true)));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review', () => doReview(...instaService.invokeFunction(getServicesForReview), 'selection', vscode.ProgressLocation.Notification)));
-	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.stagedChanges', () => doReview(...instaService.invokeFunction(getServicesForReview), 'index', vscode.ProgressLocation.SourceControl)));
-	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.unstagedChanges', () => doReview(...instaService.invokeFunction(getServicesForReview), 'workingTree', vscode.ProgressLocation.SourceControl)));
-	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.changes', () => doReview(...instaService.invokeFunction(getServicesForReview), 'all', vscode.ProgressLocation.SourceControl)));
-	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.changes.cancel', () => cancelReview(vscode.ProgressLocation.SourceControl, instaService.invokeFunction(accessor => accessor.get(IRunCommandExecutionService)))));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.stagedChanges', () => doReview(...instaService.invokeFunction(getServicesForReview), 'index', vscode.ProgressLocation.Notification)));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.unstagedChanges', () => doReview(...instaService.invokeFunction(getServicesForReview), 'workingTree', vscode.ProgressLocation.Notification)));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.changes', () => doReview(...instaService.invokeFunction(getServicesForReview), 'all', vscode.ProgressLocation.Notification)));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.stagedFileChange', (resource: vscode.SourceControlResourceState) => {
+		return doReview(...instaService.invokeFunction(getServicesForReview), { group: 'index', file: resource.resourceUri }, vscode.ProgressLocation.Notification);
+	}));
+	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.unstagedFileChange', (resource: vscode.SourceControlResourceState) => {
+		return doReview(...instaService.invokeFunction(getServicesForReview), { group: 'workingTree', file: resource.resourceUri }, vscode.ProgressLocation.Notification);
+	}));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.apply', doApplyReview));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.applyAndNext', (commentThread: vscode.CommentThread) => doApplyReview(commentThread, true)));
 	disposables.add(vscode.commands.registerCommand('github.copilot.chat.review.applyShort', (commentThread: vscode.CommentThread) => doApplyReview(commentThread, true)));

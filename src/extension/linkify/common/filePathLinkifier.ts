@@ -9,7 +9,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { hasDriveLetter } from '../../../util/vs/base/common/extpath';
 import { Schemas } from '../../../util/vs/base/common/network';
-import { basename } from '../../../util/vs/base/common/path';
+import * as path from '../../../util/vs/base/common/path';
 import { isWindows } from '../../../util/vs/base/common/platform';
 import * as resources from '../../../util/vs/base/common/resources';
 import { isUriComponents } from '../../../util/vs/base/common/uri';
@@ -96,14 +96,18 @@ export class FilePathLinkifier implements IContributedLinkifier {
 		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
 
 		// Don't linkify very short paths such as '/' or special paths such as '../'
-		if (pathText.length < 2 || ['../', '..\\', '/.', '\\.', '..'].includes(pathText)) {
+		if (pathText.length < 2 || ['../', '..\\', '/.', './', '\\.', '..'].includes(pathText)) {
 			return;
 		}
 
-		if (pathText.startsWith('/') || (isWindows && hasDriveLetter(pathText))) {
+		if (pathText.startsWith('/') || (isWindows && (pathText.startsWith('\\') || hasDriveLetter(pathText)))) {
 			try {
-				const uri = await this.statAndNormalizeUri(Uri.file(pathText));
+				const uri = await this.statAndNormalizeUri(Uri.file(pathText.startsWith('/') ? path.posix.normalize(pathText) : path.normalize(pathText)));
 				if (uri) {
+					if (path.posix.normalize(uri.path) === '/') {
+						return undefined;
+					}
+
 					return uri;
 				}
 			} catch {
@@ -136,7 +140,7 @@ export class FilePathLinkifier implements IContributedLinkifier {
 		}
 
 		// Then fallback to checking references based on filename
-		const name = basename(pathText);
+		const name = path.basename(pathText);
 		const refUri = context.references
 			.map(ref => {
 				if ('variableName' in ref.anchor) {

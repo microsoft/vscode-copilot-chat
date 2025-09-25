@@ -2,7 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type { Disposable, LanguageModelChatInformation, LanguageModelChatProvider2 } from 'vscode';
+import type { Disposable, LanguageModelChatInformation, LanguageModelChatProvider, LanguageModelDataPart, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart } from 'vscode';
 import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
@@ -29,6 +29,8 @@ interface BYOKBaseModelConfig {
 	capabilities?: BYOKModelCapabilities;
 }
 
+export type LMResponsePart = LanguageModelTextPart | LanguageModelToolCallPart | LanguageModelDataPart | LanguageModelThinkingPart;
+
 export interface BYOKGlobalKeyModelConfig extends BYOKBaseModelConfig {
 	apiKey: string;
 }
@@ -52,7 +54,6 @@ export interface BYOKModelCapabilities {
 	toolCalling: boolean;
 	vision: boolean;
 	thinking?: boolean;
-	responsesApi?: boolean;
 }
 
 export interface BYOKModelRegistry {
@@ -63,7 +64,7 @@ export interface BYOKModelRegistry {
 	registerModel(config: BYOKModelConfig): Promise<Disposable>;
 }
 
-export interface BYOKModelProvider<T extends LanguageModelChatInformation> extends LanguageModelChatProvider2<T> {
+export interface BYOKModelProvider<T extends LanguageModelChatInformation> extends LanguageModelChatProvider<T> {
 	readonly authType: BYOKAuthType;
 	/**
 	 * Called when the user is requesting an API key update. The provider should handle all the UI and updating the storage
@@ -93,7 +94,7 @@ export function chatModelInfoToProviderMetadata(chatModelInfo: IChatModelInforma
 	return {
 		id: chatModelInfo.id,
 		family: chatModelInfo.capabilities.family,
-		description: localize('byok.model.description', '{0} is contributed via the {1} provider.', chatModelInfo.name, chatModelInfo.capabilities.family),
+		tooltip: localize('byok.model.description', '{0} is contributed via the {1} provider.', chatModelInfo.name, chatModelInfo.capabilities.family),
 		version: '1.0.0',
 		maxOutputTokens: outputTokens,
 		maxInputTokens: inputTokens,
@@ -101,9 +102,9 @@ export function chatModelInfoToProviderMetadata(chatModelInfo: IChatModelInforma
 		isUserSelectable: true,
 		capabilities: {
 			toolCalling: chatModelInfo.capabilities.supports.tool_calls,
-			vision: chatModelInfo.capabilities.supports.vision,
+			imageInput: chatModelInfo.capabilities.supports.vision,
 		},
-		auth: true
+		requiresAuthorization: true
 	};
 }
 
@@ -121,7 +122,7 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 		version: '1.0.0',
 		capabilities: {
 			type: 'chat',
-			family: providerName,
+			family: modelId,
 			supports: {
 				streaming: true,
 				tool_calls: !!knownModelInfo?.toolCalling,
@@ -152,14 +153,14 @@ export function byokKnownModelsToAPIInfo(providerName: string, knownModels: BYOK
 			version: '1.0.0',
 			maxOutputTokens: capabilities.maxOutputTokens,
 			maxInputTokens: capabilities.maxInputTokens,
-			cost: providerName,
+			detail: providerName,
 			family: providerName,
-			description: `${capabilities.name} is contributed via the ${providerName} provider.`,
+			tooltip: `${capabilities.name} is contributed via the ${providerName} provider.`,
 			capabilities: {
 				toolCalling: capabilities.toolCalling,
-				vision: capabilities.vision
+				imageInput: capabilities.vision
 			},
-		};
+		} satisfies LanguageModelChatInformation;
 	});
 }
 

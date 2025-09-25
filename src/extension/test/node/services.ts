@@ -7,9 +7,10 @@ import { ToolGroupingCache } from '../../../extension/tools/common/virtualTools/
 import { IToolGroupingCache, IToolGroupingService } from '../../../extension/tools/common/virtualTools/virtualToolTypes';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { MockChatMLFetcher } from '../../../platform/chat/test/common/mockChatMLFetcher';
-import { EMBEDDING_MODEL } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { DiffServiceImpl } from '../../../platform/diff/node/diffServiceImpl';
+import { EmbeddingType, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
+import { RemoteEmbeddingsComputer } from '../../../platform/embeddings/common/remoteEmbeddingsComputer';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IModelConfig } from '../../../platform/endpoint/test/node/openaiCompatibleEndpoint';
 import { TestEndpointProvider } from '../../../platform/endpoint/test/node/testEndpointProvider';
@@ -30,11 +31,17 @@ import { NullTestProvider } from '../../../platform/testing/common/nullTestProvi
 import { TestLogService } from '../../../platform/testing/common/testLogService';
 import { ITestProvider } from '../../../platform/testing/common/testProvider';
 import { IWorkspaceChunkSearchService, NullWorkspaceChunkSearchService } from '../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
+import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
+import { IClaudeCodeSdkService } from '../../agents/claude/node/claudeCodeSdkService';
+import { MockClaudeCodeSdkService } from '../../agents/claude/node/test/mockClaudeCodeSdkService';
+import { ILanguageModelServer } from '../../agents/node/langModelServer';
+import { MockLanguageModelServer } from '../../agents/node/test/mockLanguageModelServer';
 import { CommandServiceImpl, ICommandService } from '../../commands/node/commandService';
 import { ILinkifyService, LinkifyService } from '../../linkify/common/linkifyService';
 import { IFeedbackReporter, NullFeedbackReporterImpl } from '../../prompt/node/feedbackReporter';
 import { IPromptVariablesService, NullPromptVariablesService } from '../../prompt/node/promptVariablesService';
+import { ITodoListContextProvider, TodoListContextProvider } from '../../prompt/node/todoListContextProvider';
 import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inline/fixCookbookService';
 import { IToolsService } from '../../tools/common/toolsService';
@@ -46,20 +53,19 @@ export interface ISimulationModelConfig {
 	chatModel?: string;
 	smartChatModel?: string;
 	fastChatModel?: string;
-	embeddingModel?: EMBEDDING_MODEL;
+	readonly embeddingType?: EmbeddingType;
 	fastRewriteModel?: string;
 	skipModelMetadataCache?: boolean;
 	customModelConfigs?: Map<string, IModelConfig>;
 }
 
-export function createExtensionUnitTestingServices(currentTestRunInfo?: any, modelConfig?: ISimulationModelConfig): TestingServiceCollection {
-	const testingServiceCollection = createPlatformServices();
+export function createExtensionUnitTestingServices(disposables: Pick<DisposableStore, 'add'> = new DisposableStore(), currentTestRunInfo?: any, modelConfig?: ISimulationModelConfig): TestingServiceCollection {
+	const testingServiceCollection = createPlatformServices(disposables);
 	testingServiceCollection.define(
 		IEndpointProvider,
 		new SyncDescriptor(TestEndpointProvider, [
 			modelConfig?.smartChatModel ?? modelConfig?.chatModel,
 			modelConfig?.fastChatModel ?? modelConfig?.chatModel,
-			modelConfig?.embeddingModel,
 			modelConfig?.fastRewriteModel,
 			currentTestRunInfo,
 			!!modelConfig?.skipModelMetadataCache,
@@ -77,6 +83,7 @@ export function createExtensionUnitTestingServices(currentTestRunInfo?: any, mod
 	testingServiceCollection.define(IFeedbackReporter, new SyncDescriptor(NullFeedbackReporterImpl));
 	testingServiceCollection.define(IChatMLFetcher, new SyncDescriptor(MockChatMLFetcher));
 	testingServiceCollection.define(IToolsService, new SyncDescriptor(TestToolsService, [new Set()]));
+	testingServiceCollection.define(IClaudeCodeSdkService, new SyncDescriptor(MockClaudeCodeSdkService));
 	testingServiceCollection.define(IEditLogService, new SyncDescriptor(EditLogService));
 	testingServiceCollection.define(IMultiFileEditInternalTelemetryService, new SyncDescriptor(MultiFileEditInternalTelemetryService));
 	testingServiceCollection.define(ICodeMapperService, new SyncDescriptor(CodeMapperService));
@@ -90,5 +97,8 @@ export function createExtensionUnitTestingServices(currentTestRunInfo?: any, mod
 	testingServiceCollection.define(ITerminalService, new SyncDescriptor(NullTerminalService));
 	testingServiceCollection.define(IToolGroupingCache, new SyncDescriptor(ToolGroupingCache));
 	testingServiceCollection.define(IToolGroupingService, new SyncDescriptor(ToolGroupingService));
+	testingServiceCollection.define(IEmbeddingsComputer, new SyncDescriptor(RemoteEmbeddingsComputer));
+	testingServiceCollection.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
+	testingServiceCollection.define(ILanguageModelServer, new SyncDescriptor(MockLanguageModelServer));
 	return testingServiceCollection;
 }

@@ -14,7 +14,7 @@ import { IEnvService } from '../../env/common/envService';
 import { BaseOctoKitService, VSCodeTeamId } from '../../github/common/githubService';
 import { NullBaseOctoKitService } from '../../github/common/nullOctokitServiceImpl';
 import { ILogService } from '../../log/common/logService';
-import { IFetcherService, Response, jsonVerboseError } from '../../networking/common/fetcherService';
+import { FetchOptions, IFetcherService, Response, jsonVerboseError } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { CopilotToken, CopilotUserInfo, ExtendedTokenInfo, TokenInfo, TokenInfoOrError, containsInternalOrg } from '../common/copilotToken';
@@ -102,11 +102,36 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 	 * @returns A Copilot token info or an error.
 	 * @todo this should be not be public, but it is for now to allow testing.
 	 */
-	async authFromGitHubToken(
-		githubToken: string
+	async authFromGitHubToken(githubToken: string, ghUsername: string): Promise<TokenInfoOrError & NotGitHubLoginFailed> {
+		return this.doAuthFromGitHubTokenOrDevDeviceId({ githubToken, ghUsername });
+	}
+
+	/**
+	 * Fetches a Copilot token from the devDeviceId.
+	 * @param devDeviceId A device ID to mint a Copilot token from.
+	 * @returns A Copilot token info or an error.
+	 * @todo this should be not be public, but it is for now to allow testing.
+	 */
+	async authFromDevDeviceId(devDeviceId: string): Promise<TokenInfoOrError & NotGitHubLoginFailed> {
+		return this.doAuthFromGitHubTokenOrDevDeviceId({ devDeviceId });
+	}
+
+	private async doAuthFromGitHubTokenOrDevDeviceId(
+		context: { githubToken: string; ghUsername: string } | { devDeviceId: string }
 	): Promise<TokenInfoOrError & NotGitHubLoginFailed> {
 		this._telemetryService.sendGHTelemetryEvent('auth.new_login');
-		const response = await this.fetchCopilotToken(githubToken);
+
+		let response, userInfo, ghUsername;
+		if ('githubToken' in context) {
+			ghUsername = context.ghUsername;
+			[response, userInfo] = (await Promise.all([
+				this.fetchCopilotTokenFromGitHubToken(context.githubToken),
+				this.fetchCopilotUserInfo(context.githubToken)
+			]));
+		} else {
+			response = await this.fetchCopilotTokenFromDevDeviceId(context.devDeviceId);
+		}
+
 		if (!response) {
 			this._logService.warn('Failed to get copilot token');
 			this._telemetryService.sendGHTelemetryErrorEvent('auth.request_failed');
@@ -149,22 +174,18 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 		// adjust expires_at to the refresh time + a buffer to avoid expiring the token before the refresh can fire.
 		tokenInfo.expires_at = nowSeconds() + tokenInfo.refresh_in + 60; // extra buffer to allow refresh to happen successfully
 
-
-
 		// extend the token envelope
-		const userInfo = await this.fetchCopilotUserInfo(githubToken);
-		const authedUser = await this._baseOctokitservice.getCurrentAuthedUserWithToken(githubToken);
-		const login = authedUser?.login ?? 'unknown';
+		const login = ghUsername ?? 'unknown';
 		let isVscodeTeamMember = false;
 		// VS Code team members are guaranteed to be a part of an internal org so we can check that first to minimize API calls
-		if (containsInternalOrg(tokenInfo.organization_list ?? [])) {
-			isVscodeTeamMember = !!(await this._baseOctokitservice.getTeamMembershipWithToken(VSCodeTeamId, githubToken, login));
+		if (containsInternalOrg(tokenInfo.organization_list ?? []) && 'githubToken' in context) {
+			isVscodeTeamMember = !!(await this._baseOctokitservice.getTeamMembershipWithToken(VSCodeTeamId, context.githubToken, login));
 		}
 		const extendedInfo: ExtendedTokenInfo = {
 			...tokenInfo,
-			copilot_plan: userInfo.copilot_plan,
-			quota_snapshots: userInfo.quota_snapshots,
-			quota_reset_date: userInfo.quota_reset_date,
+			copilot_plan: userInfo?.copilot_plan ?? tokenInfo.sku ?? '',
+			quota_snapshots: userInfo?.quota_snapshots,
+			quota_reset_date: userInfo?.quota_reset_date,
 			username: login,
 			isVscodeTeamMember,
 		};
@@ -185,22 +206,40 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 	//#endregion
 
 	//#region Private methods
-	private async fetchCopilotToken(githubToken: string) {
-		return await this._capiClientService.makeRequest<Response>({
+	private async fetchCopilotTokenFromGitHubToken(githubToken: string) {
+		const options: FetchOptions = {
 			headers: {
 				Authorization: `token ${githubToken}`,
 				'X-GitHub-Api-Version': '2025-04-01'
 			},
-		}, { type: RequestType.CopilotToken });
+			retryFallbacks: true,
+			expectJSON: true,
+		};
+		return await this._capiClientService.makeRequest<Response>(options, { type: RequestType.CopilotToken });
+	}
+
+	private async fetchCopilotTokenFromDevDeviceId(devDeviceId: string) {
+		const options: FetchOptions = {
+			headers: {
+				'X-GitHub-Api-Version': '2025-04-01',
+				'Editor-Device-Id': `${devDeviceId}`
+			},
+			retryFallbacks: true,
+			expectJSON: true,
+		};
+		return await this._capiClientService.makeRequest<Response>(options, { type: RequestType.CopilotNLToken });
 	}
 
 	private async fetchCopilotUserInfo(githubToken: string): Promise<CopilotUserInfo> {
-		const response = await this._capiClientService.makeRequest<Response>({
+		const options: FetchOptions = {
 			headers: {
 				Authorization: `token ${githubToken}`,
 				'X-GitHub-Api-Version': '2025-04-01',
-			}
-		}, { type: RequestType.CopilotUserInfo });
+			},
+			retryFallbacks: true,
+			expectJSON: true,
+		};
+		const response = await this._capiClientService.makeRequest<Response>(options, { type: RequestType.CopilotUserInfo });
 		const data = await response.json();
 		return data;
 	}
@@ -225,7 +264,7 @@ export class FixedCopilotTokenManager extends BaseCopilotTokenManager implements
 		@IFetcherService fetcherService: IFetcherService,
 		@IEnvService envService: IEnvService
 	) {
-		super(new NullBaseOctoKitService(capiClientService, fetcherService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
+		super(new NullBaseOctoKitService(capiClientService, fetcherService, logService, telemetryService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
 		this.copilotToken = { token: _completionsToken, expires_at: 0, refresh_in: 0, username: 'fixedTokenManager', isVscodeTeamMember: false, copilot_plan: 'unknown' };
 	}
 
@@ -260,6 +299,7 @@ export class CopilotTokenManagerFromGitHubToken extends BaseCopilotTokenManager 
 
 	constructor(
 		private readonly githubToken: string,
+		private readonly githubUsername: string,
 		@ILogService logService: ILogService,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IDomainService domainService: IDomainService,
@@ -268,12 +308,12 @@ export class CopilotTokenManagerFromGitHubToken extends BaseCopilotTokenManager 
 		@IEnvService envService: IEnvService,
 		@IConfigurationService protected readonly configurationService: IConfigurationService
 	) {
-		super(new NullBaseOctoKitService(capiClientService, fetcherService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
+		super(new NullBaseOctoKitService(capiClientService, fetcherService, logService, telemetryService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
 	}
 
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
 		if (!this.copilotToken || this.copilotToken.expires_at < nowSeconds() - (60 * 5 /* 5min */) || force) {
-			const tokenResult = await this.authFromGitHubToken(this.githubToken);
+			const tokenResult = await this.authFromGitHubToken(this.githubToken, this.githubUsername);
 			if (tokenResult.kind === 'failure') {
 				throw Error(
 					`Failed to get copilot token: ${tokenResult.reason.toString()} ${tokenResult.message ?? ''}`
@@ -286,7 +326,7 @@ export class CopilotTokenManagerFromGitHubToken extends BaseCopilotTokenManager 
 
 	async checkCopilotToken() {
 		if (!this.copilotToken || this.copilotToken.expires_at < nowSeconds()) {
-			const tokenResult = await this.authFromGitHubToken(this.githubToken);
+			const tokenResult = await this.authFromGitHubToken(this.githubToken, this.githubUsername);
 			if (tokenResult.kind === 'failure') {
 				return tokenResult;
 			}

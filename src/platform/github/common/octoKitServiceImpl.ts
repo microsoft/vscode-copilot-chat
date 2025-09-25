@@ -4,7 +4,9 @@
  *--------------------------------------------------------------------------------------------*/
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
+import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
+import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { BaseOctoKitService, IOctoKitService, IOctoKitUser } from './githubService';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
@@ -13,9 +15,11 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 	constructor(
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
-		@IFetcherService fetcherService: IFetcherService
+		@IFetcherService fetcherService: IFetcherService,
+		@ILogService logService: ILogService,
+		@ITelemetryService telemetryService: ITelemetryService
 	) {
-		super(capiClientService, fetcherService);
+		super(capiClientService, fetcherService, logService, telemetryService);
 	}
 
 	async getCurrentAuthedUser(): Promise<IOctoKitUser | undefined> {

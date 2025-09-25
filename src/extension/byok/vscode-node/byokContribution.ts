@@ -16,11 +16,14 @@ import { IExtensionContribution } from '../../common/contributions';
 import { AnthropicLMProvider } from './anthropicProvider';
 import { AzureBYOKModelProvider } from './azureProvider';
 import { BYOKStorageService, IBYOKStorageService } from './byokStorageService';
+import { CustomOAIModelConfigurator } from './customOAIModelConfigurator';
+import { CustomOAIBYOKModelProvider } from './customOAIProvider';
 import { GeminiBYOKLMProvider } from './geminiProvider';
 import { GroqBYOKLMProvider } from './groqProvider';
 import { OllamaLMProvider } from './ollamaProvider';
 import { OAIBYOKLMProvider } from './openAIProvider';
 import { OpenRouterLMProvider } from './openRouterProvider';
+import { XAIBYOKLMProvider } from './xAIProvider';
 
 export class BYOKContrib extends Disposable implements IExtensionContribution {
 	public readonly id: string = 'byok-contribution';
@@ -40,10 +43,17 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 		super();
 		this._register(commands.registerCommand('github.copilot.chat.manageBYOK', async (vendor: string) => {
 			const provider = this._providers.get(vendor);
-			if (provider) {
+
+			// Show quick pick for Azure and CustomOAI providers
+			if (provider && (vendor === AzureBYOKModelProvider.providerName.toLowerCase() || vendor === CustomOAIBYOKModelProvider.providerName.toLowerCase())) {
+				const configurator = new CustomOAIModelConfigurator(this._configurationService, vendor, provider);
+				await configurator.configureModelOrUpdateAPIKey();
+			} else if (provider) {
+				// For all other providers, directly go to API key management
 				await provider.updateAPIKey();
 			}
 		}));
+
 		this._byokStorageService = new BYOKStorageService(extensionContext);
 		this._authChange(authService, this._instantiationService);
 
@@ -61,12 +71,14 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			this._providers.set(AnthropicLMProvider.providerName.toLowerCase(), instantiationService.createInstance(AnthropicLMProvider, knownModels[AnthropicLMProvider.providerName], this._byokStorageService));
 			this._providers.set(GroqBYOKLMProvider.providerName.toLowerCase(), instantiationService.createInstance(GroqBYOKLMProvider, knownModels[GroqBYOKLMProvider.providerName], this._byokStorageService));
 			this._providers.set(GeminiBYOKLMProvider.providerName.toLowerCase(), instantiationService.createInstance(GeminiBYOKLMProvider, knownModels[GeminiBYOKLMProvider.providerName], this._byokStorageService));
+			this._providers.set(XAIBYOKLMProvider.providerName.toLowerCase(), instantiationService.createInstance(XAIBYOKLMProvider, knownModels[XAIBYOKLMProvider.providerName], this._byokStorageService));
 			this._providers.set(OAIBYOKLMProvider.providerName.toLowerCase(), instantiationService.createInstance(OAIBYOKLMProvider, knownModels[OAIBYOKLMProvider.providerName], this._byokStorageService));
 			this._providers.set(OpenRouterLMProvider.providerName.toLowerCase(), instantiationService.createInstance(OpenRouterLMProvider, this._byokStorageService));
 			this._providers.set(AzureBYOKModelProvider.providerName.toLowerCase(), instantiationService.createInstance(AzureBYOKModelProvider, this._byokStorageService));
+			this._providers.set(CustomOAIBYOKModelProvider.providerName.toLowerCase(), instantiationService.createInstance(CustomOAIBYOKModelProvider, this._byokStorageService));
 
 			for (const [providerName, provider] of this._providers) {
-				this._store.add(lm.registerChatModelProvider(providerName, provider));
+				this._store.add(lm.registerLanguageModelChatProvider(providerName, provider));
 			}
 		}
 	}
