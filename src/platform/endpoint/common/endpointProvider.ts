@@ -16,6 +16,11 @@ export type ModelPolicy = {
 	terms?: string;
 };
 
+export type CustomModel = {
+	key_name: string;
+	owner_name: string;
+};
+
 export type IChatModelCapabilities = {
 	type: 'chat';
 	family: string;

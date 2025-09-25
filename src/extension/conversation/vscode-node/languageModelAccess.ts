@@ -158,21 +158,18 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			if (endpoint.model === AutoChatEndpoint.id) {
 				modelDetail = 'Variable';
 			}
-			let modelName = endpoint.name;
 			if (endpoint.customModel) {
 				const customModel = endpoint.customModel;
-				modelDetail = customModel.ownerName;
-				modelDescription = customModel.keyName;
+				modelDetail = customModel.owner_name;
+				modelDescription = customModel.key_name;
 				modelCategory = { label: localize('languageModelHeader.custom_models', "Custom Models"), order: 1 };
-
-				modelName = endpoint.name.replace(` · ${customModel.keyName}`, '');
 			}
 
 			const session = this._authenticationService.anyGitHubSession;
 
 			const model: vscode.LanguageModelChatInformation = {
 				id: endpoint.model,
-				name: endpoint.model === AutoChatEndpoint.id ? 'Auto' : modelName,
+				name: endpoint.model === AutoChatEndpoint.id ? 'Auto' : endpoint.name,
 				family: endpoint.family,
 				tooltip: modelDescription,
 				detail: modelDetail,
