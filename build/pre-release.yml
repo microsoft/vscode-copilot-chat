@@ -80,6 +80,8 @@ extends:
         displayName: Create build cache archive
 
       - pwsh: |
+          $ErrorActionPreference = "Stop"
+
           # Get the OAuth token from the git config
           $result = git config --get-regexp .*extraheader ^AUTHORIZATION:
           $basicToken = $result -split "AUTHORIZATION: basic " | Select-Object -Last 1
@@ -98,6 +100,7 @@ extends:
         displayName: mixin
 
       - pwsh: |
+          $ErrorActionPreference = "Stop"
           $result = git config --get-regexp .*extraheader ^AUTHORIZATION:
           $basicToken = $result -split "AUTHORIZATION: basic " | Select-Object -Last 1
           $oauthToken = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($basicToken)) -split ":" | Select-Object -Last 1
@@ -177,6 +180,7 @@ extends:
         displayName: Install dotnet cli
 
       - pwsh: |
+          $ErrorActionPreference = "Stop"
           $result = git config --get-regexp .*extraheader ^AUTHORIZATION:
           $basicToken = $result -split "AUTHORIZATION: basic " | Select-Object -Last 1
           $oauthToken = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($basicToken)) -split ":" | Select-Object -Last 1
