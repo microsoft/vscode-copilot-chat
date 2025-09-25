@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { BasePromptElementProps, Chunk, Image, PromptElement, PromptPiece, PromptPieceChild, PromptSizing, Raw, SystemMessage, TokenLimit, UserMessage } from '@vscode/prompt-tsx';
-import { isDefined } from '@vscode/test-electron/out/util';
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -47,6 +46,7 @@ import { MultirootWorkspaceStructure } from '../panel/workspace/workspaceStructu
 import { AgentConversationHistory } from './agentConversationHistory';
 import { AlternateGPTPrompt, CodexStyleGPT5CodexPrompt, CodexStyleGPTPrompt, DefaultAgentPrompt, DefaultAgentPromptV2, SweBenchAgentPrompt } from './agentInstructions';
 import { SummarizedConversationHistory } from './summarizedConversationHistory';
+import { isDefined } from '../../../../util/vs/base/common/types';
 
 export interface AgentPromptProps extends GenericBasePromptElementProps {
 	readonly endpoint: IChatEndpoint;
