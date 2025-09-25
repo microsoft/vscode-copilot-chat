@@ -158,7 +158,7 @@ export class RemoteEmbeddingsComputer implements IEmbeddingsComputer {
 		const batchSize = endpoint.maxBatchSize;
 		// Open AI seems to allow 1 less than max tokens for the model requests. So if the max tokens is 8192, we can only send 8191 tokens.
 		const maxTokens = endpoint.modelMaxPromptTokens - 1;
-		return this.fetchResponseWithBatches(typeInfo, endpoint, inputs, cancellationToken, maxTokens, batchSize, options?.parallelism);
+		return this.fetchResponseWithBatches(typeInfo, endpoint, inputs, cancellationToken, maxTokens, batchSize);
 	}
 
 	/**
