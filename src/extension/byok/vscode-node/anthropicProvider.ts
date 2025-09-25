@@ -41,6 +41,15 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			for (const model of response.data) {
 				if (this._knownModels && this._knownModels[model.id]) {
 					modelList[model.id] = this._knownModels[model.id];
+				} else {
+					// Mix in generic capabilities for models we don't know
+					modelList[model.id] = {
+						maxInputTokens: 100000,
+						maxOutputTokens: 16000,
+						name: model.display_name,
+						toolCalling: true,
+						vision: false
+					};
 				}
 			}
 			return modelList;

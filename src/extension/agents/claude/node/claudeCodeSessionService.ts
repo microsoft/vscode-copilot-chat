@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { SDKMessage } from '@anthropic-ai/claude-code';
+import { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-code';
 import Anthropic from '@anthropic-ai/sdk';
 import type { CancellationToken } from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
@@ -341,11 +341,11 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		}
 
 		// Find the first user message to use as label
-		const firstUserMessage = messages.find(msg =>
+		const firstUserMessage: SDKUserMessage | undefined = messages.find((msg): msg is SDKUserMessage =>
 			msg.type === 'user' && 'message' in msg && msg.message?.role === 'user'
 		);
 		if (firstUserMessage && 'message' in firstUserMessage) {
-			const message = firstUserMessage.message;
+			const message: Anthropic.MessageParam = firstUserMessage.message;
 			let content: string | undefined;
 
 			// Handle both string content and array content formats using our helper
@@ -378,7 +378,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	/**
 	 * Strip attachments from message content, handling both string and array formats
 	 */
-	private _stripAttachmentsFromMessageContent(content: string | Anthropic.ContentBlockParam[]): string | Anthropic.ContentBlockParam[] {
+	private _stripAttachmentsFromMessageContent(content: Anthropic.MessageParam['content']): string | Anthropic.ContentBlockParam[] {
 		if (typeof content === 'string') {
 			return this._stripAttachments(content);
 		} else if (Array.isArray(content)) {

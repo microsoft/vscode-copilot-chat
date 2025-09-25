@@ -37,7 +37,7 @@ export class SettingsEditorSearchServiceImpl implements ISettingsEditorSearchSer
 
 		let embeddingResult: Embeddings;
 		try {
-			embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [query], {}, new TelemetryCorrelationId('SettingsEditorSearchServiceImpl::provideSettingsSearchResults'), token);
+			embeddingResult = await this.embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [query], { endpointType: 'capi' }, new TelemetryCorrelationId('SettingsEditorSearchServiceImpl::provideSettingsSearchResults'), token);
 		} catch {
 			if (token.isCancellationRequested) {
 				progress.report(canceledBundle);
@@ -81,7 +81,7 @@ export class SettingsEditorSearchServiceImpl implements ISettingsEditorSearchSer
 		}
 
 		const copilotToken = await this.authenticationService.getCopilotToken();
-		if (embeddingSettings.length === 0 || copilotToken.isFreeUser) {
+		if (embeddingSettings.length === 0 || copilotToken.isFreeUser || copilotToken.isNoAuthUser) {
 			progress.report({
 				query,
 				kind: SettingsSearchResultKind.LLM_RANKED,

@@ -255,7 +255,7 @@ import { AgentPrompt, AgentPromptProps } from '../agentPrompt';
 				chatVariables: new ChatVariablesCollection(),
 				history: [],
 				query: 'hello',
-				modeInstructions: 'custom mode instructions',
+				modeInstructions: { content: 'custom mode instructions' },
 			}, undefined)).toMatchSnapshot();
 		});
 

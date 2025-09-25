@@ -236,6 +236,7 @@ declare module 'vscode' {
 	export class ExtendedLanguageModelToolResult extends LanguageModelToolResult {
 		toolResultMessage?: string | MarkdownString;
 		toolResultDetails?: Array<Uri | Location>;
+		toolMetadata?: unknown;
 	}
 
 	// #region Chat participant detection
