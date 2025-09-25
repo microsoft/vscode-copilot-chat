@@ -161,7 +161,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			if (endpoint.customModel) {
 				const customModel = endpoint.customModel;
 				modelDetail = customModel.owner_name;
-				modelDescription = customModel.key_name;
+				modelDescription = `${endpoint.name} is contributed by ${customModel.owner_name} using ${customModel.key_name}`;
 				modelCategory = { label: localize('languageModelHeader.custom_models', "Custom Models"), order: 1 };
 			}
 
