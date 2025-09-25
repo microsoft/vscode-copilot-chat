@@ -135,7 +135,7 @@
 		"taskExecutionTerminal",
 		"dataChannels",
 		"languageModelThinkingPart",
-		"chatSessionsProvider",
+		"chatSessionsProvider@2",
 		"devDeviceId",
 		"contribEditorContentMenu"
 	],
