@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { downloadZMQ } from '@vscode/zeromq';
-import { spawn } from 'child_process';
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { compressTikToken } from './build/compressTikToken';
@@ -67,50 +67,16 @@ const REPO_ROOT = path.join(__dirname, '..');
  * Clones the zeromq.js repository from a specific commit into node_modules/zeromq
  * @param commit The git commit hash to checkout
  */
-async function cloneZeroMQ(commit: string): Promise<void> {
+function cloneZeroMQ(commit: string) {
 	const zeromqPath = path.join(REPO_ROOT, 'node_modules', 'zeromq');
 
 	// Remove existing zeromq directory if it exists
 	if (fs.existsSync(zeromqPath)) {
-		await fs.promises.rm(zeromqPath, { recursive: true, force: true });
+		fs.rmSync(zeromqPath, { recursive: true, force: true });
 	}
 
-	return new Promise((resolve, reject) => {
-		// Clone the repository
-		const cloneProcess = spawn('git', ['clone', 'https://github.com/rebornix/zeromq.js.git', zeromqPath], {
-			cwd: REPO_ROOT,
-			stdio: 'inherit'
-		});
-
-		cloneProcess.on('close', (code) => {
-			if (code !== 0) {
-				reject(new Error(`Git clone failed with exit code ${code}`));
-				return;
-			}
-
-			// Checkout the specific commit
-			const checkoutProcess = spawn('git', ['checkout', commit], {
-				cwd: zeromqPath,
-				stdio: 'inherit'
-			});
-
-			checkoutProcess.on('close', (checkoutCode) => {
-				if (checkoutCode !== 0) {
-					reject(new Error(`Git checkout failed with exit code ${checkoutCode}`));
-					return;
-				}
-				resolve();
-			});
-
-			checkoutProcess.on('error', (error) => {
-				reject(new Error(`Git checkout error: ${error.message}`));
-			});
-		});
-
-		cloneProcess.on('error', (error) => {
-			reject(new Error(`Git clone error: ${error.message}`));
-		});
-	});
+	execSync(`git clone https://github.com/rebornix/zeromq.js.git ${zeromqPath}`, { stdio: 'inherit', cwd: REPO_ROOT });
+	execSync(`git checkout ${commit}`, { stdio: 'inherit', cwd: zeromqPath });
 }
 
 async function main() {
