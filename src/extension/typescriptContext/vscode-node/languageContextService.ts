@@ -559,7 +559,10 @@ class RunnableResultManager implements vscode.Disposable {
 		this.disposables.add(vscode.window.onDidChangeActiveTextEditor(() => {
 			this.clear();
 		}));
-		this.disposables.add(vscode.window.tabGroups.onDidChangeTabs(() => {
+		this.disposables.add(vscode.window.tabGroups.onDidChangeTabs((event: vscode.TabChangeEvent) => {
+			if (event.closed.length === 0 && event.opened.length === 0) {
+				return;
+			}
 			for (const item of this.neighborFileRunnableResults) {
 				this.results.delete(item.resultId);
 			}
@@ -728,7 +731,7 @@ class RunnableResultManager implements vscode.Disposable {
 		return this.results.get(id);
 	}
 
-	public getCachedRunnableResults(document: vscode.TextDocument, position: vscode.Position): ResolvedRunnableResult[] {
+	public getCachedRunnableResults(document: vscode.TextDocument, position: vscode.Position, emitMode?: protocol.EmitMode): ResolvedRunnableResult[] {
 		const results: ResolvedRunnableResult[] = [];
 		if (this.requestInfo?.document !== document.uri.toString()) {
 			return results;
@@ -737,6 +740,9 @@ class RunnableResultManager implements vscode.Disposable {
 			return results;
 		}
 		for (const item of this.results.values()) {
+			if (emitMode !== undefined && item.cache?.emitMode === emitMode) {
+				continue;
+			}
 			const scope = item.cache?.scope;
 			if (scope === undefined || scope.kind !== protocol.CacheScopeKind.WithinRange) {
 				results.push(item);
@@ -1091,6 +1097,30 @@ class InflightRequestInfo {
 	}
 }
 
+class OnTimeoutData {
+
+	private readonly document: string;
+	private readonly version: number;
+	private readonly position: vscode.Position;
+
+	public readonly runnableResults: ResolvedRunnableResult[] = [];
+	public resultBuilder: ContextItemResultBuilder | undefined;
+
+	constructor(document: vscode.TextDocument, position: vscode.Position) {
+		this.document = document.uri.toString();
+		this.version = document.version;
+		this.position = position;
+	}
+
+	addRunnableResult(result: ResolvedRunnableResult): void {
+		this.runnableResults.push(result);
+	}
+
+	matches(document: vscode.TextDocument, position: vscode.Position): boolean {
+		return this.document === document.uri.toString() && this.version === document.version && this.position.isEqual(position);
+	}
+}
+
 export class LanguageContextServiceImpl implements ILanguageContextService, vscode.Disposable {
 
 	private static readonly defaultCachePopulationBudget: number = 500;
@@ -1111,6 +1141,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 	private pendingRequest: PendingRequestInfo | undefined;
 	private inflightCachePopulationRequest: InflightRequestInfo | undefined;
 	private readonly cachePopulationTimeout: number;
+	private onTimeoutData: OnTimeoutData | undefined;
 
 	private readonly disposables = new DisposableStore();
 	private _onCachePopulated: vscode.EventEmitter<OnCachePopulatedEvent>;
@@ -1134,6 +1165,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 		this.neighborFileModel = new NeighborFileModel();
 		this.pendingRequest = undefined;
 		this.inflightCachePopulationRequest = undefined;
+		this.onTimeoutData = undefined;
 		this.cachePopulationTimeout = this.getCachePopulationBudget();
 
 		this.disposables = new DisposableStore();
@@ -1283,13 +1315,62 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 		}
 	}
 
-	async *getContext(document: vscode.TextDocument, position: vscode.Position, context: RequestContext, token: vscode.CancellationToken): AsyncIterable<ContextItem> {
+	public async *getContext(document: vscode.TextDocument, position: vscode.Position, context: RequestContext, token: vscode.CancellationToken): AsyncIterable<ContextItem> {
+		this.onTimeoutData = undefined;
 		if (document.languageId !== 'typescript' && document.languageId !== 'typescriptreact') {
 			return;
 		}
 
 		const startTime = Date.now();
 		let cacheRequest = 'none';
+		const cachePopulationRequestInflight = this.inflightCachePopulationRequest !== undefined && this.inflightCachePopulationRequest.matchesDocument(document);
+		if (cachePopulationRequestInflight) {
+			this.onTimeoutData = new OnTimeoutData(document, position);
+			cacheRequest = 'inflight';
+		}
+		if (token.isCancellationRequested) {
+			this.telemetrySender.sendRequestCancelledTelemetry(context, Date.now() - startTime);
+			return;
+		}
+		const isDebugging = this.isDebugging;
+		const forDebugging: ContextItem[] | undefined = isDebugging ? [] : undefined;
+		const contextItemResult = new ContextItemResultBuilder(Date.now() - startTime);
+		if (this.onTimeoutData !== undefined) {
+			this.onTimeoutData.resultBuilder = contextItemResult;
+		}
+		const runnableResults = this.runnableResultManager.getCachedRunnableResults(document, position);
+		const characterBudget = (context.tokenBudget ?? currentTokenBudget) * 4;
+		let characterBudgetLeft = characterBudget;
+		// We first collect all items to yield so that the state of the cache doesn't change underneath us.
+		// This could otherwise happen if the cache population request finishes while we are yielding items.
+		const itemsToYield: ContextItem[] = [];
+		outer: for (const runnableResult of runnableResults) {
+			if (cachePopulationRequestInflight && runnableResult.cache?.emitMode === protocol.EmitMode.ClientBasedOnTimeout && this.onTimeoutData !== undefined) {
+				this.onTimeoutData.addRunnableResult(runnableResult);
+			} else {
+				for (const { item, size } of contextItemResult.update(runnableResult, true)) {
+					forDebugging?.push(item);
+					characterBudgetLeft -= size;
+					if (characterBudgetLeft < 0) {
+						break outer;
+					}
+					itemsToYield.push(item);
+				}
+				if (token.isCancellationRequested) {
+					this.onTimeoutData = undefined;
+					break;
+				}
+			}
+		}
+		for (const item of itemsToYield) {
+			if (token.isCancellationRequested) {
+				this.onTimeoutData = undefined;
+				break;
+			}
+			yield item;
+		}
+
+		// Recheck for an inflight request and join it if it is for the same document and position.
 		if (this.inflightCachePopulationRequest !== undefined && this.inflightCachePopulationRequest.matchesDocument(document)) {
 			cacheRequest = 'inflight';
 			// We have an inflight request for the same document and position.
@@ -1300,33 +1381,20 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 			// The server promised resolved first. So the inflight request is done.
 			if (result !== 'timedOut') {
 				this.inflightCachePopulationRequest = undefined;
-				cacheRequest = 'awaited';
-			}
-		}
-		const afterInflightJoin = Date.now() - startTime;
-		if (token.isCancellationRequested) {
-			this.telemetrySender.sendRequestCancelledTelemetry(context, afterInflightJoin);
-			return;
-		}
-		const isDebugging = this.isDebugging;
-		const forDebugging: ContextItem[] | undefined = isDebugging ? [] : undefined;
-		const contextItemResult = new ContextItemResultBuilder(afterInflightJoin);
-		const runnableResults = this.runnableResultManager.getCachedRunnableResults(document, position);
-		const characterBudget = (context.tokenBudget ?? currentTokenBudget) * 4;
-		let characterBudgetLeft = characterBudget;
-		outer: for (const runnableResult of runnableResults) {
-			for (const { item, size } of contextItemResult.update(runnableResult, true)) {
-				forDebugging?.push(item);
-				characterBudgetLeft -= size;
-				if (characterBudgetLeft < 0) {
-					break outer;
+				if (this.onTimeoutData !== undefined) {
+					this.onTimeoutData = undefined;
+					const runnableResults = this.runnableResultManager.getCachedRunnableResults(document, position, protocol.EmitMode.ClientBasedOnTimeout);
+					for (const runnableResult of runnableResults) {
+						for (const { item } of contextItemResult.update(runnableResult)) {
+							forDebugging?.push(item);
+							yield item;
+						}
+					}
+					cacheRequest = 'awaited';
 				}
-				yield item;
-			}
-			if (token.isCancellationRequested) {
-				break;
 			}
 		}
+
 		const isSpeculativeRequest = context.proposedEdits !== undefined;
 		if (isSpeculativeRequest) {
 			this.telemetrySender.sendSpeculativeRequestTelemetry(context, this.runnableResultManager.getRequestId() ?? 'unknown', contextItemResult.stats.yielded);
@@ -1347,8 +1415,26 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 		return;
 	}
 
-	getContextOnTimeout(document: vscode.TextDocument, position: vscode.Position, context: RequestContext): readonly ContextItem[] | undefined {
-		return [];
+
+	public getContextOnTimeout(document: vscode.TextDocument, position: vscode.Position, context: RequestContext): readonly ContextItem[] | undefined {
+		try {
+			if (this.onTimeoutData === undefined) {
+				return [];
+			}
+			if (!this.onTimeoutData.matches(document, position) || this.onTimeoutData.resultBuilder === undefined) {
+				return [];
+			}
+			const result: ContextItem[] = [];
+			const contextItemResult = this.onTimeoutData.resultBuilder;
+			for (const runnableResult of this.onTimeoutData.runnableResults) {
+				for (const { item } of contextItemResult.update(runnableResult, true)) {
+					result.push(item);
+				}
+			}
+			return result;
+		} finally {
+			this.onTimeoutData = undefined;
+		}
 	}
 
 	private getCachePopulationBudget(): number {
@@ -1530,6 +1616,18 @@ class CachePopulationTrigger implements vscode.Disposable {
 	}
 }
 
+async function* mapAsyncIterable<T, U>(
+	source: AsyncIterable<T>,
+	transform: (item: T) => U | undefined
+): AsyncIterable<U> {
+	for await (const item of source) {
+		const result = transform(item);
+		if (result !== undefined) {
+			yield result;
+		}
+	}
+}
+
 const showContextInspectorViewContextKey = `github.copilot.chat.showContextInspectorView`;
 export class InlineCompletionContribution implements vscode.Disposable, TokenBudgetProvider {
 
@@ -1630,17 +1728,17 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 			const telemetrySender = this.telemetrySender;
 			const self = this;
 			const resolver: Copilot.ContextResolver<Copilot.SupportedContextItem> = {
-				async *resolve(request: Copilot.ResolveRequest, token: vscode.CancellationToken): AsyncIterable<Copilot.SupportedContextItem> {
+				resolve(request: Copilot.ResolveRequest, token: vscode.CancellationToken): Promise<Copilot.SupportedContextItem[]> | AsyncIterable<Copilot.SupportedContextItem> {
 					// console.log(`Resolve request ${Date.now()}`);
 					const isSpeculativeRequest = request.documentContext.proposedEdits !== undefined;
 					const [document, position] = self.getDocumentAndPosition(request, token);
 					if (document === undefined || position === undefined) {
-						return;
+						return Promise.resolve([]);
 					}
 					const tokenBudget = self.getTokenBudget(document);
 					if (tokenBudget <= 0) {
 						telemetrySender.sendRequestTelemetry(document, position, { requestId: request.completionId, source: KnownSources.completion }, ContextItemSummary.DefaultExhausted, 0, undefined, undefined);
-						return [];
+						return Promise.resolve([]);
 					}
 					const context: RequestContext = {
 						requestId: request.completionId,
@@ -1653,12 +1751,32 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 						sampleTelemetry: self.getSampleTelemetry(request.activeExperiments)
 					};
 					const items = languageContextService.getContext(document, position, context, token);
-					for await (const item of items) {
-						const converted = self.convertItem(item);
-						if (converted === undefined) {
-							continue;
+					if (Array.isArray(items)) {
+						const convertedItems: Copilot.SupportedContextItem[] = [];
+						for (const item of items) {
+							const converted = self.convertItem(item);
+							if (converted === undefined) {
+								continue;
+							}
+							convertedItems.push(converted);
 						}
-						yield converted;
+						return Promise.resolve(convertedItems);
+					} else if (typeof (items as any)[Symbol.asyncIterator] === 'function') {
+						return mapAsyncIterable(items as AsyncIterable<ContextItem>, (item) => self.convertItem(item));
+					} else if (items instanceof Promise) {
+						return items.then((resolvedItems) => {
+							const convertedItems: Copilot.SupportedContextItem[] = [];
+							for (const item of resolvedItems) {
+								const converted = self.convertItem(item);
+								if (converted === undefined) {
+									continue;
+								}
+								convertedItems.push(converted);
+							}
+							return convertedItems;
+						});
+					} else {
+						return Promise.resolve([]);
 					}
 				}
 			};
