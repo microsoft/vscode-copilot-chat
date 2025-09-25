@@ -223,6 +223,10 @@ export class ChatEndpoint implements IChatEndpoint {
 		return !!(enableResponsesApi && this._modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.Responses));
 	}
 
+	public get degradationReason(): string | undefined {
+		return this._modelMetadata.warning_message;
+	}
+
 	public get policy(): 'enabled' | { terms: string } {
 		if (!this._policyDetails) {
 			return 'enabled';
