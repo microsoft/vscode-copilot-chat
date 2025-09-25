@@ -128,7 +128,6 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			seenFamilies.add(endpoint.family);
 
 			const sanitizedModelName = endpoint.name.replace(/\(Preview\)/g, '').trim();
-
 			let modelDescription: string | undefined;
 			if (endpoint.model === AutoChatEndpoint.id) {
 				modelDescription = localize('languageModel.autoTooltip', 'Auto selects the best model for your request based on capacity and performance. Counted at 0x-0.9x the request rate, depending on the model.');
@@ -159,7 +158,6 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			if (endpoint.model === AutoChatEndpoint.id) {
 				modelDetail = 'Variable';
 			}
-
 			let modelName = endpoint.name;
 			if (endpoint.customModel) {
 				modelDetail = endpoint.customModel.ownerName;
