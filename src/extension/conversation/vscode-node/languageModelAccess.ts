@@ -160,11 +160,12 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			}
 			let modelName = endpoint.name;
 			if (endpoint.customModel) {
-				modelDetail = endpoint.customModel.ownerName;
-				modelDescription = endpoint.customModel.keyName;
+				const customModel = endpoint.customModel;
+				modelDetail = customModel.ownerName;
+				modelDescription = customModel.keyName;
 				modelCategory = { label: localize('languageModelHeader.custom_models', "Custom Models"), order: 1 };
 
-				modelName = endpoint.name.replace(` · ${endpoint.customModel.keyName}`, '');
+				modelName = endpoint.name.replace(` · ${customModel.keyName}`, '');
 			}
 
 			const session = this._authenticationService.anyGitHubSession;
