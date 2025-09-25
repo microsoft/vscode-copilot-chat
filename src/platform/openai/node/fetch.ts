@@ -333,11 +333,20 @@ async function handleError(
 		}
 
 		if (response.status === 404) {
+			let errorReason: string;
+
+			// Check if response body is valid JSON
+			if (!jsonData) {
+				errorReason = text;
+			} else {
+				errorReason = JSON.stringify(jsonData);
+			}
+
 			return {
 				type: FetchResponseKind.Failed,
 				modelRequestId: modelRequestIdObj,
 				failKind: ChatFailKind.NotFound,
-				reason: 'Resource not found'
+				reason: errorReason
 			};
 		}
 
