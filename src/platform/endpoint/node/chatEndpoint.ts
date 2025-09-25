@@ -193,12 +193,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		this.supportsPrediction = !!_modelMetadata.capabilities.supports.prediction;
 		this._supportsStreaming = !!_modelMetadata.capabilities.supports.streaming;
 		this._policyDetails = _modelMetadata.policy;
-		if (_modelMetadata.custom_model) {
-			this.customModel = {
-				key_name: _modelMetadata.custom_model.key_name,
-				owner_name: _modelMetadata.custom_model.owner_name,
-			};
-		}
+		this.customModel = _modelMetadata.custom_model;
 	}
 
 	public get modelMaxPromptTokens(): number {
