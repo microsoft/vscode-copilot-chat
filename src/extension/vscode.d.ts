@@ -19572,7 +19572,7 @@ declare module 'vscode' {
 		prompt: string;
 
 		/**
-		 * A title to show the user. The prompt will be shown by default, when this is unspecified.
+		 * An optional label to show to the user. If not provided, the {@link ChatFollowup.prompt} will be shown.
 		 */
 		label?: string;
 

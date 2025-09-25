@@ -9,11 +9,16 @@ import type { LanguageModelChat } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import type { ChatRequest } from '../../../vscodeTypes';
-import { IChatEndpoint } from '../../networking/common/networking';
+import { IChatEndpoint, IEmbeddingsEndpoint } from '../../networking/common/networking';
 
 export type ModelPolicy = {
 	state: 'enabled' | 'disabled' | 'unconfigured';
 	terms?: string;
+};
+
+export type CustomModel = {
+	key_name: string;
+	owner_name: string;
 };
 
 export type IChatModelCapabilities = {
@@ -34,6 +39,13 @@ export type IChatModelCapabilities = {
 		prediction?: boolean;
 		thinking?: boolean;
 	};
+};
+
+export type IEmbeddingModelCapabilities = {
+	type: 'embeddings';
+	family: string;
+	tokenizer: TokenizerType;
+	limits?: { max_inputs?: number };
 };
 
 type ICompletionModelCapabilities = {
@@ -57,8 +69,9 @@ export interface IModelAPIResponse {
 	is_chat_fallback: boolean;
 	version: string;
 	billing?: { is_premium: boolean; multiplier: number; restricted_to?: string[] };
-	capabilities: IChatModelCapabilities | ICompletionModelCapabilities;
+	capabilities: IChatModelCapabilities | ICompletionModelCapabilities | IEmbeddingModelCapabilities;
 	supported_endpoints?: ModelSupportedEndpoint[];
+	custom_model?: { key_name: string; owner_name: string };
 }
 
 export type IChatModelInformation = IModelAPIResponse & {
@@ -69,6 +82,12 @@ export type IChatModelInformation = IModelAPIResponse & {
 export function isChatModelInformation(model: IModelAPIResponse): model is IChatModelInformation {
 	return model.capabilities.type === 'chat';
 }
+
+export function isEmbeddingModelInformation(model: IModelAPIResponse): model is IEmbeddingModelInformation {
+	return model.capabilities.type === 'embeddings';
+}
+
+export type IEmbeddingModelInformation = IModelAPIResponse & { capabilities: IEmbeddingModelCapabilities };
 
 export type ICompletionModelInformation = IModelAPIResponse & {
 	capabilities: ICompletionModelCapabilities;
@@ -99,6 +118,11 @@ export interface IEndpointProvider {
 	 * @param requestOrFamily The chat request to get the endpoint for, the family you want the endpoint for, or the LanguageModelChat.
 	 */
 	getChatEndpoint(requestOrFamily: LanguageModelChat | ChatRequest | ChatEndpointFamily): Promise<IChatEndpoint>;
+
+	/**
+	 * Get the CAPI embedding endpoint information
+	 */
+	getEmbeddingsEndpoint(family?: EmbeddingsEndpointFamily): Promise<IEmbeddingsEndpoint>;
 }
 
 export const IEndpointProvider = createServiceIdentifier<IEndpointProvider>('IEndpointProvider');
