@@ -950,7 +950,7 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 				}
 			} else if (emitData.kind === SymbolEmitDataKind.symbol) {
 				const { symbol, name } = emitData;
-				if (this.skipSymbol(symbol)) {
+				if (this.skipSymbolBasedOnDeclaration(symbol) || Symbols.isTypeParameter(symbol)) {
 					continue;
 				}
 				const key = Symbols.createKey(symbol, this.session.host);
@@ -987,7 +987,7 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 		return program.isSourceFileDefaultLibrary(sourceFile) || program.isSourceFileFromExternalLibrary(sourceFile);
 	}
 
-	protected skipSymbol(symbol: tt.Symbol): boolean {
+	protected skipSymbolBasedOnDeclaration(symbol: tt.Symbol): boolean {
 		const declarations = symbol.getDeclarations();
 		if (declarations === undefined || declarations.length === 0) {
 			return false;

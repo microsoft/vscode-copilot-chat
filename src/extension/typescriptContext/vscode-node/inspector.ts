@@ -342,9 +342,14 @@ class TreeYielded {
 		this.parent = parent;
 		const items: ContextItem[] = [];
 		this.contextItemSummary = new ContextItemResultBuilder(0);
-		for (const runnable of runnables) {
-			for (const converted of this.contextItemSummary.update(runnable)) {
-				items.push(converted.item);
+		let characterBudgetLeft = parent.characterBudget;
+		outer: for (const runnable of runnables) {
+			for (const { item, size } of this.contextItemSummary.update(runnable)) {
+				characterBudgetLeft -= size;
+				if (characterBudgetLeft < 0) {
+					break outer;
+				}
+				items.push(item);
 			}
 		}
 		this.items = items;
@@ -377,7 +382,7 @@ class TreeYielded {
 class TreeContextRequest {
 
 	private readonly label: string;
-	characterBudget: number;
+	public characterBudget: number;
 	private readonly document: string;
 	private readonly position: vscode.Position;
 	private readonly items: ReadonlyArray<ResolvedRunnableResult>;
@@ -388,6 +393,7 @@ class TreeContextRequest {
 	constructor(label: string, event: ContextComputedEvent) {
 		this.document = event.document.uri.toString();
 		this.position = event.position;
+		this.characterBudget = event.characterBudget;
 		this.items = event.results;
 		this.summary = event.summary;
 		const start = new Date(Date.now() - this.summary.totalTime);

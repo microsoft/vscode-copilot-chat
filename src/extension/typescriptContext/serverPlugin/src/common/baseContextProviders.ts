@@ -239,6 +239,8 @@ export class TypesOfNeighborFilesRunnable extends AbstractContextRunnable {
 
 	private readonly tokenInfo: tss.TokenInfo;
 
+	private static SymbolsToInclude: number = ts.SymbolFlags.Class | ts.SymbolFlags.Interface | ts.SymbolFlags.TypeAlias | ts.SymbolFlags.Enum | ts.SymbolFlags.Function;
+
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, tokenInfo: tss.TokenInfo, priority: number = Priorities.NeighborFiles) {
 		super(session, languageService, context, 'TypesOfNeighborFilesRunnable', SnippetLocation.Secondary, priority, ComputeCost.Medium);
 		this.tokenInfo = tokenInfo;
@@ -273,7 +275,7 @@ export class TypesOfNeighborFilesRunnable extends AbstractContextRunnable {
 				for (const member of sourceFileSymbol.exports) {
 					cancellationToken.throwIfCancellationRequested();
 					const memberSymbol = member[1];
-					if ((memberSymbol.flags & (ts.SymbolFlags.Class | ts.SymbolFlags.Interface | ts.SymbolFlags.TypeAlias | ts.SymbolFlags.Enum | ts.SymbolFlags.Function)) === 0) {
+					if ((memberSymbol.flags & TypesOfNeighborFilesRunnable.SymbolsToInclude) === 0) {
 						continue;
 					}
 					if (!this.handleSymbol(memberSymbol, member[0] as string, true)) {
@@ -459,7 +461,7 @@ export class TypeOfExpressionRunnable extends AbstractContextRunnable {
 
 	private readonly expression: tt.Expression;
 
-	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, expression: tt.Expression, priority: number = Priorities.Locals) {
+	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, expression: tt.Expression, priority: number = Priorities.Expression) {
 		super(session, languageService, context, 'TypeOfExpressionRunnable', SnippetLocation.Primary, priority, ComputeCost.Low);
 		this.expression = expression;
 	}

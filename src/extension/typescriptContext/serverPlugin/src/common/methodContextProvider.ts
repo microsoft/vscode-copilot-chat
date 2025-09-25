@@ -511,7 +511,7 @@ class PropertiesTypeRunnable extends AbstractContextRunnable {
 	private readonly declaration: tt.MethodDeclaration | tt.ConstructorDeclaration | tt.GetAccessorDeclaration | tt.SetAccessorDeclaration;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, declaration: tt.MethodDeclaration | tt.ConstructorDeclaration | tt.GetAccessorDeclaration | tt.SetAccessorDeclaration, priority: number = Priorities.Properties) {
-		super(session, languageService, context, 'PropertiesTypeRunnable', SnippetLocation.Primary, priority, ComputeCost.Medium);
+		super(session, languageService, context, 'PropertiesTypeRunnable', SnippetLocation.Secondary, priority, ComputeCost.Medium);
 		this.declaration = declaration;
 	}
 

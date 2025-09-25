@@ -1261,7 +1261,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				contextItemResult.updateResponse(body, token);
 				this.telemetrySender.sendRequestTelemetry(document, position, context, contextItemResult, timeTaken, { before: cacheState, after: this.runnableResultManager.getCacheState() }, undefined);
 				isDebugging && forDebugging?.length;
-				this._onCachePopulated.fire({ document, position, source: context.source, results: resolved, summary: contextItemResult });
+				this._onCachePopulated.fire({ document, position, characterBudget: args.primaryCharacterBudget, source: context.source, results: resolved, summary: contextItemResult });
 			} else if (protocol.ComputeContextResponse.isError(response)) {
 				this.telemetrySender.sendRequestFailureTelemetry(context, response.body);
 				console.error('Error populating cache:', response.body.message, response.body.stack);
@@ -1312,12 +1312,13 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 		const forDebugging: ContextItem[] | undefined = isDebugging ? [] : undefined;
 		const contextItemResult = new ContextItemResultBuilder(afterInflightJoin);
 		const runnableResults = this.runnableResultManager.getCachedRunnableResults(document, position);
-		let characterBudget = (context.tokenBudget ?? currentTokenBudget) * 4;
+		const characterBudget = (context.tokenBudget ?? currentTokenBudget) * 4;
+		let characterBudgetLeft = characterBudget;
 		outer: for (const runnableResult of runnableResults) {
 			for (const { item, size } of contextItemResult.update(runnableResult, true)) {
 				forDebugging?.push(item);
-				characterBudget -= size;
-				if (characterBudget < 0) {
+				characterBudgetLeft -= size;
+				if (characterBudgetLeft < 0) {
 					break outer;
 				}
 				yield item;
@@ -1341,7 +1342,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				{ before: cacheState, after: cacheState }, cacheRequest
 			);
 			isDebugging && forDebugging?.length;
-			this._onContextComputed.fire({ document, position, source: context.source, results: runnableResults, summary: contextItemResult });
+			this._onContextComputed.fire({ document, position, characterBudget, source: context.source, results: runnableResults, summary: contextItemResult });
 		}
 		return;
 	}

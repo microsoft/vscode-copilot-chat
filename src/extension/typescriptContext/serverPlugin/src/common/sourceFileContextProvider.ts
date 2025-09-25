@@ -57,7 +57,7 @@ export class GlobalsRunnable extends AbstractContextRunnable {
 		const result: tt.Symbol[] = [];
 		const symbols = typeChecker.getSymbolsInScope(sourceFile, ts.SymbolFlags.Function | ts.SymbolFlags.Class | ts.SymbolFlags.Interface | ts.SymbolFlags.TypeAlias | ts.SymbolFlags.ValueModule);
 		for (const symbol of symbols) {
-			if (this.skipSymbol(symbol)) {
+			if (this.skipSymbolBasedOnDeclaration(symbol)) {
 				continue;
 			}
 			result.push(this.symbols.getLeafSymbol(symbol));
