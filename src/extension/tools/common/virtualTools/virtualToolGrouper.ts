@@ -29,12 +29,11 @@ const SUMMARY_PREFIX = 'Call this tool when you need access to a new category of
 const SUMMARY_SUFFIX = '\n\nBe sure to call this tool if you need a capability related to the above.';
 
 // categorize all tools except for the 11 default tools
-// 11 default tools = semantic_search, grep_search, read_file, create_file, apply_patch, replace_string_in_file,
-// insert_edit_into_file, run_in_terminal, list_dir, think, get_terminal_output
+// 12 default tools = semantic_search, grep_search, read_file, create_file, apply_patch, replace_string_in_file,
+// insert_edit_into_file, run_in_terminal, list_dir, think, get_terminal_output, manage_todo_list
 const BUILT_IN_TOOL_GROUPS = {
 	'Jupyter Notebook Tools': {
-		// "Call this tool when..."
-		summary: 'Tools for working with Jupyter notebooks - creating, editing, running cells, and managing notebook operations.',
+		summary: 'Call tools from this group when you need to work with Jupyter notebooks - creating, editing, running cells, and managing notebook operations.',
 		tools: [
 			'create_new_jupyter_notebook',
 			'edit_notebook_file',
@@ -50,7 +49,7 @@ const BUILT_IN_TOOL_GROUPS = {
 		]
 	},
 	'Web Interaction': {
-		summary: 'Tools for interacting with web content, browsing websites, and accessing external resources.',
+		summary: 'Call tools from this group when you need to interact with web content, browse websites, or access external resources.',
 		tools: [
 			'fetch_webpage',
 			'open_simple_browser',
@@ -58,13 +57,13 @@ const BUILT_IN_TOOL_GROUPS = {
 		]
 	},
 	'VS Code Interaction': {
-		summary: 'Tools for interacting with VS Code workspace and accessing VS Code features.',
+		summary: 'Call tools from this group when you need to interact with the VS Code workspace and access VS Code features.',
 		tools: [
 			'search_workspace_symbols',
 			'list_code_usages',
 			'get_errors',
 			'get_vscode_api',
-			// 'get_changed_files',
+			'get_changed_files',
 			'create_new_workspace',
 			'install_extension',
 			'get_project_setup_info',
@@ -72,25 +71,30 @@ const BUILT_IN_TOOL_GROUPS = {
 			'run_task',
 			'get_task_output',
 			'run_vscode_command',
-			// 'file_search',
-			// 'create_directory',
-			// 'multi_replace_string_in_file',
-			// 'terminal_selection',
-			// 'terminal_last_command',
+			'multi_replace_string_in_file',
 			'install_python_packages',
-			// 'manage_todo_list',
 			'get_search_view_results',
-			// 'edit_files',
-			'vscode_searchExtensions_internal'
+			'vscode_searchExtensions_internal',
+			'read_project_structure'
 		]
 	},
 	'Testing': {
-		summary: 'Tools for running tests, analyzing test failures, and managing test workflows.',
+		summary: 'Call tools from this group when you need to run tests, analyze test failures, and manage test workflows.',
 		tools: [
 			'run_tests',
 			'test_failure',
 			'test_search',
 			'runTests'
+		]
+	},
+	'Redundant but Specific': {
+		summary: 'These tools have overlapping functionalities but are highly specialized for certain tasks. \nTools: file_search, get_terminal_selection, get_terminal_last_command, create_directory, get_doc_info',
+		tools: [
+			'file_search',
+			'get_terminal_selection',
+			'get_terminal_last_command',
+			'create_directory',
+			'get_doc_info'
 		]
 	}
 } as const;
@@ -292,7 +296,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 	private async _generateGroupsFromToolset(key: string, tools: LanguageModelToolInformation[], previous: ISummarizedToolCategory[] | undefined, token: CancellationToken): Promise<(VirtualTool | LanguageModelToolInformation)[]> {
 		// Handle built-in tools with predefined groups only if experimental setting is enabled
 		if (key === BUILT_IN_GROUP) {
-			const defaultToolGroupingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.DefaultToolGrouping, this._expService);
+			const defaultToolGroupingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.DefaultToolsGrouped, this._expService);
 			if (defaultToolGroupingEnabled) {
 				return this._createBuiltInToolGroups(tools);
 			} else {
