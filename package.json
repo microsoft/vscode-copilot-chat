@@ -4091,8 +4091,7 @@
 		"vscode-languageserver-protocol": "^3.17.5",
 		"vscode-languageserver-textdocument": "^1.0.12",
 		"vscode-languageserver-types": "^3.17.5",
-		"yaml": "^2.8.0",
-		"zeromq": "github:rebornix/zeromq.js#a19e8e373b3abc677f91b936d3f00d49b1b61792"
+		"yaml": "^2.8.0"
 	},
 	"dependencies": {
 		"@anthropic-ai/claude-code": "1.0.93",

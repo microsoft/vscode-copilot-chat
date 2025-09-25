@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { downloadZMQ } from '@vscode/zeromq';
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { compressTikToken } from './build/compressTikToken';
@@ -62,6 +63,22 @@ const treeSitterGrammars: ITreeSitterGrammar[] = [
 
 const REPO_ROOT = path.join(__dirname, '..');
 
+/**
+ * Clones the zeromq.js repository from a specific commit into node_modules/zeromq
+ * @param commit The git commit hash to checkout
+ */
+function cloneZeroMQ(commit: string) {
+	const zeromqPath = path.join(REPO_ROOT, 'node_modules', 'zeromq');
+
+	// Remove existing zeromq directory if it exists
+	if (fs.existsSync(zeromqPath)) {
+		fs.rmSync(zeromqPath, { recursive: true, force: true });
+	}
+
+	execSync(`git clone https://github.com/rebornix/zeromq.js.git ${zeromqPath}`, { stdio: 'inherit', cwd: REPO_ROOT });
+	execSync(`git checkout ${commit}`, { stdio: 'inherit', cwd: zeromqPath });
+}
+
 async function main() {
 	await fs.promises.mkdir(path.join(REPO_ROOT, '.build'), { recursive: true });
 
@@ -76,6 +93,9 @@ async function main() {
 		...treeSitterGrammars.map(grammar => `node_modules/@vscode/tree-sitter-wasm/wasm/${grammar.name}.wasm`),
 		'node_modules/@vscode/tree-sitter-wasm/wasm/tree-sitter.wasm',
 	], 'dist');
+
+	// Clone zeromq.js from specific commit
+	cloneZeroMQ('1cbebce3e17801bea63a4dcc975b982923cb4592');
 
 	await downloadZMQ();
 
