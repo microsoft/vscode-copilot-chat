@@ -100,7 +100,7 @@ export class ChatReplayIntent implements IIntent {
 			if (workspaceFolders.length > 0) {
 				uri = Uri.joinPath(workspaceFolders[0], edits.path);
 			} else {
-				uri = Uri.file(edits.path);
+				throw new Error('No workspace folder available to resolve relative path: ' + edits.path);
 			}
 		} else {
 			// Absolute path
