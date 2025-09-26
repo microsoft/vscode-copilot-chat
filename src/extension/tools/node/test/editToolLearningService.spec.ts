@@ -49,7 +49,7 @@ describe('EditToolLearningService', () => {
 		policy: 'enabled',
 		urlOrRequestMetadata: 'test-url',
 		modelMaxPromptTokens: 4000,
-		name: 'test-model',
+		name: model.id,
 		version: '1.0',
 		tokenizer: 'gpt',
 		acceptChatPolicy: vi.fn().mockResolvedValue(true),

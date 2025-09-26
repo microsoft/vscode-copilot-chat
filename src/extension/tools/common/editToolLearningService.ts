@@ -129,7 +129,7 @@ export class EditToolLearningService implements IEditToolLearningService {
 			/* __GDPR__
 				"editToolLearning.transition" : {
 					"owner": "connor4312",
-					"comment": "Expansion of virtual tool groups using embedding-based ranking.",
+					"comment": "Tracks state transitions in the edit tool learning system.",
 					"error": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "Error message if expansion failed" },
 					"modelId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model ID" },
 					"state": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "State the model transitioned to", "isMeasurement": true }
