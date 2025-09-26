@@ -17,19 +17,20 @@ import { Iterable } from '../../../../util/vs/base/common/iterator';
 import { StopWatch } from '../../../../util/vs/base/common/stopwatch';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelToolExtensionSource, LanguageModelToolMCPSource } from '../../../../vscodeTypes';
+import { BuiltInToolGroupHandler } from './builtInToolGroupHandler';
 import { EMBEDDING_TYPE_FOR_TOOL_GROUPING, ToolEmbeddingsComputer } from './toolEmbeddingsCache';
 import { VIRTUAL_TOOL_NAME_PREFIX, VirtualTool } from './virtualTool';
 import { divideToolsIntoExistingGroups, divideToolsIntoGroups, summarizeToolGroup } from './virtualToolSummarizer';
 import { ISummarizedToolCategory, IToolCategorization, IToolGroupingCache } from './virtualToolTypes';
 import * as Constant from './virtualToolsConstants';
 
-const BUILT_IN_GROUP = 'builtin';
 const CATEGORIZATION_ENDPOINT = CHAT_MODEL.GPT4OMINI;
 const SUMMARY_PREFIX = 'Call this tool when you need access to a new category of tools. The category of tools is described as follows:\n\n';
 const SUMMARY_SUFFIX = '\n\nBe sure to call this tool if you need a capability related to the above.';
 
 export class VirtualToolGrouper implements IToolCategorization {
 	private readonly toolEmbeddingsComputer: ToolEmbeddingsComputer;
+	private readonly builtInToolGroupHandler: BuiltInToolGroupHandler;
 
 	constructor(
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
@@ -42,6 +43,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 		@IInstantiationService _instantiationService: IInstantiationService,
 	) {
 		this.toolEmbeddingsComputer = _instantiationService.createInstance(ToolEmbeddingsComputer);
+		this.builtInToolGroupHandler = new BuiltInToolGroupHandler(_telemetryService);
 	}
 
 	async addGroups(query: string, root: VirtualTool, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<void> {
@@ -57,7 +59,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 			} else if (t.source instanceof LanguageModelToolMCPSource) {
 				return 'mcp_' + t.source.label;
 			} else {
-				return BUILT_IN_GROUP;
+				return BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY;
 			}
 		});
 
@@ -76,12 +78,9 @@ export class VirtualToolGrouper implements IToolCategorization {
 		const predictedToolsSw = new StopWatch();
 		const predictedToolsPromise = virtualToolEmbeddingRankingEnabled && this._getPredictedTools(query, tools, token).then(tools => ({ tools, durationMs: predictedToolsSw.elapsed() }));
 
+		// Now all toolsets (including built-in) go through _generateGroupsFromToolset
 		const grouped = await Promise.all(Object.entries(byToolset).map(([key, tools]) => {
-			if (key === BUILT_IN_GROUP) {
-				return tools;
-			} else {
-				return this._generateGroupsFromToolset(key, tools, previousCategorizations.get(key), token);
-			}
+			return this._generateGroupsFromToolset(key, tools, previousCategorizations.get(key), token);
 		}));
 
 		this._cache.flush();
@@ -226,6 +225,25 @@ export class VirtualToolGrouper implements IToolCategorization {
 
 	/** Top-level request to categorize a group of tools from a single source. */
 	private async _generateGroupsFromToolset(key: string, tools: LanguageModelToolInformation[], previous: ISummarizedToolCategory[] | undefined, token: CancellationToken): Promise<(VirtualTool | LanguageModelToolInformation)[]> {
+		// Handle built-in tools with predefined groups only if experimental setting is enabled
+		if (key === BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY) {
+			const defaultToolGroupingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.DefaultToolsGrouped, this._expService);
+			if (defaultToolGroupingEnabled) {
+				// Get the model family from the categorization endpoint to check if grouping should apply
+				const endpoint = await this._endpointProvider.getChatEndpoint(CATEGORIZATION_ENDPOINT);
+				const modelFamily = endpoint?.family;
+
+				// Only apply grouping for GPT-4.1 or GPT-5 models
+				if (!modelFamily || (modelFamily !== 'gpt-4.1' && !modelFamily.startsWith('gpt-5'))) {
+					return tools;
+				}
+
+				return this.builtInToolGroupHandler.createBuiltInToolGroups(tools);
+			} else {
+				return tools;
+			}
+		}
+
 		if (tools.length <= Constant.MIN_TOOLSET_SIZE_TO_GROUP) {
 			return tools;
 		}
@@ -300,6 +318,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 
 		return virtualTools.concat(uncategorized);
 	}
+
 
 	private async _getPredictedTools(query: string, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<LanguageModelToolInformation[]> {
 		// compute the embeddings for the query
