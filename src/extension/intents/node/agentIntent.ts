@@ -78,8 +78,7 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 			allowTools[ToolName.ReplaceString] = await modelSupportsReplaceString(model);
 			allowTools[ToolName.ApplyPatch] = await modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
 
-			const applyPatchExclusively = configurationService.getExperimentBasedConfig(ConfigKey.Internal.Gpt5ApplyPatchExclusively, experimentationService) || simTestContext.isInSimulationTests;
-			if (allowTools[ToolName.ApplyPatch] && modelCanUseApplyPatchExclusively(model) && applyPatchExclusively) {
+			if (allowTools[ToolName.ApplyPatch] && modelCanUseApplyPatchExclusively(model)) {
 				allowTools[ToolName.EditFile] = false;
 			}
 
