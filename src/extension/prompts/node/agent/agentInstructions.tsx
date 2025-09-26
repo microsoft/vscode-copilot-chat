@@ -420,6 +420,7 @@ export class CodexStyleGPTPrompt extends PromptElement<DefaultAgentPromptProps> 
 
 export class CodexStyleGPT5CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
+		const tools = detectToolCapabilities(this.props.availableTools);
 		return <InstructionMessage>
 			You are a coding agent based on GPT-5-Codex. You are running as a coding agent in the Codex CLI on a user's computer.<br />
 			<br />
@@ -436,13 +437,16 @@ export class CodexStyleGPT5CodexPrompt extends PromptElement<DefaultAgentPromptP
 			<br />
 			## Tool use<br />
 			- You have access to many tools. If a tool exists to perform a specific task, you MUST use that tool instead of running a terminal command to perform that task.<br />
-			<br />
-			## Todo tool<br />
-			<br />
-			When using the todo list tool:<br />
-			- Skip using the todo list tool for straightforward tasks (roughly the easiest 25%).<br />
-			- Do not make single-step todo lists.<br />
-			- When you made a todo, update it after having performed one of the sub-tasks that you shared on the todo list.<br />
+			{tools[ToolName.CoreManageTodoList] && <>
+				<br />
+				## {ToolName.CoreManageTodoList} tool<br />
+				<br />
+				When using the {ToolName.CoreManageTodoList} tool:<br />
+				- Skip using {ToolName.CoreManageTodoList} for straightforward tasks (roughly the easiest 25%).<br />
+				- Do not make single-step todo lists.<br />
+				- When you made a todo, update it after having performed one of the sub-tasks that you shared on the todo list.<br />
+				<br />
+			</>}
 			<br />
 			## Special user requests<br />
 			<br />
@@ -1113,5 +1117,3 @@ class NotebookInstructions extends PromptElement<DefaultAgentPromptProps> {
 		</Tag>;
 	}
 }
-
-
