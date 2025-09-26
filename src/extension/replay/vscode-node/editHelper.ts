@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Uri, WorkspaceEdit, Range, ChatResponseStream } from 'vscode';
+import { ChatResponseStream, Range, Uri, WorkspaceEdit } from 'vscode';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { FileEdits, Replacement } from '../common/chatReplayResponses';
 
