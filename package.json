@@ -2997,6 +2997,19 @@
 									"description": "Whether the model requires an API key for authentication",
 									"default": true
 								},
+								"editTools": {
+									"type": "array",
+									"description": "List of edit tools supported by the model. If this is not configured, the editor will try multiple edit tools and pick the best one.\n\n- 'find-replace': Find and replace text in a document.\n- 'multi-find-replace': Find and replace text in a document.\n- 'apply-patch': A file-oriented diff format used by some OpenAI models\n- 'code-rewrite': A general but slower editing tool that allows the model to rewrite and code snippet and provide only the replacement to the editor.",
+									"items": {
+										"type": "string",
+										"enum": [
+											"find-replace",
+											"multi-find-replace",
+											"apply-patch",
+											"code-rewrite"
+										]
+									}
+								},
 								"thinking": {
 									"type": "boolean",
 									"default": false,

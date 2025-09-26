@@ -21,6 +21,19 @@ export type CustomModel = {
 	owner_name: string;
 };
 
+export type EndpointEditToolName = 'find-replace' | 'multi-find-replace' | 'apply-patch' | 'code-rewrite';
+
+const allEndpointEditToolNames: ReadonlySet<EndpointEditToolName> = new Set([
+	'find-replace',
+	'multi-find-replace',
+	'apply-patch',
+	'code-rewrite'
+]);
+
+export function isEndpointEditToolName(toolName: string): toolName is EndpointEditToolName {
+	return allEndpointEditToolNames.has(toolName as EndpointEditToolName);
+}
+
 export type IChatModelCapabilities = {
 	type: 'chat';
 	family: string;
