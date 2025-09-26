@@ -79,6 +79,7 @@
 	},
 	"github.copilot.command.logWorkbenchState": "Log Workbench State",
 	"github.copilot.command.showChatLogView": "Show Chat Debug View",
+	"github.copilot.command.showOutputChannel": "Show Output Channel",
 	"github.copilot.command.showContextInspectorView": "Inspect Language Context",
 	"github.copilot.command.resetVirtualToolGroups": "Reset Virtual Tool Groups",
 	"github.copilot.command.applySuggestionWithCopilot": "Apply Suggestion",

@@ -1990,6 +1990,11 @@
 				"category": "Developer"
 			},
 			{
+				"command": "github.copilot.debug.showOutputChannel",
+				"title": "%github.copilot.command.showOutputChannel%",
+				"category": "Developer"
+			},
+			{
 				"command": "github.copilot.debug.showContextInspectorView",
 				"title": "%github.copilot.command.showContextInspectorView%",
 				"icon": "$(inspect)",
@@ -3356,6 +3361,10 @@
 				{
 					"command": "github.copilot.chat.debug.showRawRequestBody",
 					"when": "false"
+				},
+				{
+					"command": "github.copilot.debug.showOutputChannel",
+					"when": "false"
 				}
 			],
 			"view/title": [
@@ -3373,6 +3382,11 @@
 					"command": "github.copilot.chat.debug.exportAllPromptLogsAsJson",
 					"when": "view == copilot-chat",
 					"group": "export@1"
+				},
+				{
+					"command": "github.copilot.debug.showOutputChannel",
+					"when": "view == copilot-chat",
+					"group": "3_show@1"
 				},
 				{
 					"command": "github.copilot.debug.showChatLogView",
