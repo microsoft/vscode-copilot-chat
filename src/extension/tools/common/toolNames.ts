@@ -103,6 +103,13 @@ export enum ContributedToolName {
 	ExecuteTask = 'execute_task',
 }
 
+export const byokEditToolNamesToToolNames = {
+	'find-replace': ToolName.ReplaceString,
+	'multi-find-replace': ToolName.MultiReplaceString,
+	'apply-patch': ToolName.ApplyPatch,
+	'code-rewrite': ToolName.EditFile,
+} as const;
+
 const toolNameToContributedToolNames = new Map<ToolName, ContributedToolName>();
 const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>();
 for (const [contributedNameKey, contributedName] of Object.entries(ContributedToolName)) {
