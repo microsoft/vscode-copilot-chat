@@ -104,6 +104,12 @@ export interface IToolCategorization {
 	 * the appropriate virtual tool or top-level tool in the `root`.
 	 */
 	addGroups(query: string, root: VirtualTool, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<void>;
+
+	/**
+	 * Recalculates the "embeddings" group, when enabled, so relevant tools
+	 * for the query are shown at the top level.
+	 */
+	recomputeEmbeddingRankings(query: string, root: VirtualTool, token: CancellationToken): Promise<void>;
 }
 
 export interface ISummarizedToolCategory {
