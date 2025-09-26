@@ -63,7 +63,7 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 
 		const allowTools: Record<string, boolean> = {};
 		allowTools[ToolName.EditFile] = true;
-		allowTools[ToolName.ReplaceString] = modelSupportsReplaceString(model);
+		allowTools[ToolName.ReplaceString] = await modelSupportsReplaceString(model);
 		allowTools[ToolName.ApplyPatch] = await modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
 
 		if (allowTools[ToolName.ApplyPatch] && modelCanUseApplyPatchExclusively(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.Gpt5ApplyPatchExclusively, experimentationService)) {
@@ -90,13 +90,13 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 			}
 		}
 
-		if (modelCanUseReplaceStringExclusively(model)) {
+		if (await modelCanUseReplaceStringExclusively(model)) {
 			allowTools[ToolName.ReplaceString] = true;
 			allowTools[ToolName.EditFile] = false;
 		}
 
 		if (allowTools[ToolName.ReplaceString]) {
-			if (modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
+			if (await modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
 				allowTools[ToolName.MultiReplaceString] = true;
 			}
 		}
