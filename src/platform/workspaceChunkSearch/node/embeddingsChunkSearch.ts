@@ -28,6 +28,7 @@ import { WorkspaceChunkEmbeddingsIndex, WorkspaceChunkEmbeddingsIndexState } fro
 import { IWorkspaceFileIndex } from './workspaceFileIndex';
 
 export enum LocalEmbeddingsIndexStatus {
+	Disabled = 'disabled',
 	Unknown = 'unknown',
 
 	UpdatingIndex = 'updatingIndex',
@@ -366,9 +367,13 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 	}
 
 	private async getExpandedClientSideIndexingStatus(): Promise<'enabled' | 'available' | 'disabled'> {
-		const token = await this._authService.getCopilotToken();
-		if (!token?.isExpandedClientSideIndexingEnabled()) {
-			return 'disabled';
+		try {
+			const token = await this._authService.getCopilotToken();
+			if (!token?.isExpandedClientSideIndexingEnabled()) {
+				return 'disabled';
+			}
+		} catch {
+			// noop
 		}
 
 		const cache = this._extensionContext.workspaceState.get<boolean | undefined>(this._hasPromptedExpandedIndexingKey);

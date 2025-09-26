@@ -6,14 +6,11 @@
 import { SDKAssistantMessage, SDKMessage } from '@anthropic-ai/claude-code';
 import Anthropic from '@anthropic-ai/sdk';
 import * as vscode from 'vscode';
-import { ILogService } from '../../../platform/log/common/logService';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { ChatRequestTurn2 } from '../../../vscodeTypes';
 import { ClaudeToolNames, IExitPlanModeInput } from '../../agents/claude/common/claudeTools';
 import { createFormattedToolInvocation } from '../../agents/claude/common/toolInvocationFormatter';
-import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
 import { IClaudeCodeSession, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
-import { ClaudeSessionDataStore } from './claudeChatSessionItemProvider';
 
 interface ToolContext {
 	unprocessedToolCalls: Map<string, Anthropic.ToolUseBlock>;
@@ -23,51 +20,21 @@ interface ToolContext {
 export class ClaudeChatSessionContentProvider implements vscode.ChatSessionContentProvider {
 
 	constructor(
-		private readonly claudeAgentManager: ClaudeAgentManager,
-		private readonly sessionStore: ClaudeSessionDataStore,
 		@IClaudeCodeSessionService private readonly sessionService: IClaudeCodeSessionService,
-		@ILogService private readonly logService: ILogService
 	) { }
 
-	async provideChatSessionContent(internalSessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
-		const initialRequest = this.sessionStore.getAndConsumeInitialRequest(internalSessionId);
-		const claudeSessionId = this.sessionStore.getSessionId(internalSessionId) ?? internalSessionId;
+	async provideChatSessionContent(claudeSessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
 		const existingSession = claudeSessionId && await this.sessionService.getSession(claudeSessionId, token);
 		const toolContext = this._createToolContext();
 		const history = existingSession ?
 			this._buildChatHistory(existingSession, toolContext) :
 			[];
-		if (initialRequest) {
-			history.push(new ChatRequestTurn2(initialRequest.prompt, undefined, [], '', [], undefined));
-		}
+
 		return {
 			history,
-			// This is called to attach to a previous or new session- send a request if it's a new session
-			activeResponseCallback: initialRequest ?
-				async (stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => {
-					this._log(`Starting activeResponseCallback, internalID: ${internalSessionId}`);
-					const request = this._createInitialChatRequest(initialRequest, internalSessionId);
-					const result = await this.claudeAgentManager.handleRequest(undefined, request, { history: [] }, stream, token);
-					if (result.claudeSessionId) {
-						this._log(`activeResponseCallback, setClaudeSessionId: ${internalSessionId} -> ${result.claudeSessionId}`);
-						this.sessionStore.setClaudeSessionId(internalSessionId, result.claudeSessionId);
-					}
-				} :
-				undefined,
-			requestHandler: async (request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => {
-				const claudeSessionId = this.sessionStore.getSessionId(internalSessionId);
-				this._log(`requestHandler, internalID: ${internalSessionId}, claudeID: ${claudeSessionId}`);
-				const result = await this.claudeAgentManager.handleRequest(claudeSessionId, request, context, stream, token);
-				if (result.claudeSessionId) {
-					this.sessionStore.setClaudeSessionId(internalSessionId, result.claudeSessionId);
-				}
-				return result;
-			}
+			activeResponseCallback: undefined,
+			requestHandler: undefined,
 		};
-	}
-
-	private _log(message: string): void {
-		this.logService.debug(`[ClaudeChatSessionContentProvider] ${message}`);
 	}
 
 	private _userMessageToRequest(message: Anthropic.MessageParam, toolContext: ToolContext): vscode.ChatRequestTurn2 | undefined {
@@ -122,14 +89,6 @@ export class ClaudeChatSessionContentProvider implements vscode.ChatSessionConte
 				return this._assistantMessageToResponse(m.message, toolContext);
 			}
 		}));
-	}
-
-	private _createInitialChatRequest(initialRequest: vscode.ChatRequest, internalSessionId: string): vscode.ChatRequest {
-		return {
-			...initialRequest,
-			// TODO this does not work
-			toolInvocationToken: { sessionId: internalSessionId } as vscode.ChatParticipantToolToken
-		};
 	}
 
 	private _extractTextContent(content: string | Anthropic.ContentBlockParam[]): string {
