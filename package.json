@@ -1673,15 +1673,6 @@
 						]
 					}
 				]
-			},
-			{
-				"id": "github.copilot.chatReplay",
-				"name": "chatReplay",
-				"fullName": "Chat Replay",
-				"when": "debugType == 'vscode-chat-replay'",
-				"locations": [
-					"panel"
-				]
 			}
 		],
 		"languageModelChatProviders": [
@@ -3983,6 +3974,13 @@
 					"supportsFileAttachments": true,
 					"supportsToolAttachments": false
 				}
+			},
+			{
+				"id": "chat-replay",
+				"type": "chat-replay",
+				"name": "replay",
+				"displayName": "Chat Replay",
+				"description": "Replay chat sessions from JSON files"
 			}
 		],
 		"debuggers": [

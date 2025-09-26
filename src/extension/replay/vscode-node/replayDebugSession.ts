@@ -16,8 +16,9 @@ import {
 import type { DebugProtocol } from '@vscode/debugprotocol';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { commands, type WorkspaceFolder } from 'vscode';
-import { ChatReplayResponses, ChatStep } from '../common/chatReplayResponses';
+import { window, type WorkspaceFolder } from 'vscode';
+import { ChatStep } from '../common/chatReplayResponses';
+import { ChatReplaySessionProvider } from './chatReplaySessionProvider';
 
 export class ChatReplayDebugSession extends LoggingDebugSession {
 
@@ -29,11 +30,13 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 	private _currentIndex = -1;
 	private _stopOnEntry = true;
 	private _variableHandles = new Handles<any>();
-	private _replay = ChatReplayResponses.getInstance();
+	private _sessionProvider: ChatReplaySessionProvider | undefined;
+	private _debugSessionId: string = '';
 
-	constructor(workspaceFolder: WorkspaceFolder | undefined) {
+	constructor(workspaceFolder: WorkspaceFolder | undefined, sessionProvider?: ChatReplaySessionProvider) {
 		super();
 		this._workspaceFolder = workspaceFolder;
+		this._sessionProvider = sessionProvider;
 		// all line/column numbers are 1-based in DAP
 		this.setDebuggerLinesStartAt1(true);
 		this.setDebuggerColumnsStartAt1(true);
@@ -75,8 +78,12 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 			}
 
 			this._currentIndex = 0;
-			this._replay = ChatReplayResponses.create(() => this.sendEvent(new TerminatedEvent()));
-			startReplayInChat();
+
+			// Generate debug session ID for communication with chat session provider
+			const baseSessionId = Buffer.from(this._program).toString('base64');
+			this._debugSessionId = `debug:${baseSessionId}`;
+
+			await startReplayInChatSession(this._program);
 
 			if (this._stopOnEntry) {
 				this.sendEvent(new StoppedEvent('entry', ChatReplayDebugSession.THREAD_ID));
@@ -87,7 +94,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 	}
 
 	protected override disconnectRequest(response: DebugProtocol.DisconnectResponse): void {
-		this._replay.markDone();
+		// Clean up any debug session state
 		this.sendResponse(response);
 		this.sendEvent(new TerminatedEvent());
 	}
@@ -147,7 +154,6 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 			this.sendResponse(response);
 		} else {
 			// We're done
-			this._replay.markDone();
 			this.sendResponse(response);
 			this.sendEvent(new TerminatedEvent());
 		}
@@ -159,14 +165,17 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 			this.replayNextResponse(step);
 			this.sendResponse(response);
 		} else {
-			this._replay.markDone();
 			this.sendResponse(response);
 			this.sendEvent(new TerminatedEvent());
 		}
 	}
 
 	private replayNextResponse(step: ChatStep): void {
-		this._replay.replayResponse(step);
+		// Use the chat session provider to step through the replay
+		if (this._sessionProvider) {
+			this._sessionProvider.stepNext(this._debugSessionId);
+		}
+
 		this._currentIndex++;
 
 		// Send a stopped event to indicate we are at the next step
@@ -259,10 +268,11 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 	}
 }
 
-async function startReplayInChat() {
-	await commands.executeCommand('workbench.panel.chat.view.copilot.focus');
-	await commands.executeCommand('type', {
-		text: `\@chatReplay`,
-	});
-	await commands.executeCommand('workbench.action.chat.submit');
+async function startReplayInChatSession(programPath: string) {
+	// Generate session ID from file path with debug prefix
+	const baseSessionId = Buffer.from(programPath).toString('base64');
+	const debugSessionId = `debug:${baseSessionId}`;
+
+	// Open the chat session in the editor with debug session ID
+	await window.showChatSession('chat-replay', debugSessionId, {});
 }

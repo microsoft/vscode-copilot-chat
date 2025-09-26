@@ -41,7 +41,7 @@ type Request = {
 	id: string;
 	line: number;
 	prompt: string;
-	result: string;
+	result: string | string[];
 }
 
 export type ChatStep = UserQuery | Request | ToolStep;
