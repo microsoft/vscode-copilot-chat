@@ -276,7 +276,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				...editWindowLines,
 				...contentWithCursorLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
 			].join('\n');
-		const { taggedCurrentFileContent, nLines: nLinesCurrentFile } = createTaggedCurrentFileContentUsingPagedClipping(
+		const taggedCurrentFileContentResult = createTaggedCurrentFileContentUsingPagedClipping(
 			currentFileContentLines,
 			areaAroundCodeToEditForCurrentFile,
 			areaAroundEditWindowLinesRange,
@@ -284,6 +284,13 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptOptions.pagedClipping.pageSize,
 			promptOptions.currentFile,
 		);
+
+		if (taggedCurrentFileContentResult.isError()) {
+			return Result.error(new NoNextEditReason.PromptTooLarge('currentFile'));
+		}
+
+		const { taggedCurrentFileContent, nLines: nLinesCurrentFile } = taggedCurrentFileContentResult.val;
+
 		telemetryBuilder.setNLinesOfCurrentFileInPrompt(nLinesCurrentFile);
 
 		const recordingEnabled = this.configService.getConfig<boolean>(ConfigKey.Internal.InlineEditsLogContextRecorderEnabled);
@@ -320,6 +327,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		logContext.setPrompt(messages);
 		telemetryBuilder.setPrompt(messages);
+
+		const HARD_CHAR_LIMIT = 30000 * 4; // 30K tokens, assuming 4 chars per token -- we use approximation here because counting tokens exactly is time-consuming
+		const promptCharCount = messages.reduce((total, msg) => total + msg.content.reduce((subtotal, part) => subtotal + part.text.length, 0), 0);
+		if (promptCharCount > HARD_CHAR_LIMIT) {
+			return Result.error(new NoNextEditReason.PromptTooLarge('final'));
+		}
 
 		await this.debounce(delaySession, telemetryBuilder);
 		if (cancellationToken.isCancellationRequested) {
