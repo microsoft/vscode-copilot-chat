@@ -51,6 +51,7 @@ import { applyPatch5Description } from '../../tools/node/applyPatchTool';
 import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
 import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation } from './toolCallingLoop';
+import { ISimulationTestContext } from '../../../platform/simulationTestContext/common/simulationTestContext';
 
 export const getAgentTools = (instaService: IInstantiationService, request: vscode.ChatRequest) =>
 	instaService.invokeFunction(async accessor => {
@@ -61,6 +62,7 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 		const experimentationService = accessor.get<IExperimentationService>(IExperimentationService);
 		const endpointProvider = accessor.get<IEndpointProvider>(IEndpointProvider);
 		const editToolLearningService = accessor.get<IEditToolLearningService>(IEditToolLearningService);
+		const simTestContext = accessor.get(ISimulationTestContext);
 		const model = await endpointProvider.getChatEndpoint(request);
 
 		const allowTools: Record<string, boolean> = {};
@@ -76,7 +78,8 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 			allowTools[ToolName.ReplaceString] = await modelSupportsReplaceString(model);
 			allowTools[ToolName.ApplyPatch] = await modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
 
-			if (allowTools[ToolName.ApplyPatch] && modelCanUseApplyPatchExclusively(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.Gpt5ApplyPatchExclusively, experimentationService)) {
+			const applyPatchExclusively = configurationService.getExperimentBasedConfig(ConfigKey.Internal.Gpt5ApplyPatchExclusively, experimentationService) || simTestContext.isInSimulationTests;
+			if (allowTools[ToolName.ApplyPatch] && modelCanUseApplyPatchExclusively(model) && applyPatchExclusively) {
 				allowTools[ToolName.EditFile] = false;
 			}
 
