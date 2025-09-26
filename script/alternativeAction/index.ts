@@ -186,7 +186,7 @@ async function handleAlternativeActionJson(inputFilePath: string) {
 		return;
 	}
 	const outputFilePath = inputFilePath.replace(/\.json$/, '.scoredEdits.json');
-	await writeFiles(outputFilePath.replace(/\.scoredEdits\.json$/, ''), scoring);
+	await Promise.all(writeFiles(outputFilePath.replace(/\.scoredEdits\.json$/, ''), scoring));
 	log('Scoring written to:', outputFilePath);
 }
 
