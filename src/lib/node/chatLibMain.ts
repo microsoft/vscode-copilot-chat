@@ -43,7 +43,7 @@ import { ILanguageContextProviderService } from '../../platform/languageContextP
 import { NullLanguageContextProviderService } from '../../platform/languageContextProvider/common/nullLanguageContextProviderService';
 import { ILanguageDiagnosticsService } from '../../platform/languages/common/languageDiagnosticsService';
 import { TestLanguageDiagnosticsService } from '../../platform/languages/common/testLanguageDiagnosticsService';
-import { ConsoleLog, ILogService, LogLevel, LogServiceImpl } from '../../platform/log/common/logService';
+import { ConsoleLog, ILogService, LogLevel as InternalLogLevel, LogServiceImpl } from '../../platform/log/common/logService';
 import { FetchOptions, IAbortController, IFetcherService } from '../../platform/networking/common/fetcherService';
 import { IFetcher } from '../../platform/networking/common/networking';
 import { NullRequestLogger } from '../../platform/requestLogger/node/nullRequestLogger';
@@ -62,6 +62,47 @@ import { SyncDescriptor } from '../../util/vs/platform/instantiation/common/desc
 import { IInstantiationService } from '../../util/vs/platform/instantiation/common/instantiation';
 import { eventPropertiesToSimpleObject } from '../../platform/telemetry/common/telemetryData';
 
+/**
+ * Log levels (taken from vscode.d.ts)
+ */
+export enum LogLevel {
+
+	/**
+	 * No messages are logged with this level.
+	 */
+	Off = 0,
+
+	/**
+	 * All messages are logged with this level.
+	 */
+	Trace = 1,
+
+	/**
+	 * Messages with debug and higher log level are logged with this level.
+	 */
+	Debug = 2,
+
+	/**
+	 * Messages with info and higher log level are logged with this level.
+	 */
+	Info = 3,
+
+	/**
+	 * Messages with warning and higher log level are logged with this level.
+	 */
+	Warning = 4,
+
+	/**
+	 * Only error messages are logged with this level.
+	 */
+	Error = 5
+}
+
+export interface ILogTarget {
+	logIt(level: LogLevel, metadataStr: string, ...extra: any[]): void;
+	show?(preserveFocus?: boolean): void;
+}
+
 export interface ITelemetrySender {
 	sendTelemetryEvent(eventName: string, properties?: Record<string, string | undefined>, measurements?: Record<string, number | undefined>): void;
 }
@@ -71,6 +112,7 @@ export interface INESProviderOptions {
 	readonly fetcher: IFetcher;
 	readonly copilotTokenManager: ICopilotTokenManager;
 	readonly telemetrySender: ITelemetrySender;
+	readonly logTarget?: ILogTarget;
 }
 
 export function createNESProvider(options: INESProviderOptions): INESProvider {
@@ -166,14 +208,14 @@ export interface INESProvider {
 }
 
 function setupServices(options: INESProviderOptions) {
-	const { fetcher, copilotTokenManager, telemetrySender } = options;
+	const { fetcher, copilotTokenManager, telemetrySender, logTarget } = options;
 	const builder = new InstantiationServiceBuilder();
 	builder.define(IConfigurationService, new SyncDescriptor(DefaultsOnlyConfigurationService));
 	builder.define(IExperimentationService, new SyncDescriptor(NullExperimentationService));
 	builder.define(ISimulationTestContext, new SyncDescriptor(NulSimulationTestContext));
 	builder.define(IWorkspaceService, new SyncDescriptor(NullWorkspaceService));
 	builder.define(IDiffService, new SyncDescriptor(DiffServiceImpl, [false]));
-	builder.define(ILogService, new SyncDescriptor(LogServiceImpl, [[new ConsoleLog(undefined, LogLevel.Trace)]]));
+	builder.define(ILogService, new SyncDescriptor(LogServiceImpl, [[logTarget || new ConsoleLog(undefined, InternalLogLevel.Trace)]]));
 	builder.define(IGitExtensionService, new SyncDescriptor(NullGitExtensionService));
 	builder.define(ILanguageContextProviderService, new SyncDescriptor(NullLanguageContextProviderService));
 	builder.define(ILanguageDiagnosticsService, new SyncDescriptor(TestLanguageDiagnosticsService));
