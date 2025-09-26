@@ -2077,14 +2077,19 @@
 					"experimental"
 				]
 			},
-			{
-				"command": "github.copilot.open.walkthrough",
-				"title": "%github.copilot.command.openWalkthrough%",
-				"category": "GitHub Copilot"
-			},
-			{
-				"command": "github.copilot.debug.generateInlineEditTests",
-				"title": "Generate Inline Edit Tests",
+                        {
+                                "command": "github.copilot.open.walkthrough",
+                                "title": "%github.copilot.command.openWalkthrough%",
+                                "category": "GitHub Copilot"
+                        },
+                        {
+                                "command": "github.copilot.open.releaseNotes",
+                                "title": "%github.copilot.command.openReleaseNotes%",
+                                "category": "GitHub Copilot"
+                        },
+                        {
+                                "command": "github.copilot.debug.generateInlineEditTests",
+                                "title": "Generate Inline Edit Tests",
 				"category": "GitHub Copilot",
 				"enablement": "resourceScheme == 'ccreq'"
 			},
