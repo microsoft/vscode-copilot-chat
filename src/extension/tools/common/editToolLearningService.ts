@@ -130,7 +130,6 @@ export class EditToolLearningService implements IEditToolLearningService {
 				"editToolLearning.transition" : {
 					"owner": "connor4312",
 					"comment": "Tracks state transitions in the edit tool learning system.",
-					"error": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "Error message if expansion failed" },
 					"modelId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model ID" },
 					"state": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "State the model transitioned to", "isMeasurement": true }
 				}
