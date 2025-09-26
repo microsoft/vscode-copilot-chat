@@ -1116,8 +1116,56 @@ class OnTimeoutData {
 		this.runnableResults.push(result);
 	}
 
+	addRunnableResults(results: readonly ResolvedRunnableResult[]): void {
+		this.runnableResults.push(...results);
+	}
+
 	matches(document: vscode.TextDocument, position: vscode.Position): boolean {
 		return this.document === document.uri.toString() && this.version === document.version && this.position.isEqual(position);
+	}
+}
+
+enum ContextItemUsageMode {
+	minimal = 'minimal',
+	half = 'half',
+	double = 'double',
+	fill = 'fill'
+}
+namespace ContextItemUsageMode {
+	export function fromString(value: string): ContextItemUsageMode {
+		switch (value) {
+			case 'minimal': return ContextItemUsageMode.minimal;
+			case 'half': return ContextItemUsageMode.half;
+			case 'double': return ContextItemUsageMode.double;
+			case 'fill': return ContextItemUsageMode.fill;
+			default: return ContextItemUsageMode.minimal;
+		}
+	}
+}
+
+class CharacterBudget {
+
+	public readonly overall: number;
+	private mandatory: number;
+	private optional: number;
+
+	constructor(mandatory: number, optional: number) {
+		this.overall = mandatory;
+		this.mandatory = mandatory;
+		this.optional = optional;
+	}
+
+	spend(chars: number): void {
+		this.mandatory -= chars;
+		this.optional -= chars;
+	}
+
+	isExhausted(): boolean {
+		return this.mandatory <= 0;
+	}
+
+	isOptionalExhausted(): boolean {
+		return this.optional <= 0;
 	}
 }
 
@@ -1125,10 +1173,11 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 
 	private static readonly defaultCachePopulationBudget: number = 500;
 	private static readonly defaultCachePopulationRaceTimeout: number = 20;
+	private static readonly ExecConfig: ExecConfig = { executionTarget: ExecutionTarget.Semantic };
 
 	readonly _serviceBrand: undefined;
 
-	private static readonly ExecConfig: ExecConfig = { executionTarget: ExecutionTarget.Semantic };
+	private readonly disposables: DisposableStore;
 
 	private readonly isDebugging: boolean;
 	private _isActivated: Promise<boolean> | undefined;
@@ -1137,13 +1186,12 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 	private readonly runnableResultManager: RunnableResultManager;
 	private readonly neighborFileModel: NeighborFileModel;
 
-
 	private pendingRequest: PendingRequestInfo | undefined;
 	private inflightCachePopulationRequest: InflightRequestInfo | undefined;
-	private readonly cachePopulationTimeout: number;
 	private onTimeoutData: OnTimeoutData | undefined;
+	private cachePopulationTimeout: number;
+	private usageMode: ContextItemUsageMode;
 
-	private readonly disposables = new DisposableStore();
 	private _onCachePopulated: vscode.EventEmitter<OnCachePopulatedEvent>;
 	public readonly onCachePopulated: vscode.Event<OnCachePopulatedEvent>;
 
@@ -1167,8 +1215,17 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 		this.inflightCachePopulationRequest = undefined;
 		this.onTimeoutData = undefined;
 		this.cachePopulationTimeout = this.getCachePopulationBudget();
+		this.usageMode = this.getUsageMode();
 
 		this.disposables = new DisposableStore();
+		this.disposables.add(this.configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration(ConfigKey.TypeScriptLanguageContextMode.fullyQualifiedId)) {
+				this.usageMode = this.getUsageMode();
+			} else if (e.affectsConfiguration(ConfigKey.TypeScriptLanguageContextCacheTimeout.fullyQualifiedId)) {
+				this.cachePopulationTimeout = this.getCachePopulationBudget();
+			}
+		}));
+
 		this._onCachePopulated = this.disposables.add(new vscode.EventEmitter<OnCachePopulatedEvent>());
 		this.onCachePopulated = this._onCachePopulated.event;
 
@@ -1340,59 +1397,71 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 		}
 		const runnableResults = this.runnableResultManager.getCachedRunnableResults(document, position);
 		const characterBudget = (context.tokenBudget ?? currentTokenBudget) * 4;
-		let characterBudgetLeft = characterBudget;
+		const budget = this.getCharacterBudget(context, document);
 		// We first collect all items to yield so that the state of the cache doesn't change underneath us.
 		// This could otherwise happen if the cache population request finishes while we are yielding items.
 		const itemsToYield: ContextItem[] = [];
-		outer: for (const runnableResult of runnableResults) {
-			if (cachePopulationRequestInflight && runnableResult.cache?.emitMode === protocol.EmitMode.ClientBasedOnTimeout && this.onTimeoutData !== undefined) {
-				this.onTimeoutData.addRunnableResult(runnableResult);
-			} else {
+		const { mandatory, optional, onTimeout } = this.getRunnables(document, position, cachePopulationRequestInflight);
+		if (this.onTimeoutData !== undefined) {
+			this.onTimeoutData.addRunnableResults(onTimeout);
+		}
+		outer: for (const runnableResult of mandatory) {
+			for (const { item, size } of contextItemResult.update(runnableResult, true)) {
+				forDebugging?.push(item);
+				budget.spend(size);
+				if (budget.isExhausted()) {
+					break outer;
+				}
+				itemsToYield.push(item);
+			}
+		}
+		if (!budget.isOptionalExhausted()) {
+			outer: for (const runnableResult of optional) {
 				for (const { item, size } of contextItemResult.update(runnableResult, true)) {
 					forDebugging?.push(item);
-					characterBudgetLeft -= size;
-					if (characterBudgetLeft < 0) {
+					budget.spend(size);
+					if (budget.isOptionalExhausted()) {
 						break outer;
 					}
 					itemsToYield.push(item);
 				}
+			}
+		}
+		if (!token.isCancellationRequested) {
+			for (const item of itemsToYield) {
 				if (token.isCancellationRequested) {
 					this.onTimeoutData = undefined;
 					break;
 				}
+				yield item;
 			}
-		}
-		for (const item of itemsToYield) {
-			if (token.isCancellationRequested) {
-				this.onTimeoutData = undefined;
-				break;
-			}
-			yield item;
-		}
 
-		// Recheck for an inflight request and join it if it is for the same document and position.
-		if (this.inflightCachePopulationRequest !== undefined && this.inflightCachePopulationRequest.matchesDocument(document)) {
-			cacheRequest = 'inflight';
-			// We have an inflight request for the same document and position.
-			// We wait for the server promise to resolve and then see if we can yield items from the
-			// inflight request.
-			const timeOut = Math.max(0, Math.min(context.timeBudget ?? LanguageContextServiceImpl.defaultCachePopulationRaceTimeout, LanguageContextServiceImpl.defaultCachePopulationRaceTimeout));
-			const result = await Promise.race([this.inflightCachePopulationRequest.serverPromise, new Promise((resolve) => setTimeout(resolve, timeOut)).then(() => 'timedOut')]);
-			// The server promised resolved first. So the inflight request is done.
-			if (result !== 'timedOut') {
-				this.inflightCachePopulationRequest = undefined;
-				if (this.onTimeoutData !== undefined) {
-					this.onTimeoutData = undefined;
-					const runnableResults = this.runnableResultManager.getCachedRunnableResults(document, position, protocol.EmitMode.ClientBasedOnTimeout);
-					for (const runnableResult of runnableResults) {
-						for (const { item } of contextItemResult.update(runnableResult)) {
-							forDebugging?.push(item);
-							yield item;
+			// Recheck for an inflight request and join it if it is for the same document and position.
+			if (this.inflightCachePopulationRequest !== undefined && this.inflightCachePopulationRequest.matchesDocument(document)) {
+				cacheRequest = 'inflight';
+				// We have an inflight request for the same document and position.
+				// We wait for the server promise to resolve and then see if we can yield items from the
+				// inflight request.
+				const timeOut = Math.max(0, Math.min(context.timeBudget ?? LanguageContextServiceImpl.defaultCachePopulationRaceTimeout, LanguageContextServiceImpl.defaultCachePopulationRaceTimeout));
+				const result = await Promise.race([this.inflightCachePopulationRequest.serverPromise, new Promise((resolve) => setTimeout(resolve, timeOut)).then(() => 'timedOut')]);
+				// The server promised resolved first. So the inflight request is done.
+				if (result !== 'timedOut') {
+					this.inflightCachePopulationRequest = undefined;
+					if (this.onTimeoutData !== undefined) {
+						this.onTimeoutData = undefined;
+						const runnableResults = this.runnableResultManager.getCachedRunnableResults(document, position, protocol.EmitMode.ClientBasedOnTimeout);
+						for (const runnableResult of runnableResults) {
+							for (const { item } of contextItemResult.update(runnableResult)) {
+								forDebugging?.push(item);
+								yield item;
+							}
 						}
+						cacheRequest = 'awaited';
 					}
-					cacheRequest = 'awaited';
 				}
 			}
+		} else {
+			this.onTimeoutData = undefined;
 		}
 
 		const isSpeculativeRequest = context.proposedEdits !== undefined;
@@ -1410,11 +1479,29 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				{ before: cacheState, after: cacheState }, cacheRequest
 			);
 			isDebugging && forDebugging?.length;
-			this._onContextComputed.fire({ document, position, characterBudget, source: context.source, results: runnableResults, summary: contextItemResult });
+			this._onContextComputed.fire({ document, position, characterBudget: characterBudget.mandatory, source: context.source, results: runnableResults, summary: contextItemResult });
 		}
 		return;
 	}
 
+	private getRunnables(document: vscode.TextDocument, position: vscode.Position, cachePopulationInflight: boolean): { mandatory: readonly ResolvedRunnableResult[]; optional: readonly ResolvedRunnableResult[]; onTimeout: readonly ResolvedRunnableResult[] } {
+		const mandatory: ResolvedRunnableResult[] = [];
+		const optional: ResolvedRunnableResult[] = [];
+		const onTimeout: ResolvedRunnableResult[] = [];
+		for (const runnable of this.runnableResultManager.getCachedRunnableResults(document, position)) {
+			if (cachePopulationInflight && runnable.cache?.emitMode === protocol.EmitMode.ClientBasedOnTimeout) {
+				onTimeout.push(runnable);
+			} else {
+				const priority = runnable.priority;
+				if (priority === protocol.Priorities.Expression || priority === protocol.Priorities.Locals || priority === protocol.Priorities.Inherited || priority === protocol.Priorities.Traits) {
+					mandatory.push(runnable);
+				} else {
+					optional.push(runnable);
+				}
+			}
+		}
+		return { mandatory, optional, onTimeout };
+	}
 
 	public getContextOnTimeout(document: vscode.TextDocument, position: vscode.Position, context: RequestContext): readonly ContextItem[] | undefined {
 		try {
@@ -1440,6 +1527,26 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 	private getCachePopulationBudget(): number {
 		const result = this.configurationService.getExperimentBasedConfig(ConfigKey.TypeScriptLanguageContextCacheTimeout, this.experimentationService);
 		return result ?? LanguageContextServiceImpl.defaultCachePopulationBudget;
+	}
+
+	private getUsageMode(): ContextItemUsageMode {
+		const value = this.configurationService.getExperimentBasedConfig(ConfigKey.TypeScriptLanguageContextMode, this.experimentationService);
+		return ContextItemUsageMode.fromString(value);
+	}
+
+	private getCharacterBudget(context: RequestContext, document: vscode.TextDocument): CharacterBudget {
+		const chars = (context.tokenBudget ?? currentTokenBudget) * 4;
+		switch (this.usageMode) {
+			case ContextItemUsageMode.minimal:
+			case ContextItemUsageMode.fill:
+				return new CharacterBudget(chars, chars);
+			case ContextItemUsageMode.half:
+				return new CharacterBudget(chars, Math.floor(chars / 2));
+			case ContextItemUsageMode.double:
+				return new CharacterBudget(chars, Math.min(chars, document.getText().length));
+			default:
+				return new CharacterBudget(chars, chars);
+		}
 	}
 }
 
