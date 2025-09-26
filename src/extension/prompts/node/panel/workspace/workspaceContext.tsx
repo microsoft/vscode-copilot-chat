@@ -13,6 +13,7 @@ import { IPromptPathRepresentationService } from '../../../../../platform/prompt
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry';
 import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../../../../platform/workspace/common/workspaceService';
 import { KeywordItem, ResolvedWorkspaceChunkQuery, WorkspaceChunkQuery } from '../../../../../platform/workspaceChunkSearch/common/workspaceChunkSearch';
+import { LocalEmbeddingsIndexStatus } from '../../../../../platform/workspaceChunkSearch/node/embeddingsChunkSearch';
 import { IWorkspaceChunkSearchService, WorkspaceChunkSearchResult } from '../../../../../platform/workspaceChunkSearch/node/workspaceChunkSearchService';
 import { GlobIncludeOptions } from '../../../../../util/common/glob';
 import { createFencedCodeBlock, getLanguageId } from '../../../../../util/common/markdown';
@@ -45,7 +46,7 @@ export const MAX_CHUNK_TOKEN_COUNT = 32_000;
 export const MAX_TOOL_CHUNK_TOKEN_COUNT = 20_000;
 
 type WorkspaceChunksState = {
-	readonly result: WorkspaceChunkSearchResult;
+	readonly result?: WorkspaceChunkSearchResult;
 };
 
 export interface ChunksToolProps extends BasePromptElementProps {
@@ -73,6 +74,11 @@ export class WorkspaceChunks extends PromptElement<ChunksToolProps, WorkspaceChu
 	}
 
 	override async prepare(sizing: PromptSizing, progress: vscode.Progress<vscode.ChatResponsePart> | undefined, token = CancellationToken.None): Promise<WorkspaceChunksState> {
+		const indexState = await this.workspaceChunkSearch.getIndexState();
+		if (indexState.localIndexState.status === LocalEmbeddingsIndexStatus.Disabled && indexState.remoteIndexState.status === 'disabled') {
+			return {};
+		}
+
 		const searchResult = await logExecTime(this.logService, 'workspaceContext.perf.prepareWorkspaceChunks', () => {
 			return raceCancellationError(
 				this.workspaceChunkSearch.searchFileChunks({
@@ -115,6 +121,10 @@ export class WorkspaceChunks extends PromptElement<ChunksToolProps, WorkspaceChu
 	}
 
 	override render(state: WorkspaceChunksState, sizing: PromptSizing): PromptPiece<any, any> | undefined {
+		if (state.result === undefined) {
+			return <TextChunk>The workspace index is not available at this time.</TextChunk>;
+		}
+
 		return <WorkspaceChunkList
 			result={state.result}
 			referencesOut={this.props.referencesOut}

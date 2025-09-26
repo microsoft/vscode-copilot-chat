@@ -12,6 +12,7 @@ test/scenarios/**
 .eslintplugin/**
 chat-lib/**
 test/aml/out/**
+.vscode-test/**
 
 # ignore vs
 src/util/vs/**

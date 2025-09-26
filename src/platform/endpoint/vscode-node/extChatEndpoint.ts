@@ -30,6 +30,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	public readonly isFallback: boolean = false;
 	public readonly isPremium: boolean = false;
 	public readonly multiplier: number = 0;
+	public readonly isExtensionContributed = true;
 
 	constructor(
 		private readonly languageModel: vscode.LanguageModelChat,

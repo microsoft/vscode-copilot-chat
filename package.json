@@ -1822,122 +1822,122 @@
 				"command": "github.copilot.chat.explain",
 				"title": "%github.copilot.command.explainThis%",
 				"enablement": "!github.copilot.interactiveSession.disabled",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.explain.palette",
 				"title": "%github.copilot.command.explainThis%",
 				"enablement": "!github.copilot.interactiveSession.disabled && !editorReadonly",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.review",
 				"title": "%github.copilot.command.reviewAndComment%",
 				"enablement": "config.github.copilot.chat.reviewSelection.enabled && !github.copilot.interactiveSession.disabled",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.review.apply",
 				"title": "%github.copilot.command.applyReviewSuggestion%",
 				"icon": "$(sparkle)",
 				"enablement": "commentThread =~ /hasSuggestion/",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.review.applyAndNext",
 				"title": "%github.copilot.command.applyReviewSuggestionAndNext%",
 				"icon": "$(sparkle)",
 				"enablement": "commentThread =~ /hasSuggestion/",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.review.discard",
 				"title": "%github.copilot.command.discardReviewSuggestion%",
 				"icon": "$(close)",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.review.discardAndNext",
 				"title": "%github.copilot.command.discardReviewSuggestionAndNext%",
 				"icon": "$(close)",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.review.discardAll",
 				"title": "%github.copilot.command.discardAllReviewSuggestion%",
 				"icon": "$(close-all)",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.review.stagedChanges",
 				"title": "%github.copilot.command.reviewStagedChanges%",
 				"icon": "$(code-review)",
 				"enablement": "github.copilot.chat.reviewDiff.enabled && !github.copilot.interactiveSession.disabled",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.review.unstagedChanges",
 				"title": "%github.copilot.command.reviewUnstagedChanges%",
 				"icon": "$(code-review)",
 				"enablement": "github.copilot.chat.reviewDiff.enabled && !github.copilot.interactiveSession.disabled",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.review.changes",
 				"title": "%github.copilot.command.reviewChanges%",
 				"icon": "$(code-review)",
 				"enablement": "github.copilot.chat.reviewDiff.enabled && !github.copilot.interactiveSession.disabled",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.review.stagedFileChange",
 				"title": "%github.copilot.command.reviewFileChange%",
 				"icon": "$(code-review)",
 				"enablement": "github.copilot.chat.reviewDiff.enabled && !github.copilot.interactiveSession.disabled",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.review.unstagedFileChange",
 				"title": "%github.copilot.command.reviewFileChange%",
 				"icon": "$(code-review)",
 				"enablement": "github.copilot.chat.reviewDiff.enabled && !github.copilot.interactiveSession.disabled",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.review.previous",
 				"title": "%github.copilot.command.gotoPreviousReviewSuggestion%",
 				"icon": "$(arrow-up)",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.review.next",
 				"title": "%github.copilot.command.gotoNextReviewSuggestion%",
 				"icon": "$(arrow-down)",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.review.continueInInlineChat",
 				"title": "%github.copilot.command.continueReviewInInlineChat%",
 				"icon": "$(comment-discussion)",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.review.continueInChat",
 				"title": "%github.copilot.command.continueReviewInChat%",
 				"icon": "$(comment-discussion)",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.review.markHelpful",
 				"title": "%github.copilot.command.helpfulReviewSuggestion%",
 				"icon": "$(thumbsup)",
 				"enablement": "!(commentThread =~ /markedAsHelpful/)",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.openUserPreferences",
 				"title": "%github.copilot.command.openUserPreferences%",
-				"category": "GitHub Copilot",
+				"category": "Chat",
 				"enablement": "config.github.copilot.chat.enableUserPreferences"
 			},
 			{
@@ -1945,39 +1945,39 @@
 				"title": "%github.copilot.command.unhelpfulReviewSuggestion%",
 				"icon": "$(thumbsdown)",
 				"enablement": "!(commentThread =~ /markedAsUnhelpful/)",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.generate",
 				"title": "%github.copilot.command.generateThis%",
 				"icon": "$(sparkle)",
 				"enablement": "!github.copilot.interactiveSession.disabled && !editorReadonly",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.generateDocs",
 				"title": "%github.copilot.command.generateDocs%",
 				"enablement": "!github.copilot.interactiveSession.disabled && !editorReadonly",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.generateTests",
 				"title": "%github.copilot.command.generateTests%",
 				"enablement": "!github.copilot.interactiveSession.disabled && !editorReadonly",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.fix",
 				"title": "%github.copilot.command.fixThis%",
 				"enablement": "!github.copilot.interactiveSession.disabled && !editorReadonly",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.interactiveSession.feedback",
 				"title": "%github.copilot.command.sendChatFeedback%",
 				"enablement": "github.copilot-chat.activated && !github.copilot.interactiveSession.disabled",
 				"icon": "$(feedback)",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.debug.workbenchState",
@@ -2004,14 +2004,14 @@
 			{
 				"command": "github.copilot.terminal.explainTerminalLastCommand",
 				"title": "%github.copilot.command.explainTerminalLastCommand%",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.git.generateCommitMessage",
 				"title": "%github.copilot.git.generateCommitMessage%",
 				"icon": "$(sparkle)",
 				"enablement": "!github.copilot.interactiveSession.disabled",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.git.resolveMergeConflicts",
@@ -2023,13 +2023,13 @@
 			{
 				"command": "github.copilot.devcontainer.generateDevContainerConfig",
 				"title": "%github.copilot.devcontainer.generateDevContainerConfig%",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.tests.fixTestFailure",
 				"icon": "$(sparkle)",
 				"title": "%github.copilot.command.fixTestFailure%",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.tests.fixTestFailure.fromInline",
@@ -2044,7 +2044,8 @@
 			{
 				"command": "github.copilot.chat.attachSelection",
 				"title": "%github.copilot.chat.attachSelection%",
-				"category": "GitHub Copilot"
+				"icon": "$(comment-discussion)",
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.debug.collectDiagnostics",
@@ -2066,12 +2067,12 @@
 				"command": "github.copilot.debug.generateSTest",
 				"title": "%github.copilot.command.generateSTest%",
 				"enablement": "github.copilot.debugReportFeedback",
-				"category": "GitHub Copilot Developer"
+				"category": "Developer"
 			},
 			{
 				"command": "github.copilot.debug.generateConfiguration",
 				"title": "%github.copilot.command.generateConfiguration%",
-				"category": "GitHub Copilot",
+				"category": "Chat",
 				"enablement": "config.github.copilot.chat.startDebugging.enabled",
 				"tags": [
 					"experimental"
@@ -2080,35 +2081,35 @@
 			{
 				"command": "github.copilot.open.walkthrough",
 				"title": "%github.copilot.command.openWalkthrough%",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.debug.generateInlineEditTests",
 				"title": "Generate Inline Edit Tests",
-				"category": "GitHub Copilot",
+				"category": "Chat",
 				"enablement": "resourceScheme == 'ccreq'"
 			},
 			{
 				"command": "github.copilot.buildLocalWorkspaceIndex",
 				"title": "%github.copilot.command.buildLocalWorkspaceIndex%",
-				"category": "GitHub Copilot",
+				"category": "Chat",
 				"enablement": "github.copilot-chat.activated"
 			},
 			{
 				"command": "github.copilot.buildRemoteWorkspaceIndex",
 				"title": "%github.copilot.command.buildRemoteWorkspaceIndex%",
-				"category": "GitHub Copilot",
+				"category": "Chat",
 				"enablement": "github.copilot-chat.activated"
 			},
 			{
 				"command": "github.copilot.report",
 				"title": "Report Issue",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.rerunWithCopilotDebug",
 				"title": "%github.copilot.command.rerunWithCopilotDebug%",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.startCopilotDebugCommand",
@@ -2117,7 +2118,7 @@
 			{
 				"command": "github.copilot.chat.clearTemporalContext",
 				"title": "Clear Temporal Context",
-				"category": "GitHub Copilot (Developer)"
+				"category": "Developer"
 			},
 			{
 				"command": "github.copilot.search.markHelpful",
@@ -4171,7 +4172,7 @@
 		"@anthropic-ai/sdk": "^0.63.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
-		"@vscode/copilot-api": "^0.1.9",
+		"@vscode/copilot-api": "^0.1.10",
 		"@vscode/extension-telemetry": "^1.0.0",
 		"@vscode/l10n": "^0.0.18",
 		"@vscode/prompt-tsx": "^0.4.0-alpha.5",

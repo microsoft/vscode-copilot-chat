@@ -10,6 +10,7 @@ import { CurrentFileOptions, DiffHistoryOptions, PromptingStrategy, PromptOption
 import { StatelessNextEditDocument } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { IXtabHistoryEditEntry, IXtabHistoryEntry } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ContextKind, TraitContext } from '../../../platform/languageServer/common/languageContextService';
+import { Result } from '../../../util/common/result';
 import { pushMany, range } from '../../../util/vs/base/common/arrays';
 import { illegalArgument } from '../../../util/vs/base/common/errors';
 import { Schemas } from '../../../util/vs/base/common/network';
@@ -665,10 +666,13 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 	computeTokens: (s: string) => number,
 	pageSize: number,
 	opts: CurrentFileOptions
-): { taggedCurrentFileContent: string; nLines: number } {
+): Result<{ taggedCurrentFileContent: string; nLines: number }, 'outOfBudget'> {
 
 	// subtract budget consumed by areaAroundCodeToEdit
 	const availableTokenBudget = opts.maxTokens - countTokensForLines(areaAroundCodeToEdit.split(/\r?\n/), computeTokens);
+	if (availableTokenBudget < 0) {
+		return Result.error('outOfBudget');
+	}
 
 	const { firstPageIdx, lastPageIdx } = expandRangeToPageRange(
 		currentDocLines,
@@ -688,5 +692,5 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 		...currentDocLines.slice(areaAroundEditWindowLinesRange.endExclusive, linesOffsetEnd),
 	];
 
-	return { taggedCurrentFileContent: taggedCurrentFileContent.join('\n'), nLines: taggedCurrentFileContent.length };
+	return Result.ok({ taggedCurrentFileContent: taggedCurrentFileContent.join('\n'), nLines: taggedCurrentFileContent.length });
 }

@@ -272,6 +272,9 @@ export class ChatStatusWorkspaceIndexingStatus extends Disposable {
 					},
 				};
 
+			case LocalEmbeddingsIndexStatus.Disabled:
+				return undefined;
+
 			case LocalEmbeddingsIndexStatus.TooManyFilesForAnyIndexing:
 			default:
 				return {
