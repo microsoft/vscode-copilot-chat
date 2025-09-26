@@ -16,7 +16,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { LanguageModelPromptTsxPart, LanguageModelToolResult } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
-import { EditTools, IEditToolLearningService } from '../common/editToolLearningService';
+import { IEditToolLearningService } from '../common/editToolLearningService';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
@@ -70,9 +70,9 @@ export class EditFileTool implements ICopilotTool<IEditFileParams> {
 		};
 		try {
 			await this.toolsService.invokeTool(InternalEditToolId, internalOptions, token);
-			void this.recordEditSuccess(options, ToolName.EditFile as EditTools, true);
+			void this.recordEditSuccess(options, true);
 		} catch (error) {
-			void this.recordEditSuccess(options, ToolName.EditFile as EditTools, false);
+			void this.recordEditSuccess(options, false);
 			throw error;
 		}
 
