@@ -162,6 +162,13 @@ export class ConversationFeature implements IExtensionContribution {
 			return;
 		} else {
 			this._searchProviderRegistered = true;
+
+			// Don't register for no auth user
+			if (this.authenticationService.copilotToken?.isNoAuthUser) {
+				this.logService.debug('ConversationFeature: Skipping search provider registration - no GitHub session available');
+				return;
+			}
+
 			return vscode.workspace.registerAITextSearchProvider('file', this.instantiationService.createInstance(SemanticSearchTextSearchProvider));
 		}
 	}

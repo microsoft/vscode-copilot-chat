@@ -28,6 +28,7 @@ import { WorkspaceChunkEmbeddingsIndex, WorkspaceChunkEmbeddingsIndexState } fro
 import { IWorkspaceFileIndex } from './workspaceFileIndex';
 
 export enum LocalEmbeddingsIndexStatus {
+	Disabled = 'disabled',
 	Unknown = 'unknown',
 
 	UpdatingIndex = 'updatingIndex',
