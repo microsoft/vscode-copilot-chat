@@ -88,6 +88,17 @@ describe('replace_string_in_file - applyEdit', () => {
 		}
 	});
 
+	test('replaceAll with single occurrence should work normally', async () => {
+		setText('single test here');
+		const result = await doApplyEdit('test', 'replacement', doc.document.uri, true);
+		expect(result.updatedFile).toBe('single replacement here');
+	});
+
+	test('replaceAll with no matches should fail normally', async () => {
+		setText('no match here');
+		await expect(doApplyEdit('test', 'replacement', doc.document.uri, true)).rejects.toThrow(NoMatchError);
+	});
+
 	test('whitespace flexible matching - different indentation', async () => {
 		setText('function test() {\n    console.log("hello");\n}');
 		// Use the exact text from the file for this test

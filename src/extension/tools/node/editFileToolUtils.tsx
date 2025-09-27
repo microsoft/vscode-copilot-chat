@@ -98,14 +98,15 @@ function positionsToLineNumbers(text: string, positions: number[]): number[] {
 	let positionIndex = 0;
 	
 	for (let lineIndex = 0; lineIndex < lines.length && positionIndex < positions.length; lineIndex++) {
-		const lineLength = lines[lineIndex].length + 1; // +1 for newline character
+		const isLastLine = lineIndex === lines.length - 1;
+		const lineLength = lines[lineIndex].length + (isLastLine ? 0 : 1); // +1 for newline character, except last line
 		
-		while (positionIndex < positions.length && positions[positionIndex] >= currentPos && positions[positionIndex] < currentPos + lineLength) {
+		while (positionIndex < positions.length && positions[positionIndex] >= currentPos && (isLastLine ? positions[positionIndex] <= currentPos + lineLength : positions[positionIndex] < currentPos + lineLength)) {
 			lineNumbers.push(lineIndex + 1); // 1-based line numbers
 			positionIndex++;
 		}
 		
-		currentPos += lineLength;
+		currentPos += lines[lineIndex].length + (isLastLine ? 0 : 1);
 	}
 	
 	return lineNumbers;
