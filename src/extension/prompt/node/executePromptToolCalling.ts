@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { randomUUID } from 'crypto';
-import type { CancellationToken, ChatRequest, LanguageModelToolInformation, Progress } from 'vscode';
+import type { CancellationToken, ChatRequest, ChatResponseStream, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
@@ -43,6 +43,17 @@ export class ExecutePromptToolCallingLoop extends ToolCallingLoop<IExecutePrompt
 		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService);
 	}
 
+	protected override createPromptContext(availableTools: LanguageModelToolInformation[], outputStream: ChatResponseStream | undefined) {
+		const context = super.createPromptContext(availableTools, outputStream);
+		if (context.tools) {
+			context.tools = {
+				...context.tools,
+				inSubAgent: true
+			};
+		}
+		return context;
+	}
+
 	private async getEndpoint(request: ChatRequest) {
 		let endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
 		if (!endpoint.supportsToolCalls) {
@@ -73,7 +84,7 @@ export class ExecutePromptToolCallingLoop extends ToolCallingLoop<IExecutePrompt
 	}
 
 	protected async getAvailableTools(): Promise<LanguageModelToolInformation[]> {
-		const excludedTools = new Set([ToolName.ExecutePrompt, ToolName.ExecuteTask, ToolName.CoreManageTodoList]);
+		const excludedTools = new Set([ToolName.ExecutePrompt, ToolName.CoreManageTodoList]);
 		return (await getAgentTools(this.instantiationService, this.options.request))
 			.filter(tool => !excludedTools.has(tool.name as ToolName))
 			// TODO can't do virtual tools at this level

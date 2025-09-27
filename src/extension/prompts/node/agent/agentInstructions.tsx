@@ -184,7 +184,6 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 			</Tag>}
 			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
-			{tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
@@ -421,6 +420,7 @@ export class CodexStyleGPTPrompt extends PromptElement<DefaultAgentPromptProps> 
 
 export class CodexStyleGPT5CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
+		const tools = detectToolCapabilities(this.props.availableTools);
 		return <InstructionMessage>
 			You are a coding agent based on GPT-5-Codex. You are running as a coding agent in the Codex CLI on a user's computer.<br />
 			<br />
@@ -437,13 +437,16 @@ export class CodexStyleGPT5CodexPrompt extends PromptElement<DefaultAgentPromptP
 			<br />
 			## Tool use<br />
 			- You have access to many tools. If a tool exists to perform a specific task, you MUST use that tool instead of running a terminal command to perform that task.<br />
-			<br />
-			## Todo tool<br />
-			<br />
-			When using the todo list tool:<br />
-			- Skip using the todo list tool for straightforward tasks (roughly the easiest 25%).<br />
-			- Do not make single-step todo lists.<br />
-			- When you made a todo, update it after having performed one of the sub-tasks that you shared on the todo list.<br />
+			{tools[ToolName.CoreManageTodoList] && <>
+				<br />
+				## {ToolName.CoreManageTodoList} tool<br />
+				<br />
+				When using the {ToolName.CoreManageTodoList} tool:<br />
+				- Skip using {ToolName.CoreManageTodoList} for straightforward tasks (roughly the easiest 25%).<br />
+				- Do not make single-step todo lists.<br />
+				- When you made a todo, update it after having performed one of the sub-tasks that you shared on the todo list.<br />
+				<br />
+			</>}
 			<br />
 			## Special user requests<br />
 			<br />
@@ -597,7 +600,6 @@ export class DefaultAgentPromptV2 extends PromptElement<DefaultAgentPromptProps>
 					- You don't currently have any tools available for editing files. If the user asks you to edit a file, request enabling editing tools or print a codeblock with the suggested changes.<br />
 				</Tag>}
 				{this.props.codesearchMode && <Tag name='codesearch_mode_instructions'><CodesearchModeInstructions {...this.props} /></Tag>}
-				{tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 				{isGrokCode && tools[ToolName.ReplaceString] && !tools[ToolName.ApplyPatch] && <Tag name='edit_file_instructions'>
 					Before you edit an existing file, make sure you either already have it in the provided context, or read it with the {ToolName.ReadFile} tool, so that you can make proper changes.<br />
 					{tools[ToolName.MultiReplaceString]
@@ -785,7 +787,6 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 			</Tag>}
 			{tools[ToolName.ApplyPatch] && <ApplyPatchInstructions {...this.props} tools={tools} />}
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
-			{tools[ToolName.CoreManageTodoList] && <TodoListToolInstructions {...this.props} />}
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
@@ -1113,56 +1114,6 @@ class NotebookInstructions extends PromptElement<DefaultAgentPromptProps> {
 			{hasGetNotebookSummaryTool && <>Use the {ToolName.GetNotebookSummary} tool to get the summary of the notebook (this includes the list or all cells along with the Cell Id, Cell type and Cell Language, execution details and mime types of the outputs, if any).<br /></>}
 			Important Reminder: Avoid referencing Notebook Cell Ids in user messages. Use cell number instead.<br />
 			Important Reminder: Markdown cells cannot be executed
-		</Tag>;
-	}
-}
-
-class TodoListToolInstructions extends PromptElement<DefaultAgentPromptProps> {
-	render() {
-		return <Tag name='planning_instructions'>
-			You have access to an {ToolName.CoreManageTodoList} tool which tracks todos and progress and renders them to the user. Using the tool helps demonstrate that you've understood the task and convey how you're approaching it. Plans can help to make complex, ambiguous, or multi-phase work clearer and more collaborative for the user. A good plan should break the task into meaningful, logically ordered steps that are easy to verify as you go. Note that plans are not for padding out simple work with filler steps or stating the obvious. <br />
-			Use this tool to create and manage a structured todo list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.<br />
-			It also helps the user understand the progress of the task and overall progress of their requests.<br />
-			<br />
-			NOTE that you should not use this tool if there is only one trivial task to do. In this case you are better off just doing the task directly.<br />
-			<br />
-			Use a plan when:<br />
-			- The task is non-trivial and will require multiple actions over a long time horizon.<br />
-			- There are logical phases or dependencies where sequencing matters.<br />
-			- The work has ambiguity that benefits from outlining high-level goals.<br />
-			- You want intermediate checkpoints for feedback and validation.<br />
-			- When the user asked you to do more than one thing in a single prompt<br />
-			- The user has asked you to use the plan tool (aka "TODOs")<br />
-			- You generate additional steps while working, and plan to do them before yielding to the user<br />
-			<br />
-			Skip a plan when:<br />
-			- The task is simple and direct.<br />
-			- Breaking it down would only produce literal or trivial steps.<br />
-			<br />
-			Examples of TRIVIAL tasks (skip planning):<br />
-			- "Fix this typo in the README"<br />
-			- "Add a console.log statement to debug"<br />
-			- "Update the version number in package.json"<br />
-			- "Answer a question about existing code"<br />
-			- "Read and explain what this function does"<br />
-			- "Add a simple getter method to a class"<br />
-			<br />
-			Examples of NON-TRIVIAL tasks and the plan (use planning):<br />
-			- "Add user authentication to the app" → Design auth flow, Update backend API, Implement login UI, Add session management<br />
-			- "Refactor the payment system to support multiple currencies" → Analyze current system, Design new schema, Update backend logic, Migrate data, Update frontend<br />
-			- "Debug and fix the performance issue in the dashboard" → Profile performance, Identify bottlenecks, Implement optimizations, Validate improvements<br />
-			- "Implement a new feature with multiple components" → Design component architecture, Create data models, Build UI components, Add integration tests<br />
-			- "Migrate from REST API to GraphQL" → Design GraphQL schema, Update backend resolvers, Migrate frontend queries, Update documentation<br />
-			<br />
-			<br />
-			Planning Progress Rules<br />
-			- Before beginning any new todo: you MUST update the todo list and mark exactly one todo as `in-progress`. Never start work with zero `in-progress` items.<br />
-			- Keep only one todo `in-progress` at a time. If switching tasks, first mark the current todo `completed` or revert it to `not-started` with a short reason; then set the next todo to `in-progress`.<br />
-			- Immediately after finishing a todo: you MUST mark it `completed` and add any newly discovered follow-up todos. Do not leave completion implicit.<br />
-			- Before ending your turn or declaring completion: ensure EVERY todo is explicitly marked (`not-started`, `in-progress`, or `completed`). If the work is finished, ALL todos must be marked `completed`. Never leave items unchecked or ambiguous.<br />
-			<br />
-			The content of your plan should not involve doing anything that you aren't capable of doing (i.e. don't try to test things that you can't test). Do not use plans for simple or single-step queries that you can just do or answer immediately.<br />
-			<br />
 		</Tag>;
 	}
 }
