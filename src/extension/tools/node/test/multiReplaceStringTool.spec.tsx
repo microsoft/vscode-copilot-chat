@@ -181,7 +181,7 @@ import { IFile } from '../../../../../base/node/zip.js';`
 				filePath: '/workspace/replaceall-test.ts',
 				explanation: 'Try to replace "test" without replaceAll flag',
 				newString: 'replacement',
-				oldString: 'test'
+				oldString: 'test',
 				// replaceAll is not set, should default to false
 			}]
 		};

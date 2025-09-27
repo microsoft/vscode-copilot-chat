@@ -99,9 +99,15 @@ function positionsToLineNumbers(text: string, positions: number[]): number[] {
 	
 	for (let lineIndex = 0; lineIndex < lines.length && positionIndex < positions.length; lineIndex++) {
 		const isLastLine = lineIndex === lines.length - 1;
-		const lineLength = lines[lineIndex].length + (isLastLine ? 0 : 1); // +1 for newline character, except last line
+		const lineStart = currentPos;
+		const lineEnd = currentPos + lines[lineIndex].length;
 		
-		while (positionIndex < positions.length && positions[positionIndex] >= currentPos && (isLastLine ? positions[positionIndex] <= currentPos + lineLength : positions[positionIndex] < currentPos + lineLength)) {
+		// Helper function to check if position is within this line
+		const isPositionInLine = (pos: number) => {
+			return pos >= lineStart && (isLastLine ? pos <= lineEnd : pos < lineEnd + 1);
+		};
+		
+		while (positionIndex < positions.length && isPositionInLine(positions[positionIndex])) {
 			lineNumbers.push(lineIndex + 1); // 1-based line numbers
 			positionIndex++;
 		}
