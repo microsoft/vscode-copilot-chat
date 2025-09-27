@@ -301,5 +301,5 @@
 	"github.copilot.config.useResponsesApi": "Use the Responses API instead of the Chat Completions API when supported. Enables reasoning and reasoning summaries.\n\n**Note**: This is an experimental feature that is not yet activated for all users.",
 	"github.copilot.config.responsesApiReasoningEffort": "Sets the reasoning effort used for the Responses API. Requires `#github.copilot.chat.useResponsesApi#`.",
 	"github.copilot.config.responsesApiReasoningSummary": "Sets the reasoning summary style used for the Responses API. Requires `#github.copilot.chat.useResponsesApi#`.",
-	"github.copilot.config.advanced.executePrompt.enabled": "The executePrompt tool enables the agent to execute tasks in a separate, isolated context."
+	"github.copilot.config.executePrompt.enabled": "The executePrompt tool enables the agent to execute tasks in a separate, isolated context."
 }
