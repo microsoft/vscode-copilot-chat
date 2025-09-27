@@ -102,9 +102,9 @@ function positionsToLineNumbers(text: string, positions: number[]): number[] {
 		const lineStart = currentPos;
 		const lineEnd = currentPos + lines[lineIndex].length;
 		
-		// Helper function to check if position is within this line
+		// Helper function to check if position is within this line's content
 		const isPositionInLine = (pos: number) => {
-			return pos >= lineStart && (isLastLine ? pos <= lineEnd : pos < lineEnd + 1);
+			return pos >= lineStart && pos <= lineEnd;
 		};
 		
 		while (positionIndex < positions.length && isPositionInLine(positions[positionIndex])) {
