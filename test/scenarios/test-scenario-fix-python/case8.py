@@ -11,9 +11,9 @@ def palindrome(s, inner = False):
             i += 1
             j += -1
         elif inner == False:
-            if s[i+1:j+1] == palindrom(s[i+1:j+1],inner = True):
+            if s[i+1:j+1] == palindrome(s[i+1:j+1],inner = True):
                 return s[0:i]+s[i+1:j+1]+s[j+1:]
-            elif s[i:j] == palindrom(s[i:j],inner = True):
+            elif s[i:j] == palindrome(s[i:j],inner = True):
                 return s[0:i]+s[i:j]+s[j+1:]
             else:
                 return None
