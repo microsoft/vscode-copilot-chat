@@ -87,6 +87,31 @@ function escapeRegex(str: string): string {
 }
 
 /**
+ * Converts text positions to line numbers (1-based).
+ */
+function positionsToLineNumbers(text: string, positions: number[]): number[] {
+	if (positions.length === 0) return [];
+	
+	const lines = text.split('\n');
+	let currentPos = 0;
+	const lineNumbers: number[] = [];
+	let positionIndex = 0;
+	
+	for (let lineIndex = 0; lineIndex < lines.length && positionIndex < positions.length; lineIndex++) {
+		const lineLength = lines[lineIndex].length + 1; // +1 for newline character
+		
+		while (positionIndex < positions.length && positions[positionIndex] >= currentPos && positions[positionIndex] < currentPos + lineLength) {
+			lineNumbers.push(lineIndex + 1); // 1-based line numbers
+			positionIndex++;
+		}
+		
+		currentPos += lineLength;
+	}
+	
+	return lineNumbers;
+}
+
+/**
  * Calculates the similarity ratio between two strings using Levenshtein distance.
  * Returns a value between 0 (completely different) and 1 (identical).
  */
@@ -140,7 +165,7 @@ type MatchResult = MatchResultCommon & (
 	| { text: string; type: 'fuzzy' }
 	| { text: string; type: 'whitespace' }
 	| { text: string; type: 'similarity'; suggestion: string; similarity: number }
-	| { text: string; type: 'multiple'; suggestion: string; matchPositions: number[]; strategy: 'exact' | 'fuzzy' | 'whitespace' }
+	| { text: string; type: 'multiple'; suggestion: string; matchPositions: number[]; strategy: 'exact' | 'fuzzy' | 'whitespace'; lineNumbers?: number[] }
 );
 
 /**
@@ -150,6 +175,7 @@ type MatchResult = MatchResultCommon & (
  * @param text The source text to search in
  * @param oldStr The string to find and replace
  * @param newStr The replacement string
+ * @param replaceAll Whether to replace all occurrences instead of throwing an error for multiple matches
  * @returns An object with the new text, match type, and additional match information
  */
 export function findAndReplaceOne(
@@ -157,21 +183,22 @@ export function findAndReplaceOne(
 	oldStr: string,
 	newStr: string,
 	eol: string,
+	replaceAll: boolean = false,
 ): MatchResult {
 	// Strategy 1: Try exact match first (fastest)
-	const exactResult = tryExactMatch(text, oldStr, newStr);
+	const exactResult = tryExactMatch(text, oldStr, newStr, replaceAll);
 	if (exactResult.type !== 'none') {
 		return exactResult;
 	}
 
 	// Strategy 2: Try whitespace-flexible matching
-	const whitespaceResult = tryWhitespaceFlexibleMatch(text, oldStr, newStr, eol);
+	const whitespaceResult = tryWhitespaceFlexibleMatch(text, oldStr, newStr, eol, replaceAll);
 	if (whitespaceResult.type !== 'none') {
 		return whitespaceResult;
 	}
 
 	// Strategy 3: Try line-by-line fuzzy matching
-	const fuzzyResult = tryFuzzyMatch(text, oldStr, newStr, eol);
+	const fuzzyResult = tryFuzzyMatch(text, oldStr, newStr, eol, replaceAll);
 	if (fuzzyResult.type !== 'none') {
 		return fuzzyResult;
 	}
@@ -194,7 +221,7 @@ export function findAndReplaceOne(
 /**
  * Tries to find an exact match of oldStr in text.
  */
-function tryExactMatch(text: string, oldStr: string, newStr: string): MatchResult {
+function tryExactMatch(text: string, oldStr: string, newStr: string, replaceAll: boolean = false): MatchResult {
 	const matchPositions: number[] = [];
 	for (let searchIdx = 0; ;) {
 		const idx = text.indexOf(oldStr, searchIdx);
@@ -208,14 +235,30 @@ function tryExactMatch(text: string, oldStr: string, newStr: string): MatchResul
 
 	// Check for multiple exact occurrences.
 	if (matchPositions.length > 1) {
-		return {
-			text,
-			type: 'multiple',
-			editPosition: matchPositions.map(idx => [idx, idx + oldStr.length]),
-			strategy: 'exact',
-			matchPositions,
-			suggestion: "Multiple exact matches found. Make your search string more specific."
-		};
+		if (replaceAll) {
+			// Replace all occurrences from right to left to avoid position shifts
+			let result = text;
+			for (let i = matchPositions.length - 1; i >= 0; i--) {
+				const idx = matchPositions[i];
+				result = result.slice(0, idx) + newStr + result.slice(idx + oldStr.length);
+			}
+			return {
+				text: result,
+				type: 'exact',
+				editPosition: matchPositions.map(idx => [idx, idx + oldStr.length]),
+			};
+		} else {
+			const lineNumbers = positionsToLineNumbers(text, matchPositions);
+			return {
+				text,
+				type: 'multiple',
+				editPosition: matchPositions.map(idx => [idx, idx + oldStr.length]),
+				strategy: 'exact',
+				matchPositions,
+				lineNumbers,
+				suggestion: `Multiple exact matches found on lines ${lineNumbers.join(', ')}. Make your search string more specific or use replaceAll: true to replace all occurrences.`
+			};
+		}
 	}
 	// Exactly one exact match found.
 	const firstExactIdx = matchPositions[0];
@@ -230,7 +273,7 @@ function tryExactMatch(text: string, oldStr: string, newStr: string): MatchResul
 /**
  * Tries to match using flexible whitespace handling.
  */
-function tryWhitespaceFlexibleMatch(text: string, oldStr: string, newStr: string, eol: string): MatchResult {
+function tryWhitespaceFlexibleMatch(text: string, oldStr: string, newStr: string, eol: string, replaceAll: boolean = false): MatchResult {
 	const haystack = text.split(eol).map(line => line.trim());
 	const needle = oldStr.trim().split(eol).map(line => line.trim());
 	needle.push(''); // trailing newline to match until the end of a line
@@ -255,14 +298,31 @@ function tryWhitespaceFlexibleMatch(text: string, oldStr: string, newStr: string
 	const positions = matchedLines.map(match => convert.positionToOffset(new EditorPosition(match + 1, 1)));
 
 	if (matchedLines.length > 1) {
-		return {
-			text,
-			type: 'multiple',
-			editPosition: [],
-			matchPositions: positions,
-			suggestion: "Multiple matches found with flexible whitespace. Make your search string more unique.",
-			strategy: 'whitespace',
-		};
+		if (replaceAll) {
+			// Replace all occurrences from right to left to avoid position shifts
+			let result = text;
+			for (let i = matchedLines.length - 1; i >= 0; i--) {
+				const startIdx = positions[i];
+				const endIdx = convert.positionToOffset(new EditorPosition(matchedLines[i] + 1 + needle.length, 1));
+				result = result.slice(0, startIdx) + newStr + eol + result.slice(endIdx);
+			}
+			return {
+				text: result,
+				type: 'whitespace',
+				editPosition: matchedLines.map((match, i) => [positions[i], convert.positionToOffset(new EditorPosition(match + 1 + needle.length, 1))]),
+			};
+		} else {
+			const lineNumbers = matchedLines.map(line => line + 1); // Convert to 1-based
+			return {
+				text,
+				type: 'multiple',
+				editPosition: [],
+				matchPositions: positions,
+				lineNumbers,
+				suggestion: `Multiple matches found with flexible whitespace on lines ${lineNumbers.join(', ')}. Make your search string more unique or use replaceAll: true to replace all occurrences.`,
+				strategy: 'whitespace',
+			};
+		}
 	}
 
 	// Exactly one whitespace-flexible match found
@@ -279,7 +339,7 @@ function tryWhitespaceFlexibleMatch(text: string, oldStr: string, newStr: string
 /**
  * Tries to match using the traditional fuzzy approach with line-by-line matching.
  */
-function tryFuzzyMatch(text: string, oldStr: string, newStr: string, eol: string): MatchResult {
+function tryFuzzyMatch(text: string, oldStr: string, newStr: string, eol: string, replaceAll: boolean = false): MatchResult {
 	// Handle trailing newlines
 	const hasTrailingLF = oldStr.endsWith(eol);
 	if (hasTrailingLF) {
@@ -309,14 +369,33 @@ function tryFuzzyMatch(text: string, oldStr: string, newStr: string, eol: string
 		};
 	}
 	if (matches.length > 1) {
-		return {
-			text,
-			type: 'multiple',
-			editPosition: [],
-			suggestion: "Multiple fuzzy matches found. Try including more context in your search string.",
-			strategy: 'fuzzy',
-			matchPositions: matches.map(match => match.index || 0),
-		};
+		if (replaceAll) {
+			// Replace all occurrences from right to left to avoid position shifts
+			let result = text;
+			for (let i = matches.length - 1; i >= 0; i--) {
+				const match = matches[i];
+				const startIdx = match.index || 0;
+				const endIdx = startIdx + match[0].length;
+				result = result.slice(0, startIdx) + newStr + result.slice(endIdx);
+			}
+			return {
+				text: result,
+				type: 'fuzzy',
+				editPosition: matches.map(match => [match.index || 0, (match.index || 0) + match[0].length]),
+			};
+		} else {
+			const matchPositions = matches.map(match => match.index || 0);
+			const lineNumbers = positionsToLineNumbers(text, matchPositions);
+			return {
+				text,
+				type: 'multiple',
+				editPosition: [],
+				suggestion: `Multiple fuzzy matches found on lines ${lineNumbers.join(', ')}. Try including more context in your search string or use replaceAll: true to replace all occurrences.`,
+				strategy: 'fuzzy',
+				matchPositions,
+				lineNumbers,
+			};
+		}
 	}
 
 	// Exactly one fuzzy match found
@@ -412,7 +491,8 @@ export async function applyEdit(
 	workspaceService: IWorkspaceService,
 	notebookService: INotebookService,
 	alternativeNotebookContent: IAlternativeNotebookContentService,
-	languageModel: LanguageModelChat | undefined
+	languageModel: LanguageModelChat | undefined,
+	replaceAll: boolean = false
 
 ): Promise<{ patch: Hunk[]; updatedFile: string; edits: TextEdit[] }> {
 	let originalFile: string;
@@ -443,7 +523,7 @@ export async function applyEdit(
 			// Edit existing file case
 			if (new_string === '') {
 				// For empty new string, handle special deletion case
-				const result = findAndReplaceOne(originalFile, old_string, new_string, eol);
+				const result = findAndReplaceOne(originalFile, old_string, new_string, eol, replaceAll);
 				if (result.type === 'none') {
 					// Try with newline appended if the original doesn't end with newline
 					if (!old_string.endsWith(eol) && originalFile.includes(old_string + eol)) {
@@ -470,15 +550,15 @@ export async function applyEdit(
 				} else {
 					updatedFile = result.text;
 
-					if (result.editPosition.length) {
-						const [start, end] = result.editPosition[0];
+					// Handle multiple edits for replaceAll
+					for (const [start, end] of result.editPosition) {
 						const range = new Range(document.positionAt(start), document.positionAt(end));
 						edits.push(TextEdit.delete(range));
 					}
 				}
 			} else {
 				// Normal replacement case using the enhanced matcher
-				const result = findAndReplaceOne(originalFile, old_string, new_string, eol);
+				const result = findAndReplaceOne(originalFile, old_string, new_string, eol, replaceAll);
 
 				if (result.type === 'none') {
 					const suggestion = result?.suggestion || 'The string to replace must match exactly or be a valid fuzzy match.';
@@ -495,8 +575,8 @@ export async function applyEdit(
 				} else {
 					updatedFile = result.text;
 
-					if (result.editPosition.length) {
-						const [start, end] = result.editPosition[0];
+					// Handle multiple edits for replaceAll
+					for (const [start, end] of result.editPosition) {
 						const range = new Range(document.positionAt(start), document.positionAt(end));
 						edits.push(TextEdit.replace(range, new_string));
 					}
