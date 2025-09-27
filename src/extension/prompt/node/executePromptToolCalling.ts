@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { randomUUID } from 'crypto';
-import type { CancellationToken, ChatRequest, LanguageModelToolInformation, Progress } from 'vscode';
+import type { CancellationToken, ChatRequest, ChatResponseStream, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
@@ -41,6 +41,17 @@ export class ExecutePromptToolCallingLoop extends ToolCallingLoop<IExecutePrompt
 		@ITelemetryService telemetryService: ITelemetryService,
 	) {
 		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService);
+	}
+
+	protected override createPromptContext(availableTools: LanguageModelToolInformation[], outputStream: ChatResponseStream | undefined) {
+		const context = super.createPromptContext(availableTools, outputStream);
+		if (context.tools) {
+			context.tools = {
+				...context.tools,
+				inSubAgent: true
+			};
+		}
+		return context;
 	}
 
 	private async getEndpoint(request: ChatRequest) {
