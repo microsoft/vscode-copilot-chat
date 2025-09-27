@@ -3033,7 +3033,8 @@
 						"type": "string",
 						"default": "default",
 						"tags": [
-							"experimental"
+							"experimental",
+							"onExp"
 						],
 						"enum": [
 							"default",
