@@ -13,20 +13,20 @@ import { ToolName } from '../common/toolNames';
 import { CopilotToolMode, ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 
-export interface IExecuteTaskParams {
+export interface IExecutePromptParams {
 	prompt: string;
 	description: string;
 }
 
-class ExecuteTaskTool implements ICopilotTool<IExecuteTaskParams> {
-	public static readonly toolName = ToolName.ExecuteTask;
+class ExecutePromptTool implements ICopilotTool<IExecutePromptParams> {
+	public static readonly toolName = ToolName.ExecutePrompt;
 	private _inputContext: IBuildPromptContext | undefined;
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) { }
 
-	async invoke(options: vscode.LanguageModelToolInvocationOptions<IExecuteTaskParams>, token: vscode.CancellationToken) {
+	async invoke(options: vscode.LanguageModelToolInvocationOptions<IExecutePromptParams>, token: vscode.CancellationToken) {
 
 		const loop = this.instantiationService.createInstance(ExecutePromptToolCallingLoop, {
 			toolCallLimit: 25,
@@ -50,7 +50,7 @@ class ExecuteTaskTool implements ICopilotTool<IExecuteTaskParams> {
 		return result;
 	}
 
-	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IExecuteTaskParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
+	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IExecutePromptParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
 		const { input } = options;
 		try {
 			return {
@@ -61,10 +61,10 @@ class ExecuteTaskTool implements ICopilotTool<IExecuteTaskParams> {
 		}
 	}
 
-	async resolveInput(input: IExecuteTaskParams, promptContext: IBuildPromptContext, mode: CopilotToolMode): Promise<IExecuteTaskParams> {
+	async resolveInput(input: IExecutePromptParams, promptContext: IBuildPromptContext, mode: CopilotToolMode): Promise<IExecutePromptParams> {
 		this._inputContext = promptContext;
 		return input;
 	}
 }
 
-ToolRegistry.registerTool(ExecuteTaskTool);
+ToolRegistry.registerTool(ExecutePromptTool);
