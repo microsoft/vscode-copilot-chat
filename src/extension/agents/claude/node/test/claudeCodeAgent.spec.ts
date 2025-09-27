@@ -80,7 +80,7 @@ describe('ClaudeCodeSession', () => {
 
 	it('processes a single request correctly', async () => {
 		const serverConfig = { port: 8080, nonce: 'test-nonce' };
-		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session'));
+		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', undefined));
 		const stream = new MockChatResponseStream();
 
 		await session.invoke('Hello', {} as vscode.ChatParticipantToolToken, stream, CancellationToken.None);
@@ -90,7 +90,7 @@ describe('ClaudeCodeSession', () => {
 
 	it('queues multiple requests and processes them sequentially', async () => {
 		const serverConfig = { port: 8080, nonce: 'test-nonce' };
-		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session'));
+		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', undefined));
 
 		const stream1 = new MockChatResponseStream();
 		const stream2 = new MockChatResponseStream();
@@ -109,7 +109,7 @@ describe('ClaudeCodeSession', () => {
 
 	it('cancels pending requests when cancelled', async () => {
 		const serverConfig = { port: 8080, nonce: 'test-nonce' };
-		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session'));
+		const session = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', undefined));
 		const stream = new MockChatResponseStream();
 		const source = new CancellationTokenSource();
 		source.cancel();
@@ -119,7 +119,7 @@ describe('ClaudeCodeSession', () => {
 
 	it('cleans up resources when disposed', async () => {
 		const serverConfig = { port: 8080, nonce: 'test-nonce' };
-		const session = instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session');
+		const session = instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'test-session', undefined);
 
 		// Dispose the session immediately
 		session.dispose();
@@ -132,8 +132,8 @@ describe('ClaudeCodeSession', () => {
 
 	it('handles multiple sessions with different session IDs', async () => {
 		const serverConfig = { port: 8080, nonce: 'test-nonce' };
-		const session1 = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'session-1'));
-		const session2 = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'session-2'));
+		const session1 = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'session-1', undefined));
+		const session2 = store.add(instantiationService.createInstance(ClaudeCodeSession, serverConfig, 'session-2', undefined));
 
 		expect(session1.sessionId).toBe('session-1');
 		expect(session2.sessionId).toBe('session-2');
