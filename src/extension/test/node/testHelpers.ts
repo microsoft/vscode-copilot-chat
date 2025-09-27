@@ -23,6 +23,7 @@ export class TestChatRequest implements ChatRequest {
 	public model = null!;
 	public tools = new Map();
 	public id = generateUuid();
+	public sessionId = generateUuid();
 
 	constructor(
 		public prompt: string

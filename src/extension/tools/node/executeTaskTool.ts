@@ -4,14 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseMarkdownPart, ExtendedLanguageModelToolResult, LanguageModelTextPart } from '../../../vscodeTypes';
+import { ChatPrepareToolInvocationPart, ExtendedLanguageModelToolResult, LanguageModelTextPart } from '../../../vscodeTypes';
 import { Conversation, Turn } from '../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ExecutePromptToolCallingLoop } from '../../prompt/node/executePromptToolCalling';
 import { ToolName } from '../common/toolNames';
 import { CopilotToolMode, ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
-import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 
 export interface IExecuteTaskParams {
 	prompt: string;
@@ -36,11 +36,10 @@ class ExecuteTaskTool implements ICopilotTool<IExecuteTaskParams> {
 			promptText: options.input.prompt,
 		});
 
-		// TODO This also prevents codeblock pills from being rendered
-		// I want to render this content as thinking blocks but couldn't get it to work
+		// I want to render this content as thinking blocks when we they include tool calls
 		const stream = this._inputContext?.stream && ChatResponseStreamImpl.filter(
 			this._inputContext.stream,
-			part => !(part instanceof ChatResponseMarkdownPart)
+			part => part instanceof ChatPrepareToolInvocationPart
 		);
 
 		const loopResult = await loop.run(stream, token);

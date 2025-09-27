@@ -174,7 +174,8 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 				location2: request.location2,
 				model: request.model,
 				tools: new Map(),
-				id: request.id
+				id: request.id,
+				sessionId: '1'
 			};
 		} else {
 			// Something went wrong, history item was deleted or lost?
@@ -192,7 +193,8 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 				location2: request.location2,
 				model: request.model,
 				tools: new Map(),
-				id: request.id
+				id: request.id,
+				sessionId: '1'
 			};
 		}
 	}
