@@ -3031,7 +3031,7 @@
 					},
 					"github.copilot.chat.gpt5CodexAlternatePrompt": {
 						"type": "string",
-						"default": "default",
+						"default": "codex",
 						"tags": [
 							"experimental",
 							"onExp"
