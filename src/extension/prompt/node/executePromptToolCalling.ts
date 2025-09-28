@@ -20,6 +20,7 @@ import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { ToolName } from '../../tools/common/toolNames';
 import { IBuildPromptContext } from '../common/intents';
 import { IBuildPromptResult } from './intents';
+import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 
 export interface IExecutePromptToolCallingLoopOptions extends IToolCallingLoopOptions {
 	request: ChatRequest;
@@ -93,23 +94,28 @@ export class ExecutePromptToolCallingLoop extends ToolCallingLoop<IExecutePrompt
 
 	protected async fetch({ messages, finishedCb, requestOptions }: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
 		const endpoint = await this.getEndpoint(this.options.request);
-		return endpoint.makeChatRequest(
-			ExecutePromptToolCallingLoop.ID,
+		return endpoint.makeChatRequest2({
+			debugName: ExecutePromptToolCallingLoop.ID,
 			messages,
 			finishedCb,
-			token,
-			this.options.location,
-			undefined,
-			{
-				...requestOptions,
-				temperature: 0
+			location: this.options.location,
+			requestOptions: {
+				...(requestOptions ?? {}),
+				temperature: 0,
+				tools: normalizeToolSchema(
+					endpoint.family,
+					requestOptions?.tools,
+					(tool, rule) => {
+						this._logService.warn(`Tool ${tool} failed validation: ${rule}`);
+					},
+				),
 			},
 			// This loop is inside a tool called from another request, so never user initiated
-			false,
-			{
+			userInitiatedRequest: false,
+			telemetryProperties: {
 				messageId: randomUUID(),
 				messageSource: ExecutePromptToolCallingLoop.ID
 			},
-		);
+		}, token);
 	}
 }
