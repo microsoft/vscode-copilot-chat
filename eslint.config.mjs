@@ -37,6 +37,9 @@ export default tseslint.config(
 		files: [
 			'**/*.{js,jsx,mjs,cjs,ts,tsx}',
 		],
+		ignores: [
+			'./src/extension/completions-core/**/*'
+		],
 		languageOptions: {
 			parser: tsParser,
 		},
@@ -317,6 +320,13 @@ export default tseslint.config(
 			'local/no-bad-gdpr-comment': ['error'],
 			'local/no-gdpr-event-name-mismatch': ['error'],
 			'local/no-unlayered-files': ['error'],
+			'local/no-restricted-copilot-pr-string': [
+				'error',
+				{
+					className: 'GitHubPullRequestProviders',
+					string: 'Generate with Copilot'
+				}
+			],
 		}
 	},
 	{

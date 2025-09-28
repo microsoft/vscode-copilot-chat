@@ -28,6 +28,7 @@ import { WorkspaceChunkEmbeddingsIndex, WorkspaceChunkEmbeddingsIndexState } fro
 import { IWorkspaceFileIndex } from './workspaceFileIndex';
 
 export enum LocalEmbeddingsIndexStatus {
+	Disabled = 'disabled',
 	Unknown = 'unknown',
 
 	UpdatingIndex = 'updatingIndex',
@@ -199,7 +200,7 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.WorkspaceEnableEmbeddingsSearch, this._experimentationService);
 	}
 
-	@LogExecTime(self => self._logService)
+	@LogExecTime(self => self._logService, 'EmbeddingsChunkSearch::searchSubsetOfFiles')
 	async searchSubsetOfFiles(sizing: StrategySearchSizing, query: WorkspaceChunkQueryWithEmbeddings, files: readonly URI[], options: WorkspaceChunkSearchOptions, telemetry: { info: TelemetryCorrelationId; batchInfo?: ComputeBatchInfo }, token: CancellationToken): Promise<StrategySearchResult> {
 		if (!files.length) {
 			return { chunks: [] };
@@ -252,16 +253,16 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 			const limitStatus = await this.checkIndexSizeLimits();
 			if (limitStatus) {
 				if (limitStatus === LocalEmbeddingsIndexStatus.TooManyFilesForAnyIndexing) {
-					this._logService.logger.debug(`EmbeddingsChunkSearch: Disabling all local embedding indexing due to too many files. Found ${this._embeddingsIndex.fileCount} files. Max: ${this.getManualIndexFileCap()}`);
+					this._logService.debug(`EmbeddingsChunkSearch: Disabling all local embedding indexing due to too many files. Found ${this._embeddingsIndex.fileCount} files. Max: ${await this.getManualIndexFileCap()}`);
 				} else if (limitStatus === LocalEmbeddingsIndexStatus.TooManyFilesForAutomaticIndexing) {
-					this._logService.logger.debug(`EmbeddingsChunkSearch: skipping automatic indexing due to too many files. Found ${this._embeddingsIndex.fileCount} files. Max: ${this.getAutoIndexFileCap()}`);
+					this._logService.debug(`EmbeddingsChunkSearch: skipping automatic indexing due to too many files. Found ${this._embeddingsIndex.fileCount} files. Max: ${await this.getAutoIndexFileCap()}`);
 				}
 
 				this.setState(limitStatus);
 				return;
 			}
 
-			this._logService.logger.debug(`EmbeddingsChunkSearch: initialize found ${this._embeddingsIndex.fileCount} files. Max: ${this.getAutoIndexFileCap()}`);
+			this._logService.debug(`EmbeddingsChunkSearch: initialize found ${this._embeddingsIndex.fileCount} files. Max: ${await this.getAutoIndexFileCap()}`);
 			this.setState(LocalEmbeddingsIndexStatus.Ready);
 		})();
 		await this._init;
@@ -306,15 +307,15 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 	}
 
 	private async triggerIndexingOfWorkspace(trigger: BuildIndexTriggerReason, telemetryInfo: TelemetryCorrelationId): Promise<void> {
-		this._logService.logger.debug('EmbeddingsChunkSearch::triggerIndexingOfWorkspace()');
+		this._logService.debug('EmbeddingsChunkSearch::triggerIndexingOfWorkspace()');
 		this.setState(LocalEmbeddingsIndexStatus.UpdatingIndex);
 
 		try {
 			await this._embeddingsIndex.triggerIndexingOfWorkspace(trigger, telemetryInfo, this._disposeCts.token);
 			this.setState(LocalEmbeddingsIndexStatus.Ready);
-			this._logService.logger.debug('Workspace Chunk Embeddings Index initialized.');
+			this._logService.debug('Workspace Chunk Embeddings Index initialized.');
 		} catch (e) {
-			this._logService.logger.warn(`Failed to index workspace: ${e}`);
+			this._logService.warn(`Failed to index workspace: ${e}`);
 		}
 	}
 
@@ -348,17 +349,17 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 
 	private async getAutoIndexFileCap() {
 		if (await this.getExpandedClientSideIndexingStatus() === 'enabled') {
-			return this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.expandedEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultExpandedAutomaticIndexingFileCap;
+			return this._experimentationService.getTreatmentVariable<number>('workspace.expandedEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultExpandedAutomaticIndexingFileCap;
 		}
 
-		return this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.embeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultAutomaticIndexingFileCap;
+		return this._experimentationService.getTreatmentVariable<number>('workspace.embeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultAutomaticIndexingFileCap;
 	}
 
 	private async getManualIndexFileCap() {
-		let manualCap = this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.manualEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultManualIndexingFileCap;
+		let manualCap = this._experimentationService.getTreatmentVariable<number>('workspace.manualEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultManualIndexingFileCap;
 
 		if (await this.getExpandedClientSideIndexingStatus() === 'available') {
-			manualCap = this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.expandedEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultExpandedAutomaticIndexingFileCap;
+			manualCap = this._experimentationService.getTreatmentVariable<number>('workspace.expandedEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultExpandedAutomaticIndexingFileCap;
 		}
 
 		// The manual cap should never be lower than the auto cap
@@ -366,9 +367,13 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 	}
 
 	private async getExpandedClientSideIndexingStatus(): Promise<'enabled' | 'available' | 'disabled'> {
-		const token = await this._authService.getCopilotToken();
-		if (!token?.isExpandedClientSideIndexingEnabled()) {
-			return 'disabled';
+		try {
+			const token = await this._authService.getCopilotToken();
+			if (!token?.isExpandedClientSideIndexingEnabled()) {
+				return 'disabled';
+			}
+		} catch {
+			// noop
 		}
 
 		const cache = this._extensionContext.workspaceState.get<boolean | undefined>(this._hasPromptedExpandedIndexingKey);
@@ -390,7 +395,7 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 			return;
 		}
 
-		const defaultDelay = this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.embeddingIndex.automaticReindexingDelay') ?? 60000;
+		const defaultDelay = this._experimentationService.getTreatmentVariable<number>('workspace.embeddingIndex.automaticReindexingDelay') ?? 60000;
 		for (const uri of uris) {
 			let delayer = this._reindexRequests.get(uri);
 			if (!delayer) {

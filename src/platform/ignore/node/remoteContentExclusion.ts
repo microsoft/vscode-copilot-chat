@@ -118,7 +118,7 @@ export class RemoteContentExclusion implements IDisposable {
 			for (const rule of patterns) {
 				const matchesPattern = minimatch(fileName, rule, minimatchConfig) || minimatch(file.path, rule, minimatchConfig);
 				if (matchesPattern) {
-					this._logService.logger.debug(`File ${file.path} is ignored by content exclusion rule ${rule}`);
+					this._logService.debug(`File ${file.path} is ignored by content exclusion rule ${rule}`);
 					this._ignoreGlobResultCache.set(file, true);
 					return true;
 				}
@@ -148,12 +148,12 @@ export class RemoteContentExclusion implements IDisposable {
 				}
 			}
 			if (ifAnyMatch.length > 0 && fileContents && ifAnyMatch.some(pattern => pattern.test(fileContents))) {
-				this._logService.logger.debug(`File ${file.path} is ignored by content exclusion rule ifAnyMatch`);
+				this._logService.debug(`File ${file.path} is ignored by content exclusion rule ifAnyMatch`);
 				this._ignoreRegexResultCache.set(fileContentHash, true);
 				return true;
 			}
 			if (ifNoneMatch.length > 0 && fileContents && !ifNoneMatch.some(pattern => pattern.test(fileContents))) {
-				this._logService.logger.debug(`File ${file.path} is ignored by content exclusion rule ifNoneMatch`);
+				this._logService.debug(`File ${file.path} is ignored by content exclusion rule ifNoneMatch`);
 				this._ignoreRegexResultCache.set(fileContentHash, true);
 				return true;
 			}
@@ -247,7 +247,7 @@ export class RemoteContentExclusion implements IDisposable {
 			}, { type: RequestType.ContentExclusion, repos: reposToFetch });
 
 			if (!response.ok) {
-				this._logService.logger.error(`Failed to fetch content exclusion rules: ${response?.statusText}`);
+				this._logService.error(`Failed to fetch content exclusion rules: ${response?.statusText}`);
 				return;
 			}
 			const data: ContentExclusionResponse[] = await response.json();
@@ -258,7 +258,7 @@ export class RemoteContentExclusion implements IDisposable {
 				const repo = reposToFetch[j];
 				const rulesForRepo = { patterns, ifAnyMatch, ifNoneMatch };
 				this._contentExclusionCache.set(repo, rulesForRepo);
-				this._logService.logger.trace(`Fetched content exclusion rules for ${repo}: ${JSON.stringify(rulesForRepo)}`);
+				this._logService.trace(`Fetched content exclusion rules for ${repo}: ${JSON.stringify(rulesForRepo)}`);
 			}
 		};
 
@@ -273,7 +273,7 @@ export class RemoteContentExclusion implements IDisposable {
 			await updateRulesForRepos(batch);
 		}
 		this._lastRuleFetch = Date.now();
-		this._logService.logger.info(`Fetched content exclusion rules in ${Date.now() - startTime}ms`);
+		this._logService.info(`Fetched content exclusion rules in ${Date.now() - startTime}ms`);
 	}
 
 

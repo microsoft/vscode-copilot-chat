@@ -25,6 +25,11 @@ parameters:
     type: boolean
     default: true
 
+  - name: mixinCompletionsCore
+    displayName: Mixin Completions Core
+    type: boolean
+    default: true
+
 extends:
   template: azure-pipelines/extension/stable.yml@templates
   parameters:
@@ -94,6 +99,21 @@ extends:
           Remove-Item -Recurse -Force ../vscode-capi
         displayName: mixin
 
+      - pwsh: |
+          $result = git config --get-regexp .*extraheader ^AUTHORIZATION:
+          $basicToken = $result -split "AUTHORIZATION: basic " | Select-Object -Last 1
+          $oauthToken = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($basicToken)) -split ":" | Select-Object -Last 1
+          $PackageJson = Get-Content -Path package.json -Raw | ConvertFrom-Json
+          $CompletionsCoreVersion = $PackageJson.completionsCore
+          git clone -b completions-port https://vscode:$oauthToken@github.com/microsoft/vscode-copilot-completions.git --depth 1 src/extension/completions-core
+          pushd src/extension/completions-core
+          git checkout $CompletionsCoreVersion
+          popd
+          rm src/extension/completions/vscode-node/completionsCoreContribution.ts
+          mv src/extension/completions/vscode-node/completionsCoreContribution.ts.txt src/extension/completions/vscode-node/completionsCoreContribution.ts
+        condition: and(succeeded(), eq(${{ parameters.mixinCompletionsCore }}, true))
+        displayName: Mixin the completions core repo
+
       - script: npm run build
         displayName: npm run build
 
@@ -157,6 +177,21 @@ extends:
 
       - script: npm run setup:dotnet
         displayName: Install dotnet cli
+
+      - pwsh: |
+          $result = git config --get-regexp .*extraheader ^AUTHORIZATION:
+          $basicToken = $result -split "AUTHORIZATION: basic " | Select-Object -Last 1
+          $oauthToken = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($basicToken)) -split ":" | Select-Object -Last 1
+          $PackageJson = Get-Content -Path package.json -Raw | ConvertFrom-Json
+          $CompletionsCoreVersion = $PackageJson.completionsCore
+          git clone -b completions-port https://vscode:$oauthToken@github.com/microsoft/vscode-copilot-completions.git --depth 1 src/extension/completions-core
+          pushd src/extension/completions-core
+          git checkout $CompletionsCoreVersion
+          popd
+          rm src/extension/completions/vscode-node/completionsCoreContribution.ts
+          mv src/extension/completions/vscode-node/completionsCoreContribution.ts.txt src/extension/completions/vscode-node/completionsCoreContribution.ts
+        condition: and(succeeded(), eq(${{ parameters.mixinCompletionsCore }}, true))
+        displayName: Mixin the completions core repo
 
       - script: npm run typecheck
         displayName: npm run typecheck

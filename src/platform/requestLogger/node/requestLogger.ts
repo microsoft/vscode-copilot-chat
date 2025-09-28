@@ -3,52 +3,85 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { HTMLTracer, IChatEndpointInfo, RenderPromptResult } from '@vscode/prompt-tsx';
+import type { RequestMetadata } from '@vscode/copilot-api';
+import { HTMLTracer, IChatEndpointInfo, Raw, RenderPromptResult } from '@vscode/prompt-tsx';
 import { AsyncLocalStorage } from 'async_hooks';
 import type { Event } from 'vscode';
 import { ChatFetchError, ChatFetchResponseType, ChatLocation, ChatResponses, FetchSuccess } from '../../../platform/chat/common/commonTypes';
-import { IResponseDelta } from '../../../platform/networking/common/fetch';
-import { IChatEndpoint } from '../../../platform/networking/common/networking';
+import { IResponseDelta, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
+import { IChatEndpoint, IEndpointBody } from '../../../platform/networking/common/networking';
 import { Result } from '../../../util/common/result';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ThemeIcon } from '../../../util/vs/base/common/themables';
 import { assertType } from '../../../util/vs/base/common/types';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
-import { ChatRequest, LanguageModelToolResult2 } from '../../../vscodeTypes';
+import type { ChatRequest, LanguageModelToolResult2 } from '../../../vscodeTypes';
+import type { IModelAPIResponse } from '../../endpoint/common/endpointProvider';
 import { Completion } from '../../nesFetch/common/completionsAPI';
 import { CompletionsFetchFailure, ModelParams } from '../../nesFetch/common/completionsFetchService';
 import { IFetchRequestParams } from '../../nesFetch/node/completionsFetchServiceImpl';
 import { APIUsage } from '../../networking/common/openai';
-import { ChatParams } from '../../openai/node/fetch';
+import { ThinkingData } from '../../thinking/common/thinking';
 
 export type UriData = { kind: 'request'; id: string } | { kind: 'latest' };
 
 export class ChatRequestScheme {
 	public static readonly chatRequestScheme = 'ccreq';
 
-	public static buildUri(data: UriData): string {
+	public static buildUri(data: UriData, format: 'markdown' | 'json' | 'rawrequest' = 'markdown'): string {
+		let extension: string;
+		if (format === 'markdown') {
+			extension = 'copilotmd';
+		} else if (format === 'json') {
+			extension = 'json';
+		} else { // rawrequest
+			extension = 'request.json';
+		}
 		if (data.kind === 'latest') {
-			return `${ChatRequestScheme.chatRequestScheme}:latestrequest.copilotmd`;
+			return `${ChatRequestScheme.chatRequestScheme}:latest.${extension}`;
 		} else {
-			return `${ChatRequestScheme.chatRequestScheme}:${data.id}.copilotmd`;
+			return `${ChatRequestScheme.chatRequestScheme}:${data.id}.${extension}`;
 		}
 	}
 
-	public static parseUri(uri: string): UriData | undefined {
-		if (uri === ChatRequestScheme.buildUri({ kind: 'latest' })) {
-			return { kind: 'latest' };
-		} else {
-			const match = uri.match(/ccreq:([^\s]+)\.copilotmd/);
-			if (match) {
-				return { kind: 'request', id: match[1] };
-			}
+	public static parseUri(uri: string): { data: UriData; format: 'markdown' | 'json' | 'rawrequest' } | undefined {
+		// Check for latest markdown
+		if (uri === this.buildUri({ kind: 'latest' }, 'markdown')) {
+			return { data: { kind: 'latest' }, format: 'markdown' };
 		}
+		// Check for latest JSON
+		if (uri === this.buildUri({ kind: 'latest' }, 'json')) {
+			return { data: { kind: 'latest' }, format: 'json' };
+		}
+		// Check for latest rawrequest
+		if (uri === this.buildUri({ kind: 'latest' }, 'rawrequest')) {
+			return { data: { kind: 'latest' }, format: 'rawrequest' };
+		}
+
+		// Check for specific request markdown
+		const mdMatch = uri.match(/ccreq:([^\s]+)\.copilotmd/);
+		if (mdMatch) {
+			return { data: { kind: 'request', id: mdMatch[1] }, format: 'markdown' };
+		}
+
+		// specific raw body json
+		const bodyJsonMatch = uri.match(/ccreq:([^\s]+)\.request\.json/);
+		if (bodyJsonMatch) {
+			return { data: { kind: 'request', id: bodyJsonMatch[1] }, format: 'rawrequest' };
+		}
+
+		// Check for specific request JSON
+		const jsonMatch = uri.match(/ccreq:([^\s]+)\.json/);
+		if (jsonMatch) {
+			return { data: { kind: 'request', id: jsonMatch[1] }, format: 'json' };
+		}
+
 		return undefined;
 	}
 
 	public static findAllUris(text: string): { uri: string; range: OffsetRange }[] {
-		const linkRE = /(ccreq:[^\s]+\.copilotmd)/g;
+		const linkRE = /(ccreq:[^\s]+\.(copilotmd|json|request\.json))/g;
 		return [...text.matchAll(linkRE)].map(
 			(m) => {
 				const identifier = m[1];
@@ -75,6 +108,7 @@ export interface ILoggedElementInfo {
 	maxTokens: number;
 	trace: HTMLTracer;
 	chatRequest: ChatRequest | undefined;
+	toJSON(): object;
 }
 
 export interface ILoggedRequestInfo {
@@ -82,6 +116,7 @@ export interface ILoggedRequestInfo {
 	id: string;
 	entry: LoggedRequest;
 	chatRequest: ChatRequest | undefined;
+	toJSON(): object;
 }
 
 export interface ILoggedToolCall {
@@ -92,6 +127,20 @@ export interface ILoggedToolCall {
 	response: LanguageModelToolResult2;
 	chatRequest: ChatRequest | undefined;
 	time: number;
+	thinking?: ThinkingData;
+	toJSON(): Promise<object>;
+}
+
+export interface ILoggedPendingRequest {
+	messages: Raw.ChatMessage[];
+	tools: (OpenAiFunctionTool | OpenAiResponsesFunctionTool)[] | undefined;
+	ourRequestId: string;
+	model: string;
+	location: ChatLocation;
+	intent?: string;
+	postOptions?: OptionalChatRequestParams;
+	body?: IEndpointBody;
+	ignoreStatefulMarker?: boolean;
 }
 
 export type LoggedInfo = ILoggedElementInfo | ILoggedRequestInfo | ILoggedToolCall;
@@ -105,9 +154,11 @@ export interface IRequestLogger {
 
 	captureInvocation<T>(request: ChatRequest, fn: () => Promise<T>): Promise<T>;
 
-	logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2): void;
+	logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void;
 
-	logChatRequest(debugName: string, chatEndpoint: IChatEndpointLogInfo, chatParams: ChatParams): PendingLoggedChatRequest;
+	logModelListCall(requestId: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void;
+
+	logChatRequest(debugName: string, chatEndpoint: IChatEndpointLogInfo, chatParams: ILoggedPendingRequest): PendingLoggedChatRequest;
 
 	logCompletionRequest(debugName: string, chatEndpoint: IChatEndpointLogInfo, chatParams: ICompletionFetchRequestLogParams, requestId: string): PendingLoggedCompletionRequest;
 
@@ -116,6 +167,9 @@ export interface IRequestLogger {
 
 	onDidChangeRequests: Event<void>;
 	getRequests(): LoggedInfo[];
+
+	enableWorkspaceEditTracing(): void;
+	disableWorkspaceEditTracing(): void;
 }
 
 export const enum LoggedRequestKind {
@@ -139,7 +193,7 @@ export interface ICompletionFetchRequestLogParams extends IFetchRequestParams {
 export interface ILoggedChatMLRequest {
 	debugName: string;
 	chatEndpoint: IChatEndpointLogInfo;
-	chatParams: ChatParams | ICompletionFetchRequestLogParams;
+	chatParams: ILoggedPendingRequest | ICompletionFetchRequestLogParams;
 	startTime: Date;
 	endTime: Date;
 }
@@ -205,9 +259,10 @@ export abstract class AbstractRequestLogger extends Disposable implements IReque
 		return requestLogStorage.run(request, () => fn());
 	}
 
+	public abstract logModelListCall(id: string, requestMetadata: RequestMetadata, models: IModelAPIResponse[]): void;
 	public abstract logToolCall(id: string, name: string | undefined, args: unknown, response: LanguageModelToolResult2): void;
 
-	public logChatRequest(debugName: string, chatEndpoint: IChatEndpoint, chatParams: ChatParams): PendingLoggedChatRequest {
+	public logChatRequest(debugName: string, chatEndpoint: IChatEndpoint, chatParams: ILoggedPendingRequest): PendingLoggedChatRequest {
 		return new PendingLoggedChatRequest(this, debugName, chatEndpoint, chatParams);
 	}
 
@@ -219,6 +274,14 @@ export abstract class AbstractRequestLogger extends Disposable implements IReque
 	public abstract addEntry(entry: LoggedRequest): void;
 	public abstract getRequests(): LoggedInfo[];
 	abstract onDidChangeRequests: Event<void>;
+
+	public enableWorkspaceEditTracing(): void {
+		// no-op by default; concrete implementations can override
+	}
+
+	public disableWorkspaceEditTracing(): void {
+		// no-op by default; concrete implementations can override
+	}
 
 	/** Current request being made to the LM. */
 	protected get currentRequest() {
@@ -234,7 +297,7 @@ class AbstractPendingLoggedRequest {
 		protected _logbook: IRequestLogger,
 		protected _debugName: string,
 		protected _chatEndpoint: IChatEndpointLogInfo,
-		protected _chatParams: ChatParams | ICompletionFetchRequestLogParams
+		protected _chatParams: ILoggedPendingRequest | ICompletionFetchRequestLogParams
 	) {
 		this._time = new Date();
 	}
@@ -302,7 +365,7 @@ export class PendingLoggedChatRequest extends AbstractPendingLoggedRequest {
 		logbook: IRequestLogger,
 		debugName: string,
 		chatEndpoint: IChatEndpoint,
-		chatParams: ChatParams
+		chatParams: ILoggedPendingRequest
 	) {
 		super(logbook, debugName, chatEndpoint, chatParams);
 	}

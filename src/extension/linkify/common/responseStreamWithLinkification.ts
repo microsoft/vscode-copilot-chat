@@ -2,11 +2,11 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type { ChatResponseFileTree, ChatResponsePart, ChatResponseStream, ChatVulnerability, Command, Location, NotebookEdit, TextEdit, Uri } from 'vscode';
+import type { ChatResponseClearToPreviousToolInvocationReason, ChatResponseFileTree, ChatResponsePart, ChatResponseStream, ChatVulnerability, Command, Location, NotebookEdit, TextEdit, ThinkingDelta, Uri } from 'vscode';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { FinalizableChatResponseStream } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { ChatResponseAnchorPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, MarkdownString } from '../../../vscodeTypes';
+import { ChatPrepareToolInvocationPart, ChatResponseAnchorPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, MarkdownString } from '../../../vscodeTypes';
 import { LinkifiedText, LinkifySymbolAnchor } from './linkifiedText';
 import { IContributedLinkifierFactory, ILinkifier, ILinkifyService, LinkifierContext } from './linkifyService';
 
@@ -36,6 +36,11 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 		return this._linkifier.totalAddedLinkCount;
 	}
 
+	clearToPreviousToolInvocation(reason: ChatResponseClearToPreviousToolInvocationReason): void {
+		this._linkifier.flush(CancellationToken.None);
+		this._progress.clearToPreviousToolInvocation(reason);
+	}
+
 	//#region ChatResponseStream
 	markdown(value: string | MarkdownString): ChatResponseStream {
 		this.appendMarkdown(typeof value === 'string' ? new MarkdownString(value) : value);
@@ -62,10 +67,16 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 		return this;
 	}
 
+	thinkingProgress(thinkingDelta: ThinkingDelta): ChatResponseStream {
+		this.enqueue(() => this._progress.thinkingProgress(thinkingDelta), false);
+		return this;
+	}
+
 	warning(value: string | MarkdownString): ChatResponseStream {
 		this.enqueue(() => this._progress.warning(value), false);
 		return this;
 	}
+
 
 	reference(value: Uri | Location): ChatResponseStream {
 		this.enqueue(() => this._progress.reference(value), false);
@@ -94,7 +105,9 @@ export class ResponseStreamWithLinkification implements FinalizableChatResponseS
 	private isBlockPart(part: ChatResponsePart): boolean {
 		return part instanceof ChatResponseFileTreePart
 			|| part instanceof ChatResponseCommandButtonPart
-			|| part instanceof ChatResponseConfirmationPart;
+			|| part instanceof ChatResponseConfirmationPart
+			|| part instanceof ChatPrepareToolInvocationPart
+			|| part instanceof ChatResponseThinkingProgressPart;
 	}
 
 	textEdit(target: Uri, editsOrDone: TextEdit | TextEdit[] | true): ChatResponseStream {

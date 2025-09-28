@@ -9,6 +9,8 @@ export type RecentlyViewedDocumentsOptions = {
 	readonly includeViewedFiles: boolean;
 }
 
+export type LanguageContextLanguages = { [languageId: string]: boolean };
+
 export type LanguageContextOptions = {
 	readonly enabled: boolean;
 	readonly maxTokens: number;
@@ -18,6 +20,7 @@ export type DiffHistoryOptions = {
 	readonly nEntries: number;
 	readonly maxTokens: number;
 	readonly onlyForDocsInPrompt: boolean;
+	readonly useRelativePaths: boolean;
 }
 
 export type PagedClipping = { pageSize: number };
@@ -74,5 +77,13 @@ export const DEFAULT_OPTIONS: PromptOptions = {
 		nEntries: 25,
 		maxTokens: 1000,
 		onlyForDocsInPrompt: false,
+		useRelativePaths: false,
 	},
+};
+
+// TODO: consider a better per language setting/experiment approach
+export const LANGUAGE_CONTEXT_ENABLED_LANGUAGES: LanguageContextLanguages = {
+	'prompt': true,
+	'instructions': true,
+	'chatmode': true,
 };

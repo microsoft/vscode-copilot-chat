@@ -2,10 +2,10 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type { ChatResponseProviderMetadata, Disposable } from 'vscode';
+import type { Disposable, LanguageModelChatInformation, LanguageModelChatProvider, LanguageModelDataPart, LanguageModelTextPart, LanguageModelThinkingPart, LanguageModelToolCallPart } from 'vscode';
 import { CopilotToken } from '../../../platform/authentication/common/copilotToken';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
-import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
+import { EndpointEditToolName, IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { TokenizerType } from '../../../util/common/tokenizer';
 import { localize } from '../../../util/vs/nls';
 
@@ -29,6 +29,8 @@ interface BYOKBaseModelConfig {
 	capabilities?: BYOKModelCapabilities;
 }
 
+export type LMResponsePart = LanguageModelTextPart | LanguageModelToolCallPart | LanguageModelDataPart | LanguageModelThinkingPart;
+
 export interface BYOKGlobalKeyModelConfig extends BYOKBaseModelConfig {
 	apiKey: string;
 }
@@ -46,10 +48,13 @@ export type BYOKModelConfig = BYOKGlobalKeyModelConfig | BYOKPerModelConfig | BY
 
 export interface BYOKModelCapabilities {
 	name: string;
+	url?: string;
 	maxInputTokens: number;
 	maxOutputTokens: number;
 	toolCalling: boolean;
 	vision: boolean;
+	thinking?: boolean;
+	editTools?: EndpointEditToolName[];
 }
 
 export interface BYOKModelRegistry {
@@ -58,6 +63,14 @@ export interface BYOKModelRegistry {
 	updateKnownModelsList(knownModels: BYOKKnownModels | undefined): void;
 	getAllModels(apiKey?: string): Promise<{ id: string; name: string }[]>;
 	registerModel(config: BYOKModelConfig): Promise<Disposable>;
+}
+
+export interface BYOKModelProvider<T extends LanguageModelChatInformation> extends LanguageModelChatProvider<T> {
+	readonly authType: BYOKAuthType;
+	/**
+	 * Called when the user is requesting an API key update. The provider should handle all the UI and updating the storage
+	 */
+	updateAPIKey(): Promise<void>;
 }
 
 // Many model providers don't have robust model lists. This allows us to map id -> information about models, and then if we don't know the model just let the user enter a custom id
@@ -76,24 +89,23 @@ export function isNoAuthConfig(config: BYOKModelConfig): config is BYOKNoAuthMod
 	return !('apiKey' in config) && !('deploymentUrl' in config);
 }
 
-export function chatModelInfoToProviderMetadata(chatModelInfo: IChatModelInformation): ChatResponseProviderMetadata {
+export function chatModelInfoToProviderMetadata(chatModelInfo: IChatModelInformation): LanguageModelChatInformation {
 	const outputTokens = chatModelInfo.capabilities.limits?.max_output_tokens ?? 4096;
 	const inputTokens = chatModelInfo.capabilities.limits?.max_prompt_tokens ?? ((chatModelInfo.capabilities.limits?.max_context_window_tokens || 64000) - outputTokens);
 	return {
+		id: chatModelInfo.id,
 		family: chatModelInfo.capabilities.family,
-		cost: chatModelInfo.capabilities.family, // This is a bit odd, but this is what renders in the grey side text
-		description: localize('byok.model.description', '{0} is contributed via the {1} provider.', chatModelInfo.name, chatModelInfo.capabilities.family),
-		vendor: 'copilot-byok',
+		tooltip: localize('byok.model.description', '{0} is contributed via the {1} provider.', chatModelInfo.name, chatModelInfo.capabilities.family),
 		version: '1.0.0',
 		maxOutputTokens: outputTokens,
 		maxInputTokens: inputTokens,
 		name: chatModelInfo.name,
 		isUserSelectable: true,
 		capabilities: {
-			agentMode: chatModelInfo.capabilities.supports.tool_calls,
 			toolCalling: chatModelInfo.capabilities.supports.tool_calls,
-			vision: chatModelInfo.capabilities.supports.vision,
-		}
+			imageInput: chatModelInfo.capabilities.supports.vision,
+		},
+		requiresAuthorization: true
 	};
 }
 
@@ -111,11 +123,12 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 		version: '1.0.0',
 		capabilities: {
 			type: 'chat',
-			family: providerName,
+			family: modelId,
 			supports: {
 				streaming: true,
 				tool_calls: !!knownModelInfo?.toolCalling,
-				vision: !!knownModelInfo?.vision
+				vision: !!knownModelInfo?.vision,
+				thinking: !!knownModelInfo?.thinking
 			},
 			tokenizer: TokenizerType.O200K,
 			limits: {
@@ -128,6 +141,28 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 		is_chat_fallback: false,
 		model_picker_enabled: true
 	};
+}
+
+export function byokKnownModelsToAPIInfo(providerName: string, knownModels: BYOKKnownModels | undefined): LanguageModelChatInformation[] {
+	if (!knownModels) {
+		return [];
+	}
+	return Object.entries(knownModels).map(([id, capabilities]) => {
+		return {
+			id,
+			name: capabilities.name,
+			version: '1.0.0',
+			maxOutputTokens: capabilities.maxOutputTokens,
+			maxInputTokens: capabilities.maxInputTokens,
+			detail: providerName,
+			family: providerName,
+			tooltip: `${capabilities.name} is contributed via the ${providerName} provider.`,
+			capabilities: {
+				toolCalling: capabilities.toolCalling,
+				imageInput: capabilities.vision
+			},
+		} satisfies LanguageModelChatInformation;
+	});
 }
 
 export function isBYOKEnabled(copilotToken: Omit<CopilotToken, "token">, capiClientService: ICAPIClientService): boolean {

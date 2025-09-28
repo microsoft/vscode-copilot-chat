@@ -6,6 +6,7 @@
 import { PromptElement, PromptElementProps, PromptPiece, PromptSizing } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
+import { isScenarioAutomation } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IIgnoreService } from '../../../../platform/ignore/common/ignoreService';
 import { ILanguageFeaturesService, isLocationLink } from '../../../../platform/languages/common/languageFeaturesService';
@@ -78,15 +79,15 @@ export class DefinitionAtPosition extends PromptElement<Props, State> {
 			return { k: 'ignored' };
 		}
 
-		const timeout = this._vscodeExtensionCtxService.extensionMode === ExtensionMode.Test
+		const timeout = this._vscodeExtensionCtxService.extensionMode === ExtensionMode.Test && !isScenarioAutomation
 			? 0
 			: (this.props.timeoutMs === undefined ? DefinitionAtPosition.DEFAULT_TIMEOUT_MS : this.props.timeoutMs);
 
 		const definitions = await this.findDefinition(timeout);
 
-		this._logService.logger.debug(`Found ${definitions.length} implementation(s)/definition(s)`);
+		this._logService.debug(`Found ${definitions.length} implementation(s)/definition(s)`);
 		if (definitions.length > 0) {
-			this._logService.logger.debug(`Implementation(s)/definition(s) found:` + JSON.stringify(definitions, null, '\t'));
+			this._logService.debug(`Implementation(s)/definition(s) found:` + JSON.stringify(definitions, null, '\t'));
 		}
 
 		return {
@@ -140,7 +141,7 @@ export class DefinitionAtPosition extends PromptElement<Props, State> {
 			try {
 				const impls = await this._languageFeaturesService.getImplementations(document.uri, position);
 
-				this._logService.logger.debug(`Found ${impls.length} implementations` + JSON.stringify(impls, null, '\t'));
+				this._logService.debug(`Found ${impls.length} implementations` + JSON.stringify(impls, null, '\t'));
 
 				if (impls.length > 0) {
 					return impls;
@@ -150,14 +151,14 @@ export class DefinitionAtPosition extends PromptElement<Props, State> {
 			try {
 				const defs = await this._languageFeaturesService.getDefinitions(document.uri, position);
 
-				this._logService.logger.debug(`Found ${defs.length} definitions` + JSON.stringify(defs, null, '\t'));
+				this._logService.debug(`Found ${defs.length} definitions` + JSON.stringify(defs, null, '\t'));
 
 				if (defs.length > 0) {
 					return defs;
 				}
 			} catch { }
 
-			this._logService.logger.debug(`No definitions or implementations found`);
+			this._logService.debug(`No definitions or implementations found`);
 
 			return [];
 		};

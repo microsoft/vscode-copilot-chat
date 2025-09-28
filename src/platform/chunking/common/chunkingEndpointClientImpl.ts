@@ -18,7 +18,6 @@ import { Range } from '../../../util/vs/editor/common/core/range';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Embedding, EmbeddingType, EmbeddingVector } from '../../embeddings/common/embeddingsComputer';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
-import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
 import { logExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
@@ -81,7 +80,7 @@ class RequestRateLimiter extends Disposable {
 	) {
 		super();
 
-		this._maxParallelChunksRequests = experimentationService.getTreatmentVariable<number>('vscode', 'workspace.embeddingIndex.maxParallelChunksRequests') ?? 8;
+		this._maxParallelChunksRequests = experimentationService.getTreatmentVariable<number>('workspace.embeddingIndex.maxParallelChunksRequests') ?? 8;
 	}
 
 	public enqueue(task: RequestTask, token: CancellationToken): Promise<Response> {
@@ -300,7 +299,6 @@ export class ChunkingEndpointClientImpl extends Disposable implements IChunkingE
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
-		@IDomainService private readonly _domainService: IDomainService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IEnvService private readonly _envService: IEnvService,
 		@IFetcherService private readonly _fetcherService: IFetcherService,
@@ -346,9 +344,7 @@ export class ChunkingEndpointClientImpl extends Disposable implements IChunkingE
 			const makeRequest = async (attempt: number) => {
 				return logExecTime(this._logService, `ChunksEndpointEmbeddingComputer.fetchChunksRequest(${content.uri}, attempt=${attempt})`, () => postRequest(
 					this._fetcherService,
-					this._envService,
 					this._telemetryService,
-					this._domainService,
 					this._capiClientService,
 					{ type: RequestType.Chunks },
 					authToken,
@@ -382,7 +378,7 @@ export class ChunkingEndpointClientImpl extends Disposable implements IChunkingE
 
 			const response = await raceCancellationError(this._requestLimiter.enqueue(makeRequest, token), token);
 			if (!response.ok) {
-				this._logService.logger.debug(`Error chunking '${content.uri}'. Status: ${response.status}. Status Text: ${response.statusText}.`);
+				this._logService.debug(`Error chunking '${content.uri}'. Status: ${response.status}. Status Text: ${response.statusText}.`);
 
 				/* __GDPR__
 					"workspaceChunkEmbeddingsIndex.computeChunksAndEmbeddings.error" : {
@@ -457,7 +453,7 @@ export class ChunkingEndpointClientImpl extends Disposable implements IChunkingE
 			}));
 
 		} catch (e) {
-			this._logService.logger.error(e);
+			this._logService.error(e);
 			return undefined;
 		}
 	}

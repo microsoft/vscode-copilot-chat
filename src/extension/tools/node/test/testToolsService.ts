@@ -27,8 +27,8 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 	];
 
 	private static readonly ContainerOnlyTools = [
-		ToolName.RunInTerminal,
-		ToolName.GetTerminalOutput
+		ToolName.CoreRunInTerminal,
+		ToolName.CoreGetTerminalOutput
 	];
 
 	private readonly _tools = new Map<string, LanguageModelToolInformation>();
@@ -79,6 +79,7 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 			const info: LanguageModelToolInformation = {
 				name: tool.toolName,
 				description: mapContributedToolNamesInString(contributedTool.modelDescription),
+				source: undefined,
 				inputSchema: contributedTool.inputSchema && mapContributedToolNamesInSchema(contributedTool.inputSchema),
 				tags: contributedTool.tags ?? []
 			};
@@ -130,7 +131,8 @@ export class TestToolsService extends BaseToolsService implements IToolsService 
 				name: contributedTool.name,
 				description: contributedTool.modelDescription,
 				inputSchema: contributedTool.inputSchema,
-				tags: []
+				tags: [],
+				source: undefined,
 			};
 		}
 
@@ -197,5 +199,19 @@ export function getPackagejsonToolsForTest() {
 	const tools = new Set(packageJson.contributes.languageModelTools
 		.filter(tool => (tool.canBeReferencedInPrompt || toolsetReferenceNames.has(tool.toolReferenceName)))
 		.map(tool => getToolName(tool.name)));
+
+	// Add core tools that should be enabled for the agent.
+	// Normally, vscode is in control of deciding which tools are enabled for a chat request, but in the simulator, the extension has to decide this.
+	// Since it can't get info like `canBeReferencedInPrompt` from the extension API, we have to hardcode tool names here.
+	tools.add(ToolName.CoreRunInTerminal);
+	tools.add(ToolName.CoreGetTerminalOutput);
+	tools.add(ToolName.CoreTerminalLastCommand);
+	tools.add(ToolName.CoreTerminalSelection);
+	tools.add(ToolName.CoreCreateAndRunTask);
+	tools.add(ToolName.CoreGetTaskOutput);
+	tools.add(ToolName.CoreRunTask);
+	tools.add(ToolName.CoreRunTest);
+	tools.add(ToolName.CoreManageTodoList);
+
 	return tools;
 }

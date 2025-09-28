@@ -105,9 +105,9 @@ export class TfidfChunkSearch extends Disposable implements IWorkspaceChunkSearc
 			}
 
 			const resolvedQuery = this.toQuery(resolved);
-			this._logService.logger.trace(`TfidfChunkSearch.searchWorkspace: Starting tfidf search for: ${resolvedQuery}`);
+			this._logService.trace(`TfidfChunkSearch.searchWorkspace: Starting tfidf search for: ${resolvedQuery}`);
 			const result = await raceCancellationError(this.doTfidfSearch(resolvedQuery, sizing.maxResultCountHint, options, telemetryInfo.addCaller('TfidfChunkSearch::searchWorkspace'), token), token);
-			this._logService.logger.trace(`TfidfChunkSearch.searchWorkspace: Found ${result.length} results`);
+			this._logService.trace(`TfidfChunkSearch.searchWorkspace: Found ${result.length} results`);
 
 			return { chunks: result.map((chunk): FileChunkAndScore => ({ chunk, distance: undefined })) };
 		}, (execTime, status) => {
@@ -217,7 +217,7 @@ export class TfidfChunkSearch extends Disposable implements IWorkspaceChunkSearc
 		});
 	}
 
-	@LogExecTime(self => self._logService)
+	@LogExecTime(self => self._logService, 'TfIdfChunkSearch::initializeWholeWorkspace')
 	private initializeWholeWorkspace(): Promise<void> {
 		this._initializePromise ??= this.initializeWorkspaceFiles();
 		return this._initializePromise;
@@ -294,7 +294,7 @@ export class TfidfChunkSearch extends Disposable implements IWorkspaceChunkSearc
 	/**
 	 * Initialize the index for a subset of files in the workspace.
 	 */
-	@LogExecTime(self => self._logService)
+	@LogExecTime(self => self._logService, 'TfIdfChunkSearch::initializeForSubsetFiles')
 	private async initializeForSubsetFiles(files: readonly URI[]): Promise<void> {
 		await logExecTime(this._logService, 'initialize workspaceIndex', () => this._workspaceIndex.initialize());
 		if (this._isDisposed) {

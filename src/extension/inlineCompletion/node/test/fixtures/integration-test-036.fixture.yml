@@ -1,0 +1,28 @@
+name: 'worst case, gigantic current file, long code snippets'
+performance:
+    samples: 2
+    mean-max-ms: 3500
+
+state:
+    context-items:
+        code-snippets:
+            - uri: file://assets/036/be_access.c
+              value: ${file:assets/036/be_access.c}
+            - uri: file://assets/036/be_error.c
+              value: ${file:assets/036/be_error.c}
+            - uri: file://assets/036/be_impl.h
+              value: ${file:assets/036/be_impl.h}
+            - uri: file://assets/036/be_info.c
+              value: ${file:assets/036/be_info.c}
+            - uri: file://assets/036/be.c
+              value: ${file:assets/036/be.c}
+            - uri: file://assets/036/be.h
+              value: ${file:assets/036/be.h}
+    current-file:
+        uri: file://assets/035/111k_loc.h
+        language: C
+        text: ${file:assets/035/111k_loc.h}
+
+expected-prompt:
+    prefix: ${file:assets/036/expected-prefix.txt}
+    suffix: ${file:assets/036/expected-suffix.txt}

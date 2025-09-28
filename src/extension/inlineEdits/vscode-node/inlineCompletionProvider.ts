@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, Command, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, Position, Range, TextDocument, l10n, Event as vscodeEvent } from 'vscode';
+import { CancellationToken, Command, EndOfLine, InlineCompletionContext, InlineCompletionDisplayLocation, InlineCompletionDisplayLocationKind, InlineCompletionEndOfLifeReason, InlineCompletionEndOfLifeReasonKind, InlineCompletionItem, InlineCompletionItemProvider, InlineCompletionList, InlineCompletionsDisposeReason, InlineCompletionsDisposeReasonKind, NotebookCell, NotebookCellKind, Position, Range, TextDocument, TextDocumentShowOptions, l10n, Event as vscodeEvent, window, workspace } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { stringEditFromDiff } from '../../../platform/editing/common/edit';
@@ -14,32 +14,44 @@ import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/docum
 import { InlineEditRequestLogContext } from '../../../platform/inlineEdits/common/inlineEditLogContext';
 import { ShowNextEditPreference } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { ILogService } from '../../../platform/log/common/logService';
+import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { findCell, findNotebook, isNotebookCell } from '../../../util/common/notebooks';
 import { ITracer, createTracer } from '../../../util/common/tracing';
 import { softAssert } from '../../../util/vs/base/common/assert';
 import { raceCancellation, timeout } from '../../../util/vs/base/common/async';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
 import { StringEdit } from '../../../util/vs/editor/common/core/edits/stringEdit';
-import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LineCheck } from '../../inlineChat/vscode-node/inlineChatHint';
 import { NextEditProviderTelemetryBuilder, TelemetrySender } from '../node/nextEditProviderTelemetry';
 import { INextEditResult, NextEditResult } from '../node/nextEditResult';
 import { InlineCompletionCommand, InlineEditDebugComponent } from './components/inlineEditDebugComponent';
 import { LogContextRecorder } from './components/logContextRecorder';
-import { toExternalRange } from './features/diagnosticsBasedCompletions/diagnosticsCompletions';
 import { DiagnosticsNextEditResult } from './features/diagnosticsInlineEditProvider';
 import { InlineEditModel } from './inlineEditModel';
 import { learnMoreCommandId, learnMoreLink } from './inlineEditProviderFeature';
 import { isInlineSuggestion } from './isInlineSuggestion';
 import { InlineEditLogger } from './parts/inlineEditLogger';
+import { IVSCodeObservableDocument } from './parts/vscodeWorkspace';
+import { toExternalRange } from './utils/translations';
+import { getNotebookId } from '../../../platform/notebook/common/helpers';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 
-export interface NesCompletionItem extends InlineCompletionItem {
+const learnMoreAction: Command = {
+	title: l10n.t('Learn More'),
+	command: learnMoreCommandId,
+	tooltip: learnMoreLink
+};
+
+interface NesCompletionItem extends InlineCompletionItem {
 	readonly telemetryBuilder: NextEditProviderTelemetryBuilder;
 	readonly info: NesCompletionInfo;
 	wasShown: boolean;
+	isEditInAnotherDocument?: boolean;
 }
 
 class NesCompletionList extends InlineCompletionList {
@@ -82,13 +94,16 @@ function isLlmCompletionInfo(item: NesCompletionInfo): item is LlmCompletionInfo
 	return item.source === 'provider';
 }
 
+const GoToNextEdit = l10n.t('Go To Next Edit');
+
 
 export class InlineCompletionProviderImpl implements InlineCompletionItemProvider {
-	public readonly displayName = 'Next edit suggestion';
+	public readonly displayName = 'Next Edit Suggestion';
 
 	private readonly _tracer: ITracer;
 
 	public readonly onDidChange: vscodeEvent<void> | undefined = Event.fromObservableLight(this.model.onChange);
+	private readonly _displayNextEditorNES: boolean;
 
 	constructor(
 		private readonly model: InlineEditModel,
@@ -102,9 +117,13 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@ILogService private readonly _logService: ILogService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
-		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService
+		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
+		@INotebookService private readonly _notebookService: INotebookService,
+		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 	) {
-		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.logger.trace(s));
+		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
+		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, this._expService);
 	}
 
 	// copied from `vscodeWorkspace.ts` `DocumentFilter#_enabledLanguages`
@@ -138,34 +157,50 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			return undefined;
 		}
 
+		if (this.authenticationService.copilotToken?.isNoAuthUser) {
+			// TODO@bpasero revisit this in the future
+			tracer.returns('inline edits disabled for anonymous users');
+			return undefined;
+		}
+
 		const doc = this.model.workspace.getDocumentByTextDocument(document);
 		if (!doc) {
 			tracer.returns('document not found in workspace');
 			return undefined;
 		}
 
-		const logContext = new InlineEditRequestLogContext(doc.id.uri, document.version, context);
+		const documentVersion = (isNotebookCell(document.uri) ? findNotebook(document.uri, workspace.notebookDocuments)?.version : undefined) || document.version;
+		const logContext = new InlineEditRequestLogContext(doc.id.uri, documentVersion, context);
 		logContext.recordingBookmark = this.model.debugRecorder.createBookmark();
 
-		const telemetryBuilder = new NextEditProviderTelemetryBuilder(this._gitExtensionService, this.model.nextEditProvider.ID, doc, this.model.debugRecorder, logContext.recordingBookmark);
+		const telemetryBuilder = new NextEditProviderTelemetryBuilder(this._gitExtensionService, this._notebookService, this._workspaceService, this.model.nextEditProvider.ID, doc, this.model.debugRecorder, logContext.recordingBookmark);
 		telemetryBuilder.setOpportunityId(context.requestUuid);
 		telemetryBuilder.setConfigIsDiagnosticsNESEnabled(!!this.model.diagnosticsBasedProvider);
 		telemetryBuilder.setIsNaturalLanguageDominated(LineCheck.isNaturalLanguageDominated(document, position));
 
 		const requestCancellationTokenSource = new CancellationTokenSource(token);
+		const completionsCts = new CancellationTokenSource(token);
 		let suggestionInfo: NesCompletionInfo | undefined;
 		try {
 			tracer.trace('invoking next edit provider');
 
 			const { first, all } = raceAndAll([
 				this.model.nextEditProvider.getNextEdit(doc.id, context, logContext, token, telemetryBuilder.nesBuilder),
-				this.model.diagnosticsBasedProvider?.runUntilNextEdit(doc.id, context, logContext, 50, requestCancellationTokenSource.token, telemetryBuilder.diagnosticsBuilder) ?? raceCancellation(new Promise<undefined>(() => { }), requestCancellationTokenSource.token)
+				this.model.diagnosticsBasedProvider?.runUntilNextEdit(doc.id, context, logContext, 50, requestCancellationTokenSource.token, telemetryBuilder.diagnosticsBuilder) ?? raceCancellation(new Promise<undefined>(() => { }), requestCancellationTokenSource.token),
+				this.model.completionsProvider?.getCompletions(doc.id, context, logContext, token) ?? raceCancellation(new Promise<undefined>(() => { }), completionsCts.token),
 			]);
 
-			let [providerSuggestion, diagnosticsSuggestion] = await first;
+			let [providerSuggestion, diagnosticsSuggestion, completionAtCursor] = await first;
 
-			// If the provider returned first with empty result, then we wait for the diagnostics provider
-			if (providerSuggestion && providerSuggestion.result === undefined && this.model.diagnosticsBasedProvider) {
+			// ensure completions promise resolves
+			completionsCts.cancel();
+
+			const hasCompletionAtCursor = completionAtCursor && completionAtCursor.result !== undefined;
+			const hasNonEmptyLlmNes = providerSuggestion && providerSuggestion.result !== undefined;
+
+			const shouldGiveMoreTimeToDiagnostics = !hasCompletionAtCursor && !hasNonEmptyLlmNes && this.model.diagnosticsBasedProvider;
+
+			if (shouldGiveMoreTimeToDiagnostics) {
 				tracer.trace('giving some more time to diagnostics provider');
 				timeout(1000).then(() => requestCancellationTokenSource.cancel());
 				[, diagnosticsSuggestion] = await all;
@@ -183,13 +218,14 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			}
 
 			// Determine which suggestion to use
-			if (diagnosticsSuggestion?.result) {
+			if (completionAtCursor?.result) {
+				suggestionInfo = new LlmCompletionInfo(completionAtCursor, doc.id, document, context.requestUuid);
+			} else if (diagnosticsSuggestion?.result) {
 				suggestionInfo = new DiagnosticsCompletionInfo(diagnosticsSuggestion, doc.id, document, context.requestUuid);
 			} else if (providerSuggestion) {
 				suggestionInfo = new LlmCompletionInfo(providerSuggestion, doc.id, document, context.requestUuid);
 			} else {
 				this.telemetrySender.scheduleSendingEnhancedTelemetry({ requestId: logContext.requestId, result: undefined }, telemetryBuilder);
-				console.error('Providers returned nothing without cancellation being requested');
 				return emptyList;
 			}
 
@@ -202,57 +238,47 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			}
 
 			tracer.trace(`using next edit suggestion from ${suggestionInfo.source}`);
+			let isInlineCompletion: boolean = false;
+			let completionItem: Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined;
 
-			const range = documentRangeFromOffsetRange(document, result.edit.replaceRange);
+			const documents = doc.fromOffsetRange(result.edit.replaceRange);
+			const [targetDocument, range] = documents.length ? documents[0] : [undefined, undefined];
 
-			// Only show edit when the cursor is max 4 lines away from the edit
-			const showRange = (
-				result.showRangePreference === ShowNextEditPreference.AroundEdit
-					? new Range(
-						Math.max(range.start.line - 4, 0),
-						0,
-						range.end.line + 4,
-						Number.MAX_SAFE_INTEGER
-					)
-					: undefined
-			);
+			addNotebookTelemetry(document, position, result.edit.newText, documents, telemetryBuilder);
+			telemetryBuilder.setIsActiveDocument(window.activeTextEditor?.document === targetDocument);
 
-			const displayLocation: InlineCompletionDisplayLocation | undefined = result.displayLocation ? {
-				range: toExternalRange(result.displayLocation.range),
-				label: result.displayLocation.label
-			} : undefined;
+			if (!targetDocument) {
+				tracer.trace('no next edit suggestion');
+			} else if (hasNotebookCellMarker(document, result.edit.newText)) {
+				tracer.trace('no next edit suggestion, edits contain Notebook Cell Markers');
+			} else if (targetDocument === document) {
+				// nes is for this same document.
+				const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
+				isInlineCompletion = allowInlineCompletions && isInlineSuggestion(position, document, range, result.edit.newText);
+				completionItem = serveAsCompletionsProvider && !isInlineCompletion ?
+					undefined :
+					this.createCompletionItem(doc, document, position, range, result);
+			} else if (this._displayNextEditorNES) {
+				// nes is for a different document.
+				completionItem = serveAsCompletionsProvider ?
+					undefined :
+					this.createNextEditorEditCompletionItem(position, {
+						document: targetDocument,
+						insertText: result.edit.newText,
+						range
+					});
+			}
 
-			const learnMoreAction: Command = {
-				title: l10n.t('Learn More'),
-				command: learnMoreCommandId,
-				tooltip: learnMoreLink
-			};
+			if (!completionItem) {
+				this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
+				return emptyList;
+			}
 
 			const menuCommands: InlineCompletionCommand[] = [];
 			if (this.inlineEditDebugComponent) {
 				menuCommands.push(...this.inlineEditDebugComponent.getCommands(logContext));
 			}
 
-			const allowInlineCompletions = this.model.inlineEditsInlineCompletionsEnabled.get();
-			const isInlineCompletion = allowInlineCompletions && isInlineSuggestion(position, document, range, result.edit.newText);
-
-			if (serveAsCompletionsProvider && !isInlineCompletion) {
-				this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
-				return emptyList;
-			}
-
-			const inlineEdit: NesCompletionItem = {
-				range,
-				insertText: result.edit.newText,
-				showRange,
-				action: learnMoreAction,
-				info: suggestionInfo,
-				isInlineEdit: !isInlineCompletion,
-				showInlineEditMenu: !serveAsCompletionsProvider,
-				displayLocation,
-				telemetryBuilder,
-				wasShown: false,
-			};
 
 			// telemetry
 			telemetryBuilder.setPickedNESType(suggestionInfo.source === 'diagnostics' ? 'diagnostics' : 'llm');
@@ -267,7 +293,17 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 			this.telemetrySender.scheduleSendingEnhancedTelemetry(suggestionInfo.suggestion, telemetryBuilder);
 
-			return new NesCompletionList(context.requestUuid, inlineEdit, menuCommands, telemetryBuilder);
+			const nesCompletionItem: NesCompletionItem = {
+				...completionItem,
+				info: suggestionInfo,
+				telemetryBuilder,
+				action: learnMoreAction,
+				isInlineEdit: !isInlineCompletion,
+				showInlineEditMenu: !serveAsCompletionsProvider,
+				wasShown: false
+			};
+
+			return new NesCompletionList(context.requestUuid, nesCompletionItem, menuCommands, telemetryBuilder);
 		} catch (e) {
 			tracer.trace('error', e);
 			logContext.setError(e);
@@ -281,8 +317,73 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 			throw e;
 		} finally {
 			requestCancellationTokenSource.dispose();
+			completionsCts.dispose();
 			this.logger.add(logContext);
 		}
+	}
+
+	private createNextEditorEditCompletionItem(requestingPosition: Position,
+		nextEdit: { document: TextDocument; range: Range; insertText: string }
+	): Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> {
+		// Display the next edit in the current document, but with a command to open the next edit in the other document.
+		// & range of this completion item will be the same as the current documents cursor position.
+		const range = new Range(requestingPosition, requestingPosition);
+		const displayLocation: InlineCompletionDisplayLocation = {
+			range,
+			label: GoToNextEdit,
+			kind: InlineCompletionDisplayLocationKind.Label
+		};
+
+		const commandArgs: TextDocumentShowOptions = {
+			preserveFocus: false,
+			selection: new Range(nextEdit.range.start, nextEdit.range.start)
+		};
+		const command: Command = {
+			command: 'vscode.open',
+			title: GoToNextEdit,
+			arguments: [nextEdit.document.uri, commandArgs]
+		};
+		return {
+			range,
+			insertText: nextEdit.insertText,
+			showRange: range,
+			command,
+			displayLocation,
+			isEditInAnotherDocument: true
+		};
+	}
+
+	private createCompletionItem(
+		doc: IVSCodeObservableDocument,
+		document: TextDocument,
+		position: Position,
+		range: Range,
+		result: NonNullable<(NextEditResult | DiagnosticsNextEditResult)['result']>,
+	): Omit<NesCompletionItem, 'telemetryBuilder' | 'info' | 'showInlineEditMenu' | 'action' | 'wasShown' | 'isInlineEdit'> | undefined {
+
+		// Only show edit when the cursor is max 4 lines away from the edit
+		const showRange = result.showRangePreference === ShowNextEditPreference.AroundEdit
+			? new Range(
+				Math.max(range.start.line - 4, 0),
+				0,
+				range.end.line + 4,
+				Number.MAX_SAFE_INTEGER
+			) : undefined;
+
+		const displayLocationRange = result.displayLocation && doc.fromRange(document, toExternalRange(result.displayLocation.range));
+		const displayLocation: InlineCompletionDisplayLocation | undefined = result.displayLocation && displayLocationRange ? {
+			range: displayLocationRange,
+			label: result.displayLocation.label,
+			kind: InlineCompletionDisplayLocationKind.Code
+		} : undefined;
+
+
+		return {
+			range,
+			insertText: result.edit.newText,
+			showRange,
+			displayLocation,
+		};
 	}
 
 	public handleDidShowCompletionItem(completionItem: NesCompletionItem, updatedInsertText: string): void {
@@ -343,7 +444,9 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		const info = item.info;
 		if (isLlmCompletionInfo(info)) {
 			this.model.nextEditProvider.handleAcceptance(info.documentId, info.suggestion);
-			this._trackSurvivalRate(info);
+			if (!item.isEditInAnotherDocument) {
+				this._trackSurvivalRate(info);
+			}
 		} else {
 			this.model.diagnosticsBasedProvider?.handleAcceptance(info.documentId, info.suggestion);
 		}
@@ -485,13 +588,49 @@ export function raceAndAll<T extends readonly unknown[]>(
 	return { first, all };
 }
 
-export function documentRangeFromOffsetRange(doc: TextDocument, range: OffsetRange): Range {
-	return new Range(
-		doc.positionAt(range.start),
-		doc.positionAt(range.endExclusive)
-	);
-}
-
 function shortOpportunityId(oppId: string): string {
 	return oppId.substring(4, 8);
+}
+
+function hasNotebookCellMarker(document: TextDocument, newText: string) {
+	return isNotebookCell(document.uri) && newText.includes('%% vscode.cell [id=');
+}
+
+function addNotebookTelemetry(document: TextDocument, position: Position, newText: string, documents: [TextDocument, Range][], telemetryBuilder: NextEditProviderTelemetryBuilder) {
+	const notebook = isNotebookCell(document.uri) ? findNotebook(document.uri, workspace.notebookDocuments) : undefined;
+	const cell = notebook ? findCell(document.uri, notebook) : undefined;
+	if (!cell || !notebook || !documents.length) {
+		return;
+	}
+	const cellMarkerCount = newText.match(/%% vscode.cell \[id=/g)?.length || 0;
+	const cellMarkerIndex = newText.indexOf('#%% vscode.cell [id=');
+	const isMultiline = newText.includes('\n');
+	const targetEol = documents[0][0].eol === EndOfLine.CRLF ? '\r\n' : '\n';
+	const sourceEol = newText.includes('\r\n') ? '\r\n' : (newText.includes('\n') ? '\n' : targetEol);
+	const nextEditor = window.visibleTextEditors.find(editor => editor.document === documents[0][0]);
+	const isNextEditorRangeVisible = nextEditor && nextEditor.visibleRanges.some(range => range.contains(documents[0][1]));
+	const notebookId = getNotebookId(notebook);
+	const lineSuffix = `(${position.line}:${position.character})`;
+	const getCellPrefix = (c: NotebookCell) => {
+		if (c === cell) {
+			return `*`;
+		}
+		if (c.document === documents[0][0]) {
+			return `+`;
+		}
+		return '';
+	};
+	const lineCounts = notebook.getCells()
+		.filter(c => c.kind === NotebookCellKind.Code)
+		.map(c => `${getCellPrefix(c)}${c.document.lineCount}${c === cell ? lineSuffix : ''}`).join(',');
+	telemetryBuilder.
+		setNotebookCellMarkerIndex(cellMarkerIndex)
+		.setNotebookCellMarkerCount(cellMarkerCount)
+		.setIsMultilineEdit(isMultiline)
+		.setIsEolDifferent(targetEol !== sourceEol)
+		.setIsNextEditorVisible(!!nextEditor)
+		.setIsNextEditorRangeVisible(!!isNextEditorRangeVisible)
+		.setNotebookCellLines(lineCounts)
+		.setNotebookId(notebookId)
+		.setIsNESForOtherEditor(documents[0][0] !== document);
 }

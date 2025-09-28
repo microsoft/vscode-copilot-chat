@@ -6,8 +6,11 @@
 import { AuthenticationContrib } from '../../authentication/vscode-node/authentication.contribution';
 import { BYOKContrib } from '../../byok/vscode-node/byokContribution';
 import { ChatQuotaContribution } from '../../chat/vscode-node/chatQuota.contribution';
+import { ChatSessionsContrib } from '../../chatSessions/vscode-node/chatSessions';
 import * as chatBlockLanguageContribution from '../../codeBlocks/vscode-node/chatBlockLanguageFeatures.contribution';
 import { IExtensionContributionFactory, asContributionFactory } from '../../common/contributions';
+import { CompletionsCoreContribution } from '../../completions/vscode-node/completionsCoreContribution';
+import { CompletionsUnificationContribution } from '../../completions/vscode-node/completionsUnificationContribution';
 import { ConfigurationMigrationContribution } from '../../configuration/vscode-node/configurationMigration';
 import { ContextKeysContribution } from '../../contextKeys/vscode-node/contextKeys.contribution';
 import { AiMappedEditsContrib } from '../../conversation/vscode-node/aiMappedEditsContrib';
@@ -33,6 +36,7 @@ import { DebugCommandsContribution } from '../../prompt/vscode-node/debugCommand
 import { RenameSuggestionsContrib } from '../../prompt/vscode-node/renameSuggestions';
 import { PromptFileContextContribution } from '../../promptFileContext/vscode-node/promptFileContextService';
 import { RelatedFilesProviderContribution } from '../../relatedFiles/vscode-node/relatedFiles.contribution';
+import { ChatReplayContribution } from '../../replay/vscode-node/chatReplayContrib';
 import { SearchPanelCommands } from '../../search/vscode-node/commands';
 import { SettingsSchemaFeature } from '../../settingsSchema/vscode-node/settingsSchemaFeature';
 import { SurveyCommandContribution } from '../../survey/vscode-node/surveyCommands';
@@ -74,7 +78,11 @@ export const vscodeNodeContributions: IExtensionContributionFactory[] = [
 	asContributionFactory(ChatQuotaContribution),
 	asContributionFactory(NotebookFollowCommands),
 	asContributionFactory(PromptFileContextContribution),
+	asContributionFactory(ChatReplayContribution),
+	asContributionFactory(CompletionsCoreContribution),
+	asContributionFactory(CompletionsUnificationContribution),
 	workspaceIndexingContribution,
+	asContributionFactory(ChatSessionsContrib)
 ];
 
 /**

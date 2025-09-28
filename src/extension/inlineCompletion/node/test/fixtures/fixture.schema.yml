@@ -1,0 +1,56 @@
+# (Descriptive) name of the test case
+name: test name
+
+# State of the world at prompt request time
+state:
+    # The current open file
+    current-file:
+        uri: file:///test/main.py
+        language: python
+        text: |
+            def hello_⮑
+    # List of open files
+    open-files:
+        - uri: file:///test/user.py
+          language: python
+          text: |
+              class User:
+                def __init__(self, username, email):
+                  self.username = username
+                  self.email = email
+    # serialized context items served via the context provider API
+    context-items:
+        code-snippets:
+            - uri: file:///dad-jokes/src/add.js
+              value: |-
+                  export function add(a: number, b: number): number {
+                      return a + b;
+                  }
+            - uri: file:///dad-jokes/src/multiply.js
+              value: |-
+                  export function multiply(a: number, b: number): number {
+                      return a * b;
+                  }
+        traits:
+            - name: 'funny'
+              value: 'joke'
+            - name: 'unfunny'
+              value: 'joke'
+
+options:
+    # Maximum prompt length in tokens
+    max-prompt-length: 500
+    # Whether to normalize line endings in the prompt
+    normalize-line-endings: true
+    # Tokenizer used for prompt generation
+    tokenizer: cl100k_base
+    # Percent of 'max-prompt-length' to reserve for the suffix
+    suffix-percent: 15
+    # Threshold (in percent) for declaring match of new suffix with existing suffix
+    suffix-match-threshold: 10
+
+expected-prompt:
+    prefix: |
+        # Path: main.py
+        def hello_
+    suffix:

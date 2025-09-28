@@ -7,7 +7,8 @@ import * as vscode from 'vscode';
 
 import { LRUCache } from 'lru-cache';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { Copilot } from '../../../platform/inlineCompletions/vscode-node/api';
+import { Copilot } from '../../../platform/inlineCompletions/common/api';
+import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ContextKind, ILanguageContextService, KnownSources, TriggerKind, type ContextItem, type RequestContext } from '../../../platform/languageServer/common/languageContextService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -110,7 +111,7 @@ class TelemetrySender {
 				}
 			);
 		}
-		this.logService.logger.debug(`TypeScript Copilot context speculative request: [${context.requestId} - ${originalRequestId}, numberOfItems: ${numberOfItems}]`);
+		this.logService.debug(`TypeScript Copilot context speculative request: [${context.requestId} - ${originalRequestId}, numberOfItems: ${numberOfItems}]`);
 	}
 
 	public willLogRequestTelemetry(context: RequestContext): boolean {
@@ -134,6 +135,7 @@ class TelemetrySender {
 					"owner": "dirkb",
 					"comment": "Telemetry for copilot inline completion context",
 					"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
+					"opportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The opportunity id" },
 					"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The source of the request" },
 					"trigger": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The trigger kind of the request" },
 					"cacheRequest": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The cache request that was used to populate the cache" },
@@ -164,6 +166,7 @@ class TelemetrySender {
 				'typescript-context-plugin.completion-context.request',
 				{
 					requestId: context.requestId,
+					opportunityId: context.opportunityId ?? 'unknown',
 					source: context.source ?? KnownSources.unknown,
 					trigger: context.trigger ?? TriggerKind.unknown,
 					cacheRequest: cacheRequest ?? 'unknown',
@@ -193,7 +196,7 @@ class TelemetrySender {
 				}
 			);
 		}
-		this.logService.logger.debug(`TypeScript Copilot context: [${context.requestId}, ${context.source ?? KnownSources.unknown}, ${JSON.stringify(position, undefined, 0)}, ${JSON.stringify(nodePath, undefined, 0)}, ${JSON.stringify(stats, undefined, 0)}, cacheItems:${data.cachedItems}, cacheState:${JSON.stringify(cacheState, undefined, 0)}, budgetExhausted:${data.tokenBudgetExhausted}, cancelled:${data.cancelled}, timedOut:${data.timedOut}, fileSize:${fileSize}] in [${timeTaken},${data.serverTime},${data.contextComputeTime}]ms.${data.timedOut ? ' Timed out.' : ''}`);
+		this.logService.debug(`TypeScript Copilot context: [${context.requestId}, ${context.source ?? KnownSources.unknown}, ${JSON.stringify(position, undefined, 0)}, ${JSON.stringify(nodePath, undefined, 0)}, ${JSON.stringify(stats, undefined, 0)}, cacheItems:${data.cachedItems}, cacheState:${JSON.stringify(cacheState, undefined, 0)}, budgetExhausted:${data.tokenBudgetExhausted}, cancelled:${data.cancelled}, timedOut:${data.timedOut}, fileSize:${fileSize}] in [${timeTaken},${data.serverTime},${data.contextComputeTime}]ms.${data.timedOut ? ' Timed out.' : ''}`);
 		if (data.errorData !== undefined && data.errorData.length > 0) {
 			const errorData = data.errorData;
 			for (const error of errorData) {
@@ -218,7 +221,7 @@ class TelemetrySender {
 						code: error.code
 					}
 				);
-				this.logService.logger.error('Error computing context:', `${error.message} [${error.code}]`);
+				this.logService.error('Error computing context:', `${error.message} [${error.code}]`);
 			}
 		}
 	}
@@ -232,6 +235,7 @@ class TelemetrySender {
 				"owner": "dirkb",
 				"comment": "Telemetry for copilot inline completion context on timeout",
 				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
+				"opportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The opportunity id" },
 				"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The source of the request" },
 				"total": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Total number of context items", "isMeasurement": true },
 				"snippets": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of code snippets", "isMeasurement": true },
@@ -246,6 +250,7 @@ class TelemetrySender {
 			'typescript-context-plugin.completion-context.on-timeout',
 			{
 				requestId: context.requestId,
+				opportunityId: context.opportunityId ?? 'unknown',
 				source: context.source ?? KnownSources.unknown,
 				items: JSON.stringify(items),
 				cacheState: cacheState.toString()
@@ -258,7 +263,7 @@ class TelemetrySender {
 				totalSize: totalSize
 			}
 		);
-		this.logService.logger.debug(`TypeScript Copilot context on timeout: [${context.requestId}, ${JSON.stringify(stats, undefined, 0)}]`);
+		this.logService.debug(`TypeScript Copilot context on timeout: [${context.requestId}, ${JSON.stringify(stats, undefined, 0)}]`);
 	}
 
 	public sendRequestFailureTelemetry(context: RequestContext, data: { error: protocol.ErrorCode; message: string; stack?: string }): void {
@@ -267,6 +272,7 @@ class TelemetrySender {
 				"owner": "dirkb",
 				"comment": "Telemetry for copilot inline completion context in failure case",
 				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
+				"opportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The opportunity id" },
 				"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The source of the request" },
 				"code:": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The failure code" },
 				"message": { "classification": "CallstackOrException", "purpose": "PerformanceAndHealth", "comment": "The failure message" },
@@ -277,6 +283,7 @@ class TelemetrySender {
 			'typescript-context-plugin.completion-context.failed',
 			{
 				requestId: context.requestId,
+				opportunityId: context.opportunityId ?? 'unknown',
 				source: context.source ?? KnownSources.unknown,
 				code: data.error,
 				message: data.message,
@@ -285,23 +292,29 @@ class TelemetrySender {
 		);
 	}
 
-	public sendRequestCancelledTelemetry(context: RequestContext): void {
+	public sendRequestCancelledTelemetry(context: RequestContext, timeTaken: number): void {
 		/* __GDPR__
 			"typescript-context-plugin.completion-context.cancelled" : {
 				"owner": "dirkb",
 				"comment": "Telemetry for copilot inline completion context in cancellation case",
 				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request correlation id" },
-				"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The source of the request" }
+				"opportunityId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The opportunity id" },
+				"source": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The source of the request" },
+				"timeTaken": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Time taken to provide the completion", "isMeasurement": true }
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent(
 			'typescript-context-plugin.completion-context.cancelled',
 			{
 				requestId: context.requestId,
+				opportunityId: context.opportunityId ?? 'unknown',
 				source: context.source ?? KnownSources.unknown
+			},
+			{
+				timeTaken: timeTaken
 			}
 		);
-		this.logService.logger.debug(`TypeScript Copilot context request ${context.requestId} got cancelled.`);
+		this.logService.debug(`TypeScript Copilot context request ${context.requestId} got cancelled.`);
 	}
 
 	public sendActivationTelemetry(response: protocol.PingResponse | undefined, error: any | undefined): void {
@@ -733,7 +746,11 @@ class RunnableResultManager implements vscode.Disposable {
 				}
 			}
 		}
-		return results;
+		// Sort them by priority so that the most important items are emitted first if they
+		// are contained in more than one runnable result.
+		return results.sort((a, b) => {
+			return a.priority < b.priority ? 1 : a.priority > b.priority ? -1 : 0;
+		});
 	}
 
 	public getContextRequestState(document: vscode.TextDocument, position: vscode.Position): ContextRequestState | undefined {
@@ -807,6 +824,7 @@ class RunnableResultManager implements vscode.Disposable {
 					items.set(key, item);
 				}
 			};
+			// We don't need to sort by priority here since the data is used for the next cache request.
 			for (const [id, item] of this.results.entries()) {
 				const scope = item.cache?.scope;
 				if (scope === undefined || scope.kind !== protocol.CacheScopeKind.WithinRange) {
@@ -1167,17 +1185,17 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 			this.telemetrySender.sendActivationTelemetry(response, undefined);
 			if (response !== undefined) {
 				if (response.body?.kind === 'ok') {
-					this.logService.logger.info('TypeScript server plugin activated.');
+					this.logService.info('TypeScript server plugin activated.');
 					activated = true;
 				} else {
-					this.logService.logger.error('TypeScript server plugin not activated:', response.body?.message ?? 'Message not provided.');
+					this.logService.error('TypeScript server plugin not activated:', response.body?.message ?? 'Message not provided.');
 				}
 			} else {
-				this.logService.logger.error('TypeScript server plugin not activated:', 'No ping response received.');
+				this.logService.error('TypeScript server plugin not activated:', 'No ping response received.');
 			}
 		} catch (error) {
 			this.telemetrySender.sendActivationTelemetry(undefined, error);
-			this.logService.logger.error('Error pinging TypeScript server plugin:', error);
+			this.logService.error('Error pinging TypeScript server plugin:', error);
 		}
 
 		return activated;
@@ -1226,7 +1244,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 			}
 			const timeTaken = Date.now() - startTime;
 			if (protocol.ComputeContextResponse.isCancelled(response)) {
-				this.telemetrySender.sendRequestCancelledTelemetry(context);
+				this.telemetrySender.sendRequestCancelledTelemetry(context, timeTaken);
 			} else if (protocol.ComputeContextResponse.isOk(response)) {
 				const body: protocol.ComputeContextResponse.OK = response.body;
 				const contextItemResult = new ContextItemResultBuilder(timeTaken);
@@ -1245,13 +1263,13 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				contextItemResult.updateResponse(body, token);
 				this.telemetrySender.sendRequestTelemetry(document, position, context, contextItemResult, timeTaken, { before: cacheState, after: this.runnableResultManager.getCacheState() }, undefined);
 				isDebugging && forDebugging?.length;
-				this._onCachePopulated.fire({ document, position, results: resolved, summary: contextItemResult });
+				this._onCachePopulated.fire({ document, position, source: context.source, results: resolved, summary: contextItemResult });
 			} else if (protocol.ComputeContextResponse.isError(response)) {
 				this.telemetrySender.sendRequestFailureTelemetry(context, response.body);
 				console.error('Error populating cache:', response.body.message, response.body.stack);
 			}
 		} catch (error) {
-			this.logService.logger.error(error, `Error populating cache for document: ${document.uri.toString()} at position: ${position.line + 1}:${position.character + 1}`);
+			this.logService.error(error, `Error populating cache for document: ${document.uri.toString()} at position: ${position.line + 1}:${position.character + 1}`);
 		}
 		if (this.pendingRequest !== undefined) {
 			// We had a pending request. Clear it and try to populate the cache again.
@@ -1287,13 +1305,14 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				cacheRequest = 'awaited';
 			}
 		}
+		const afterInflightJoin = Date.now() - startTime;
 		if (token.isCancellationRequested) {
-			this.telemetrySender.sendRequestCancelledTelemetry(context);
+			this.telemetrySender.sendRequestCancelledTelemetry(context, afterInflightJoin);
 			return;
 		}
 		const isDebugging = this.isDebugging;
 		const forDebugging: ContextItem[] | undefined = isDebugging ? [] : undefined;
-		const contextItemResult = new ContextItemResultBuilder(0);
+		const contextItemResult = new ContextItemResultBuilder(afterInflightJoin);
 		const runnableResults = this.runnableResultManager.getCachedRunnableResults(document, position);
 		for (const runnableResult of runnableResults) {
 			for (const item of contextItemResult.update(runnableResult, true)) {
@@ -1301,8 +1320,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				yield item;
 			}
 			if (token.isCancellationRequested) {
-				this.telemetrySender.sendRequestCancelledTelemetry(context);
-				return;
+				break;
 			}
 		}
 		const isSpeculativeRequest = context.proposedEdits !== undefined;
@@ -1311,6 +1329,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 		} else {
 			const cacheState = this.runnableResultManager.getCacheState();
 			contextItemResult.path = this.runnableResultManager.getNodePath();
+			contextItemResult.cancelled = token.isCancellationRequested;
 			contextItemResult.serverTime = 0;
 			contextItemResult.contextComputeTime = 0;
 			contextItemResult.fromCache = true;
@@ -1319,7 +1338,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				{ before: cacheState, after: cacheState }, cacheRequest
 			);
 			isDebugging && forDebugging?.length;
-			this._onContextComputed.fire({ document, position, results: runnableResults, summary: contextItemResult });
+			this._onContextComputed.fire({ document, position, source: context.source, results: runnableResults, summary: contextItemResult });
 		}
 		return;
 	}
@@ -1373,7 +1392,7 @@ class CachePopulationTrigger implements vscode.Disposable {
 				this.onInlineCompletion(document, position, context);
 				return undefined;
 			}
-		}, { debounceDelayMs: 0 }));
+		}, { debounceDelayMs: 0, groupId: 'contextService' }));
 	}
 
 	public dispose() {
@@ -1522,7 +1541,8 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@ILogService readonly logService: ILogService,
 		@ITelemetryService readonly telemetryService: ITelemetryService,
-		@ILanguageContextService private readonly languageContextService: ILanguageContextService
+		@ILanguageContextService private readonly languageContextService: ILanguageContextService,
+		@ILanguageContextProviderService private readonly languageContextProviderService: ILanguageContextProviderService,
 	) {
 		this.registrations = undefined;
 		this.telemetrySender = new TelemetrySender(telemetryService, logService);
@@ -1574,7 +1594,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 			} else {
 				this.unregister();
 			}
-		}).catch((error: any) => this.logService.logger.error('Error checking TypeScript context provider registration:', error));
+		}).catch((error: any) => this.logService.error('Error checking TypeScript context provider registration:', error));
 	}
 
 	private async register(): Promise<void> {
@@ -1591,7 +1611,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 
 			const copilotAPI = await this.getCopilotApi();
 			if (copilotAPI === undefined) {
-				logService.logger.warn('Copilot API is undefined, unable to register context provider.');
+				logService.warn('Copilot API is undefined, unable to register context provider.');
 				return;
 			}
 
@@ -1607,7 +1627,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 			const self = this;
 			const resolver: Copilot.ContextResolver<Copilot.SupportedContextItem> = {
 				async *resolve(request: Copilot.ResolveRequest, token: vscode.CancellationToken): AsyncIterable<Copilot.SupportedContextItem> {
-					console.log(`Resolve request ${Date.now()}`);
+					// console.log(`Resolve request ${Date.now()}`);
 					const isSpeculativeRequest = request.documentContext.proposedEdits !== undefined;
 					const [document, position] = self.getDocumentAndPosition(request, token);
 					if (document === undefined || position === undefined) {
@@ -1620,9 +1640,10 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 					}
 					const context: RequestContext = {
 						requestId: request.completionId,
+						opportunityId: request.opportunityId,
 						timeBudget: request.timeBudget,
 						tokenBudget: tokenBudget,
-						source: KnownSources.completion,
+						source: request.source === 'nes' ? KnownSources.nes : KnownSources.completion,
 						trigger: TriggerKind.completion,
 						proposedEdits: isSpeculativeRequest ? [] : undefined,
 						sampleTelemetry: self.getSampleTelemetry(request.activeExperiments)
@@ -1665,15 +1686,17 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 					return result;
 				};
 			}
-			this.registrations.add(copilotAPI.registerContextProvider({
+			const provider: Copilot.ContextProvider<Copilot.SupportedContextItem> = {
 				id: 'typescript-ai-context-provider',
 				selector: { scheme: 'file', language: 'typescript' },
 				resolver: resolver
-			}));
+			};
+			this.registrations.add(copilotAPI.registerContextProvider(provider));
+			this.registrations.add(this.languageContextProviderService.registerContextProvider(provider));
 			this.telemetrySender.sendInlineCompletionProviderTelemetry(KnownSources.completion, true);
-			logService.logger.info('Registered TypeScript context provider with Copilot inline completions.');
+			logService.info('Registered TypeScript context provider with Copilot inline completions.');
 		} catch (error) {
-			logService.logger.error('Error checking if server plugin is installed:', error);
+			logService.error('Error checking if server plugin is installed:', error);
 		}
 	}
 
@@ -1682,7 +1705,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 		const typeScriptExtension = vscode.extensions.getExtension('vscode.typescript-language-features');
 		if (typeScriptExtension === undefined) {
 			this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.TypescriptPlugin, 'TypeScript extension not found', undefined);
-			this.logService.logger.error('TypeScript extension not found');
+			this.logService.error('TypeScript extension not found');
 			return false;
 		}
 		try {
@@ -1691,10 +1714,10 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 		} catch (error) {
 			if (error instanceof Error) {
 				this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.TypescriptPlugin, error.message, error.stack);
-				this.logService.logger.error('Error checking if TypeScript plugin is installed:', error.message);
+				this.logService.error('Error checking if TypeScript plugin is installed:', error.message);
 			} else {
 				this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.TypescriptPlugin, 'Unknown error', undefined);
-				this.logService.logger.error('Error checking if TypeScript plugin is installed: Unknown error');
+				this.logService.error('Error checking if TypeScript plugin is installed: Unknown error');
 			}
 			return false;
 		}
@@ -1752,7 +1775,7 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 		const copilotExtension = vscode.extensions.getExtension('GitHub.copilot');
 		if (copilotExtension === undefined) {
 			this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.CopilotExtension, 'Copilot extension not found', undefined);
-			this.logService.logger.error('Copilot extension not found');
+			this.logService.error('Copilot extension not found');
 			return undefined;
 		}
 		try {
@@ -1761,10 +1784,10 @@ export class InlineCompletionContribution implements vscode.Disposable, TokenBud
 		} catch (error) {
 			if (error instanceof Error) {
 				this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.CopilotExtension, error.message, error.stack);
-				this.logService.logger.error('Error activating Copilot extension:', error.message);
+				this.logService.error('Error activating Copilot extension:', error.message);
 			} else {
 				this.telemetrySender.sendActivationFailedTelemetry(ErrorLocation.Client, ErrorPart.CopilotExtension, 'Unknown error', undefined);
-				this.logService.logger.error('Error activating Copilot extension: Unknown error.');
+				this.logService.error('Error activating Copilot extension: Unknown error.');
 			}
 			return undefined;
 		}

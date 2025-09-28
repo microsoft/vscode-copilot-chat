@@ -7,18 +7,22 @@ import * as vscodeTypes from '../../../../vscodeTypes';
 import { CancellationTokenSource } from '../../../vs/base/common/cancellation';
 import { Emitter as EventEmitter } from '../../../vs/base/common/event';
 import { URI as Uri } from '../../../vs/base/common/uri';
-import { AISearchKeyword, ChatErrorLevel, ChatImageMimeType, ChatReferenceBinaryData, ChatReferenceDiagnostic, ChatRequestEditedFileEventKind, ChatRequestEditorData, ChatRequestNotebookData, ChatRequestTurn, ChatResponseAnchorPart, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseExtensionsPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseMovePart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseTurn, ChatResponseWarningPart, ExcludeSettingOptions, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, LanguageModelToolResult2, PreparedTerminalToolInvocation, TextSearchMatch2, ChatPrepareToolInvocationPart } from './chatTypes';
-import { Diagnostic, DiagnosticRelatedInformation, Location } from './diagnostics';
-import { TextEdit, WorkspaceEdit } from './editing';
-import { ChatLocation, ChatVariableLevel, DiagnosticSeverity, EndOfLine, ExtensionMode, TextEditorCursorStyle, TextEditorLineNumbersStyle, TextEditorRevealType } from './enums';
+import { Diagnostic, DiagnosticRelatedInformation } from '../../../vs/workbench/api/common/extHostTypes/diagnostic';
+import { Location } from '../../../vs/workbench/api/common/extHostTypes/location';
+import { MarkdownString } from '../../../vs/workbench/api/common/extHostTypes/markdownString';
+import { NotebookCellData, NotebookCellKind, NotebookData, NotebookEdit, NotebookRange } from '../../../vs/workbench/api/common/extHostTypes/notebooks';
+import { Position } from '../../../vs/workbench/api/common/extHostTypes/position';
+import { Range } from '../../../vs/workbench/api/common/extHostTypes/range';
+import { Selection } from '../../../vs/workbench/api/common/extHostTypes/selection';
+import { SnippetString } from '../../../vs/workbench/api/common/extHostTypes/snippetString';
+import { SnippetTextEdit } from '../../../vs/workbench/api/common/extHostTypes/snippetTextEdit';
+import { SymbolInformation, SymbolKind } from '../../../vs/workbench/api/common/extHostTypes/symbolInformation';
+import { EndOfLine, TextEdit } from '../../../vs/workbench/api/common/extHostTypes/textEdit';
+import { AISearchKeyword, ChatErrorLevel, ChatImageMimeType, ChatPrepareToolInvocationPart, ChatReferenceBinaryData, ChatReferenceDiagnostic, ChatRequestEditedFileEventKind, ChatRequestEditorData, ChatRequestNotebookData, ChatRequestTurn, ChatResponseAnchorPart, ChatResponseClearToPreviousToolInvocationReason, ChatResponseCodeblockUriPart, ChatResponseCodeCitationPart, ChatResponseCommandButtonPart, ChatResponseConfirmationPart, ChatResponseExtensionsPart, ChatResponseFileTreePart, ChatResponseMarkdownPart, ChatResponseMarkdownWithVulnerabilitiesPart, ChatResponseMovePart, ChatResponseNotebookEditPart, ChatResponseProgressPart, ChatResponseProgressPart2, ChatResponsePullRequestPart, ChatResponseReferencePart, ChatResponseReferencePart2, ChatResponseTextEditPart, ChatResponseThinkingProgressPart, ChatResponseTurn, ChatResponseTurn2, ChatResponseWarningPart, ChatToolInvocationPart, ExcludeSettingOptions, LanguageModelChatMessageRole, LanguageModelDataPart, LanguageModelDataPart2, LanguageModelError, LanguageModelPartAudience, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelTextPart2, LanguageModelToolCallPart, LanguageModelToolExtensionSource, LanguageModelToolMCPSource, LanguageModelToolResult, LanguageModelToolResult2, LanguageModelToolResultPart, LanguageModelToolResultPart2, TextSearchMatch2 } from './chatTypes';
+import { TextDocumentChangeReason, TextEditorSelectionChangeKind, WorkspaceEdit } from './editing';
+import { ChatLocation, ChatVariableLevel, DiagnosticSeverity, ExtensionMode, FileType, TextEditorCursorStyle, TextEditorLineNumbersStyle, TextEditorRevealType } from './enums';
 import { t } from './l10n';
-import { MarkdownString } from './markdownString';
 import { NewSymbolName, NewSymbolNameTag, NewSymbolNameTriggerKind } from './newSymbolName';
-import { NotebookCellData, NotebookCellKind, NotebookData, NotebookEdit, NotebookRange } from './notebookDocument';
-import { Position } from './position';
-import { Range } from './range';
-import { Selection } from './selection';
-import { SymbolInformation } from './symbolInformation';
 import { TerminalShellExecutionCommandLineConfidence } from './terminal';
 
 const shim: typeof vscodeTypes = {
@@ -44,6 +48,7 @@ const shim: typeof vscodeTypes = {
 	},
 	ExtensionMode,
 	ChatVariableLevel,
+	ChatResponseClearToPreviousToolInvocationReason,
 	ChatResponseMarkdownPart,
 	ChatResponseFileTreePart,
 	ChatResponseAnchorPart,
@@ -70,13 +75,15 @@ const shim: typeof vscodeTypes = {
 	NewSymbolNameTag,
 	NewSymbolNameTriggerKind,
 	ChatLocation,
-	SymbolInformation,
+	SymbolInformation: SymbolInformation as any,
 	LanguageModelToolResult,
 	ExtendedLanguageModelToolResult: LanguageModelToolResult,
 	LanguageModelToolResult2,
 	LanguageModelPromptTsxPart,
 	LanguageModelTextPart,
 	LanguageModelDataPart,
+	LanguageModelToolExtensionSource,
+	LanguageModelToolMCPSource,
 	ChatImageMimeType,
 	ChatReferenceBinaryData,
 	ChatReferenceDiagnostic,
@@ -88,10 +95,28 @@ const shim: typeof vscodeTypes = {
 	NotebookEdit,
 	NotebookCellData,
 	NotebookData,
-	PreparedTerminalToolInvocation,
 	ChatErrorLevel,
 	TerminalShellExecutionCommandLineConfidence,
-	ChatRequestEditedFileEventKind
+	ChatRequestEditedFileEventKind,
+	ChatResponsePullRequestPart,
+	LanguageModelTextPart2,
+	LanguageModelDataPart2,
+	LanguageModelPartAudience,
+	ChatResponseThinkingProgressPart,
+	LanguageModelToolCallPart,
+	LanguageModelToolResultPart,
+	LanguageModelToolResultPart2,
+	LanguageModelChatMessageRole,
+	TextEditorSelectionChangeKind,
+	TextDocumentChangeReason,
+	ChatToolInvocationPart,
+	ChatResponseTurn2,
+	ChatRequestTurn2: ChatRequestTurn,
+	LanguageModelError: LanguageModelError as any, // Some difference in the definition of Error is breaking this
+	SymbolKind,
+	SnippetString,
+	SnippetTextEdit,
+	FileType
 };
 
 export = shim;

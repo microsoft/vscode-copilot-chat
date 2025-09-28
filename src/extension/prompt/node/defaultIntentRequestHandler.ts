@@ -5,36 +5,43 @@
 
 import * as l10n from '@vscode/l10n';
 import { Raw } from '@vscode/prompt-tsx';
-import type { CancellationToken, ChatRequest, ChatResponseReferencePart, ChatResponseStream, ChatResult, LanguageModelToolInformation, Progress } from 'vscode';
+import type { ChatRequest, ChatResponseReferencePart, ChatResponseStream, ChatResult, LanguageModelToolInformation, Progress } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
+import { ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession, NullEditSurvivalTrackingSession } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { HAS_IGNORED_FILES_MESSAGE } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { FinishedCallback, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
+import { IResponseDelta, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
+import { FilterReason } from '../../../platform/networking/common/openai';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ISurveyService } from '../../../platform/survey/common/surveyService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { Event } from '../../../util/vs/base/common/event';
+import { Iterable } from '../../../util/vs/base/common/iterator';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { mixin } from '../../../util/vs/base/common/objects';
-import { assertType } from '../../../util/vs/base/common/types';
+import { assertType, Mutable } from '../../../util/vs/base/common/types';
+import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseMarkdownPart, ChatResponseProgressPart, ChatResponseTextEditPart, LanguageModelToolResult2 } from '../../../vscodeTypes';
 import { CodeBlocksMetadata, CodeBlockTrackingChatResponseStream } from '../../codeBlocks/node/codeBlockProcessor';
 import { CopilotInteractiveEditorResponse, InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
 import { PauseController } from '../../intents/node/pauseController';
-import { EmptyPromptError, isToolCallLimitCancellation, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
+import { EmptyPromptError, isToolCallLimitCancellation, IToolCallingBuiltPromptEvent, IToolCallingLoopOptions, IToolCallingResponseEvent, IToolCallLoopResult, ToolCallingLoop, ToolCallingLoopFetchOptions, ToolCallLimitBehavior } from '../../intents/node/toolCallingLoop';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ResponseStreamWithLinkification } from '../../linkify/common/responseStreamWithLinkification';
 import { SummarizedConversationHistoryMetadata } from '../../prompts/node/agent/summarizedConversationHistory';
 import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
+import { IToolGrouping, IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
 import { Conversation, getUniqueReferences, GlobalContextMessageMetadata, IResultMetadata, RenderedUserMessageMetadata, RequestDebugInformation, ResponseStreamParticipant, Turn, TurnStatus } from '../common/conversation';
 import { IBuildPromptContext, IToolCallRound } from '../common/intents';
 import { ChatTelemetry, ChatTelemetryBuilder } from './chatParticipantTelemetry';
@@ -42,6 +49,7 @@ import { IntentInvocationMetadata } from './conversation';
 import { IDocumentContext } from './documentContext';
 import { IBuildPromptResult, IIntent, IIntentInvocation, IResponseProcessor } from './intents';
 import { ConversationalBaseTelemetryData, createTelemetryWithId, sendModelMessageTelemetry } from './telemetry';
+import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 
 export interface IDefaultIntentRequestHandlerOptions {
 	maxToolCallIterations: number;
@@ -101,12 +109,12 @@ export class DefaultIntentRequestHandler {
 				return CanceledResult;
 			}
 
-			this._logService.logger.trace('Processing intent');
+			this._logService.trace('Processing intent');
 			const intentInvocation = await this.intent.invoke({ location: this.location, documentContext: this.documentContext, request: this.request });
 			if (this.token.isCancellationRequested) {
 				return CanceledResult;
 			}
-			this._logService.logger.trace('Processed intent');
+			this._logService.trace('Processed intent');
 
 			this.turn.setMetadata(new IntentInvocationMetadata(intentInvocation));
 
@@ -147,7 +155,7 @@ export class DefaultIntentRequestHandler {
 				return {};
 			}
 
-			this._logService.logger.error(err);
+			this._logService.error(err);
 			this._telemetryService.sendGHTelemetryException(err, 'Error');
 			const errorMessage = (<Error>err).message;
 			const chatResult = { errorDetails: { message: errorMessage } };
@@ -321,11 +329,11 @@ export class DefaultIntentRequestHandler {
 		try {
 			const result = await loop.run(this.stream, pauseCtrl);
 			if (!result.round.toolCalls.length || result.response.type !== ChatFetchResponseType.Success) {
-				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableToolCount, this.token.isCancellationRequested ? 'cancelled' : result.response.type);
+				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableTools, this.token.isCancellationRequested ? 'cancelled' : result.response.type);
 			}
 			result.chatResult ??= {};
 			if ((result.chatResult.metadata as IResultMetadata)?.maxToolCallsExceeded) {
-				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableToolCount, 'maxToolCalls');
+				loop.telemetry.sendToolCallingTelemetry(result.toolCallRounds, result.availableTools, 'maxToolCalls');
 			}
 
 			// TODO need proper typing for all chat metadata and a better pattern to build it up from random places
@@ -366,7 +374,7 @@ export class DefaultIntentRequestHandler {
 
 	private async processSuccessfulFetchResult(appliedText: string, requestId: string, chatResult: ChatResult, baseModelTelemetry: ConversationalBaseTelemetryData, rounds: IToolCallRound[]): Promise<ChatResult> {
 		if (appliedText.length === 0 && !rounds.some(r => r.toolCalls.length)) {
-			const message = l10n.t('The model unexpectedly did not return a response, which may indicate a service issue. Please report a bug.');
+			const message = l10n.t('The model unexpectedly did not return a response. Request ID: {0}', requestId);
 			this.turn.setResponse(TurnStatus.Error, { type: 'meta', message }, baseModelTelemetry.properties.messageId, chatResult);
 			return {
 				errorDetails: {
@@ -384,10 +392,18 @@ export class DefaultIntentRequestHandler {
 			appliedText,
 			requestId,
 			this.documentContext?.document,
-			baseModelTelemetry
+			baseModelTelemetry,
+			this.getModeName()
 		);
 
 		return chatResult;
+	}
+
+	private getModeName(): string {
+		return this.request.modeInstructions2 ? 'custom' :
+			this.intent.id === 'editAgent' ? 'agent' :
+				(this.intent.id === 'edit' || this.intent.id === 'edit2') ? 'edit' :
+					'ask';
 	}
 
 	private processOffTopicFetchResult(baseModelTelemetry: ConversationalBaseTelemetryData): ChatResult {
@@ -417,6 +433,7 @@ export class DefaultIntentRequestHandler {
 				return chatResult;
 			}
 			case ChatFetchResponseType.BadRequest:
+			case ChatFetchResponseType.NetworkError:
 			case ChatFetchResponseType.Failed: {
 				const errorDetails = getErrorDetailsFromChatFetchError(fetchResult, (await this._authenticationService.getCopilotToken()).copilotPlan);
 				const chatResult = { errorDetails, metadata: metadataFragment };
@@ -425,8 +442,14 @@ export class DefaultIntentRequestHandler {
 			}
 			case ChatFetchResponseType.Filtered: {
 				const errorDetails = getErrorDetailsFromChatFetchError(fetchResult, (await this._authenticationService.getCopilotToken()).copilotPlan);
-				const chatResult = { errorDetails, metadata: metadataFragment };
+				const chatResult = { errorDetails, metadata: { ...metadataFragment, filterReason: fetchResult.category } };
 				this.turn.setResponse(TurnStatus.Filtered, undefined, baseModelTelemetry.properties.messageId, chatResult);
+				return chatResult;
+			}
+			case ChatFetchResponseType.PromptFiltered: {
+				const errorDetails = getErrorDetailsFromChatFetchError(fetchResult, (await this._authenticationService.getCopilotToken()).copilotPlan);
+				const chatResult = { errorDetails, metadata: { ...metadataFragment, filterReason: FilterReason.Prompt } };
+				this.turn.setResponse(TurnStatus.PromptFiltered, undefined, baseModelTelemetry.properties.messageId, chatResult);
 				return chatResult;
 			}
 			case ChatFetchResponseType.AgentUnauthorized: {
@@ -460,6 +483,8 @@ export class DefaultIntentRequestHandler {
 				this.turn.setResponse(TurnStatus.Error, undefined, baseModelTelemetry.properties.messageId, chatResult);
 				return chatResult;
 			}
+			case ChatFetchResponseType.InvalidStatefulMarker:
+				throw new Error('unreachable'); // retried within the endpoint
 		}
 	}
 }
@@ -471,7 +496,6 @@ interface IInternalRequestResult {
 	hadIgnoredFiles: boolean;
 	lastRequestMessages: Raw.ChatMessage[];
 	lastRequestTelemetry: ChatTelemetry;
-	availableToolCount: number;
 }
 
 interface IDefaultToolLoopOptions extends IToolCallingLoopOptions {
@@ -485,6 +509,8 @@ interface IDefaultToolLoopOptions extends IToolCallingLoopOptions {
 
 class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 	public telemetry!: ChatTelemetry;
+	private toolGrouping?: IToolGrouping;
+
 	constructor(
 		options: IDefaultToolLoopOptions,
 		telemetryBuilder: ChatTelemetryBuilder,
@@ -494,10 +520,17 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		@IEndpointProvider endpointProvider: IEndpointProvider,
 		@IAuthenticationChatUpgradeService authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
 		@ITelemetryService telemetryService: ITelemetryService,
+		@IToolGroupingService private readonly toolGroupingService: IToolGroupingService,
+		@IExperimentationService private readonly _experimentationService: IExperimentationService,
+		@ICopilotTokenStore private readonly _copilotTokenStore: ICopilotTokenStore,
 	) {
 		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService);
 
 		this._register(this.onDidBuildPrompt(({ result, tools, promptTokenLength }) => {
+			if (result.metadata.get(SummarizedConversationHistoryMetadata)) {
+				this.toolGrouping?.didInvalidateCache();
+			}
+
 			this.telemetry = telemetryBuilder.makeRequest(
 				options.intent!,
 				options.location,
@@ -510,6 +543,131 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 				tools.length
 			);
 		}));
+
+		this._register(this.onDidReceiveResponse(() => {
+			this.toolGrouping?.didTakeTurn();
+		}));
+	}
+
+	protected override createPromptContext(availableTools: LanguageModelToolInformation[], outputStream: ChatResponseStream | undefined): Mutable<IBuildPromptContext> {
+		const context = super.createPromptContext(availableTools, outputStream);
+		this._handleVirtualCalls(context);
+
+		const extraVars = this.options.invocation.getAdditionalVariables?.(context);
+		if (extraVars?.hasVariables()) {
+			return {
+				...context,
+				chatVariables: ChatVariablesCollection.merge(context.chatVariables, extraVars),
+			};
+		}
+
+		return context;
+	}
+
+	/**
+	 * Temporary logic to evaluate the efficacy of virtual tool grouping. Enabled
+	 * only for internal users so as to not cost premium requests for real users.
+	 *
+	 * 1. Wait until we get the first MCP (external) tool call for a conversation.
+	 * 2. Trigger virtual tool grouping
+	 * 3. Replay that same request with virtual tool grouping enabled
+	 * 4. Ensure the group containing the tool call is expanded
+	 */
+	private _didParallelToolCallLoop?: boolean;
+	private async _doMirroredCallWithVirtualTools(delta: IResponseDelta, messages: Raw.ChatMessage[], requestOptions: OptionalChatRequestParams) {
+		const shouldDo = !this._didParallelToolCallLoop
+			&& this._copilotTokenStore.copilotToken?.isInternal
+			&& !this.toolGrouping?.isEnabled;
+		if (!shouldDo) {
+			return;
+		}
+
+		const candidateCall = delta.copilotToolCalls?.find(tc => tc.name.startsWith('mcp_'));
+		if (!candidateCall) {
+			return;
+		}
+
+		this._didParallelToolCallLoop = true;
+		if (this._experimentationService.getTreatmentVariable<boolean>('copilotchat.noParallelToolLoop')) {
+			return;
+		}
+
+		const token = CancellationToken.None;
+		const allTools = await this.options.invocation.getAvailableTools?.() ?? [];
+		const grouping = this.toolGroupingService.create(this.options.conversation.sessionId, allTools);
+		const computed = await grouping.compute(this.options.request.prompt, token);
+
+		const container = grouping.getContainerFor(candidateCall.name);
+
+		let state = container ? (container.isExpanded ? 'defaultExpanded' : 'collapsed') : 'topLevel';
+		if (state === 'collapsed') {
+			await this.options.invocation.endpoint.makeChatRequest(
+				`${ChatLocation.toStringShorter(this.options.location)}/${this.options.intent?.id}/virtualParallelEval`,
+				messages,
+				(_text, _index, delta) => {
+					if (delta.copilotToolCalls?.some(tc => tc.name === container!.name)) {
+						state = 'expanded';
+						return Promise.resolve(1);
+					}
+					return Promise.resolve(undefined);
+				},
+				token,
+				this.options.overrideRequestLocation ?? this.options.location,
+				undefined,
+				{
+					...requestOptions,
+					tools: normalizeToolSchema(
+						this.options.invocation.endpoint.family,
+						computed.map(tool => ({
+							type: 'function',
+							function: {
+								name: tool.name,
+								description: tool.description,
+								parameters: tool.inputSchema && Object.keys(tool.inputSchema).length ? tool.inputSchema : undefined
+							},
+						})),
+						(tool, rule) => {
+							this._logService.warn(`Tool ${tool} failed validation: ${rule}`);
+						},
+					),
+					temperature: this.calculateTemperature(),
+				},
+				false, // The first tool call is user initiated and then the rest are just considered part of the loop
+			);
+		}
+
+
+		/* __GDPR__
+			"virtualTools.parallelCall" : {
+				"owner": "connor4312",
+				"comment": "Reports information about the generation of virtual tools.",
+				"toolCallName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Name of the original tool call" },
+				"toolGroupName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Name of the containing tool group" },
+				"toolGroupState": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If/how the tool call was expanded" }
+			}
+		*/
+		this._telemetryService.sendMSFTTelemetryEvent('virtualTools.parallelCall', {
+			toolCallName: candidateCall.name,
+			toolGroupName: container?.name,
+			toolGroupState: state,
+		});
+	}
+
+	private _handleVirtualCalls(context: Mutable<IBuildPromptContext>) {
+		if (!this.toolGrouping) {
+			return;
+		}
+
+		for (const call of context.toolCallRounds?.at(-1)?.toolCalls || Iterable.empty()) {
+			if (context.toolCallResults?.[call.id]) {
+				continue;
+			}
+			const expanded = this.toolGrouping.didCall(context.toolCallRounds!.length, call.name);
+			if (expanded) {
+				context.toolCallResults ??= {};
+				context.toolCallResults[call.id] = expanded;
+			}
+		}
 	}
 
 	protected override async buildPrompt(buildPromptContext: IBuildPromptContext, progress: Progress<ChatResponseReferencePart | ChatResponseProgressPart>, token: CancellationToken): Promise<IBuildPromptResult> {
@@ -518,41 +676,66 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		return buildPromptResult;
 	}
 
-	protected override async fetch(messages: Raw.ChatMessage[], finishedCb: FinishedCallback, requestOptions: OptionalChatRequestParams, firstFetchCall: boolean, token: CancellationToken): Promise<ChatResponse> {
+	protected override async fetch(opts: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
 		const messageSourcePrefix = this.options.location === ChatLocation.Editor ? 'inline' : 'chat';
-		return this.options.invocation.endpoint.makeChatRequest(
-			`${ChatLocation.toStringShorter(this.options.location)}/${this.options.intent?.id}`,
-			messages,
-			(...args) => {
+		return this.options.invocation.endpoint.makeChatRequest2({
+			...opts,
+			debugName: `${ChatLocation.toStringShorter(this.options.location)}/${this.options.intent?.id}`,
+			finishedCb: (text, index, delta) => {
 				this.telemetry.markReceivedToken();
-				return finishedCb(...args);
+				this._doMirroredCallWithVirtualTools(delta, opts.messages, opts.requestOptions!);
+				return opts.finishedCb!(text, index, delta);
 			},
-			token,
-			this.options.overrideRequestLocation ?? this.options.location,
-			undefined,
-			{
-				...requestOptions,
+			location: this.options.overrideRequestLocation ?? this.options.location,
+			requestOptions: {
+				...opts.requestOptions,
 				tools: normalizeToolSchema(
 					this.options.invocation.endpoint.family,
-					requestOptions.tools,
+					opts.requestOptions.tools,
 					(tool, rule) => {
-						this._logService.logger.warn(`Tool ${tool} failed validation: ${rule}`);
+						this._logService.warn(`Tool ${tool} failed validation: ${rule}`);
 					},
 				),
 				temperature: this.calculateTemperature(),
 			},
-			firstFetchCall, // The first tool call is user initiated and then the rest are just considered part of the loop
-			{
+			telemetryProperties: {
 				messageId: this.telemetry.telemetryMessageId,
 				conversationId: this.options.conversation.sessionId,
 				messageSource: this.options.intent?.id && this.options.intent.id !== UnknownIntent.ID ? `${messageSourcePrefix}.${this.options.intent.id}` : `${messageSourcePrefix}.user`,
 			},
-			{ intent: true }
-		);
+			enableRetryOnFilter: true
+		}, token);
 	}
 
-	protected override async getAvailableTools(): Promise<LanguageModelToolInformation[]> {
-		return this.options.invocation.getAvailableTools?.() ?? [];
+	protected override async getAvailableTools(outputStream: ChatResponseStream | undefined, token: CancellationToken): Promise<LanguageModelToolInformation[]> {
+		const tools = await this.options.invocation.getAvailableTools?.() ?? [];
+		if (this.toolGrouping) {
+			this.toolGrouping.tools = tools;
+		} else {
+			this.toolGrouping = this.toolGroupingService.create(this.options.conversation.sessionId, tools);
+			for (const ref of this.options.request.toolReferences) {
+				this.toolGrouping.ensureExpanded(ref.name);
+			}
+		}
+
+		if (!this.toolGrouping.isEnabled) {
+			return tools;
+		}
+
+		const computePromise = this.toolGrouping.compute(this.options.request.prompt, token);
+
+		// Show progress if this takes a moment...
+		const timeout = setTimeout(() => {
+			outputStream?.progress(localize('computingTools', 'Optimizing tool selection...'), async () => {
+				await computePromise;
+			});
+		}, 1000);
+
+		try {
+			return await computePromise;
+		} finally {
+			clearTimeout(timeout);
+		}
 	}
 
 	private fixMessageNames(messages: Raw.ChatMessage[]): void {

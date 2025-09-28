@@ -7,9 +7,12 @@ import { CopilotTokenStore, ICopilotTokenStore } from '../../../platform/authent
 import { BlockedExtensionService, IBlockedExtensionService } from '../../../platform/chat/common/blockedExtensionService';
 import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
 import { IChatSessionService } from '../../../platform/chat/common/chatSessionService';
+import { TestChatSessionService } from '../../../platform/chat/test/common/testChatSessionService';
 import { INaiveChunkingService, NaiveChunkingService } from '../../../platform/chunking/node/naiveChunkerService';
+import { MockRunCommandExecutionService } from '../../../platform/commands/common/mockRunCommandExecutionService';
+import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
 import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { DefaultsOnlyConfigurationService } from '../../../platform/configuration/test/common/defaultsOnlyConfigurationService';
+import { DefaultsOnlyConfigurationService } from '../../../platform/configuration/common/defaultsOnlyConfigurationService';
 import { IDebugOutputService } from '../../../platform/debug/common/debugOutputService';
 import { DebugOutputServiceImpl } from '../../../platform/debug/vscode/debugOutputServiceImpl';
 import { IDialogService } from '../../../platform/dialog/common/dialogService';
@@ -28,6 +31,8 @@ import { EnvServiceImpl } from '../../../platform/env/vscode/envServiceImpl';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IExtensionsService } from '../../../platform/extensions/common/extensionsService';
 import { VSCodeExtensionsService } from '../../../platform/extensions/vscode/extensionsService';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { NodeFileSystemService } from '../../../platform/filesystem/node/fileSystemServiceImpl';
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
@@ -36,6 +41,7 @@ import { GitServiceImpl } from '../../../platform/git/vscode/gitServiceImpl';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { OctoKitService } from '../../../platform/github/common/octoKitServiceImpl';
 import { IIgnoreService, NullIgnoreService } from '../../../platform/ignore/common/ignoreService';
+import { IImageService, nullImageService } from '../../../platform/image/common/imageService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ILanguageFeaturesService, NoopLanguageFeaturesService } from '../../../platform/languages/common/languageFeaturesService';
 import { LanguageDiagnosticsServiceImpl } from '../../../platform/languages/vscode/languageDiagnosticsServiceImpl';
@@ -55,6 +61,8 @@ import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogg
 import { IReviewService } from '../../../platform/review/common/reviewService';
 import { IScopeSelector } from '../../../platform/scopeSelection/common/scopeSelection';
 import { ScopeSelectorImpl } from '../../../platform/scopeSelection/vscode-node/scopeSelectionImpl';
+import { ISearchService } from '../../../platform/search/common/searchService';
+import { SearchServiceImpl } from '../../../platform/search/vscode-node/searchServiceImpl';
 import { ISimulationTestContext, NulSimulationTestContext } from '../../../platform/simulationTestContext/common/simulationTestContext';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
 import { TabsAndEditorsServiceImpl } from '../../../platform/tabs/vscode/tabsAndEditorsServiceImpl';
@@ -69,7 +77,6 @@ import { ITestProvider } from '../../../platform/testing/common/testProvider';
 import { IWorkspaceMutationManager } from '../../../platform/testing/common/workspaceMutationManager';
 import { ISetupTestsDetector, NullSetupTestsDetector } from '../../../platform/testing/node/setupTestDetector';
 import { TestProvider } from '../../../platform/testing/vscode/testProviderImpl';
-import { IThinkingDataService, ThinkingDataImpl } from '../../../platform/thinking/node/thinkingDataService';
 import { ITokenizerProvider, TokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ExtensionTextDocumentManager } from '../../../platform/workspace/vscode/workspaceServiceImpl';
@@ -88,12 +95,17 @@ import { LaunchConfigService } from '../../onboardDebug/vscode/launchConfigServi
 import { ChatMLFetcherImpl } from '../../prompt/node/chatMLFetcher';
 import { IFeedbackReporter, NullFeedbackReporterImpl } from '../../prompt/node/feedbackReporter';
 import { IPromptVariablesService } from '../../prompt/node/promptVariablesService';
+import { ITodoListContextProvider, TodoListContextProvider } from '../../prompt/node/todoListContextProvider';
 import { GitDiffService } from '../../prompt/vscode-node/gitDiffService';
 import { PromptVariablesServiceImpl } from '../../prompt/vscode-node/promptVariablesService';
 import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inline/fixCookbookService';
 import { WorkspaceMutationManager } from '../../testing/node/setupTestsFileManager';
+import { EditToolLearningService, IEditToolLearningService } from '../../tools/common/editToolLearningService';
 import { IToolsService, NullToolsService } from '../../tools/common/toolsService';
+import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
+import { ToolGroupingCache } from '../../tools/common/virtualTools/virtualToolGroupCache';
+import { IToolGroupingCache, IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
 
 /**
  * A default context for VSCode extension testing, building on general one in `lib`.
@@ -101,12 +113,13 @@ import { IToolsService, NullToolsService } from '../../tools/common/toolsService
  */
 export function createExtensionTestingServices(): TestingServiceCollection {
 	const testingServiceCollection = _createBaselineServices();
+	testingServiceCollection.define(IFileSystemService, new SyncDescriptor(NodeFileSystemService));
 	testingServiceCollection.define(IConfigurationService, new SyncDescriptor(DefaultsOnlyConfigurationService));
 	testingServiceCollection.define(IEnvService, new SyncDescriptor(TestEnvService));
 	testingServiceCollection.define(ISimulationTestContext, new SyncDescriptor(NulSimulationTestContext));
 	testingServiceCollection.define(IRequestLogger, new SyncDescriptor(NullRequestLogger));
 	testingServiceCollection.define(IFeedbackReporter, new SyncDescriptor(NullFeedbackReporterImpl));
-	testingServiceCollection.define(IEndpointProvider, new SyncDescriptor(TestEndpointProvider, [undefined, undefined, undefined, undefined, undefined]));
+	testingServiceCollection.define(IEndpointProvider, new SyncDescriptor(TestEndpointProvider, [undefined, undefined, undefined, undefined, false, undefined]));
 	testingServiceCollection.define(ICopilotTokenStore, new SyncDescriptor(CopilotTokenStore));
 	testingServiceCollection.define(IDomainService, new SyncDescriptor(DomainService));
 	testingServiceCollection.define(ICAPIClientService, new SyncDescriptor(CAPIClientImpl));
@@ -119,6 +132,7 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(IWorkspaceService, new SyncDescriptor(ExtensionTextDocumentManager));
 	testingServiceCollection.define(IExtensionsService, new SyncDescriptor(VSCodeExtensionsService));
 	testingServiceCollection.define(IChatMLFetcher, new SyncDescriptor(ChatMLFetcherImpl));
+	testingServiceCollection.define(IImageService, nullImageService);
 	testingServiceCollection.define(ITabsAndEditorsService, new SyncDescriptor(TabsAndEditorsServiceImpl));
 	testingServiceCollection.define(IEmbeddingsComputer, new SyncDescriptor(RemoteEmbeddingsComputer));
 	testingServiceCollection.define(ITelemetryService, new SyncDescriptor(NullTelemetryService));
@@ -135,6 +149,7 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(INaiveChunkingService, new SyncDescriptor(NaiveChunkingService));
 	testingServiceCollection.define(ILinkifyService, new SyncDescriptor(LinkifyService));
 	testingServiceCollection.define(ITestGenInfoStorage, new SyncDescriptor(TestGenInfoStorage));
+	testingServiceCollection.define(IEditToolLearningService, new SyncDescriptor(EditToolLearningService));
 	testingServiceCollection.define(IDebugCommandToConfigConverter, new SyncDescriptor(DebugCommandToConfigConverter));
 	testingServiceCollection.define(ILaunchConfigService, new SyncDescriptor(LaunchConfigService));
 	testingServiceCollection.define(IDebuggableCommandIdentifier, new SyncDescriptor(DebuggableCommandIdentifier));
@@ -158,9 +173,13 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(IScopeSelector, new SyncDescriptor(ScopeSelectorImpl));
 	testingServiceCollection.define(IPromptPathRepresentationService, new SyncDescriptor(PromptPathRepresentationService));
 	testingServiceCollection.define(IToolsService, new SyncDescriptor(NullToolsService));
-	testingServiceCollection.define(IChatSessionService, new SyncDescriptor(NullToolsService));
+	testingServiceCollection.define(IChatSessionService, new SyncDescriptor(TestChatSessionService));
 	testingServiceCollection.define(INotebookService, new SyncDescriptor(SimulationNotebookService));
-	testingServiceCollection.define(IThinkingDataService, new SyncDescriptor(ThinkingDataImpl));
+	testingServiceCollection.define(IRunCommandExecutionService, new SyncDescriptor(MockRunCommandExecutionService));
+	testingServiceCollection.define(ISearchService, new SyncDescriptor(SearchServiceImpl));
+	testingServiceCollection.define(IToolGroupingCache, new SyncDescriptor(ToolGroupingCache));
+	testingServiceCollection.define(IToolGroupingService, new SyncDescriptor(ToolGroupingService));
+	testingServiceCollection.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
 
 	return testingServiceCollection;
 }

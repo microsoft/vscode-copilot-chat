@@ -3,11 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { BYOKAuthType } from '../common/byokProvider';
-import { BaseOpenAICompatibleBYOKRegistry } from './baseOpenAICompatibleProvider';
+import { IBYOKStorageService } from './byokStorageService';
+import { CustomOAIBYOKModelProvider } from './customOAIProvider';
 
 export function resolveAzureUrl(modelId: string, url: string): string {
 	// The fully resolved url was already passed in
@@ -33,33 +34,32 @@ export function resolveAzureUrl(modelId: string, url: string): string {
 	}
 }
 
-/**
- * BYOK registry for Azure OpenAI deployments
- *
- * Azure is different from other providers because each model has its own deployment URL and key,
- * and there's no central listing API. The user needs to manually register each model they want to use.
- */
-
-export class AzureBYOKModelRegistry extends BaseOpenAICompatibleBYOKRegistry {
+export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
+	static override readonly providerName = 'Azure';
 
 	constructor(
-		@IFetcherService _fetcherService: IFetcherService,
-		@ILogService _logService: ILogService,
-		@IInstantiationService _instantiationService: IInstantiationService,
+		byokStorageService: IBYOKStorageService,
+		@IConfigurationService configurationService: IConfigurationService,
+		@ILogService logService: ILogService,
+		@IInstantiationService instantiationService: IInstantiationService,
+		@IExperimentationService experimentationService: IExperimentationService
 	) {
 		super(
-			BYOKAuthType.PerModelDeployment,
-			'Azure',
-			'',
-			_fetcherService,
-			_logService,
-			_instantiationService
+			byokStorageService,
+			configurationService,
+			logService,
+			instantiationService,
+			experimentationService
 		);
+		// Override the instance properties
+		this.providerName = AzureBYOKModelProvider.providerName;
 	}
 
-	override async getAllModels(_apiKey: string): Promise<{ id: string; name: string }[]> {
-		// Azure doesn't have a central API for listing models
-		// Each model has a unique deployment URL
-		return [];
+	protected override getConfigKey() {
+		return ConfigKey.AzureModels;
+	}
+
+	protected override resolveUrl(modelId: string, url: string): string {
+		return resolveAzureUrl(modelId, url);
 	}
 }

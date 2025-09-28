@@ -10,7 +10,7 @@ import { BudgetExceededError } from '@vscode/prompt-tsx/dist/base/materialized';
 import type * as vscode from 'vscode';
 import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { modelCanUseReplaceStringExclusively, modelSupportsApplyPatch, modelSupportsReplaceString } from '../../../platform/endpoint/common/chatModelCapabilities';
+import { modelCanUseApplyPatchExclusively, modelCanUseReplaceStringExclusively, modelSupportsApplyPatch, modelSupportsMultiReplaceString, modelSupportsReplaceString, modelSupportsSimplifiedApplyPatchInstructions } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -25,6 +25,7 @@ import { ITestProvider } from '../../../platform/testing/common/testProvider';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
+import { Iterable } from '../../../util/vs/base/common/iterator';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ICommandService } from '../../commands/node/commandService';
 import { Intent } from '../../common/constants';
@@ -34,20 +35,24 @@ import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
 import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIntentRequestHandler';
 import { IDocumentContext } from '../../prompt/node/documentContext';
-import { IBuildPromptResult, IIntent, IntentLinkificationOptions } from '../../prompt/node/intents';
+import { IBuildPromptResult, IIntent, IIntentInvocation } from '../../prompt/node/intents';
 import { AgentPrompt, AgentPromptProps } from '../../prompts/node/agent/agentPrompt';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { TemporalContextStats } from '../../prompts/node/inline/temporalContext';
 import { EditCodePrompt2 } from '../../prompts/node/panel/editCodePrompt2';
 import { ToolResultMetadata } from '../../prompts/node/panel/toolCalling';
-import { ToolName } from '../../tools/common/toolNames';
+import { IEditToolLearningService } from '../../tools/common/editToolLearningService';
+import { ContributedToolName, ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
+import { VirtualTool } from '../../tools/common/virtualTools/virtualTool';
+import { IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
+import { applyPatch5Description } from '../../tools/node/applyPatchTool';
 import { addCacheBreakpoints } from './cacheBreakpoints';
 import { EditCodeIntent, EditCodeIntentInvocation, EditCodeIntentInvocationOptions, mergeMetadata, toNewChatReferences } from './editCodeIntent';
 import { getRequestedToolCallIterationLimit, IContinueOnErrorConfirmation } from './toolCallingLoop';
 
-const getTools = (instaService: IInstantiationService, request: vscode.ChatRequest) =>
+export const getAgentTools = (instaService: IInstantiationService, request: vscode.ChatRequest) =>
 	instaService.invokeFunction(async accessor => {
 		const toolsService = accessor.get<IToolsService>(IToolsService);
 		const testService = accessor.get<ITestProvider>(ITestProvider);
@@ -55,22 +60,69 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 		const configurationService = accessor.get<IConfigurationService>(IConfigurationService);
 		const experimentationService = accessor.get<IExperimentationService>(IExperimentationService);
 		const endpointProvider = accessor.get<IEndpointProvider>(IEndpointProvider);
+		const editToolLearningService = accessor.get<IEditToolLearningService>(IEditToolLearningService);
 		const model = await endpointProvider.getChatEndpoint(request);
 
 		const allowTools: Record<string, boolean> = {};
-		allowTools[ToolName.EditFile] = true;
-		allowTools[ToolName.ReplaceString] = modelSupportsReplaceString(model) || !!(model.family.includes('gemini') && configurationService.getExperimentBasedConfig(ConfigKey.Internal.GeminiReplaceString, experimentationService));
-		allowTools[ToolName.ApplyPatch] = modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
 
-		if (modelCanUseReplaceStringExclusively(model)) {
-			allowTools[ToolName.ReplaceString] = true;
-			allowTools[ToolName.EditFile] = false;
+		const learned = editToolLearningService.getPreferredEndpointEditTool(model);
+		if (learned) { // a learning-enabled (BYOK) model, we should go with what it prefers
+			allowTools[ToolName.EditFile] = learned.includes(ToolName.EditFile);
+			allowTools[ToolName.ReplaceString] = learned.includes(ToolName.ReplaceString);
+			allowTools[ToolName.MultiReplaceString] = learned.includes(ToolName.MultiReplaceString);
+			allowTools[ToolName.ApplyPatch] = learned.includes(ToolName.ApplyPatch);
+		} else {
+			allowTools[ToolName.EditFile] = true;
+			allowTools[ToolName.ReplaceString] = await modelSupportsReplaceString(model);
+			allowTools[ToolName.ApplyPatch] = await modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
+
+			if (allowTools[ToolName.ApplyPatch] && modelCanUseApplyPatchExclusively(model)) {
+				allowTools[ToolName.EditFile] = false;
+			}
+
+			if (model.family === 'grok-code') {
+				const treatment = experimentationService.getTreatmentVariable<string>('copilotchat.hiddenModelBEditTool');
+				switch (treatment) {
+					case 'with_replace_string':
+						allowTools[ToolName.ReplaceString] = true;
+						allowTools[ToolName.MultiReplaceString] = configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceStringGrok, experimentationService);
+						allowTools[ToolName.EditFile] = true;
+						break;
+					case 'only_replace_string':
+						allowTools[ToolName.ReplaceString] = true;
+						allowTools[ToolName.MultiReplaceString] = configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceStringGrok, experimentationService);
+						allowTools[ToolName.EditFile] = false;
+						break;
+					case 'control':
+					default:
+						allowTools[ToolName.ReplaceString] = false;
+						allowTools[ToolName.EditFile] = true;
+				}
+			}
+
+			if (await modelCanUseReplaceStringExclusively(model)) {
+				allowTools[ToolName.ReplaceString] = true;
+				allowTools[ToolName.EditFile] = false;
+			}
+
+			if (allowTools[ToolName.ReplaceString]) {
+				if (await modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
+					allowTools[ToolName.MultiReplaceString] = true;
+				}
+			}
 		}
 
 		allowTools[ToolName.RunTests] = await testService.hasAnyTests();
-		allowTools[ToolName.RunTask] = !!(configurationService.getConfig(ConfigKey.AgentCanRunTasks) && tasksService.getTasks().length);
+		allowTools[ToolName.CoreRunTask] = tasksService.getTasks().length > 0;
 
-		return toolsService.getEnabledTools(request, tool => {
+		if (request.tools.get(ContributedToolName.EditFilesPlaceholder) === false) {
+			allowTools[ToolName.ApplyPatch] = false;
+			allowTools[ToolName.EditFile] = false;
+			allowTools[ToolName.ReplaceString] = false;
+			allowTools[ToolName.MultiReplaceString] = false;
+		}
+
+		const tools = toolsService.getEnabledTools(request, tool => {
 			if (typeof allowTools[tool.name] === 'boolean') {
 				return allowTools[tool.name];
 			}
@@ -78,6 +130,15 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 			// Must return undefined to fall back to other checks
 			return undefined;
 		});
+
+		if (modelSupportsSimplifiedApplyPatchInstructions(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.Gpt5AlternativePatch, experimentationService)) {
+			const ap = tools.findIndex(t => t.name === ToolName.ApplyPatch);
+			if (ap !== -1) {
+				tools[ap] = { ...tools[ap], description: applyPatch5Description };
+			}
+		}
+
+		return tools;
 	});
 
 export class AgentIntent extends EditCodeIntent {
@@ -93,18 +154,52 @@ export class AgentIntent extends EditCodeIntent {
 		@IExperimentationService expService: IExperimentationService,
 		@ICodeMapperService codeMapperService: ICodeMapperService,
 		@IWorkspaceService workspaceService: IWorkspaceService,
+		@IToolGroupingService private readonly _toolGroupingService: IToolGroupingService,
 	) {
 		super(instantiationService, endpointProvider, configurationService, expService, codeMapperService, workspaceService, { intentInvocation: AgentIntentInvocation, processCodeblocks: false });
 	}
 
 	override async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, agentName: string, location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
 		if (request.command === 'list') {
-			const editingTools = await getTools(this.instantiationService, request);
-			stream.markdown(`Available tools: \n${editingTools.map(tool => `- ${tool.name}`).join('\n')}\n`);
+			await this.listTools(conversation, request, stream, token);
 			return {};
 		}
 
 		return super.handleRequest(conversation, request, stream, token, documentContext, agentName, location, chatTelemetry, onPaused);
+	}
+
+	private async listTools(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken) {
+		const editingTools = await getAgentTools(this.instantiationService, request);
+		const grouping = this._toolGroupingService.create(conversation.sessionId, editingTools);
+		if (!grouping.isEnabled) {
+			stream.markdown(`Available tools: \n${editingTools.map(tool => `- ${tool.name}`).join('\n')}\n`);
+			return;
+		}
+
+		let str = 'Available tools:\n';
+		function printTool(tool: vscode.LanguageModelToolInformation | VirtualTool, indent = 0) {
+			const prefix = '  '.repeat(indent * 2);
+			str += `${prefix}- ${tool.name}`;
+			if (tool instanceof VirtualTool) {
+				if (tool.isExpanded) {
+					str += ` (expanded):`;
+				} else {
+					str += ': ' + tool.description.split('\n\n').map((chunk, i) => i > 0 ? prefix + '  ' + chunk : chunk).join('\n\n');
+				}
+			}
+			str += '\n';
+			if (tool instanceof VirtualTool && tool.contents.length > 0) {
+				for (const child of tool.contents) {
+					printTool(child, indent + 1);
+				}
+			}
+		}
+
+		const tools = await grouping.computeAll(request.prompt, token);
+		tools.forEach(t => printTool(t));
+		stream.markdown(str);
+
+		return {};
 	}
 
 	protected override getIntentHandlerOptions(request: vscode.ChatRequest): IDefaultIntentRequestHandlerOptions | undefined {
@@ -119,13 +214,7 @@ export class AgentIntent extends EditCodeIntent {
 	}
 }
 
-export class AgentIntentInvocation extends EditCodeIntentInvocation {
-
-	public override get linkification(): IntentLinkificationOptions {
-		// on by default:
-		const enabled = this.configurationService.getConfig(ConfigKey.Internal.EditLinkification) !== false;
-		return { disable: !enabled };
-	}
+export class AgentIntentInvocation extends EditCodeIntentInvocation implements IIntentInvocation {
 
 	public override readonly codeblocksRepresentEdits = false;
 
@@ -152,13 +241,12 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 		@ITelemetryService telemetryService: ITelemetryService,
 		@INotebookService notebookService: INotebookService,
 		@ILogService private readonly logService: ILogService,
-		@IExperimentationService private readonly experimentationService: IExperimentationService,
 	) {
 		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService);
 	}
 
 	public override getAvailableTools(): Promise<vscode.LanguageModelToolInformation[]> {
-		return getTools(this.instantiationService, this.request);
+		return getAgentTools(this.instantiationService, this.request);
 	}
 
 	override async buildPrompt(
@@ -184,10 +272,13 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 			this.configurationService.getConfig<number | undefined>(ConfigKey.Internal.SummarizeAgentConversationHistoryThreshold) ?? this.endpoint.modelMaxPromptTokens,
 			this.endpoint.modelMaxPromptTokens
 		);
-		const safeBudget = Math.floor((baseBudget - toolTokens) * 0.85);
+		const useTruncation = this.configurationService.getConfig(ConfigKey.Internal.UseResponsesApiTruncation);
+		const safeBudget = useTruncation ?
+			Number.MAX_SAFE_INTEGER :
+			Math.floor((baseBudget - toolTokens) * 0.85);
 		const endpoint = toolTokens > 0 ? this.endpoint.cloneWithTokenOverride(safeBudget) : this.endpoint;
-		const summarizationEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.SummarizeAgentConversationHistory, this.experimentationService) && this.prompt === AgentPrompt;
-		this.logService.logger.debug(`AgentIntent: rendering with budget=${safeBudget} (baseBudget: ${baseBudget}, toolTokens: ${toolTokens}), summarizationEnabled=${summarizationEnabled}`);
+		const summarizationEnabled = this.configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory) && this.prompt === AgentPrompt;
+		this.logService.debug(`AgentIntent: rendering with budget=${safeBudget} (baseBudget: ${baseBudget}, toolTokens: ${toolTokens}), summarizationEnabled=${summarizationEnabled}`);
 		let result: RenderPromptResult;
 		const props: AgentPromptProps = {
 			endpoint,
@@ -207,7 +298,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 			result = await renderer.render(progress, token);
 		} catch (e) {
 			if (e instanceof BudgetExceededError && summarizationEnabled) {
-				this.logService.logger.debug(`[Agent] budget exceeded, triggering summarization (${e.message})`);
+				this.logService.debug(`[Agent] budget exceeded, triggering summarization (${e.message})`);
 				if (!promptContext.toolCallResults) {
 					promptContext = {
 						...promptContext,
@@ -224,7 +315,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 					});
 					result = await renderer.render(progress, token);
 				} catch (e) {
-					this.logService.logger.error(e, `[Agent] summarization failed`);
+					this.logService.error(e, `[Agent] summarization failed`);
 					const errorKind = e instanceof BudgetExceededError ? 'budgetExceeded' : 'error';
 					/* __GDPR__
 						"triggerSummarizeFailed" : {
@@ -283,10 +374,31 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 	}
 
 	modifyErrorDetails(errorDetails: vscode.ChatErrorDetails, response: ChatResponse): vscode.ChatErrorDetails {
-		errorDetails.confirmationButtons = [
-			{ data: { copilotContinueOnError: true } satisfies IContinueOnErrorConfirmation, label: l10n.t('Try Again') },
-		];
+		if (!errorDetails.responseIsFiltered) {
+			errorDetails.confirmationButtons = [
+				{ data: { copilotContinueOnError: true } satisfies IContinueOnErrorConfirmation, label: l10n.t('Try Again') },
+			];
+		}
 		return errorDetails;
+	}
+
+	getAdditionalVariables(promptContext: IBuildPromptContext): ChatVariablesCollection | undefined {
+		const lastTurn = promptContext.conversation?.turns.at(-1);
+		if (!lastTurn) {
+			return;
+		}
+
+		// Search backwards to find the first real request and return those variables too.
+		// Variables aren't re-attached to requests from confirmations.
+		// TODO https://github.com/microsoft/vscode/issues/262858, more to do here
+		if (lastTurn.acceptedConfirmationData) {
+			const turns = promptContext.conversation!.turns.slice(0, -1);
+			for (const turn of Iterable.reverse(turns)) {
+				if (!turn.acceptedConfirmationData) {
+					return turn.promptVariables;
+				}
+			}
+		}
 	}
 
 	override processResponse = undefined;

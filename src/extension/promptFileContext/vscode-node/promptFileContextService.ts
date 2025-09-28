@@ -7,13 +7,14 @@ import * as vscode from 'vscode';
 
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
-import { Copilot } from '../../../platform/inlineCompletions/vscode-node/api';
+import { Copilot } from '../../../platform/inlineCompletions/common/api';
+import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun, IObservable } from '../../../util/vs/base/common/observableInternal';
 
-const promptFileSelector = ['prompt', 'instructions', 'chatmode'];
+export const promptFileSelector = ['prompt', 'instructions', 'chatmode'];
 
 export class PromptFileContextContribution extends Disposable {
 
@@ -27,6 +28,7 @@ export class PromptFileContextContribution extends Disposable {
 		@ILogService private readonly logService: ILogService,
 		@IExperimentationService experimentationService: IExperimentationService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
+		@ILanguageContextProviderService private readonly languageContextProviderService: ILanguageContextProviderService,
 	) {
 		super();
 		this._enableCompletionContext = configurationService.getExperimentBasedConfigObservable(ConfigKey.Internal.PromptFileContext, experimentationService);
@@ -54,7 +56,7 @@ export class PromptFileContextContribution extends Disposable {
 		try {
 			const copilotAPI = await this.getCopilotApi();
 			if (copilotAPI === undefined) {
-				this.logService.logger.warn('Copilot API is undefined, unable to register context provider.');
+				this.logService.warn('Copilot API is undefined, unable to register context provider.');
 				return disposables;
 			}
 			const self = this;
@@ -82,24 +84,28 @@ export class PromptFileContextContribution extends Disposable {
 				this.models = [...modelNames.keys()];
 			});
 
-			disposables.add(copilotAPI.registerContextProvider({
+			const provider: Copilot.ContextProvider<Copilot.SupportedContextItem> = {
 				id: 'promptfile-ai-context-provider',
 				selector: promptFileSelector,
 				resolver: resolver
-			}));
+			};
+			disposables.add(copilotAPI.registerContextProvider(provider));
+			disposables.add(this.languageContextProviderService.registerContextProvider(provider));
 		} catch (error) {
-			this.logService.logger.error('Error regsistering prompt file context provider:', error);
+			this.logService.error('Error regsistering prompt file context provider:', error);
 		}
 		return disposables;
 	}
 
 	private getContext(languageId: string): Copilot.SupportedContextItem[] {
 
+
 		switch (languageId) {
-			case 'prompt':
+			case 'prompt': {
+				const toolNamesList = this.getToolNames().join(', ');
 				return [
 					{
-						name: 'This is a prompt file that uses a frontmatter header with the following fields',
+						name: 'This is a prompt file. It uses markdown with a YAML front matter header that only supports a limited set of attributes and values. Do not suggest any other properties',
 						value: `mode, description, model, tools`,
 					},
 					{
@@ -112,25 +118,29 @@ export class PromptFileContextContribution extends Disposable {
 					},
 					{
 						name: '`tools` is optional and is an array that can consist of any number of the following values',
-						value: `'changes', 'codebase', 'editFiles', 'extensions', 'fetch', 'findTestFiles', 'githubRepo', 'new', 'openSimpleBrowser', 'problems', 'runCommands', 'runNotebooks', 'runTasks', 'runTests', 'search', 'searchResults', 'terminalLastCommand', 'terminalSelection', 'testFailure', 'usages', 'vscodeAPI'`
+						value: toolNamesList
 					},
 					{
-						name: 'Here is an example of a prompt file:',
+						name: 'Here is an example of a prompt file',
 						value: [
+							``,
+							'```md',
 							`---`,
-							`mode: 'agent'`,
+							`mode: agent`,
 							`description: This prompt is used to generate a new issue template for GitHub repositories.`,
 							`model: ${this.models[0] || 'GPT-4.1'}`,
-							`tools: ['changes', 'codebase', 'editFiles', 'extensions', 'fetch', 'findTestFiles', 'githubRepo', 'new', 'openSimpleBrowser', 'problems', 'runCommands', 'runNotebooks', 'runTasks', 'runTests', 'search', 'searchResults', 'terminalLastCommand', 'terminalSelection', 'testFailure', 'usages', 'vscodeAPI']`,
+							`tools: [${toolNamesList}]`,
 							`---`,
 							`Generate a new issue template for a GitHub repository.`,
+							'```',
 						].join('\n'),
 					},
 				];
-			case 'instructions':
+			}
+			case 'instructions': {
 				return [
 					{
-						name: 'This is an instructions file that uses a frontmatter header with the following fields',
+						name: 'This is a instructions file. It uses markdown with a YAML front matter header that only supports a limited set of attributes and values. Do not suggest any other properties',
 						value: `description, applyTo`,
 					},
 					{
@@ -138,20 +148,25 @@ export class PromptFileContextContribution extends Disposable {
 						value: `**`,
 					},
 					{
-						name: 'Here is an example of a instruction file:',
+						name: 'Here is an example of an instruction file',
 						value: [
+							``,
+							'```md',
 							`---`,
 							`description: This file describes the TypeScript code style for the project.`,
 							`applyTo: **/*.ts, **/*.js`,
 							`---`,
 							`For private fields, start the field name with an underscore (_).`,
+							'```',
 						].join('\n'),
 					},
 				];
-			case 'chatmode':
+			}
+			case 'chatmode': {
+				const toolNamesList = this.getToolNames().join(', ');
 				return [
 					{
-						name: 'This is an custom mode file that uses a frontmatter header with the following fields',
+						name: 'This is a custom chat mode file. It uses markdown with a YAML front matter header that only supports a limited set of attributes and values. Do not suggest any other properties',
 						value: `description, model, tools`,
 					},
 					{
@@ -160,30 +175,38 @@ export class PromptFileContextContribution extends Disposable {
 					},
 					{
 						name: '`tools` is optional and is an array that can consist of any number of the following values',
-						value: `'changes', 'codebase', 'editFiles', 'extensions', 'fetch', 'findTestFiles', 'githubRepo', 'new', 'openSimpleBrowser', 'problems', 'runCommands', 'runNotebooks', 'runTasks', 'runTests', 'search', 'searchResults', 'terminalLastCommand', 'terminalSelection', 'testFailure', 'usages', 'vscodeAPI'`
+						value: `[${toolNamesList}]`,
 					},
 					{
-						name: 'Here is an example of a mode file:',
+						name: 'Here is an example of a mode file',
 						value: [
+							``,
+							'```md',
 							`---`,
 							`description: This mode is used to plan a new feature.`,
 							`model: GPT-4.1`,
-							`tools: ['changes', 'codebase','extensions', 'fetch', 'findTestFiles', 'githubRepo', 'openSimpleBrowser', 'problems', 'search', 'searchResults', 'terminalLastCommand', 'terminalSelection', 'testFailure', 'usages', 'vscodeAPI']`,
+							`tools: [${toolNamesList}]`,
 							`---`,
 							`First come up with a plan for the new feature. Write a todo list of tasks to complete the feature.`,
+							'```',
 						].join('\n'),
 					},
 				];
+			}
 			default:
 				return [];
 		}
+	}
+
+	private getToolNames(): string[] {
+		return ['changes', 'codebase', 'editFiles', 'extensions', 'fetch', 'findTestFiles', 'githubRepo', 'new', 'openSimpleBrowser', 'problems', 'runCommands', 'runNotebooks', 'runTasks', 'runTests', 'search', 'searchResults', 'terminalLastCommand', 'terminalSelection', 'testFailure', 'usages', 'vscodeAPI'];
 	}
 
 
 	private async getCopilotApi(): Promise<Copilot.ContextProviderApiV1 | undefined> {
 		const copilotExtension = vscode.extensions.getExtension('GitHub.copilot');
 		if (copilotExtension === undefined) {
-			this.logService.logger.error('Copilot extension not found');
+			this.logService.error('Copilot extension not found');
 			return undefined;
 		}
 		try {
@@ -191,9 +214,9 @@ export class PromptFileContextContribution extends Disposable {
 			return api.getContextProviderAPI('v1');
 		} catch (error) {
 			if (error instanceof Error) {
-				this.logService.logger.error('Error activating Copilot extension:', error.message);
+				this.logService.error('Error activating Copilot extension:', error.message);
 			} else {
-				this.logService.logger.error('Error activating Copilot extension: Unknown error.');
+				this.logService.error('Error activating Copilot extension: Unknown error.');
 			}
 			return undefined;
 		}

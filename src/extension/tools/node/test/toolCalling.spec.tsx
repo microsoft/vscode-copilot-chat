@@ -31,7 +31,7 @@ suite('TestFailureTool', () => {
 
 	async function doTest(toolCallRounds: ToolCallRound[], toolCallResults?: Record<string, LanguageModelToolResult>, otherProps?: Partial<ChatToolCallsProps>): Promise<RenderPromptResult> {
 		const element = otherProps?.isHistorical ? ChatToolCallsWrapper : ChatToolCalls;
-		const renderer = PromptRenderer.create(accessor.get(IInstantiationService), accessor.get(IInstantiationService).createInstance(MockEndpoint), element, {
+		const renderer = PromptRenderer.create(accessor.get(IInstantiationService), accessor.get(IInstantiationService).createInstance(MockEndpoint, undefined), element, {
 			promptContext: {
 				tools: {
 					toolInvocationToken: '1' as never,
@@ -70,7 +70,7 @@ suite('TestFailureTool', () => {
 	test('tool fails on first call, not second', async () => {
 		let i = 0;
 		testToolsService.addTestToolOverride(
-			{ name: 'testTool', description: '', inputSchema: undefined, tags: [] },
+			{ name: 'testTool', description: '', inputSchema: undefined, tags: [], source: undefined },
 			{
 				invoke: async () => {
 					if (i++ !== 1) {
@@ -102,7 +102,7 @@ suite('TestFailureTool', () => {
 	test('invalid JSON on first call, not second', async () => {
 		let i = 0;
 		testToolsService.addTestToolOverride(
-			{ name: 'testTool', description: '', inputSchema: undefined, tags: [] },
+			{ name: 'testTool', description: '', inputSchema: undefined, tags: [], source: undefined },
 			{
 				invoke: async (options) => {
 					i++;

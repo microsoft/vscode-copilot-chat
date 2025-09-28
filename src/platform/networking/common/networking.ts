@@ -10,18 +10,16 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { CancellationError } from '../../../util/vs/base/common/errors';
-import { IntentParams, Source } from '../../chat/common/chatMLFetcher';
+import { Source } from '../../chat/common/chatMLFetcher';
 import type { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
-import { EMBEDDING_MODEL } from '../../configuration/common/configurationService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
-import { IDomainService } from '../../endpoint/common/domainService';
-import { IEnvService } from '../../env/common/envService';
+import { CustomModel, EndpointEditToolName } from '../../endpoint/common/endpointProvider';
 import { ILogService } from '../../log/common/logService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { FinishedCallback, OpenAiFunctionTool, OptionalChatRequestParams } from './fetch';
+import { FinishedCallback, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams } from './fetch';
 import { FetchOptions, IAbortController, IFetcherService, Response } from './fetcherService';
-import { ChatCompletion } from './openai';
+import { ChatCompletion, RawMessageConversionCallback, rawMessageToCAPI } from './openai';
 
 /**
  * Encapsulates all the functionality related to making GET/POST requests using
@@ -60,16 +58,22 @@ const requestTimeoutMs = 30 * 1000; // 30 seconds
  */
 export interface IEndpointBody {
 	/** General or completions: */
-	tools?: OpenAiFunctionTool[];
-	inputs?: string[];
+	tools?: (OpenAiFunctionTool | OpenAiResponsesFunctionTool)[];
 	model?: string;
+	previous_response_id?: string;
 	max_tokens?: number;
+	max_output_tokens?: number;
 	max_completion_tokens?: number;
 	temperature?: number;
 	top_p?: number;
 	stream?: boolean;
 	messages?: any[];
+	n?: number;
+	reasoning?: { effort?: string; summary?: string };
+	tool_choice?: OptionalChatRequestParams['tool_choice'] | { type: 'function'; name: string };
+	top_logprobs?: number;
 	intent?: boolean;
+	intent_threshold?: number;
 	state?: 'enabled';
 	snippy?: { enabled: boolean };
 	stream_options?: { include_usage?: boolean };
@@ -90,7 +94,12 @@ export interface IEndpointBody {
 	similarity?: number;
 	/** Code search: */
 	scoping_query?: string;
-	include_embeddings?: boolean;
+
+	/** Responses API: */
+	input?: readonly any[];
+	truncation?: 'auto' | 'disabled';
+	include?: ['reasoning.encrypted_content'];
+	store?: boolean;
 }
 
 export interface IEndpoint {
@@ -112,24 +121,55 @@ export function stringifyUrlOrRequestMetadata(urlOrRequestMetadata: string | Req
 	return JSON.stringify(urlOrRequestMetadata);
 }
 
-export interface IEmbeddingEndpoint extends IEndpoint {
+export interface IEmbeddingsEndpoint extends IEndpoint {
 	readonly maxBatchSize: number;
-	readonly model: EMBEDDING_MODEL;
+}
+
+export interface IMakeChatRequestOptions {
+	/** The debug name for this request */
+	debugName: string;
+	/** The array of chat messages to send */
+	messages: Raw.ChatMessage[];
+	ignoreStatefulMarker?: boolean;
+	/** Streaming callback for each response part. */
+	finishedCb: FinishedCallback | undefined;
+	/** Location where the chat message is being sent. */
+	location: ChatLocation;
+	/** Optional source of the chat request */
+	source?: Source;
+	/** Additional request options */
+	requestOptions?: Omit<OptionalChatRequestParams, 'n'>;
+	/** Indicates if the request was user-initiated */
+	userInitiatedRequest?: boolean;
+	/** (CAPI-only) Optional telemetry properties for analytics */
+	telemetryProperties?: TelemetryProperties;
+	/** Enable retrying the request when it was filtered due to snippy. Note- if using finishedCb, requires supporting delta.retryReason, eg with clearToPreviousToolInvocation */
+	enableRetryOnFilter?: boolean;
+}
+
+export interface ICreateEndpointBodyOptions extends IMakeChatRequestOptions {
+	requestId: string;
+	postOptions: OptionalChatRequestParams;
 }
 
 export interface IChatEndpoint extends IEndpoint {
 	readonly maxOutputTokens: number;
 	/** The model ID- this may change and will be `copilot-base` for the base model. Use `family` to switch behavior based on model type. */
 	readonly model: string;
+	readonly apiType?: string;
+	readonly supportsThinkingContentInHistory?: boolean;
 	readonly supportsToolCalls: boolean;
 	readonly supportsVision: boolean;
 	readonly supportsPrediction: boolean;
+	readonly supportedEditTools?: readonly EndpointEditToolName[];
 	readonly showInModelPicker: boolean;
 	readonly isPremium?: boolean;
 	readonly multiplier?: number;
 	readonly restrictedToSkus?: string[];
 	readonly isDefault: boolean;
 	readonly isFallback: boolean;
+	readonly customModel?: CustomModel;
+	readonly isExtensionContributed?: boolean;
 	readonly policy: 'enabled' | { terms: string };
 	/**
 	 * Handles processing of responses from a chat endpoint. Each endpoint can have different response formats.
@@ -176,22 +216,48 @@ export interface IChatEndpoint extends IEndpoint {
 		requestOptions?: Omit<OptionalChatRequestParams, 'n'>,
 		userInitiatedRequest?: boolean,
 		telemetryProperties?: TelemetryProperties,
-		intentParams?: IntentParams
 	): Promise<ChatResponse>;
+
+	/**
+	 * Flights a request from the chat endpoint returning a chat response.
+	 * Most of the time this is ChatMLFetcher#fetchOne, but it can be overridden for special cases.
+	 */
+	makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse>;
+
+	/**
+	 * Creates the request body to be sent to the endpoint based on the request.
+	 */
+	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody;
 
 	cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint;
 }
 
+/** Function to create a standard request body for CAPI completions */
+export function createCapiRequestBody(options: ICreateEndpointBodyOptions, model: string, callback?: RawMessageConversionCallback) {
+	// FIXME@ulugbekna: need to investigate why language configs have such stop words, eg
+	// python has `\ndef` and `\nclass` which must be stop words for ghost text
+	// const stops = getLanguageConfig<string[]>(accessor, ConfigKey.Stops);
+
+	const request: IEndpointBody = {
+		messages: rawMessageToCAPI(options.messages, callback),
+		model,
+		// stop: stops,
+	};
+
+	if (options.postOptions) {
+		Object.assign(request, options.postOptions);
+	}
+
+	return request;
+}
+
 function networkRequest(
 	fetcher: IFetcher,
-	envService: IEnvService,
 	telemetryService: ITelemetryService,
-	domainService: IDomainService,
 	capiClientService: ICAPIClientService,
 	requestType: 'GET' | 'POST',
 	endpointOrUrl: IEndpoint | string | RequestMetadata,
 	secretKey: string,
-	hmac: string | undefined,
 	intent: string,
 	requestId: string,
 	body?: IEndpointBody,
@@ -277,9 +343,7 @@ export function canRetryOnceNetworkError(reason: any) {
 
 export function postRequest(
 	fetcherService: IFetcherService,
-	envService: IEnvService,
 	telemetryService: ITelemetryService,
-	domainService: IDomainService,
 	capiClientService: ICAPIClientService,
 	endpointOrUrl: IEndpoint | string | RequestMetadata,
 	secretKey: string,
@@ -291,14 +355,11 @@ export function postRequest(
 	cancelToken?: CancellationToken
 ): Promise<Response> {
 	return networkRequest(fetcherService,
-		envService,
 		telemetryService,
-		domainService,
 		capiClientService,
 		'POST',
 		endpointOrUrl,
 		secretKey,
-		hmac,
 		intent,
 		requestId,
 		body,
@@ -309,9 +370,7 @@ export function postRequest(
 
 export function getRequest(
 	fetcherService: IFetcher,
-	envService: IEnvService,
 	telemetryService: ITelemetryService,
-	domainService: IDomainService,
 	capiClientService: ICAPIClientService,
 	endpointOrUrl: IEndpoint | string | RequestMetadata,
 	secretKey: string,
@@ -323,14 +382,11 @@ export function getRequest(
 	cancelToken?: CancellationToken
 ): Promise<Response> {
 	return networkRequest(fetcherService,
-		envService,
 		telemetryService,
-		domainService,
 		capiClientService,
 		'GET',
 		endpointOrUrl,
 		secretKey,
-		hmac,
 		intent,
 		requestId,
 		body,

@@ -5,18 +5,17 @@
 
 import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { ITokenizer } from '../../../util/common/tokenizer';
-import { EMBEDDING_MODEL } from '../../configuration/common/configurationService';
-import { IEmbeddingEndpoint } from '../../networking/common/networking';
+import { LEGACY_EMBEDDING_MODEL_ID } from '../../embeddings/common/embeddingsComputer';
+import { IEmbeddingsEndpoint } from '../../networking/common/networking';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { IEmbeddingModelInformation } from '../common/endpointProvider';
 
-export class EmbeddingEndpoint implements IEmbeddingEndpoint {
+export class EmbeddingEndpoint implements IEmbeddingsEndpoint {
 	public readonly maxBatchSize: number;
 	public readonly modelMaxPromptTokens: number;
 
 	public readonly name = this._modelInfo.name;
 	public readonly version = this._modelInfo.version;
-	public readonly model = this._modelInfo.id as EMBEDDING_MODEL;
 	public readonly family = this._modelInfo.capabilities.family;
 	public readonly tokenizer = this._modelInfo.capabilities.tokenizer;
 
@@ -33,6 +32,6 @@ export class EmbeddingEndpoint implements IEmbeddingEndpoint {
 	}
 
 	public get urlOrRequestMetadata(): string | RequestMetadata {
-		return { type: RequestType.CAPIEmbeddings, modelId: this.model };
+		return { type: RequestType.CAPIEmbeddings, modelId: LEGACY_EMBEDDING_MODEL_ID.TEXT3SMALL };
 	}
 }

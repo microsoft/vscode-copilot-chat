@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Language, Query, QueryMatch, SyntaxNode } from 'web-tree-sitter';
+import { pushMany } from '../../../util/vs/base/common/arrays';
 
 
 class LanguageQueryCache {
@@ -41,7 +42,7 @@ export function runQueries(queries: string[], root: SyntaxNode): QueryMatch[] {
 	for (const query of queries) {
 		const compiledQuery = QueryCache.INSTANCE.getQuery(root.tree.getLanguage(), query);
 		const queryMatches = compiledQuery.matches(root);
-		matches.push(...queryMatches);
+		pushMany(matches, queryMatches);
 	}
 	return matches;
 }

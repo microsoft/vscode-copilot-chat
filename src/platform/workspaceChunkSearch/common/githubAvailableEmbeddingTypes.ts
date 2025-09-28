@@ -5,6 +5,7 @@
 
 import { RequestType } from '@vscode/copilot-api';
 import { createRequestHMAC } from '../../../util/common/crypto';
+import { Result } from '../../../util/common/result';
 import { CallTracker } from '../../../util/common/telemetryCorrelationId';
 import { env } from '../../../util/vs/base/common/process';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
@@ -13,7 +14,6 @@ import { getGithubMetadataHeaders } from '../../chunking/common/chunkingEndpoint
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { EmbeddingType } from '../../embeddings/common/embeddingsComputer';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
-import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
@@ -26,15 +26,23 @@ export interface AvailableEmbeddingTypes {
 	readonly deprecated: readonly EmbeddingType[];
 }
 
+type GetAvailableTypesError =
+	| { type: 'requestFailed'; error: Error }
+	| { type: 'unauthorized'; status: 401 | 404 }
+	| { type: 'noSession' }
+	| { type: 'badResponse'; status: number }
+	;
+
+type GetAvailableTypesResult = Result<AvailableEmbeddingTypes, GetAvailableTypesError>;
+
 export class GithubAvailableEmbeddingTypesManager {
 
-	private _cached?: Promise<AvailableEmbeddingTypes | undefined>;
+	private _cached?: Promise<GetAvailableTypesResult>;
 
 	constructor(
 		@ILogService private readonly _logService: ILogService,
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-		@IDomainService private readonly _domainService: IDomainService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IEnvService private readonly _envService: IEnvService,
 		@IFetcherService private readonly _fetcherService: IFetcherService,
@@ -43,44 +51,57 @@ export class GithubAvailableEmbeddingTypesManager {
 	) {
 		this._cached = this._authService.getAnyGitHubSession({ silent: true }).then(session => {
 			if (!session) {
-				return undefined;
+				return Result.error<GetAvailableTypesError>({ type: 'noSession' });
 			}
 
 			return this.doGetAvailableTypes(session.accessToken);
 		});
 	}
 
-	private async getAllAvailableTypes(silent: boolean): Promise<AvailableEmbeddingTypes | undefined> {
+	private async getAllAvailableTypes(silent: boolean): Promise<GetAvailableTypesResult> {
 		if (this._cached) {
+			const oldCached = this._cached;
 			try {
 				const cachedResult = await this._cached;
-				if (cachedResult) {
+				if (cachedResult.isOk()) {
 					return cachedResult;
 				}
 			} catch {
 				// noop
 			}
 
-			this._cached = undefined;
+			if (this._cached === oldCached) {
+				this._cached = undefined;
+			}
 		}
 
-		const session = await this._authService.getAnyGitHubSession({ silent });
-		if (!session) {
-			return undefined;
-		}
+		this._cached ??= (async () => {
+			const anySession = await this._authService.getAnyGitHubSession({ silent });
+			if (!anySession) {
+				return Result.error<GetAvailableTypesError>({ type: 'noSession' });
+			}
 
-		this._cached ??= this.doGetAvailableTypes(session.accessToken);
+			const initialResult = await this.doGetAvailableTypes(anySession.accessToken);
+			if (initialResult.isOk()) {
+				return initialResult;
+			}
+
+			const permissiveSession = await this._authService.getPermissiveGitHubSession({ silent, createIfNone: !silent ? true : undefined });
+			if (!permissiveSession) {
+				return initialResult;
+			}
+			return this.doGetAvailableTypes(permissiveSession.accessToken);
+		})();
+
 		return this._cached;
 	}
 
-	private async doGetAvailableTypes(token: string): Promise<AvailableEmbeddingTypes | undefined> {
+	private async doGetAvailableTypes(token: string): Promise<GetAvailableTypesResult> {
 		let response: Response;
 		try {
 			response = await getRequest(
 				this._fetcherService,
-				this._envService,
 				this._telemetryService,
-				this._domainService,
 				this._capiClientService,
 				{ type: RequestType.EmbeddingsModels },
 				token,
@@ -91,8 +112,11 @@ export class GithubAvailableEmbeddingTypesManager {
 				getGithubMetadataHeaders(new CallTracker(), this._envService)
 			);
 		} catch (e) {
-			this._logService.logger.error('Error fetching available embedding types', e);
-			return undefined;
+			this._logService.error('Error fetching available embedding types', e);
+			return Result.error<GetAvailableTypesError>({
+				type: 'requestFailed',
+				error: e
+			});
 		}
 
 		if (!response.ok) {
@@ -107,7 +131,15 @@ export class GithubAvailableEmbeddingTypesManager {
 				statusCode: response.status,
 			});
 
-			return undefined;
+			// Also treat 404s as unauthorized since this typically indicates that the user is anonymous
+			if (response.status === 401 || response.status === 404) {
+				return Result.error<GetAvailableTypesError>({ type: 'unauthorized', status: response.status });
+			}
+
+			return Result.error<GetAvailableTypesError>({
+				type: 'badResponse',
+				status: response.status
+			});
 		}
 		type Model = {
 			id: string;
@@ -145,14 +177,30 @@ export class GithubAvailableEmbeddingTypesManager {
 			deprecatedEmbeddingTypes: deprecated.map(type => type.id).join(','),
 		});
 
-		return { primary, deprecated };
+		return Result.ok({ primary, deprecated });
 	}
 
 	async getPreferredType(silent: boolean): Promise<EmbeddingType | undefined> {
-		const all = await this.getAllAvailableTypes(silent);
-		if (!all) {
+		const result = await this.getAllAvailableTypes(silent);
+		if (!result.isOk()) {
+			this._logService.info(`GithubAvailableEmbeddingTypesManager: Could not find any available embedding types. Error: ${result.err.type}`);
+
+			/* __GDPR__
+				"githubAvailableEmbeddingTypes.getPreferredType.error" : {
+					"owner": "mjbvz",
+					"comment": "Information about failed githubAvailableEmbeddingTypes calls",
+					"error": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The reason why the request failed" }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('githubAvailableEmbeddingTypes.getPreferredType.error', {
+				error: result.err.type,
+			});
+
 			return undefined;
 		}
+
+		const all = result.val;
+		this._logService.info(`GithubAvailableEmbeddingTypesManager: Got embeddings. Primary: ${all.primary.join(',')}. Deprecated: ${all.deprecated.join(',')}`);
 
 		const preference = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.WorkspacePreferredEmbeddingsModel, this._experimentationService);
 		if (preference) {

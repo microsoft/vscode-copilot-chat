@@ -11,7 +11,10 @@
 		"lib": ["ES2022", "WebWorker"],
 		"types": [],
 		"noEmit": true,
-		"skipLibCheck": true
+		"skipLibCheck": true,
+		"jsx": "react",
+		"jsxFactory": "vscpp",
+		"jsxFragmentFactory": "vscppf"
 	},
 	"include": [
 		"src/**/common/**/*.ts",

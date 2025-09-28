@@ -7,12 +7,13 @@ import { TokenizerType } from '../../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
-import { CHAT_MODEL } from '../../../configuration/common/configurationService';
+import { CHAT_MODEL, IConfigurationService } from '../../../configuration/common/configurationService';
 import { IEnvService } from '../../../env/common/envService';
+import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { IEndpointBody } from '../../../networking/common/networking';
+import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
-import { IThinkingDataService } from '../../../thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../../common/capiClient';
 import { IDomainService } from '../../common/domainService';
@@ -30,7 +31,9 @@ export class CustomNesEndpoint extends ChatEndpoint {
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService instantiationService: IInstantiationService,
-		@IThinkingDataService thinkingDataService: IThinkingDataService
+		@IConfigurationService configurationService: IConfigurationService,
+		@IExperimentationService experimentationService: IExperimentationService,
+		@ILogService logService: ILogService
 	) {
 		const modelInfo: IChatModelInformation = {
 			id: CHAT_MODEL.CUSTOM_NES,
@@ -62,13 +65,14 @@ export class CustomNesEndpoint extends ChatEndpoint {
 			domainService,
 			capiClientService,
 			fetcherService,
-			envService,
 			telemetryService,
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
 			instantiationService,
-			thinkingDataService
+			configurationService,
+			experimentationService,
+			logService
 		);
 	}
 

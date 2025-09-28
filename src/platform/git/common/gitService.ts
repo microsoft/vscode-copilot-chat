@@ -56,6 +56,7 @@ export interface IGitService extends IDisposable {
 	diffBetween(uri: URI, ref1: string, ref2: string): Promise<Change[] | undefined>;
 	diffWith(uri: URI, ref: string): Promise<Change[] | undefined>;
 	fetch(uri: URI, remote?: string, ref?: string, depth?: number): Promise<void>;
+	getMergeBase(uri: URI, ref1: string, ref2: string): Promise<string | undefined>;
 }
 
 /**
@@ -63,9 +64,11 @@ export interface IGitService extends IDisposable {
  */
 export function getGitHubRepoInfoFromContext(repoContext: RepoContext): { id: GithubRepoId; remoteUrl: string } | undefined {
 	for (const remoteUrl of getOrderedRemoteUrlsFromContext(repoContext)) {
-		const id = getGithubRepoIdFromFetchUrl(remoteUrl);
-		if (id) {
-			return { id, remoteUrl };
+		if (remoteUrl) {
+			const id = getGithubRepoIdFromFetchUrl(remoteUrl);
+			if (id) {
+				return { id, remoteUrl };
+			}
 		}
 	}
 	return undefined;

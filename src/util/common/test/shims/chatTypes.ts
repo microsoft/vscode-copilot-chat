@@ -5,7 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { VSBuffer } from '../../../vs/base/common/buffer';
-import { MarkdownString } from './markdownString';
+import { MarkdownString } from '../../../vs/workbench/api/common/extHostTypes/markdownString';
 
 export class ChatResponseMarkdownPart {
 	value: vscode.MarkdownString;
@@ -43,6 +43,17 @@ export class ChatResponseProgressPart {
 	value: string;
 	constructor(value: string) {
 		this.value = value;
+	}
+}
+
+export class ChatResponseThinkingProgressPart {
+	value: string | string[];
+	id?: string;
+	metadata?: { readonly [key: string]: any };
+	constructor(value: string | string[], id?: string, metadata?: { readonly [key: string]: any }) {
+		this.value = value;
+		this.id = id;
+		this.metadata = metadata;
 	}
 }
 
@@ -99,6 +110,22 @@ export class ChatResponseExtensionsPart {
 		this.extensions = extensions;
 	}
 }
+
+export class ChatResponsePullRequestPart {
+	readonly uri: vscode.Uri;
+	readonly linkTag: string;
+	readonly title: string;
+	readonly description: string;
+	readonly author: string;
+	constructor(uri: vscode.Uri, title: string, description: string, author: string, linkTag: string) {
+		this.uri = uri;
+		this.title = title;
+		this.description = description;
+		this.author = author;
+		this.linkTag = linkTag;
+	}
+}
+
 
 export class ChatResponseCodeCitationPart {
 	value: vscode.Uri;
@@ -247,6 +274,19 @@ export class LanguageModelTextPart implements vscode.LanguageModelTextPart {
 	}
 }
 
+export enum LanguageModelPartAudience {
+	Assistant = 0,
+	User = 1,
+	Extension = 2,
+}
+
+export class LanguageModelTextPart2 extends LanguageModelTextPart {
+	audience: LanguageModelPartAudience[] | undefined;
+	constructor(value: string, audience?: LanguageModelPartAudience[]) {
+		super(value);
+		this.audience = audience;
+	}
+}
 export class LanguageModelDataPart implements vscode.LanguageModelDataPart {
 	mimeType: string;
 	data: Uint8Array<ArrayBufferLike>;
@@ -268,7 +308,14 @@ export class LanguageModelDataPart implements vscode.LanguageModelDataPart {
 	static text(value: string): vscode.LanguageModelDataPart {
 		return new LanguageModelDataPart(VSBuffer.fromString(value).buffer, 'text/plain');
 	}
+}
 
+export class LanguageModelDataPart2 extends LanguageModelDataPart {
+	audience: LanguageModelPartAudience[] | undefined;
+	constructor(data: Uint8Array, mimeType: string, audience?: LanguageModelPartAudience[]) {
+		super(data, mimeType);
+		this.audience = audience;
+	}
 }
 
 export enum ChatImageMimeType {
@@ -301,14 +348,6 @@ export class AISearchKeyword {
 	constructor(public keyword: string) { }
 }
 
-export class PreparedTerminalToolInvocation {
-	constructor(
-		public readonly command: string,
-		public readonly language: string,
-		public readonly confirmationMessages?: vscode.LanguageModelToolConfirmationMessages,
-	) { }
-}
-
 export enum ChatErrorLevel {
 	Info = 0,
 	Warning = 1,
@@ -319,4 +358,116 @@ export enum ChatRequestEditedFileEventKind {
 	Keep = 1,
 	Undo = 2,
 	UserModification = 3,
+}
+
+export enum ChatResponseClearToPreviousToolInvocationReason {
+	NoReason = 0,
+	FilteredContentRetry = 1,
+	CopyrightContentRetry = 2,
+}
+
+export class LanguageModelToolExtensionSource implements vscode.LanguageModelToolExtensionSource {
+	constructor(public readonly id: string, public readonly label: string) { }
+}
+
+export class LanguageModelToolMCPSource implements vscode.LanguageModelToolMCPSource {
+	constructor(public readonly label: string, public readonly name: string, public readonly instructions: string | undefined) { }
+}
+
+export class LanguageModelToolCallPart implements vscode.LanguageModelToolCallPart {
+	callId: string;
+	name: string;
+	input: any;
+
+	constructor(callId: string, name: string, input: any) {
+		this.callId = callId;
+		this.name = name;
+
+		this.input = input;
+	}
+}
+
+export class LanguageModelToolResultPart implements vscode.LanguageModelToolResultPart {
+	callId: string;
+	content: (LanguageModelTextPart | LanguageModelPromptTsxPart | unknown)[];
+	isError: boolean;
+
+	constructor(callId: string, content: (LanguageModelTextPart | LanguageModelPromptTsxPart | unknown)[], isError?: boolean) {
+		this.callId = callId;
+		this.content = content;
+		this.isError = isError ?? false;
+	}
+}
+
+export class LanguageModelToolResultPart2 implements vscode.LanguageModelToolResultPart2 {
+	callId: string;
+	content: (LanguageModelTextPart | LanguageModelPromptTsxPart | LanguageModelDataPart | unknown)[];
+	isError: boolean;
+
+	constructor(callId: string, content: (LanguageModelTextPart | LanguageModelPromptTsxPart | LanguageModelDataPart | unknown)[], isError?: boolean) {
+		this.callId = callId;
+		this.content = content;
+		this.isError = isError ?? false;
+	}
+}
+
+export enum LanguageModelChatMessageRole {
+	User = 1,
+	Assistant = 2,
+	System = 3
+}
+
+export class ChatToolInvocationPart {
+	toolName: string;
+	toolCallId: string;
+	isError?: boolean;
+	invocationMessage?: string | vscode.MarkdownString;
+	originMessage?: string | vscode.MarkdownString;
+	pastTenseMessage?: string | vscode.MarkdownString;
+	isConfirmed?: boolean;
+	isComplete?: boolean;
+	toolSpecificData?: vscode.ChatTerminalToolInvocationData;
+
+	constructor(toolName: string,
+		toolCallId: string,
+		isError?: boolean) {
+		this.toolName = toolName;
+		this.toolCallId = toolCallId;
+		this.isError = isError;
+	}
+}
+
+export class ChatResponseTurn2 implements vscode.ChatResponseTurn2 {
+
+	constructor(
+		readonly response: ReadonlyArray<ChatResponseMarkdownPart | ChatResponseFileTreePart | ChatResponseAnchorPart | ChatResponseCommandButtonPart | ChatResponseExtensionsPart | ChatToolInvocationPart>,
+		readonly result: vscode.ChatResult,
+		readonly participant: string,
+		readonly command?: string
+	) { }
+}
+
+export class LanguageModelError extends Error {
+
+	static readonly #name = 'LanguageModelError';
+
+	static NotFound(message?: string): LanguageModelError {
+		return new LanguageModelError(message, LanguageModelError.NotFound.name);
+	}
+
+	static NoPermissions(message?: string): LanguageModelError {
+		return new LanguageModelError(message, LanguageModelError.NoPermissions.name);
+	}
+
+	static Blocked(message?: string): LanguageModelError {
+		return new LanguageModelError(message, LanguageModelError.Blocked.name);
+	}
+
+	readonly code: string;
+
+	constructor(message?: string, code?: string, cause?: Error) {
+		super(message, { cause });
+		this.name = LanguageModelError.#name;
+		this.code = code ?? '';
+	}
 }

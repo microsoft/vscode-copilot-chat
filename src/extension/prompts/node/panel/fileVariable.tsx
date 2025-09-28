@@ -262,7 +262,7 @@ class CodeSummary extends PromptElement<CodeSummaryProps, unknown> {
 		return (
 			<Tag name='attachment' attrs={attrs} >
 				{this.props.description ? this.props.description + ':\n' : ''}
-				<CodeBlock includeFilepath={this.props.filePathMode === FilePathMode.AsComment} languageId={document.languageId} uri={uri} references={references} code={code} />
+				<CodeBlock includeFilepath={this.props.filePathMode === FilePathMode.AsComment} languageId={document.languageId} uri={uri} references={references} code={code} fence='' />
 			</Tag>
 		);
 	}

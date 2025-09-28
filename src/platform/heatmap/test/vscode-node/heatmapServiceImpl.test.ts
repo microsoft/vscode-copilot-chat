@@ -13,6 +13,9 @@ import { NullGitExtensionService } from '../../../git/common/nullGitExtensionSer
 import { createPlatformServices } from '../../../test/node/services';
 import { SelectionPoint } from '../../common/heatmapService';
 import { HeatmapServiceImpl } from '../../vscode/heatmapServiceImpl';
+import { IFileSystemService } from '../../../filesystem/common/fileSystemService';
+import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
+import { NodeFileSystemService } from '../../../filesystem/node/fileSystemServiceImpl';
 
 
 suite('HeatmapServiceImpl', () => {
@@ -29,6 +32,7 @@ suite('HeatmapServiceImpl', () => {
 	setup(function () {
 		const services = createPlatformServices();
 		services.define(IGitExtensionService, new NullGitExtensionService());
+		services.define(IFileSystemService, new SyncDescriptor(NodeFileSystemService));
 		const accessor = services.createTestingAccessor();
 
 		const memFs = new MemFS();
@@ -383,7 +387,7 @@ class MemFS implements vscode.FileSystemProvider {
 
 	private _emitter = new vscode.EventEmitter<vscode.FileChangeEvent[]>();
 	private _bufferedEvents: vscode.FileChangeEvent[] = [];
-	private _fireSoonHandle?: NodeJS.Timeout;
+	private _fireSoonHandle?: TimeoutHandle;
 
 	readonly onDidChangeFile: vscode.Event<vscode.FileChangeEvent[]> = this._emitter.event;
 

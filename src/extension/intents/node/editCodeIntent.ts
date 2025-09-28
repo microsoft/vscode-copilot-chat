@@ -182,7 +182,8 @@ export class EditCodeIntent implements IIntent {
 		const { location, documentContext, request } = invocationContext;
 		const endpoint = await this.endpointProvider.getChatEndpoint(request);
 
-		if (location === ChatLocation.Panel || (location === ChatLocation.Editor && this.configurationService.getNonExtensionConfig('inlineChat.enableV2'))) {
+		if (location === ChatLocation.Panel || location === ChatLocation.Notebook
+			|| (location === ChatLocation.Editor && this.configurationService.getNonExtensionConfig('inlineChat.enableV2'))) {
 			return this.instantiationService.createInstance(this.intentOptions.intentInvocation, this, location, endpoint, request, this.intentOptions);
 		}
 
@@ -308,9 +309,7 @@ export class EditCodeIntentInvocation implements IIntentInvocation {
 	protected stableToolReferences = this.request.toolReferences.map(InternalToolReference.from);
 
 	public get linkification(): IntentLinkificationOptions {
-		// off by default:
-		const enabled = this.configurationService.getConfig(ConfigKey.Internal.EditLinkification) === true;
-		return { disable: !enabled };
+		return { disable: false };
 	}
 
 	public readonly codeblocksRepresentEdits: boolean = true;
@@ -330,7 +329,7 @@ export class EditCodeIntentInvocation implements IIntentInvocation {
 		@IToolsService protected readonly toolsService: IToolsService,
 		@IConfigurationService protected readonly configurationService: IConfigurationService,
 		@IEditLogService private readonly editLogService: IEditLogService,
-		@ICommandService private readonly commandService: ICommandService,
+		@ICommandService protected readonly commandService: ICommandService,
 		@ITelemetryService protected readonly telemetryService: ITelemetryService,
 		@INotebookService private readonly notebookService: INotebookService,
 	) { }
@@ -415,7 +414,7 @@ export class EditCodeIntentInvocation implements IIntentInvocation {
 
 		return {
 			...result,
-			// The codebase tool is not actually called/referenced in the edit prompt, so we ned to
+			// The codebase tool is not actually called/referenced in the edit prompt, so we need to
 			// merge its metadata so that its output is not lost and it's not called repeatedly every turn
 			// todo@connor4312/joycerhl: this seems a bit janky
 			metadata: codebase ? mergeMetadata(result.metadata, codebase.metadatas) : result.metadata,

@@ -7,31 +7,51 @@ import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/docum
 import { RootedEdit } from '../../../platform/inlineEdits/common/dataTypes/edit';
 import { LanguageContextResponse } from '../../../platform/inlineEdits/common/dataTypes/languageContext';
 import { CurrentFileOptions, DiffHistoryOptions, PromptingStrategy, PromptOptions } from '../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
-import { StatelessNextEditRequest } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
+import { StatelessNextEditDocument } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { IXtabHistoryEditEntry, IXtabHistoryEntry } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
-import { ContextKind } from '../../../platform/languageServer/common/languageContextService';
-import { range } from '../../../util/vs/base/common/arrays';
+import { ContextKind, TraitContext } from '../../../platform/languageServer/common/languageContextService';
+import { Result } from '../../../util/common/result';
+import { pushMany, range } from '../../../util/vs/base/common/arrays';
 import { illegalArgument } from '../../../util/vs/base/common/errors';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 
-export const CURSOR_TAG = "<|cursor|>";
-export const CODE_TO_EDIT_START_TAG = "<|code_to_edit|>";
-export const CODE_TO_EDIT_END_TAG = "<|/code_to_edit|>";
+export namespace PromptTags {
+	export const CURSOR = "<|cursor|>";
 
-export const AREA_AROUND_START_TAG = "<|area_around_code_to_edit|>";
-export const AREA_AROUND_END_TAG = "<|/area_around_code_to_edit|>";
-export const CURRENT_FILE_CONTENT_START_TAG = "<|current_file_content|>";
-export const CURRENT_FILE_CONTENT_END_TAG = "<|/current_file_content|>";
-export const EDIT_DIFF_HISTORY_START_TAG = "<|edit_diff_history|>";
-export const EDIT_DIFF_HISTORY_END_TAG = "<|/edit_diff_history|>";
-export const RECENTLY_VIEWED_CODE_SNIPPETS_START = "<|recently_viewed_code_snippets|>";
-export const RECENTLY_VIEWED_CODE_SNIPPETS_END = "<|/recently_viewed_code_snippets|>";
-export const CODE_SNIPPET_START = "<|recently_viewed_code_snippet|>";
-export const CODE_SNIPPET_END = "<|/recently_viewed_code_snippet|>";
+	export const EDIT_WINDOW = {
+		start: "<|code_to_edit|>",
+		end: "<|/code_to_edit|>"
+	};
 
-export const systemPromptTemplate = `Your role as an AI assistant is to help developers complete their code tasks by assisting in editing specific sections of code marked by the ${CODE_TO_EDIT_START_TAG} and ${CODE_TO_EDIT_END_TAG} tags, while adhering to Microsoft's content policies and avoiding the creation of content that violates copyrights.
+	export const AREA_AROUND = {
+		start: "<|area_around_code_to_edit|>",
+		end: "<|/area_around_code_to_edit|>"
+	};
+
+	export const CURRENT_FILE = {
+		start: "<|current_file_content|>",
+		end: "<|/current_file_content|>"
+	};
+
+	export const EDIT_HISTORY = {
+		start: "<|edit_diff_history|>",
+		end: "<|/edit_diff_history|>"
+	};
+
+	export const RECENT_FILES = {
+		start: "<|recently_viewed_code_snippets|>",
+		end: "<|/recently_viewed_code_snippets|>"
+	};
+
+	export const RECENT_FILE = {
+		start: "<|recently_viewed_code_snippet|>",
+		end: "<|/recently_viewed_code_snippet|>"
+	};
+}
+
+export const systemPromptTemplate = `Your role as an AI assistant is to help developers complete their code tasks by assisting in editing specific sections of code marked by the ${PromptTags.EDIT_WINDOW.start} and ${PromptTags.EDIT_WINDOW.end} tags, while adhering to Microsoft's content policies and avoiding the creation of content that violates copyrights.
 
 You have access to the following information to help you make informed suggestions:
 
@@ -39,9 +59,9 @@ You have access to the following information to help you make informed suggestio
 - current_file_content: The content of the file the developer is currently working on, providing the broader context of the code. Line numbers in the form #| are included to help you understand the edit diff history.
 - edit_diff_history: A record of changes made to the code, helping you understand the evolution of the code and the developer's intentions. These changes are listed from oldest to latest. It's possible a lot of old edit diff history is entirely irrelevant to the developer's change.
 - area_around_code_to_edit: The context showing the code surrounding the section to be edited.
-- cursor position marked as ${CURSOR_TAG}: Indicates where the developer's cursor is currently located, which can be crucial for understanding what part of the code they are focusing on.
+- cursor position marked as ${PromptTags.CURSOR}: Indicates where the developer's cursor is currently located, which can be crucial for understanding what part of the code they are focusing on.
 
-Your task is to predict and complete the changes the developer would have made next in the ${CODE_TO_EDIT_START_TAG} section. The developer may have stopped in the middle of typing. Your goal is to keep the developer on the path that you think they're following. Some examples include further implementing a class, method, or variable, or improving the quality of the code. Make sure the developer doesn't get distracted and ensure your suggestion is relevant. Consider what changes need to be made next, if any. If you think changes should be made, ask yourself if this is truly what needs to happen. If you are confident about it, then proceed with the changes.
+Your task is to predict and complete the changes the developer would have made next in the ${PromptTags.EDIT_WINDOW.start} section. The developer may have stopped in the middle of typing. Your goal is to keep the developer on the path that you think they're following. Some examples include further implementing a class, method, or variable, or improving the quality of the code. Make sure the developer doesn't get distracted and ensure your suggestion is relevant. Consider what changes need to be made next, if any. If you think changes should be made, ask yourself if this is truly what needs to happen. If you are confident about it, then proceed with the changes.
 
 # Steps
 
@@ -52,9 +72,9 @@ Your task is to predict and complete the changes the developer would have made n
 
 # Output Format
 
-- Provide only the revised code within the tags. If no changes are necessary, simply return the original code from within the ${CODE_TO_EDIT_START_TAG} and ${CODE_TO_EDIT_END_TAG} tags.
+- Provide only the revised code within the tags. If no changes are necessary, simply return the original code from within the ${PromptTags.EDIT_WINDOW.start} and ${PromptTags.EDIT_WINDOW.end} tags.
 - There are line numbers in the form #| in the code displayed to you above, but these are just for your reference. Please do not include the numbers of the form #| in your response.
-- Ensure that you do not output duplicate code that exists outside of these tags. The output should be the revised code that was between these tags and should not include the ${CODE_TO_EDIT_START_TAG} or ${CODE_TO_EDIT_END_TAG} tags.
+- Ensure that you do not output duplicate code that exists outside of these tags. The output should be the revised code that was between these tags and should not include the ${PromptTags.EDIT_WINDOW.start} or ${PromptTags.EDIT_WINDOW.end} tags.
 
 \`\`\`
 // Your revised code goes here
@@ -131,65 +151,117 @@ export const simplifiedPrompt = 'Predict next code edit based on the context giv
 
 export const xtab275SystemPrompt = `Predict the next code edit based on user context, following Microsoft content policies and avoiding copyright violations. If a request may breach guidelines, reply: "Sorry, I can't assist with that."`;
 
-export function getUserPrompt(request: StatelessNextEditRequest, currentFileContent: string, areaAroundCodeToEdit: string, langCtx: LanguageContextResponse | undefined, computeTokens: (s: string) => number, opts: PromptOptions): string {
+export function getUserPrompt(activeDoc: StatelessNextEditDocument, xtabHistory: readonly IXtabHistoryEntry[], currentFileContent: string, areaAroundCodeToEdit: string, langCtx: LanguageContextResponse | undefined, computeTokens: (s: string) => number, opts: PromptOptions): string {
 
-	const activeDoc = request.getActiveDocument();
-
-	const { codeSnippets: recentlyViewedCodeSnippets, documents: docsInPrompt } = getRecentCodeSnippets(request, langCtx, computeTokens, opts);
+	const { codeSnippets: recentlyViewedCodeSnippets, documents: docsInPrompt } = getRecentCodeSnippets(activeDoc, xtabHistory, langCtx, computeTokens, opts);
 
 	docsInPrompt.add(activeDoc.id); // Add active document to the set of documents in prompt
 
-	const editDiffHistory = getEditDiffHistory(request, docsInPrompt, computeTokens, opts.diffHistory);
+	const editDiffHistory = getEditDiffHistory(activeDoc, xtabHistory, docsInPrompt, computeTokens, opts.diffHistory);
+
+	const relatedInformation = getRelatedInformation(langCtx);
 
 	const currentFilePath = toUniquePath(activeDoc.id, activeDoc.workspaceRoot?.path);
 
-	const postScript = opts.promptingStrategy === PromptingStrategy.UnifiedModel
-		? `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`${CURSOR_TAG}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes they would have made next. Start your response with <EDIT>, <INSERT>, or <NO_CHANGE>. If you are making an edit, start with <EDIT> and then provide the rewritten code window followed by </EDIT>. If you are inserting new code, start with <INSERT> and then provide only the new code that will be inserted at the cursor position followed by </INSERT>. If no changes are necessary, reply only with <NO_CHANGE>. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors.`
-		: (opts.promptingStrategy === PromptingStrategy.Xtab275
-			? `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. \
-Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor \
-position marked as \`${CURSOR_TAG}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes \
-they would have made next. Provide the revised code that was between the \`${CODE_TO_EDIT_START_TAG}\` and \`${CODE_TO_EDIT_END_TAG}\` tags, but do not include the tags themselves. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors. Don't include the line numbers or the form #| in your response. Do not skip any lines. Do not be lazy.`
-			: `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. \
-Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor \
-position marked as \`${CURSOR_TAG}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes \
-they would have made next. Provide the revised code that was between the \`${CODE_TO_EDIT_START_TAG}\` and \`${CODE_TO_EDIT_END_TAG}\` tags with the following format, but do not include the tags themselves.
-\`\`\`
-// Your revised code goes here
-\`\`\``);
+	const postScript = getPostScript(opts.promptingStrategy, currentFilePath);
 
-	return `${opts.promptingStrategy === PromptingStrategy.Nes41Miniv3 ? '' : '```'}
-${RECENTLY_VIEWED_CODE_SNIPPETS_START}
+	const mainPrompt = `${PromptTags.RECENT_FILES.start}
 ${recentlyViewedCodeSnippets}
-${RECENTLY_VIEWED_CODE_SNIPPETS_END}
+${PromptTags.RECENT_FILES.end}
 
-${CURRENT_FILE_CONTENT_START_TAG}
+${PromptTags.CURRENT_FILE.start}
 current_file_path: ${currentFilePath}
 ${currentFileContent}
-${CURRENT_FILE_CONTENT_END_TAG}
+${PromptTags.CURRENT_FILE.end}
 
-${EDIT_DIFF_HISTORY_START_TAG}
+${PromptTags.EDIT_HISTORY.start}
 ${editDiffHistory}
-${EDIT_DIFF_HISTORY_END_TAG}
+${PromptTags.EDIT_HISTORY.end}
 
-${areaAroundCodeToEdit}${opts.promptingStrategy === PromptingStrategy.Nes41Miniv3 ? '' : '\n```'}
+${areaAroundCodeToEdit}`;
 
-${postScript}
-`.trim();
+	const includeBackticks = opts.promptingStrategy !== PromptingStrategy.Nes41Miniv3 && opts.promptingStrategy !== PromptingStrategy.Codexv21NesUnified;
+
+	const prompt = relatedInformation + (includeBackticks ? wrapInBackticks(mainPrompt) : mainPrompt) + postScript;
+
+	const trimmedPrompt = prompt.trim();
+
+	return trimmedPrompt;
+}
+
+function wrapInBackticks(content: string) {
+	return `\`\`\`\n${content}\n\`\`\``;
+}
+
+function getPostScript(strategy: PromptingStrategy | undefined, currentFilePath: string) {
+	let postScript: string | undefined;
+	switch (strategy) {
+		case PromptingStrategy.Codexv21NesUnified:
+			break;
+		case PromptingStrategy.UnifiedModel:
+			postScript = `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`${PromptTags.CURSOR}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes they would have made next. Start your response with <EDIT>, <INSERT>, or <NO_CHANGE>. If you are making an edit, start with <EDIT> and then provide the rewritten code window followed by </EDIT>. If you are inserting new code, start with <INSERT> and then provide only the new code that will be inserted at the cursor position followed by </INSERT>. If no changes are necessary, reply only with <NO_CHANGE>. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors.`;
+			break;
+		case PromptingStrategy.Nes41Miniv3:
+			postScript = `The developer was working on a section of code within the tags <|code_to_edit|> in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`<|cursor|>\`, please continue the developer's work. Update the <|code_to_edit|> section by predicting and completing the changes they would have made next. Start your response with <EDIT> or <NO_CHANGE>. If you are making an edit, start with <EDIT> and then provide the rewritten code window followed by </EDIT>. If no changes are necessary, reply only with <NO_CHANGE>. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors.`;
+			break;
+		case PromptingStrategy.Xtab275:
+			postScript = `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor position marked as \`${PromptTags.CURSOR}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes they would have made next. Provide the revised code that was between the \`${PromptTags.EDIT_WINDOW.start}\` and \`${PromptTags.EDIT_WINDOW.end}\` tags, but do not include the tags themselves. Avoid undoing or reverting the developer's last change unless there are obvious typos or errors. Don't include the line numbers or the form #| in your response. Do not skip any lines. Do not be lazy.`;
+			break;
+		case PromptingStrategy.SimplifiedSystemPrompt:
+		default:
+			postScript = `The developer was working on a section of code within the tags \`code_to_edit\` in the file located at \`${currentFilePath}\`. \
+Using the given \`recently_viewed_code_snippets\`, \`current_file_content\`, \`edit_diff_history\`, \`area_around_code_to_edit\`, and the cursor \
+position marked as \`${PromptTags.CURSOR}\`, please continue the developer's work. Update the \`code_to_edit\` section by predicting and completing the changes \
+they would have made next. Provide the revised code that was between the \`${PromptTags.EDIT_WINDOW.start}\` and \`${PromptTags.EDIT_WINDOW.end}\` tags with the following format, but do not include the tags themselves.
+\`\`\`
+// Your revised code goes here
+\`\`\``;
+			break;
+	}
+
+	const formattedPostScript = postScript === undefined ? '' : `\n\n${postScript}`;
+	return formattedPostScript;
+}
+
+function getRelatedInformation(langCtx: LanguageContextResponse | undefined): string {
+	if (langCtx === undefined) {
+		return '';
+	}
+
+	const traits = langCtx.items
+		.filter(ctx => ctx.context.kind === ContextKind.Trait)
+		.filter(t => !t.onTimeout)
+		.map(t => t.context) as TraitContext[];
+
+	if (traits.length === 0) {
+		return '';
+	}
+
+	const relatedInformation: string[] = [];
+	for (const trait of traits) {
+		relatedInformation.push(`${trait.name}: ${trait.value}`);
+	}
+
+	return `Consider this related information:\n${relatedInformation.join('\n')}\n\n`;
 }
 
 function getEditDiffHistory(
-	request: StatelessNextEditRequest,
+	activeDoc: StatelessNextEditDocument,
+	xtabHistory: readonly IXtabHistoryEntry[],
 	docsInPrompt: Set<DocumentId>,
 	computeTokens: (s: string) => number,
-	{ onlyForDocsInPrompt, maxTokens, nEntries }: DiffHistoryOptions
+	{ onlyForDocsInPrompt, maxTokens, nEntries, useRelativePaths }: DiffHistoryOptions
 ) {
+	const workspacePath = useRelativePaths ? activeDoc.workspaceRoot?.path : undefined;
+
+	const reversedHistory = xtabHistory.slice().reverse();
+
 	let tokenBudget = maxTokens;
 
 	const allDiffs: string[] = [];
 
 	// we traverse in reverse (ie from most recent to least recent) because we may terminate early due to token-budget overflow
-	for (const entry of request.xtabEditHistory.reverse()) {
+	for (const entry of reversedHistory) {
 		if (allDiffs.length >= nEntries) { // we've reached the maximum number of entries
 			break;
 		}
@@ -202,7 +274,7 @@ function getEditDiffHistory(
 			continue;
 		}
 
-		const docDiff = generateDocDiff(entry);
+		const docDiff = generateDocDiff(entry, workspacePath);
 		if (docDiff === null) {
 			continue;
 		}
@@ -230,12 +302,12 @@ function getEditDiffHistory(
 	return promptPiece;
 }
 
-function generateDocDiff(entry: IXtabHistoryEditEntry): string | null {
+function generateDocDiff(entry: IXtabHistoryEditEntry, workspacePath: string | undefined): string | null {
 	const docDiffLines: string[] = [];
 
 	const lineEdit = RootedEdit.toLineEdit(entry.edit);
 
-	for (const singleLineEdit of lineEdit.edits) {
+	for (const singleLineEdit of lineEdit.replacements) {
 		const oldLines = entry.edit.base.getLines().slice(singleLineEdit.lineRange.startLineNumber - 1, singleLineEdit.lineRange.endLineNumberExclusive - 1);
 		const newLines = singleLineEdit.newLines;
 
@@ -247,26 +319,29 @@ function generateDocDiff(entry: IXtabHistoryEditEntry): string | null {
 		const startLineNumber = singleLineEdit.lineRange.startLineNumber - 1;
 
 		docDiffLines.push(`@@ -${startLineNumber},${oldLines.length} +${startLineNumber},${newLines.length} @@`);
-		docDiffLines.push(...oldLines.map(x => `-${x}`));
-		docDiffLines.push(...newLines.map(x => `+${x}`));
+		pushMany(docDiffLines, oldLines.map(x => `-${x}`));
+		pushMany(docDiffLines, newLines.map(x => `+${x}`));
 	}
 
 	if (docDiffLines.length === 0) {
 		return null;
 	}
 
-	const uniquePath = toUniquePath(entry.docId, undefined);
+	const uniquePath = toUniquePath(entry.docId, workspacePath);
 
-	const docDiff = [
+	const docDiffArr = [
 		`--- ${uniquePath}`,
 		`+++ ${uniquePath}`,
-		...docDiffLines
-	].join('\n');
+	];
+
+	pushMany(docDiffArr, docDiffLines);
+
+	const docDiff = docDiffArr.join('\n');
 
 	return docDiff;
 }
 
-function toUniquePath(documentId: DocumentId, workspaceRootPath: string | undefined): string {
+export function toUniquePath(documentId: DocumentId, workspaceRootPath: string | undefined): string {
 	const filePath = documentId.path;
 	// remove prefix from path if defined
 
@@ -289,11 +364,12 @@ function formatCodeSnippet(
 	const firstLine = truncate
 		? `code_snippet_file_path: ${filePath} (truncated)`
 		: `code_snippet_file_path: ${filePath}`;
-	return [CODE_SNIPPET_START, firstLine, fileContent, CODE_SNIPPET_END].join('\n');
+	return [PromptTags.RECENT_FILE.start, firstLine, fileContent, PromptTags.RECENT_FILE.end].join('\n');
 }
 
 function getRecentCodeSnippets(
-	request: StatelessNextEditRequest,
+	activeDoc: StatelessNextEditDocument,
+	xtabHistory: readonly IXtabHistoryEntry[],
 	langCtx: LanguageContextResponse | undefined,
 	computeTokens: (code: string) => number,
 	opts: PromptOptions,
@@ -304,13 +380,11 @@ function getRecentCodeSnippets(
 
 	const { includeViewedFiles, nDocuments } = opts.recentlyViewedDocuments;
 
-	const activeDoc = request.getActiveDocument();
-
 	// get last documents besides active document
 	// enforces the option to include/exclude viewed files
 	const docsBesidesActiveDoc: IXtabHistoryEntry[] = []; // from most to least recent
-	for (let i = request.xtabEditHistory.length - 1, seenDocuments = new Set<DocumentId>(); i >= 0; --i) {
-		const entry = request.xtabEditHistory[i];
+	for (let i = xtabHistory.length - 1, seenDocuments = new Set<DocumentId>(); i >= 0; --i) {
+		const entry = xtabHistory[i];
 
 		if (!includeViewedFiles && entry.kind === 'visibleRanges') {
 			continue;
@@ -592,10 +666,13 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 	computeTokens: (s: string) => number,
 	pageSize: number,
 	opts: CurrentFileOptions
-): { taggedCurrentFileContent: string; nLines: number } {
+): Result<{ taggedCurrentFileContent: string; nLines: number }, 'outOfBudget'> {
 
 	// subtract budget consumed by areaAroundCodeToEdit
 	const availableTokenBudget = opts.maxTokens - countTokensForLines(areaAroundCodeToEdit.split(/\r?\n/), computeTokens);
+	if (availableTokenBudget < 0) {
+		return Result.error('outOfBudget');
+	}
 
 	const { firstPageIdx, lastPageIdx } = expandRangeToPageRange(
 		currentDocLines,
@@ -615,5 +692,5 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 		...currentDocLines.slice(areaAroundEditWindowLinesRange.endExclusive, linesOffsetEnd),
 	];
 
-	return { taggedCurrentFileContent: taggedCurrentFileContent.join('\n'), nLines: taggedCurrentFileContent.length };
+	return Result.ok({ taggedCurrentFileContent: taggedCurrentFileContent.join('\n'), nLines: taggedCurrentFileContent.length });
 }

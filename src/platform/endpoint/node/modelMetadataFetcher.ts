@@ -8,6 +8,7 @@ import type { LanguageModelChat } from 'vscode';
 import { createRequestHMAC } from '../../../util/common/crypto';
 import { TaskSingler } from '../../../util/common/taskSingler';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
@@ -16,11 +17,11 @@ import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { getRequest } from '../../networking/common/networking';
+import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
-import { IDomainService } from '../common/domainService';
-import { ChatEndpointFamily, IChatModelInformation, IEmbeddingModelInformation, IModelAPIResponse, isChatModelInformation, isEmbeddingModelInformation } from '../common/endpointProvider';
+import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IModelAPIResponse, isChatModelInformation, isCompletionModelInformation, isEmbeddingModelInformation } from '../common/endpointProvider';
 import { getMaxPromptTokens } from './chatEndpoint';
 
 export interface IModelMetadataFetcher {
@@ -30,6 +31,11 @@ export interface IModelMetadataFetcher {
 	 * Does not always indicate there is a change, just that the data is fresh
 	 */
 	onDidModelsRefresh: Event<void>;
+
+	/**
+	 * Gets all the completion models known by the model fetcher endpoint
+	 */
+	getAllCompletionModels(forceRefresh: boolean): Promise<ICompletionModelInformation[]>;
 
 	/**
 	 * Gets all the chat models known by the model fetcher endpoint
@@ -61,11 +67,12 @@ export interface IModelMetadataFetcher {
  * This is solely owned by the EndpointProvider (and TestEndpointProvider) which uses this service to power server side rollout of models
  * All model acquisition should be done through the EndpointProvider
  */
-export class ModelMetadataFetcher implements IModelMetadataFetcher {
+export class ModelMetadataFetcher extends Disposable implements IModelMetadataFetcher {
 
 	private static readonly ALL_MODEL_KEY = 'allModels';
 
 	private _familyMap: Map<string, IModelAPIResponse[]> = new Map();
+	private _completionsFamilyMap: Map<string, IModelAPIResponse[]> = new Map();
 	private _copilotBaseModel: IModelAPIResponse | undefined;
 	private _lastFetchTime: number = 0;
 	private readonly _taskSingler = new TaskSingler<IModelAPIResponse | undefined | void>();
@@ -75,10 +82,10 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 	public onDidModelsRefresh = this._onDidModelRefresh.event;
 
 	constructor(
-		private readonly collectFetcherTelemetry: ((accessor: ServicesAccessor) => void) | undefined,
+		private readonly collectFetcherTelemetry: ((accessor: ServicesAccessor, error: any) => void) | undefined,
 		protected readonly _isModelLab: boolean,
 		@IFetcherService private readonly _fetcher: IFetcherService,
-		@IDomainService private readonly _domainService: IDomainService,
+		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
@@ -87,7 +94,28 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@ILogService private readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-	) { }
+	) {
+		super();
+		this._register(this._authService.onDidAuthenticationChange(() => {
+			// Auth changed so next fetch should be forced to get a new list
+			this._familyMap.clear();
+			this._completionsFamilyMap.clear();
+			this._lastFetchTime = 0;
+		}));
+	}
+
+	public async getAllCompletionModels(forceRefresh: boolean): Promise<ICompletionModelInformation[]> {
+		await this._taskSingler.getOrCreate(ModelMetadataFetcher.ALL_MODEL_KEY, () => this._fetchModels(forceRefresh));
+		const completionModels: ICompletionModelInformation[] = [];
+		for (const [, models] of this._completionsFamilyMap) {
+			for (const model of models) {
+				if (isCompletionModelInformation(model)) {
+					completionModels.push(model);
+				}
+			}
+		}
+		return completionModels;
+	}
 
 	public async getAllChatModels(): Promise<IChatModelInformation[]> {
 		await this._taskSingler.getOrCreate(ModelMetadataFetcher.ALL_MODEL_KEY, this._fetchModels.bind(this));
@@ -209,15 +237,14 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 
 		const copilotToken = (await this._authService.getCopilotToken()).token;
 		const requestId = generateUuid();
+		const requestMetadata = { type: RequestType.Models, isModelLab: this._isModelLab };
 
 		try {
 			const response = await getRequest(
 				this._fetcher,
-				this._envService,
 				this._telemetryService,
-				this._domainService,
 				this._capiClientService,
-				{ type: RequestType.Models, isModelLab: this._isModelLab },
+				requestMetadata,
 				copilotToken,
 				await createRequestHMAC(process.env.HMAC_SECRET),
 				'model-access',
@@ -225,12 +252,12 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 			);
 
 			this._lastFetchTime = Date.now();
-			this._logService.logger.info(`Fetched model metadata in ${Date.now() - requestStartTime}ms ${requestId}`);
+			this._logService.info(`Fetched model metadata in ${Date.now() - requestStartTime}ms ${requestId}`);
 
 			if (response.status < 200 || response.status >= 300) {
 				// If we're rate limited and have models, we should just return
 				if (response.status === 429 && this._familyMap.size > 0) {
-					this._logService.logger.warn(`Rate limited while fetching models ${requestId}`);
+					this._logService.warn(`Rate limited while fetching models ${requestId}`);
 					return;
 				}
 				throw new Error(`Failed to fetch models (${requestId}): ${(await response.text()) || response.statusText || `HTTP ${response.status}`}`);
@@ -239,54 +266,61 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 			this._familyMap.clear();
 
 			const data: IModelAPIResponse[] = (await response.json()).data;
+			this._requestLogger.logModelListCall(requestId, requestMetadata, data);
 			for (const model of data) {
-				// Skip completion models. We don't handle them so we only want chat + embeddings
-				if (model.capabilities.type === 'completions') {
-					continue;
-				}
+				const isCompletionModel = isCompletionModelInformation(model);
 				// The base model is whatever model is deemed "fallback" by the server
-				if (model.is_chat_fallback) {
+				if (model.is_chat_fallback && !isCompletionModel) {
 					this._copilotBaseModel = model;
 				}
 				const family = model.capabilities.family;
-				if (!this._familyMap.has(family)) {
-					this._familyMap.set(family, []);
+				const familyMap = isCompletionModel ? this._completionsFamilyMap : this._familyMap;
+				if (!familyMap.has(family)) {
+					familyMap.set(family, []);
 				}
-				this._familyMap.get(family)?.push(model);
+				familyMap.get(family)?.push(model);
 			}
 			this._lastFetchError = undefined;
 			this._onDidModelRefresh.fire();
 
 			if (this.collectFetcherTelemetry) {
-				this._instantiationService.invokeFunction(this.collectFetcherTelemetry);
+				this._instantiationService.invokeFunction(this.collectFetcherTelemetry, undefined);
 			}
 		} catch (e) {
-			this._logService.logger.error(e, `Failed to fetch models (${requestId})`);
+			this._logService.error(e, `Failed to fetch models (${requestId})`);
 			this._lastFetchError = e;
 			this._lastFetchTime = 0;
 			// If we fail to fetch models, we should try again next time
+			if (this.collectFetcherTelemetry) {
+				this._instantiationService.invokeFunction(this.collectFetcherTelemetry, e);
+			}
 		}
 	}
 
 	private async _fetchModel(modelId: string): Promise<IModelAPIResponse | undefined> {
 		const copilotToken = (await this._authService.getCopilotToken()).token;
+		const requestId = generateUuid();
+		const requestMetadata = { type: RequestType.ListModel, modelId: modelId };
 
 		try {
 			const response = await getRequest(
 				this._fetcher,
-				this._envService,
 				this._telemetryService,
-				this._domainService,
 				this._capiClientService,
-				{ type: RequestType.ListModel, modelId: modelId },
+				requestMetadata,
 				copilotToken,
 				await createRequestHMAC(process.env.HMAC_SECRET),
 				'model-access',
-				generateUuid(),
+				requestId,
 			);
 
 			const data: IModelAPIResponse = await response.json();
-			if (data.capabilities.type === 'completions') {
+			if (response.status !== 200) {
+				this._logService.error(`Failed to fetch model ${modelId} (requestId: ${requestId}): ${JSON.stringify(data)}`);
+				return;
+			}
+			this._requestLogger.logModelListCall(requestId, requestMetadata, [data]);
+			if (data.capabilities.type === 'completion') {
 				return;
 			}
 			// Functions that call this method, check the family map first so this shouldn't result in duplicate entries
@@ -306,7 +340,7 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 	private async _findExpOverride(resolvedModel: IModelAPIResponse): Promise<IModelAPIResponse | undefined> {
 		// This is a mapping of model id to model id. Allowing us to override the request for any model with a different model
 		let modelExpOverrides: { [key: string]: string } = {};
-		const expResult = this._expService.getTreatmentVariable<string>('vscode', 'copilotchat.modelOverrides');
+		const expResult = this._expService.getTreatmentVariable<string>('copilotchat.modelOverrides');
 		try {
 			modelExpOverrides = JSON.parse(expResult || '{}');
 		} catch {

@@ -2,21 +2,22 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { Raw } from '@vscode/prompt-tsx';
 import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { IChatMLFetcher, IntentParams, Source } from '../../../platform/chat/common/chatMLFetcher';
-import { ChatFetchResponseType, ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
+import { IChatMLFetcher } from '../../../platform/chat/common/chatMLFetcher';
+import { ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
-import { IEnvService } from '../../../platform/env/common/envService';
-import { FinishedCallback, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
+import { ILogService } from '../../../platform/log/common/logService';
+import { isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
-import { IChatEndpoint, IEndpointBody } from '../../../platform/networking/common/networking';
-import { ITelemetryService, TelemetryProperties } from '../../../platform/telemetry/common/telemetry';
-import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
+import { createCapiRequestBody, IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { RawMessageConversionCallback } from '../../../platform/networking/common/openai';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../platform/tokenizer/node/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 
@@ -44,33 +45,65 @@ function hydrateBYOKErrorMessages(response: ChatResponse): ChatResponse {
 
 export class OpenAIEndpoint extends ChatEndpoint {
 	constructor(
-		private readonly _modelInfo: IChatModelInformation,
-		private readonly _apiKey: string,
-		private readonly _modelUrl: string,
+		protected readonly modelMetadata: IChatModelInformation,
+		protected readonly _apiKey: string,
+		protected readonly _modelUrl: string,
 		@IFetcherService fetcherService: IFetcherService,
 		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
-		@IEnvService envService: IEnvService,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IAuthenticationService authService: IAuthenticationService,
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
-		@IInstantiationService private instantiationService: IInstantiationService,
-		@IThinkingDataService thinkingDataService: IThinkingDataService
+		@IInstantiationService protected instantiationService: IInstantiationService,
+		@IConfigurationService configurationService: IConfigurationService,
+		@IExperimentationService expService: IExperimentationService,
+		@ILogService logService: ILogService
 	) {
 		super(
-			_modelInfo,
+			modelMetadata,
 			domainService,
 			capiClientService,
 			fetcherService,
-			envService,
 			telemetryService,
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
 			instantiationService,
-			thinkingDataService
+			configurationService,
+			expService,
+			logService
 		);
+	}
+
+	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		if (this.useResponsesApi) {
+			// Handle Responses API: customize the body directly
+			options.ignoreStatefulMarker = false;
+			const body = super.createRequestBody(options);
+			body.store = true;
+			body.n = undefined;
+			body.stream_options = undefined;
+			if (!this.modelMetadata.capabilities.supports.thinking) {
+				body.reasoning = undefined;
+				body.include = undefined;
+			}
+			if (body.previous_response_id && !body.previous_response_id.startsWith('resp_')) {
+				// Don't use a response ID from CAPI
+				body.previous_response_id = undefined;
+			}
+			return body;
+		} else {
+			// Handle CAPI: provide callback for thinking data processing
+			const callback: RawMessageConversionCallback = (out, data) => {
+				if (data && data.id) {
+					out.cot_id = data.id;
+					out.cot_summary = Array.isArray(data.text) ? data.text.join('') : data.text;
+				}
+			};
+			const body = createCapiRequestBody(options, this.model, callback);
+			return body;
+		}
 	}
 
 	override interceptBody(body: IEndpointBody | undefined): void {
@@ -79,10 +112,27 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		if (body?.tools?.length === 0) {
 			delete body.tools;
 		}
+
+		if (body?.tools) {
+			body.tools = body.tools.map(tool => {
+				if (isOpenAiFunctionTool(tool) && tool.function.parameters === undefined) {
+					tool.function.parameters = { type: "object", properties: {} };
+				}
+				return tool;
+			});
+		}
+
 		if (body) {
+			if (this.modelMetadata.capabilities.supports.thinking) {
+				delete body.temperature;
+				body['max_completion_tokens'] = body.max_tokens;
+				delete body.max_tokens;
+			}
 			// Removing max tokens defaults to the maximum which is what we want for BYOK
 			delete body.max_tokens;
-			body['stream_options'] = { 'include_usage': true };
+			if (!this.useResponsesApi) {
+				body['stream_options'] = { 'include_usage': true };
+			}
 		}
 	}
 
@@ -107,34 +157,17 @@ export class OpenAIEndpoint extends ChatEndpoint {
 	}
 
 	override cloneWithTokenOverride(modelMaxPromptTokens: number): IChatEndpoint {
-		const newModelInfo = { ...this._modelInfo, maxInputTokens: modelMaxPromptTokens };
+		const newModelInfo = { ...this.modelMetadata, maxInputTokens: modelMaxPromptTokens };
 		return this.instantiationService.createInstance(OpenAIEndpoint, newModelInfo, this._apiKey, this._modelUrl);
 	}
 
-	override async makeChatRequest(
-		debugName: string,
-		messages: Raw.ChatMessage[],
-		finishedCb: FinishedCallback | undefined,
-		token: CancellationToken,
-		location: ChatLocation,
-		source?: Source,
-		requestOptions?: Omit<OptionalChatRequestParams, 'n'>,
-		userInitiatedRequest?: boolean,
-		telemetryProperties?: TelemetryProperties,
-		intentParams?: IntentParams
-	): Promise<ChatResponse> {
-		const response = await super.makeChatRequest(
-			debugName,
-			messages,
-			finishedCb,
-			token,
-			location,
-			source,
-			requestOptions,
-			userInitiatedRequest,
-			telemetryProperties,
-			intentParams
-		);
+	public override async makeChatRequest2(options: IMakeChatRequestOptions, token: CancellationToken): Promise<ChatResponse> {
+		// Apply ignoreStatefulMarker: false for initial request
+		const modifiedOptions: IMakeChatRequestOptions = { ...options, ignoreStatefulMarker: false };
+		let response = await super.makeChatRequest2(modifiedOptions, token);
+		if (response.type === ChatFetchResponseType.InvalidStatefulMarker) {
+			response = await this._makeChatRequest2({ ...options, ignoreStatefulMarker: true }, token);
+		}
 		return hydrateBYOKErrorMessages(response);
 	}
 }

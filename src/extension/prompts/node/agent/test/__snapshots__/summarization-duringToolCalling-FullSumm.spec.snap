@@ -2,13 +2,11 @@
 ~~~md
 <attachments>
 <attachment id="file" filePath="/workspace/file.ts">
-```ts
 line 1
 line 2
 
 line 4
 line 5
-```
 </attachment>
 
 </attachments>
@@ -21,7 +19,9 @@ line 5
 <userRequest>
 edit this file
 </userRequest>
-copilot_cache_control: {"type":"ephemeral"}
+
+
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -58,7 +58,8 @@ console.log('hi')"
 ~~~md
 🛠️ tooluse_2
 success
-copilot_cache_control: {"type":"ephemeral"}
+
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -71,5 +72,6 @@ Focus particularly on:
 - What the agent was actively working on when the token budget was exceeded
 - How these recent operations connect to the overall user goals
 Include all important tool calls and their results as part of the appropriate sections, with special emphasis on the most recent operations.
-copilot_cache_control: {"type":"ephemeral"}
+
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~

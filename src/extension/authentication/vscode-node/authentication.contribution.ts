@@ -2,6 +2,7 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { window } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
@@ -54,7 +55,7 @@ class AuthUpgradeAsk extends Disposable {
 			}
 		} catch (error) {
 			// likely due to the user canceling the auth flow
-			this._logService.logger.error(error, 'Failed to get copilot token');
+			this._logService.error(error, 'Failed to get copilot token');
 		}
 
 		await Event.toPromise(
@@ -74,8 +75,17 @@ class AuthUpgradeAsk extends Disposable {
 				// We signed out, so we should show the prompt again
 				this._extensionContext.globalState.update(AuthUpgradeAsk.AUTH_UPGRADE_ASK_KEY, false);
 				return;
-			} else {
+			}
+			if (window.state.focused) {
 				await this.showPrompt();
+			} else {
+				// Wait for the window to get focus before trying to show the prompt
+				const disposable = window.onDidChangeWindowState(async (e) => {
+					if (e.focused) {
+						disposable.dispose();
+						await this.showPrompt();
+					}
+				});
 			}
 		}));
 	}
@@ -90,9 +100,9 @@ class AuthUpgradeAsk extends Disposable {
 			return;
 		}
 		if (await this._authenticationChatUpgradeService.showPermissiveSessionModal()) {
-			this._logService.logger.debug('Got permissive GitHub token');
+			this._logService.debug('Got permissive GitHub token');
 		} else {
-			this._logService.logger.debug('Did not get permissive GitHub token');
+			this._logService.debug('Did not get permissive GitHub token');
 		}
 		this._extensionContext.globalState.update(AuthUpgradeAsk.AUTH_UPGRADE_ASK_KEY, true);
 	}

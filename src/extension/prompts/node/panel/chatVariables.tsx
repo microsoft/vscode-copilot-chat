@@ -25,7 +25,7 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatReferenceBinaryData, ChatReferenceDiagnostic, LanguageModelToolResult2, Range, Uri } from '../../../../vscodeTypes';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
-import { ChatVariablesCollection, isPromptInstruction } from '../../../prompt/common/chatVariablesCollection';
+import { ChatVariablesCollection, isPromptFile, isPromptInstruction } from '../../../prompt/common/chatVariablesCollection';
 import { InternalToolReference } from '../../../prompt/common/intents';
 import { ToolName } from '../../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../../tools/common/toolSchemaNormalizer';
@@ -33,10 +33,12 @@ import { IToolsService } from '../../../tools/common/toolsService';
 import { EmbeddedInsideUserMessage, embeddedInsideUserMessageDefault } from '../base/promptElement';
 import { IPromptEndpoint, PromptRenderer } from '../base/promptRenderer';
 import { Tag } from '../base/tag';
+import { SummarizedDocumentLineNumberStyle } from '../inline/summarizedDocument/implementation';
 import { FilePathMode, FileVariable } from './fileVariable';
 import { Image } from './image';
 import { NotebookCellOutputVariable } from './notebookVariables';
 import { PanelChatBasePrompt } from './panelChatBasePrompt';
+import { PromptFile } from './promptFile';
 import { sendInvokedToolTelemetry, toolCallErrorToResult, ToolResult, ToolResultMetadata } from './toolCalling';
 import { IFileTreeData, workspaceVisualFileTree } from './workspace/visualFileTree';
 
@@ -141,9 +143,18 @@ function asUserMessage(element: PromptElement, priority: number | undefined): Us
 
 export async function renderChatVariables(chatVariables: ChatVariablesCollection, fileSystemService: IFileSystemService, includeFilepathInCodeBlocks = true, omitReferences?: boolean, isAgent?: boolean): Promise<PromptElement[]> {
 	const elements = [];
+	const filePathMode = (isAgent && includeFilepathInCodeBlocks)
+		? FilePathMode.AsAttribute
+		: includeFilepathInCodeBlocks
+			? FilePathMode.AsComment
+			: FilePathMode.None;
 	for (const variable of chatVariables) {
 		const { uniqueName: variableName, value: variableValue, reference } = variable;
 		if (isPromptInstruction(variable)) { // prompt instructions are handled in the `CustomInstructions` element
+			continue;
+		}
+		if (isPromptFile(variable)) {
+			elements.push(<PromptFile variable={variable} omitReferences={omitReferences} filePathMode={filePathMode} />);
 			continue;
 		}
 
@@ -160,12 +171,15 @@ export async function renderChatVariables(chatVariables: ChatVariablesCollection
 			if (isDirectory) {
 				elements.push(<FolderVariable variableName={variableName} folderUri={uri} omitReferences={omitReferences} description={reference.modelDescription} />);
 			} else {
-				const filePathMode = (isAgent && includeFilepathInCodeBlocks)
-					? FilePathMode.AsAttribute
-					: includeFilepathInCodeBlocks
-						? FilePathMode.AsComment
-						: FilePathMode.None;
-				const file = <FileVariable alwaysIncludeSummary={true} filePathMode={filePathMode} variableName={variableName} variableValue={variableValue} omitReferences={omitReferences} description={reference.modelDescription} />;
+				const file = <FileVariable
+					alwaysIncludeSummary={true}
+					filePathMode={filePathMode}
+					variableName={variableName}
+					variableValue={variableValue}
+					omitReferences={omitReferences}
+					description={reference.modelDescription}
+					lineNumberStyle={isAgent ? SummarizedDocumentLineNumberStyle.OmittedRanges : undefined}
+				/>;
 
 				if (!isAgent || (!URI.isUri(variableValue) || variableValue.scheme !== Schemas.vscodeNotebookCellOutput)) {
 					// When attaching outupts, there's no need to add the entire notebook file again, as model can request the notebook file.
@@ -429,7 +443,7 @@ export class ChatToolReferences extends PromptElement<ChatToolCallProps, void> {
 							}
 						}
 					],
-					(tool, rule) => this.logService.logger.warn(`Tool ${tool} failed validation: ${rule}`)
+					(tool, rule) => this.logService.warn(`Tool ${tool} failed validation: ${rule}`)
 				),
 				tool_choice: {
 					type: 'function',

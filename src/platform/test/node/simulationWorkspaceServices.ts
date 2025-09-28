@@ -9,7 +9,7 @@ import { promisify } from 'util';
 import type * as vscode from 'vscode';
 import * as glob from '../../../util/common/glob';
 import { getLanguageForResource } from '../../../util/common/languages';
-import { ExtHostDocumentData } from '../../../util/common/test/shims/textDocument';
+import { createTextDocumentData } from '../../../util/common/test/shims/textDocument';
 import { asArray, coalesce } from '../../../util/vs/base/common/arrays';
 import { AsyncIterableSource, raceTimeout } from '../../../util/vs/base/common/async';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
@@ -61,6 +61,7 @@ export class SimulationWorkspaceService extends AbstractWorkspaceService {
 	override onDidChangeTextDocument: vscode.Event<vscode.TextDocumentChangeEvent> = Event.None;
 	override onDidChangeWorkspaceFolders: vscode.Event<vscode.WorkspaceFoldersChangeEvent> = Event.None;
 	override onDidChangeNotebookDocument: vscode.Event<vscode.NotebookDocumentChangeEvent> = Event.None;
+	override onDidChangeTextEditorSelection: vscode.Event<vscode.TextEditorSelectionChangeEvent> = Event.None;
 
 	override showTextDocument(document: vscode.TextDocument): Promise<void> {
 		return Promise.resolve();
@@ -74,7 +75,7 @@ export class SimulationWorkspaceService extends AbstractWorkspaceService {
 		if (uri.scheme === 'file') {
 			const fileContents = await fs.readFile(this.workspace.mapLocation(uri).fsPath, 'utf8');
 			const language = getLanguageForResource(uri);
-			const doc = ExtHostDocumentData.create(uri, fileContents, language.languageId);
+			const doc = createTextDocumentData(uri, fileContents, language.languageId);
 			this.workspace.addDocument(doc);
 			return doc.document;
 		}
@@ -453,23 +454,28 @@ export class SnapshotSearchService extends AbstractSearchService {
 			const maxResults = options?.maxResults ?? Number.MAX_SAFE_INTEGER;
 			let count = 0;
 
-			for (const uri of uris) {
-				const doc = await this.workspaceService.openTextDocument(uri);
-				count += this._search2(query, doc, iterableSource);
-				if (count >= maxResults) {
-					break;
+			try {
+				for (const uri of uris) {
+					const doc = await this.workspaceService.openTextDocument(uri);
+					count += this._search2(query, doc, iterableSource);
+					if (count >= maxResults) {
+						break;
+					}
 				}
+			} catch {
+				// I can't figure out why errors here fire 'unhandledrejection' so just swallow them
 			}
-
-			iterableSource.resolve();
 
 			return {
 				limitHit: count >= maxResults
 			};
 		};
 
+		const completePromise = doSearch();
+		completePromise.catch(() => { });
+		completePromise.finally(() => iterableSource.resolve());
 		return {
-			complete: doSearch(),
+			complete: completePromise,
 			results: iterableSource.asyncIterable
 		};
 	}
@@ -738,6 +744,10 @@ export class TestingGitService implements IGitService {
 	async fetch(uri: URI, remote?: string, ref?: string, depth?: number): Promise<void> {
 		return;
 	}
+
+	async getMergeBase(uri: URI, ref1: string, ref2: string): Promise<string | undefined> {
+		return undefined;
+	}
 }
 
 export class TestingTerminalService extends Disposable implements ITerminalService {
@@ -825,6 +835,9 @@ export class TestingTerminalService extends Disposable implements ITerminalServi
 	getBufferForTerminal(terminal: vscode.Terminal, maxChars?: number): string {
 		return '';
 	}
+	getBufferWithPid(pid: number, maxChars?: number): Promise<string> {
+		throw new Error('Method not implemented.');
+	}
 }
 
 class SimulationTerminal extends Disposable implements vscode.Terminal {
@@ -911,26 +924,26 @@ class SimulationTerminalShellExecution extends Disposable implements vscode.Term
 		const realWorkspacePath = this.workspace.mapLocation(this.workspace.workspaceFolders[0]).fsPath.replace(/\/$/, '');
 		try {
 			let command = this.commandLine.value;
-			this.logService.logger.trace(`Original command: ${command}`);
+			this.logService.trace(`Original command: ${command}`);
 			command = command.replaceAll(fakeWorkspacePath, realWorkspacePath);
-			this.logService.logger.trace(`Command with replaced workspace path: ${command}`);
+			this.logService.trace(`Command with replaced workspace path: ${command}`);
 
 			const execPromise = promisify(exec);
 			const execP = execPromise(command, { cwd: this.cwd?.fsPath });
 			const result = await raceTimeout(execP, 600_000);
 			let output = result ? result.stdout + result.stderr : undefined;
-			this.logService.logger.trace(`Done executing command: ${command}`);
+			this.logService.trace(`Done executing command: ${command}`);
 			let resultStr;
 			try {
 				resultStr = !result ? String(result) : JSON.stringify(result);
 			} catch (e) {
 				resultStr = `cannot stringify result: ${e}. Result: ${result}`;
 			}
-			this.logService.logger.trace(`Result: ${resultStr}`);
+			this.logService.trace(`Result: ${resultStr}`);
 			if (output) {
-				this.logService.logger.trace(`Original output: ${output}`);
+				this.logService.trace(`Original output: ${output}`);
 				output = output.replaceAll(realWorkspacePath, fakeWorkspacePath);
-				this.logService.logger.trace(`Output with replaced workspace path: ${output}`);
+				this.logService.trace(`Output with replaced workspace path: ${output}`);
 			}
 			return output;
 		} catch (e) {
@@ -945,21 +958,21 @@ class SimulationTerminalShellExecution extends Disposable implements vscode.Term
 				msg = e instanceof Error ? e.message : String(e);
 			}
 
-			this.logService.logger.trace(`Original error message: ${msg}`);
+			this.logService.trace(`Original error message: ${msg}`);
 			msg = msg.replaceAll(realWorkspacePath, fakeWorkspacePath);
-			this.logService.logger.trace(`Error message with replaced workspace path: ${msg}`);
+			this.logService.trace(`Error message with replaced workspace path: ${msg}`);
 			return msg;
 		}
 	}
 
 	async *read(): AsyncIterable<string> {
-		this.logService.logger.trace(`SimulationTerminalShellExecution: read()`);
+		this.logService.trace(`SimulationTerminalShellExecution: read()`);
 		const result = await this.run();
-		this.logService.logger.trace(`SimulationTerminalShellExecution: result: ${result}`);
+		this.logService.trace(`SimulationTerminalShellExecution: result: ${result}`);
 		if (result) {
 			yield result;
 		}
-		this.logService.logger.trace(`SimulationTerminalShellExecution: firing end event`);
+		this.logService.trace(`SimulationTerminalShellExecution: firing end event`);
 		this._onDidEndTerminalShellExecution.fire();
 	}
 }

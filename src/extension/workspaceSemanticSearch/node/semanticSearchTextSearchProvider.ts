@@ -128,7 +128,7 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 			const chatProgress: vscode.Progress<ChatResponseReferencePart | vscode.ChatResponseProgressPart> = {
 				report(_obj) { }
 			};
-			this._logService.logger.trace(`Starting semantic search for ${query}`);
+			this._logService.trace(`Starting semantic search for ${query}`);
 			SemanticSearchTextSearchProvider.latestQuery = query;
 			const includes = new Set<vscode.GlobPattern>();
 			const excludes = new Set<vscode.GlobPattern>();
@@ -158,6 +158,7 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 				{
 					endpoint: await this.getEndpoint(),
 					tokenBudget: MAX_CHUNK_TOKEN_COUNT,
+					fullWorkspaceTokenBudget: MAX_CHUNK_TOKEN_COUNT,
 					maxResults: MAX_CHUNKS_RESULTS,
 				},
 				{
@@ -199,7 +200,8 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 					toolInvocationToken: undefined as never,
 					model: null!,
 					tools: new Map(),
-					id: '1'
+					id: '1',
+					sessionId: '1'
 				};
 				const intentInvocation = await intent.invoke({ location: ChatLocation.Other, request });
 				const progress: vscode.Progress<ChatResponseReferencePart | vscode.ChatResponseProgressPart> = {
@@ -232,7 +234,6 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 						messageId: generateUuid(),
 						messageSource: 'search.workspace'
 					},
-					{ intent: true }
 				);
 				SemanticSearchTextSearchProvider.feedBackTelemetry.llmFilteringDuration = Date.now() - llmFilteringDuration;
 				searchResult = fetchResult.type === 'success' ? fetchResult.value : (fetchResult.type === 'length' ? fetchResult.truncatedValue : '');
@@ -339,7 +340,7 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 				});
 			}
 
-			this._logService.logger.debug(`Semantic search took ${sw.elapsed()}ms`);
+			this._logService.debug(`Semantic search took ${sw.elapsed()}ms`);
 			return { limitHit: false } satisfies vscode.TextSearchComplete;
 		};
 		return getResults();
@@ -450,7 +451,8 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 				toolInvocationToken: undefined as never,
 				model: null!,
 				tools: new Map(),
-				id: '1'
+				id: '1',
+				sessionId: '1'
 			};
 			const intentInvocation = await searchKeywordsIntent.invoke({ location: ChatLocation.Other, request });
 			const fakeProgress: vscode.Progress<any | any> = {
@@ -481,7 +483,6 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 					messageId: generateUuid(),
 					messageSource: 'search.keywords'
 				},
-				{ intent: true }
 			);
 			const keywordResult = fetchResult.type === 'success' ? fetchResult.value : (fetchResult.type === 'length' ? fetchResult.truncatedValue : '');
 			const usedResults = [];

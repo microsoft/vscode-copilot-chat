@@ -7,7 +7,6 @@ import { IAuthenticationService } from '../../../platform/authentication/common/
 import { ChatDisabledError, ContactSupportError, EnterpriseManagedError, NotSignedUpError, SubscriptionExpiredError } from '../../../platform/authentication/vscode-node/copilotTokenManager';
 import { SESSION_LOGIN_MESSAGE } from '../../../platform/authentication/vscode-node/session';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
@@ -15,7 +14,6 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observableInternal';
-import { isBYOKEnabled } from '../../byok/common/byokProvider';
 
 const welcomeViewContextKeys = {
 	Activated: 'github.copilot-chat.activated',
@@ -33,14 +31,13 @@ const showLogViewContextKey = `github.copilot.chat.showLogView`;
 const debugReportFeedbackContextKey = 'github.copilot.debugReportFeedback';
 
 const previewFeaturesDisabledContextKey = 'github.copilot.previewFeaturesDisabled';
-const byokEnabledContextKey = 'github.copilot.byokEnabled';
 
 const debugContextKey = 'github.copilot.chat.debug';
 
 export class ContextKeysContribution extends Disposable {
 
 	private _needsOfflineCheck = false;
-	private _scheduledOfflineCheck: NodeJS.Timeout | undefined;
+	private _scheduledOfflineCheck: TimeoutHandle | undefined;
 	private _showLogView = false;
 
 	constructor(
@@ -49,7 +46,6 @@ export class ContextKeysContribution extends Disposable {
 		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@ILogService private readonly _logService: ILogService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
-		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IEnvService private readonly _envService: IEnvService
 	) {
 		super();
@@ -77,7 +73,7 @@ export class ContextKeysContribution extends Disposable {
 	private _scheduleOfflineCheck() {
 		this._cancelPendingOfflineCheck();
 		this._needsOfflineCheck = true;
-		this._logService.logger.debug(`[context keys] Scheduling offline check. Active: ${window.state.active}, focused: ${window.state.focused}.`);
+		this._logService.debug(`[context keys] Scheduling offline check. Active: ${window.state.active}, focused: ${window.state.focused}.`);
 		if (window.state.active && window.state.focused) {
 			const delayInSeconds = 60;
 			this._scheduledOfflineCheck = setTimeout(() => {
@@ -88,10 +84,10 @@ export class ContextKeysContribution extends Disposable {
 	}
 
 	private _runOfflineCheck(trigger: string) {
-		this._logService.logger.debug(`[context keys] ${trigger}. Needs offline check: ${this._needsOfflineCheck}, active: ${window.state.active}, focused: ${window.state.focused}.`);
+		this._logService.debug(`[context keys] ${trigger}. Needs offline check: ${this._needsOfflineCheck}, active: ${window.state.active}, focused: ${window.state.focused}.`);
 		if (this._needsOfflineCheck && window.state.active && window.state.focused) {
 			this._inspectContext()
-				.catch(err => this._logService.logger.error(err));
+				.catch(err => this._logService.error(err));
 		}
 	}
 
@@ -104,7 +100,7 @@ export class ContextKeysContribution extends Disposable {
 	}
 
 	private async _inspectContext() {
-		this._logService.logger.debug(`[context keys] Updating context keys.`);
+		this._logService.debug(`[context keys] Updating context keys.`);
 		this._cancelPendingOfflineCheck();
 		const allKeys = Object.values(welcomeViewContextKeys);
 		let error: unknown | undefined = undefined;
@@ -121,7 +117,7 @@ export class ContextKeysContribution extends Disposable {
 				reason === 'GitHubLoginFailed'
 					? SESSION_LOGIN_MESSAGE
 					: `GitHub Copilot could not connect to server. Extension activation failed: "${reason}"`;
-			this._logService.logger.error(message);
+			this._logService.error(message);
 		}
 
 		if (error instanceof NotSignedUpError) {
@@ -165,21 +161,11 @@ export class ContextKeysContribution extends Disposable {
 			const copilotToken = await this._authenticationService.getCopilotToken();
 			const disabled = !copilotToken.isEditorPreviewFeaturesEnabled();
 			if (disabled) {
-				this._logService.logger.warn(`Copilot preview features are disabled by organizational policy. Learn more: https://aka.ms/github-copilot-org-enable-features`);
+				this._logService.warn(`Copilot preview features are disabled by organizational policy. Learn more: https://aka.ms/github-copilot-org-enable-features`);
 			}
 			commands.executeCommand('setContext', previewFeaturesDisabledContextKey, disabled);
 		} catch (e) {
 			commands.executeCommand('setContext', previewFeaturesDisabledContextKey, undefined);
-		}
-	}
-
-	private async _updateBYOKEnabled() {
-		try {
-			const copilotToken = await this._authenticationService.getCopilotToken();
-			const byokAllowed = isBYOKEnabled(copilotToken, this._capiClientService);
-			commands.executeCommand('setContext', byokEnabledContextKey, byokAllowed);
-		} catch (e) {
-			commands.executeCommand('setContext', byokEnabledContextKey, false);
 		}
 	}
 
@@ -202,7 +188,6 @@ export class ContextKeysContribution extends Disposable {
 		this._inspectContext();
 		this._updateQuotaExceededContext();
 		this._updatePreviewFeaturesDisabledContext();
-		this._updateBYOKEnabled();
 		this._updateShowLogViewContext();
 	}
 }

@@ -9,11 +9,10 @@ import { TokenizerType } from '../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
-import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
-import { IEnvService } from '../../env/common/envService';
+import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
-import { IThinkingDataService } from '../../thinking/node/thinkingDataService';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
@@ -28,7 +27,6 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IFetcherService fetcherService: IFetcherService,
-		@IEnvService envService: IEnvService,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IAuthenticationService private readonly authService: IAuthenticationService,
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
@@ -36,9 +34,10 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
-		@IThinkingDataService thinkingDataService: IThinkingDataService
+		@ILogService logService: ILogService,
 	) {
-		const model = configurationService.getExperimentBasedConfig<string>(ConfigKey.Internal.InstantApplyModelName, experimentationService) ?? 'gpt-4o-instant-apply-full-ft-v66';
+		const model = configurationService.getExperimentBasedConfig<string>(ConfigKey.Internal.InstantApplyModelName, experimentationService) ?? CHAT_MODEL.GPT4OPROXY;
+
 		const modelInfo: IChatModelInformation = {
 			id: model,
 			name: model,
@@ -62,13 +61,14 @@ export class Proxy4oEndpoint extends ChatEndpoint {
 			domainService,
 			capiClientService,
 			fetcherService,
-			envService,
 			telemetryService,
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
 			instantiationService,
-			thinkingDataService,
+			configurationService,
+			experimentationService,
+			logService
 		);
 	}
 

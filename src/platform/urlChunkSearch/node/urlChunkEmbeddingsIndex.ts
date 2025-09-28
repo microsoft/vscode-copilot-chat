@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { createSha256Hash } from '../../../util/common/crypto';
-import { CallTracker } from '../../../util/common/telemetryCorrelationId';
+import { CallTracker, TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { raceCancellationError } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -69,11 +69,7 @@ export class UrlChunkEmbeddingsIndex extends Disposable {
 	}
 
 	private async computeEmbeddings(str: string, token: CancellationToken): Promise<Embedding> {
-		const embeddings = await this._embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [str], {}, token);
-		if (!embeddings?.values.length) {
-			throw new Error('Timeout computing embeddings');
-		}
-
+		const embeddings = await this._embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [str], {}, new TelemetryCorrelationId('UrlChunkEmbeddingsIndex::computeEmbeddings'), token);
 		return embeddings.values[0];
 	}
 
@@ -84,10 +80,10 @@ export class UrlChunkEmbeddingsIndex extends Disposable {
 
 		const batchInfo = new ComputeBatchInfo();
 
-		this._logService.logger.trace(`urlChunkEmbeddingsIndex: Getting auth token `);
+		this._logService.trace(`urlChunkEmbeddingsIndex: Getting auth token `);
 		const authToken = await this.tryGetAuthToken();
 		if (!authToken) {
-			this._logService.logger.error('urlChunkEmbeddingsIndex: Unable to get auth token');
+			this._logService.error('urlChunkEmbeddingsIndex: Unable to get auth token');
 			throw new Error('Unable to get auth token');
 		}
 

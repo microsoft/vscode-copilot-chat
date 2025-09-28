@@ -6,9 +6,11 @@
 import type * as vscode from 'vscode';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
+import { ThinkingData } from '../../../platform/thinking/common/thinking';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { ChatRequest } from '../../../vscodeTypes';
 import { getToolName } from '../../tools/common/toolNames';
+import { IToolGrouping } from '../../tools/common/virtualTools/virtualToolTypes';
 import { ChatVariablesCollection } from './chatVariablesCollection';
 import { Conversation, Turn } from './conversation';
 
@@ -25,6 +27,8 @@ export interface IToolCallRound {
 	response: string;
 	toolInputRetry: number;
 	toolCalls: IToolCall[];
+	thinking?: ThinkingData;
+	statefulMarker?: string;
 }
 
 export interface InternalToolReference extends vscode.ChatLanguageModelToolReference {
@@ -52,14 +56,16 @@ export interface IBuildPromptContext {
 		readonly toolReferences: readonly InternalToolReference[];
 		readonly toolInvocationToken: vscode.ChatParticipantToolToken;
 		readonly availableTools: readonly vscode.LanguageModelToolInformation[];
+		readonly inSubAgent?: boolean;
 	};
-	readonly modeInstructions?: string;
+	readonly modeInstructions?: vscode.ChatRequestModeInstructions;
 
 	/**
 	 * The accumulated tool call rounds for the current ongoing response.
 	 */
 	readonly toolCallRounds?: readonly IToolCallRound[];
 	readonly toolCallResults?: Record<string, vscode.LanguageModelToolResult>;
+	readonly toolGrouping?: IToolGrouping;
 
 	readonly editedFileEvents?: readonly vscode.ChatRequestEditedFileEvent[];
 	readonly conversation?: Conversation;

@@ -5,11 +5,14 @@
 
 import * as l10n from '@vscode/l10n';
 import type { ChatRequest, ChatRequestTurn2, ChatResponseStream, ChatResult, Location } from 'vscode';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../../platform/authentication/common/authenticationUpgrade';
 import { getChatParticipantIdFromName, getChatParticipantNameFromId, workspaceAgentName } from '../../../platform/chat/common/chatAgents';
 import { CanceledMessage, ChatLocation } from '../../../platform/chat/common/commonTypes';
+import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { FilterReason } from '../../../platform/networking/common/openai';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
 import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
@@ -32,7 +35,7 @@ import { IIntentService } from '../../intents/node/intentService';
 import { UnknownIntent } from '../../intents/node/unknownIntent';
 import { ContributedToolName } from '../../tools/common/toolNames';
 import { ChatVariablesCollection } from '../common/chatVariablesCollection';
-import { Conversation, GlobalContextMessageMetadata, ICopilotChatResult, ICopilotChatResultIn, normalizeSummariesOnRounds, RenderedUserMessageMetadata, Turn, TurnStatus } from '../common/conversation';
+import { Conversation, getGlobalContextCacheKey, GlobalContextMessageMetadata, ICopilotChatResult, ICopilotChatResultIn, normalizeSummariesOnRounds, RenderedUserMessageMetadata, Turn, TurnStatus } from '../common/conversation';
 import { InternalToolReference } from '../common/intents';
 import { ChatTelemetryBuilder } from './chatParticipantTelemetry';
 import { DefaultIntentRequestHandler } from './defaultIntentRequestHandler';
@@ -72,15 +75,17 @@ export class ChatParticipantRequestHandler {
 		private readonly chatAgentArgs: IChatAgentArgs,
 		private readonly onPaused: Event<boolean>,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@ICommandService private readonly _commandService: ICommandService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@IIntentService private readonly _intentService: IIntentService,
 		@IConversationStore private readonly _conversationStore: IConversationStore,
 		@ITabsAndEditorsService tabsAndEditorsService: ITabsAndEditorsService,
 		@ILogService private readonly _logService: ILogService,
-		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService
+		@IAuthenticationService private readonly _authService: IAuthenticationService,
+		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService,
 	) {
-		this.location = getLocation(request);
+		this.location = this.getLocation(request);
 
 		this.intentDetector = this._instantiationService.createInstance(IntentDetector);
 
@@ -116,17 +121,31 @@ export class ChatParticipantRequestHandler {
 			this.request
 		);
 
-		const latestTurn = new Turn(
+		const latestTurn = Turn.fromRequest(
 			this.chatTelemetry.telemetryMessageId,
-			{ message: request.prompt, type: 'user' },
-			new ChatVariablesCollection(request.references),
-			request.toolReferences.map(InternalToolReference.from),
-			request.editedFileEvents,
-		);
+			this.request);
 
 		this.conversation = new Conversation(actualSessionId, turns.concat(latestTurn));
 
 		this.turn = latestTurn;
+	}
+
+	private getLocation(request: ChatRequest) {
+		if (request.location2 instanceof ChatRequestEditorData) {
+			return ChatLocation.Editor;
+		} else if (request.location2 instanceof ChatRequestNotebookData) {
+			return ChatLocation.Notebook;
+		}
+		switch (request.location) { // deprecated, but location2 does not yet allow to distinguish between panel, editing session and others
+			case VSChatLocation.Editor:
+				return ChatLocation.Editor;
+			case VSChatLocation.Panel:
+				return ChatLocation.Panel;
+			case VSChatLocation.Terminal:
+				return ChatLocation.Terminal;
+			default:
+				return ChatLocation.Other;
+		}
 	}
 
 	private async sanitizeVariables(): Promise<ChatRequest> {
@@ -194,7 +213,7 @@ export class ChatParticipantRequestHandler {
 				}
 			};
 		}
-		this._logService.logger.trace(`[${ChatLocation.toStringShorter(this.location)}] chat request received from extension host`);
+		this._logService.trace(`[${ChatLocation.toStringShorter(this.location)}] chat request received from extension host`);
 		try {
 
 			// sanitize the variables of all requests
@@ -234,6 +253,10 @@ export class ChatParticipantRequestHandler {
 				}
 
 				result = await chatResult;
+				const endpoint = await this._endpointProvider.getChatEndpoint(this.request);
+				result.details = this._authService.copilotToken?.isNoAuthUser ?
+					`${endpoint.name}` :
+					`${endpoint.name} • ${endpoint.multiplier ?? 0}x`;
 			}
 
 			this._conversationStore.addConversation(this.turn.id, this.conversation);
@@ -263,15 +286,15 @@ export class ChatParticipantRequestHandler {
 		if (!command?.intent && this.location === ChatLocation.Editor) { // TODO@jrieken do away with location specific code
 
 			let preferredIntent: Intent | undefined;
-			if (this.location === ChatLocation.Editor && this.documentContext && this.request.attempt === 0 && history.length === 0) { // TODO@jrieken do away with location specific code
+			if (this.documentContext && this.request.attempt === 0 && history.length === 0) {
 				if (this.documentContext.selection.isEmpty && this.documentContext.document.lineAt(this.documentContext.selection.start.line).text.trim() === '') {
 					preferredIntent = Intent.Generate;
 				} else if (!this.documentContext.selection.isEmpty && this.documentContext.selection.start.line !== this.documentContext.selection.end.line) {
 					preferredIntent = Intent.Edit;
 				}
-				if (preferredIntent) {
-					return this._intentService.getIntent(preferredIntent, this.location) ?? this._intentService.unknownIntent;
-				}
+			}
+			if (preferredIntent) {
+				return this._intentService.getIntent(preferredIntent, this.location) ?? this._intentService.unknownIntent;
 			}
 		}
 
@@ -302,9 +325,7 @@ export class ChatParticipantRequestHandler {
 
 
 export function addHistoryToConversation(accessor: ServicesAccessor, history: ReadonlyArray<ChatRequestTurn | ChatResponseTurn>): { turns: Turn[]; sessionId: string | undefined } {
-	const commandService = accessor.get(ICommandService);
-	const conversationStore = accessor.get(IConversationStore);
-	const workspaceService = accessor.get(IWorkspaceService);
+	const instaService = accessor.get(IInstantiationService);
 
 	const turns: Turn[] = [];
 	let sessionId: string | undefined;
@@ -316,12 +337,12 @@ export function addHistoryToConversation(accessor: ServicesAccessor, history: Re
 		if (entry instanceof ChatRequestTurn) {
 			previousChatRequestTurn = entry;
 		} else {
-			const existingTurn = findExistingTurnFromVSCodeChatHistoryTurn(conversationStore, entry);
+			const existingTurn = instaService.invokeFunction(findExistingTurnFromVSCodeChatHistoryTurn, entry);
 			if (existingTurn) {
 				turns.push(existingTurn);
 			} else {
 				if (previousChatRequestTurn) {
-					const deserializedTurn = createTurnFromVSCodeChatHistoryTurns(previousChatRequestTurn, entry, commandService, workspaceService);
+					const deserializedTurn = instaService.invokeFunction(createTurnFromVSCodeChatHistoryTurns, previousChatRequestTurn, entry);
 					previousChatRequestTurn = undefined;
 					turns.push(deserializedTurn);
 				}
@@ -340,7 +361,8 @@ export function addHistoryToConversation(accessor: ServicesAccessor, history: Re
 /**
  * Try to find an existing `Turn` instance that we created previously based on the responseId of a vscode turn.
  */
-function findExistingTurnFromVSCodeChatHistoryTurn(conversationStore: IConversationStore, turn: ChatRequestTurn | ChatResponseTurn): Turn | undefined {
+function findExistingTurnFromVSCodeChatHistoryTurn(accessor: ServicesAccessor, turn: ChatRequestTurn | ChatResponseTurn): Turn | undefined {
+	const conversationStore = accessor.get(IConversationStore);
 	const responseId = getResponseIdFromVSCodeChatHistoryTurn(turn);
 	const conversation = responseId ? conversationStore.getConversation(responseId) : undefined;
 	return conversation?.turns.find(turn => turn.id === responseId);
@@ -358,11 +380,14 @@ function getResponseIdFromVSCodeChatHistoryTurn(turn: ChatRequestTurn | ChatResp
  * Try as best as possible to create a `Turn` object from data that comes from vscode.
  */
 function createTurnFromVSCodeChatHistoryTurns(
+	accessor: ServicesAccessor,
 	chatRequestTurn: ChatRequestTurn2,
-	chatResponseTurn: ChatResponseTurn,
-	commandService: ICommandService,
-	workspaceService: IWorkspaceService
+	chatResponseTurn: ChatResponseTurn
 ): Turn {
+	const commandService = accessor.get(ICommandService);
+	const workspaceService = accessor.get(IWorkspaceService);
+	const instaService = accessor.get(IInstantiationService);
+
 	const currentTurn = new Turn(
 		undefined,
 		{ message: chatRequestTurn.prompt, type: 'user' },
@@ -391,7 +416,11 @@ function createTurnFromVSCodeChatHistoryTurns(
 	if (!chatResponseTurn.result.errorDetails) {
 		status = TurnStatus.Success;
 	} else if (chatResponseTurn.result.errorDetails?.responseIsFiltered) {
-		status = TurnStatus.Filtered;
+		if (chatResponseTurn.result.metadata?.category === FilterReason.Prompt) {
+			status = TurnStatus.PromptFiltered;
+		} else {
+			status = TurnStatus.Filtered;
+		}
 	} else if (chatResponseTurn.result.errorDetails.message === 'Cancelled' || chatResponseTurn.result.errorDetails.message === CanceledMessage.message) {
 		status = TurnStatus.Cancelled;
 	} else {
@@ -401,31 +430,14 @@ function createTurnFromVSCodeChatHistoryTurns(
 	currentTurn.setResponse(status, { message: content, type: 'model', name: command?.commandId || UnknownIntent.ID }, undefined, chatResponseTurn.result);
 	const turnMetadata = (chatResponseTurn.result as ICopilotChatResultIn).metadata;
 	if (turnMetadata?.renderedGlobalContext) {
-		currentTurn.setMetadata(new GlobalContextMessageMetadata(turnMetadata?.renderedGlobalContext));
+		const cacheKey = turnMetadata.globalContextCacheKey ?? instaService.invokeFunction(getGlobalContextCacheKey);
+		currentTurn.setMetadata(new GlobalContextMessageMetadata(turnMetadata?.renderedGlobalContext, cacheKey));
 	}
 	if (turnMetadata?.renderedUserMessage) {
 		currentTurn.setMetadata(new RenderedUserMessageMetadata(turnMetadata.renderedUserMessage));
 	}
 
 	return currentTurn;
-}
-
-function getLocation(request: ChatRequest) {
-	if (request.location2 instanceof ChatRequestEditorData) {
-		return ChatLocation.Editor;
-	} else if (request.location2 instanceof ChatRequestNotebookData) {
-		return ChatLocation.Other; // TODO should this be ChatLocation.Notebook
-	}
-	switch (request.location) { // deprecated, but location2 does not yet allow to distinguish between panel, editing session and others
-		case VSChatLocation.Editor:
-			return ChatLocation.Editor;
-		case VSChatLocation.Panel:
-			return ChatLocation.Panel;
-		case VSChatLocation.Terminal:
-			return ChatLocation.Terminal;
-		default:
-			return ChatLocation.Other;
-	}
 }
 
 function anchorPartToMarkdown(workspaceService: IWorkspaceService, anchor: ChatResponseAnchorPart): string {

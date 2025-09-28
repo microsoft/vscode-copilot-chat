@@ -10,7 +10,7 @@ import { ITestingServicesAccessor, TestingServiceCollection } from '../../../../
 import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { getLanguage } from '../../../../util/common/languages';
-import { ExtHostDocumentData } from '../../../../util/common/test/shims/textDocument';
+import { createTextDocumentData } from '../../../../util/common/test/shims/textDocument';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/common/descriptors';
 import { DiagnosticSeverity, Range } from '../../../../vscodeTypes';
@@ -26,9 +26,9 @@ suite('GetErrorsTool', () => {
 	// Avoid creating windows paths
 	const workspaceFolder = URI.file('/test/workspace');
 	const tsDocUri = URI.file('/test/workspace/file.ts');
-	const tsDoc = ExtHostDocumentData.create(tsDocUri, 'line 1\nline 2\n\nline 4\nline 5', 'ts').document;
+	const tsDoc = createTextDocumentData(tsDocUri, 'line 1\nline 2\n\nline 4\nline 5', 'ts').document;
 	const tsDocUri2 = URI.file('/test/workspace/file2.ts');
-	const tsDoc2 = ExtHostDocumentData.create(tsDocUri2, 'line 1\nline 2\n\nline 4\nline 5', 'ts').document;
+	const tsDoc2 = createTextDocumentData(tsDocUri2, 'line 1\nline 2\n\nline 4\nline 5', 'ts').document;
 
 	beforeEach(() => {
 		collection = createExtensionUnitTestingServices();

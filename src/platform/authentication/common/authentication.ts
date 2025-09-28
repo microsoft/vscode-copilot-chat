@@ -162,7 +162,7 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 	) {
 		super();
 		this._register(_tokenManager.onDidCopilotTokenRefresh(() => {
-			this._logService.logger.debug('Handling CopilotToken refresh.');
+			this._logService.debug('Handling CopilotToken refresh.');
 			void this._handleAuthChangeEvent();
 		}));
 	}
@@ -196,6 +196,16 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 
 	//#endregion
 
+	//#region Ado
+
+	protected _anyAdoSession: AuthenticationSession | undefined;
+	get anyAdoSession(): AuthenticationSession | undefined {
+		return this._anyAdoSession;
+	}
+	protected abstract getAnyAdoSession(options?: AuthenticationGetSessionOptions): Promise<AuthenticationSession | undefined>;
+
+	//#endregion
+
 	//#region Copilot Token
 
 	private _copilotTokenError: Error | undefined;
@@ -204,8 +214,6 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 	}
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
 		try {
-			await this.getAnyGitHubSession({ silent: true });
-			// TODO: could this take in an auth session?
 			const token = await this._tokenManager.getCopilotToken(force);
 			this._tokenStore.copilotToken = token;
 			this._copilotTokenError = undefined;
@@ -243,6 +251,7 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 	protected async _handleAuthChangeEvent(): Promise<void> {
 		const anyGitHubSessionBefore = this._anyGitHubSession;
 		const permissiveGitHubSessionBefore = this._permissiveGitHubSession;
+		const anyAdoSessionBefore = this._anyAdoSession;
 		const copilotTokenBefore = this._tokenStore.copilotToken;
 		const copilotTokenErrorBefore = this._copilotTokenError;
 
@@ -250,10 +259,11 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 		const resolved = await Promise.allSettled([
 			this.getAnyGitHubSession({ silent: true }),
 			this.getPermissiveGitHubSession({ silent: true }),
+			this.getAnyAdoSession({ silent: true }),
 		]);
 		for (const res of resolved) {
 			if (res.status === 'rejected') {
-				this._logService.logger.error(`Error getting a session: ${res.reason}`);
+				this._logService.error(`Error getting a session: ${res.reason}`);
 			}
 		}
 
@@ -262,15 +272,20 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 			permissiveGitHubSessionBefore?.accessToken !== this._permissiveGitHubSession?.accessToken
 		) {
 			this._onDidAccessTokenChange.fire();
-			this._logService.logger.debug('Auth state changed, minting a new CopilotToken...');
+			this._logService.debug('Auth state changed, minting a new CopilotToken...');
 			// The auth state has changed, so mint a new Copilot token
 			try {
 				await this.getCopilotToken(true);
 			} catch (e) {
 				// Ignore errors
 			}
-			this._logService.logger.debug('Minted a new CopilotToken.');
+			this._logService.debug('Minted a new CopilotToken.');
 			return;
+		}
+
+		if (anyAdoSessionBefore?.accessToken !== this._anyAdoSession?.accessToken) {
+			this._logService.debug(`Ado auth state changed, firing event. Had token before: ${!!anyAdoSessionBefore?.accessToken}. Has token now: ${!!this._anyAdoSession?.accessToken}.`);
+			this._onDidAdoAuthenticationChange.fire();
 		}
 
 		// Auth state hasn't changed, but the Copilot token might have
@@ -284,9 +299,9 @@ export abstract class BaseAuthenticationService extends Disposable implements IA
 			// React to errors changing too (i.e. I go from zero session to a session that doesn't have Copilot access)
 			copilotTokenErrorBefore?.message !== this._copilotTokenError?.message
 		) {
-			this._logService.logger.debug('CopilotToken state changed, firing event.');
+			this._logService.debug('CopilotToken state changed, firing event.');
 			this._onDidAuthenticationChange.fire();
 		}
-		this._logService.logger.debug('Finished handling auth change event.');
+		this._logService.debug('Finished handling auth change event.');
 	}
 }

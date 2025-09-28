@@ -4,25 +4,25 @@
  *--------------------------------------------------------------------------------------------*/
 import type { CancellationToken } from 'vscode';
 import { IAuthenticationService } from '../../src/platform/authentication/common/authentication';
-import { EMBEDDING_MODEL } from '../../src/platform/configuration/common/configurationService';
-import { ComputeEmbeddingsOptions, Embedding, EmbeddingType, EmbeddingVector, Embeddings, getWellKnownEmbeddingTypeInfo } from '../../src/platform/embeddings/common/embeddingsComputer';
+import { ComputeEmbeddingsOptions, Embedding, EmbeddingType, EmbeddingVector, Embeddings, LEGACY_EMBEDDING_MODEL_ID, getWellKnownEmbeddingTypeInfo } from '../../src/platform/embeddings/common/embeddingsComputer';
 import { RemoteEmbeddingsComputer } from '../../src/platform/embeddings/common/remoteEmbeddingsComputer';
 import { ICAPIClientService } from '../../src/platform/endpoint/common/capiClient';
-import { IDomainService } from '../../src/platform/endpoint/common/domainService';
 import { IEndpointProvider } from '../../src/platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../src/platform/env/common/envService';
+import { ILogService } from '../../src/platform/log/common/logService';
 import { IFetcherService } from '../../src/platform/networking/common/fetcherService';
 import { ITelemetryService } from '../../src/platform/telemetry/common/telemetry';
+import { TelemetryCorrelationId } from '../../src/util/common/telemetryCorrelationId';
 import { computeSHA256 } from './hash';
 
 export class CacheableEmbeddingRequest {
 	public readonly hash: string;
 	public readonly query: string;
-	public readonly model: EMBEDDING_MODEL;
+	public readonly model: LEGACY_EMBEDDING_MODEL_ID;
 
 	constructor(
 		embeddingQuery: string,
-		model: EMBEDDING_MODEL
+		model: LEGACY_EMBEDDING_MODEL_ID
 	) {
 		this.query = embeddingQuery;
 		this.model = model;
@@ -46,21 +46,21 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 	constructor(
 		private readonly cache: IEmbeddingsCache,
 		@IAuthenticationService authService: IAuthenticationService,
-		@ITelemetryService telemetryService: ITelemetryService,
-		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
-		@IEndpointProvider endpointProvider: IEndpointProvider,
 		@IEnvService envService: IEnvService,
-		@IFetcherService fetcherService: IFetcherService
+		@IFetcherService fetcherService: IFetcherService,
+		@ILogService logService: ILogService,
+		@ITelemetryService telemetryService: ITelemetryService,
+		@IEndpointProvider endpointProvider: IEndpointProvider
 	) {
 		super(
 			authService,
-			telemetryService,
-			domainService,
 			capiClientService,
-			endpointProvider,
 			envService,
-			fetcherService
+			fetcherService,
+			logService,
+			telemetryService,
+			endpointProvider
 		);
 	}
 
@@ -68,8 +68,9 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 		type: EmbeddingType,
 		inputs: string[],
 		options: ComputeEmbeddingsOptions,
-		cancellationToken: CancellationToken | undefined,
-	): Promise<Embeddings | undefined> {
+		telemetryInfo?: TelemetryCorrelationId,
+		token?: CancellationToken,
+	): Promise<Embeddings> {
 		const embeddingEntries = new Map<string, Embedding>();
 		const nonCached: string[] = [];
 
@@ -89,10 +90,7 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 		}
 
 		if (nonCached.length) {
-			const embeddingsResult = await super.computeEmbeddings(type, nonCached, options, cancellationToken);
-			if (!embeddingsResult) {
-				return undefined;
-			}
+			const embeddingsResult = await super.computeEmbeddings(type, nonCached, options, telemetryInfo, token);
 
 			// Update the cache with the newest entries
 			for (let i = 0; i < nonCached.length; i++) {
@@ -107,10 +105,9 @@ export class CachingEmbeddingsComputer extends RemoteEmbeddingsComputer {
 		const out: Embedding[] = [];
 		for (const input of inputs) {
 			const embedding = embeddingEntries.get(input);
-			if (!embedding) {
-				return undefined;
+			if (embedding) {
+				out.push(embedding);
 			}
-			out.push(embedding);
 		}
 		return { type, values: out };
 	}

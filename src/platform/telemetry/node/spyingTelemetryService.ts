@@ -72,6 +72,9 @@ export class SpyingTelemetryService implements ITelemetryService {
 	setSharedProperty(name: string, value: string): void {
 		// Do nothing
 	}
+	setAdditionalExpAssignments(expAssignments: string[]): void {
+		// Do nothing
+	}
 	sendTelemetryErrorEvent(eventName: string, destination: TelemetryDestination, properties?: TelemetryEventProperties | undefined, measurements?: TelemetryEventMeasurements | undefined): void {
 		this.addEvent(TelemetryServiceEventType.error, eventName, properties, measurements);
 	}
@@ -121,3 +124,8 @@ export class SpyingTelemetryService implements ITelemetryService {
 type TelemetryEventMapKeysFilteredByEventName<TEventName> = {
 	[TKey in keyof TelemetryEventMap]: TelemetryEventMap[TKey]['eventName'] extends TEventName ? TKey : never
 }[keyof TelemetryEventMap];
+
+declare global {
+	interface TelemetryEventMap {
+	}
+}

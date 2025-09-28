@@ -6,6 +6,7 @@
 import type * as vscode from 'vscode';
 import { ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { modelSupportsMultiReplaceString, modelSupportsReplaceString } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -37,17 +38,20 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 		const endpointProvider = accessor.get<IEndpointProvider>(IEndpointProvider);
 		const notebookService = accessor.get<INotebookService>(INotebookService);
 		const configurationService = accessor.get<IConfigurationService>(IConfigurationService);
-		const experimentalService = accessor.get<IExperimentationService>(IExperimentationService);
+		const experimentationService = accessor.get<IExperimentationService>(IExperimentationService);
 		const model = await endpointProvider.getChatEndpoint(request);
 		const lookForTools = new Set<string>([ToolName.EditFile]);
 
 
-		if (configurationService.getExperimentBasedConfig(ConfigKey.EditsCodeNewNotebookAgentEnabled, experimentalService) !== false && requestHasNotebookRefs(request, notebookService, { checkPromptAsWell: true })) {
+		if (requestHasNotebookRefs(request, notebookService, { checkPromptAsWell: true })) {
 			lookForTools.add(ToolName.CreateNewJupyterNotebook);
 		}
 
-		if (model.family.startsWith('claude')) {
+		if (await modelSupportsReplaceString(model)) {
 			lookForTools.add(ToolName.ReplaceString);
+			if (await modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
+				lookForTools.add(ToolName.MultiReplaceString);
+			}
 		}
 		lookForTools.add(ToolName.EditNotebook);
 		if (requestHasNotebookRefs(request, notebookService, { checkPromptAsWell: true })) {
@@ -87,9 +91,7 @@ export class EditCode2Intent extends EditCodeIntent {
 export class EditCode2IntentInvocation extends AgentIntentInvocation {
 
 	public override get linkification(): IntentLinkificationOptions {
-		// on by default:
-		const enabled = this.configurationService.getConfig(ConfigKey.Internal.EditLinkification) !== false;
-		return { disable: !enabled };
+		return { disable: false };
 	}
 
 	protected override prompt = EditCodePrompt2;
@@ -113,9 +115,8 @@ export class EditCode2IntentInvocation extends AgentIntentInvocation {
 		@ITelemetryService telemetryService: ITelemetryService,
 		@INotebookService notebookService: INotebookService,
 		@ILogService logService: ILogService,
-		@IExperimentationService experimentationService: IExperimentationService,
 	) {
-		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, logService, experimentationService);
+		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, logService);
 	}
 
 	public override async getAvailableTools(): Promise<vscode.LanguageModelToolInformation[]> {

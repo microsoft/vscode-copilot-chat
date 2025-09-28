@@ -13,6 +13,11 @@ export class CAPIClientImpl extends BaseCAPIClientService {
 		@IFetcherService fetcherService: IFetcherService,
 		@IEnvService envService: IEnvService
 	) {
-		super(process.env.HMAC_SECRET, fetcherService, envService);
+		super(
+			process.env.HMAC_SECRET,
+			!!process.env.FORCE_DEV_INTEGRATION,
+			fetcherService,
+			envService
+		);
 	}
 }

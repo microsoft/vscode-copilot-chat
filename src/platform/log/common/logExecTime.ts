@@ -30,10 +30,10 @@ export async function measureExecTime<R>(fn: () => PromiseLike<R>, cb: MeasureCa
  */
 export async function logExecTime<R>(logService: ILogService, name: string, fn: () => PromiseLike<R>, measureCb?: MeasureCallBack<R>): Promise<R> {
 	return measureExecTime(() => {
-		logService.logger.trace(`${name} started`);
+		logService.trace(`${name} started`);
 		return fn();
 	}, (time, status, result) => {
-		logService.logger.trace(`${name} ${status}. Elapsed ${time}`);
+		logService.trace(`${name} ${status}. Elapsed ${time}`);
 		measureCb?.(time, status, result);
 	});
 }
@@ -43,13 +43,12 @@ export async function logExecTime<R>(logService: ILogService, name: string, fn: 
  */
 export function LogExecTime<T>(
 	getLogService: (self: T) => ILogService,
-	overrideLogName?: string,
+	logName: string,
 	measureCb?: (this: T, time: number, status: 'success' | 'failed' | 'cancelled') => void,
 ) {
 	return function (target: T, propertyKey: string, descriptor: PropertyDescriptor) {
 		const originalMethod = descriptor.value;
 		let idPool = 0;
-		const logName = overrideLogName ?? ((target as any)?.constructor?.name) ? ((target as any).constructor.name + '.' + propertyKey) : propertyKey;
 		descriptor.value = async function (this: T, ...args: any[]) {
 			const id = idPool++;
 			const logService = getLogService(this);

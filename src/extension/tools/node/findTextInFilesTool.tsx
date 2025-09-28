@@ -50,8 +50,9 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		const askedForTooManyResults = options.input.maxResults && options.input.maxResults > MaxResultsCap;
 		const maxResults = Math.min(options.input.maxResults ?? 20, MaxResultsCap);
 		const isRegExp = options.input.isRegexp ?? true;
+		const queryIsValidRegex = this.isValidRegex(options.input.query);
 		let results = await this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, token);
-		if (!results.length) {
+		if (!results.length && queryIsValidRegex) {
 			results = await this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, token);
 		}
 
@@ -76,6 +77,15 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		return result;
 	}
 
+	private isValidRegex(pattern: string): boolean {
+		try {
+			new RegExp(pattern);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
 	private async searchAndCollectResults(query: string, isRegExp: boolean, patterns: vscode.GlobPattern[] | undefined, maxResults: number, token: CancellationToken): Promise<vscode.TextSearchResult2[]> {
 		const searchResult = this.searchService.findTextInFiles2(
 			{
@@ -93,6 +103,9 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 			results.push(item);
 		}
 
+		// Necessary in case it was rejected
+		await searchResult.complete;
+
 		return results;
 	}
 
@@ -102,11 +115,27 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		};
 	}
 
-	private formatQueryString(input: IFindTextInFilesToolParams): string {
-		return input.includePattern && input.includePattern !== '**/*' ?
-			`\`${input.query}\` (\`${input.includePattern}\`)` :
-			`\`${input.query}\``;
+	/**
+	 * Formats text as a Markdown inline code span that is resilient to backticks within the text.
+	 * It chooses a backtick fence one longer than the longest run of backticks in the content,
+	 * and pads with a space when the content begins or ends with a backtick as per CommonMark.
+	 */
+	private formatCodeSpan(text: string): string {
+		const matches = text.match(/`+/g);
+		const maxRun = matches ? matches.reduce((m, s) => Math.max(m, s.length), 0) : 0;
+		const fence = '`'.repeat(maxRun + 1);
+		const needsPadding = text.startsWith('`') || text.endsWith('`');
+		const inner = needsPadding ? ` ${text} ` : text;
+		return `${fence}${inner}${fence}`;
+	}
 
+	private formatQueryString(input: IFindTextInFilesToolParams): string {
+		const querySpan = this.formatCodeSpan(input.query);
+		if (input.includePattern && input.includePattern !== '**/*') {
+			const patternSpan = this.formatCodeSpan(input.includePattern);
+			return `${querySpan} (${patternSpan})`;
+		}
+		return querySpan;
 	}
 
 	async resolveInput(input: IFindTextInFilesToolParams, _promptContext: IBuildPromptContext, mode: CopilotToolMode): Promise<IFindTextInFilesToolParams> {
