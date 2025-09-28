@@ -18,6 +18,7 @@ import { IToolCallingLoopOptions, ToolCallingLoop, ToolCallingLoopFetchOptions }
 import { AgentPrompt } from '../../prompts/node/agent/agentPrompt';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { ToolName } from '../../tools/common/toolNames';
+import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 import { IBuildPromptContext } from '../common/intents';
 import { IBuildPromptResult } from './intents';
 
@@ -43,14 +44,18 @@ export class ExecutePromptToolCallingLoop extends ToolCallingLoop<IExecutePrompt
 		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService);
 	}
 
-	protected override createPromptContext(availableTools: LanguageModelToolInformation[], outputStream: ChatResponseStream | undefined) {
+	protected override createPromptContext(availableTools: LanguageModelToolInformation[], outputStream: ChatResponseStream | undefined): IBuildPromptContext {
 		const context = super.createPromptContext(availableTools, outputStream);
 		if (context.tools) {
 			context.tools = {
 				...context.tools,
+				toolReferences: [],
 				inSubAgent: true
 			};
 		}
+		context.query = this.options.promptText;
+		context.chatVariables = new ChatVariablesCollection();
+		context.conversation = undefined;
 		return context;
 	}
 
@@ -62,20 +67,15 @@ export class ExecutePromptToolCallingLoop extends ToolCallingLoop<IExecutePrompt
 		return endpoint;
 	}
 
-	protected async buildPrompt(buildPromptContext: IBuildPromptContext, progress: Progress<ChatResponseReferencePart | ChatResponseProgressPart>, token: CancellationToken): Promise<IBuildPromptResult> {
+	protected async buildPrompt(promptContext: IBuildPromptContext, progress: Progress<ChatResponseReferencePart | ChatResponseProgressPart>, token: CancellationToken): Promise<IBuildPromptResult> {
 		const endpoint = await this.getEndpoint(this.options.request);
-		const promptContext: IBuildPromptContext = {
-			...buildPromptContext,
-			query: this.options.promptText,
-			conversation: undefined
-		};
 		const renderer = PromptRenderer.create(
 			this.instantiationService,
 			endpoint,
 			AgentPrompt,
 			{
 				endpoint,
-				promptContext,
+				promptContext: promptContext,
 				location: this.options.location,
 				enableCacheBreakpoints: false,
 			}
