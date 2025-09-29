@@ -451,7 +451,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 
 	constructor(
 		gitExtensionService: IGitExtensionService,
-		notebookService: INotebookService,
+		notebookService: INotebookService | undefined,
 		workspaceService: IWorkspaceService,
 		providerId: string,
 		doc: IObservableDocument,
