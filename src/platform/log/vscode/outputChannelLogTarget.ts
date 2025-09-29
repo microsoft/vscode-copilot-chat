@@ -8,9 +8,11 @@ import { ILogTarget } from '../common/logService';
 
 export let outputChannel: OutputChannel;
 
+export const OutputChannelName = 'GitHub Copilot Chat';
+
 export class NewOutputChannelLogTarget implements ILogTarget {
 
-	private readonly _outputChannel = window.createOutputChannel('GitHub Copilot Chat', { log: true });
+	private readonly _outputChannel = window.createOutputChannel(OutputChannelName, { log: true });
 
 	constructor(extensionContext: ExtensionContext) {
 		outputChannel = this._outputChannel;

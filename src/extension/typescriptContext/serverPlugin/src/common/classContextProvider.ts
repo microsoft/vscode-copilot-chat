@@ -7,7 +7,7 @@ import TS from './typescript';
 const ts = TS();
 
 import { CodeSnippetBuilder } from './code';
-import { AbstractContextRunnable, ComputeCost, ContextProvider, ContextResult, Search, type ComputeContextSession, type ContextRunnableCollector, type RequestContext, type RunnableResult } from './contextProvider';
+import { AbstractContextRunnable, ComputeCost, ContextProvider, ContextResult, Search, SnippetLocation, type ComputeContextSession, type ContextRunnableCollector, type RequestContext, type RunnableResult } from './contextProvider';
 import { EmitMode, Priorities, SpeculativeKind } from './protocol';
 import tss, { ClassDeclarations, ReferencedByVisitor, Symbols } from './typescripts';
 
@@ -264,7 +264,7 @@ export class SuperClassRunnable extends AbstractContextRunnable {
 	private readonly classDeclaration: tt.ClassDeclaration;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, classDeclaration: tt.ClassDeclaration, priority: number = Priorities.Inherited) {
-		super(session, languageService, context, 'SuperClassRunnable', priority, ComputeCost.Medium);
+		super(session, languageService, context, 'SuperClassRunnable', SnippetLocation.Primary, priority, ComputeCost.Medium);
 		this.classDeclaration = classDeclaration;
 	}
 
@@ -296,7 +296,7 @@ class SimilarClassRunnable extends AbstractContextRunnable {
 	private readonly classDeclaration: tt.ClassDeclaration;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, classDeclaration: tt.ClassDeclaration, priority: number = Priorities.Blueprints) {
-		super(session, languageService, context, 'SimilarClassRunnable', priority, ComputeCost.High);
+		super(session, languageService, context, 'SimilarClassRunnable', SnippetLocation.Primary, priority, ComputeCost.High);
 		this.classDeclaration = classDeclaration;
 	}
 
@@ -325,7 +325,7 @@ class SimilarClassRunnable extends AbstractContextRunnable {
 		}
 		const code = new CodeSnippetBuilder(this.session, this.context.getSymbols(foundInProgram), classDeclaration.getSourceFile());
 		code.addDeclaration(similarClass.declaration);
-		result.addSnippet(code, undefined);
+		result.addSnippet(code, this.location, undefined);
 	}
 }
 

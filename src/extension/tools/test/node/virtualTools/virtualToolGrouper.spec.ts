@@ -79,7 +79,7 @@ describe('Virtual Tools - Grouper', () => {
 		const testingServiceCollection = createExtensionUnitTestingServices();
 		accessor = testingServiceCollection.createTestingAccessor();
 		grouper = accessor.get(IInstantiationService).createInstance(TestVirtualToolGrouper);
-		root = new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX, '', Infinity, { groups: [], toolsetKey: '', preExpanded: true });
+		root = new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX, '', Infinity, { groups: [], toolsetKey: '', wasExpandedByDefault: true });
 		root.isExpanded = true;
 	});
 
@@ -597,8 +597,179 @@ describe('Virtual Tools - Grouper', () => {
 			expect(extVirtualTool).toBeDefined();
 			if (extVirtualTool) {
 				expect(extVirtualTool.isExpanded).toBe(true);
-				expect(extVirtualTool.metadata.preExpanded).toBe(true);
+				expect(extVirtualTool.metadata.wasExpandedByDefault).toBe(true);
 			}
+		});
+	});
+
+	describe('recomputeEmbeddingRankings', () => {
+		beforeEach(() => {
+			const configurationService = accessor.get(IConfigurationService);
+			vi.spyOn(configurationService, 'getExperimentBasedConfig').mockReturnValue(true);
+		});
+
+		it('should do nothing when embedding ranking is disabled', async () => {
+			const configurationService = accessor.get(IConfigurationService);
+			vi.spyOn(configurationService, 'getExperimentBasedConfig').mockReturnValue(false);
+
+			const tools = [makeTool('test1'), makeTool('test2')];
+			root.contents = [...tools];
+
+			const originalContents = [...root.contents];
+			await grouper.recomputeEmbeddingRankings('query', root, CancellationToken.None);
+
+			// Should not have changed anything
+			expect(root.contents).toEqual(originalContents);
+		});
+
+		it('should create embeddings group with predicted tools', async () => {
+			const tools = [makeTool('predicted1'), makeTool('regular1'), makeTool('predicted2'), makeTool('regular2')];
+			root.contents = [...tools];
+
+			// Mock the embeddings computer and tool retrieval
+			const embeddingsComputer = accessor.get(IEmbeddingsComputer);
+			vi.spyOn(embeddingsComputer, 'computeEmbeddings').mockResolvedValue({
+				type: EmbeddingType.text3small_512,
+				values: [{
+					type: EmbeddingType.text3small_512,
+					value: [0.1, 0.2, 0.3, 0.4, 0.5]
+				}]
+			});
+
+			vi.spyOn(grouper['toolEmbeddingsComputer'], 'retrieveSimilarEmbeddingsForAvailableTools')
+				.mockResolvedValue(['predicted1', 'predicted2']);
+
+			await grouper.recomputeEmbeddingRankings('test query', root, CancellationToken.None);
+
+			// Should have added embeddings group at the beginning
+			expect(root.contents[0]).toBeInstanceOf(VirtualTool);
+			const embeddingsGroup = root.contents[0] as VirtualTool;
+			expect(embeddingsGroup.name).toBe('activate_embeddings');
+			expect(embeddingsGroup.description).toBe('Tools with high predicted relevancy for this query');
+			expect(embeddingsGroup.isExpanded).toBe(true);
+			expect(embeddingsGroup.metadata.canBeCollapsed).toBe(false);
+			expect(embeddingsGroup.metadata.wasExpandedByDefault).toBe(true);
+
+			// Should contain the predicted tools
+			expect(embeddingsGroup.contents).toHaveLength(2);
+			expect(embeddingsGroup.contents.map(t => t.name)).toEqual(['predicted1', 'predicted2']);
+
+			// Original tools should still be in root
+			const remainingTools = root.contents.slice(1);
+			expect(remainingTools).toEqual(tools);
+		});
+
+		it('should replace existing embeddings group when recomputing', async () => {
+			const tools = [makeTool('tool1'), makeTool('tool2'), makeTool('tool3')];
+			root.contents = [...tools];
+
+			const embeddingsComputer = accessor.get(IEmbeddingsComputer);
+			vi.spyOn(embeddingsComputer, 'computeEmbeddings').mockResolvedValue({
+				type: EmbeddingType.text3small_512,
+				values: [{
+					type: EmbeddingType.text3small_512,
+					value: [0.1, 0.2, 0.3, 0.4, 0.5]
+				}]
+			});
+
+			// First call - predict tool1
+			vi.spyOn(grouper['toolEmbeddingsComputer'], 'retrieveSimilarEmbeddingsForAvailableTools')
+				.mockResolvedValueOnce(['tool1']);
+
+			await grouper.recomputeEmbeddingRankings('query1', root, CancellationToken.None);
+
+			// Should have embeddings group with tool1
+			expect(root.contents[0]).toBeInstanceOf(VirtualTool);
+			let embeddingsGroup = root.contents[0] as VirtualTool;
+			expect(embeddingsGroup.contents).toHaveLength(1);
+			expect(embeddingsGroup.contents[0].name).toBe('tool1');
+
+			// Second call - predict tool2 and tool3
+			vi.spyOn(grouper['toolEmbeddingsComputer'], 'retrieveSimilarEmbeddingsForAvailableTools')
+				.mockResolvedValueOnce(['tool2', 'tool3']);
+
+			await grouper.recomputeEmbeddingRankings('query2', root, CancellationToken.None);
+
+			// Should have replaced the embeddings group
+			expect(root.contents[0]).toBeInstanceOf(VirtualTool);
+			embeddingsGroup = root.contents[0] as VirtualTool;
+			expect(embeddingsGroup.contents).toHaveLength(2);
+			expect(embeddingsGroup.contents.map(t => t.name)).toEqual(['tool2', 'tool3']);
+		});
+
+		it('should create empty embeddings group when no predicted tools found', async () => {
+			const tools = [makeTool('tool1'), makeTool('tool2')];
+			root.contents = [...tools];
+
+			const embeddingsComputer = accessor.get(IEmbeddingsComputer);
+			vi.spyOn(embeddingsComputer, 'computeEmbeddings').mockResolvedValue({
+				type: EmbeddingType.text3small_512,
+				values: [{
+					type: EmbeddingType.text3small_512,
+					value: [0.1, 0.2, 0.3, 0.4, 0.5]
+				}]
+			});
+
+			// Return no predicted tools
+			vi.spyOn(grouper['toolEmbeddingsComputer'], 'retrieveSimilarEmbeddingsForAvailableTools')
+				.mockResolvedValue([]);
+
+			await grouper.recomputeEmbeddingRankings('query', root, CancellationToken.None);
+
+			// Should have added empty embeddings group at the beginning
+			expect(root.contents[0]).toBeInstanceOf(VirtualTool);
+			const embeddingsGroup = root.contents[0] as VirtualTool;
+			expect(embeddingsGroup.name).toBe('activate_embeddings');
+			expect(embeddingsGroup.contents).toHaveLength(0);
+
+			// Original tools should still be in root after the embeddings group
+			const remainingTools = root.contents.slice(1);
+			expect(remainingTools).toEqual(tools);
+		});
+
+		it('should create empty embeddings group when predicted tools are not found in root', async () => {
+			const tools = [makeTool('tool1'), makeTool('tool2')];
+			root.contents = [...tools];
+
+			const embeddingsComputer = accessor.get(IEmbeddingsComputer);
+			vi.spyOn(embeddingsComputer, 'computeEmbeddings').mockResolvedValue({
+				type: EmbeddingType.text3small_512,
+				values: [{
+					type: EmbeddingType.text3small_512,
+					value: [0.1, 0.2, 0.3, 0.4, 0.5]
+				}]
+			});
+
+			// Return predicted tools that don't exist in root
+			vi.spyOn(grouper['toolEmbeddingsComputer'], 'retrieveSimilarEmbeddingsForAvailableTools')
+				.mockResolvedValue(['nonexistent1', 'nonexistent2']);
+
+			await grouper.recomputeEmbeddingRankings('query', root, CancellationToken.None);
+
+			// Should have added empty embeddings group since predicted tools don't exist in root
+			expect(root.contents[0]).toBeInstanceOf(VirtualTool);
+			const embeddingsGroup = root.contents[0] as VirtualTool;
+			expect(embeddingsGroup.name).toBe('activate_embeddings');
+			expect(embeddingsGroup.contents).toHaveLength(0);
+
+			// Original tools should still be in root after the embeddings group
+			const remainingTools = root.contents.slice(1);
+			expect(remainingTools).toEqual(tools);
+		});
+
+		it('should handle errors in embeddings computation gracefully', async () => {
+			const tools = [makeTool('tool1'), makeTool('tool2')];
+			root.contents = [...tools];
+
+			// Mock embeddings computation to throw an error
+			const embeddingsComputer = accessor.get(IEmbeddingsComputer);
+			vi.spyOn(embeddingsComputer, 'computeEmbeddings').mockRejectedValue(new Error('Embeddings computation failed'));
+
+			const originalContents = [...root.contents];
+
+			// Should not throw and should not modify contents
+			await expect(grouper.recomputeEmbeddingRankings('query', root, CancellationToken.None)).resolves.toBeUndefined();
+			expect(root.contents).toEqual(originalContents);
 		});
 	});
 

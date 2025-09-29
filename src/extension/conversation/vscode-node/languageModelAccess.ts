@@ -132,7 +132,11 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			if (endpoint.degradationReason) {
 				modelDescription = endpoint.degradationReason;
 			} else if (endpoint.model === AutoChatEndpoint.id) {
-				modelDescription = localize('languageModel.autoTooltip', 'Auto selects the best model for your request based on capacity and performance. Counted at 0x-0.9x the request rate, depending on the model.');
+				if (this._authenticationService.copilotToken?.isNoAuthUser) {
+					modelDescription = localize('languageModel.autoTooltipNoAuth', 'Auto selects the best model for your request based on capacity and performance.');
+				} else {
+					modelDescription = localize('languageModel.autoTooltip', 'Auto selects the best model for your request based on capacity and performance. Counted at 0x-0.9x the request rate, depending on the model.');
+				}
 			} else if (endpoint.multiplier) {
 				modelDescription = localize('languageModel.costTooltip', '{0} ({1}) is counted at a {2}x rate.', sanitizedModelName, endpoint.version, endpoint.multiplier);
 			} else if (endpoint.isFallback && endpoint.multiplier === 0) {
@@ -155,9 +159,16 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			// Counting tokens requires instantiating the tokenizers, which makes this process use a lot of memory.
 			// Let's cache the results across extension activations
 			const baseCount = await this._promptBaseCountCache.getBaseCount(endpoint);
-			let multiplierString = endpoint.multiplier !== undefined ? `${endpoint.multiplier}x` : undefined;
+			let modelDetail = endpoint.multiplier !== undefined ? `${endpoint.multiplier}x` : undefined;
+
 			if (endpoint.model === AutoChatEndpoint.id) {
-				multiplierString = 'Variable';
+				modelDetail = 'Variable';
+			}
+			if (endpoint.customModel) {
+				const customModel = endpoint.customModel;
+				modelDetail = customModel.owner_name;
+				modelDescription = `${endpoint.name} is contributed by ${customModel.owner_name} using ${customModel.key_name}`;
+				modelCategory = { label: localize('languageModelHeader.custom_models', "Custom Models"), order: 1 };
 			}
 
 			const session = this._authenticationService.anyGitHubSession;
@@ -167,7 +178,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				name: endpoint.model === AutoChatEndpoint.id ? 'Auto' : endpoint.name,
 				family: endpoint.family,
 				tooltip: modelDescription,
-				detail: multiplierString,
+				detail: modelDetail,
 				category: modelCategory,
 				statusIcon: endpoint.degradationReason ? new vscode.ThemeIcon('warning') : undefined,
 				version: endpoint.version,

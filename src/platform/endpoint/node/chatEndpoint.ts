@@ -29,7 +29,7 @@ import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
-import { IChatModelInformation, ModelPolicy, ModelSupportedEndpoint } from '../common/endpointProvider';
+import { CustomModel, IChatModelInformation, ModelPolicy, ModelSupportedEndpoint } from '../common/endpointProvider';
 import { createResponsesRequestBody, processResponseFromChatEndpoint } from './responsesApi';
 
 // get ChatMaxNumTokens from config for experimentation
@@ -154,6 +154,7 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly isPremium?: boolean | undefined;
 	public readonly multiplier?: number | undefined;
 	public readonly restrictedToSkus?: string[] | undefined;
+	public readonly customModel?: CustomModel | undefined;
 
 	private readonly _supportsStreaming: boolean;
 	private _policyDetails: ModelPolicy | undefined;
@@ -192,6 +193,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		this.supportsPrediction = !!_modelMetadata.capabilities.supports.prediction;
 		this._supportsStreaming = !!_modelMetadata.capabilities.supports.streaming;
 		this._policyDetails = _modelMetadata.policy;
+		this.customModel = _modelMetadata.custom_model;
 	}
 
 	public get modelMaxPromptTokens(): number {

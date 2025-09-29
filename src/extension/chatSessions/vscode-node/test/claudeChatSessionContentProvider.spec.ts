@@ -13,6 +13,7 @@ import { IFileSystemService } from '../../../../platform/filesystem/common/fileS
 import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { MockFileSystemService } from '../../../../platform/filesystem/node/test/mockFileSystemService';
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
+import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
@@ -21,12 +22,9 @@ import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../../util/vs/platform/instantiation/common/serviceCollection';
 import { ChatRequestTurn, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolInvocationPart } from '../../../../vscodeTypes';
-import { ClaudeAgentManager } from '../../../agents/claude/node/claudeCodeAgent';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../../agents/claude/node/claudeCodeSessionService';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { ClaudeChatSessionContentProvider } from '../claudeChatSessionContentProvider';
-import { ClaudeSessionDataStore } from '../claudeChatSessionItemProvider';
-import { TestWorkspaceService } from '../../../../platform/test/node/testWorkspaceService';
 
 // Mock types for testing
 interface MockClaudeSession {
@@ -38,8 +36,6 @@ interface MockClaudeSession {
 }
 
 describe('ChatSessionContentProvider', () => {
-	let mockClaudeAgentManager: ClaudeAgentManager;
-	let mockSessionStore: ClaudeSessionDataStore;
 	let mockSessionService: IClaudeCodeSessionService;
 	let provider: ClaudeChatSessionContentProvider;
 	const store = new DisposableStore();
@@ -47,16 +43,6 @@ describe('ChatSessionContentProvider', () => {
 	const workspaceFolderUri = URI.file('/project');
 
 	beforeEach(() => {
-		mockClaudeAgentManager = {
-			handleRequest: vi.fn().mockResolvedValue({ claudeSessionId: 'test-claude-session' })
-		} as any;
-
-		mockSessionStore = {
-			getAndConsumeInitialRequest: vi.fn(),
-			setClaudeSessionId: vi.fn(),
-			getSessionId: vi.fn()
-		} as any;
-
 		mockSessionService = {
 			getSession: vi.fn()
 		} as any;
@@ -69,9 +55,7 @@ describe('ChatSessionContentProvider', () => {
 		serviceCollection.define(IClaudeCodeSessionService, mockSessionService);
 		accessor = serviceCollection.createTestingAccessor();
 		const instaService = accessor.get(IInstantiationService);
-		provider = instaService.createInstance(ClaudeChatSessionContentProvider,
-			mockClaudeAgentManager,
-			mockSessionStore);
+		provider = instaService.createInstance(ClaudeChatSessionContentProvider);
 	});
 
 	afterEach(() => {
@@ -117,11 +101,8 @@ describe('ChatSessionContentProvider', () => {
 		});
 	}
 
-	const mockInitialRequest: vscode.ChatRequest = { prompt: 'initial prompt' } as Partial<vscode.ChatRequest> as any;
 	describe('provideChatSessionContent', () => {
 		it('returns empty history when no existing session', async () => {
-			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
-			vi.mocked(mockSessionStore.getSessionId).mockReturnValue('test-session');
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
 
 			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
@@ -144,8 +125,6 @@ describe('ChatSessionContentProvider', () => {
 				]
 			};
 
-			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
-			vi.mocked(mockSessionStore.getSessionId).mockReturnValue('test-session');
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
 
 			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
@@ -185,9 +164,7 @@ describe('ChatSessionContentProvider', () => {
 				]
 			};
 
-			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
-			vi.mocked(mockSessionStore.getSessionId).mockReturnValue('test-session');
 
 			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
 
@@ -233,9 +210,7 @@ describe('ChatSessionContentProvider', () => {
 				]
 			};
 
-			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
-			vi.mocked(mockSessionStore.getSessionId).mockReturnValue('test-session');
 
 			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
 
@@ -255,66 +230,6 @@ describe('ChatSessionContentProvider', () => {
 				  },
 				]
 			`);
-		});
-
-		it('creates activeResponseCallback that calls claudeAgentManager', async () => {
-			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(mockInitialRequest);
-			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
-			vi.mocked(mockClaudeAgentManager.handleRequest).mockResolvedValue({ claudeSessionId: 'new-claude-session' });
-
-			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
-
-			// Mock stream and test the callback
-			const mockStream = {} as vscode.ChatResponseStream;
-			expect(result.activeResponseCallback).toBeDefined();
-			await result.activeResponseCallback!(mockStream, CancellationToken.None);
-
-			expect(mockClaudeAgentManager.handleRequest).toHaveBeenCalledWith(
-				undefined,
-				expect.objectContaining({
-					prompt: 'initial prompt'
-				}),
-				{ history: [] },
-				mockStream,
-				CancellationToken.None
-			);
-
-			expect(mockSessionStore.setClaudeSessionId).toHaveBeenCalledWith('test-session', 'new-claude-session');
-		});
-
-		it('not new session - does not have activeResponseCallback', async () => {
-			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
-			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
-			vi.mocked(mockClaudeAgentManager.handleRequest).mockResolvedValue({ claudeSessionId: 'new-claude-session' });
-
-			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
-			expect(result.activeResponseCallback).toBeUndefined();
-		});
-
-		it('creates requestHandler that calls claudeAgentManager with session id', async () => {
-			vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
-			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
-			vi.mocked(mockSessionStore.getSessionId).mockReturnValue('existing-claude-session');
-
-			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
-
-			// Mock request, context, and stream
-			const mockRequest = { prompt: 'test request' } as vscode.ChatRequest;
-			const mockContext = { history: [] } as vscode.ChatContext;
-			const mockStream = {} as vscode.ChatResponseStream;
-
-			if (result.requestHandler) {
-				result.requestHandler(mockRequest, mockContext, mockStream, CancellationToken.None);
-			}
-
-			expect(mockSessionStore.getSessionId).toHaveBeenCalledWith('test-session');
-			expect(mockClaudeAgentManager.handleRequest).toHaveBeenCalledWith(
-				'existing-claude-session',
-				mockRequest,
-				mockContext,
-				mockStream,
-				CancellationToken.None
-			);
 		});
 	});
 
@@ -349,9 +264,7 @@ describe('ChatSessionContentProvider', () => {
 			]
 		};
 
-		vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
-		vi.mocked(mockSessionStore.getSessionId).mockReturnValue('test-session');
 
 		const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
 
@@ -432,9 +345,7 @@ describe('ChatSessionContentProvider', () => {
 			]
 		};
 
-		vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
-		vi.mocked(mockSessionStore.getSessionId).mockReturnValue('test-session');
 
 		const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
 
@@ -487,9 +398,7 @@ describe('ChatSessionContentProvider', () => {
 			]
 		};
 
-		vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
 		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
-		vi.mocked(mockSessionStore.getSessionId).mockReturnValue('test-session');
 
 		const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
 
@@ -501,58 +410,6 @@ describe('ChatSessionContentProvider', () => {
 			  },
 			]
 		`);
-	});
-
-	it('creates activeResponseCallback that calls claudeAgentManager', async () => {
-		vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(mockInitialRequest);
-		vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
-		vi.mocked(mockClaudeAgentManager.handleRequest).mockResolvedValue({ claudeSessionId: 'new-claude-session' });
-
-		const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
-
-		// Mock stream and test the callback
-		const mockStream = {} as vscode.ChatResponseStream;
-		if (result.activeResponseCallback) {
-			await result.activeResponseCallback(mockStream, CancellationToken.None);
-		}
-
-		expect(mockClaudeAgentManager.handleRequest).toHaveBeenCalledWith(
-			undefined,
-			expect.objectContaining({
-				prompt: 'initial prompt'
-			}),
-			{ history: [] },
-			mockStream,
-			CancellationToken.None
-		);
-
-		expect(mockSessionStore.setClaudeSessionId).toHaveBeenCalledWith('test-session', 'new-claude-session');
-	});
-
-	it('creates requestHandler that calls claudeAgentManager with session id', async () => {
-		vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
-		vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
-		vi.mocked(mockSessionStore.getSessionId).mockReturnValue('existing-claude-session');
-
-		const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
-
-		// Mock request, context, and stream
-		const mockRequest = { prompt: 'test request' } as vscode.ChatRequest;
-		const mockContext = { history: [] } as vscode.ChatContext;
-		const mockStream = {} as vscode.ChatResponseStream;
-
-		if (result.requestHandler) {
-			result.requestHandler(mockRequest, mockContext, mockStream, CancellationToken.None);
-		}
-
-		expect(mockSessionStore.getSessionId).toHaveBeenCalledWith('test-session');
-		expect(mockClaudeAgentManager.handleRequest).toHaveBeenCalledWith(
-			'existing-claude-session',
-			mockRequest,
-			mockContext,
-			mockStream,
-			CancellationToken.None
-		);
 	});
 
 	it('loads real fixture file with tool invocation flow and converts to correct chat history', async () => {
@@ -574,12 +431,7 @@ describe('ChatSessionContentProvider', () => {
 		const childInstantiationService = instaService.createChild(new ServiceCollection(
 			[IClaudeCodeSessionService, realSessionService]
 		));
-		const provider = childInstantiationService.createInstance(ClaudeChatSessionContentProvider,
-			mockClaudeAgentManager,
-			mockSessionStore);
-
-		vi.mocked(mockSessionStore.getAndConsumeInitialRequest).mockReturnValue(undefined);
-		vi.mocked(mockSessionStore.getSessionId).mockReturnValue('4c289ca8-f8bb-4588-8400-88b78beb784d');
+		const provider = childInstantiationService.createInstance(ClaudeChatSessionContentProvider);
 
 		const result = await provider.provideChatSessionContent('4c289ca8-f8bb-4588-8400-88b78beb784d', CancellationToken.None);
 		expect(mapHistoryForSnapshot(result.history)).toMatchSnapshot();

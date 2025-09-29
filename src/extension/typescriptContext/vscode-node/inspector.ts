@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 
 import type { ContextItem, SnippetContext, TraitContext } from '../../../platform/languageServer/common/languageContextService';
 import * as protocol from '../common/serverProtocol';
-import { ContextItemResultBuilder, type ContextComputedEvent, type ContextItemSummary, type IInternalLanguageContextService, type ResolvedRunnableResult } from './types';
+import { type ContextItemSummary, type IInternalLanguageContextService, type OnCachePopulatedEvent, type OnContextComputedEvent, type OnContextComputedOnTimeoutEvent, type ResolvedRunnableResult } from './types';
 
 class TreePropertyItem {
 
@@ -335,18 +335,10 @@ type TreeYieldedContextItem = TreeYieldedSnippet | TreeYieldedTrait;
 class TreeYielded {
 
 	private readonly parent: TreeContextRequest;
-	private readonly items: ContextItem[];
-	private readonly contextItemSummary: ContextItemResultBuilder;
+	private readonly items: ReadonlyArray<ContextItem>;
 
-	constructor(parent: TreeContextRequest, runnables: ReadonlyArray<ResolvedRunnableResult>) {
+	constructor(parent: TreeContextRequest, items: ReadonlyArray<ContextItem>) {
 		this.parent = parent;
-		const items: ContextItem[] = [];
-		this.contextItemSummary = new ContextItemResultBuilder(0);
-		for (const runnable of runnables) {
-			for (const converted of this.contextItemSummary.update(runnable)) {
-				items.push(converted);
-			}
-		}
 		this.items = items;
 	}
 
@@ -363,7 +355,7 @@ class TreeYielded {
 	}
 
 	public toTreeItem(): vscode.TreeItem {
-		const label = `Yielded: ${this.items.length} from ${this.contextItemSummary.stats.total} items`;
+		const label = `Yielded: ${this.items.length} items`;
 		const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.Collapsed);
 		item.id = this.id;
 		return item;
@@ -374,21 +366,18 @@ class TreeYielded {
 	}
 }
 
-class TreeContextRequest {
+abstract class TreeContextRequest {
 
-	private readonly label: string;
-
-	private readonly document: string;
-	private readonly position: vscode.Position;
-	private readonly items: ReadonlyArray<ResolvedRunnableResult>;
+	protected readonly label: string;
+	protected readonly document: string;
+	protected readonly position: vscode.Position;
 	public readonly summary: ContextItemSummary;
 
 	private static counter = 1;
 
-	constructor(label: string, event: ContextComputedEvent) {
+	constructor(label: string, event: OnCachePopulatedEvent | OnContextComputedEvent | OnContextComputedOnTimeoutEvent) {
 		this.document = event.document.uri.toString();
 		this.position = event.position;
-		this.items = event.results;
 		this.summary = event.summary;
 		const start = new Date(Date.now() - this.summary.totalTime);
 		const timeString = `${start.getMinutes().toString().padStart(2, '0')}:${start.getSeconds().toString().padStart(2, '0')}.${start.getMilliseconds().toString().padStart(3, '0')}`;
@@ -408,7 +397,31 @@ class TreeContextRequest {
 
 	private createTooltip(): vscode.MarkdownString {
 		const markdown = new vscode.MarkdownString(`**${this.label}**\n\n`);
-		const json = {
+		const json = this.createJson();
+		markdown.appendCodeblock(JSON.stringify(json, undefined, 2), 'json');
+		return markdown;
+	}
+
+	protected abstract createJson(): any;
+
+	public abstract children(): (TreeRunnableResult | TreeYieldedContextItem)[];
+
+	public get id(): string {
+		return `${TreeContextRequest.counter++}`;
+	}
+}
+
+class TreeCachePopulateContextRequest extends TreeContextRequest {
+
+	private readonly items: ReadonlyArray<ResolvedRunnableResult>;
+
+	constructor(label: string, event: OnCachePopulatedEvent) {
+		super(label, event);
+		this.items = event.items;
+	}
+
+	protected createJson(): any {
+		return {
 			document: this.document,
 			position: {
 				line: this.position.line + 1,
@@ -422,21 +435,59 @@ class TreeContextRequest {
 				contextComputeTime: this.summary.contextComputeTime,
 			},
 		};
-		markdown.appendCodeblock(JSON.stringify(json, undefined, 2), 'json');
-		return markdown;
 	}
 
-	public children(): (TreeRunnableResult | TreeYielded)[] {
-		const result: (TreeRunnableResult | TreeYielded)[] = [];
+	public override children(): (TreeRunnableResult | TreeYieldedContextItem)[] {
+		const result: (TreeRunnableResult | TreeYieldedContextItem)[] = [];
 		for (const item of this.items) {
 			result.push(new TreeRunnableResult(this, item));
 		}
-		result.push(new TreeYielded(this, this.items));
 		return result;
 	}
+}
 
-	public get id(): string {
-		return `${TreeContextRequest.counter++}`;
+class TreeYieldContextRequest extends TreeContextRequest {
+
+	private readonly items: ReadonlyArray<ContextItem>;
+
+	constructor(label: string, event: OnContextComputedEvent | OnContextComputedOnTimeoutEvent) {
+		super(label, event);
+		this.items = event.items;
+	}
+
+	protected createJson(): any {
+		return {
+			document: this.document,
+			position: {
+				line: this.position.line + 1,
+				character: this.position.character + 1
+			},
+			items: this.items.length,
+			cached: `${this.summary.cachedItems}/${this.summary.stats.total} cached`,
+			timings: {
+				totalTime: this.summary.totalTime,
+				serverTime: this.summary.serverTime,
+				contextComputeTime: this.summary.contextComputeTime,
+			},
+		};
+	}
+
+	public override children(): TreeYieldedContextItem[] {
+		const children: TreeYieldedContextItem[] = [];
+		for (const item of this.items) {
+			if (item.kind === protocol.ContextKind.Snippet) {
+				children.push(new TreeYieldedSnippet(item as SnippetContext));
+			} else if (item.kind === protocol.ContextKind.Trait) {
+				children.push(new TreeYieldedTrait(item as TraitContext));
+			}
+		}
+		return children;
+	}
+
+	public override toTreeItem(): vscode.TreeItem {
+		const item = new vscode.TreeItem(this.label, vscode.TreeItemCollapsibleState.Collapsed);
+		item.id = this.id;
+		return item;
 	}
 }
 
@@ -456,13 +507,13 @@ export class InspectorDataProvider implements vscode.TreeDataProvider<InspectorI
 		this.onDidChangeTreeData = this._onDidChangeTreeData.event;
 		this.items = [];
 		this.languageContextService.onCachePopulated((event) => {
-			this.addContextRequest(new TreeContextRequest(`Cache`, event));
+			this.addContextRequest(new TreeCachePopulateContextRequest(`Cache`, event));
 		});
 		this.languageContextService.onContextComputed((event) => {
-			this.addContextRequest(new TreeContextRequest(`Context`, event));
+			this.addContextRequest(new TreeYieldContextRequest(`Context`, event));
 		});
 		this.languageContextService.onContextComputedOnTimeout((event) => {
-			this.addContextRequest(new TreeContextRequest(`OnTimeout`, event));
+			this.addContextRequest(new TreeYieldContextRequest(`OnTimeout`, event));
 		});
 	}
 

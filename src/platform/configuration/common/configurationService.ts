@@ -734,11 +734,9 @@ export namespace ConfigKey {
 
 		export const VirtualToolEmbeddingRanking = defineExpSetting<boolean>('chat.advanced.virtualTools.embeddingRanking', false, INTERNAL);
 		export const MultiReplaceStringGrok = defineExpSetting<boolean>('chat.advanced.multiReplaceStringGrok.enabled', false, INTERNAL);
-		export const Gpt5ApplyPatchExclusively = defineExpSetting<boolean>('chat.advanced.gpt5ApplyPatchExclusively.enabled', false, INTERNAL);
 
 		export const EnableClaudeCodeAgent = defineSetting<boolean | string | undefined>('chat.advanced.claudeCode.enabled', false);
 		export const ClaudeCodeDebugEnabled = defineSetting<boolean>('chat.advanced.claudeCode.debug', false);
-		export const TaskToolsEnabled = defineSetting<boolean>('chat.advanced.taskTools.enabled', true);
 		export const Gpt5AlternativePatch = defineExpSetting<boolean>('chat.advanced.gpt5AlternativePatch', false);
 	}
 
@@ -765,6 +763,7 @@ export namespace ConfigKey {
 	export const SetupTests = defineSetting<boolean>('chat.setupTests.enabled', true);
 	/** Whether the Copilot TypeScript context provider is enabled and if how */
 	export const TypeScriptLanguageContext = defineExpSetting<boolean>('chat.languageContext.typescript.enabled', false);
+	export const TypeScriptLanguageContextMode = defineExpSetting<'minimal' | 'half' | 'double' | 'fill'>('chat.languageContext.typescript.items', 'minimal');
 	export const TypeScriptLanguageContextCacheTimeout = defineExpSetting<number>('chat.languageContext.typescript.cacheTimeout', 500);
 	export const TypeScriptLanguageContextFix = defineExpSetting<boolean>('chat.languageContext.fix.typescript.enabled', false);
 	export const TypeScriptLanguageContextInline = defineExpSetting<boolean>('chat.languageContext.inline.typescript.enabled', false);
@@ -804,8 +803,9 @@ export namespace ConfigKey {
 
 	export const EnableAlternateGptPrompt = defineExpSetting<boolean>('chat.alternateGptPrompt.enabled', false);
 	export const Gpt5AlternatePrompt = defineExpSetting<string>('chat.gpt5AlternatePrompt', 'default');
-	export const Gpt5CodexAlternatePrompt = defineExpSetting<'default' | 'codex'>('chat.gpt5CodexAlternatePrompt', 'default');
+	export const Gpt5CodexAlternatePrompt = defineExpSetting<'default' | 'codex'>('chat.gpt5CodexAlternatePrompt', 'codex');
 	export const GrokCodeAlternatePrompt = defineExpSetting<string>('chat.grokCodeAlternatePrompt', 'default');
+	export const ExecutePromptEnabled = defineSetting<boolean>('chat.executePrompt.enabled', false);
 }
 
 export function getAllConfigKeys(): string[] {

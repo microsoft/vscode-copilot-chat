@@ -20,6 +20,7 @@ import { ChatCompletion } from '../../networking/common/openai';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
+import { EndpointEditToolName, isEndpointEditToolName } from '../common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../common/endpointTypes';
 import { decodeStatefulMarker, encodeStatefulMarker, rawPartAsStatefulMarker } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
@@ -30,6 +31,8 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	public readonly isFallback: boolean = false;
 	public readonly isPremium: boolean = false;
 	public readonly multiplier: number = 0;
+	public readonly isExtensionContributed = true;
+	public readonly supportedEditTools?: readonly EndpointEditToolName[] | undefined;
 
 	constructor(
 		private readonly languageModel: vscode.LanguageModelChat,
@@ -38,6 +41,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	) {
 		// Initialize with the model's max tokens
 		this._maxTokens = languageModel.maxInputTokens;
+		this.supportedEditTools = languageModel.capabilities.editToolsHint?.filter(isEndpointEditToolName);
 	}
 
 	get modelMaxPromptTokens(): number {

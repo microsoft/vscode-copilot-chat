@@ -19,6 +19,7 @@ import { Disposable, IDisposable } from '../../../util/vs/base/common/lifecycle'
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart2 } from '../../../vscodeTypes';
+import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../authentication/common/authenticationUpgrade';
 import { FileChunk, FileChunkAndScore } from '../../chunking/common/chunk';
 import { MAX_CHUNK_SIZE_TOKENS } from '../../chunking/node/naiveChunker';
@@ -118,6 +119,7 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 
 	constructor(
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
@@ -128,6 +130,10 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 	}
 
 	private async tryInit(silent: boolean): Promise<WorkspaceChunkSearchServiceImpl | undefined> {
+		if (!this._authenticationService.copilotToken || this._authenticationService.copilotToken.isNoAuthUser) {
+			return undefined;
+		}
+
 		if (this._impl) {
 			return this._impl;
 		}
@@ -161,7 +167,7 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 					repos: [],
 				},
 				localIndexState: {
-					status: LocalEmbeddingsIndexStatus.Unknown,
+					status: !this._authenticationService.copilotToken || this._authenticationService.copilotToken.isNoAuthUser ? LocalEmbeddingsIndexStatus.Disabled : LocalEmbeddingsIndexStatus.Unknown,
 					getState: async () => undefined,
 				}
 			};
