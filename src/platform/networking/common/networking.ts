@@ -164,6 +164,7 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly supportedEditTools?: readonly EndpointEditToolName[];
 	readonly showInModelPicker: boolean;
 	readonly isPremium?: boolean;
+	readonly degradationReason?: string;
 	readonly multiplier?: number;
 	readonly restrictedToSkus?: string[];
 	readonly isDefault: boolean;

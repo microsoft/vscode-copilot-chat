@@ -2811,6 +2811,22 @@
 						],
 						"markdownDescription": "%github.copilot.chat.languageContext.typescript.enabled%"
 					},
+					"github.copilot.chat.languageContext.typescript.items": {
+						"type": "string",
+						"enum": [
+							"minimal",
+							"double",
+							"fillHalf",
+							"fill"
+						],
+						"default": "minimal",
+						"scope": "resource",
+						"tags": [
+							"experimental",
+							"onExP"
+						],
+						"markdownDescription": "%github.copilot.chat.languageContext.typescript.items%"
+					},
 					"github.copilot.chat.languageContext.typescript.cacheTimeout": {
 						"type": "number",
 						"default": 500,

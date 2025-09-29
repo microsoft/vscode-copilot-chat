@@ -479,6 +479,10 @@ namespace tss {
 			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeAlias) !== 0;
 		}
 
+		public static isTypeParameter(symbol: tt.Symbol | undefined): boolean {
+			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeParameter) !== 0;
+		}
+
 		public static isTypeLiteral(symbol: tt.Symbol | undefined): boolean {
 			return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeLiteral) !== 0;
 		}

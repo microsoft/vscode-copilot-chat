@@ -129,7 +129,9 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 			const sanitizedModelName = endpoint.name.replace(/\(Preview\)/g, '').trim();
 			let modelDescription: string | undefined;
-			if (endpoint.model === AutoChatEndpoint.id) {
+			if (endpoint.degradationReason) {
+				modelDescription = endpoint.degradationReason;
+			} else if (endpoint.model === AutoChatEndpoint.id) {
 				if (this._authenticationService.copilotToken?.isNoAuthUser) {
 					modelDescription = localize('languageModel.autoTooltipNoAuth', 'Auto selects the best model for your request based on capacity and performance.');
 				} else {
@@ -178,6 +180,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				tooltip: modelDescription,
 				detail: modelDetail,
 				category: modelCategory,
+				statusIcon: endpoint.degradationReason ? new vscode.ThemeIcon('warning') : undefined,
 				version: endpoint.version,
 				maxInputTokens: endpoint.modelMaxPromptTokens - baseCount - BaseTokensPerCompletion,
 				maxOutputTokens: endpoint.maxOutputTokens,

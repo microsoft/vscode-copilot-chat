@@ -410,11 +410,18 @@ export interface RunnableResultContext {
 	manageContextItem(item: FullContextItem): ContextItem;
 }
 
+export enum SnippetLocation {
+	Primary,
+	Secondary
+}
+
 export class RunnableResult {
 
 	private readonly id: string;
 	private readonly runnableResultContext: RunnableResultContext;
-	private readonly tokenBudget: TokenBudget;
+
+	private readonly primaryBudget: CharacterBudget;
+	private readonly secondaryBudget: CharacterBudget;
 	private state: ContextRunnableState;
 	private speculativeKind: SpeculativeKind;
 	private cache: CacheInfo | undefined;
@@ -422,23 +429,28 @@ export class RunnableResult {
 	public readonly priority: number;
 	public readonly items: ContextItem[];
 
-	constructor(id: ContextRunnableResultId, priority: number, runnableResultContext: RunnableResultContext, tokenBudget: TokenBudget, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined) {
+	constructor(id: ContextRunnableResultId, priority: number, runnableResultContext: RunnableResultContext, primaryBudget: CharacterBudget, secondaryBudget: CharacterBudget, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined) {
 		this.id = id;
 		this.priority = priority;
 		this.runnableResultContext = runnableResultContext;
-		this.tokenBudget = tokenBudget;
+		this.primaryBudget = primaryBudget;
+		this.secondaryBudget = secondaryBudget;
 		this.state = ContextRunnableState.Created;
 		this.speculativeKind = speculativeKind;
 		this.cache = cache;
 		this.items = [];
 	}
 
-	public isTokenBudgetExhausted(): boolean {
-		if (this.tokenBudget.isExhausted()) {
+	public isPrimaryBudgetExhausted(): boolean {
+		if (this.primaryBudget.isExhausted()) {
 			this.state = ContextRunnableState.IsFull;
 			return true;
 		}
 		return false;
+	}
+
+	public isSecondaryBudgetExhausted(): boolean {
+		return this.secondaryBudget.isExhausted();
 	}
 
 	public done(): void {
@@ -465,25 +477,26 @@ export class RunnableResult {
 		this.state = ContextRunnableState.InProgress;
 		const trait = Trait.create(traitKind, name, value);
 		this.items.push(this.runnableResultContext.manageContextItem(trait));
-		this.tokenBudget.spent(Trait.sizeInChars(trait));
+		this.primaryBudget.spent(Trait.sizeInChars(trait));
 	}
 
-	public addSnippet(code: SnippetProvider, key: string | undefined): void;
-	public addSnippet(code: SnippetProvider, key: string | undefined, ifRoom: false): void;
-	public addSnippet(code: SnippetProvider, key: string | undefined, ifRoom: true): boolean;
-	public addSnippet(code: SnippetProvider, key: string | undefined, ifRoom: boolean): boolean
-	public addSnippet(code: SnippetProvider, key: string | undefined, ifRoom: boolean = false): boolean {
+	public addSnippet(code: SnippetProvider, location: SnippetLocation, key: string | undefined): void;
+	public addSnippet(code: SnippetProvider, location: SnippetLocation, key: string | undefined, ifRoom: false): void;
+	public addSnippet(code: SnippetProvider, location: SnippetLocation, key: string | undefined, ifRoom: true): boolean;
+	public addSnippet(code: SnippetProvider, location: SnippetLocation, key: string | undefined, ifRoom: boolean): boolean
+	public addSnippet(code: SnippetProvider, location: SnippetLocation, key: string | undefined, ifRoom: boolean = false): boolean {
+		const budget = location === SnippetLocation.Primary ? this.primaryBudget : this.secondaryBudget;
 		if (code.isEmpty()) {
 			return true;
 		}
 		const snippet: CodeSnippet = code.snippet(key);
 		const size = CodeSnippet.sizeInChars(snippet);
-		if (ifRoom && !this.tokenBudget.hasRoom(size)) {
+		if (ifRoom && !budget.hasRoom(size)) {
 			this.state = ContextRunnableState.IsFull;
 			return false;
 		}
 		this.state = ContextRunnableState.InProgress;
-		this.tokenBudget.spent(size);
+		budget.spent(size);
 		this.items.push(this.runnableResultContext.manageContextItem(snippet));
 		return true;
 	}
@@ -527,7 +540,8 @@ class RunnableResultReference {
 
 export class ContextResult {
 
-	public readonly tokenBudget: TokenBudget;
+	public readonly primaryBudget: CharacterBudget;
+	public readonly secondaryBudget: CharacterBudget;
 	public readonly context: RequestContext;
 
 	private state: ContextRequestResultState;
@@ -539,8 +553,9 @@ export class ContextResult {
 	private readonly runnableResults: (RunnableResult | RunnableResultReference)[] = [];
 	private readonly contextItems: Map<ContextItemKey, FullContextItem>;
 
-	constructor(tokenBudget: TokenBudget, context: RequestContext) {
-		this.tokenBudget = tokenBudget;
+	constructor(primaryBudget: CharacterBudget, secondaryBudget: CharacterBudget, context: RequestContext) {
+		this.primaryBudget = primaryBudget;
+		this.secondaryBudget = secondaryBudget;
 		this.context = context;
 		this.state = ContextRequestResultState.Created;
 		this.path = undefined;
@@ -572,7 +587,7 @@ export class ContextResult {
 
 	public createRunnableResult(id: ContextRunnableResultId, priority: number, speculativeKind: SpeculativeKind, cache?: CacheInfo | undefined): RunnableResult {
 		this.state = ContextRequestResultState.InProgress;
-		const result = new RunnableResult(id, priority, this, this.tokenBudget, speculativeKind, cache);
+		const result = new RunnableResult(id, priority, this, this.primaryBudget, this.secondaryBudget, speculativeKind, cache);
 		this.runnableResults.push(result);
 		return result;
 	}
@@ -654,7 +669,7 @@ export class ContextResult {
 			timings: this.timings,
 			errors: this.errors,
 			timedOut: this.timedOut,
-			exhausted: this.tokenBudget.isExhausted(),
+			exhausted: this.primaryBudget.isExhausted(),
 			runnableResults: runnableResults,
 			contextItems: Array.from(this.contextItems.values())
 		};
@@ -738,7 +753,7 @@ export interface ContextRunnable {
 class CacheBasedContextRunnable implements ContextRunnable {
 
 	private readonly cached: CachedContextRunnableResult;
-	private tokenBudget: TokenBudget | undefined;
+	private tokenBudget: CharacterBudget | undefined;
 
 	public readonly id: ContextRunnableResultId;
 	public readonly priority: number;
@@ -752,7 +767,7 @@ class CacheBasedContextRunnable implements ContextRunnable {
 	}
 
 	initialize(result: ContextResult): void {
-		this.tokenBudget = result.tokenBudget;
+		this.tokenBudget = result.primaryBudget;
 		result.addRunnableResultReference(this.cached);
 	}
 
@@ -796,6 +811,7 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 	public readonly symbols: Symbols;
 
 	public readonly id: ContextRunnableResultId;
+	protected readonly location: SnippetLocation;
 	public readonly priority: number;
 	public readonly cost: ComputeCost;
 
@@ -804,13 +820,14 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 	private readonly program: tt.Program | undefined;
 	private result: RunnableResult | undefined;
 
-	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, id: ContextRunnableResultId, priority: number, cost: ComputeCost) {
+	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, id: ContextRunnableResultId, location: SnippetLocation, priority: number, cost: ComputeCost) {
 		this.session = session;
 		this.languageService = languageService;
 		this.program = languageService.getProgram();
 		this.context = context;
 		this.symbols = context.getSymbols(this.getProgram());
 		this.id = id;
+		this.location = location;
 		this.priority = priority;
 		this.cost = cost;
 	}
@@ -847,7 +864,7 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 			throw new Error('Runnable not initialized');
 		}
 		token.throwIfCancellationRequested();
-		if (this.result.isTokenBudgetExhausted()) {
+		if (this.result.isPrimaryBudgetExhausted()) {
 			return;
 		}
 		this.run(this.result, token);
@@ -925,15 +942,15 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 				const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, this.getActiveSourceFile());
 				snippetBuilder.addDeclaration(emitData.node);
 				if (ifRoom === undefined || ifRoom === false) {
-					this.result.addSnippet(snippetBuilder, undefined);
+					this.result.addSnippet(snippetBuilder, this.location, undefined);
 				} else {
-					if (!this.result.addSnippet(snippetBuilder, undefined, ifRoom)) {
+					if (!this.result.addSnippet(snippetBuilder, this.location, undefined, ifRoom)) {
 						return false;
 					}
 				}
 			} else if (emitData.kind === SymbolEmitDataKind.symbol) {
 				const { symbol, name } = emitData;
-				if (this.skipSymbol(symbol)) {
+				if (this.skipSymbolBasedOnDeclaration(symbol) || Symbols.isTypeParameter(symbol)) {
 					continue;
 				}
 				const key = Symbols.createKey(symbol, this.session.host);
@@ -943,9 +960,9 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 				const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, this.getActiveSourceFile());
 				snippetBuilder.addTypeSymbol(symbol, name);
 				if (ifRoom === undefined || ifRoom === false) {
-					this.result.addSnippet(snippetBuilder, key);
+					this.result.addSnippet(snippetBuilder, this.location, key);
 				} else {
-					if (!this.result.addSnippet(snippetBuilder, key, ifRoom)) {
+					if (!this.result.addSnippet(snippetBuilder, this.location, key, ifRoom)) {
 						return false;
 					}
 				}
@@ -970,7 +987,7 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 		return program.isSourceFileDefaultLibrary(sourceFile) || program.isSourceFileFromExternalLibrary(sourceFile);
 	}
 
-	protected skipSymbol(symbol: tt.Symbol): boolean {
+	protected skipSymbolBasedOnDeclaration(symbol: tt.Symbol): boolean {
 		const declarations = symbol.getDeclarations();
 		if (declarations === undefined || declarations.length === 0) {
 			return false;
@@ -1201,17 +1218,15 @@ export class TokenBudgetExhaustedError extends Error {
 	}
 }
 
-export class TokenBudget {
+export class CharacterBudget {
 
 	private charBudget: number;
 	private lowWaterMark: number;
 	private itemRejected: boolean;
 
-	constructor(budget: number, lowWaterMark: number = 64) {
-		// This is an approximation that we can have 4 characters
-		// per token on average.
-		this.charBudget = budget * 4;
-		this.lowWaterMark = lowWaterMark * 4;
+	constructor(budget: number, lowWaterMark: number = 256) {
+		this.charBudget = budget;
+		this.lowWaterMark = lowWaterMark;
 		this.itemRejected = false;
 	}
 
