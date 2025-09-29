@@ -320,6 +320,8 @@ export interface SummarizedAgentHistoryProps extends BasePromptElementProps {
 	readonly enableCacheBreakpoints?: boolean;
 	readonly workingNotebook?: NotebookDocument;
 	readonly maxToolResultLength: number;
+	/** Optional hard cap on summary tokens; effective budget = min(prompt sizing tokenBudget, this value) */
+	readonly maxSummaryTokens?: number;
 }
 
 /**
@@ -524,9 +526,13 @@ class ConversationHistorySummarizer {
 		}
 
 		const summarySize = await this.sizing.countTokens(response.value);
-		if (summarySize > this.sizing.tokenBudget) {
+		const effectiveBudget =
+			!!this.props.maxSummaryTokens
+				? Math.min(this.sizing.tokenBudget, this.props.maxSummaryTokens)
+				: this.sizing.tokenBudget;
+		if (summarySize > effectiveBudget) {
 			this.sendSummarizationTelemetry('too_large', response.requestId, this.props.endpoint.model, mode, elapsedTime, response.usage);
-			this.logInfo(`Summary too large: ${summarySize} tokens`, mode);
+			this.logInfo(`Summary too large: ${summarySize} tokens (effective budget ${effectiveBudget})`, mode);
 			throw new Error('Summary too large');
 		}
 
