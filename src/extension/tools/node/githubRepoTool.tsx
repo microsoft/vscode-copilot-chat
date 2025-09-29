@@ -12,7 +12,7 @@ import { GithubRepoId, toGithubNwo } from '../../../platform/git/common/gitServi
 import { IGithubCodeSearchService } from '../../../platform/remoteCodeSearch/common/githubCodeSearchService';
 import { RemoteCodeSearchIndexStatus } from '../../../platform/remoteCodeSearch/common/remoteCodeSearch';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { GithubAvailableEmbeddingTypesManager } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
+import { GithubAvailableEmbeddingTypesService, IGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
 import { Result } from '../../../util/common/result';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { isLocation, isUri } from '../../../util/common/types';
@@ -42,12 +42,12 @@ interface PrepareError {
 export class GithubRepoTool implements ICopilotTool<GithubRepoToolParams> {
 	public static readonly toolName = ToolName.GithubRepo;
 
-	private readonly _availableEmbeddingTypesManager = new Lazy<GithubAvailableEmbeddingTypesManager>(() => this._instantiationService.createInstance(GithubAvailableEmbeddingTypesManager));
 
 	constructor(
 		@IRunCommandExecutionService _commandService: IRunCommandExecutionService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IGithubCodeSearchService private readonly _githubCodeSearch: IGithubCodeSearchService,
+		@IGithubAvailableEmbeddingTypesService private readonly _availableEmbeddingTypesManager: Lazy<GithubAvailableEmbeddingTypesService>,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 	) { }
 

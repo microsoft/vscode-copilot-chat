@@ -6,6 +6,7 @@
 import { RequestType } from '@vscode/copilot-api';
 import { createRequestHMAC } from '../../../util/common/crypto';
 import { Result } from '../../../util/common/result';
+import { createServiceIdentifier } from '../../../util/common/services';
 import { CallTracker } from '../../../util/common/telemetryCorrelationId';
 import { env } from '../../../util/vs/base/common/process';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
@@ -35,7 +36,22 @@ type GetAvailableTypesError =
 
 type GetAvailableTypesResult = Result<AvailableEmbeddingTypes, GetAvailableTypesError>;
 
-export class GithubAvailableEmbeddingTypesManager {
+export const IGithubAvailableEmbeddingTypesService = createServiceIdentifier<IGithubAvailableEmbeddingTypesService>('IGithubAvailableEmbeddingTypesService');
+
+export interface IGithubAvailableEmbeddingTypesService {
+	readonly _serviceBrand: undefined;
+
+	/**
+	 * Gets the preferred embedding type based on available types and user configuration.
+	 * @param silent Whether to silently handle authentication errors
+	 * @returns The preferred embedding type or undefined if none available
+	 */
+	getPreferredType(silent: boolean): Promise<EmbeddingType | undefined>;
+}
+
+export class GithubAvailableEmbeddingTypesService implements IGithubAvailableEmbeddingTypesService {
+
+	readonly _serviceBrand: undefined;
 
 	private _cached?: Promise<GetAvailableTypesResult>;
 
