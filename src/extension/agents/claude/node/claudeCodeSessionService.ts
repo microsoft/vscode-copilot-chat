@@ -12,15 +12,16 @@ import { FileType } from '../../../../platform/filesystem/common/fileTypes';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { createServiceIdentifier } from '../../../../util/common/services';
+import { CancellationError } from '../../../../util/vs/base/common/errors';
 import { ResourceMap, ResourceSet } from '../../../../util/vs/base/common/map';
 import { isEqualOrParent } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { CancellationError } from '../../../../util/vs/base/common/errors';
 
 type RawStoredSDKMessage = SDKMessage & {
 	readonly parentUuid: string | null;
 	readonly sessionId: string;
 	readonly timestamp: string;
+	readonly isMeta?: boolean;
 }
 interface SummaryEntry {
 	readonly type: 'summary';
@@ -35,8 +36,16 @@ type StoredSDKMessage = SDKMessage & {
 	readonly timestamp: Date;
 }
 
+interface ParsedSessionMessage {
+	readonly raw: RawStoredSDKMessage;
+	readonly isMeta: boolean;
+}
+
 export const IClaudeCodeSessionService = createServiceIdentifier<IClaudeCodeSessionService>('IClaudeCodeSessionService');
 
+/**
+ * Service to load and manage Claude Code chat sessions from disk.
+ */
 export interface IClaudeCodeSessionService {
 	readonly _serviceBrand: undefined;
 	getAllSessions(token: CancellationToken): Promise<readonly IClaudeCodeSession[]>;
@@ -290,7 +299,6 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 	}
 
 	private async _getMessagesFromSession(fileUri: URI, token: CancellationToken): Promise<{ messages: Map<string, StoredSDKMessage>; summaries: Map<string, SummaryEntry> }> {
-		const messages = new Map<string, StoredSDKMessage>();
 		const summaries = new Map<string, SummaryEntry>();
 		try {
 			// Read and parse the JSONL file
@@ -303,6 +311,7 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 
 			// Parse JSONL content line by line
 			const lines = text.trim().split('\n').filter(line => line.trim());
+			const rawMessages = new Map<string, ParsedSessionMessage>();
 
 			// Parse each line and build message map
 			for (const line of lines) {
@@ -310,11 +319,22 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 					const entry = JSON.parse(line) as ClaudeSessionFileEntry;
 
 					if ('uuid' in entry && entry.uuid && 'message' in entry) {
-						const sdkMessage = this._reviveStoredSDKMessage(entry as RawStoredSDKMessage);
-						const uuid = sdkMessage.uuid;
-						if (uuid) {
-							messages.set(uuid, sdkMessage);
+						const rawEntry = entry;
+						const uuid = rawEntry.uuid;
+						if (!uuid) {
+							continue;
 						}
+
+						const { isMeta, ...rest } = rawEntry;
+						const normalizedRaw = {
+							...rest,
+							parentUuid: rawEntry.parentUuid ?? null
+						} as RawStoredSDKMessage;
+
+						rawMessages.set(uuid, {
+							raw: normalizedRaw,
+							isMeta: Boolean(isMeta)
+						});
 					} else if ('summary' in entry && entry.summary && !entry.summary.toLowerCase().startsWith('api error: 401') && !entry.summary.toLowerCase().startsWith('invalid api key')) {
 						const summaryEntry = entry as SummaryEntry;
 						const uuid = summaryEntry.leafUuid;
@@ -326,6 +346,8 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 					this._logService.warn(`Failed to parse line in ${fileUri}: ${line} - ${parseError}`);
 				}
 			}
+
+			const messages = this._reviveStoredMessages(rawMessages);
 			return { messages, summaries };
 		} catch (e) {
 			this._logService.error(e, `[ClaudeChatSessionItemProvider] Failed to load session: ${fileUri}`);
@@ -380,22 +402,100 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		return text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, '').trim();
 	}
 
+	private _normalizeCommandContent(text: string): string {
+		const parsed = this._extractCommandContent(text);
+		if (parsed !== null) {
+			return parsed;
+		}
+		return this._removeCommandTags(text);
+	}
+
+	private _extractCommandContent(text: string): string | null {
+		const commandMessageMatch = /<command-message>([\s\S]*?)<\/command-message>/i.exec(text);
+		if (!commandMessageMatch) {
+			return null;
+		}
+
+		const commandMessage = commandMessageMatch[1]?.trim();
+		return commandMessage ? `/${commandMessage}` : null;
+	}
+
+	private _removeCommandTags(text: string): string {
+		return text
+			.replace(/<command-message>/gi, '')
+			.replace(/<\/command-message>/gi, '')
+			.replace(/<command-name>/gi, '')
+			.replace(/<\/command-name>/gi, '')
+			.trim();
+	}
+
+	private _reviveStoredMessages(rawMessages: Map<string, ParsedSessionMessage>): Map<string, StoredSDKMessage> {
+		const messages = new Map<string, StoredSDKMessage>();
+
+		for (const [uuid, entry] of rawMessages) {
+			if (entry.isMeta) {
+				continue;
+			}
+
+			const parentUuid = this._resolveParentUuid(entry.raw.parentUuid ?? null, rawMessages);
+			const revived = this._reviveStoredSDKMessage({
+				...entry.raw,
+				parentUuid
+			});
+
+			if (uuid) {
+				messages.set(uuid, revived);
+			}
+		}
+
+		return messages;
+	}
+
+	private _resolveParentUuid(parentUuid: string | null, rawMessages: Map<string, ParsedSessionMessage>): string | null {
+		let current = parentUuid;
+		const visited = new Set<string>();
+
+		while (current) {
+			if (visited.has(current)) {
+				return current;
+			}
+			visited.add(current);
+
+			const candidate = rawMessages.get(current);
+			if (!candidate) {
+				return current;
+			}
+
+			if (!candidate.isMeta) {
+				return current;
+			}
+
+			current = candidate.raw.parentUuid ?? null;
+		}
+
+		return current ?? null;
+	}
+
 	/**
 	 * Strip attachments from message content, handling both string and array formats
 	 */
 	private _stripAttachmentsFromMessageContent(content: Anthropic.MessageParam['content']): string | Anthropic.ContentBlockParam[] {
 		if (typeof content === 'string') {
-			return this._stripAttachments(content);
+			const withoutAttachments = this._stripAttachments(content);
+			return this._normalizeCommandContent(withoutAttachments);
 		} else if (Array.isArray(content)) {
-			return content.map(block => {
+			const processedBlocks = content.map(block => {
 				if (block.type === 'text') {
+					const textBlock = block;
+					const cleanedText = this._normalizeCommandContent(this._stripAttachments(textBlock.text));
 					return {
 						...block,
-						text: this._stripAttachments((block as Anthropic.TextBlockParam).text)
+						text: cleanedText
 					};
 				}
 				return block;
-			});
+			}).filter(block => block.type !== 'text' || block.text.trim().length > 0);
+			return processedBlocks;
 		}
 		return content;
 	}

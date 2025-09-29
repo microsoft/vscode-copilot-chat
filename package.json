@@ -3999,7 +3999,29 @@
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsToolAttachments": false
-				}
+				},
+				"commands": [
+					{
+						"name": "init",
+						"description": "Initialize a new CLAUDE.md file with codebase documentation"
+					},
+					{
+						"name": "compact",
+						"description": "Clear conversation history but keep a summary in context. Optional: /compact [instructions for summarization]"
+					},
+					{
+						"name": "pr-comments",
+						"description": "Get comments from a GitHub pull request"
+					},
+					{
+						"name": "review",
+						"description": "Review a pull request"
+					},
+					{
+						"name": "security-review",
+						"description": "Complete a security review of the pending changes on the current branch"
+					}
+				]
 			}
 		],
 		"debuggers": [

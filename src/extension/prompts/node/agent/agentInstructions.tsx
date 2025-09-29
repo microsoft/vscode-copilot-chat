@@ -437,6 +437,7 @@ export class CodexStyleGPT5CodexPrompt extends PromptElement<DefaultAgentPromptP
 			<br />
 			## Tool use<br />
 			- You have access to many tools. If a tool exists to perform a specific task, you MUST use that tool instead of running a terminal command to perform that task.<br />
+			{tools[ToolName.RunTests] && <>- Use the {ToolName.RunTests} tool to run tests instead of running terminal commands.<br /></>}
 			{tools[ToolName.CoreManageTodoList] && <>
 				<br />
 				## {ToolName.CoreManageTodoList} tool<br />
