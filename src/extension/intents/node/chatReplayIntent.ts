@@ -93,7 +93,19 @@ export class ChatReplayIntent implements IIntent {
 	}
 
 	private async makeEdit(edits: FileEdits, stream: vscode.ChatResponseStream) {
-		const uri = Uri.file(edits.path);
+		let uri: Uri;
+		if (!edits.path.startsWith('/') && !edits.path.match(/^[a-zA-Z]:/)) {
+			// Relative path - join with first workspace folder
+			const workspaceFolders = this.workspaceService.getWorkspaceFolders();
+			if (workspaceFolders.length > 0) {
+				uri = Uri.joinPath(workspaceFolders[0], edits.path);
+			} else {
+				throw new Error('No workspace folder available to resolve relative path: ' + edits.path);
+			}
+		} else {
+			// Absolute path
+			uri = Uri.file(edits.path);
+		}
 		await this.ensureFileExists(uri);
 
 		stream.markdown('\n```\n');

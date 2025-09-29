@@ -4,10 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { languages } from 'vscode';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { autorun } from '../../../util/vs/base/common/observableInternal';
+import { autorun, observableFromEvent } from '../../../util/vs/base/common/observableInternal';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { createContext, setup } from '../../completions-core/completionsServiceBridges';
 import { CopilotInlineCompletionItemProvider } from '../../completions-core/extension/src/inlineCompletion';
@@ -17,10 +18,13 @@ export class CompletionsCoreContribution extends Disposable {
 
 	private _provider: CopilotInlineCompletionItemProvider | undefined;
 
+	private readonly _copilotToken = observableFromEvent(this, this.authenticationService.onDidAuthenticationChange, () => this.authenticationService.copilotToken);
+
 	constructor(
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService experimentationService: IExperimentationService,
+		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 	) {
 		super();
 
@@ -29,6 +33,11 @@ export class CompletionsCoreContribution extends Disposable {
 		this._register(autorun(reader => {
 			const unificationStateValue = unificationState.read(reader);
 			const configEnabled = configurationService.getExperimentBasedConfigObservable<boolean>(ConfigKey.Internal.InlineEditsEnableGhCompletionsProvider, experimentationService).read(reader);
+
+			if (this._copilotToken.read(reader)?.isNoAuthUser) {
+				// TODO@bpasero revisit this in the future
+				return;
+			}
 
 			if (unificationStateValue?.codeUnification || configEnabled) {
 				const provider = this._getOrCreateProvider();

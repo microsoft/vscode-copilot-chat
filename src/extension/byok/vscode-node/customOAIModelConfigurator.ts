@@ -5,6 +5,7 @@
 
 import { InputBoxOptions, LanguageModelChatInformation, QuickInputButtons, QuickPickItem, window } from 'vscode';
 import { Config, ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { EndpointEditToolName } from '../../../platform/endpoint/common/endpointProvider';
 import { DisposableStore } from '../../../util/vs/base/common/lifecycle';
 import { BYOKModelProvider } from '../common/byokProvider';
 
@@ -15,6 +16,7 @@ interface ModelConfig {
 	vision: boolean;
 	maxInputTokens: number;
 	maxOutputTokens: number;
+	editTools?: EndpointEditToolName[];
 	requiresAPIKey?: boolean;
 	thinking?: boolean;
 }
@@ -414,6 +416,7 @@ export class CustomOAIModelConfigurator {
 		}
 
 		return {
+			...currentConfig,
 			name: modelName.trim(),
 			url: url.trim(),
 			toolCalling: capabilities.toolCalling,

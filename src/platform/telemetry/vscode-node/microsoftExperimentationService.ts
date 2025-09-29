@@ -12,10 +12,10 @@ import { IEnvService } from '../../env/common/envService';
 import { packageJson } from '../../env/common/packagejson';
 import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { ILogService } from '../../log/common/logService';
-import { ITelemetryService } from '../common/telemetry';
-import { BaseExperimentationService, UserInfoStore } from '../node/baseExperimentationService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { FetcherService } from '../../networking/vscode-node/fetcherServiceImpl';
+import { ITelemetryService } from '../common/telemetry';
+import { BaseExperimentationService, UserInfoStore } from '../node/baseExperimentationService';
 
 function getTargetPopulation(isPreRelease: boolean): TargetPopulation {
 	if (isPreRelease) {
@@ -136,6 +136,16 @@ class GithubAccountFilterProvider implements IExperimentationFilterProvider {
 
 }
 
+class DevDeviceIdFilterProvider implements IExperimentationFilterProvider {
+	constructor(private _devDeviceId: string) { }
+
+	getFilters(): Map<string, any> {
+		const filters = new Map<string, any>();
+		filters.set('X-VSCode-DevDeviceId', this._devDeviceId);
+		return filters;
+	}
+}
+
 export class MicrosoftExperimentationService extends BaseExperimentationService {
 	constructor(
 		@ITelemetryService telemetryService: ITelemetryService,
@@ -163,7 +173,8 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 				new RelatedExtensionsFilterProvider(logService),
 				new CopilotExtensionsFilterProvider(logService),
 				// The callback is called in super ctor. At that time, self/this is not initialized yet (but also, no filter could have been possibly set).
-				new CopilotCompletionsFilterProvider(() => self?.getCompletionsFilters() ?? new Map(), logService)
+				new CopilotCompletionsFilterProvider(() => self?.getCompletionsFilters() ?? new Map(), logService),
+				new DevDeviceIdFilterProvider(vscode.env.devDeviceId)
 			);
 		};
 

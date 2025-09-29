@@ -127,6 +127,7 @@ suite('defaultIntentRequestHandler', () => {
 		model: LanguageModelChat = { family: '' } as any;
 		tools = new Map();
 		id = generateUuid();
+		sessionId = generateUuid();
 	}
 
 	const responseStream = new ChatResponseStreamImpl(p => response.push(p), () => { });

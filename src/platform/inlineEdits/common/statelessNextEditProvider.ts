@@ -209,6 +209,11 @@ export namespace NoNextEditReason {
 		constructor(public readonly message: FilteredOutReason | string) {
 		}
 	}
+	export class PromptTooLarge {
+		public readonly kind = 'promptTooLarge';
+		constructor(public readonly message: 'currentFile' | 'final') {
+		}
+	}
 	export class Uncategorized {
 		public readonly kind = 'uncategorized';
 		constructor(public readonly error: Error) {
@@ -227,6 +232,7 @@ export type NoNextEditReason =
 	| NoNextEditReason.GotCancelled
 	| NoNextEditReason.FetchFailure
 	| NoNextEditReason.FilteredOut
+	| NoNextEditReason.PromptTooLarge
 	| NoNextEditReason.Uncategorized
 	| NoNextEditReason.Unexpected
 	;
@@ -330,7 +336,7 @@ export class StatelessNextEditTelemetryBuilder {
 		if (result.isError()) {
 			if (result.err instanceof NoNextEditReason.ActiveDocumentHasNoEdits || result.err instanceof NoNextEditReason.NoSuggestions) {
 				// ignore
-			} else if (result.err instanceof NoNextEditReason.GotCancelled || result.err instanceof NoNextEditReason.FilteredOut) {
+			} else if (result.err instanceof NoNextEditReason.GotCancelled || result.err instanceof NoNextEditReason.FilteredOut || result.err instanceof NoNextEditReason.PromptTooLarge) {
 				noNextEditReasonMessage = result.err.message;
 			} else if (result.err instanceof NoNextEditReason.FetchFailure || result.err instanceof NoNextEditReason.Uncategorized || result.err instanceof NoNextEditReason.Unexpected) {
 				noNextEditReasonMessage = result.err.error.stack ? result.err.error.stack : result.err.error.message;
