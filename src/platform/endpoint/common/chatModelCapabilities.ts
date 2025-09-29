@@ -85,8 +85,8 @@ export async function modelCanUseReplaceStringExclusively(model: LanguageModelCh
 /**
  * The model can accept image urls as the `image_url` parameter in mcp tool results.
  */
-export function modelCanUseMcpResultImageURL(model: LanguageModelChat | IChatEndpoint): boolean {
-	return !model.family.startsWith('claude') && !model.family.startsWith('Anthropic');
+export async function modelCanUseMcpResultImageURL(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
+	return !model.family.startsWith('claude') && !model.family.startsWith('Anthropic') && !await isHiddenModelB(model);
 }
 
 /**

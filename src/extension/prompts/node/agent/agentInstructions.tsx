@@ -143,7 +143,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 					<>
 						Before you edit an existing file, make sure you either already have it in the provided context, or read it with the {ToolName.ReadFile} tool, so that you can make proper changes.<br />
 						{tools[ToolName.MultiReplaceString]
-							? <>Use the {ToolName.ReplaceString} tool for single string replacements, paying attention to context to ensure your replacement is unique. Prefer the {ToolName.MultiReplaceString} tool when you need to make multiple string replacements across one or more files in a single operation. This is significantly more efficient than calling {ToolName.ReplaceString} multiple times and should be your first choice for: fixing similar patterns across files, applying consistent formatting changes, bulk refactoring operations, or any scenario where you need to make the same type of change in multiple places.<br /></>
+							? <>Use the {ToolName.ReplaceString} tool for single string replacements, paying attention to context to ensure your replacement is unique. Prefer the {ToolName.MultiReplaceString} tool when you need to make multiple string replacements across one or more files in a single operation. This is significantly more efficient than calling {ToolName.ReplaceString} multiple times and should be your first choice for: fixing similar patterns across files, applying consistent formatting changes, bulk refactoring operations, or any scenario where you need to make the same type of change in multiple places. Do not announce which tool you're using (for example, avoid saying "I'll implement all the changes using multi_replace_string_in_file").<br /></>
 							: isGrokCode
 								? <>Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file. For optimal efficiency, group related edits into larger batches instead of making 10+ separate tool calls. When making several changes to the same file, strive to complete all necessary edits with as few tool calls as possible.<br /></>
 								: <>Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file.<br /></>}
@@ -199,7 +199,9 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 					If platform-specific acceleration applies, include an optional speed-up fenced block with commands. Close with a concise completion summary describing what changed and how it was verified (build/tests/linters), plus any follow-ups.<br />
 				</>}
 				<Tag name='example'>
-					The class `Person` is in `src/models/person.ts`.
+					The class `Person` is in `src/models/person.ts`.<br />
+					The function `calculateTotal` is defined in `lib/utils/math.ts`.<br />
+					You can find the configuration in `config/app.config.json`.
 				</Tag>
 				<MathIntegrationRules />
 			</Tag>
