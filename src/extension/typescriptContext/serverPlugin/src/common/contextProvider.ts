@@ -42,8 +42,9 @@ export class RequestContext {
 	private readonly clientSideContextItems: Map<ContextItemKey, CachedContextItem>;
 
 	public readonly session: ComputeContextSession;
+	public readonly includeDocumentation: boolean;
 
-	constructor(session: ComputeContextSession, neighborFiles: tt.server.NormalizedPath[], clientSideRunnableResults: Map<ContextRunnableResultId, CachedContextRunnableResult>) {
+	constructor(session: ComputeContextSession, neighborFiles: tt.server.NormalizedPath[], clientSideRunnableResults: Map<ContextRunnableResultId, CachedContextRunnableResult>, includeDocumentation: boolean) {
 		this.session = session;
 		this.symbols = new Map();
 		this.neighborFiles = neighborFiles;
@@ -54,6 +55,7 @@ export class RequestContext {
 				this.clientSideContextItems.set(item.key, item);
 			}
 		}
+		this.includeDocumentation = includeDocumentation;
 	}
 
 	public getSymbols(program: tt.Program): Symbols {
@@ -939,7 +941,7 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 				if (this.skipNode(emitData.node)) {
 					continue;
 				}
-				const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, this.getActiveSourceFile());
+				const snippetBuilder = new CodeSnippetBuilder(this.context, this.symbols, this.getActiveSourceFile());
 				snippetBuilder.addDeclaration(emitData.node);
 				if (ifRoom === undefined || ifRoom === false) {
 					this.result.addSnippet(snippetBuilder, this.location, undefined);
@@ -957,7 +959,7 @@ export abstract class AbstractContextRunnable implements ContextRunnable {
 				if (key !== undefined && this.result.addFromKnownItems(key)) {
 					continue;
 				}
-				const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, this.getActiveSourceFile());
+				const snippetBuilder = new CodeSnippetBuilder(this.context, this.symbols, this.getActiveSourceFile());
 				snippetBuilder.addTypeSymbol(symbol, name);
 				if (ifRoom === undefined || ifRoom === false) {
 					this.result.addSnippet(snippetBuilder, this.location, key);

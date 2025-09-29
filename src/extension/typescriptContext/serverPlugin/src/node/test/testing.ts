@@ -112,7 +112,7 @@ export type TestSession = {
 export type ContextItemWithPriority = FullContextItem & PriorityTag;
 
 export function computeContext(session: TestSession, document: string, position: { line: number; character: number }, contextKind: ContextKind): ContextItemWithPriority[] {
-	const result: ContextResult = new ContextResult(new CharacterBudget(7 * 1024 * 4), new CharacterBudget(8 * 1024 * 4), new RequestContext(session.session, [], new Map()));
+	const result: ContextResult = new ContextResult(new CharacterBudget(7 * 1024 * 4), new CharacterBudget(8 * 1024 * 4), new RequestContext(session.session, [], new Map(), true));
 	const program = session.service.getProgram();
 	if (program === undefined) {
 		return [];

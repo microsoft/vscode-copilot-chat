@@ -763,7 +763,8 @@ export namespace ConfigKey {
 	export const SetupTests = defineSetting<boolean>('chat.setupTests.enabled', true);
 	/** Whether the Copilot TypeScript context provider is enabled and if how */
 	export const TypeScriptLanguageContext = defineExpSetting<boolean>('chat.languageContext.typescript.enabled', false);
-	export const TypeScriptLanguageContextMode = defineExpSetting<'minimal' | 'half' | 'double' | 'fill'>('chat.languageContext.typescript.items', 'minimal');
+	export const TypeScriptLanguageContextMode = defineExpSetting<'minimal' | 'double' | 'fillHalf' | 'fill'>('chat.languageContext.typescript.items', 'minimal');
+	export const TypeScriptLanguageContextIncludeDocumentation = defineExpSetting<boolean>('chat.languageContext.typescript.includeDocumentation', false);
 	export const TypeScriptLanguageContextCacheTimeout = defineExpSetting<number>('chat.languageContext.typescript.cacheTimeout', 500);
 	export const TypeScriptLanguageContextFix = defineExpSetting<boolean>('chat.languageContext.fix.typescript.enabled', false);
 	export const TypeScriptLanguageContextInline = defineExpSetting<boolean>('chat.languageContext.inline.typescript.enabled', false);

@@ -113,7 +113,7 @@ suite('Method - Simple', () => {
 	test('complete method', () => {
 		const expected: testing.ExpectedCodeSnippet[] = [{
 			kind: ContextKind.Snippet,
-			value: 'declare class B { /** * The length of the line. */ protected _length: number; /** * Returns the occurrence of \'foo\'. * * @returns the occurrence of \'foo\'. */ public foo(): number; /** * The distance between two points. */ protected distance: number; }',
+			value: 'declare class B { /** * The distance between two points. */ protected distance: number; /** * The length of the line. */ protected _length: number; /** * Returns the occurrence of \'foo\'. * * @returns the occurrence of \'foo\'. */ public foo(): number; }',
 			fileName: /p2\/source\/f1.ts$/
 		}];
 		const context = computeContext(session, path.join(root, 'p2/source/f2.ts'), { line: 5, character: 0 }, ContextKind.Snippet);

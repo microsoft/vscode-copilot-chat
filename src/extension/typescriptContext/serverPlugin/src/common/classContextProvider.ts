@@ -9,7 +9,7 @@ const ts = TS();
 import { CodeSnippetBuilder } from './code';
 import { AbstractContextRunnable, ComputeCost, ContextProvider, ContextResult, Search, SnippetLocation, type ComputeContextSession, type ContextRunnableCollector, type RequestContext, type RunnableResult } from './contextProvider';
 import { EmitMode, Priorities, SpeculativeKind } from './protocol';
-import tss, { ClassDeclarations, ReferencedByVisitor, Symbols } from './typescripts';
+import tss, { ClassDeclarations, ReferencedByVisitor, Symbols, type DirectSuperSymbolInfo } from './typescripts';
 
 export type TypeInfo = {
 	symbol: tt.Symbol;
@@ -284,9 +284,23 @@ export class SuperClassRunnable extends AbstractContextRunnable {
 			return;
 		}
 
-		const [extendsClass, extendsName] = symbols.getExtendsSymbol(clazz);
-		if (extendsClass !== undefined && extendsName !== undefined) {
-			this.handleSymbol(extendsClass, extendsName);
+		const directSuperSymbolInfo: DirectSuperSymbolInfo | undefined = symbols.getDirectSuperSymbols(clazz);
+		if (directSuperSymbolInfo === undefined) {
+			return;
+		}
+		if (directSuperSymbolInfo.extends !== undefined) {
+			const { symbol, name } = directSuperSymbolInfo.extends;
+			if (symbol !== undefined && name !== undefined) {
+				this.handleSymbol(symbol, name);
+			}
+		}
+		if (directSuperSymbolInfo.implements !== undefined) {
+			for (const impl of directSuperSymbolInfo.implements) {
+				const { symbol, name } = impl;
+				if (symbol !== undefined && name !== undefined) {
+					this.handleSymbol(symbol, name);
+				}
+			}
 		}
 	}
 }
@@ -323,7 +337,7 @@ class SimilarClassRunnable extends AbstractContextRunnable {
 		if (foundInProgram === undefined || similarClass === undefined) {
 			return;
 		}
-		const code = new CodeSnippetBuilder(this.session, this.context.getSymbols(foundInProgram), classDeclaration.getSourceFile());
+		const code = new CodeSnippetBuilder(this.context, this.context.getSymbols(foundInProgram), classDeclaration.getSourceFile());
 		code.addDeclaration(similarClass.declaration);
 		result.addSnippet(code, this.location, undefined);
 	}

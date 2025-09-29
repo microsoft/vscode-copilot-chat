@@ -2827,6 +2827,16 @@
 						],
 						"markdownDescription": "%github.copilot.chat.languageContext.typescript.items%"
 					},
+					"github.copilot.chat.languageContext.typescript.includeDocumentation": {
+						"type": "boolean",
+						"default": false,
+						"scope": "resource",
+						"tags": [
+							"experimental",
+							"onExP"
+						],
+						"markdownDescription": "%github.copilot.chat.languageContext.typescript.includeDocumentation%"
+					},
 					"github.copilot.chat.languageContext.typescript.cacheTimeout": {
 						"type": "number",
 						"default": 500,

@@ -69,7 +69,7 @@ const computeContextHandler = (request: ComputeContextRequest): ComputeContextHa
 	}
 	const clientSideRunnableResults: Map<ContextRunnableResultId, CachedContextRunnableResult> = args.clientSideRunnableResults !== undefined ? new Map(args.clientSideRunnableResults.map(item => [item.id, item])) : new Map();
 	const cancellationToken = new CancellationTokenWithTimer(languageServiceHost?.getCancellationToken ? languageServiceHost.getCancellationToken() : undefined, startTime, timeBudget, computeContextSession?.host.isDebugging() ?? false);
-	const requestContext = new RequestContext(computeContextSession!, normalizedPaths, clientSideRunnableResults);
+	const requestContext = new RequestContext(computeContextSession!, normalizedPaths, clientSideRunnableResults, !!args.includeDocumentation);
 	const result: ContextResult = new ContextResult(primaryCharacterBudget, secondaryCharacterBudget, requestContext);
 	try {
 		computeContext(result, computeContextSession!, languageService, file, pos, cancellationToken);

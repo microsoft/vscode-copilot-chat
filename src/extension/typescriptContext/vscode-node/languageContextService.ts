@@ -1034,7 +1034,7 @@ type ComputeContextRequestArgs = Omit<protocol.ComputeContextRequestArgs, 'file'
 	$traceId?: string;
 };
 namespace ComputeContextRequestArgs {
-	export function create(document: vscode.TextDocument, position: vscode.Position, context: RequestContext, startTime: number, timeBudget: number, willLogRequestTelemetry: boolean, neighborFiles: readonly string[] | undefined, clientSideRunnableResults: readonly protocol.CachedContextRunnableResult[] | undefined): ComputeContextRequestArgs {
+	export function create(document: vscode.TextDocument, position: vscode.Position, context: RequestContext, startTime: number, timeBudget: number, willLogRequestTelemetry: boolean, neighborFiles: readonly string[] | undefined, clientSideRunnableResults: readonly protocol.CachedContextRunnableResult[] | undefined, includeDocumentation: boolean): ComputeContextRequestArgs {
 		return {
 			file: vscode.Uri.file(document.fileName),
 			line: position.line + 1,
@@ -1043,6 +1043,7 @@ namespace ComputeContextRequestArgs {
 			timeBudget: timeBudget,
 			primaryCharacterBudget: (context.tokenBudget ?? 7 * 1024) * 4,
 			secondaryCharacterBudget: (currentTokenBudget * 4),
+			includeDocumentation: includeDocumentation,
 			neighborFiles: neighborFiles !== undefined && neighborFiles.length > 0 ? neighborFiles : undefined,
 			clientSideRunnableResults: clientSideRunnableResults,
 			$traceId: willLogRequestTelemetry ? context.requestId : undefined
@@ -1197,6 +1198,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 	private onTimeoutData: OnTimeoutData | undefined;
 	private cachePopulationTimeout: number;
 	private usageMode: ContextItemUsageMode;
+	private includeDocumentation: boolean;
 
 	private _onCachePopulated: vscode.EventEmitter<OnCachePopulatedEvent>;
 	public readonly onCachePopulated: vscode.Event<OnCachePopulatedEvent>;
@@ -1222,6 +1224,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 		this.onTimeoutData = undefined;
 		this.cachePopulationTimeout = this.getCachePopulationBudget();
 		this.usageMode = this.getUsageMode();
+		this.includeDocumentation = this.getIncludeDocumentation();
 
 		this.disposables = new DisposableStore();
 		this.disposables.add(this.configurationService.onDidChangeConfiguration(e => {
@@ -1229,6 +1232,8 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				this.usageMode = this.getUsageMode();
 			} else if (e.affectsConfiguration(ConfigKey.TypeScriptLanguageContextCacheTimeout.fullyQualifiedId)) {
 				this.cachePopulationTimeout = this.getCachePopulationBudget();
+			} else if (e.affectsConfiguration(ConfigKey.TypeScriptLanguageContextIncludeDocumentation.fullyQualifiedId)) {
+				this.includeDocumentation = this.getIncludeDocumentation();
 			}
 		}));
 
@@ -1314,7 +1319,10 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 		const neighborFiles: string[] = this.neighborFileModel.getNeighborFiles(document);
 		const timeBudget = this.cachePopulationTimeout;
 		const willLogRequestTelemetry = this.telemetrySender.willLogRequestTelemetry(context);
-		const args: ComputeContextRequestArgs = ComputeContextRequestArgs.create(document, position, context, startTime, timeBudget, willLogRequestTelemetry, neighborFiles, contextRequestState?.server);
+		const args: ComputeContextRequestArgs = ComputeContextRequestArgs.create(
+			document, position, context, startTime, timeBudget, willLogRequestTelemetry,
+			neighborFiles, contextRequestState?.server, this.includeDocumentation
+		);
 		try {
 			const isDebugging = this.isDebugging;
 			const forDebugging: ContextItem[] | undefined = isDebugging ? [] : undefined;
@@ -1538,6 +1546,10 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 	private getUsageMode(): ContextItemUsageMode {
 		const value = this.configurationService.getExperimentBasedConfig(ConfigKey.TypeScriptLanguageContextMode, this.experimentationService);
 		return ContextItemUsageMode.fromString(value);
+	}
+
+	private getIncludeDocumentation(): boolean {
+		return this.configurationService.getExperimentBasedConfig<boolean>(ConfigKey.TypeScriptLanguageContextIncludeDocumentation, this.experimentationService);
 	}
 
 	private getCharacterBudget(context: RequestContext, document: vscode.TextDocument): CharacterBudget {

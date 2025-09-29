@@ -399,6 +399,7 @@ export interface ComputeContextRequestArgs extends tt.server.protocol.FileLocati
 	timeBudget: number;
 	primaryCharacterBudget: number;
 	secondaryCharacterBudget: number;
+	includeDocumentation?: boolean;
 	neighborFiles?: readonly FilePath[];
 	clientSideRunnableResults?: readonly CachedContextRunnableResult[];
 }

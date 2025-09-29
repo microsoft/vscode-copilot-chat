@@ -449,7 +449,7 @@ abstract class SimilarPropertyRunnable<T extends tt.MethodDeclaration | tt.Const
 					return;
 				}
 				const sourceFile = this.declaration.getSourceFile();
-				const snippetBuilder = new CodeSnippetBuilder(this.session, this.context.getSymbols(program), sourceFile);
+				const snippetBuilder = new CodeSnippetBuilder(this.context, this.context.getSymbols(program), sourceFile);
 				snippetBuilder.addDeclaration(candidate);
 				result.addSnippet(snippetBuilder, this.location, undefined);
 			}

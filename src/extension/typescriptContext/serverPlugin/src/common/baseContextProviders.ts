@@ -523,7 +523,7 @@ export class TypeOfExpressionRunnable extends AbstractContextRunnable {
 			if (returnTypeSymbol === undefined) {
 				continue;
 			}
-			const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile);
+			const snippetBuilder = new CodeSnippetBuilder(this.context, this.symbols, sourceFile);
 			snippetBuilder.addTypeSymbol(returnTypeSymbol, returnTypeSymbol.name);
 			result.addSnippet(snippetBuilder, this.location, undefined);
 		}
@@ -531,7 +531,7 @@ export class TypeOfExpressionRunnable extends AbstractContextRunnable {
 		if (typeSymbol === undefined) {
 			return;
 		}
-		const snippetBuilder = new CodeSnippetBuilder(this.session, this.symbols, sourceFile);
+		const snippetBuilder = new CodeSnippetBuilder(this.context, this.symbols, sourceFile);
 		snippetBuilder.addTypeSymbol(typeSymbol, typeSymbol.name);
 		result.addSnippet(snippetBuilder, this.location, undefined);
 	}
