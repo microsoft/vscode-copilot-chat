@@ -229,3 +229,12 @@ export class GithubAvailableEmbeddingTypesService implements IGithubAvailableEmb
 		return all.primary.at(0) ?? all.deprecated.at(0);
 	}
 }
+
+
+export class MockGithubAvailableEmbeddingTypesService implements IGithubAvailableEmbeddingTypesService {
+	declare readonly _serviceBrand: undefined;
+
+	async getPreferredType(_silent: boolean): Promise<EmbeddingType | undefined> {
+		return EmbeddingType.metis_1024_I16_Binary;
+	}
+}
