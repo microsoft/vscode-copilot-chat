@@ -2829,8 +2829,8 @@
 						"type": "string",
 						"enum": [
 							"minimal",
-							"half",
 							"double",
+							"fillHalf",
 							"fill"
 						],
 						"default": "minimal",

@@ -30,15 +30,13 @@ export namespace ResolvedRunnableResult {
 export type ContextComputedEvent = {
 	document: vscode.TextDocument;
 	position: vscode.Position;
-	characterBudget: number;
 	source?: string;
-	results: ReadonlyArray<ResolvedRunnableResult>;
 	summary: ContextItemSummary;
 }
 
-export type OnCachePopulatedEvent = ContextComputedEvent;
-export type OnContextComputedEvent = ContextComputedEvent;
-export type OnContextComputedOnTimeoutEvent = ContextComputedEvent;
+export type OnCachePopulatedEvent = ContextComputedEvent & { items: ReadonlyArray<ResolvedRunnableResult> };
+export type OnContextComputedEvent = ContextComputedEvent & { items: ReadonlyArray<ContextItem> };
+export type OnContextComputedOnTimeoutEvent = ContextComputedEvent & { items: ReadonlyArray<ContextItem> };
 
 export interface IInternalLanguageContextService extends ILanguageContextService {
 	onCachePopulated: vscode.Event<OnCachePopulatedEvent>;

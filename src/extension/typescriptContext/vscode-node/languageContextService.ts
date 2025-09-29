@@ -1127,16 +1127,16 @@ class OnTimeoutData {
 
 enum ContextItemUsageMode {
 	minimal = 'minimal',
-	half = 'half',
 	double = 'double',
+	fillHalf = 'fillHalf',
 	fill = 'fill'
 }
 namespace ContextItemUsageMode {
 	export function fromString(value: string): ContextItemUsageMode {
 		switch (value) {
 			case 'minimal': return ContextItemUsageMode.minimal;
-			case 'half': return ContextItemUsageMode.half;
 			case 'double': return ContextItemUsageMode.double;
+			case 'fillHalf': return ContextItemUsageMode.fillHalf;
 			case 'fill': return ContextItemUsageMode.fill;
 			default: return ContextItemUsageMode.minimal;
 		}
@@ -1148,11 +1148,13 @@ class CharacterBudget {
 	public readonly overall: number;
 	private mandatory: number;
 	private optional: number;
+	private start: { mandatory: number; optional: number };
 
 	constructor(mandatory: number, optional: number) {
 		this.overall = mandatory;
 		this.mandatory = mandatory;
 		this.optional = optional;
+		this.start = { mandatory, optional };
 	}
 
 	spend(chars: number): void {
@@ -1166,6 +1168,10 @@ class CharacterBudget {
 
 	isOptionalExhausted(): boolean {
 		return this.optional <= 0;
+	}
+
+	public fresh(): CharacterBudget {
+		return new CharacterBudget(this.start.mandatory, this.start.optional);
 	}
 }
 
@@ -1350,7 +1356,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				contextItemResult.updateResponse(body, token);
 				this.telemetrySender.sendRequestTelemetry(document, position, context, contextItemResult, timeTaken, { before: cacheState, after: this.runnableResultManager.getCacheState() }, undefined);
 				isDebugging && forDebugging?.length;
-				this._onCachePopulated.fire({ document, position, characterBudget: args.primaryCharacterBudget, source: context.source, results: resolved, summary: contextItemResult });
+				this._onCachePopulated.fire({ document, position, source: context.source, items: resolved, summary: contextItemResult });
 			} else if (protocol.ComputeContextResponse.isError(response)) {
 				this.telemetrySender.sendRequestFailureTelemetry(context, response.body);
 				console.error('Error populating cache:', response.body.message, response.body.stack);
@@ -1395,9 +1401,7 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 		if (this.onTimeoutData !== undefined) {
 			this.onTimeoutData.resultBuilder = contextItemResult;
 		}
-		const runnableResults = this.runnableResultManager.getCachedRunnableResults(document, position);
-		const characterBudget = (context.tokenBudget ?? currentTokenBudget) * 4;
-		const budget = this.getCharacterBudget(context, document);
+		const characterBudget = this.getCharacterBudget(context, document);
 		// We first collect all items to yield so that the state of the cache doesn't change underneath us.
 		// This could otherwise happen if the cache population request finishes while we are yielding items.
 		const itemsToYield: ContextItem[] = [];
@@ -1408,19 +1412,19 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 		outer: for (const runnableResult of mandatory) {
 			for (const { item, size } of contextItemResult.update(runnableResult, true)) {
 				forDebugging?.push(item);
-				budget.spend(size);
-				if (budget.isExhausted()) {
+				characterBudget.spend(size);
+				if (characterBudget.isExhausted()) {
 					break outer;
 				}
 				itemsToYield.push(item);
 			}
 		}
-		if (!budget.isOptionalExhausted()) {
+		if (!characterBudget.isOptionalExhausted()) {
 			outer: for (const runnableResult of optional) {
 				for (const { item, size } of contextItemResult.update(runnableResult, true)) {
 					forDebugging?.push(item);
-					budget.spend(size);
-					if (budget.isOptionalExhausted()) {
+					characterBudget.spend(size);
+					if (characterBudget.isOptionalExhausted()) {
 						break outer;
 					}
 					itemsToYield.push(item);
@@ -1479,7 +1483,9 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 				{ before: cacheState, after: cacheState }, cacheRequest
 			);
 			isDebugging && forDebugging?.length;
-			this._onContextComputed.fire({ document, position, characterBudget: characterBudget.mandatory, source: context.source, results: runnableResults, summary: contextItemResult });
+			this._onContextComputed.fire({
+				document, position, source: context.source, items: itemsToYield, summary: contextItemResult
+			});
 		}
 		return;
 	}
@@ -1538,12 +1544,13 @@ export class LanguageContextServiceImpl implements ILanguageContextService, vsco
 		const chars = (context.tokenBudget ?? currentTokenBudget) * 4;
 		switch (this.usageMode) {
 			case ContextItemUsageMode.minimal:
-			case ContextItemUsageMode.fill:
-				return new CharacterBudget(chars, chars);
-			case ContextItemUsageMode.half:
-				return new CharacterBudget(chars, Math.floor(chars / 2));
+				return new CharacterBudget(chars, 0);
 			case ContextItemUsageMode.double:
 				return new CharacterBudget(chars, Math.min(chars, document.getText().length));
+			case ContextItemUsageMode.fillHalf:
+				return new CharacterBudget(chars, Math.floor(chars / 2));
+			case ContextItemUsageMode.fill:
+				return new CharacterBudget(chars, chars);
 			default:
 				return new CharacterBudget(chars, chars);
 		}
