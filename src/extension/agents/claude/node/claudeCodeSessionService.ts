@@ -15,6 +15,7 @@ import { createServiceIdentifier } from '../../../../util/common/services';
 import { ResourceMap, ResourceSet } from '../../../../util/vs/base/common/map';
 import { isEqualOrParent } from '../../../../util/vs/base/common/resources';
 import { URI } from '../../../../util/vs/base/common/uri';
+import { CancellationError } from '../../../../util/vs/base/common/errors';
 
 type RawStoredSDKMessage = SDKMessage & {
 	readonly parentUuid: string | null;
@@ -294,6 +295,10 @@ export class ClaudeCodeSessionService implements IClaudeCodeSessionService {
 		try {
 			// Read and parse the JSONL file
 			const content = await this._fileSystem.readFile(fileUri);
+			if (token.isCancellationRequested) {
+				throw new CancellationError();
+			}
+
 			const text = Buffer.from(content).toString('utf8');
 
 			// Parse JSONL content line by line

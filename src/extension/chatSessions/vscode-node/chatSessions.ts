@@ -5,7 +5,6 @@
 
 import * as vscode from 'vscode';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { localize } from '../../../util/vs/nls';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../util/vs/platform/instantiation/common/serviceCollection';
@@ -16,6 +15,7 @@ import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/lan
 import { IExtensionContribution } from '../../common/contributions';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
 import { ClaudeChatSessionItemProvider } from './claudeChatSessionItemProvider';
+import { ClaudeChatSessionParticipant } from './claudeChatSessionParticipant';
 
 export class ChatSessionsContrib extends Disposable implements IExtensionContribution {
 	readonly id = 'chatSessions';
@@ -40,36 +40,8 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 
 		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
 		const chatSessionContentProvider = claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider);
-		const chatParticipant = vscode.chat.createChatParticipant(this.sessionType, async (request, context, stream, token) => {
-			const create = async () => {
-				const { claudeSessionId } = await claudeAgentManager.handleRequest(undefined, request, context, stream, token);
-				if (!claudeSessionId) {
-					stream.warning(localize('claude.failedToCreateSession', "Failed to create a new Claude Code session."));
-					return;
-				}
-				return claudeSessionId;
-			};
-			const { chatSessionContext } = context;
-			if (chatSessionContext) {
-				if (chatSessionContext.isUntitled) {
-					/* New, empty session */
-					const claudeSessionId = await create();
-					if (claudeSessionId) {
-						// Tell UI to replace with claude-backed session
-						sessionItemProvider.swap(chatSessionContext.chatSessionItem, { id: claudeSessionId, label: request.prompt ?? 'Claude Code' });
-					}
-					return {};
-				}
-				/* Existing session */
-				const { id } = chatSessionContext.chatSessionItem;
-				await claudeAgentManager.handleRequest(id, request, context, stream, token);
-			} else {
-				/* Via @claude */
-				// TODO: Think about how this should work
-				stream.markdown(localize('claude.viaAtClaude', "Start a new Claude Code session"));
-				stream.button({ command: `workbench.action.chat.openNewSessionEditor.${this.sessionType}`, title: localize('claude.startNewSession', "Start Session") });
-			}
-		});
+		const claudeChatSessionParticipant = claudeAgentInstaService.createInstance(ClaudeChatSessionParticipant, this.sessionType, claudeAgentManager, sessionItemProvider);
+		const chatParticipant = vscode.chat.createChatParticipant(this.sessionType, claudeChatSessionParticipant.createHandler());
 		this._register(vscode.chat.registerChatSessionContentProvider(this.sessionType, chatSessionContentProvider, chatParticipant));
 	}
 }

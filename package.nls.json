@@ -199,6 +199,7 @@
 	"github.copilot.command.openWalkthrough": "Open Walkthrough",
 	"github.copilot.walkthrough.title": "GitHub Copilot",
 	"github.copilot.walkthrough.description": "Your AI pair programmer to write code faster and smarter",
+	"github.copilot.command.refreshClaudeCodeSessions": "Refresh Claude Code Sessions",
 	"github.copilot.walkthrough.signIn.title": "Sign in with GitHub",
 	"github.copilot.walkthrough.signIn.description": "To get started with Copilot, sign in with your GitHub account.\nMake sure you're using the correct GitHub account. You can also sign in later using the account menu.\n\n[Sign In](command:github.copilot.signIn)",
 	"github.copilot.walkthrough.signIn.media.altText": "Sign in to GitHub via this walkthrough or VS Code's account menu",

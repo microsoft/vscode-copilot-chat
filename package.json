@@ -1775,7 +1775,7 @@
 		"commands": [
 			{
 				"command": "github.copilot.claude.sessions.refresh",
-				"title": "Refresh Claude Code Sessions",
+				"title": "%github.copilot.command.refreshClaudeCodeSessions%",
 				"icon": "$(refresh)",
 				"category": "Claude Code"
 			},
