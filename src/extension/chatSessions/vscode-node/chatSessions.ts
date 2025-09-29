@@ -37,6 +37,14 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		this._register(vscode.commands.registerCommand('github.copilot.claude.sessions.refresh', () => {
 			sessionItemProvider.refresh();
 		}));
+		this._register(vscode.commands.registerCommand('github.copilot.claude.sessions.create.worktree', async () => {
+			const workingDirectory = await vscode.commands.executeCommand('git.createWorktreeWithDefaults');
+			const metadata: Record<string, any> = {};
+			if (workingDirectory) {
+				metadata.workingDirectory = workingDirectory;
+			}
+			await vscode.commands.executeCommand('workbench.action.chat.openNewSessionEditorWithMetadata', this.sessionType, metadata);
+		}));
 
 		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
 		const chatSessionContentProvider = claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider);
@@ -56,7 +64,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 					const claudeSessionId = await create();
 					if (claudeSessionId) {
 						// Tell UI to replace with claude-backed session
-						sessionItemProvider.swap(chatSessionContext.chatSessionItem, { id: claudeSessionId, label: request.prompt ?? 'Claude Code' });
+						sessionItemProvider.swap(chatSessionContext.chatSessionItem, { id: claudeSessionId, label: request.prompt ?? 'Claude Code', metadata: context.chatSessionContext?.chatSessionItem.metadata });
 					}
 					return {};
 				}
