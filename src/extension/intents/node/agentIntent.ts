@@ -115,6 +115,12 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 		allowTools[ToolName.RunTests] = await testService.hasAnyTests();
 		allowTools[ToolName.CoreRunTask] = tasksService.getTasks().length > 0;
 
+		if (model.family === 'gpt-5-codex') {
+			allowTools[ToolName.CoreManageTodoList] = false;
+			allowTools[ToolName.Think] = false;
+		}
+
+		allowTools[ToolName.EditFilesPlaceholder] = false;
 		if (request.tools.get(ContributedToolName.EditFilesPlaceholder) === false) {
 			allowTools[ToolName.ApplyPatch] = false;
 			allowTools[ToolName.EditFile] = false;
