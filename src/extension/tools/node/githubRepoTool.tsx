@@ -18,7 +18,6 @@ import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelatio
 import { isLocation, isUri } from '../../../util/common/types';
 import { raceCancellationError, timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
-import { Lazy } from '../../../util/vs/base/common/lazy';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, MarkdownString } from '../../../vscodeTypes';
@@ -47,7 +46,7 @@ export class GithubRepoTool implements ICopilotTool<GithubRepoToolParams> {
 		@IRunCommandExecutionService _commandService: IRunCommandExecutionService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IGithubCodeSearchService private readonly _githubCodeSearch: IGithubCodeSearchService,
-		@IGithubAvailableEmbeddingTypesService private readonly _availableEmbeddingTypesManager: Lazy<GithubAvailableEmbeddingTypesService>,
+		@IGithubAvailableEmbeddingTypesService private readonly _availableEmbeddingTypesManager: GithubAvailableEmbeddingTypesService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 	) { }
 
@@ -57,7 +56,7 @@ export class GithubRepoTool implements ICopilotTool<GithubRepoToolParams> {
 			throw new Error('Invalid input. Could not parse repo');
 		}
 
-		const embeddingType = await this._availableEmbeddingTypesManager.value.getPreferredType(false);
+		const embeddingType = await this._availableEmbeddingTypesManager.getPreferredType(false);
 		if (!embeddingType) {
 			throw new Error('No embedding models available');
 		}
