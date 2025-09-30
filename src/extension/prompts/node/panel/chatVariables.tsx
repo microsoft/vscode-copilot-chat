@@ -359,8 +359,9 @@ export class ChatToolReferences extends PromptElement<ChatToolCallProps, void> {
 
 			const name = toolReference.range ? this.props.promptContext.query.slice(toolReference.range[0], toolReference.range[1]) : undefined;
 			try {
-				const result = await this.toolsService.invokeTool(tool.name, { input: { ...toolArgs, ...internalToolArgs }, toolInvocationToken: tools.toolInvocationToken }, CancellationToken.None);
-				sendInvokedToolTelemetry(this.promptEndpoint.acquireTokenizer(), this.telemetryService, tool.name, result);
+				const input = { ...toolArgs, ...internalToolArgs };
+				const result = await this.toolsService.invokeTool(tool.name, { input, toolInvocationToken: tools.toolInvocationToken }, CancellationToken.None);
+				sendInvokedToolTelemetry(this.promptEndpoint.acquireTokenizer(), this.telemetryService, tool.name, JSON.stringify(input), result);
 				results.push({ name, value: result });
 			} catch (err) {
 				const errResult = toolCallErrorToResult(err);
