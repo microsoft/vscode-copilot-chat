@@ -9,7 +9,9 @@
 		"ghcr.io/devcontainers/features/python:1": {},
 		"ghcr.io/devcontainers/features/dotnet:2": {},
 		"ghcr.io/devcontainers/features/desktop-lite:1": {},
-		"ghcr.io/devcontainers/features/git-lfs:1": {}
+		"ghcr.io/devcontainers/features/git-lfs:1": {
+			"autoPull": false // see https://github.com/devcontainers/features/blob/main/src/git-lfs/README.md#options
+		}
 	},
 	"containerEnv": {
 		"DEBIAN_FRONTEND": "noninteractive"
@@ -30,7 +32,7 @@
 	},
 	"containerUser": "node",
 	"onCreateCommand": {
-		"initGitLfs": "git lfs install --force",
 		"npmInstall": "npm install || true"
-	}
+	},
+	"postCreateCommand": "cd ${containerWorkspaceFolder} && bash .devcontainer/fix-lfs-husky-hooks.sh --autoMergeLfsHusky && (git lfs pull || echo 'Warning: git lfs pull failed')"
 }
