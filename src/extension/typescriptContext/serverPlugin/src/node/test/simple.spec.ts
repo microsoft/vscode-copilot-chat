@@ -345,6 +345,58 @@ suite('PropertyTypes', () => {
 	});
 });
 
+suite('TypeOfExpressionRunnable', () => {
+	let session: testing.TestSession;
+	beforeAll(() => {
+		session = create(path.join(root, 'p14'));
+	});
+
+	test('ignores property access without identifier', () => {
+		const context = computeContext(session, path.join(root, 'p14/source/f2.ts'), { line: 3, character: 19 }, ContextKind.Snippet);
+		assertContextItems(context, []);
+	});
+
+	test('type from method chain', () => {
+		const expected: testing.ExpectedCodeSnippet[] = [{
+			kind: ContextKind.Snippet,
+			value: 'declare class Calculator { constructor(initial: number = 0); public add(x: number): Calculator; public getResult(): Result; }',
+			fileName: /p14\/source\/f1.ts$/
+		}];
+		const context = computeContext(session, path.join(root, 'p14/source/f3.ts'), { line: 4, character: 22 }, ContextKind.Snippet);
+		assertContextItems(context, expected, 'contains');
+	});
+
+	test('type from method return (interface)', () => {
+		const expected: testing.ExpectedCodeSnippet[] = [{
+			kind: ContextKind.Snippet,
+			value: 'interface Result { value: number; message: string; }',
+			fileName: /p14\/source\/f1.ts$/
+		}];
+		const context = computeContext(session, path.join(root, 'p14/source/f4.ts'), { line: 4, character: 25 }, ContextKind.Snippet);
+		assertContextItems(context, expected, 'contains');
+	});
+
+	test('type from element access chain', () => {
+		const expected: testing.ExpectedCodeSnippet[] = [{
+			kind: ContextKind.Snippet,
+			value: 'declare class Calculator { constructor(initial: number = 0); public add(x: number): Calculator; public getResult(): Result; }',
+			fileName: /p14\/source\/f1.ts$/
+		}];
+		const context = computeContext(session, path.join(root, 'p14/source/f5.ts'), { line: 4, character: 19 }, ContextKind.Snippet);
+		assertContextItems(context, expected, 'contains');
+	});
+
+	test('type from deeply nested property access', () => {
+		const expected: testing.ExpectedCodeSnippet[] = [{
+			kind: ContextKind.Snippet,
+			value: 'declare class Calculator { constructor(initial: number = 0); public add(x: number): Calculator; public getResult(): Result; }',
+			fileName: /p14\/source\/f1.ts$/
+		}];
+		const context = computeContext(session, path.join(root, 'p14/source/f6.ts'), { line: 7, character: 25 }, ContextKind.Snippet);
+		assertContextItems(context, expected, 'contains');
+	});
+});
+
 suite('Traits', () => {
 	test('complete traits', () => {
 		const session: testing.TestSession = create(path.join(root, 'p1'));
