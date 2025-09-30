@@ -70,15 +70,15 @@ class PromptSaveRules extends PromptElement {
 				2. Extract the core intent, removing conversation-specific details (e.g., specific file names, variable names, or project-specific context)<br />
 				3. Identify any recurring instructions, constraints, or requirements that define how the task should be approached<br />
 				4. Generalize the task into a reusable prompt that could apply to similar scenarios<br />
-				5. Create a concise title in kebab-case format (e.g., "generate-unit-tests", "refactor-for-performance", "explain-api-design")<br />
-				6. Write a brief description (1-2 sentences) explaining what the prompt accomplishes<br />
-				7. Craft the generalized prompt text, using placeholders where appropriate (e.g., "the selected code", "the current file", "the specified functionality")<br />
+				5. Create a very concise action-oriented title in kebab-case format that will be used for the slash command (1-3 words, e.g., "generate-unit-tests", "refactor-for-performance", "explain-api-design", etc)<br />
+				6. Write a brief description (1 sentence, max 15 words) explaining the goal of the prompt<br />
+				7. Craft the generalized multi-line markdown text prompt, using placeholders where appropriate (e.g., "the selected code", "the current file", "the specified functionality")<br />
 				<br />
 				Guidelines for creating the prompt:<br />
 				- Focus on the pattern of interaction, not specific implementation details<br />
 				- Preserve important constraints or requirements (e.g., "follow test-driven development", "maintain backward compatibility")<br />
 				- Use general terms rather than specific names (e.g., "the function" instead of "calculateTotal")<br />
-				- Keep the prompt concise but complete - it should provide clear direction without unnecessary verbosity<br />
+				- Keep the prompt concise but complete (reflecting the complexity of the task) - it should provide clear direction without unnecessary verbosity<br />
 				- The prompt should work as a standalone instruction that captures the essence of the conversation's goal<br />
 				<br />
 				Example good titles:<br />
