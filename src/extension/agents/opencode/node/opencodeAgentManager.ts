@@ -9,7 +9,7 @@ import { isLocation } from '../../../../util/common/types';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatToolInvocationPart, MarkdownString } from '../../../../vscodeTypes';
+import { createFormattedToolInvocation } from '../common/toolInvocationFormatter';
 import { OpenCodeClient } from './opencodeClient';
 import { OpenCodeServerManager } from './opencodeServerManager';
 
@@ -245,75 +245,36 @@ export class OpenCodeAgentManager extends Disposable {
 					break;
 				case 'tool_use': {
 					const id = String(part.id ?? `oc_${Date.now()}`);
-					const name = String(part.name ?? part.tool ?? 'tool');
-					const inv = new ChatToolInvocationPart(name, id, false);
-					inv.isConfirmed = true;
-					if (part.input) {
-						const md = new MarkdownString();
-						md.appendCodeblock(JSON.stringify(part.input, null, 2), 'json');
-						inv.invocationMessage = md;
+					const inv = createFormattedToolInvocation(part);
+					if (inv) {
+						pendingTools.set(id, inv);
+						stream.push(inv);
 					}
-					pendingTools.set(id, inv);
-					stream.push(inv);
 					break;
 				}
 				case 'tool_result': {
 					const toolUseId = String(part.tool_use_id ?? part.id ?? '');
 					const inv = pendingTools.get(toolUseId);
 					if (inv) {
-						inv.isComplete = true;
-						inv.isError = !!part.is_error;
-						const md = new MarkdownString();
-						const result = part.result ?? part.content ?? part.output;
-						if (typeof result === 'string') {
-							md.appendCodeblock(result);
-						} else {
-							try {
-								md.appendCodeblock(JSON.stringify(result ?? {}, null, 2), 'json');
-							} catch {
-								md.appendCodeblock(String(result));
-							}
-						}
-						inv.pastTenseMessage = md;
+						createFormattedToolInvocation(part, inv);
 						pendingTools.delete(toolUseId);
 					}
 					break;
 				}
 				case 'tool': {
 					const id = String(part.callID ?? part.id ?? `oc_${Date.now()}`);
-					const name = String(part.tool ?? part.name ?? 'tool');
 					let inv = pendingTools.get(id);
 					if (!inv) {
-						inv = new ChatToolInvocationPart(name, id, false);
-						inv.isConfirmed = true;
-						const input = part.state?.input ?? part.input;
-						if (input) {
-							const mdIn = new MarkdownString();
-							try { mdIn.appendCodeblock(JSON.stringify(input, null, 2), 'json'); }
-							catch { mdIn.appendCodeblock(String(input)); }
-							inv.invocationMessage = mdIn;
+						inv = createFormattedToolInvocation(part);
+						if (inv) {
+							pendingTools.set(id, inv);
+							stream.push(inv);
 						}
-
-						pendingTools.set(id, inv);
-						stream.push(inv);
-					}
-
-					const status = String(part.state?.status ?? '');
-					const output = part.state?.output ?? part.output ?? part.result ?? part.content;
-					if (status === 'completed' || typeof output !== 'undefined') {
-						inv!.isComplete = true;
-						inv!.isError = status === 'error' || !!part.error;
-						const mdOut = new MarkdownString();
-						if (typeof output === 'string') {
-							mdOut.appendCodeblock(output);
-						} else {
-							try { mdOut.appendCodeblock(JSON.stringify(output ?? {}, null, 2), 'json'); }
-							catch { mdOut.appendCodeblock(String(output)); }
+					} else {
+						createFormattedToolInvocation(part, inv);
+						if (inv.isComplete) {
+							pendingTools.delete(id);
 						}
-						inv!.invocationMessage = mdOut;
-						inv!.pastTenseMessage = mdOut;
-						stream.push(inv);
-						pendingTools.delete(id);
 					}
 					break;
 				}

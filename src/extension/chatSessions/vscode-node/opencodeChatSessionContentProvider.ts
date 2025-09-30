@@ -10,6 +10,7 @@ import { ChatRequestTurn2 } from '../../../vscodeTypes';
 import { OpenCodeAgentManager } from '../../agents/opencode/node/opencodeAgentManager';
 import { IOpenCodeSession, IOpenCodeSessionService, OpenCodeMessage } from '../../agents/opencode/node/opencodeSessionService';
 
+import { createFormattedToolInvocation } from '../../agents/opencode/common/toolInvocationFormatter';
 import { OpenCodeSessionDataStore } from './opencodeChatSessionItemProvider';
 
 /**
@@ -173,28 +174,22 @@ export class OpenCodeChatSessionContentProvider extends Disposable implements vs
 				// Heuristic: treat certain parts as tool invocations
 				const toolUse = this._asOpenCodeToolUse(part);
 				if (toolUse) {
-					const invocation = new vscode.ChatToolInvocationPart(toolUse.name, toolUse.id, false);
-					invocation.isConfirmed = true;
-					if (toolUse.input) {
-						const md = new vscode.MarkdownString();
-						md.appendCodeblock(JSON.stringify(toolUse.input, null, 2), 'json');
-						invocation.invocationMessage = md;
+					const invocation = createFormattedToolInvocation(part);
+					if (invocation) {
+						toolContext.pendingToolInvocations.set(toolUse.id, invocation);
+						responseParts.push(invocation);
 					}
-					toolContext.pendingToolInvocations.set(toolUse.id, invocation);
-					responseParts.push(invocation);
 
 					// If OpenCode 'tool' part already includes completion, finalize immediately
 					if (part.type === 'tool') {
 						const status = String(part.state?.status ?? '');
 						const output = part.state?.output ?? part.output ?? part.result ?? part.content;
 						if (status === 'completed' || typeof output !== 'undefined') {
-							invocation.isComplete = true;
-							invocation.isError = status === 'error' || !!part.error;
-							const mdOut = new vscode.MarkdownString();
-							if (typeof output === 'string') { mdOut.appendCodeblock(output); }
-							else { mdOut.appendCodeblock(JSON.stringify(output ?? {}, null, 2), 'json'); }
-							invocation.pastTenseMessage = mdOut;
-							toolContext.pendingToolInvocations.delete(toolUse.id);
+							const pending = toolContext.pendingToolInvocations.get(toolUse.id);
+							if (pending) {
+								createFormattedToolInvocation(part, pending);
+								toolContext.pendingToolInvocations.delete(toolUse.id);
+							}
 						}
 					}
 				}
@@ -276,19 +271,9 @@ export class OpenCodeChatSessionContentProvider extends Disposable implements vs
 			const pending = toolContext.pendingToolInvocations.get(toolResult.tool_use_id || toolResult.id);
 			if (!pending) { continue; }
 
-			// Mark completion and attach result message
-			pending.isComplete = true;
-			pending.isError = !!toolResult.is_error;
-			const md = new vscode.MarkdownString();
-			if (toolResult.is_error) {
-				md.appendMarkdown('**Error:**\n');
-			}
-			if (typeof toolResult.result === 'string') {
-				md.appendCodeblock(toolResult.result);
-			} else {
-				md.appendCodeblock(JSON.stringify(toolResult.result ?? {}, null, 2), 'json');
-			}
-			pending.pastTenseMessage = md;
+			// Use the tool invocation formatter to process the result
+			createFormattedToolInvocation(part, pending);
+
 			// Remove from pending once completed
 			toolContext.pendingToolInvocations.delete(toolResult.tool_use_id || toolResult.id);
 		}
