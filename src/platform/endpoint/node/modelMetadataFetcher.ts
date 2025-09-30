@@ -8,6 +8,7 @@ import type { LanguageModelChat } from 'vscode';
 import { createRequestHMAC } from '../../../util/common/crypto';
 import { TaskSingler } from '../../../util/common/taskSingler';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../authentication/common/authentication';
@@ -20,8 +21,7 @@ import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
-import { IDomainService } from '../common/domainService';
-import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IModelAPIResponse, isChatModelInformation, isCompletionModelInformation } from '../common/endpointProvider';
+import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IModelAPIResponse, isChatModelInformation, isCompletionModelInformation, isEmbeddingModelInformation } from '../common/endpointProvider';
 import { getMaxPromptTokens } from './chatEndpoint';
 
 export interface IModelMetadataFetcher {
@@ -54,6 +54,12 @@ export interface IModelMetadataFetcher {
 	 * @returns The chat model information if found, otherwise undefined
 	 */
 	getChatModelFromApiModel(model: LanguageModelChat): Promise<IChatModelInformation | undefined>;
+
+	/**
+	 * Retrieves an embeddings model by its family name
+	 * @param family The family of the model to fetch
+	 */
+	getEmbeddingsModel(family: 'text-embedding-3-small'): Promise<IEmbeddingModelInformation>;
 }
 
 /**
@@ -61,7 +67,7 @@ export interface IModelMetadataFetcher {
  * This is solely owned by the EndpointProvider (and TestEndpointProvider) which uses this service to power server side rollout of models
  * All model acquisition should be done through the EndpointProvider
  */
-export class ModelMetadataFetcher implements IModelMetadataFetcher {
+export class ModelMetadataFetcher extends Disposable implements IModelMetadataFetcher {
 
 	private static readonly ALL_MODEL_KEY = 'allModels';
 
@@ -80,7 +86,6 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 		protected readonly _isModelLab: boolean,
 		@IFetcherService private readonly _fetcher: IFetcherService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
-		@IDomainService private readonly _domainService: IDomainService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IConfigurationService private readonly _configService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
@@ -89,7 +94,15 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@ILogService private readonly _logService: ILogService,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-	) { }
+	) {
+		super();
+		this._register(this._authService.onDidAuthenticationChange(() => {
+			// Auth changed so next fetch should be forced to get a new list
+			this._familyMap.clear();
+			this._completionsFamilyMap.clear();
+			this._lastFetchTime = 0;
+		}));
+	}
 
 	public async getAllCompletionModels(forceRefresh: boolean): Promise<ICompletionModelInformation[]> {
 		await this._taskSingler.getOrCreate(ModelMetadataFetcher.ALL_MODEL_KEY, () => this._fetchModels(forceRefresh));
@@ -185,6 +198,16 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 		return resolvedModel;
 	}
 
+	public async getEmbeddingsModel(family: 'text-embedding-3-small'): Promise<IEmbeddingModelInformation> {
+		await this._taskSingler.getOrCreate(ModelMetadataFetcher.ALL_MODEL_KEY, this._fetchModels.bind(this));
+		let resolvedModel = this._familyMap.get(family)?.[0];
+		resolvedModel = await this._hydrateResolvedModel(resolvedModel);
+		if (!isEmbeddingModelInformation(resolvedModel)) {
+			throw new Error(`Unable to resolve embeddings model with family selection: ${family}`);
+		}
+		return resolvedModel;
+	}
+
 	private _shouldRefreshModels(): boolean {
 		if (this._familyMap.size === 0) {
 			return true;
@@ -219,9 +242,7 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 		try {
 			const response = await getRequest(
 				this._fetcher,
-				this._envService,
 				this._telemetryService,
-				this._domainService,
 				this._capiClientService,
 				requestMetadata,
 				copilotToken,
@@ -284,9 +305,7 @@ export class ModelMetadataFetcher implements IModelMetadataFetcher {
 		try {
 			const response = await getRequest(
 				this._fetcher,
-				this._envService,
 				this._telemetryService,
-				this._domainService,
 				this._capiClientService,
 				requestMetadata,
 				copilotToken,

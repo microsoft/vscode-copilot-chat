@@ -8,19 +8,19 @@ import { TokenizerType } from '../../../../util/common/tokenizer';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
-import { IConfigurationService } from '../../../configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../../configuration/common/configurationService';
 import { IEnvService } from '../../../env/common/envService';
 import { ILogService } from '../../../log/common/logService';
 import { isOpenAiFunctionTool } from '../../../networking/common/fetch';
 import { IFetcherService } from '../../../networking/common/fetcherService';
-import { IChatEndpoint, IEndpointBody } from '../../../networking/common/networking';
+import { IChatEndpoint, ICreateEndpointBodyOptions, IEndpointBody } from '../../../networking/common/networking';
 import { CAPIChatMessage, RawMessageConversionCallback } from '../../../networking/common/openai';
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ITokenizerProvider } from '../../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../../common/capiClient';
 import { IDomainService } from '../../common/domainService';
-import { IChatModelInformation } from '../../common/endpointProvider';
+import { IChatModelInformation, ModelSupportedEndpoint } from '../../common/endpointProvider';
 import { ChatEndpoint } from '../../node/chatEndpoint';
 
 export type IModelConfig = {
@@ -36,6 +36,7 @@ export type IModelConfig = {
 			tool_calls: boolean;
 			vision: boolean;
 			prediction: boolean;
+			thinking: boolean;
 		};
 		limits: {
 			max_prompt_tokens: number;
@@ -43,6 +44,7 @@ export type IModelConfig = {
 			max_context_window_tokens?: number;
 		};
 	};
+	supported_endpoints: readonly ModelSupportedEndpoint[];
 	url: string;
 	auth: {
 		/**
@@ -104,22 +106,29 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 					streaming: modelConfig.capabilities.supports.streaming,
 					tool_calls: modelConfig.capabilities.supports.tool_calls,
 					vision: modelConfig.capabilities.supports.vision,
-					prediction: modelConfig.capabilities.supports.prediction
+					prediction: modelConfig.capabilities.supports.prediction,
+					thinking: modelConfig.capabilities.supports.thinking ?? false
 				},
 				limits: {
 					max_prompt_tokens: modelConfig.capabilities.limits.max_prompt_tokens,
 					max_output_tokens: modelConfig.capabilities.limits.max_output_tokens,
 					max_context_window_tokens: modelConfig.capabilities.limits.max_context_window_tokens
 				}
-			}
+			},
+			supported_endpoints: Array.isArray(modelConfig.supported_endpoints) && modelConfig.supported_endpoints.length > 0
+				? modelConfig.supported_endpoints
+				: [ModelSupportedEndpoint.ChatCompletions]
 		};
+		// configurationService.useResponsesApi should be set to true if ModelSupportedEndpoint.Responses is in modelConfig.supported_endpoints
+		if (modelInfo.supported_endpoints?.includes(ModelSupportedEndpoint.Responses)) {
+			configurationService.setConfig(ConfigKey.UseResponsesApi, true);
+		}
 
 		super(
 			modelInfo,
 			domainService,
 			capiClientService,
 			fetcherService,
-			envService,
 			telemetryService,
 			authService,
 			chatMLFetcher,
@@ -132,7 +141,7 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 	}
 
 	override get urlOrRequestMetadata(): string {
-		return this.modelConfig.url;
+		return this.modelConfig.version ? this.modelConfig.url + '?api-version=' + this.modelConfig.version : this.modelConfig.url;
 	}
 
 	public getExtraHeaders(): Record<string, string> {
@@ -165,6 +174,23 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 		}
 
 		return headers;
+	}
+
+	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
+		if (this.useResponsesApi) {
+			// Handle Responses API: customize the body directly
+			options.ignoreStatefulMarker = false;
+			const body = super.createRequestBody(options);
+			body.store = true;
+			body.n = undefined;
+			body.stream_options = undefined;
+			if (!this.modelConfig.capabilities.supports.thinking) {
+				body.reasoning = undefined;
+			}
+			return body;
+		}
+		const body = super.createRequestBody(options);
+		return body;
 	}
 
 	override interceptBody(body: IEndpointBody | undefined): void {
@@ -232,18 +258,20 @@ export class OpenAICompatibleTestEndpoint extends ChatEndpoint {
 				// OpenAI requires the model name to be set in the body
 				body.model = this.modelConfig.name;
 
-				const newMessages: CAPIChatMessage[] = body.messages!.map((message: CAPIChatMessage): CAPIChatMessage => {
-					if (message.role === OpenAI.ChatRole.System) {
-						return {
-							role: OpenAI.ChatRole.User,
-							content: message.content,
-						};
-					} else {
-						return message;
-					}
-				});
-				// Add the messages & model back
-				body['messages'] = newMessages;
+				// Handle messages reformatting if messages exist
+				if (body.messages) {
+					const newMessages: CAPIChatMessage[] = body.messages.map((message: CAPIChatMessage): CAPIChatMessage => {
+						if (message.role === OpenAI.ChatRole.System) {
+							return {
+								role: OpenAI.ChatRole.User,
+								content: message.content,
+							};
+						} else {
+							return message;
+						}
+					});
+					body['messages'] = newMessages;
+				}
 			}
 		}
 

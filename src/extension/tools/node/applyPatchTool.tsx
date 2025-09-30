@@ -37,13 +37,14 @@ import { PromptRenderer, renderPromptElementJSON } from '../../prompts/node/base
 import { Tag } from '../../prompts/node/base/tag';
 import { processFullRewriteNotebook } from '../../prompts/node/codeMapper/codeMapper';
 import { CodeBlock } from '../../prompts/node/panel/safeElements';
+import { IEditToolLearningService } from '../common/editToolLearningService';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { PATCH_PREFIX, PATCH_SUFFIX } from './applyPatch/parseApplyPatch';
 import { ActionType, Commit, DiffError, FileChange, identify_files_needed, InvalidContextError, InvalidPatchFormatError, processPatch } from './applyPatch/parser';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
-import { createEditConfirmation } from './editFileToolUtils';
+import { canExistingFileBeEdited, createEditConfirmation } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileNotContentExcluded, resolveToolInputPath } from './toolUtils';
 
@@ -74,6 +75,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		@IAlternativeNotebookContentEditGenerator private readonly alternativeNotebookEditGenerator: IAlternativeNotebookContentEditGenerator,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
+		@IEditToolLearningService private readonly editToolLearningService: IEditToolLearningService,
 	) { }
 
 	private getTrailingDocumentEmptyLineCount(document: vscode.TextDocument): number {
@@ -192,7 +194,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		let healed: string | undefined;
 		const docText: DocText = {};
 		try {
-			({ commit, healed } = await this.buildCommitWithHealing(options.input.input, docText, options.input.explanation, token));
+			({ commit, healed } = await this.buildCommitWithHealing(options.model, options.input.input, docText, options.input.explanation, token));
 		} catch (error) {
 			if (error instanceof HealedError) {
 				healed = error.healedPatch;
@@ -309,7 +311,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 				const existingDiagnostics = this.languageDiagnosticsService.getDiagnostics(uri);
 
 				// Initialize edit survival tracking for text documents
-				const existsOnDisk = await this.fileSystemService.stat(uri).then(() => true, () => false);
+				const existsOnDisk = await this.instantiationService.invokeFunction(canExistingFileBeEdited, uri);
 				if (existsOnDisk) {
 					const document = notebookUri ?
 						await this.workspaceService.openNotebookDocumentAndSnapshot(notebookUri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model)) :
@@ -372,6 +374,16 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 							timeDelayMs: res.timeDelayMs,
 							didBranchChange: res.didBranchChange ? 1 : 0,
 						});
+						res.telemetryService.sendGHTelemetryEvent('applyPatch/trackEditSurvival', {
+							headerRequestId: this._promptContext?.requestId,
+							requestSource: 'agent',
+							mapper: 'applyPatchTool'
+						}, {
+							survivalRateFourGram: res.fourGram,
+							survivalRateNoRevert: res.noRevert,
+							timeDelayMs: res.timeDelayMs,
+							didBranchChange: res.didBranchChange ? 1 : 0,
+						});
 					});
 				}
 			});
@@ -422,13 +434,13 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 			}
 		).render(undefined, token);
 
-		const fetchResult = await endpoint.makeChatRequest(
-			'healApplyPatch',
-			prompt.messages,
-			undefined,
-			token,
-			ChatLocation.Other
-		);
+		const fetchResult = await endpoint.makeChatRequest2({
+			debugName: 'healApplyPatch',
+			messages: prompt.messages,
+			finishedCb: undefined,
+			location: ChatLocation.Other,
+			enableRetryOnFilter: true
+		}, token);
 
 		if (fetchResult.type !== ChatFetchResponseType.Success) {
 			return undefined;
@@ -443,12 +455,19 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		return patchEnd === -1 ? fetchResult.value.slice(patchStart) : fetchResult.value.slice(patchStart, patchEnd + PATCH_SUFFIX.length);
 	}
 
-	private async buildCommitWithHealing(patch: string, docText: DocText, explanation: string, token: CancellationToken): Promise<{ commit: Commit; healed?: string }> {
+	private async buildCommitWithHealing(model: vscode.LanguageModelChat | undefined, patch: string, docText: DocText, explanation: string, token: CancellationToken): Promise<{ commit: Commit; healed?: string }> {
 		try {
-			return await this.buildCommit(patch, docText);
+			const result = await this.buildCommit(patch, docText);
+			if (model) {
+				this.editToolLearningService.didMakeEdit(model, ToolName.ApplyPatch, true);
+			}
+			return result;
 		} catch (error) {
 			if (!(error instanceof DiffError)) {
 				throw error;
+			}
+			if (model) {
+				this.editToolLearningService.didMakeEdit(model, ToolName.ApplyPatch, false);
 			}
 
 			let success = true;

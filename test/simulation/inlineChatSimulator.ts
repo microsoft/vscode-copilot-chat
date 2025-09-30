@@ -373,7 +373,8 @@ export async function simulateEditingScenario(
 				toolInvocationToken: (isInExtensionHost ? undefined : {}) as never,
 				model: null!, // https://github.com/microsoft/vscode-copilot/issues/9475
 				tools: new Map(),
-				id: '1'
+				id: '1',
+				sessionId: '1'
 			};
 
 			// Run intent detection

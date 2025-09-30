@@ -9,40 +9,47 @@ import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/d
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../util/vs/platform/instantiation/common/serviceCollection';
 import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
+import { ClaudeCodeSdkService, IClaudeCodeSdkService } from '../../agents/claude/node/claudeCodeSdkService';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
+import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
 import { OpenCodeAgentManager } from '../../agents/opencode/node/opencodeAgentManager';
 import { OpenCodeClient } from '../../agents/opencode/node/opencodeClient';
 import { OpenCodeServerManager } from '../../agents/opencode/node/opencodeServerManager';
 import { IOpenCodeSessionService, OpenCodeSessionService } from '../../agents/opencode/node/opencodeSessionService';
 import { IExtensionContribution } from '../../common/contributions';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
-import { ClaudeChatSessionItemProvider, ClaudeSessionDataStore } from './claudeChatSessionItemProvider';
+import { ClaudeChatSessionItemProvider } from './claudeChatSessionItemProvider';
+import { ClaudeChatSessionParticipant } from './claudeChatSessionParticipant';
 import { OpenCodeChatSessionContentProvider } from './opencodeChatSessionContentProvider';
 import { OpenCodeChatSessionItemProvider, OpenCodeSessionDataStore } from './opencodeChatSessionItemProvider';
 
 export class ChatSessionsContrib extends Disposable implements IExtensionContribution {
 	readonly id = 'chatSessions';
+	readonly sessionType = 'claude-code';
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
 	) {
 		super();
-
 		// === Claude Integration ===
 		const claudeAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
-				[IClaudeCodeSessionService, new SyncDescriptor(ClaudeCodeSessionService)]));
+				[IClaudeCodeSessionService, new SyncDescriptor(ClaudeCodeSessionService)],
+				[IClaudeCodeSdkService, new SyncDescriptor(ClaudeCodeSdkService)],
+				[ILanguageModelServer, new SyncDescriptor(LanguageModelServer)],
+			));
 
-		const sessionStore = claudeAgentInstaService.createInstance(ClaudeSessionDataStore);
-		const sessionItemProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionItemProvider, sessionStore));
-		this._register(vscode.chat.registerChatSessionItemProvider('claude-code', sessionItemProvider));
+		const sessionItemProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionItemProvider));
+		this._register(vscode.chat.registerChatSessionItemProvider(this.sessionType, sessionItemProvider));
 		this._register(vscode.commands.registerCommand('github.copilot.claude.sessions.refresh', () => {
 			sessionItemProvider.refresh();
 		}));
 
 		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
-		const chatSessionContentProvider = claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider, claudeAgentManager, sessionStore);
-		this._register(vscode.chat.registerChatSessionContentProvider('claude-code', chatSessionContentProvider));
+		const chatSessionContentProvider = claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider);
+		const claudeChatSessionParticipant = claudeAgentInstaService.createInstance(ClaudeChatSessionParticipant, this.sessionType, claudeAgentManager, sessionItemProvider);
+		const chatParticipant = vscode.chat.createChatParticipant(this.sessionType, claudeChatSessionParticipant.createHandler());
+		this._register(vscode.chat.registerChatSessionContentProvider(this.sessionType, chatSessionContentProvider, chatParticipant));
 
 		// === OpenCode Integration ===
 		const openCodeServerManager = this._register(instantiationService.createInstance(OpenCodeServerManager));
@@ -64,7 +71,6 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		this._register(vscode.commands.registerCommand('github.copilot.opencode.sessions.refresh', () => {
 			opencodeSessionItemProvider.refresh();
 		}));
-
 
 		const opencodeChatSessionContentProvider = opencodeInstaService.createInstance(
 			OpenCodeChatSessionContentProvider,

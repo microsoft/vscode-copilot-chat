@@ -48,11 +48,9 @@ import { Delayer, DelaySession } from '../../inlineEdits/common/delayer';
 import { editWouldDeleteWhatWasJustInserted } from '../../inlineEdits/common/ghNearbyNesProvider';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
-import { AREA_AROUND_END_TAG, AREA_AROUND_START_TAG, CODE_TO_EDIT_END_TAG, CODE_TO_EDIT_START_TAG, createTaggedCurrentFileContentUsingPagedClipping, CURSOR_TAG, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, nes41Miniv3SystemPrompt, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/promptCrafting';
+import { createTaggedCurrentFileContentUsingPagedClipping, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, nes41Miniv3SystemPrompt, PromptTags, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/promptCrafting';
 import { XtabEndpoint } from './xtabEndpoint';
 import { linesWithBackticksRemoved, toLines } from './xtabUtils';
-
-export const IGNORE_TEXT_BEFORE = /```[^\n]*\n/;
 
 namespace ResponseTags {
 	export const NO_CHANGE = {
@@ -140,6 +138,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			filters.push((edits) => IgnoreWhitespaceOnlyChanges.filterEdit(activeDoc, edits));
 		}
 
+		if (this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsUndoInsertionFilteringEnabled, this.expService)) {
+			filters.push((edits) => editWouldDeleteWhatWasJustInserted(activeDoc, new LineEdit(edits)) ? [] : edits);
+		}
+
 		return filters.reduce((acc, filter) => filter(acc), edits);
 	}
 
@@ -181,12 +183,32 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		telemetryBuilder: StatelessNextEditTelemetryBuilder,
 		retryState: RetryState,
 	): Promise<Result<void, NoNextEditReason>> {
+		return this.doGetNextEditWithSelection(
+			request,
+			getOrDeduceSelectionFromLastEdit(request.getActiveDocument()),
+			pushEdit,
+			delaySession,
+			logContext,
+			cancellationToken,
+			telemetryBuilder,
+			retryState,
+		);
+	}
 
-		const tracer = this.tracer.sub('doGetNextEdit');
+	private async doGetNextEditWithSelection(
+		request: StatelessNextEditRequest,
+		selection: Range | null,
+		pushEdit: PushEdit,
+		delaySession: DelaySession,
+		logContext: InlineEditRequestLogContext,
+		cancellationToken: CancellationToken,
+		telemetryBuilder: StatelessNextEditTelemetryBuilder,
+		retryState: RetryState,
+	): Promise<Result<void, NoNextEditReason>> {
+
+		const tracer = this.tracer.sub('doGetNextEditWithSelection');
 
 		const activeDocument = request.getActiveDocument();
-
-		const selection = getOrDeduceSelectionFromLastEdit(activeDocument);
 
 		if (selection === null) {
 			return Result.error(new NoNextEditReason.Uncategorized(new Error('NoSelection')));
@@ -226,23 +248,23 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		// Expected: editWindow.substring(activeDocument.documentAfterEdits.value) === editWindowLines.join('\n')
 
-		const doesIncludeCursorTag = editWindowLines.some(line => line.includes(CURSOR_TAG));
+		const doesIncludeCursorTag = editWindowLines.some(line => line.includes(PromptTags.CURSOR));
 		const shouldRemoveCursorTagFromResponse = !doesIncludeCursorTag; // we'd like to remove the tag only if the original edit-window didn't include the tag
 
-		const addCursorTagEdit = StringEdit.single(StringReplacement.insert(cursorOffset, CURSOR_TAG));
+		const addCursorTagEdit = StringEdit.single(StringReplacement.insert(cursorOffset, PromptTags.CURSOR));
 		const contentWithCursor = addCursorTagEdit.applyOnText(currentFileContent);
 		const contentWithCursorLines = contentWithCursor.getLines();
 
 		const editWindowWithCursorLines = contentWithCursorLines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
 
 		const areaAroundCodeToEdit = [
-			AREA_AROUND_START_TAG,
+			PromptTags.AREA_AROUND.start,
 			...contentWithCursorLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
-			CODE_TO_EDIT_START_TAG,
+			PromptTags.EDIT_WINDOW.start,
 			...editWindowWithCursorLines,
-			CODE_TO_EDIT_END_TAG,
+			PromptTags.EDIT_WINDOW.end,
 			...contentWithCursorLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
-			AREA_AROUND_END_TAG
+			PromptTags.AREA_AROUND.end
 		].join('\n');
 
 		const promptOptions = this.determinePromptOptions(activeDocument);
@@ -254,7 +276,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				...editWindowLines,
 				...contentWithCursorLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
 			].join('\n');
-		const { taggedCurrentFileContent, nLines: nLinesCurrentFile } = createTaggedCurrentFileContentUsingPagedClipping(
+		const taggedCurrentFileContentResult = createTaggedCurrentFileContentUsingPagedClipping(
 			currentFileContentLines,
 			areaAroundCodeToEditForCurrentFile,
 			areaAroundEditWindowLinesRange,
@@ -262,6 +284,13 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptOptions.pagedClipping.pageSize,
 			promptOptions.currentFile,
 		);
+
+		if (taggedCurrentFileContentResult.isError()) {
+			return Result.error(new NoNextEditReason.PromptTooLarge('currentFile'));
+		}
+
+		const { taggedCurrentFileContent, nLines: nLinesCurrentFile } = taggedCurrentFileContentResult.val;
+
 		telemetryBuilder.setNLinesOfCurrentFileInPrompt(nLinesCurrentFile);
 
 		const recordingEnabled = this.configService.getConfig<boolean>(ConfigKey.Internal.InlineEditsLogContextRecorderEnabled);
@@ -284,7 +313,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			}
 		}
 
-		const userPrompt = getUserPrompt(request, taggedCurrentFileContent, areaAroundCodeToEdit, langCtx, computeTokens, promptOptions);
+		const userPrompt = getUserPrompt(activeDocument, request.xtabEditHistory, taggedCurrentFileContent, areaAroundCodeToEdit, langCtx, computeTokens, promptOptions);
 
 		const prediction = this.getPredictedOutput(editWindowLines, promptOptions.promptingStrategy);
 
@@ -298,6 +327,12 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		logContext.setPrompt(messages);
 		telemetryBuilder.setPrompt(messages);
+
+		const HARD_CHAR_LIMIT = 30000 * 4; // 30K tokens, assuming 4 chars per token -- we use approximation here because counting tokens exactly is time-consuming
+		const promptCharCount = messages.reduce((total, msg) => total + msg.content.reduce((subtotal, part) => subtotal + part.text.length, 0), 0);
+		if (promptCharCount > HARD_CHAR_LIMIT) {
+			return Result.error(new NoNextEditReason.PromptTooLarge('final'));
+		}
 
 		await this.debounce(delaySession, telemetryBuilder);
 		if (cancellationToken.isCancellationRequested) {
@@ -450,36 +485,37 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		logContext.setFetchStartTime();
 
 		// we must not await this promise because we want to stream edits as they come in
-		const fetchResultPromise = endpoint.makeChatRequest(
-			XtabProvider.ID,
-			messages,
-			async (text, _, delta) => {
-				if (!firstTokenReceived.isSettled) {
-					firstTokenReceived.complete();
-				}
-				if (ttft === undefined) {
-					ttft = fetchRequestStopWatch.elapsed();
-					logContext.addLog(`TTFT ${ttft} ms`);
-				}
+		const fetchResultPromise = endpoint.makeChatRequest2(
+			{
+				debugName: XtabProvider.ID,
+				messages,
+				finishedCb: async (text, _, delta) => {
+					if (!firstTokenReceived.isSettled) {
+						firstTokenReceived.complete();
+					}
+					if (ttft === undefined) {
+						ttft = fetchRequestStopWatch.elapsed();
+						logContext.addLog(`TTFT ${ttft} ms`);
+					}
 
-				fetchStreamSource.update(text, delta);
-				responseSoFar = text;
-				logContext.setResponse(responseSoFar);
-				return undefined;
+					fetchStreamSource.update(text, delta);
+					responseSoFar = text;
+					logContext.setResponse(responseSoFar);
+					return undefined;
+				},
+				location: ChatLocation.Other,
+				source: undefined,
+				requestOptions: {
+					temperature: 0,
+					stream: true,
+					prediction,
+				} satisfies OptionalChatRequestParams,
+				userInitiatedRequest: undefined,
+				telemetryProperties: {
+					requestId: request.id,
+				},
 			},
 			cancellationToken,
-			ChatLocation.Other,
-			undefined,
-			{
-				temperature: 0,
-				// max_tokens: 256, // `max_tokens` is not supported along with `prediction` - https://platform.openai.com/docs/guides/predicted-outputs#limitations
-				stream: true,
-				prediction,
-			} satisfies OptionalChatRequestParams,
-			undefined,
-			{
-				requestId: request.id,
-			}
 		);
 
 		telemetryBuilder.setResponse(fetchResultPromise.then((response) => ({ response, ttft })));
@@ -535,7 +571,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				tracer.trace(trace);
 
 				return opts.shouldRemoveCursorTagFromResponse
-					? v.replaceAll(CURSOR_TAG, '')
+					? v.replaceAll(PromptTags.CURSOR, '')
 					: v;
 			});
 		})();
@@ -672,14 +708,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 					logContext.setResponse(responseSoFar);
 
 					for (const singleLineEdit of singleLineEdits) {
-						const lineEdit = new LineEdit([singleLineEdit]);
-
-						if (editWouldDeleteWhatWasJustInserted(request.getActiveDocument(), lineEdit)) {
-							this.trace(`filtering edit because it would undo previous insertion: ${singleLineEdit.toString()}`, logContext, tracer);
-							i++;
-							continue;
-						}
-
 						this.trace(`pushing edit #${i}:\n${singleLineEdit.toString()}`, logContext, tracer);
 
 						if (!hasBeenDelayed) { // delay only the first one
@@ -791,13 +819,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return new OffsetRange(codeToEditStart, codeToEditEndExcl);
 	}
 
-
-	public static getBacktickSection(text: string): string {
-		const textTrimmedStart = text.replace(/^\`\`\`[a-zA-Z]*\r?\n/, '');
-		const textTrimmedEnd = textTrimmedStart.replace(/(\r?\n)\`\`\`$/, '');
-		return textTrimmedEnd;
-	}
-
 	private static mapChatFetcherErrorToNoNextEditReason(fetchError: ChatFetchError): NoNextEditReason {
 		switch (fetchError.type) {
 			case ChatFetchResponseType.Canceled:
@@ -826,13 +847,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		if (this.forceUseDefaultModel) {
 			return xtabPromptOptions.DEFAULT_OPTIONS;
 		} else {
-			const promptingStrategy = this.determinePromptingStrategy({
-				isXtabUnifiedModel: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabUseUnifiedModel, this.expService),
-				isCodexV21NesUnified: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabCodexV21NesUnified, this.expService),
-				useSimplifiedPrompt: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseSimplifiedPrompt, this.expService),
-				useXtab275Prompting: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseXtab275Prompting, this.expService),
-				useNes41Miniv3Prompting: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabUseNes41Miniv3Prompting, this.expService),
-			});
+			const promptingStrategy = this.determinePromptingStrategy();
 			return {
 				promptingStrategy,
 				currentFile: {
@@ -864,7 +879,13 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 	}
 
-	private determinePromptingStrategy({ isXtabUnifiedModel, isCodexV21NesUnified, useSimplifiedPrompt, useXtab275Prompting, useNes41Miniv3Prompting }: { isXtabUnifiedModel: boolean; isCodexV21NesUnified: boolean; useSimplifiedPrompt: boolean; useXtab275Prompting: boolean; useNes41Miniv3Prompting: boolean }): xtabPromptOptions.PromptingStrategy | undefined {
+	private determinePromptingStrategy(): xtabPromptOptions.PromptingStrategy | undefined {
+		const isXtabUnifiedModel = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabUseUnifiedModel, this.expService);
+		const isCodexV21NesUnified = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabCodexV21NesUnified, this.expService);
+		const useSimplifiedPrompt = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseSimplifiedPrompt, this.expService);
+		const useXtab275Prompting = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseXtab275Prompting, this.expService);
+		const useNes41Miniv3Prompting = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabUseNes41Miniv3Prompting, this.expService);
+
 		if (isXtabUnifiedModel) {
 			return xtabPromptOptions.PromptingStrategy.UnifiedModel;
 		} else if (isCodexV21NesUnified) {

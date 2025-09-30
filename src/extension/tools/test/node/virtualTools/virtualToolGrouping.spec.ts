@@ -3,9 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LanguageModelTextPart, LanguageModelToolInformation } from 'vscode';
 import { HARD_TOOL_LIMIT, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
+import { IExperimentationService } from '../../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry';
 import { ITestingServicesAccessor } from '../../../../../platform/test/node/services';
 import { shuffle } from '../../../../../util/vs/base/common/arrays';
@@ -17,7 +18,6 @@ import { ToolGrouping } from '../../../common/virtualTools/toolGrouping';
 import { VIRTUAL_TOOL_NAME_PREFIX, VirtualTool } from '../../../common/virtualTools/virtualTool';
 import { TRIM_THRESHOLD } from '../../../common/virtualTools/virtualToolsConstants';
 import { IToolCategorization } from '../../../common/virtualTools/virtualToolTypes';
-import { IExperimentationService } from '../../../../../platform/telemetry/common/nullExperimentationService';
 
 describe('Virtual Tools - Grouping', () => {
 	let accessor: ITestingServicesAccessor;
@@ -54,7 +54,10 @@ describe('Virtual Tools - Grouping', () => {
 
 	function createGroupingGrouper(): IToolCategorization {
 		return {
-			addGroups(root, tools, token) {
+			recomputeEmbeddingRankings() {
+				return Promise.resolve();
+			},
+			addGroups(query, root, tools, token) {
 				const groups = groupBy(tools, t => t.name.split('_')[0]);
 				root.contents = [];
 				for (const [groupName, groupTools] of Object.entries(groups)) {
@@ -66,7 +69,7 @@ describe('Virtual Tools - Grouping', () => {
 						`${VIRTUAL_TOOL_NAME_PREFIX}${groupName}`,
 						`Group of tools: ${groupName}`,
 						0,
-						{ groups: [], toolsetKey: '', preExpanded: true }
+						{ groups: [], toolsetKey: '', wasExpandedByDefault: true }
 					);
 					groupTool.contents = groupTools;
 					root.contents.push(groupTool);
@@ -78,12 +81,15 @@ describe('Virtual Tools - Grouping', () => {
 
 	function createSimpleGrouper(): IToolCategorization {
 		return {
-			addGroups(root, tools, token) {
+			recomputeEmbeddingRankings: (query, root, token) => Promise.resolve(),
+			addGroups(query, root, tools, token) {
 				root.contents = [...tools];
 				return Promise.resolve();
 			},
 		};
 	}
+
+
 
 	beforeEach(() => {
 		const testingServiceCollection = createExtensionUnitTestingServices();
@@ -148,7 +154,7 @@ describe('Virtual Tools - Grouping', () => {
 
 	describe('compute()', () => {
 		it('should return empty array for no tools', async () => {
-			const result = await grouping.compute(CancellationToken.None);
+			const result = await grouping.compute('', CancellationToken.None);
 			expect(result).toEqual([]);
 		});
 
@@ -156,7 +162,7 @@ describe('Virtual Tools - Grouping', () => {
 			const tools = [makeTool('test1'), makeTool('test2')];
 			grouping.tools = tools;
 
-			const result = await grouping.compute(CancellationToken.None);
+			const result = await grouping.compute('', CancellationToken.None);
 			expect(result).toEqual(tools);
 		});
 
@@ -171,7 +177,7 @@ describe('Virtual Tools - Grouping', () => {
 			];
 			grouping.tools = tools;
 
-			const result = await grouping.compute(CancellationToken.None);
+			const result = await grouping.compute('', CancellationToken.None);
 			expect(result).toHaveLength(1);
 			expect(result[0].name).toBe(`${VIRTUAL_TOOL_NAME_PREFIX}file`);
 			expect(result[0].description).toBe('Group of tools: file');
@@ -190,7 +196,7 @@ describe('Virtual Tools - Grouping', () => {
 			];
 			grouping.tools = tools;
 
-			const result = await grouping.compute(CancellationToken.None);
+			const result = await grouping.compute('', CancellationToken.None);
 			expect(result).toHaveLength(3); // 1 group + 2 singles
 
 			const groupTool = result.find(t => t.name.startsWith(VIRTUAL_TOOL_NAME_PREFIX));
@@ -215,7 +221,7 @@ describe('Virtual Tools - Grouping', () => {
 			];
 			grouping.tools = tools;
 
-			const result = await grouping.computeAll(CancellationToken.None);
+			const result = await grouping.computeAll('', CancellationToken.None);
 			expect(result).toHaveLength(1);
 			expect(result[0]).toBeInstanceOf(VirtualTool);
 
@@ -242,7 +248,7 @@ describe('Virtual Tools - Grouping', () => {
 			grouping.tools = tools;
 
 			// First compute to create the virtual tool
-			await grouping.compute(CancellationToken.None);
+			await grouping.compute('', CancellationToken.None);
 
 			const result = grouping.didCall(0, `${VIRTUAL_TOOL_NAME_PREFIX}file`);
 			expect(result).toBeDefined();
@@ -264,7 +270,7 @@ describe('Virtual Tools - Grouping', () => {
 			grouping.tools = tools;
 
 			// First compute - should return virtual tool
-			let result = await grouping.compute(CancellationToken.None);
+			let result = await grouping.compute('', CancellationToken.None);
 			expect(result).toHaveLength(1);
 			expect(result[0].name).toBe(`${VIRTUAL_TOOL_NAME_PREFIX}file`);
 
@@ -272,7 +278,7 @@ describe('Virtual Tools - Grouping', () => {
 			grouping.didCall(0, `${VIRTUAL_TOOL_NAME_PREFIX}file`);
 
 			// Second compute - should now return the expanded tools
-			result = await grouping.compute(CancellationToken.None);
+			result = await grouping.compute('', CancellationToken.None);
 			expect(result).toEqual(tools);
 		});
 	});
@@ -296,7 +302,7 @@ describe('Virtual Tools - Grouping', () => {
 			shuffle(groupNumbers);
 
 			// Initial compute - should create virtual tools for groups
-			let result = await grouping.compute(CancellationToken.None);
+			let result = await grouping.compute('', CancellationToken.None);
 			expect(result.length).toBeLessThan(toolGroups.length); // Should be grouped
 
 			// Expand some virtual tools by calling them at different turns
@@ -305,11 +311,11 @@ describe('Virtual Tools - Grouping', () => {
 			for (; i < groupNumbers.length && result.length < TRIM_THRESHOLD; i++) {
 				grouping.didCall(0, `${VIRTUAL_TOOL_NAME_PREFIX}group${groupNumbers[i]}`);
 				grouping.didTakeTurn();
-				result = await grouping.compute(CancellationToken.None);
+				result = await grouping.compute('', CancellationToken.None);
 			}
 
 			grouping.didInvalidateCache();
-			result = await grouping.compute(CancellationToken.None);
+			result = await grouping.compute('', CancellationToken.None);
 			expect(result.length).toBeLessThanOrEqual(TRIM_THRESHOLD);
 			for (let k = i - 1; k > i - 3; k--) {
 				expect(result.map(r => r.name)).toContain(`group${groupNumbers[k]}_tool1`);
@@ -329,7 +335,7 @@ describe('Virtual Tools - Grouping', () => {
 			}
 			grouping.tools = tools;
 
-			await grouping.compute(CancellationToken.None);
+			await grouping.compute('', CancellationToken.None);
 
 			// Expand tools in different order - later calls are more recent
 			grouping.didCall(0, `${VIRTUAL_TOOL_NAME_PREFIX}group0`); // Oldest usage
@@ -343,7 +349,7 @@ describe('Virtual Tools - Grouping', () => {
 
 			// Force trimming
 			grouping.didInvalidateCache();
-			const result = await grouping.compute(CancellationToken.None);
+			const result = await grouping.compute('', CancellationToken.None);
 
 			// group2 tools should still be expanded (most recent)
 			// group0 tools should be collapsed first (least recent)
@@ -365,7 +371,7 @@ describe('Virtual Tools - Grouping', () => {
 			}
 			grouping.tools = tools;
 
-			await grouping.compute(CancellationToken.None);
+			await grouping.compute('', CancellationToken.None);
 
 			// Expand some tools
 			grouping.didCall(0, `${VIRTUAL_TOOL_NAME_PREFIX}group0`);
@@ -374,7 +380,7 @@ describe('Virtual Tools - Grouping', () => {
 
 			// First cache invalidation
 			grouping.didInvalidateCache();
-			let result = await grouping.compute(CancellationToken.None);
+			let result = await grouping.compute('', CancellationToken.None);
 			const firstTrimCount = result.length;
 			expect(firstTrimCount).toBeLessThanOrEqual(TRIM_THRESHOLD);
 
@@ -385,7 +391,7 @@ describe('Virtual Tools - Grouping', () => {
 
 			// Second cache invalidation
 			grouping.didInvalidateCache();
-			result = await grouping.compute(CancellationToken.None);
+			result = await grouping.compute('', CancellationToken.None);
 
 			// Should still respect TRIM_THRESHOLD
 			expect(result.length).toBeLessThanOrEqual(TRIM_THRESHOLD);
@@ -404,11 +410,136 @@ describe('Virtual Tools - Grouping', () => {
 
 			// Invalidate cache to trigger trimming
 			grouping.didInvalidateCache();
-			const result = await grouping.compute(CancellationToken.None);
+			const result = await grouping.compute('', CancellationToken.None);
 
 			// Since there are no virtual tools to collapse, should keep all tools
 			// even if exceeding TRIM_THRESHOLD
 			expect(result.length).toBe(150);
+		});
+	});
+
+	describe('cache invalidation integration', () => {
+		it('should trigger recomputeEmbeddingRankings during cache invalidation', async () => {
+			mockGrouper = createSimpleGrouper();
+			grouping = accessor.get(IInstantiationService).createInstance(TestToolGrouping, []);
+
+			const spy = vi.spyOn(mockGrouper, 'recomputeEmbeddingRankings');
+			const tools = [makeTool('test1'), makeTool('test2')];
+			grouping.tools = tools;
+
+			// Initial compute should not call recomputeEmbeddingRankings
+			await grouping.compute('query', CancellationToken.None);
+			expect(spy).not.toHaveBeenCalled();
+
+			// Cache invalidation should trigger recomputeEmbeddingRankings
+			grouping.didInvalidateCache();
+			await grouping.compute('query', CancellationToken.None);
+			expect(spy).toHaveBeenCalledWith('query', grouping['_root'], CancellationToken.None);
+		});
+	});
+
+	describe('canBeCollapsed metadata', () => {
+		it('should respect canBeCollapsed=false during trimming', async () => {
+			mockGrouper = {
+				recomputeEmbeddingRankings() {
+					return Promise.resolve();
+				},
+				addGroups(query, root, tools, token) {
+					// Create some virtual tools with different canBeCollapsed settings
+					const collapsibleGroup = new VirtualTool(
+						`${VIRTUAL_TOOL_NAME_PREFIX}collapsible`,
+						'Collapsible group',
+						0,
+						{ groups: [], toolsetKey: '', canBeCollapsed: true, wasExpandedByDefault: true }
+					);
+					collapsibleGroup.contents = tools.slice(0, 2);
+					collapsibleGroup.isExpanded = true;
+
+					const nonCollapsibleGroup = new VirtualTool(
+						`${VIRTUAL_TOOL_NAME_PREFIX}noncollapsible`,
+						'Non-collapsible group',
+						0,
+						{ groups: [], toolsetKey: '', canBeCollapsed: false, wasExpandedByDefault: true }
+					);
+					nonCollapsibleGroup.contents = tools.slice(2, 4);
+					nonCollapsibleGroup.isExpanded = true;
+
+					root.contents = [collapsibleGroup, nonCollapsibleGroup, ...tools.slice(4)];
+					return Promise.resolve();
+				},
+			};
+			grouping = accessor.get(IInstantiationService).createInstance(TestToolGrouping, []);
+
+			// Create many tools to trigger trimming
+			const manyTools: LanguageModelToolInformation[] = [];
+			for (let i = 0; i < TRIM_THRESHOLD + 10; i++) {
+				manyTools.push(makeTool(`tool_${i}`));
+			}
+			grouping.tools = manyTools;
+
+			// Initial compute
+			await grouping.compute('', CancellationToken.None);
+
+			// Force trimming
+			grouping.didInvalidateCache();
+			await grouping.compute('', CancellationToken.None);
+
+			// Non-collapsible group should still be expanded
+			const allResult = await grouping.computeAll('', CancellationToken.None);
+			const nonCollapsibleGroup = allResult.find(tool =>
+				tool instanceof VirtualTool && tool.name === `${VIRTUAL_TOOL_NAME_PREFIX}noncollapsible`
+			) as VirtualTool;
+			expect(nonCollapsibleGroup?.isExpanded).toBe(true);
+
+			// Collapsible group may have been collapsed - just verify it exists
+			const collapsibleGroup = allResult.find(tool =>
+				tool instanceof VirtualTool && tool.name === `${VIRTUAL_TOOL_NAME_PREFIX}collapsible`
+			) as VirtualTool;
+			expect(collapsibleGroup).toBeDefined();
+		});
+
+		it('should set lastUsedOnTurn to Infinity for non-collapsible tools during trimming attempts', async () => {
+			mockGrouper = {
+				recomputeEmbeddingRankings() {
+					return Promise.resolve();
+				},
+				addGroups(query, root, tools, token) {
+					const nonCollapsibleGroup = new VirtualTool(
+						`${VIRTUAL_TOOL_NAME_PREFIX}noncollapsible`,
+						'Non-collapsible group',
+						5, // Initial lastUsedOnTurn
+						{ groups: [], toolsetKey: '', canBeCollapsed: false, wasExpandedByDefault: true }
+					);
+					nonCollapsibleGroup.contents = tools.slice(0, 3);
+					nonCollapsibleGroup.isExpanded = true;
+
+					root.contents = [nonCollapsibleGroup, ...tools.slice(3)];
+					return Promise.resolve();
+				},
+			};
+			grouping = accessor.get(IInstantiationService).createInstance(TestToolGrouping, []);
+
+			// Create many tools to trigger trimming
+			const manyTools: LanguageModelToolInformation[] = [];
+			for (let i = 0; i < TRIM_THRESHOLD + 10; i++) {
+				manyTools.push(makeTool(`tool_${i}`));
+			}
+			grouping.tools = manyTools;
+
+			// Initial compute
+			await grouping.compute('', CancellationToken.None);
+
+			// Force trimming
+			grouping.didInvalidateCache();
+			await grouping.compute('', CancellationToken.None);
+
+			// Check that non-collapsible tool's lastUsedOnTurn was set to Infinity
+			const allResult = await grouping.computeAll('', CancellationToken.None);
+			const nonCollapsibleGroup = allResult.find(tool =>
+				tool instanceof VirtualTool && tool.name === `${VIRTUAL_TOOL_NAME_PREFIX}noncollapsible`
+			) as VirtualTool;
+			expect(nonCollapsibleGroup?.lastUsedOnTurn).toBe(Infinity);
+			expect(nonCollapsibleGroup?.isExpanded).toBe(true);
 		});
 	});
 
@@ -426,7 +557,7 @@ describe('Virtual Tools - Grouping', () => {
 			}
 
 			grouping.tools = manyTools;
-			const result = await grouping.compute(CancellationToken.None);
+			const result = await grouping.compute('', CancellationToken.None);
 			expect(result.length).toBeLessThanOrEqual(HARD_TOOL_LIMIT);
 
 			for (let i = 0; i < 10; i++) {

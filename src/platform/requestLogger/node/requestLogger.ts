@@ -29,8 +29,15 @@ export type UriData = { kind: 'request'; id: string } | { kind: 'latest' };
 export class ChatRequestScheme {
 	public static readonly chatRequestScheme = 'ccreq';
 
-	public static buildUri(data: UriData, format: 'markdown' | 'json' = 'markdown'): string {
-		const extension = format === 'json' ? 'json' : 'copilotmd';
+	public static buildUri(data: UriData, format: 'markdown' | 'json' | 'rawrequest' = 'markdown'): string {
+		let extension: string;
+		if (format === 'markdown') {
+			extension = 'copilotmd';
+		} else if (format === 'json') {
+			extension = 'json';
+		} else { // rawrequest
+			extension = 'request.json';
+		}
 		if (data.kind === 'latest') {
 			return `${ChatRequestScheme.chatRequestScheme}:latest.${extension}`;
 		} else {
@@ -38,7 +45,7 @@ export class ChatRequestScheme {
 		}
 	}
 
-	public static parseUri(uri: string): { data: UriData; format: 'markdown' | 'json' } | undefined {
+	public static parseUri(uri: string): { data: UriData; format: 'markdown' | 'json' | 'rawrequest' } | undefined {
 		// Check for latest markdown
 		if (uri === this.buildUri({ kind: 'latest' }, 'markdown')) {
 			return { data: { kind: 'latest' }, format: 'markdown' };
@@ -47,11 +54,21 @@ export class ChatRequestScheme {
 		if (uri === this.buildUri({ kind: 'latest' }, 'json')) {
 			return { data: { kind: 'latest' }, format: 'json' };
 		}
+		// Check for latest rawrequest
+		if (uri === this.buildUri({ kind: 'latest' }, 'rawrequest')) {
+			return { data: { kind: 'latest' }, format: 'rawrequest' };
+		}
 
 		// Check for specific request markdown
 		const mdMatch = uri.match(/ccreq:([^\s]+)\.copilotmd/);
 		if (mdMatch) {
 			return { data: { kind: 'request', id: mdMatch[1] }, format: 'markdown' };
+		}
+
+		// specific raw body json
+		const bodyJsonMatch = uri.match(/ccreq:([^\s]+)\.request\.json/);
+		if (bodyJsonMatch) {
+			return { data: { kind: 'request', id: bodyJsonMatch[1] }, format: 'rawrequest' };
 		}
 
 		// Check for specific request JSON
@@ -64,7 +81,7 @@ export class ChatRequestScheme {
 	}
 
 	public static findAllUris(text: string): { uri: string; range: OffsetRange }[] {
-		const linkRE = /(ccreq:[^\s]+\.(copilotmd|json))/g;
+		const linkRE = /(ccreq:[^\s]+\.(copilotmd|json|request\.json))/g;
 		return [...text.matchAll(linkRE)].map(
 			(m) => {
 				const identifier = m[1];

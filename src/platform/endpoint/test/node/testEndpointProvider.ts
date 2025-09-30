@@ -9,20 +9,22 @@ import type { ChatRequest, LanguageModelChat } from 'vscode';
 import { CacheableRequest, SQLiteCache } from '../../../../../test/base/cache';
 import { TestingCacheSalts } from '../../../../../test/base/salts';
 import { CurrentTestRunInfo } from '../../../../../test/base/simulationContext';
+import { TokenizerType } from '../../../../util/common/tokenizer';
 import { SequencerByKey } from '../../../../util/vs/base/common/async';
 import { IInstantiationService, ServicesAccessor } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { CHAT_MODEL, IConfigurationService } from '../../../configuration/common/configurationService';
+import { LEGACY_EMBEDDING_MODEL_ID } from '../../../embeddings/common/embeddingsComputer';
 import { IEnvService } from '../../../env/common/envService';
 import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
-import { IChatEndpoint } from '../../../networking/common/networking';
+import { IChatEndpoint, IEmbeddingsEndpoint } from '../../../networking/common/networking';
 import { IRequestLogger } from '../../../requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../../common/capiClient';
-import { IDomainService } from '../../common/domainService';
-import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEndpointProvider } from '../../common/endpointProvider';
+import { ChatEndpointFamily, EmbeddingsEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../common/endpointProvider';
+import { EmbeddingEndpoint } from '../../node/embeddingsEndpoint';
 import { ModelMetadataFetcher } from '../../node/modelMetadataFetcher';
 import { AzureTestEndpoint } from './azureEndpoint';
 import { CAPITestEndpoint } from './capiEndpoint';
@@ -68,7 +70,6 @@ export class TestModelMetadataFetcher extends ModelMetadataFetcher {
 		info: CurrentTestRunInfo | undefined,
 		private readonly _skipModelMetadataCache: boolean = false,
 		@IFetcherService _fetcher: IFetcherService,
-		@IDomainService _domainService: IDomainService,
 		@ICAPIClientService _capiClientService: ICAPIClientService,
 		@IConfigurationService _configService: IConfigurationService,
 		@IExperimentationService _expService: IExperimentationService,
@@ -84,7 +85,6 @@ export class TestModelMetadataFetcher extends ModelMetadataFetcher {
 			_isModelLab,
 			_fetcher,
 			_requestLogger,
-			_domainService,
 			_capiClientService,
 			_configService,
 			_expService,
@@ -123,6 +123,7 @@ export class TestEndpointProvider implements IEndpointProvider {
 
 	declare readonly _serviceBrand: undefined;
 
+	private _testEmbeddingEndpoint: IEmbeddingsEndpoint | undefined;
 	private _chatEndpoints: Map<string, IChatEndpoint> = new Map();
 	private _prodChatModelMetadata: Promise<Map<string, IChatModelInformation>>;
 	private _modelLabChatModelMetadata: Promise<Map<string, IChatModelInformation>>;
@@ -202,5 +203,24 @@ export class TestEndpointProvider implements IEndpointProvider {
 		} else {
 			return await this.getChatEndpointInfo(this.gpt4oMiniModelToRunAgainst ?? CHAT_MODEL.GPT4OMINI, await this._modelLabChatModelMetadata, await this._prodChatModelMetadata);
 		}
+	}
+	async getEmbeddingsEndpoint(family?: EmbeddingsEndpointFamily): Promise<IEmbeddingsEndpoint> {
+		const id = LEGACY_EMBEDDING_MODEL_ID.TEXT3SMALL;
+		const modelInformation: IEmbeddingModelInformation = {
+			id: id,
+			name: id,
+			version: '1.0',
+			model_picker_enabled: false,
+			is_chat_default: false,
+			billing: { is_premium: false, multiplier: 0 },
+			is_chat_fallback: false,
+			capabilities: {
+				type: 'embeddings',
+				tokenizer: TokenizerType.O200K,
+				family: 'test'
+			}
+		};
+		this._testEmbeddingEndpoint ??= this._instantiationService.createInstance(EmbeddingEndpoint, modelInformation);
+		return this._testEmbeddingEndpoint;
 	}
 }

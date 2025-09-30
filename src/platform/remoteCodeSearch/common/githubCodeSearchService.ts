@@ -20,7 +20,6 @@ import { getGithubMetadataHeaders } from '../../chunking/common/chunkingEndpoint
 import { stripChunkTextMetadata, truncateToMaxUtf8Length } from '../../chunking/common/chunkingStringUtils';
 import { EmbeddingType } from '../../embeddings/common/embeddingsComputer';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
-import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
 import { GithubRepoId, toGithubNwo } from '../../git/common/gitService';
 import { IIgnoreService } from '../../ignore/common/ignoreService';
@@ -109,7 +108,6 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 
 	constructor(
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
-		@IDomainService private readonly _domainService: IDomainService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IEnvService private readonly _envService: IEnvService,
 		@IFetcherService private readonly _fetcherService: IFetcherService,
@@ -271,9 +269,7 @@ export class GithubCodeSearchService implements IGithubCodeSearchService {
 		const response = await raceCancellationError(
 			postRequest(
 				this._fetcherService,
-				this._envService,
 				this._telemetryService,
-				this._domainService,
 				this._capiClientService,
 				{ type: RequestType.EmbeddingsCodeSearch },
 				authToken,

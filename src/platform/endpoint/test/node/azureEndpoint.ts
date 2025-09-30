@@ -8,7 +8,6 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { IAuthenticationService } from '../../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
 import { CHAT_MODEL, IConfigurationService } from '../../../configuration/common/configurationService';
-import { IEnvService } from '../../../env/common/envService';
 import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { IChatEndpoint, IEndpointBody } from '../../../networking/common/networking';
@@ -28,7 +27,6 @@ export class AzureTestEndpoint extends ChatEndpoint {
 		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClient: ICAPIClientService,
 		@IFetcherService fetcherService: IFetcherService,
-		@IEnvService envService: IEnvService,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IAuthenticationService authService: IAuthenticationService,
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
@@ -61,7 +59,6 @@ export class AzureTestEndpoint extends ChatEndpoint {
 			domainService,
 			capiClient,
 			fetcherService,
-			envService,
 			telemetryService,
 			authService,
 			chatMLFetcher,

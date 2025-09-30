@@ -6,6 +6,7 @@
 import type * as vscode from 'vscode';
 import { ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { modelSupportsMultiReplaceString, modelSupportsReplaceString } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -26,14 +27,13 @@ import { Intent } from '../../common/constants';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
 import { IBuildPromptContext, InternalToolReference } from '../../prompt/common/intents';
 import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIntentRequestHandler';
-import { IBuildPromptResult, IIntent, IntentLinkificationOptions } from '../../prompt/node/intents';
+import { IBuildPromptResult, IIntent } from '../../prompt/node/intents';
 import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
 import { getToolName, ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
 import { EditCodeIntent, EditCodeIntentOptions } from './editCodeIntent';
 import { EditCode2IntentInvocation } from './editCodeIntent2';
 import { getRequestedToolCallIterationLimit } from './toolCallingLoop';
-import { modelSupportsMultiReplaceString, modelSupportsReplaceString } from '../../../platform/endpoint/common/chatModelCapabilities';
 
 const getTools = (instaService: IInstantiationService, request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> =>
 	instaService.invokeFunction(async accessor => {
@@ -41,17 +41,17 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 		const endpointProvider = accessor.get<IEndpointProvider>(IEndpointProvider);
 		const notebookService = accessor.get<INotebookService>(INotebookService);
 		const configurationService = accessor.get<IConfigurationService>(IConfigurationService);
+		const experimentationService = accessor.get<IExperimentationService>(IExperimentationService);
 		const model = await endpointProvider.getChatEndpoint(request);
 		const lookForTools = new Set<string>([ToolName.EditFile]);
-		const experimentationService = accessor.get<IExperimentationService>(IExperimentationService);
 
 		if (requestHasNotebookRefs(request, notebookService, { checkPromptAsWell: true })) {
 			lookForTools.add(ToolName.CreateNewJupyterNotebook);
 		}
 
-		if (modelSupportsReplaceString(model)) {
+		if (await modelSupportsReplaceString(model)) {
 			lookForTools.add(ToolName.ReplaceString);
-			if (modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
+			if (await modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
 				lookForTools.add(ToolName.MultiReplaceString);
 			}
 		}
@@ -94,12 +94,6 @@ export class NotebookEditorIntent extends EditCodeIntent {
 
 export class NotebookEditorIntentInvocation extends EditCode2IntentInvocation {
 
-	public override get linkification(): IntentLinkificationOptions {
-		// off by default:
-		const enabled = this.configurationService.getConfig(ConfigKey.Internal.EditLinkification) === true;
-		return { disable: !enabled };
-	}
-
 	constructor(
 		intent: IIntent,
 		location: ChatLocation,
@@ -121,9 +115,8 @@ export class NotebookEditorIntentInvocation extends EditCode2IntentInvocation {
 		@ITelemetryService telemetryService: ITelemetryService,
 		@INotebookService notebookService: INotebookService,
 		@ILogService logService: ILogService,
-		@IExperimentationService experimentationService: IExperimentationService,
 	) {
-		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, logService, experimentationService);
+		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, logService);
 	}
 
 	public override async getAvailableTools(): Promise<vscode.LanguageModelToolInformation[]> {

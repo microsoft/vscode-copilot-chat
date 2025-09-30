@@ -11,7 +11,6 @@ import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
-import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
@@ -52,7 +51,6 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		@IFetcherService fetcherService: IFetcherService,
 		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
-		@IEnvService envService: IEnvService,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IAuthenticationService authService: IAuthenticationService,
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
@@ -67,7 +65,6 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			domainService,
 			capiClientService,
 			fetcherService,
-			envService,
 			telemetryService,
 			authService,
 			chatMLFetcher,
@@ -89,6 +86,11 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			body.stream_options = undefined;
 			if (!this.modelMetadata.capabilities.supports.thinking) {
 				body.reasoning = undefined;
+				body.include = undefined;
+			}
+			if (body.previous_response_id && !body.previous_response_id.startsWith('resp_')) {
+				// Don't use a response ID from CAPI
+				body.previous_response_id = undefined;
 			}
 			return body;
 		} else {

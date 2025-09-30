@@ -20,6 +20,7 @@ import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../networking/common/fetch';
 import { ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, TokenLogProb } from '../../networking/common/openai';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { IChatModelInformation } from '../common/endpointProvider';
@@ -28,7 +29,7 @@ import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
 
 export function createResponsesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, modelInfo: IChatModelInformation): IEndpointBody {
 	const configService = accessor.get(IConfigurationService);
-	const logService = accessor.get(ILogService);
+	const expService = accessor.get(IExperimentationService);
 	const body: IEndpointBody = {
 		model,
 		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
@@ -53,18 +54,15 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	body.truncation = configService.getConfig(ConfigKey.Internal.UseResponsesApiTruncation) ?
 		'auto' :
 		'disabled';
-	const reasoningConfig = configService.getConfig(ConfigKey.Internal.ResponsesApiReasoning);
-	if (reasoningConfig === true) {
+	const effortConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningEffort, expService);
+	const summaryConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningSummary, expService);
+	const effort = effortConfig === 'default' ? undefined : effortConfig;
+	const summary = summaryConfig === 'off' ? undefined : summaryConfig;
+	if (effort || summary) {
 		body.reasoning = {
-			'effort': 'medium',
-			'summary': 'detailed'
+			...(effort ? { effort } : {}),
+			...(summary ? { summary } : {})
 		};
-	} else if (typeof reasoningConfig === 'string') {
-		try {
-			body.reasoning = JSON.parse(reasoningConfig);
-		} catch (e) {
-			logService.error(e, 'Failed to parse responses reasoning setting');
-		}
 	}
 
 	body.include = ['reasoning.encrypted_content'];
@@ -86,14 +84,17 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 			case Raw.ChatRole.Assistant:
 				if (message.content.length) {
 					input.push(...extractThinkingData(message.content));
-					input.push({
-						role: 'assistant',
-						content: message.content.map(rawContentToResponsesOutputContent).filter(isDefined),
-						// I don't think this needs to be round-tripped.
-						id: 'msg_123',
-						status: 'completed',
-						type: 'message',
-					} satisfies OpenAI.Responses.ResponseOutputMessage);
+					const asstContent = message.content.map(rawContentToResponsesOutputContent).filter(isDefined);
+					if (asstContent.length) {
+						input.push({
+							role: 'assistant',
+							content: asstContent,
+							// I don't think this needs to be round-tripped.
+							id: 'msg_123',
+							status: 'completed',
+							type: 'message',
+						} satisfies OpenAI.Responses.ResponseOutputMessage);
+					}
 				}
 				if (message.toolCalls) {
 					for (const toolCall of message.toolCalls) {
@@ -152,7 +153,9 @@ function rawContentToResponsesContent(part: Raw.ChatCompletionContentPart): Open
 function rawContentToResponsesOutputContent(part: Raw.ChatCompletionContentPart): OpenAI.Responses.ResponseOutputText | OpenAI.Responses.ResponseOutputRefusal | undefined {
 	switch (part.type) {
 		case Raw.ChatCompletionContentPartKind.Text:
-			return { type: 'output_text', text: part.text, annotations: [] };
+			if (part.text.trim()) {
+				return { type: 'output_text', text: part.text, annotations: [] };
+			}
 	}
 }
 

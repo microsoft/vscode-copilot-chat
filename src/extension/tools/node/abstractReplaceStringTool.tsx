@@ -29,13 +29,14 @@ import { ChatResponseTextEditPart, EndOfLine, Position as ExtPosition, LanguageM
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { CellOrNotebookEdit, processFullRewriteNotebookEdits } from '../../prompts/node/codeMapper/codeMapper';
+import { EditTools, IEditToolLearningService } from '../common/editToolLearningService';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
 import { ActionType } from './applyPatch/parser';
 import { CorrectedEditResult, healReplaceStringParams } from './editFileHealing';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
-import { EditError, NoChangeError, NoMatchError, applyEdit, createEditConfirmation } from './editFileToolUtils';
+import { EditError, NoChangeError, NoMatchError, applyEdit, canExistingFileBeEdited, createEditConfirmation } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileNotContentExcluded, resolveToolInputPath } from './toolUtils';
 
@@ -72,6 +73,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IConfigurationService protected readonly configurationService: IConfigurationService,
+		@IEditToolLearningService private readonly editToolLearningService: IEditToolLearningService,
 	) { }
 
 	public abstract invoke(options: vscode.LanguageModelToolInvocationOptions<T>, token: vscode.CancellationToken): Promise<LanguageModelToolResult>;
@@ -96,7 +98,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		}
 
 		// Sometimes the model replaces an empty string in a new file to create it. Allow that pattern.
-		const exists = await this.fileSystemService.stat(uri).then(() => true, () => false);
+		const exists = await this.instantiationService.invokeFunction(canExistingFileBeEdited, uri);
 		if (!exists) {
 			return {
 				uri,
@@ -237,6 +239,16 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 							timeDelayMs: res.timeDelayMs,
 							didBranchChange: res.didBranchChange ? 1 : 0,
 						});
+						res.telemetryService.sendGHTelemetryEvent('replaceString/trackEditSurvival', {
+							headerRequestId: this._promptContext?.requestId,
+							requestSource: 'agent',
+							mapper: 'stringReplaceTool'
+						}, {
+							survivalRateFourGram: res.fourGram,
+							survivalRateNoRevert: res.noRevert,
+							timeDelayMs: res.timeDelayMs,
+							didBranchChange: res.didBranchChange ? 1 : 0,
+						});
 					});
 				});
 
@@ -285,10 +297,12 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 			);
 			updatedFile = result.updatedFile;
 			edits = result.edits;
+			this.recordEditSuccess(options, true);
 		} catch (e) {
 			if (!(e instanceof NoMatchError)) {
 				throw e;
 			}
+			this.recordEditSuccess(options, false);
 
 			if (this.experimentationService.getTreatmentVariable<boolean>('copilotchat.disableReplaceStringHealing') === true) {
 				throw e; // failsafe for next release.
@@ -402,6 +416,12 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 
 	protected async modelForTelemetry(options: vscode.LanguageModelToolInvocationOptions<T>) {
 		return options.model && (await this.endpointProvider.getChatEndpoint(options.model)).model;
+	}
+
+	private async recordEditSuccess(options: vscode.LanguageModelToolInvocationOptions<T>, success: boolean) {
+		if (options.model) {
+			this.editToolLearningService.didMakeEdit(options.model, this.toolName() as EditTools, success);
+		}
 	}
 
 	async resolveInput(input: T, promptContext: IBuildPromptContext): Promise<T> {

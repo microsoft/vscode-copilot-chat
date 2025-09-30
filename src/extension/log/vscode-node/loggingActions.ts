@@ -14,7 +14,6 @@ import { RequestType } from '@vscode/copilot-api';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
-import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { CAPIClientImpl } from '../../../platform/endpoint/node/capiClientImpl';
 import { IEnvService, isScenarioAutomation } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
@@ -361,7 +360,6 @@ export function collectFetcherTelemetry(accessor: ServicesAccessor, error: any):
 	const fetcherService = accessor.get(IFetcherService);
 	const envService = accessor.get(IEnvService);
 	const telemetryService = accessor.get(ITelemetryService);
-	const domainService = accessor.get(IDomainService);
 	const logService = accessor.get(ILogService);
 	const authService = accessor.get(IAuthenticationService);
 	const configurationService = accessor.get(IConfigurationService);
@@ -427,9 +425,7 @@ export function collectFetcherTelemetry(accessor: ServicesAccessor, error: any):
 				const modifiedCapiClientService = modifiedInstaService.createInstance(CAPIClientImpl);
 				const response = await getRequest(
 					fetcher,
-					envService,
 					telemetryService,
-					domainService,
 					modifiedCapiClientService,
 					{ type: RequestType.Models },
 					copilotToken,

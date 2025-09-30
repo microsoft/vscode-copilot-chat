@@ -273,7 +273,8 @@ function getErrorDetailsFromChatFetchErrorInner(fetchResult: ChatFetchError, cop
 		case ChatFetchResponseType.RateLimited:
 			return {
 				message: getRateLimitMessage(fetchResult, hideRateLimitTimeEstimate),
-				level: ChatErrorLevel.Info
+				level: ChatErrorLevel.Info,
+				isRateLimited: true
 			};
 		case ChatFetchResponseType.QuotaExceeded:
 			return {

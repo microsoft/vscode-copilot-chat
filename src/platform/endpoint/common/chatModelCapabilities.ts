@@ -27,7 +27,7 @@ export async function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
 }
 
 export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint) {
-	return await getSha256Hash(model.family) === '008ed1bfd28fb7f15ff17f6e308c417635da136603b83b32db4719bd1cd64c09';
+	return await getSha256Hash(model.family) === '42029ef215256f8fa9fedb53542ee6553eef76027b116f8fac5346211b1e473c';
 }
 
 /**
@@ -63,30 +63,30 @@ export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat 
 /**
  * Model supports replace_string_in_file as an edit tool.
  */
-export function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || model.family.includes('gemini');
+export async function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || model.family.includes('gemini') || await isHiddenModelB(model);
 }
 
 /**
  * Model supports multi_replace_string_in_file as an edit tool.
  */
-export function modelSupportsMultiReplaceString(model: LanguageModelChat | IChatEndpoint): boolean {
-	return modelSupportsReplaceString(model) && !model.family.includes('gemini');
+export async function modelSupportsMultiReplaceString(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
+	return await modelSupportsReplaceString(model) && !model.family.includes('gemini');
 }
 
 /**
  * The model is capable of using replace_string_in_file exclusively,
  * without needing insert_edit_into_file.
  */
-export function modelCanUseReplaceStringExclusively(model: LanguageModelChat | IChatEndpoint): boolean {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic');
+export async function modelCanUseReplaceStringExclusively(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || await isHiddenModelB(model);
 }
 
 /**
  * The model can accept image urls as the `image_url` parameter in mcp tool results.
  */
-export function modelCanUseMcpResultImageURL(model: LanguageModelChat | IChatEndpoint): boolean {
-	return !model.family.startsWith('claude') && !model.family.startsWith('Anthropic');
+export async function modelCanUseMcpResultImageURL(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
+	return !model.family.startsWith('claude') && !model.family.startsWith('Anthropic') && !await isHiddenModelB(model);
 }
 
 /**

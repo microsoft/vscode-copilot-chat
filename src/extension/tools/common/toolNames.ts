@@ -54,7 +54,6 @@ export enum ToolName {
 	ToolReplay = 'tool_replay',
 	EditFilesPlaceholder = 'edit_files',
 	ExecutePrompt = 'execute_prompt',
-	ExecuteTask = 'execute_task',
 	CoreConfirmationTool = 'vscode_get_confirmation'
 }
 
@@ -100,8 +99,14 @@ export enum ContributedToolName {
 	ToolReplay = 'copilot_toolReplay',
 	EditFilesPlaceholder = 'copilot_editFiles',
 	ExecutePrompt = 'execute_prompt',
-	ExecuteTask = 'execute_task',
 }
+
+export const byokEditToolNamesToToolNames = {
+	'find-replace': ToolName.ReplaceString,
+	'multi-find-replace': ToolName.MultiReplaceString,
+	'apply-patch': ToolName.ApplyPatch,
+	'code-rewrite': ToolName.EditFile,
+} as const;
 
 const toolNameToContributedToolNames = new Map<ToolName, ContributedToolName>();
 const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>();

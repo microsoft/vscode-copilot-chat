@@ -80,7 +80,7 @@ Please include the following with each issue:
 
 **Tip:** If "Launch Copilot Extension - Watch Mode" doesn't work for you, try using the "Launch Copilot Extension" debug configuration instead.
 
-**Note:** Setup and running under Windows Subsystem for Linux (WSL) is supported.
+**Note:** Setup and running under Windows Subsystem for Linux (WSL) is supported by following the [VS Code setup instructions](https://github.com/microsoft/vscode/wiki/Selfhosting-on-Windows-WSL).
 
 ### Testing
 If you hit errors while running tests, ensure that you are using the correct Node version and that git lfs is properly installed (run `git lfs pull` to validate).
@@ -400,6 +400,11 @@ You can run the extension from Code OSS Desktop, provided that you follow along 
       "completionsAdvancedSetting": "github.copilot.advanced",
       "completionsEnablementSetting": "github.copilot.enable",
       "nextEditSuggestionsSetting": "github.copilot.nextEditSuggestions.enabled"
+   },
+   "trustedExtensionAuthAccess": {
+      "github": [
+         "github.copilot-chat"
+      ]
    }
 }
 ```
@@ -480,6 +485,11 @@ Object.assign(product, {
 			'completionsAdvancedSetting': 'github.copilot.advanced',
 			'completionsEnablementSetting': 'github.copilot.enable',
 			'nextEditSuggestionsSetting': 'github.copilot.nextEditSuggestions.enabled'
+		},
+		trustedExtensionAuthAccess: {
+			'github': [
+				'github.copilot-chat'
+			]
 		}
 	});
 }

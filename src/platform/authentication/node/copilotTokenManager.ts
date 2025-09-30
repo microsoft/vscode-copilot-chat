@@ -102,15 +102,36 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 	 * @returns A Copilot token info or an error.
 	 * @todo this should be not be public, but it is for now to allow testing.
 	 */
-	async authFromGitHubToken(
-		githubToken: string,
-		ghUsername: string
+	async authFromGitHubToken(githubToken: string, ghUsername: string): Promise<TokenInfoOrError & NotGitHubLoginFailed> {
+		return this.doAuthFromGitHubTokenOrDevDeviceId({ githubToken, ghUsername });
+	}
+
+	/**
+	 * Fetches a Copilot token from the devDeviceId.
+	 * @param devDeviceId A device ID to mint a Copilot token from.
+	 * @returns A Copilot token info or an error.
+	 * @todo this should be not be public, but it is for now to allow testing.
+	 */
+	async authFromDevDeviceId(devDeviceId: string): Promise<TokenInfoOrError & NotGitHubLoginFailed> {
+		return this.doAuthFromGitHubTokenOrDevDeviceId({ devDeviceId });
+	}
+
+	private async doAuthFromGitHubTokenOrDevDeviceId(
+		context: { githubToken: string; ghUsername: string } | { devDeviceId: string }
 	): Promise<TokenInfoOrError & NotGitHubLoginFailed> {
 		this._telemetryService.sendGHTelemetryEvent('auth.new_login');
-		const [response, userInfo] = await Promise.all([
-			this.fetchCopilotToken(githubToken),
-			this.fetchCopilotUserInfo(githubToken)
-		]);
+
+		let response, userInfo, ghUsername;
+		if ('githubToken' in context) {
+			ghUsername = context.ghUsername;
+			[response, userInfo] = (await Promise.all([
+				this.fetchCopilotTokenFromGitHubToken(context.githubToken),
+				this.fetchCopilotUserInfo(context.githubToken)
+			]));
+		} else {
+			response = await this.fetchCopilotTokenFromDevDeviceId(context.devDeviceId);
+		}
+
 		if (!response) {
 			this._logService.warn('Failed to get copilot token');
 			this._telemetryService.sendGHTelemetryErrorEvent('auth.request_failed');
@@ -157,14 +178,14 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 		const login = ghUsername ?? 'unknown';
 		let isVscodeTeamMember = false;
 		// VS Code team members are guaranteed to be a part of an internal org so we can check that first to minimize API calls
-		if (containsInternalOrg(tokenInfo.organization_list ?? [])) {
-			isVscodeTeamMember = !!(await this._baseOctokitservice.getTeamMembershipWithToken(VSCodeTeamId, githubToken, login));
+		if (containsInternalOrg(tokenInfo.organization_list ?? []) && 'githubToken' in context) {
+			isVscodeTeamMember = !!(await this._baseOctokitservice.getTeamMembershipWithToken(VSCodeTeamId, context.githubToken, login));
 		}
 		const extendedInfo: ExtendedTokenInfo = {
 			...tokenInfo,
-			copilot_plan: userInfo.copilot_plan,
-			quota_snapshots: userInfo.quota_snapshots,
-			quota_reset_date: userInfo.quota_reset_date,
+			copilot_plan: userInfo?.copilot_plan ?? tokenInfo.sku ?? '',
+			quota_snapshots: userInfo?.quota_snapshots,
+			quota_reset_date: userInfo?.quota_reset_date,
 			username: login,
 			isVscodeTeamMember,
 		};
@@ -185,7 +206,7 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 	//#endregion
 
 	//#region Private methods
-	private async fetchCopilotToken(githubToken: string) {
+	private async fetchCopilotTokenFromGitHubToken(githubToken: string) {
 		const options: FetchOptions = {
 			headers: {
 				Authorization: `token ${githubToken}`,
@@ -195,6 +216,18 @@ export abstract class BaseCopilotTokenManager extends Disposable implements ICop
 			expectJSON: true,
 		};
 		return await this._capiClientService.makeRequest<Response>(options, { type: RequestType.CopilotToken });
+	}
+
+	private async fetchCopilotTokenFromDevDeviceId(devDeviceId: string) {
+		const options: FetchOptions = {
+			headers: {
+				'X-GitHub-Api-Version': '2025-04-01',
+				'Editor-Device-Id': `${devDeviceId}`
+			},
+			retryFallbacks: true,
+			expectJSON: true,
+		};
+		return await this._capiClientService.makeRequest<Response>(options, { type: RequestType.CopilotNLToken });
 	}
 
 	private async fetchCopilotUserInfo(githubToken: string): Promise<CopilotUserInfo> {

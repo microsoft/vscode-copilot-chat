@@ -68,7 +68,7 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 				return false;
 			}
 			// The user is not signed in at all
-			if (!this._authenticationService.getAnyGitHubSession({ silent: true })) {
+			if (!(await this._authenticationService.getAnyGitHubSession({ silent: true }))) {
 				reason = 'false - not signed in';
 				return false;
 			}
@@ -174,7 +174,8 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 				location2: request.location2,
 				model: request.model,
 				tools: new Map(),
-				id: request.id
+				id: request.id,
+				sessionId: '1'
 			};
 		} else {
 			// Something went wrong, history item was deleted or lost?
@@ -192,7 +193,8 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 				location2: request.location2,
 				model: request.model,
 				tools: new Map(),
-				id: request.id
+				id: request.id,
+				sessionId: '1'
 			};
 		}
 	}

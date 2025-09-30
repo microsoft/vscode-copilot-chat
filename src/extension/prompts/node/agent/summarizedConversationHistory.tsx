@@ -320,6 +320,8 @@ export interface SummarizedAgentHistoryProps extends BasePromptElementProps {
 	readonly enableCacheBreakpoints?: boolean;
 	readonly workingNotebook?: NotebookDocument;
 	readonly maxToolResultLength: number;
+	/** Optional hard cap on summary tokens; effective budget = min(prompt sizing tokenBudget, this value) */
+	readonly maxSummaryTokens?: number;
 }
 
 /**
@@ -437,8 +439,9 @@ class ConversationHistorySummarizer {
 	private async getSummary(mode: SummaryMode, propsInfo: ISummarizedConversationHistoryInfo): Promise<FetchSuccess<string>> {
 		const stopwatch = new StopWatch(false);
 		const forceGpt41 = this.configurationService.getExperimentBasedConfig(ConfigKey.Internal.AgentHistorySummarizationForceGpt41, this.experimentationService);
-		const endpoint = forceGpt41 ?
-			await this.endpointProvider.getChatEndpoint('gpt-4.1') :
+		const gpt41Endpoint = await this.endpointProvider.getChatEndpoint('gpt-4.1');
+		const endpoint = forceGpt41 && (gpt41Endpoint.modelMaxPromptTokens >= this.props.endpoint.modelMaxPromptTokens) ?
+			gpt41Endpoint :
 			this.props.endpoint;
 
 		let summarizationPrompt: ChatMessage[];
@@ -489,11 +492,18 @@ class ConversationHistorySummarizer {
 				stripCacheBreakpoints(summarizationPrompt);
 			}
 
-			summaryResponse = await endpoint.makeChatRequest(`summarizeConversationHistory-${mode}`, ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt), undefined, this.token ?? CancellationToken.None, ChatLocation.Other, undefined, {
-				temperature: 0,
-				stream: false,
-				...toolOpts
-			});
+			summaryResponse = await endpoint.makeChatRequest2({
+				debugName: `summarizeConversationHistory-${mode}`,
+				messages: ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt),
+				finishedCb: undefined,
+				location: ChatLocation.Other,
+				requestOptions: {
+					temperature: 0,
+					stream: false,
+					...toolOpts
+				},
+				enableRetryOnFilter: true
+			}, this.token ?? CancellationToken.None);
 		} catch (e) {
 			this.logInfo(`Error from summarization request. ${e.message}`, mode);
 			this.sendSummarizationTelemetry('requestThrow', '', this.props.endpoint.model, mode, stopwatch.elapsed(), undefined);
@@ -516,9 +526,13 @@ class ConversationHistorySummarizer {
 		}
 
 		const summarySize = await this.sizing.countTokens(response.value);
-		if (summarySize > this.sizing.tokenBudget) {
+		const effectiveBudget =
+			!!this.props.maxSummaryTokens
+				? Math.min(this.sizing.tokenBudget, this.props.maxSummaryTokens)
+				: this.sizing.tokenBudget;
+		if (summarySize > effectiveBudget) {
 			this.sendSummarizationTelemetry('too_large', response.requestId, this.props.endpoint.model, mode, elapsedTime, response.usage);
-			this.logInfo(`Summary too large: ${summarySize} tokens`, mode);
+			this.logInfo(`Summary too large: ${summarySize} tokens (effective budget ${effectiveBudget})`, mode);
 			throw new Error('Summary too large');
 		}
 

@@ -19572,7 +19572,7 @@ declare module 'vscode' {
 		prompt: string;
 
 		/**
-		 * A title to show the user. The prompt will be shown by default, when this is unspecified.
+		 * An optional label to show to the user. If not provided, the {@link ChatFollowup.prompt} will be shown.
 		 */
 		label?: string;
 
@@ -20454,20 +20454,24 @@ declare module 'vscode' {
 		/**
 		 * Various features that the model supports such as tool calling or image input.
 		 */
-		readonly capabilities: {
+		readonly capabilities: LanguageModelChatCapabilities;
+	}
 
-			/**
-			 * Whether image input is supported by the model.
-			 * Common supported images are jpg and png, but each model will vary in supported mimetypes.
-			 */
-			readonly imageInput?: boolean;
+	/**
+	 * Various features that the {@link LanguageModelChatInformation} supports such as tool calling or image input.
+	 */
+	export interface LanguageModelChatCapabilities {
+		/**
+		 * Whether image input is supported by the model.
+		 * Common supported images are jpg and png, but each model will vary in supported mimetypes.
+		 */
+		readonly imageInput?: boolean;
 
-			/**
-			 * Whether tool calling is supported by the model.
-			 * If a number is provided, that is the maximum number of tools that can be provided in a request to the model.
-			 */
-			readonly toolCalling?: boolean | number;
-		};
+		/**
+		 * Whether tool calling is supported by the model.
+		 * If a number is provided, that is the maximum number of tools that can be provided in a request to the model.
+		 */
+		readonly toolCalling?: boolean | number;
 	}
 
 	/**

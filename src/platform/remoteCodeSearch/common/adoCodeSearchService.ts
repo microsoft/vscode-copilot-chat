@@ -20,7 +20,6 @@ import { stripChunkTextMetadata } from '../../chunking/common/chunkingStringUtil
 import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { EmbeddingType } from '../../embeddings/common/embeddingsComputer';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
-import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
 import { AdoRepoId } from '../../git/common/gitService';
 import { IIgnoreService } from '../../ignore/common/ignoreService';
@@ -28,7 +27,6 @@ import { measureExecTime } from '../../log/common/logExecTime';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { getRequest, postRequest } from '../../networking/common/networking';
-import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { CodeSearchOptions, CodeSearchResult, RemoteCodeSearchError, RemoteCodeSearchIndexState, RemoteCodeSearchIndexStatus } from './remoteCodeSearch';
 
@@ -122,22 +120,14 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 	constructor(
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IDomainService private readonly _domainService: IDomainService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IEnvService private readonly _envService: IEnvService,
-		@IExperimentationService private readonly _expService: IExperimentationService,
 		@ILogService private readonly _logService: ILogService,
 		@IFetcherService private readonly _fetcherService: IFetcherService,
 		@IIgnoreService private readonly _ignoreService: IIgnoreService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 	) {
 		super();
-
-		this._register(this._configurationService.onDidChangeConfiguration(e => {
-			if (e.affectsConfiguration(ConfigKey.Internal.WorkspaceEnableAdoCodeSearch.fullyQualifiedId)) {
-				this._onDidChangeIndexState.fire();
-			}
-		}));
 	}
 
 	private getAdoAlmStatusUrl(repoId: AdoRepoId): string {
@@ -171,12 +161,6 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 	}
 
 	private async getRemoteIndexStateImpl(auth: { readonly silent: boolean }, repoId: AdoRepoId, token: CancellationToken): Promise<Result<RemoteCodeSearchIndexState, RemoteCodeSearchError>> {
-		if (!this.isEnabled()) {
-			return Result.ok<RemoteCodeSearchIndexState>({
-				status: RemoteCodeSearchIndexStatus.NotIndexable,
-			});
-		}
-
 		const authToken = await this.getAdoAuthToken(auth.silent);
 		if (!authToken) {
 			this._logService.error(`AdoCodeSearchService::getRemoteIndexState(${repoId}). Failed to fetch indexing status. No valid ADO auth token.`);
@@ -195,9 +179,7 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 		const result = await raceCancellationError(
 			getRequest(
 				this._fetcherService,
-				this._envService,
 				this._telemetryService,
-				this._domainService,
 				this._capiClientService,
 				endpoint,
 				authToken,
@@ -276,10 +258,6 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 	): Promise<CodeSearchResult> {
 		const totalSw = new StopWatch();
 
-		if (!this.isEnabled()) {
-			return { chunks: [], outOfSync: false };
-		}
-
 		const authToken = await this.getAdoAuthToken(auth.silent);
 		if (!authToken) {
 			this._logService.error(`AdoCodeSearchService::searchRepo(${repo.adoRepoId}). Failed to search repo. No valid ADO auth token.`);
@@ -301,9 +279,7 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 		const response = await raceCancellationError(
 			postRequest(
 				this._fetcherService,
-				this._envService,
 				this._telemetryService,
-				this._domainService,
 				this._capiClientService,
 				endpoint,
 				authToken,
@@ -428,9 +404,5 @@ export class AdoCodeSearchService extends Disposable implements IAdoCodeSearchSe
 
 	private getAdoAuthToken(silent: boolean): Promise<string | undefined> {
 		return this._authenticationService.getAdoAccessTokenBase64({ silent });
-	}
-
-	private isEnabled(): boolean {
-		return this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.WorkspaceEnableAdoCodeSearch, this._expService);
 	}
 }

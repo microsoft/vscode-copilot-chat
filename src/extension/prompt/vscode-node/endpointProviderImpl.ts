@@ -9,16 +9,16 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { AutoChatEndpoint } from '../../../platform/endpoint/common/autoChatEndpoint';
 import { IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
-import { IDomainService } from '../../../platform/endpoint/common/domainService';
-import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { ChatEndpointFamily, EmbeddingsEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CopilotChatEndpoint } from '../../../platform/endpoint/node/copilotChatEndpoint';
+import { EmbeddingEndpoint } from '../../../platform/endpoint/node/embeddingsEndpoint';
 import { IModelMetadataFetcher, ModelMetadataFetcher } from '../../../platform/endpoint/node/modelMetadataFetcher';
 import { applyExperimentModifications, ExperimentConfig, getCustomDefaultModelExperimentConfig, ProxyExperimentEndpoint } from '../../../platform/endpoint/node/proxyExperimentEndpoint';
 import { ExtensionContributedChatEndpoint } from '../../../platform/endpoint/vscode-node/extChatEndpoint';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
-import { IChatEndpoint } from '../../../platform/networking/common/networking';
+import { IChatEndpoint, IEmbeddingsEndpoint } from '../../../platform/networking/common/networking';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -31,11 +31,11 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 	declare readonly _serviceBrand: undefined;
 
 	private _chatEndpoints: Map<string, IChatEndpoint> = new Map();
+	private _embeddingEndpoints: Map<string, IEmbeddingsEndpoint> = new Map();
 	private readonly _modelFetcher: IModelMetadataFetcher;
 
 	constructor(
 		collectFetcherTelemetry: (accessor: ServicesAccessor, error: any) => void,
-		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IFetcherService fetcher: IFetcherService,
 		@IAutomodeService private readonly _autoModeService: IAutomodeService,
@@ -54,7 +54,6 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 			false,
 			fetcher,
 			_requestLogger,
-			domainService,
 			capiClientService,
 			this._configService,
 			this._expService,
@@ -145,6 +144,24 @@ export class ProductionEndpointProvider implements IEndpointProvider {
 
 		this._logService.trace(`Resolved chat model`);
 		return endpoint;
+	}
+
+	async getEmbeddingsEndpoint(family?: EmbeddingsEndpointFamily): Promise<IEmbeddingsEndpoint> {
+		this._logService.trace(`Resolving embedding model`);
+		const modelMetadata = await this._modelFetcher.getEmbeddingsModel('text-embedding-3-small');
+		const model = await this.getOrCreateEmbeddingEndpointInstance(modelMetadata);
+		this._logService.trace(`Resolved embedding model`);
+		return model;
+	}
+
+	private async getOrCreateEmbeddingEndpointInstance(modelMetadata: IEmbeddingModelInformation): Promise<IEmbeddingsEndpoint> {
+		const modelId = 'text-embedding-3-small';
+		let embeddingEndpoint = this._embeddingEndpoints.get(modelId);
+		if (!embeddingEndpoint) {
+			embeddingEndpoint = this._instantiationService.createInstance(EmbeddingEndpoint, modelMetadata);
+			this._embeddingEndpoints.set(modelId, embeddingEndpoint);
+		}
+		return embeddingEndpoint;
 	}
 
 	async getAllCompletionModels(forceRefresh?: boolean): Promise<ICompletionModelInformation[]> {

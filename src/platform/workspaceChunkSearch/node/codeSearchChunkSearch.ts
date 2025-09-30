@@ -268,7 +268,7 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 
 		const repoStatuses = allRepos.reduce((sum, repo) => { sum[repo.status] = (sum[repo.status] ?? 0) + 1; return sum; }, {} as Record<string, number>);
 		const indexedRepos = allRepos.filter(repo => repo.status === RepoStatus.Ready);
-		const notYetIndexedRepos = this.canUseInstantIndexing() ? allRepos.filter(repo => repo.status === RepoStatus.NotYetIndexed) : [];
+		const notYetIndexedRepos = allRepos.filter(repo => repo.status === RepoStatus.NotYetIndexed);
 
 		if (!indexedRepos.length && !notYetIndexedRepos.length) {
 			// Get detailed info about why we failed
@@ -548,10 +548,6 @@ export class CodeSearchChunkSearch extends Disposable implements IWorkspaceChunk
 			.then((result): DiffSearchResult => ({ ...result, strategyId: this._tfIdfChunkSearch.id }));
 
 		return Promise.race([embeddingsSearch, tfIdfSearch]);
-	}
-
-	private canUseInstantIndexing(): unknown {
-		return this._configService.getExperimentBasedConfig<boolean>(ConfigKey.Internal.WorkspaceUseCodeSearchInstantIndexing, this._experimentationService);
 	}
 
 	@LogExecTime(self => self._logService, 'CodeSearchChunkSearch::doCodeSearch', function (execTime, status) {

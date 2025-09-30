@@ -5,7 +5,7 @@
 
 import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { AssistantMessage, BasePromptElementProps, PromptRenderer as BasePromptRenderer, Chunk, IfEmpty, Image, JSONTree, PromptElement, PromptElementProps, PromptMetadata, PromptPiece, PromptSizing, TokenLimit, ToolCall, ToolMessage, useKeepWith, UserMessage } from '@vscode/prompt-tsx';
-import type { ChatParticipantToolToken, LanguageModelToolResult2, LanguageModelToolTokenizationOptions } from 'vscode';
+import type { ChatParticipantToolToken, LanguageModelToolInvocationOptions, LanguageModelToolResult2, LanguageModelToolTokenizationOptions } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { modelCanUseMcpResultImageURL } from '../../../../platform/endpoint/common/chatModelCapabilities';
@@ -102,7 +102,7 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 
 		// Don't include this when rendering and triggering summarization
 		const statefulMarker = round.statefulMarker && <StatefulMarkerContainer statefulMarker={{ modelId: this.promptEndpoint.model, marker: round.statefulMarker }} />;
-		const thinking = round.thinking && <ThinkingDataContainer thinking={round.thinking} />;
+		const thinking = (!this.props.isHistorical || this.promptEndpoint?.supportsThinkingContentInHistory) && round.thinking && <ThinkingDataContainer thinking={round.thinking} />;
 		children.push(
 			<AssistantMessage toolCalls={assistantToolCalls}>
 				{statefulMarker}
@@ -213,7 +213,17 @@ class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
 						inputObj = await copilotTool.resolveInput(inputObj, this.props.promptContext, this.props.toolCallMode);
 					}
 
-					toolResult = await this.toolsService.invokeTool(this.props.toolCall.name, { input: inputObj, toolInvocationToken: this.props.toolInvocationToken, tokenizationOptions, chatRequestId: this.props.requestId }, CancellationToken.None);
+					const invocationOptions: LanguageModelToolInvocationOptions<unknown> = {
+						input: inputObj,
+						toolInvocationToken: this.props.toolInvocationToken,
+						tokenizationOptions,
+						chatRequestId: this.props.requestId
+					};
+					if (this.props.promptContext.tools?.inSubAgent) {
+						invocationOptions.fromSubAgent = true;
+					}
+
+					toolResult = await this.toolsService.invokeTool(this.props.toolCall.name, invocationOptions, CancellationToken.None);
 					sendInvokedToolTelemetry(this.promptEndpoint.acquireTokenizer(), this.telemetryService, this.props.toolCall.name, toolResult);
 				} catch (err) {
 					const errResult = toolCallErrorToResult(err);
@@ -367,12 +377,16 @@ export class ToolResultMetadata extends PromptMetadata {
 	}
 }
 
-class McpLinkedResourceToolResult extends PromptElement<{ resourceUri: URI; mimeType: string | undefined } & BasePromptElementProps> {
+// Some MCP servers return a ton of resources as a 'download' action.
+// Only include them all eagerly if we have a manageable number.
+const DONT_INCLUDE_RESOURCE_CONTENT_IF_TOOL_HAS_MORE_THAN = 9;
+
+class McpLinkedResourceToolResult extends PromptElement<{ resourceUri: URI; mimeType: string | undefined; count: number } & BasePromptElementProps> {
 	public static readonly mimeType = 'application/vnd.code.resource-link';
 	private static MAX_PREVIEW_LINES = 500;
 
 	constructor(
-		props: { resourceUri: URI; mimeType: string | undefined } & BasePromptElementProps,
+		props: { resourceUri: URI; mimeType: string | undefined; count: number } & BasePromptElementProps,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
 	) {
@@ -382,6 +396,10 @@ class McpLinkedResourceToolResult extends PromptElement<{ resourceUri: URI; mime
 	async render() {
 		if (await this.ignoreService.isCopilotIgnored(this.props.resourceUri)) {
 			return null;
+		}
+
+		if (this.props.count > DONT_INCLUDE_RESOURCE_CONTENT_IF_TOOL_HAS_MORE_THAN) {
+			return <Tag name='resource' attrs={{ uri: this.props.resourceUri.toString() }} />;
 		}
 
 		const contents = await this.fileSystemService.readFile(this.props.resourceUri);
@@ -401,6 +419,7 @@ interface IPrimitiveToolResultProps extends BasePromptElementProps {
 }
 
 class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptElement<T> {
+	protected readonly linkedResources: LanguageModelDataPart[];
 
 	constructor(
 		props: T,
@@ -412,10 +431,10 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 		@IExperimentationService private readonly experimentationService?: IExperimentationService
 	) {
 		super(props);
+		this.linkedResources = this.props.content.filter((c): c is LanguageModelDataPart => c instanceof LanguageModelDataPart && c.mimeType === McpLinkedResourceToolResult.mimeType);
 	}
 
 	async render(): Promise<PromptPiece | undefined> {
-		const hasLinkedResource = this.props.content.some(c => c instanceof LanguageModelDataPart && c.mimeType === McpLinkedResourceToolResult.mimeType);
 
 		return (
 			<>
@@ -431,7 +450,7 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 							return await this.onData(part);
 						}
 					}))}
-					{hasLinkedResource && `Hint: you can read the full contents of any truncated resources by passing their URIs as the absolutePath to the ${ToolName.ReadFile}.\n`}
+					{this.linkedResources.length > 0 && `Hint: you can read the full contents of any ${this.linkedResources.length > DONT_INCLUDE_RESOURCE_CONTENT_IF_TOOL_HAS_MORE_THAN ? '' : 'truncated '}resources by passing their URIs as the absolutePath to the ${ToolName.ReadFile}.\n`}
 				</IfEmpty>
 			</>
 		);
@@ -462,7 +481,7 @@ class PrimitiveToolResult<T extends IPrimitiveToolResultProps> extends PromptEle
 			: false;
 
 		// Anthropic (from CAPI) currently does not support image uploads from tool calls.
-		const effectiveToken = uploadsEnabled && modelCanUseMcpResultImageURL(this.endpoint) ? githubToken : undefined;
+		const effectiveToken = uploadsEnabled && await modelCanUseMcpResultImageURL(this.endpoint) ? githubToken : undefined;
 
 		return Promise.resolve(imageDataPartToTSX(part, effectiveToken, this.endpoint.urlOrRequestMetadata, this.logService, this.imageService));
 	}
@@ -535,7 +554,7 @@ export class ToolResult extends PrimitiveToolResult<IToolResultProps> {
 			return null;
 		}
 
-		return <McpLinkedResourceToolResult resourceUri={URI.revive(parsed.uri)} mimeType={parsed.underlyingMimeType} />;
+		return <McpLinkedResourceToolResult resourceUri={URI.revive(parsed.uri)} mimeType={parsed.underlyingMimeType} count={this.linkedResources.length} />;
 	}
 }
 

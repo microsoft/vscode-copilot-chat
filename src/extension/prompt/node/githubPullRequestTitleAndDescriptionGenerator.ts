@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { RenderPromptResult } from '@vscode/prompt-tsx';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
@@ -30,6 +31,7 @@ export class GitHubPullRequestTitleAndDescriptionGenerator implements TitleAndDe
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@INotificationService private readonly notificationService: INotificationService,
+		@IAuthenticationService private readonly authService: IAuthenticationService,
 	) {
 		this.logService.info('[githubTitleAndDescriptionProvider] Initializing GitHub PR title and description provider provider.');
 	}
@@ -95,8 +97,8 @@ export class GitHubPullRequestTitleAndDescriptionGenerator implements TitleAndDe
 			);
 
 		this.lastContext = { commitMessages, patches };
-		if (fetchResult.type === ChatFetchResponseType.QuotaExceeded) {
-			await this.notificationService.showQuotaExceededDialog();
+		if (fetchResult.type === ChatFetchResponseType.QuotaExceeded || (fetchResult.type === ChatFetchResponseType.RateLimited && this.authService.copilotToken?.isNoAuthUser)) {
+			await this.notificationService.showQuotaExceededDialog({ isNoAuthUser: this.authService.copilotToken?.isNoAuthUser ?? false });
 		}
 
 		if (fetchResult.type !== ChatFetchResponseType.Success) {

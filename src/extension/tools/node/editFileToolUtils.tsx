@@ -11,6 +11,7 @@ import { IConfigurationService } from '../../../platform/configuration/common/co
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 import { OffsetLineColumnConverter } from '../../../platform/editing/common/offsetLineColumnConverter';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -18,7 +19,7 @@ import * as glob from '../../../util/vs/base/common/glob';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { isWindows } from '../../../util/vs/base/common/platform';
-import { normalizePath, relativePath } from '../../../util/vs/base/common/resources';
+import { extUriBiasedIgnorePathCase, normalizePath, relativePath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
 import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -348,42 +349,47 @@ function trySimilarityMatch(text: string, oldStr: string, newStr: string, eol: s
 		return { text, editPosition: [], type: 'none' };
 	}
 
-	let bestMatch = { index: -1, similarity: 0, length: 0 };
+	let bestMatch = { startLine: -1, startOffset: 0, oldLength: 0, similarity: 0 };
+	let startOffset = 0;
 
 	// Sliding window approach to find the best matching section
 	for (let i = 0; i <= lines.length - oldLines.length; i++) {
 		let totalSimilarity = 0;
+		let oldLength = 0;
 
 		// Calculate similarity for each line in the window
 		for (let j = 0; j < oldLines.length; j++) {
 			const similarity = calculateSimilarity(oldLines[j], lines[i + j]);
 			totalSimilarity += similarity;
+			oldLength += lines[i + j].length;
 		}
 
 		const avgSimilarity = totalSimilarity / oldLines.length;
 		if (avgSimilarity > threshold && avgSimilarity > bestMatch.similarity) {
-			bestMatch = { index: i, similarity: avgSimilarity, length: oldLines.length };
+			bestMatch = { startLine: i, startOffset, similarity: avgSimilarity, oldLength: oldLength + (oldLines.length - 1) * eol.length };
 		}
+
+		startOffset += lines[i].length + eol.length;
 	}
 
-	if (bestMatch.index !== -1) {
-		// Found a match with similarity above the threshold
-		const startIndex = bestMatch.index;
-
-		// Replace the matched section
-		const newLines = [...lines];
-		newLines.splice(startIndex, bestMatch.length, ...newStr.split(eol));
-
-		return {
-			text: newLines.join(eol),
-			type: 'similarity',
-			editPosition: [[startIndex, startIndex + bestMatch.length]],
-			similarity: bestMatch.similarity,
-			suggestion: `Used similarity matching (${(bestMatch.similarity * 100).toFixed(1)}% similar). Verify the replacement.`
-		};
+	if (bestMatch.startLine === -1) {
+		return { text, editPosition: [], type: 'none' };
 	}
 
-	return { text, editPosition: [], type: 'none' };
+	// Replace the matched section
+	const newLines = [
+		...lines.slice(0, bestMatch.startLine),
+		...newStr.split(eol),
+		...lines.slice(bestMatch.startLine + oldLines.length)
+	];
+
+	return {
+		text: newLines.join(eol),
+		type: 'similarity',
+		editPosition: [[bestMatch.startOffset, bestMatch.startOffset + bestMatch.oldLength]],
+		similarity: bestMatch.similarity,
+		suggestion: `Used similarity matching (${(bestMatch.similarity * 100).toFixed(1)}% similar). Verify the replacement.`
+	};
 }
 
 // Function to generate a simple patch
@@ -589,7 +595,7 @@ function makeUriConfirmationChecker(configuration: IConfigurationService, worksp
 
 	function checkUri(uri: URI) {
 		const workspaceFolder = workspaceService.getWorkspaceFolder(uri);
-		if (!workspaceFolder && !customInstructionsService.isExternalInstructionsFile(uri)) {
+		if (!workspaceFolder && !customInstructionsService.isExternalInstructionsFile(uri) && uri.scheme !== Schemas.untitled) {
 			return ConfirmationCheckResult.OutsideWorkspace;
 		}
 
@@ -655,4 +661,15 @@ export async function createEditConfirmation(accessor: ServicesAccessor, uris: r
 			),
 		}
 	};
+}
+
+/** Returns whether the file can be edited. This is true if the file exists or it's opened (e.g. untitled files) */
+export function canExistingFileBeEdited(accessor: ServicesAccessor, uri: URI): Promise<boolean> {
+	const workspace = accessor.get(IWorkspaceService);
+	if (workspace.textDocuments.some(d => extUriBiasedIgnorePathCase.isEqual(d.uri, uri))) {
+		return Promise.resolve(true);
+	}
+
+	const fileSystemService = accessor.get(IFileSystemService);
+	return fileSystemService.stat(uri).then(() => true, () => false);
 }

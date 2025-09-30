@@ -56,6 +56,11 @@ declare module 'vscode' {
 		readonly attempt: number;
 
 		/**
+		 * The session identifier for this chat request
+		 */
+		readonly sessionId: string;
+
+		/**
 		 * If automatic command detection is enabled.
 		 */
 		readonly enableCommandDetection: boolean;
@@ -182,6 +187,8 @@ declare module 'vscode' {
 
 		isQuotaExceeded?: boolean;
 
+		isRateLimited?: boolean;
+
 		level?: ChatErrorLevel;
 
 		code?: string;
@@ -214,6 +221,7 @@ declare module 'vscode' {
 		chatSessionId?: string;
 		chatInteractionId?: string;
 		terminalCommand?: string;
+		fromSubAgent?: boolean;
 	}
 
 	export interface LanguageModelToolInvocationPrepareOptions<T> {
@@ -234,6 +242,7 @@ declare module 'vscode' {
 	export class ExtendedLanguageModelToolResult extends LanguageModelToolResult {
 		toolResultMessage?: string | MarkdownString;
 		toolResultDetails?: Array<Uri | Location>;
+		toolMetadata?: unknown;
 	}
 
 	// #region Chat participant detection

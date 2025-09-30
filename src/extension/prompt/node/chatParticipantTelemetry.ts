@@ -7,10 +7,12 @@ import { PromptReference, Raw } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { roleToString } from '../../../platform/chat/common/globalStringUtils';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { isNotebookCellOrNotebookChatInput } from '../../../util/common/notebooks';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { DiagnosticsTelemetryData, findDiagnosticsTelemetry } from '../../inlineChat/node/diagnosticsTelemetry';
 import { InteractionOutcome } from '../../inlineChat/node/promptCraftingTypes';
 import { AgentIntent } from '../../intents/node/agentIntent';
@@ -159,6 +161,7 @@ type RequestPanelTelemetryMeasurements = RequestTelemetryMeasurements & {
 	availableToolCount: number;
 	temporalCtxFileCount: number;
 	temporalCtxTotalCharCount: number;
+	summarizationEnabled: number;
 };
 
 // EVENT: inline.request
@@ -207,34 +210,46 @@ export class ChatTelemetryBuilder {
 		private readonly _documentContext: IDocumentContext | undefined,
 		private readonly _firstTurn: boolean,
 		private readonly _request: vscode.ChatRequest,
-		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-		@ILanguageDiagnosticsService private readonly _languageDiagnosticsService: ILanguageDiagnosticsService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) { }
 
 	public makeRequest(intent: IIntent, location: ChatLocation, conversation: Conversation, messages: Raw.ChatMessage[], promptTokenLength: number, references: readonly PromptReference[], endpoint: IChatEndpoint, telemetryData: readonly TelemetryData[], availableToolCount: number): InlineChatTelemetry | PanelChatTelemetry {
 
-		const Ctor = location === ChatLocation.Editor
-			? InlineChatTelemetry
-			: PanelChatTelemetry;
-
-		return new Ctor(
-			this._sessionId,
-			this._documentContext!,
-			this._firstTurn,
-			this._request,
-			this._startTime,
-			this.baseUserTelemetry,
-			conversation,
-			intent,
-			messages,
-			references,
-			endpoint,
-			promptTokenLength,
-			telemetryData,
-			availableToolCount,
-			this._telemetryService,
-			this._languageDiagnosticsService,
-		);
+		if (location === ChatLocation.Editor) {
+			return this.instantiationService.createInstance(InlineChatTelemetry,
+				this._sessionId,
+				this._documentContext!,
+				this._firstTurn,
+				this._request,
+				this._startTime,
+				this.baseUserTelemetry,
+				conversation,
+				intent,
+				messages,
+				references,
+				endpoint,
+				promptTokenLength,
+				telemetryData,
+				availableToolCount,
+			);
+		} else {
+			return this.instantiationService.createInstance(PanelChatTelemetry,
+				this._sessionId,
+				this._documentContext!,
+				this._firstTurn,
+				this._request,
+				this._startTime,
+				this.baseUserTelemetry,
+				conversation,
+				intent,
+				messages,
+				references,
+				endpoint,
+				promptTokenLength,
+				telemetryData,
+				availableToolCount,
+			);
+		}
 	}
 }
 
@@ -388,7 +403,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 	}
 
 	protected _getModeName(): string {
-		return this._request.modeInstructions ? 'custom' :
+		return this._request.modeInstructions2 ? 'custom' :
 			this._intent.id === AgentIntent.ID ? 'agent' :
 				(this._intent.id === EditCodeIntent.ID || this._intent.id === EditCode2Intent.ID) ? 'edit' :
 					'ask';
@@ -498,6 +513,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		genericTelemetryData: readonly TelemetryData[],
 		availableToolCount: number,
 		@ITelemetryService telemetryService: ITelemetryService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
 		super(ChatLocation.Panel,
 			sessionId,
@@ -603,7 +619,8 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 				"numToolCalls": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The total number of tool calls" },
 				"availableToolCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "How number of tools that were available." },
 				"temporalCtxFileCount" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "How many temporal document-parts where included" },
-				"temporalCtxTotalCharCount" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "How many characters all temporal document-parts where included" }
+				"temporalCtxTotalCharCount" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "How many characters all temporal document-parts where included" },
+				"summarizationEnabled" : { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "isMeasurement": true, "comment": "Whether summarization is enabled (the default) or disabled (via user setting)" }
 			}
 		*/
 		this._telemetryService.sendMSFTTelemetryEvent('panel.request', {
@@ -637,7 +654,8 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			numToolCalls: toolCalls.length,
 			availableToolCount: this._availableToolCount,
 			temporalCtxFileCount: temporalContexData?.documentCount ?? -1,
-			temporalCtxTotalCharCount: temporalContexData?.totalCharLength ?? -1
+			temporalCtxTotalCharCount: temporalContexData?.totalCharLength ?? -1,
+			summarizationEnabled: this._configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory) ? 1 : 0
 		} satisfies RequestPanelTelemetryMeasurements);
 
 		const modeName = this._getModeName();

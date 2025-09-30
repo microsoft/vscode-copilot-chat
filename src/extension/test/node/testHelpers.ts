@@ -6,6 +6,9 @@
 import type { ChatPromptReference, ChatRequest } from 'vscode';
 import * as vscodeTypes from '../../../vscodeTypes';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
+import { MarkdownString } from '../../../util/vs/base/common/htmlContent';
+import { URI } from '../../../util/vs/base/common/uri';
 
 export class TestChatRequest implements ChatRequest {
 	public command: string | undefined;
@@ -20,6 +23,7 @@ export class TestChatRequest implements ChatRequest {
 	public model = null!;
 	public tools = new Map();
 	public id = generateUuid();
+	public sessionId = generateUuid();
 
 	constructor(
 		public prompt: string
@@ -29,5 +33,21 @@ export class TestChatRequest implements ChatRequest {
 		this.attempt = 0;
 		this.enableCommandDetection = false;
 		this.isParticipantDetected = false;
+	}
+}
+
+export class MockChatResponseStream extends ChatResponseStreamImpl {
+
+	public output: string[] = [];
+	public uris: string[] = [];
+
+	constructor() {
+		super(() => { }, () => { });
+	}
+	override markdown(content: string | MarkdownString): void {
+		this.output.push(typeof content === 'string' ? content : content.value);
+	}
+	override codeblockUri(uri: URI): void {
+		this.uris.push(uri.toString());
 	}
 }

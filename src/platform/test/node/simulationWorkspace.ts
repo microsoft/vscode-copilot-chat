@@ -483,7 +483,7 @@ export class SimulationWorkspace extends Disposable {
 /**
  * Apply edits to `file` and return the new range and the new selection.
  */
-function applyEdits(
+export function applyEdits(
 	doc: IExtHostDocumentData,
 	edits: vscode.TextEdit[],
 	range: vscode.Range,

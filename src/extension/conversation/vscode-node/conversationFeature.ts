@@ -17,6 +17,7 @@ import { IGitCommitMessageService } from '../../../platform/git/common/gitCommit
 import { ILogService } from '../../../platform/log/common/logService';
 import { ISettingsEditorSearchService } from '../../../platform/settingsEditor/common/settingsEditorSearchService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { isUri } from '../../../util/common/types';
 import { DeferredPromise } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { DisposableStore, IDisposable, combinedDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -24,6 +25,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ContributionCollection, IExtensionContribution } from '../../common/contributions';
 import { vscodeNodeChatContributions } from '../../extension/vscode-node/contributions';
+import { IMergeConflictService } from '../../git/common/mergeConflictService';
 import { registerInlineChatCommands } from '../../inlineChat/vscode-node/inlineChatCommands';
 import { INewWorkspacePreviewContentManager } from '../../intents/node/newIntent';
 import { FindInFilesArgs } from '../../intents/node/searchIntent';
@@ -73,6 +75,7 @@ export class ConversationFeature implements IExtensionContribution {
 		@ICombinedEmbeddingIndex private readonly embeddingIndex: ICombinedEmbeddingIndex,
 		@IDevContainerConfigurationService private readonly devContainerConfigurationService: IDevContainerConfigurationService,
 		@IGitCommitMessageService private readonly gitCommitMessageService: IGitCommitMessageService,
+		@IMergeConflictService private readonly mergeConflictService: IMergeConflictService,
 		@ILinkifyService private readonly linkifyService: ILinkifyService,
 		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@INewWorkspacePreviewContentManager private readonly newWorkspacePreviewContentManager: INewWorkspacePreviewContentManager,
@@ -159,6 +162,13 @@ export class ConversationFeature implements IExtensionContribution {
 			return;
 		} else {
 			this._searchProviderRegistered = true;
+
+			// Don't register for no auth user
+			if (this.authenticationService.copilotToken?.isNoAuthUser) {
+				this.logService.debug('ConversationFeature: Skipping search provider registration - no GitHub session available');
+				return;
+			}
+
 			return vscode.workspace.registerAITextSearchProvider('file', this.instantiationService.createInstance(SemanticSearchTextSearchProvider));
 		}
 	}
@@ -245,6 +255,10 @@ export class ConversationFeature implements IExtensionContribution {
 				if (commitMessage) {
 					repository.inputBox.value = commitMessage;
 				}
+			}),
+			vscode.commands.registerCommand('github.copilot.git.resolveMergeConflicts', async (...resourceStates: (vscode.Uri | vscode.SourceControlResourceState)[]) => {
+				const resources = resourceStates.filter(r => !!r).map(r => isUri(r) ? r : r.resourceUri);
+				await this.mergeConflictService.resolveMergeConflicts(resources, undefined);
 			}),
 			vscode.commands.registerCommand('github.copilot.devcontainer.generateDevContainerConfig', async (args: DevContainerConfigGeneratorArguments, cancellationToken = new vscode.CancellationTokenSource().token) => {
 				return this.devContainerConfigurationService.generateConfiguration(args, cancellationToken);

@@ -16,7 +16,6 @@ import { IChatMLFetcher, Source } from '../../chat/common/chatMLFetcher';
 import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { getTextPart } from '../../chat/common/globalStringUtils';
 import { CHAT_MODEL, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
-import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, ICopilotToolCall, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { IFetcherService, Response } from '../../networking/common/fetcherService';
@@ -30,7 +29,7 @@ import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
-import { IChatModelInformation, ModelPolicy, ModelSupportedEndpoint } from '../common/endpointProvider';
+import { CustomModel, IChatModelInformation, ModelPolicy, ModelSupportedEndpoint } from '../common/endpointProvider';
 import { createResponsesRequestBody, processResponseFromChatEndpoint } from './responsesApi';
 
 // get ChatMaxNumTokens from config for experimentation
@@ -139,7 +138,6 @@ export async function defaultNonStreamChatResponseProcessor(response: Response, 
 }
 
 export class ChatEndpoint implements IChatEndpoint {
-	private readonly _urlOrRequestMetadata: string | RequestMetadata;
 	private readonly _maxTokens: number;
 	private readonly _maxOutputTokens: number;
 	public readonly model: string;
@@ -156,6 +154,7 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly isPremium?: boolean | undefined;
 	public readonly multiplier?: number | undefined;
 	public readonly restrictedToSkus?: string[] | undefined;
+	public readonly customModel?: CustomModel | undefined;
 
 	private readonly _supportsStreaming: boolean;
 	private _policyDetails: ModelPolicy | undefined;
@@ -165,7 +164,6 @@ export class ChatEndpoint implements IChatEndpoint {
 		@IDomainService protected readonly _domainService: IDomainService,
 		@ICAPIClientService private readonly _capiClientService: ICAPIClientService,
 		@IFetcherService private readonly _fetcherService: IFetcherService,
-		@IEnvService private readonly _envService: IEnvService,
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
 		@IAuthenticationService private readonly _authService: IAuthenticationService,
 		@IChatMLFetcher private readonly _chatMLFetcher: IChatMLFetcher,
@@ -175,7 +173,6 @@ export class ChatEndpoint implements IChatEndpoint {
 		@IExperimentationService private readonly _expService: IExperimentationService,
 		@ILogService _logService: ILogService,
 	) {
-		this._urlOrRequestMetadata = _modelMetadata.urlOrRequestMetadata ?? (this.useResponsesApi ? { type: RequestType.ChatResponses } : { type: RequestType.ChatCompletions });
 		// This metadata should always be present, but if not we will default to 8192 tokens
 		this._maxTokens = _modelMetadata.capabilities.limits?.max_prompt_tokens ?? 8192;
 		// This metadata should always be present, but if not we will default to 4096 tokens
@@ -196,6 +193,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		this.supportsPrediction = !!_modelMetadata.capabilities.supports.prediction;
 		this._supportsStreaming = !!_modelMetadata.capabilities.supports.streaming;
 		this._policyDetails = _modelMetadata.policy;
+		this.customModel = _modelMetadata.custom_model;
 	}
 
 	public get modelMaxPromptTokens(): number {
@@ -207,12 +205,26 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	public get urlOrRequestMetadata(): string | RequestMetadata {
-		return this._urlOrRequestMetadata;
+		// Use override or respect setting.
+		// TODO unlikely but would break if it changes in the middle of a request being constructed
+		return this._modelMetadata.urlOrRequestMetadata ??
+			(this.useResponsesApi ? { type: RequestType.ChatResponses } : { type: RequestType.ChatCompletions });
 	}
 
 	protected get useResponsesApi(): boolean {
-		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseResponsesApi, this._expService);
+		if (this._modelMetadata.supported_endpoints
+			&& !this._modelMetadata.supported_endpoints.includes(ModelSupportedEndpoint.ChatCompletions)
+			&& this._modelMetadata.supported_endpoints.includes(ModelSupportedEndpoint.Responses)
+		) {
+			return true;
+		}
+
+		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseResponsesApi, this._expService);
 		return !!(enableResponsesApi && this._modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.Responses));
+	}
+
+	public get degradationReason(): string | undefined {
+		return this._modelMetadata.warning_message;
 	}
 
 	public get policy(): 'enabled' | { terms: string } {
@@ -227,6 +239,10 @@ export class ChatEndpoint implements IChatEndpoint {
 
 	public get apiType(): string {
 		return this.useResponsesApi ? 'responses' : 'chatCompletions';
+	}
+
+	public get supportsThinkingContentInHistory(): boolean {
+		return this.family === 'oswe';
 	}
 
 	interceptBody(body: IEndpointBody | undefined): void {
@@ -305,9 +321,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		try {
 			const response = await postRequest(
 				this._fetcherService,
-				this._envService,
 				this._telemetryService,
-				this._domainService,
 				this._capiClientService,
 				{ type: RequestType.ModelPolicy, modelId: this.model },
 				(await this._authService.getCopilotToken()).token,
@@ -388,7 +402,6 @@ export class RemoteAgentChatEndpoint extends ChatEndpoint {
 		@IDomainService domainService: IDomainService,
 		@ICAPIClientService capiClientService: ICAPIClientService,
 		@IFetcherService fetcherService: IFetcherService,
-		@IEnvService envService: IEnvService,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IAuthenticationService authService: IAuthenticationService,
 		@IChatMLFetcher chatMLFetcher: IChatMLFetcher,
@@ -403,7 +416,6 @@ export class RemoteAgentChatEndpoint extends ChatEndpoint {
 			domainService,
 			capiClientService,
 			fetcherService,
-			envService,
 			telemetryService,
 			authService,
 			chatMLFetcher,
