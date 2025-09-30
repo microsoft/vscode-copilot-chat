@@ -146,6 +146,9 @@ export class OpenCodeChatSessionItemProvider extends Disposable implements vscod
 	private readonly _onDidChangeChatSessionItems = this._register(new Emitter<void>());
 	public readonly onDidChangeChatSessionItems = this._onDidChangeChatSessionItems.event;
 
+	private readonly _onDidCommitChatSessionItem = this._register(new Emitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>());
+	public readonly onDidCommitChatSessionItem = this._onDidCommitChatSessionItem.event;
+
 	constructor(
 		private readonly sessionStore: OpenCodeSessionDataStore,
 		@IOpenCodeSessionService private readonly opencodeSessionService: IOpenCodeSessionService,
@@ -160,6 +163,13 @@ export class OpenCodeChatSessionItemProvider extends Disposable implements vscod
 	public refresh(): void {
 		this.logService.trace('[OpenCodeChatSessionItemProvider] Refreshing session list');
 		this._onDidChangeChatSessionItems.fire();
+	}
+
+	/**
+	 * Swaps an original session item with a modified one
+	 */
+	public swap(original: vscode.ChatSessionItem, modified: vscode.ChatSessionItem): void {
+		this._onDidCommitChatSessionItem.fire({ original, modified });
 	}
 
 	/**

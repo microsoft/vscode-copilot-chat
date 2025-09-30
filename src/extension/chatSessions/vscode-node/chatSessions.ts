@@ -22,6 +22,7 @@ import { ClaudeChatSessionItemProvider } from './claudeChatSessionItemProvider';
 import { ClaudeChatSessionParticipant } from './claudeChatSessionParticipant';
 import { OpenCodeChatSessionContentProvider } from './opencodeChatSessionContentProvider';
 import { OpenCodeChatSessionItemProvider, OpenCodeSessionDataStore } from './opencodeChatSessionItemProvider';
+import { OpenCodeChatSessionParticipant } from './opencodeChatSessionParticipant';
 
 export class ChatSessionsContrib extends Disposable implements IExtensionContribution {
 	readonly id = 'chatSessions';
@@ -77,6 +78,13 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			opencodeAgentManager,
 			opencodeSessionStore
 		);
-		this._register(vscode.chat.registerChatSessionContentProvider('opencode', opencodeChatSessionContentProvider));
+		const opencodeChatSessionParticipant = opencodeInstaService.createInstance(
+			OpenCodeChatSessionParticipant,
+			'opencode',
+			opencodeAgentManager,
+			opencodeSessionItemProvider
+		);
+		const opencodeParticipant = vscode.chat.createChatParticipant('opencode', opencodeChatSessionParticipant.createHandler());
+		this._register(vscode.chat.registerChatSessionContentProvider('opencode', opencodeChatSessionContentProvider, opencodeParticipant));
 	}
 }
