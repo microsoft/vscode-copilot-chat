@@ -301,7 +301,7 @@ export class EditNotebookTool implements ICopilotTool<IEditNotebookToolParams> {
 	prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IEditNotebookToolParams>, token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
 		const uri = resolveToolInputPath(options.input.filePath, this.promptPathRepresentationService);
 		return {
-			invocationMessage: new MarkdownString(l10n.t`Edit ${formatUriForFileWidget(uri)}`)
+			invocationMessage: new MarkdownString(l10n.t('Edit {0}', formatUriForFileWidget(uri)))
 		};
 	}
 
