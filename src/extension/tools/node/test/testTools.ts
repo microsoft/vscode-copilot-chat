@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { packageJson } from '../../../../platform/env/common/packagejson';
 import { ILanguageDiagnosticsService } from '../../../../platform/languages/common/languageDiagnosticsService';
 import { IAlternativeNotebookContentService } from '../../../../platform/notebook/common/alternativeContent';
@@ -15,12 +16,12 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { LanguageModelPromptTsxPart, LanguageModelToolResult } from '../../../../vscodeTypes';
 import { renderPromptElementJSON } from '../../../prompts/node/base/promptRenderer';
 import { ICodeMapperService } from '../../../prompts/node/codeMapper/codeMapperService';
+import { IEditToolLearningService } from '../../common/editToolLearningService';
 import { ContributedToolName, mapContributedToolNamesInSchema, mapContributedToolNamesInString, ToolName } from '../../common/toolNames';
 import { IToolsService } from '../../common/toolsService';
 import { ActionType } from '../applyPatch/parser';
 import { EditFileResult } from '../editFileToolResult';
 import { EditFileTool } from '../insertEditTool';
-import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 
 interface IEditToolParams {
 	filePath: string;
@@ -46,8 +47,9 @@ export class TestEditFileTool extends EditFileTool {
 		@IAlternativeNotebookContentService alternativeNotebookContentService: IAlternativeNotebookContentService,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IEndpointProvider endpointProvider: IEndpointProvider,
+		@IEditToolLearningService editToolLearningService: IEditToolLearningService,
 	) {
-		super(promptPathRepresentationService, instantiationService, workspaceService, toolsService, notebookService, languageDiagnosticsService, alternativeNotebookContentService, telemetryService, endpointProvider);
+		super(promptPathRepresentationService, instantiationService, workspaceService, toolsService, notebookService, languageDiagnosticsService, alternativeNotebookContentService, telemetryService, endpointProvider, editToolLearningService);
 		const contributedTool = packageJson.contributes.languageModelTools.find(contributedTool => contributedTool.name === ContributedToolName.EditFile);
 		if (!contributedTool) {
 			throw new Error(`Tool ${ContributedToolName.EditFile} is not in package.json`);

@@ -5,6 +5,7 @@
 
 import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, Progress, ProvideLanguageModelChatResponseOptions, QuickPickItem, window } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { EndpointEditToolName, isEndpointEditToolName } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -66,8 +67,8 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 		return resolveCustomOAIUrl(modelId, url);
 	}
 
-	private getUserModelConfig(): Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean }> {
-		const modelConfig = this._configurationService.getConfig(this.getConfigKey()) as Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean }>;
+	private getUserModelConfig(): Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean; editTools?: EndpointEditToolName[] }> {
+		const modelConfig = this._configurationService.getConfig(this.getConfigKey()) as Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean; editTools?: EndpointEditToolName[] }>;
 		return modelConfig;
 	}
 
@@ -88,6 +89,7 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 				maxInputTokens: modelInfo.maxInputTokens,
 				maxOutputTokens: modelInfo.maxOutputTokens,
 				thinking: modelInfo.thinking,
+				editTools: modelInfo.editTools,
 			};
 		}
 		return models;
@@ -129,7 +131,8 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 			tooltip: `${capabilities.name} is contributed via the ${this.providerName} provider.`,
 			capabilities: {
 				toolCalling: capabilities.toolCalling,
-				imageInput: capabilities.vision
+				imageInput: capabilities.vision,
+				editTools: capabilities.editTools
 			},
 			thinking: capabilities.thinking || false,
 		};
@@ -168,7 +171,8 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 			vision: !!model.capabilities?.imageInput || false,
 			name: model.name,
 			url: model.url,
-			thinking: model.thinking
+			thinking: model.thinking,
+			editTools: model.capabilities.editTools?.filter(isEndpointEditToolName),
 		});
 		const openAIChatEndpoint = this._instantiationService.createInstance(OpenAIEndpoint, modelInfo, apiKey ?? '', model.url);
 		return this._lmWrapper.provideLanguageModelResponse(openAIChatEndpoint, messages, options, options.requestInitiator, progress, token);

@@ -19,6 +19,7 @@ import { URI } from '../../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../../util/vs/platform/instantiation/common/instantiation';
 import { createExtensionUnitTestingServices } from '../../../../test/node/services';
 import { ClaudeCodeSessionService } from '../claudeCodeSessionService';
+import { SDKUserMessage } from '@anthropic-ai/claude-code';
 
 function computeFolderSlug(folderUri: URI): string {
 	return folderUri.path.replace(/\//g, '-');
@@ -120,6 +121,37 @@ describe('ClaudeCodeSessionService', () => {
 			  },
 			]
 		`);
+	});
+
+	it('filters meta user messages and normalizes command content', async () => {
+		const fileName = '30530d66-37fb-4f3b-aa5f-d92b6a8afae2.jsonl';
+		const fixturePath = path.resolve(__dirname, 'fixtures', fileName);
+		const fileContents = await readFile(fixturePath, 'utf8');
+
+		mockFs.mockDirectory(dirUri, [[fileName, FileType.File]]);
+		mockFs.mockFile(URI.joinPath(dirUri, fileName), fileContents, 1000);
+
+		const sessions = await service.getAllSessions(CancellationToken.None);
+
+		expect(sessions).toHaveLength(1);
+
+		const session = sessions[0];
+		const metaUuid = 'e7f4ab9f-8e19-4262-a430-18d3e48b0c6c';
+
+		expect(session.messages.some(message => message.uuid === metaUuid)).toBe(false);
+
+		const commandUuid = 'a867fb32-ba62-4d51-917c-0fe40fa36067';
+		const commandMessage = session.messages.find((message): message is SDKUserMessage => message.uuid === commandUuid && message.type === 'user');
+		expect(commandMessage).toBeDefined();
+		if (!commandMessage) {
+			return;
+		}
+
+		const commandContent = commandMessage.message.content;
+		expect(typeof commandContent === 'string' ? commandContent : null).toBe('/init is analyzing your codebase…');
+		const assistantUuid = '6ed016f4-0df4-4a9f-8c3b-82303b68d29e';
+		const assistantMessage = session.messages.find(message => message.uuid === assistantUuid);
+		expect((assistantMessage as { readonly parentUuid?: string | null } | undefined)?.parentUuid).toBe(commandUuid);
 	});
 
 	it('handles empty directory correctly', async () => {

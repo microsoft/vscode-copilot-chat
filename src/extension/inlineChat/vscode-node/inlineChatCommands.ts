@@ -383,7 +383,8 @@ function fetchSuggestion(accessor: ServicesAccessor, thread: vscode.CommentThrea
 			toolInvocationToken: undefined as never,
 			model: null!,
 			tools: new Map(),
-			id: '1'
+			id: '1',
+			sessionId: '1',
 		};
 		let markdown = '';
 		const edits: ReviewSuggestionChange[] = [];

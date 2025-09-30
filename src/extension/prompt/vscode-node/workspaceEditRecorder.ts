@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-
+import * as vscode from 'vscode';
 import { ObservableGit } from '../../../platform/inlineEdits/common/observableGit';
 import { WorkspaceDocumentEditHistory } from '../../../platform/inlineEdits/common/workspaceEditTracker/workspaceDocumentEditTracker';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
@@ -30,8 +30,10 @@ export class WorkspaceEditRecorder extends Disposable {
 		this._workspace.openDocuments.get().forEach(doc => {
 			const edits = this._workspaceDocumentEditHistory.getRecentEdits(doc.id);
 			if (edits && edits.edits.replacements.length > 0) {
+				const docUri = vscode.Uri.parse(doc.id.path);
+				const relativePath = vscode.workspace.asRelativePath(docUri, false);
 				serializedEdits.push({
-					path: doc.id.path,
+					path: relativePath,
 					edits: JSON.stringify(edits.edits)
 				});
 			}
