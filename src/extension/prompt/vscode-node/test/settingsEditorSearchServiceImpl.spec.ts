@@ -4,8 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import type { Progress, SettingsSearchProviderOptions, SettingsSearchResult } from 'vscode';
-import { SettingsSearchResultKind } from 'vscode';
+import { SettingsSearchResultKind, type Progress, type SettingsSearchProviderOptions, type SettingsSearchResult } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { Embeddings, EmbeddingType, IEmbeddingsComputer } from '../../../../platform/embeddings/common/embeddingsComputer';
 import { ICombinedEmbeddingIndex } from '../../../../platform/embeddings/common/vscodeIndex';
