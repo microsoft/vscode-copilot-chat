@@ -245,7 +245,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const areaAroundEditWindowLinesRange = this.computeAreaAroundEditWindowLinesRange(currentFileContentLines, cursorLineIdx);
 
-		const editWindowLinesRange = this.computeEditWindowLinesRange(currentFileContentLines, cursorLineIdx, request, retryState);
+		const maxMergeConflictLines = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabMaxMergeConflictLines, this.expService);
+
+		const editWindowLinesRange = this.computeEditWindowLinesRange(currentFileContentLines, cursorLineIdx, request, maxMergeConflictLines, retryState);
 
 		const cursorOriginalLinesOffset = Math.max(0, cursorLineIdx - editWindowLinesRange.start);
 		const editWindowLastLineLength = activeDocument.documentAfterEdits.getTransformer().getLineLength(editWindowLinesRange.endExclusive);
@@ -784,7 +786,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return new OffsetRange(areaAroundStart, areaAroundEndExcl);
 	}
 
-	private computeEditWindowLinesRange(currentDocLines: string[], cursorLine: number, request: StatelessNextEditRequest, retryState: RetryState): OffsetRange {
+	private computeEditWindowLinesRange(currentDocLines: string[], cursorLine: number, request: StatelessNextEditRequest, maxMergeConflictLines: number | undefined, retryState: RetryState): OffsetRange {
 		let nLinesAbove: number;
 		{
 			const useVaryingLinesAbove = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseVaryingLinesAbove, this.expService);
@@ -829,7 +831,16 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 
 		const codeToEditStart = Math.max(0, cursorLine - nLinesAbove);
-		const codeToEditEndExcl = Math.min(currentDocLines.length, cursorLine + nLinesBelow + 1);
+		let codeToEditEndExcl = Math.min(currentDocLines.length, cursorLine + nLinesBelow + 1);
+
+		if (maxMergeConflictLines) {
+			const tentativeEditWindow = new OffsetRange(codeToEditStart, codeToEditEndExcl);
+			const mergeConflictRange = findMergeConflictMarkersRange(currentDocLines, tentativeEditWindow, maxMergeConflictLines);
+			if (mergeConflictRange) {
+				this.tracer.trace(`Expanding edit window to include merge conflict markers: ${mergeConflictRange.toString()}`);
+				codeToEditEndExcl = Math.max(codeToEditEndExcl, mergeConflictRange.endExclusive);
+			}
+		}
 
 		return new OffsetRange(codeToEditStart, codeToEditEndExcl);
 	}
@@ -1023,4 +1034,28 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		tracer.trace(msg);
 		logContext.addLog(msg);
 	}
+}
+
+/**
+ * Finds the range of lines containing merge conflict markers within a specified edit window.
+ *
+ * @param lines - Array of strings representing the lines of text to search through
+ * @param editWindowRange - The range within which to search for merge conflict markers
+ * @param maxMergeConflictLines - Maximum number of lines to search for conflict markers
+ * @returns An OffsetRange object representing the start and end of the conflict markers, or undefined if not found
+ */
+export function findMergeConflictMarkersRange(lines: string[], editWindowRange: OffsetRange, maxMergeConflictLines: number): OffsetRange | undefined {
+	for (let i = editWindowRange.start; i < Math.min(lines.length, editWindowRange.endExclusive); ++i) {
+		if (!lines[i].startsWith('<<<<<<<')) {
+			continue;
+		}
+
+		// found start of merge conflict markers -- now find the end
+		for (let j = i + 1; j < lines.length && (j - i) < maxMergeConflictLines; ++j) {
+			if (lines[j].startsWith('>>>>>>>')) {
+				return new OffsetRange(i, j + 1 /* because endExclusive */);
+			}
+		}
+	}
+	return undefined;
 }
