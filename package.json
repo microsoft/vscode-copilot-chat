@@ -2002,7 +2002,7 @@
 				"title": "%github.copilot.git.resolveMergeConflicts%",
 				"icon": "$(chat-sparkle)",
 				"enablement": "!github.copilot.interactiveSession.disabled",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.devcontainer.generateDevContainerConfig",
@@ -2023,7 +2023,7 @@
 			{
 				"command": "github.copilot.chat.attachFile",
 				"title": "%github.copilot.chat.attachFile%",
-				"category": "GitHub Copilot"
+				"category": "Chat"
 			},
 			{
 				"command": "github.copilot.chat.attachSelection",
@@ -2045,7 +2045,7 @@
 				"command": "github.copilot.debug.inlineEdit.reportNotebookNESIssue",
 				"title": "%github.copilot.command.inlineEdit.reportNotebookNESIssue%",
 				"enablement": "config.github.copilot.chat.advanced.notebook.alternativeNESFormat.enabled || github.copilot.chat.enableEnhancedNotebookNES",
-				"category": "GitHub Copilot Developer"
+				"category": "Developer"
 			},
 			{
 				"command": "github.copilot.debug.generateSTest",
