@@ -3802,7 +3802,7 @@
 			"copilot-chat": [
 				{
 					"id": "copilot-chat",
-					"name": "Copilot Chat Debug",
+					"name": "Chat Debug",
 					"icon": "assets/debug-icon.svg",
 					"when": "github.copilot.chat.showLogView"
 				}
@@ -3820,7 +3820,7 @@
 			"activitybar": [
 				{
 					"id": "copilot-chat",
-					"title": "Copilot Chat Debug",
+					"title": "Chat Debug",
 					"icon": "assets/debug-icon.svg"
 				},
 				{
