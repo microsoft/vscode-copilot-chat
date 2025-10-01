@@ -66,7 +66,7 @@ export class SettingsEditorSearchServiceImpl implements ISettingsEditorSearchSer
 
 		await this.embeddingIndex.loadIndexes();
 
-		if (embeddingResult.values.length === 0) {
+		if (embeddingResult.values.length === 0 || !embeddingResult.values[0]) {
 			progress.report({
 				query,
 				kind: SettingsSearchResultKind.EMBEDDED,
