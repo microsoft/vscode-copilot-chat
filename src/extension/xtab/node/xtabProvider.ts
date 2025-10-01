@@ -48,7 +48,7 @@ import { Delayer, DelaySession } from '../../inlineEdits/common/delayer';
 import { editWouldDeleteWhatWasJustInserted } from '../../inlineEdits/common/ghNearbyNesProvider';
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
-import { createTaggedCurrentFileContentUsingPagedClipping, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, nes41Miniv3SystemPrompt, PromptTags, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/promptCrafting';
+import { createTaggedCurrentFileContentUsingPagedClipping, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, nes41Miniv3SystemPrompt, PromptPieces, PromptTags, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/promptCrafting';
 import { XtabEndpoint } from './xtabEndpoint';
 import { linesWithBackticksRemoved, toLines } from './xtabUtils';
 
@@ -313,7 +313,17 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			}
 		}
 
-		const userPrompt = getUserPrompt(activeDocument, request.xtabEditHistory, taggedCurrentFileContent, areaAroundCodeToEdit, langCtx, computeTokens, promptOptions);
+		const promptPieces = new PromptPieces(
+			activeDocument,
+			request.xtabEditHistory,
+			taggedCurrentFileContent,
+			areaAroundCodeToEdit,
+			langCtx,
+			computeTokens,
+			promptOptions
+		);
+
+		const userPrompt = getUserPrompt(promptPieces);
 
 		const prediction = this.getPredictedOutput(editWindowLines, promptOptions.promptingStrategy);
 

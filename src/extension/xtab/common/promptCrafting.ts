@@ -151,7 +151,22 @@ export const simplifiedPrompt = 'Predict next code edit based on the context giv
 
 export const xtab275SystemPrompt = `Predict the next code edit based on user context, following Microsoft content policies and avoiding copyright violations. If a request may breach guidelines, reply: "Sorry, I can't assist with that."`;
 
-export function getUserPrompt(activeDoc: StatelessNextEditDocument, xtabHistory: readonly IXtabHistoryEntry[], currentFileContent: string, areaAroundCodeToEdit: string, langCtx: LanguageContextResponse | undefined, computeTokens: (s: string) => number, opts: PromptOptions): string {
+export class PromptPieces {
+	constructor(
+		public readonly activeDoc: StatelessNextEditDocument,
+		public readonly xtabHistory: readonly IXtabHistoryEntry[],
+		public readonly currentFileContent: string,
+		public readonly areaAroundCodeToEdit: string,
+		public readonly langCtx: LanguageContextResponse | undefined,
+		public readonly computeTokens: (s: string) => number,
+		public readonly opts: PromptOptions,
+	) {
+	}
+}
+
+export function getUserPrompt(promptPieces: PromptPieces): string {
+
+	const { activeDoc, xtabHistory, currentFileContent, areaAroundCodeToEdit, langCtx, computeTokens, opts } = promptPieces;
 
 	const { codeSnippets: recentlyViewedCodeSnippets, documents: docsInPrompt } = getRecentCodeSnippets(activeDoc, xtabHistory, langCtx, computeTokens, opts);
 
