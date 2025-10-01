@@ -65,6 +65,23 @@ export class SettingsEditorSearchServiceImpl implements ISettingsEditorSearchSer
 		}
 
 		await this.embeddingIndex.loadIndexes();
+
+		if (!embeddingResult.values[0]) {
+			progress.report({
+				query,
+				kind: SettingsSearchResultKind.EMBEDDED,
+				settings: []
+			});
+			if (!options.embeddingsOnly) {
+				progress.report({
+					query,
+					kind: SettingsSearchResultKind.LLM_RANKED,
+					settings: []
+				});
+			}
+			return;
+		}
+
 		const embeddingSettings: SettingListItem[] = this.embeddingIndex.settingsIndex.nClosestValues(embeddingResult.values[0], 25);
 		if (token.isCancellationRequested) {
 			progress.report(canceledBundle);
