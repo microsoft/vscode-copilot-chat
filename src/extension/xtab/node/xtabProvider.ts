@@ -9,6 +9,7 @@ import { ChatFetchError, ChatFetchResponseType, ChatLocation } from '../../../pl
 import { toTextParts } from '../../../platform/chat/common/globalStringUtils';
 import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
+import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { createProxyXtabEndpoint } from '../../../platform/endpoint/node/proxyXtabEndpoint';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { Copilot } from '../../../platform/inlineCompletions/common/api';
@@ -69,6 +70,10 @@ namespace ResponseTags {
 const enum RetryState {
 	NotRetrying,
 	RetryingWithExpandedWindow
+}
+
+interface ModelConfig extends xtabPromptOptions.PromptOptions {
+	modelName: string | undefined;
 }
 
 export class XtabProvider implements IStatelessNextEditProvider {
@@ -214,7 +219,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return Result.error(new NoNextEditReason.Uncategorized(new Error('NoSelection')));
 		}
 
-		const endpoint = this.getEndpoint();
+		const promptOptions = this.determineModelConfiguration(activeDocument);
+
+		const endpoint = this.getEndpoint(promptOptions.modelName);
 		logContext.setEndpointInfo(typeof endpoint.urlOrRequestMetadata === 'string' ? endpoint.urlOrRequestMetadata : JSON.stringify(endpoint.urlOrRequestMetadata.type), endpoint.model);
 		telemetryBuilder.setModelName(endpoint.model);
 
@@ -266,8 +273,6 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			...contentWithCursorLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
 			PromptTags.AREA_AROUND.end
 		].join('\n');
-
-		const promptOptions = this.determinePromptOptions(activeDocument);
 
 		const areaAroundCodeToEditForCurrentFile = promptOptions.currentFile.includeTags
 			? areaAroundCodeToEdit
@@ -853,40 +858,58 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 	}
 
-	private determinePromptOptions(activeDocument: StatelessNextEditDocument): xtabPromptOptions.PromptOptions {
+	private determineModelConfiguration(activeDocument: StatelessNextEditDocument): ModelConfig {
 		if (this.forceUseDefaultModel) {
-			return xtabPromptOptions.DEFAULT_OPTIONS;
-		} else {
-			const promptingStrategy = this.determinePromptingStrategy();
 			return {
-				promptingStrategy,
-				currentFile: {
-					maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabCurrentFileMaxTokens, this.expService),
-					includeTags: promptingStrategy !== xtabPromptOptions.PromptingStrategy.UnifiedModel /* unified model doesn't use tags in current file */ && this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabIncludeTagsInCurrentFile, this.expService),
-					prioritizeAboveCursor: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabPrioritizeAboveCursor, this.expService)
-				},
-				pagedClipping: {
-					pageSize: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabPageSize, this.expService)
-				},
-				recentlyViewedDocuments: {
-					nDocuments: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabNRecentlyViewedDocuments, this.expService),
-					maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabRecentlyViewedDocumentsMaxTokens, this.expService),
-					includeViewedFiles: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabIncludeViewedFiles, this.expService),
-				},
-				languageContext: this.determineLanguageContextOptions(activeDocument.languageId, {
-					enabled: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabLanguageContextEnabled, this.expService),
-					enabledLanguages: this.configService.getConfig(ConfigKey.Internal.InlineEditsXtabLanguageContextEnabledLanguages),
-					maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabLanguageContextMaxTokens, this.expService),
-				}),
-				diffHistory: {
-					nEntries: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffNEntries, this.expService),
-					maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffMaxTokens, this.expService),
-					onlyForDocsInPrompt: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffOnlyForDocsInPrompt, this.expService),
-					useRelativePaths: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffUseRelativePaths, this.expService),
-				}
+				modelName: undefined,
+				...xtabPromptOptions.DEFAULT_OPTIONS,
 			};
 		}
 
+		const promptingStrategy = this.determinePromptingStrategy();
+		const sourcedModelConfig = {
+			modelName: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderModelName, this.expService),
+			promptingStrategy,
+			currentFile: {
+				maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabCurrentFileMaxTokens, this.expService),
+				includeTags: promptingStrategy !== xtabPromptOptions.PromptingStrategy.UnifiedModel /* unified model doesn't use tags in current file */ && this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabIncludeTagsInCurrentFile, this.expService),
+				prioritizeAboveCursor: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabPrioritizeAboveCursor, this.expService)
+			},
+			pagedClipping: {
+				pageSize: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabPageSize, this.expService)
+			},
+			recentlyViewedDocuments: {
+				nDocuments: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabNRecentlyViewedDocuments, this.expService),
+				maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabRecentlyViewedDocumentsMaxTokens, this.expService),
+				includeViewedFiles: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabIncludeViewedFiles, this.expService),
+			},
+			languageContext: this.determineLanguageContextOptions(activeDocument.languageId, {
+				enabled: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabLanguageContextEnabled, this.expService),
+				enabledLanguages: this.configService.getConfig(ConfigKey.Internal.InlineEditsXtabLanguageContextEnabledLanguages),
+				maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabLanguageContextMaxTokens, this.expService),
+			}),
+			diffHistory: {
+				nEntries: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffNEntries, this.expService),
+				maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffMaxTokens, this.expService),
+				onlyForDocsInPrompt: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffOnlyForDocsInPrompt, this.expService),
+				useRelativePaths: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffUseRelativePaths, this.expService),
+			}
+		};
+
+		const overridingModelConfig = this.configService.getConfig(ConfigKey.Internal.InlineEditsXtabProviderModelConfiguration);
+
+		if (overridingModelConfig) {
+			return {
+				...sourcedModelConfig,
+				modelName: overridingModelConfig.modelName,
+				promptingStrategy: overridingModelConfig.promptingStrategy,
+				currentFile: {
+					...sourcedModelConfig.currentFile,
+					includeTags: overridingModelConfig.includeTagsInCurrentFile,
+				},
+			};
+		}
+		return sourcedModelConfig;
 	}
 
 	private determinePromptingStrategy(): xtabPromptOptions.PromptingStrategy | undefined {
@@ -936,22 +959,16 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return { enabled, maxTokens };
 	}
 
-	private getEndpoint() {
+	private getEndpoint(configuredModelName: string | undefined): ChatEndpoint {
 		const url = this.configService.getConfig(ConfigKey.Internal.InlineEditsXtabProviderUrl);
 		const apiKey = this.configService.getConfig(ConfigKey.Internal.InlineEditsXtabProviderApiKey);
 		const hasOverriddenUrlAndApiKey = url !== undefined && apiKey !== undefined;
-
-		const configuredModelName = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderModelName, this.expService);
 
 		if (hasOverriddenUrlAndApiKey) {
 			return this.instaService.createInstance(XtabEndpoint, url, apiKey, configuredModelName);
 		}
 
-		const modelName = this.forceUseDefaultModel
-			? undefined
-			: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderModelName, this.expService);
-
-		return createProxyXtabEndpoint(this.instaService, modelName);
+		return createProxyXtabEndpoint(this.instaService, configuredModelName);
 	}
 
 	private getPredictedOutput(editWindowLines: string[], promptingStrategy: xtabPromptOptions.PromptingStrategy | undefined): Prediction | undefined {
