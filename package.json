@@ -2955,6 +2955,13 @@
 									"type": "boolean",
 									"default": false,
 									"description": "Whether the model supports thinking capabilities"
+								},
+								"requestHeaders": {
+									"type": "object",
+									"description": "Additional HTTP headers to include with requests to this model. Reserved headers such as Authorization and api-key are ignored.",
+									"additionalProperties": {
+										"type": "string"
+									}
 								}
 							},
 							"required": [

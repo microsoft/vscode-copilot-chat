@@ -44,6 +44,17 @@ function hydrateBYOKErrorMessages(response: ChatResponse): ChatResponse {
 }
 
 export class OpenAIEndpoint extends ChatEndpoint {
+	private static readonly _reservedHeaders: ReadonlySet<string> = new Set([
+		'authorization',
+		'api-key',
+		'content-type',
+		'x-request-id',
+		'x-interaction-type',
+		'openai-intent',
+		'x-github-api-version'
+	]);
+
+	private readonly _customHeaders: Record<string, string>;
 	constructor(
 		protected readonly modelMetadata: IChatModelInformation,
 		protected readonly _apiKey: string,
@@ -58,7 +69,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		@IInstantiationService protected instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService expService: IExperimentationService,
-		@ILogService logService: ILogService
+		@ILogService private readonly _logService: ILogService
 	) {
 		super(
 			modelMetadata,
@@ -72,8 +83,29 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			instantiationService,
 			configurationService,
 			expService,
-			logService
+			_logService
 		);
+		this._customHeaders = this._sanitizeCustomHeaders(modelMetadata.requestHeaders);
+	}
+
+	private _sanitizeCustomHeaders(headers: Readonly<Record<string, string>> | undefined): Record<string, string> {
+		if (!headers) {
+			return {};
+		}
+		const sanitized: Record<string, string> = {};
+		for (const [rawKey, rawValue] of Object.entries(headers)) {
+			const key = rawKey.trim();
+			if (!key) {
+				continue;
+			}
+			const lowerKey = key.toLowerCase();
+			if (OpenAIEndpoint._reservedHeaders.has(lowerKey)) {
+				this._logService.warn(`[OpenAIEndpoint] Ignoring reserved header '${key}' for model '${this.modelMetadata.id}'.`);
+				continue;
+			}
+			sanitized[key] = rawValue;
+		}
+		return sanitized;
 	}
 
 	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
@@ -148,6 +180,18 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			headers['api-key'] = this._apiKey;
 		} else {
 			headers['Authorization'] = `Bearer ${this._apiKey}`;
+		}
+		for (const [key, value] of Object.entries(this._customHeaders)) {
+			const lowerKey = key.toLowerCase();
+			if (OpenAIEndpoint._reservedHeaders.has(lowerKey)) {
+				continue;
+			}
+			const existingKey = Object.keys(headers).find(headerKey => headerKey.toLowerCase() === lowerKey);
+			if (existingKey) {
+				this._logService.warn(`[OpenAIEndpoint] Ignoring custom header '${key}' for model '${this.modelMetadata.id}' because it conflicts with an existing header.`);
+				continue;
+			}
+			headers[key] = value;
 		}
 		return headers;
 	}
