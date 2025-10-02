@@ -14,10 +14,9 @@ import {
 	Thread
 } from '@vscode/debugadapter';
 import type { DebugProtocol } from '@vscode/debugprotocol';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { window, type WorkspaceFolder } from 'vscode';
-import { ChatStep } from '../common/chatReplayResponses';
+import { createSessionIdFromFilePath } from '../common/replayParser';
 import { ChatReplaySessionProvider } from './chatReplaySessionProvider';
 
 export class ChatReplayDebugSession extends LoggingDebugSession {
@@ -26,14 +25,12 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 
 	private _workspaceFolder: WorkspaceFolder | undefined;
 	private _program: string = '';
-	private _chatSteps: ChatStep[] = [];
-	private _currentIndex = -1;
 	private _stopOnEntry = true;
 	private _variableHandles = new Handles<any>();
-	private _sessionProvider: ChatReplaySessionProvider | undefined;
-	private _debugSessionId: string = '';
+	private _sessionProvider: ChatReplaySessionProvider;
+	private _sessionId: string = '';
 
-	constructor(workspaceFolder: WorkspaceFolder | undefined, sessionProvider?: ChatReplaySessionProvider) {
+	constructor(workspaceFolder: WorkspaceFolder | undefined, sessionProvider: ChatReplaySessionProvider) {
 		super();
 		this._workspaceFolder = workspaceFolder;
 		this._sessionProvider = sessionProvider;
@@ -66,24 +63,25 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 				? programArg
 				: path.join(this._workspaceFolder?.uri.fsPath || process.cwd(), programArg);
 
-			const content = fs.readFileSync(this._program, 'utf8');
-			this._chatSteps = this.parseReplay(content);
+			// Generate session ID for communication with chat session provider
+			this._sessionId = createSessionIdFromFilePath(this._program);
+
+			this._sessionProvider.initializeReplaySession(this._sessionId);
+			const replaySession = this._sessionProvider.getSession(this._sessionId);
+
+			if (!replaySession) {
+				throw new Error('Failed to initialize replay session');
+			}
 
 			this.sendResponse(response);
 
-			if (this._chatSteps.length === 0) {
+			if (replaySession.totalSteps === 0) {
 				// Nothing to debug; terminate immediately
 				this.sendEvent(new TerminatedEvent());
 				return;
 			}
 
-			this._currentIndex = 0;
-
-			// Generate debug session ID for communication with chat session provider
-			const baseSessionId = Buffer.from(this._program).toString('base64');
-			this._debugSessionId = `debug:${baseSessionId}`;
-
-			await startReplayInChatSession(this._program);
+			await window.showChatSession('chat-replay', this._sessionId, {});
 
 			if (this._stopOnEntry) {
 				this.sendEvent(new StoppedEvent('entry', ChatReplayDebugSession.THREAD_ID));
@@ -150,7 +148,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 	protected override continueRequest(response: DebugProtocol.ContinueResponse, args: DebugProtocol.ContinueArguments): void {
 		const step = this.currentStep();
 		if (step) {
-			this.replayNextResponse(step);
+			this.replayNextResponse();
 			this.sendResponse(response);
 		} else {
 			// We're done
@@ -162,7 +160,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 	protected override nextRequest(response: DebugProtocol.NextResponse, args: DebugProtocol.NextArguments): void {
 		const step = this.currentStep();
 		if (step) {
-			this.replayNextResponse(step);
+			this.replayNextResponse();
 			this.sendResponse(response);
 		} else {
 			this.sendResponse(response);
@@ -170,13 +168,13 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 		}
 	}
 
-	private replayNextResponse(step: ChatStep): void {
-		// Use the chat session provider to step through the replay
-		if (this._sessionProvider) {
-			this._sessionProvider.stepNext(this._debugSessionId);
+	private replayNextResponse(): void {
+		const replaySession = this._sessionProvider.getSession(this._sessionId);
+		if (!replaySession) {
+			return;
 		}
 
-		this._currentIndex++;
+		replaySession.stepNext();
 
 		// Send a stopped event to indicate we are at the next step
 		this.sendEvent(new StoppedEvent('next', ChatReplayDebugSession.THREAD_ID));
@@ -189,90 +187,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 		this.sendEvent(new StoppedEvent('pause', ChatReplayDebugSession.THREAD_ID));
 	}
 
-	private currentStep(): ChatStep | undefined {
-		if (this._currentIndex >= 0 && this._currentIndex < this._chatSteps.length) {
-			return this._chatSteps[this._currentIndex];
-		}
-
-		this._currentIndex++;
-		return undefined;
+	private currentStep() {
+		return this._sessionProvider.currentStep(this._sessionId);
 	}
-
-	private parsePrompt(prompt: { [key: string]: any }) {
-		const steps: ChatStep[] = [];
-		steps.push({
-			kind: 'userQuery',
-			query: prompt.prompt,
-			line: 0,
-		});
-
-		for (const log of prompt.logs) {
-			if (log.kind === 'toolCall') {
-				steps.push({
-					kind: 'toolCall',
-					id: log.id,
-					line: 0,
-					toolName: log.tool,
-					args: JSON.parse(log.args),
-					edits: log.edits,
-					results: log.response
-				});
-			} else if (log.kind === 'request') {
-				steps.push({
-					kind: 'request',
-					id: log.id,
-					line: 0,
-					prompt: log.messages,
-					result: log.response.message
-				});
-			}
-		}
-
-		return steps;
-	}
-
-	private parseReplay(content: string): ChatStep[] {
-		const parsed = JSON.parse(content);
-		const prompts = (parsed.prompts && Array.isArray(parsed.prompts) ? parsed.prompts : [parsed]) as { [key: string]: any }[];
-		if (prompts.filter(p => !p.prompt).length) {
-			throw new Error('Invalid replay content: expected a prompt object or an array of prompts in the base JSON structure.');
-		}
-
-		const steps: ChatStep[] = [];
-		for (const prompt of prompts) {
-			steps.push(...this.parsePrompt(prompt));
-		}
-
-		let stepIx = 0;
-		const lines = content.split('\n');
-		lines.forEach((line, index) => {
-			if (stepIx < steps.length) {
-				const step = steps[stepIx];
-				if (step.kind === 'userQuery') {
-					const match = line.match(`"prompt": "${step.query.trim()}`);
-					if (match) {
-						step.line = index + 1;
-						stepIx++;
-					}
-				} else {
-					const match = line.match(`"id": "${step.id}"`);
-					if (match) {
-						step.line = index + 1;
-						stepIx++;
-					}
-				}
-
-			}
-		});
-		return steps;
-	}
-}
-
-async function startReplayInChatSession(programPath: string) {
-	// Generate session ID from file path with debug prefix
-	const baseSessionId = Buffer.from(programPath).toString('base64');
-	const debugSessionId = `debug:${baseSessionId}`;
-
-	// Open the chat session in the editor with debug session ID
-	await window.showChatSession('chat-replay', debugSessionId, {});
 }
