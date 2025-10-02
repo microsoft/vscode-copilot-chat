@@ -9,8 +9,8 @@ import { IWorkspaceService } from '../../../../platform/workspace/common/workspa
 import { Disposable, DisposableMap } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ILanguageModelServerConfig, LanguageModelServer } from '../../node/langModelServer';
-import { createCopilotCLIToolInvocation } from '../common/copilotcliToolInvocationFormatter';
 import { type AgentOptions, type SDKEvent, ICopilotCLISdkService } from './copilotcliClient';
+import { createCopilotCLIToolInvocation } from './copilotcliToolInvocationFormatter';
 
 export class CopilotCLIAgentManager extends Disposable {
 	private _langModelServer: LanguageModelServer | undefined;
