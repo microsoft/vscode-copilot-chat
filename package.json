@@ -4056,6 +4056,17 @@
 						"description": "Complete a security review of the pending changes on the current branch"
 					}
 				]
+			},
+			{
+				"type": "copilotcli",
+				"name": "copilotcli",
+				"displayName": "Copilot CLI",
+				"description": "The Copilot CLI agent",
+				"when": "config.github.copilot.chat.advanced.copilotCLI.enabled",
+				"capabilities": {
+					"supportsFileAttachments": false,
+					"supportsToolAttachments": false
+				}
 			}
 		],
 		"debuggers": [
@@ -4260,7 +4271,8 @@
 		"minimatch": "^10.0.3",
 		"undici": "^7.11.0",
 		"vscode-tas-client": "^0.1.84",
-		"web-tree-sitter": "^0.23.0"
+		"web-tree-sitter": "^0.23.0",
+		"@github/copilot": "file:/Users/penlv/Code/Work/sweagentd/runtime/dist-cli"
 	},
 	"overrides": {
 		"@aminya/node-gyp-build": "npm:node-gyp-build@4.8.1",

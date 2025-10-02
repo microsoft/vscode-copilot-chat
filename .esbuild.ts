@@ -177,7 +177,9 @@ const nodeExtHostBuildOptions = {
 	plugins: [testBundlePlugin, sanityTestBundlePlugin, importMetaPlugin],
 	external: [
 		...baseNodeBuildOptions.external,
-		'vscode'
+		'vscode',
+		'@github/copilot',
+		'@github/copilot/sdk'
 	]
 } satisfies esbuild.BuildOptions;
 
