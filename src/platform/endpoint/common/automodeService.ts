@@ -7,6 +7,7 @@ import { RequestType } from '@vscode/copilot-api';
 import type { ChatRequest } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { TaskSingler } from '../../../util/common/taskSingler';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher } from '../../chat/common/chatMLFetcher';
 import { ILogService } from '../../log/common/logService';
@@ -30,7 +31,7 @@ export interface IAutomodeService {
 	resolveAutoModeEndpoint(chatRequest: ChatRequest | undefined, knownEndpoints: IChatEndpoint[]): Promise<IChatEndpoint>;
 }
 
-export class AutomodeService implements IAutomodeService {
+export class AutomodeService extends Disposable implements IAutomodeService {
 	readonly _serviceBrand: undefined;
 	private readonly _autoModelCache: Map<string, { endpoint: IChatEndpoint; expiration: number; autoModeToken: string; lastRequestId?: string }> = new Map();
 	private readonly _taskSingler = new TaskSingler<IChatEndpoint>();
@@ -42,6 +43,10 @@ export class AutomodeService implements IAutomodeService {
 		@ILogService private readonly _logService: ILogService,
 		@IChatMLFetcher private readonly _chatMLFetcher: IChatMLFetcher,
 	) {
+		super();
+		this._register(this._authService.onDidAuthenticationChange(() => {
+			this._autoModelCache.clear();
+		}));
 		this._serviceBrand = undefined;
 	}
 
