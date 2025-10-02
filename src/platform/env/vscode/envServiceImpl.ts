@@ -28,6 +28,12 @@ export class EnvServiceImpl implements IEnvService {
 	public get remoteName(): string | undefined {
 		return vscode.env.remoteName;
 	}
+	public get uiKind(): 'desktop' | 'web' {
+		switch (vscode.env.uiKind) {
+			case vscode.UIKind.Desktop: return 'desktop';
+			case vscode.UIKind.Web: return 'web';
+		}
+	}
 
 	public get isActive(): boolean {
 		return vscode.window.state.active;

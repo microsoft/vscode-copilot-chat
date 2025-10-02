@@ -7,12 +7,14 @@ import type { LanguageModelToolInformation } from 'vscode';
 import { ISummarizedToolCategory } from './virtualToolTypes';
 
 export const VIRTUAL_TOOL_NAME_PREFIX = 'activate_';
+export const EMBEDDINGS_GROUP_NAME = VIRTUAL_TOOL_NAME_PREFIX + 'embeddings';
 
 export interface IVirtualToolMetadata {
 	toolsetKey: string;
 	possiblePrefix?: string;
 	groups: ISummarizedToolCategory[];
-	preExpanded?: boolean;
+	wasExpandedByDefault?: boolean;
+	canBeCollapsed?: boolean;
 }
 
 export class VirtualTool {

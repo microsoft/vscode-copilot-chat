@@ -137,7 +137,8 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				input_schema: {
 					type: 'object',
 					properties: (tool.inputSchema as { properties?: Record<string, unknown> }).properties ?? {},
-					required: (tool.inputSchema as { required?: string[] }).required ?? []
+					required: (tool.inputSchema as { required?: string[] }).required ?? [],
+					$schema: (tool.inputSchema as { $schema?: unknown }).$schema
 				}
 			};
 		});

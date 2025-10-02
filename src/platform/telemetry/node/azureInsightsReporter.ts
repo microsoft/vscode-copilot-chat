@@ -122,8 +122,8 @@ function decorateWithCommonProperties(properties: TelemetryProperties, envServic
 	properties['common_vscodemachineid'] = envService.machineId;
 	properties['common_vscodesessionid'] = envService.sessionId;
 
-	properties['common_uikind'] = 'desktop';
-	properties['common_remotename'] = 'none';
+	properties['common_uikind'] = envService.uiKind;
+	properties['common_remotename'] = envService.remoteName ?? 'none';
 	properties['common_isnewappinstall'] = '';
 	return properties;
 }

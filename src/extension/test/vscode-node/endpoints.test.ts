@@ -7,7 +7,7 @@ import assert from 'assert';
 import { SinonSandbox, createSandbox } from 'sinon';
 import { LanguageModelChat } from 'vscode';
 import { CHAT_MODEL } from '../../../platform/configuration/common/configurationService';
-import { IChatModelInformation, ICompletionModelInformation } from '../../../platform/endpoint/common/endpointProvider';
+import { IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { IModelMetadataFetcher } from '../../../platform/endpoint/node/modelMetadataFetcher';
 import { ITestingServicesAccessor } from '../../../platform/test/node/services';
 import { TokenizerType } from '../../../util/common/tokenizer';
@@ -40,6 +40,23 @@ class FakeModelMetadataFetcher implements IModelMetadataFetcher {
 				type: 'chat',
 				tokenizer: TokenizerType.O200K,
 				family: 'fake-family'
+			}
+		};
+	}
+
+	async getEmbeddingsModel(): Promise<IEmbeddingModelInformation> {
+		return {
+			id: 'text-embedding-3-small',
+			name: 'fake-name',
+			version: 'fake-version',
+			model_picker_enabled: false,
+			is_chat_default: false,
+			is_chat_fallback: false,
+			capabilities: {
+				type: 'embeddings',
+				tokenizer: TokenizerType.O200K,
+				family: 'text-embedding-3-small',
+				limits: { max_inputs: 256 }
 			}
 		};
 	}

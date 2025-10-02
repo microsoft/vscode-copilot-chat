@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { vBoolean, vEnum, vObj, vRequired, vString, vUndefined, vUnion } from '../../../configuration/common/validator';
+
 export type RecentlyViewedDocumentsOptions = {
 	readonly nDocuments: number;
 	readonly maxTokens: number;
@@ -87,3 +89,15 @@ export const LANGUAGE_CONTEXT_ENABLED_LANGUAGES: LanguageContextLanguages = {
 	'instructions': true,
 	'chatmode': true,
 };
+
+export interface ModelConfiguration {
+	modelName: string;
+	promptingStrategy: PromptingStrategy | undefined /* default */;
+	includeTagsInCurrentFile: boolean;
+}
+
+export const MODEL_CONFIGURATION_VALIDATOR = vObj({
+	'modelName': vRequired(vString()),
+	'promptingStrategy': vUnion(vEnum(...Object.values(PromptingStrategy)), vUndefined()),
+	'includeTagsInCurrentFile': vRequired(vBoolean()),
+});
