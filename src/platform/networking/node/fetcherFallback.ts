@@ -38,7 +38,8 @@ export async function fetchWithFallbacks(availableFetchers: readonly IFetcher[],
 		}
 		throw firstResult!.err;
 	}
-	return { response: await availableFetchers[0].fetch(url, options) };
+	const fetcher = options.useFetcher && availableFetchers.find(f => f.getUserAgentLibrary() === options.useFetcher) || availableFetchers[0];
+	return { response: await fetcher.fetch(url, options) };
 }
 
 async function tryFetch(fetcher: IFetcher, url: string, options: FetchOptions, logService: ILogService): Promise<{ ok: boolean; response: Response } | { ok: false; err: any }> {

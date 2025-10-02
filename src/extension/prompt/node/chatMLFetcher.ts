@@ -160,7 +160,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					postOptions.n,
 					userInitiatedRequest,
 					token,
-					telemetryProperties
+					telemetryProperties,
+					opts.useFetcher,
 				));
 				tokenCount = await chatEndpoint.acquireTokenizer().countMessagesTokens(messages);
 				const extensionId = source?.extensionId ?? EXTENSION_ID;

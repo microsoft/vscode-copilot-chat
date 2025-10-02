@@ -38,6 +38,7 @@ import { ToolName } from '../../tools/common/toolNames';
 import { ToolCallCancelledError } from '../../tools/common/toolsService';
 import { ReadFileParams } from '../../tools/node/readFileTool';
 import { PauseController } from './pauseController';
+import { FetcherId } from '../../../platform/networking/common/fetcherService';
 
 
 export const enum ToolCallLimitBehavior {
@@ -81,7 +82,7 @@ export interface IToolCallingBuiltPromptEvent {
 	tools: LanguageModelToolInformation[];
 }
 
-export type ToolCallingLoopFetchOptions = Required<Pick<IMakeChatRequestOptions, 'messages' | 'finishedCb' | 'requestOptions' | 'userInitiatedRequest'>>;
+export type ToolCallingLoopFetchOptions = Required<Pick<IMakeChatRequestOptions, 'messages' | 'finishedCb' | 'requestOptions' | 'userInitiatedRequest'>> & Pick<IMakeChatRequestOptions, 'useFetcher'>;
 
 /**
  * This is a base class that can be used to implement a tool calling loop
@@ -171,6 +172,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let i = 0;
 		let lastResult: IToolCallSingleResult | undefined;
 		let lastRequestMessagesStartingIndexForRun: number | undefined;
+		let useFetcher: FetcherId | undefined = undefined; // TODO: Remember for entire VS Code session?
 
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {
@@ -179,7 +181,21 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			}
 
 			try {
-				const result = await this.runOne(outputStream, i, token);
+				let result = await this.runOne(outputStream, i, token, useFetcher);
+				if ((result.response.type === ChatFetchResponseType.NetworkError || result.response.type === ChatFetchResponseType.Failed) && result.response.reason.indexOf('net::ERR_NETWORK_CHANGED') !== -1) {
+					this._logService.info('[FetchRetry] Electron fetch\'s network changed error, retrying with Node.js fetch.');
+					result = await this.runOne(outputStream, i, token, 'node-fetch');
+					this._logService.info(`[FetchRetry] Node.js fetch outcome: ${result.response.type}`);
+					if (result.response.type === ChatFetchResponseType.Success) {
+						useFetcher = 'node-fetch';
+					} else if ((result.response.type === ChatFetchResponseType.NetworkError || result.response.type === ChatFetchResponseType.Failed)) {
+						result = await this.runOne(outputStream, i, token, 'node-http');
+						this._logService.info(`[FetchRetry] Node.js https outcome: ${result.response.type}`);
+						if (result.response.type === ChatFetchResponseType.Success) {
+							useFetcher = 'node-http';
+						}
+					}
+				}
 				if (lastRequestMessagesStartingIndexForRun === undefined) {
 					lastRequestMessagesStartingIndexForRun = result.lastRequestMessages.length - 1;
 				}
@@ -338,7 +354,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	/** Runs a single iteration of the tool calling loop. */
-	public async runOne(outputStream: ChatResponseStream | undefined, iterationNumber: number, token: CancellationToken | PauseController): Promise<IToolCallSingleResult> {
+	public async runOne(outputStream: ChatResponseStream | undefined, iterationNumber: number, token: CancellationToken | PauseController, useFetcher?: FetcherId): Promise<IToolCallSingleResult> {
 		let availableTools = await this.getAvailableTools(outputStream, token);
 		const context = this.createPromptContext(availableTools, outputStream);
 		const isContinuation = context.isContinuation || false;
@@ -462,7 +478,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					type: 'function',
 				})),
 			},
-			userInitiatedRequest: iterationNumber === 0 && !isContinuation
+			userInitiatedRequest: iterationNumber === 0 && !isContinuation,
+			useFetcher,
 		}, token);
 
 		fetchStreamSource?.resolve();

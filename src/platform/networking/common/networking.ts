@@ -18,7 +18,7 @@ import { ILogService } from '../../log/common/logService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { FinishedCallback, OpenAiFunctionTool, OpenAiResponsesFunctionTool, OptionalChatRequestParams } from './fetch';
-import { FetchOptions, IAbortController, IFetcherService, Response } from './fetcherService';
+import { FetcherId, FetchOptions, IAbortController, IFetcherService, Response } from './fetcherService';
 import { ChatCompletion, RawMessageConversionCallback, rawMessageToCAPI } from './openai';
 
 /**
@@ -145,6 +145,7 @@ export interface IMakeChatRequestOptions {
 	telemetryProperties?: TelemetryProperties;
 	/** Enable retrying the request when it was filtered due to snippy. Note- if using finishedCb, requires supporting delta.retryReason, eg with clearToPreviousToolInvocation */
 	enableRetryOnFilter?: boolean;
+	useFetcher?: FetcherId;
 }
 
 export interface ICreateEndpointBodyOptions extends IMakeChatRequestOptions {
@@ -263,7 +264,8 @@ function networkRequest(
 	requestId: string,
 	body?: IEndpointBody,
 	additionalHeaders?: Record<string, string>,
-	cancelToken?: CancellationToken
+	cancelToken?: CancellationToken,
+	useFetcher?: FetcherId,
 ): Promise<Response> {
 	// TODO @lramos15 Eventually don't even construct this fake endpoint object.
 	const endpoint = typeof endpointOrUrl === 'string' || 'type' in endpointOrUrl ? {
@@ -296,6 +298,7 @@ function networkRequest(
 		headers: headers,
 		json: body,
 		timeout: requestTimeoutMs,
+		useFetcher,
 	};
 
 	if (cancelToken) {
@@ -353,7 +356,8 @@ export function postRequest(
 	requestId: string,
 	body?: IEndpointBody,
 	additionalHeaders?: Record<string, string>,
-	cancelToken?: CancellationToken
+	cancelToken?: CancellationToken,
+	useFetcher?: FetcherId,
 ): Promise<Response> {
 	return networkRequest(fetcherService,
 		telemetryService,
@@ -365,7 +369,8 @@ export function postRequest(
 		requestId,
 		body,
 		additionalHeaders,
-		cancelToken
+		cancelToken,
+		useFetcher,
 	);
 }
 
