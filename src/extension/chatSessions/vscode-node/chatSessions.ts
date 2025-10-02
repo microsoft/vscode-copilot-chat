@@ -14,16 +14,17 @@ import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../agent
 import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
 import { IExtensionContribution } from '../../common/contributions';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
-import { ClaudeChatSessionItemProvider, ClaudeSessionDataStore } from './claudeChatSessionItemProvider';
+import { ClaudeChatSessionItemProvider } from './claudeChatSessionItemProvider';
+import { ClaudeChatSessionParticipant } from './claudeChatSessionParticipant';
 
 export class ChatSessionsContrib extends Disposable implements IExtensionContribution {
 	readonly id = 'chatSessions';
+	readonly sessionType = 'claude-code';
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
 	) {
 		super();
-
 		const claudeAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
 				[IClaudeCodeSessionService, new SyncDescriptor(ClaudeCodeSessionService)],
@@ -31,15 +32,16 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				[ILanguageModelServer, new SyncDescriptor(LanguageModelServer)],
 			));
 
-		const sessionStore = claudeAgentInstaService.createInstance(ClaudeSessionDataStore);
-		const sessionItemProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionItemProvider, sessionStore));
-		this._register(vscode.chat.registerChatSessionItemProvider('claude-code', sessionItemProvider));
+		const sessionItemProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionItemProvider));
+		this._register(vscode.chat.registerChatSessionItemProvider(this.sessionType, sessionItemProvider));
 		this._register(vscode.commands.registerCommand('github.copilot.claude.sessions.refresh', () => {
 			sessionItemProvider.refresh();
 		}));
 
 		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
-		const chatSessionContentProvider = claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider, claudeAgentManager, sessionStore);
-		this._register(vscode.chat.registerChatSessionContentProvider('claude-code', chatSessionContentProvider));
+		const chatSessionContentProvider = claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider);
+		const claudeChatSessionParticipant = claudeAgentInstaService.createInstance(ClaudeChatSessionParticipant, this.sessionType, claudeAgentManager, sessionItemProvider);
+		const chatParticipant = vscode.chat.createChatParticipant(this.sessionType, claudeChatSessionParticipant.createHandler());
+		this._register(vscode.chat.registerChatSessionContentProvider(this.sessionType, chatSessionContentProvider, chatParticipant));
 	}
 }

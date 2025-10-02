@@ -400,7 +400,7 @@ export class DefaultIntentRequestHandler {
 	}
 
 	private getModeName(): string {
-		return this.request.modeInstructions ? 'custom' :
+		return this.request.modeInstructions2 ? 'custom' :
 			this.intent.id === 'editAgent' ? 'agent' :
 				(this.intent.id === 'edit' || this.intent.id === 'edit2') ? 'edit' :
 					'ask';

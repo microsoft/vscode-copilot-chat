@@ -36,3 +36,50 @@ export function binarySearch<T>(
 	return lastLess;
 }
 
+//#region Either
+
+export type Either<L, R> = Left<L> | Right<R>;
+
+export namespace Either {
+	export function left<L>(value: L): Left<L> {
+		return new Left(value);
+	}
+
+	export function right<R>(value: R): Right<R> {
+		return new Right(value);
+	}
+}
+
+/**
+ * To instantiate a Left, use `Either.left(value)`.
+ * To instantiate a Right, use `Either.right(value)`.
+ */
+class Left<L> {
+	constructor(readonly value: L) { }
+
+	isLeft(): this is Left<L> {
+		return true;
+	}
+
+	isRight(): this is Right<never> {
+		return false;
+	}
+}
+
+/**
+ * To instantiate a Left, use `Either.left(value)`.
+ * To instantiate a Right, use `Either.right(value)`.
+ */
+class Right<R> {
+	constructor(readonly value: R) { }
+
+	isLeft(): this is Left<never> {
+		return false;
+	}
+
+	isRight(): this is Right<R> {
+		return true;
+	}
+}
+
+//#endregion

@@ -11,6 +11,7 @@ import * as path from 'path';
 import * as tar from 'tar';
 import * as vscode from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { OutputChannelName } from '../../../platform/log/vscode/outputChannelLogTarget';
 import { ChatRequestScheme, ILoggedElementInfo, ILoggedRequestInfo, ILoggedToolCall, IRequestLogger, LoggedInfo, LoggedInfoKind, LoggedRequestKind } from '../../../platform/requestLogger/node/requestLogger';
 import { assertNever } from '../../../util/vs/base/common/assert';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -26,6 +27,7 @@ const exportPromptArchiveCommand = 'github.copilot.chat.debug.exportPromptArchiv
 const exportPromptLogsAsJsonCommand = 'github.copilot.chat.debug.exportPromptLogsAsJson';
 const exportAllPromptLogsAsJsonCommand = 'github.copilot.chat.debug.exportAllPromptLogsAsJson';
 const saveCurrentMarkdownCommand = 'github.copilot.chat.debug.saveCurrentMarkdown';
+const showRawRequestBodyCommand = 'github.copilot.chat.debug.showRawRequestBody';
 
 export class RequestLogTree extends Disposable implements IExtensionContribution {
 	readonly id = 'requestLogTree';
@@ -487,6 +489,20 @@ export class RequestLogTree extends Disposable implements IExtensionContribution
 			} catch (error) {
 				vscode.window.showErrorMessage(`Failed to export all prompt logs as JSON: ${error}`);
 			}
+		}));
+
+		this._register(vscode.commands.registerCommand(showRawRequestBodyCommand, async (arg?: ChatPromptItem) => {
+			const requestId = arg?.id;
+			if (!requestId) {
+				return;
+			}
+
+			await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(ChatRequestScheme.buildUri({ kind: 'request', id: requestId }, 'rawrequest')));
+		}));
+
+		this._register(vscode.commands.registerCommand('github.copilot.debug.showOutputChannel', async () => {
+			// Yes this is the correct auto-generated command for our output channel
+			await vscode.commands.executeCommand(`workbench.action.output.show.GitHub.copilot-chat.${OutputChannelName}`);
 		}));
 	}
 }

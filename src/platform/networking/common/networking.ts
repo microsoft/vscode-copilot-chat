@@ -13,6 +13,7 @@ import { CancellationError } from '../../../util/vs/base/common/errors';
 import { Source } from '../../chat/common/chatMLFetcher';
 import type { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
+import { CustomModel, EndpointEditToolName } from '../../endpoint/common/endpointProvider';
 import { ILogService } from '../../log/common/logService';
 import { ITelemetryService, TelemetryProperties } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
@@ -120,6 +121,10 @@ export function stringifyUrlOrRequestMetadata(urlOrRequestMetadata: string | Req
 	return JSON.stringify(urlOrRequestMetadata);
 }
 
+export interface IEmbeddingsEndpoint extends IEndpoint {
+	readonly maxBatchSize: number;
+}
+
 export interface IMakeChatRequestOptions {
 	/** The debug name for this request */
 	debugName: string;
@@ -156,12 +161,16 @@ export interface IChatEndpoint extends IEndpoint {
 	readonly supportsToolCalls: boolean;
 	readonly supportsVision: boolean;
 	readonly supportsPrediction: boolean;
+	readonly supportedEditTools?: readonly EndpointEditToolName[];
 	readonly showInModelPicker: boolean;
 	readonly isPremium?: boolean;
+	readonly degradationReason?: string;
 	readonly multiplier?: number;
 	readonly restrictedToSkus?: string[];
 	readonly isDefault: boolean;
 	readonly isFallback: boolean;
+	readonly customModel?: CustomModel;
+	readonly isExtensionContributed?: boolean;
 	readonly policy: 'enabled' | { terms: string };
 	/**
 	 * Handles processing of responses from a chat endpoint. Each endpoint can have different response formats.

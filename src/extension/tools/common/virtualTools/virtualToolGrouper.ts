@@ -19,7 +19,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { LanguageModelToolExtensionSource, LanguageModelToolMCPSource } from '../../../../vscodeTypes';
 import { BuiltInToolGroupHandler } from './builtInToolGroupHandler';
 import { EMBEDDING_TYPE_FOR_TOOL_GROUPING, ToolEmbeddingsComputer } from './toolEmbeddingsCache';
-import { VIRTUAL_TOOL_NAME_PREFIX, VirtualTool } from './virtualTool';
+import { EMBEDDINGS_GROUP_NAME, VIRTUAL_TOOL_NAME_PREFIX, VirtualTool } from './virtualTool';
 import { divideToolsIntoExistingGroups, divideToolsIntoGroups, summarizeToolGroup } from './virtualToolSummarizer';
 import { ISummarizedToolCategory, IToolCategorization, IToolGroupingCache } from './virtualToolTypes';
 import * as Constant from './virtualToolsConstants';
@@ -45,6 +45,10 @@ export class VirtualToolGrouper implements IToolCategorization {
 	) {
 		this.toolEmbeddingsComputer = _instantiationService.createInstance(ToolEmbeddingsComputer);
 		this.builtInToolGroupHandler = new BuiltInToolGroupHandler(_telemetryService);
+	}
+
+	private get virtualToolEmbeddingRankingEnabled() {
+		return this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.VirtualToolEmbeddingRanking, this._expService);
 	}
 
 	async addGroups(query: string, root: VirtualTool, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<void> {
@@ -77,9 +81,8 @@ export class VirtualToolGrouper implements IToolCategorization {
 			}
 		}
 
-		const virtualToolEmbeddingRankingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.VirtualToolEmbeddingRanking, this._expService);
 		const predictedToolsSw = new StopWatch();
-		const predictedToolsPromise = virtualToolEmbeddingRankingEnabled && this._getPredictedTools(query, tools, token).then(tools => ({ tools, durationMs: predictedToolsSw.elapsed() }));
+		const predictedToolsPromise = this.virtualToolEmbeddingRankingEnabled && this._getPredictedTools(query, tools, token).then(tools => ({ tools, durationMs: predictedToolsSw.elapsed() }));
 
 		// Now all toolsets (including built-in) go through _generateGroupsFromToolset
 		const grouped = await Promise.all(Object.entries(byToolset).map(([key, tools]) => {
@@ -94,13 +97,47 @@ export class VirtualToolGrouper implements IToolCategorization {
 				const prev = previousGroups.get(tool.name);
 				if (prev) {
 					tool.isExpanded = prev.isExpanded;
-					tool.metadata.preExpanded = prev.metadata.preExpanded;
+					tool.metadata.wasExpandedByDefault = prev.metadata.wasExpandedByDefault;
 					tool.lastUsedOnTurn = prev.lastUsedOnTurn;
 				}
 			}
 		}
 
 		await this._reExpandTools(root, predictedToolsPromise);
+	}
+
+	async recomputeEmbeddingRankings(query: string, root: VirtualTool, token: CancellationToken): Promise<void> {
+		if (!this.virtualToolEmbeddingRankingEnabled) {
+			return;
+		}
+
+		const predictedToolsSw = new StopWatch();
+
+		await this._reExpandTools(root, this._getPredictedTools(query, [...root.tools()], token).then(tools => ({
+			tools,
+			durationMs: predictedToolsSw.elapsed()
+		})));
+	}
+
+	private _addPredictedToolsGroup(root: VirtualTool, predictedTools: LanguageModelToolInformation[]): void {
+		const newGroup = new VirtualTool(EMBEDDINGS_GROUP_NAME, 'Tools with high predicted relevancy for this query', Infinity, {
+			toolsetKey: EMBEDDINGS_GROUP_NAME,
+			wasExpandedByDefault: true,
+			canBeCollapsed: false,
+			groups: [],
+		});
+
+		newGroup.isExpanded = true;
+		for (const tool of predictedTools) {
+			newGroup.contents.push(tool);
+		}
+
+		const idx = root.contents.findIndex(t => t.name === EMBEDDINGS_GROUP_NAME);
+		if (idx >= 0) {
+			root.contents[idx] = newGroup;
+		} else {
+			root.contents.unshift(newGroup);
+		}
 	}
 
 	private async _reExpandTools(root: VirtualTool, predictedToolsPromise: Promise<{ tools: LanguageModelToolInformation[]; durationMs: number }> | false): Promise<void> {
@@ -112,8 +149,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 			try {
 				const { tools, durationMs } = await predictedToolsPromise;
 				computeMs = durationMs;
-				this._reExpandToolsToHitBudget(root, g => this._getGroupPredictedRelevancy(g, tools), HARD_TOOL_LIMIT);
-				return;
+				this._addPredictedToolsGroup(root, tools);
 			} catch (e) {
 				error = e;
 			} finally {
@@ -164,30 +200,6 @@ export class VirtualToolGrouper implements IToolCategorization {
 	}
 
 	/**
-	 * Gets the predicted relevancy score for a group based on the highest priority predicted tool it contains.
-	 * Lower scores indicate higher relevancy (earlier in the predictedTools array).
-	 */
-	private _getGroupPredictedRelevancy(group: VirtualTool, predictedTools: LanguageModelToolInformation[]): number {
-		// Create a set of predicted tool names for fast lookup
-		const predictedToolNames = new Set(predictedTools.map(tool => tool.name));
-
-		// Create a map of tool name to its priority (index in predictedTools array)
-		const toolPriority = new Map<string, number>();
-		predictedTools.forEach((tool, index) => {
-			toolPriority.set(tool.name, index);
-		});
-
-		// Find the highest priority (lowest index) predicted tool in this group
-		const priorities = group.contents
-			.filter(tool => 'name' in tool && predictedToolNames.has(tool.name))
-			.map(tool => toolPriority.get(tool.name) ?? Infinity)
-			.filter(index => index !== Infinity);
-
-		// Return the highest priority (lowest index), or Infinity if no predicted tools
-		return priorities.length > 0 ? Math.min(...priorities) : Infinity;
-	}
-
-	/**
 	 * Eagerly expand groups when possible just to reduce the number of indirections.
 	 * Uses the provided ranker function to determine expansion priority.
 	 *
@@ -227,7 +239,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 			}
 
 			vtool.isExpanded = true;
-			vtool.metadata.preExpanded = true;
+			vtool.metadata.wasExpandedByDefault = true;
 			toolCount = nextCount;
 
 			if (toolCount > targetLimit) {

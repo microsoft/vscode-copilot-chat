@@ -49,6 +49,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 	private _currentModels: vscode.LanguageModelChatInformation[] = []; // Store current models for reference
 	private _chatEndpoints: IChatEndpoint[] = [];
 	private _lmWrapper: CopilotLanguageModelWrapper;
+	private _promptBaseCountCache: LanguageModelAccessPromptBaseCountCache;
 
 	constructor(
 		@ILogService private readonly _logService: ILogService,
@@ -64,6 +65,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		super();
 
 		this._lmWrapper = this._instantiationService.createInstance(CopilotLanguageModelWrapper);
+		this._promptBaseCountCache = this._instantiationService.createInstance(LanguageModelAccessPromptBaseCountCache);
 
 		if (this._vsCodeExtensionContext.extensionMode === ExtensionMode.Test && !isScenarioAutomation) {
 			this._logService.warn('[LanguageModelAccess] LanguageModels and Embeddings are NOT AVAILABLE in test mode.');
@@ -127,8 +129,14 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 			const sanitizedModelName = endpoint.name.replace(/\(Preview\)/g, '').trim();
 			let modelDescription: string | undefined;
-			if (endpoint.model === AutoChatEndpoint.id) {
-				modelDescription = localize('languageModel.autoTooltip', 'Auto selects the best model for your request based on capacity and performance. Counted at 0x-0.9x the request rate, depending on the model.');
+			if (endpoint.degradationReason) {
+				modelDescription = endpoint.degradationReason;
+			} else if (endpoint.model === AutoChatEndpoint.id) {
+				if (this._authenticationService.copilotToken?.isNoAuthUser) {
+					modelDescription = localize('languageModel.autoTooltipNoAuth', 'Auto selects the best model for your request based on capacity and performance.');
+				} else {
+					modelDescription = localize('languageModel.autoTooltip', 'Auto selects the best model for your request based on capacity and performance. Counted at 0x-0.9x the request rate, depending on the model.');
+				}
 			} else if (endpoint.multiplier) {
 				modelDescription = localize('languageModel.costTooltip', '{0} ({1}) is counted at a {2}x rate.', sanitizedModelName, endpoint.version, endpoint.multiplier);
 			} else if (endpoint.isFallback && endpoint.multiplier === 0) {
@@ -148,10 +156,19 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				modelCategory = { label: localize('languageModelHeader.standard', "Standard Models"), order: 0 };
 			}
 
-			const baseCount = await PromptRenderer.create(this._instantiationService, endpoint, LanguageModelAccessPrompt, { noSafety: false, messages: [] }).countTokens();
-			let multiplierString = endpoint.multiplier !== undefined ? `${endpoint.multiplier}x` : undefined;
+			// Counting tokens requires instantiating the tokenizers, which makes this process use a lot of memory.
+			// Let's cache the results across extension activations
+			const baseCount = await this._promptBaseCountCache.getBaseCount(endpoint);
+			let modelDetail = endpoint.multiplier !== undefined ? `${endpoint.multiplier}x` : undefined;
+
 			if (endpoint.model === AutoChatEndpoint.id) {
-				multiplierString = 'Variable';
+				modelDetail = 'Variable';
+			}
+			if (endpoint.customModel) {
+				const customModel = endpoint.customModel;
+				modelDetail = customModel.owner_name;
+				modelDescription = `${endpoint.name} is contributed by ${customModel.owner_name} using ${customModel.key_name}`;
+				modelCategory = { label: localize('languageModelHeader.custom_models', "Custom Models"), order: 2 };
 			}
 
 			const session = this._authenticationService.anyGitHubSession;
@@ -161,8 +178,9 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 				name: endpoint.model === AutoChatEndpoint.id ? 'Auto' : endpoint.name,
 				family: endpoint.family,
 				tooltip: modelDescription,
-				detail: multiplierString,
+				detail: modelDetail,
 				category: modelCategory,
+				statusIcon: endpoint.degradationReason ? new vscode.ThemeIcon('warning') : undefined,
 				version: endpoint.version,
 				maxInputTokens: endpoint.modelMaxPromptTokens - baseCount - BaseTokensPerCompletion,
 				maxOutputTokens: endpoint.maxOutputTokens,
@@ -236,7 +254,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			dispo.clear();
 			dispo.value = vscode.lm.registerEmbeddingsProvider(`copilot.${model}`, new class implements vscode.EmbeddingsProvider {
 				async provideEmbeddings(input: string[], token: vscode.CancellationToken): Promise<vscode.Embedding[]> {
-					const result = await embeddingsComputer.computeEmbeddings(embeddingType, input, { parallelism: 2 }, new TelemetryCorrelationId('EmbeddingsProvider::provideEmbeddings'), token);
+					const result = await embeddingsComputer.computeEmbeddings(embeddingType, input, {}, new TelemetryCorrelationId('EmbeddingsProvider::provideEmbeddings'), token);
 					return result.values.map(embedding => ({ values: embedding.value.slice(0) }));
 				}
 			});
@@ -256,6 +274,40 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 			return undefined;
 		}
 	}
+}
+
+class LanguageModelAccessPromptBaseCountCache {
+	constructor(
+		@IVSCodeExtensionContext private readonly _extensionContext: IVSCodeExtensionContext,
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IEnvService private readonly _envService: IEnvService
+	) { }
+
+	public async getBaseCount(endpoint: IChatEndpoint): Promise<number> {
+		const key = `lmBaseCount/${endpoint.model}`;
+		const cached = this._extensionContext.globalState.get<{ extensionVersion: string; baseCount: number }>(key);
+		if (cached && cached.extensionVersion === this._envService.getVersion() && typeof cached.baseCount === 'number') {
+			return cached.baseCount;
+		}
+
+		const baseCount = await this._computeBaseCount(endpoint);
+		// Store the computed value along with the extension version so we can
+		// invalidate the cache when the extension is updated.
+		try {
+			await this._extensionContext.globalState.update(key, { extensionVersion: this._envService.getVersion(), baseCount });
+		} catch (err) {
+			// Best-effort cache update — don't fail the caller if persisting the
+			// cache entry fails for any reason.
+		}
+
+		return baseCount;
+	}
+
+	private async _computeBaseCount(endpoint: IChatEndpoint): Promise<number> {
+		const baseCount = await PromptRenderer.create(this._instantiationService, endpoint, LanguageModelAccessPrompt, { noSafety: false, messages: [] }).countTokens();
+		return baseCount;
+	}
+
 }
 
 /**

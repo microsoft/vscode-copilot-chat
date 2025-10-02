@@ -11,6 +11,7 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { WorkerWithRpcProxy } from '../../../util/node/worker';
 import { assertNever } from '../../../util/vs/base/common/assert';
+import { Lazy } from '../../../util/vs/base/common/lazy';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { basename, join } from '../../../util/vs/base/common/path';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
@@ -48,8 +49,8 @@ export class TokenizerProvider implements ITokenizerProvider {
 	declare readonly _serviceBrand: undefined;
 
 	// These files are copied to `dist` via the `build/postinstall.ts` script
-	private readonly _cl100kTokenizer: BPETokenizer;
-	private readonly _o200kTokenizer: BPETokenizer;
+	private readonly _cl100kTokenizer: Lazy<BPETokenizer>;
+	private readonly _o200kTokenizer: Lazy<BPETokenizer>;
 
 	constructor(
 		useWorker: boolean,
@@ -58,13 +59,13 @@ export class TokenizerProvider implements ITokenizerProvider {
 		// if we're running from dist, the dictionary is compressed, but if we're  running
 		// in e.g. a `spec` file we should load the dictionary using default behavior.
 		// todo: cleanup a bit, have an IS_BUILT constant?
-		this._cl100kTokenizer = new BPETokenizer(useWorker, join(__dirname, './cl100k_base.tiktoken'), 'cl100k_base', telmetryService);
-		this._o200kTokenizer = new BPETokenizer(useWorker, join(__dirname, './o200k_base.tiktoken'), 'o200k_base', telmetryService);
+		this._cl100kTokenizer = new Lazy(() => new BPETokenizer(useWorker, join(__dirname, './cl100k_base.tiktoken'), 'cl100k_base', telmetryService));
+		this._o200kTokenizer = new Lazy(() => new BPETokenizer(useWorker, join(__dirname, './o200k_base.tiktoken'), 'o200k_base', telmetryService));
 	}
 
 	dispose() {
-		this._cl100kTokenizer.dispose();
-		this._o200kTokenizer.dispose();
+		this._cl100kTokenizer.rawValue?.dispose();
+		this._o200kTokenizer.rawValue?.dispose();
 	}
 
 	/**
@@ -74,9 +75,9 @@ export class TokenizerProvider implements ITokenizerProvider {
 	public acquireTokenizer(endpoint: TokenizationEndpoint): ITokenizer {
 		switch (endpoint.tokenizer) {
 			case TokenizerType.CL100K:
-				return this._cl100kTokenizer;
+				return this._cl100kTokenizer.value;
 			case TokenizerType.O200K:
-				return this._o200kTokenizer;
+				return this._o200kTokenizer.value;
 			default:
 				throw new Error(`Unknown tokenizer: ${endpoint.tokenizer}`);
 		}

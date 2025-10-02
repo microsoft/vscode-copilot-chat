@@ -10,6 +10,7 @@ import { CurrentFileOptions, DiffHistoryOptions, PromptingStrategy, PromptOption
 import { StatelessNextEditDocument } from '../../../platform/inlineEdits/common/statelessNextEditProvider';
 import { IXtabHistoryEditEntry, IXtabHistoryEntry } from '../../../platform/inlineEdits/common/workspaceEditTracker/nesXtabHistoryTracker';
 import { ContextKind, TraitContext } from '../../../platform/languageServer/common/languageContextService';
+import { Result } from '../../../util/common/result';
 import { pushMany, range } from '../../../util/vs/base/common/arrays';
 import { illegalArgument } from '../../../util/vs/base/common/errors';
 import { Schemas } from '../../../util/vs/base/common/network';
@@ -150,7 +151,22 @@ export const simplifiedPrompt = 'Predict next code edit based on the context giv
 
 export const xtab275SystemPrompt = `Predict the next code edit based on user context, following Microsoft content policies and avoiding copyright violations. If a request may breach guidelines, reply: "Sorry, I can't assist with that."`;
 
-export function getUserPrompt(activeDoc: StatelessNextEditDocument, xtabHistory: readonly IXtabHistoryEntry[], currentFileContent: string, areaAroundCodeToEdit: string, langCtx: LanguageContextResponse | undefined, computeTokens: (s: string) => number, opts: PromptOptions): string {
+export class PromptPieces {
+	constructor(
+		public readonly activeDoc: StatelessNextEditDocument,
+		public readonly xtabHistory: readonly IXtabHistoryEntry[],
+		public readonly currentFileContent: string,
+		public readonly areaAroundCodeToEdit: string,
+		public readonly langCtx: LanguageContextResponse | undefined,
+		public readonly computeTokens: (s: string) => number,
+		public readonly opts: PromptOptions,
+	) {
+	}
+}
+
+export function getUserPrompt(promptPieces: PromptPieces): string {
+
+	const { activeDoc, xtabHistory, currentFileContent, areaAroundCodeToEdit, langCtx, computeTokens, opts } = promptPieces;
 
 	const { codeSnippets: recentlyViewedCodeSnippets, documents: docsInPrompt } = getRecentCodeSnippets(activeDoc, xtabHistory, langCtx, computeTokens, opts);
 
@@ -665,10 +681,13 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 	computeTokens: (s: string) => number,
 	pageSize: number,
 	opts: CurrentFileOptions
-): { taggedCurrentFileContent: string; nLines: number } {
+): Result<{ taggedCurrentFileContent: string; nLines: number }, 'outOfBudget'> {
 
 	// subtract budget consumed by areaAroundCodeToEdit
 	const availableTokenBudget = opts.maxTokens - countTokensForLines(areaAroundCodeToEdit.split(/\r?\n/), computeTokens);
+	if (availableTokenBudget < 0) {
+		return Result.error('outOfBudget');
+	}
 
 	const { firstPageIdx, lastPageIdx } = expandRangeToPageRange(
 		currentDocLines,
@@ -688,5 +707,5 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 		...currentDocLines.slice(areaAroundEditWindowLinesRange.endExclusive, linesOffsetEnd),
 	];
 
-	return { taggedCurrentFileContent: taggedCurrentFileContent.join('\n'), nLines: taggedCurrentFileContent.length };
+	return Result.ok({ taggedCurrentFileContent: taggedCurrentFileContent.join('\n'), nLines: taggedCurrentFileContent.length });
 }

@@ -70,7 +70,7 @@ export class RenameSuggestionsProvider implements vscode.NewSymbolNamesProvider 
 	protected isEnabled(triggerKind: NewSymbolNameTriggerKind) {
 		if (triggerKind === NewSymbolNameTriggerKind.Invoke) {
 			return true;
-		} else if (this._authService.copilotToken?.isFreeUser) {
+		} else if (this._authService.copilotToken?.isFreeUser || this._authService.copilotToken?.isNoAuthUser) {
 			return false;
 		} else {
 			return this._configurationService.getConfig(ConfigKey.AutomaticRenameSuggestions);
@@ -155,8 +155,8 @@ export class RenameSuggestionsProvider implements vscode.NewSymbolNamesProvider 
 						);
 						const fetchTime = sw.elapsed();
 
-						if (fetchResult.type === ChatFetchResponseType.QuotaExceeded) {
-							await this._notificationService.showQuotaExceededDialog();
+						if (fetchResult.type === ChatFetchResponseType.QuotaExceeded || (fetchResult.type === ChatFetchResponseType.RateLimited && this._authService.copilotToken?.isNoAuthUser)) {
+							await this._notificationService.showQuotaExceededDialog({ isNoAuthUser: this._authService.copilotToken?.isNoAuthUser ?? false });
 						}
 
 						if (token.isCancellationRequested) {
