@@ -12,7 +12,7 @@ const BUILT_IN_GROUP = 'builtin';
 const SUMMARY_PREFIX = 'Call this tool when you need access to a new category of tools. The category of tools is described as follows:\n\n';
 const SUMMARY_SUFFIX = '\n\nBe sure to call this tool if you need a capability related to the above.';
 
-// categorize all tools except for the 11 default tools
+// categorize all tools except for the 12 default tools
 // 12 default tools = semantic_search, grep_search, read_file, create_file, apply_patch, replace_string_in_file,
 // insert_edit_into_file, run_in_terminal, list_dir, think, get_terminal_output, manage_todo_list
 const BUILT_IN_TOOL_GROUPS = {
@@ -55,7 +55,6 @@ const BUILT_IN_TOOL_GROUPS = {
 			'run_task',
 			'get_task_output',
 			'run_vscode_command',
-			'multi_replace_string_in_file',
 			'install_python_packages',
 			'get_search_view_results',
 			'vscode_searchExtensions_internal',
@@ -72,13 +71,15 @@ const BUILT_IN_TOOL_GROUPS = {
 		]
 	},
 	'Redundant but Specific': {
-		summary: 'These tools have overlapping functionalities but are highly specialized for certain tasks. \nTools: file_search, get_terminal_selection, get_terminal_last_command, create_directory, get_doc_info',
+		summary: 'These tools have overlapping functionalities but are highly specialized for certain tasks. \nTools: file_search, get_terminal_selection, get_terminal_last_command, create_directory, get_doc_info, multi_replace_string_in_file, edit_files',
 		tools: [
 			'file_search',
 			'get_terminal_selection',
 			'get_terminal_last_command',
 			'create_directory',
-			'get_doc_info'
+			'get_doc_info',
+			'edit_files',
+			'multi_replace_string_in_file'
 		]
 	}
 } as const;

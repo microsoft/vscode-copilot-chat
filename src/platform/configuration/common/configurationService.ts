@@ -522,7 +522,7 @@ export function defineExpSetting<T extends ExperimentBasedConfigType>(key: strin
 }
 
 // Max CAPI tool count limit
-export const HARD_TOOL_LIMIT = 24;
+export const HARD_TOOL_LIMIT = 28;
 
 // WARNING
 // These values are used in the request and are case sensitive. Do not change them unless advised by CAPI.

@@ -31,6 +31,7 @@ const SUMMARY_SUFFIX = '\n\nBe sure to call this tool if you need a capability r
 export class VirtualToolGrouper implements IToolCategorization {
 	private readonly toolEmbeddingsComputer: ToolEmbeddingsComputer;
 	private readonly builtInToolGroupHandler: BuiltInToolGroupHandler;
+	private _hasGroupedDefaultTools = false;
 
 	constructor(
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
@@ -48,11 +49,13 @@ export class VirtualToolGrouper implements IToolCategorization {
 
 	async addGroups(query: string, root: VirtualTool, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<void> {
 		// If there's no need to group tools, just add them all directly;
+		// TODO use Constant.START_GROUPING_AFTER_TOOL_COUNT to be dynamic based on model? or can I use this logic for every model?
 		if (tools.length < Constant.START_GROUPING_AFTER_TOOL_COUNT) {
 			root.contents = tools;
 			return;
 		}
 
+		// TODO add logic here to group default tools for gpt models
 		const byToolset = groupBy(tools, t => {
 			if (t.source instanceof LanguageModelToolExtensionSource) {
 				return 'ext_' + t.source.id;
@@ -202,8 +205,18 @@ export class VirtualToolGrouper implements IToolCategorization {
 		}
 
 		// Get unexpanded virtual tools, sorted by the ranker function (ascending order).
+		// If we've grouped default tools, exclude built-in tool groups from expansion
 		const expandable = root.contents
-			.filter((t): t is VirtualTool => t instanceof VirtualTool && !t.isExpanded)
+			.filter((t): t is VirtualTool => {
+				if (!(t instanceof VirtualTool) || t.isExpanded) {
+					return false;
+				}
+				// Skip built-in tool groups if we've grouped default tools for GPT models
+				if (this._hasGroupedDefaultTools && t.metadata.toolsetKey === BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY) {
+					return false;
+				}
+				return true;
+			})
 			.sort((a, b) => ranker(a) - ranker(b));
 
 		// Expand them until we hit the target limit
@@ -229,15 +242,19 @@ export class VirtualToolGrouper implements IToolCategorization {
 		if (key === BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY) {
 			const defaultToolGroupingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.DefaultToolsGrouped, this._expService);
 			if (defaultToolGroupingEnabled) {
+				// TODO fix this logic to work for when the chat model is `gpt-4.1` or `gpt-5`
 				// Get the model family from the categorization endpoint to check if grouping should apply
-				const endpoint = await this._endpointProvider.getChatEndpoint(CATEGORIZATION_ENDPOINT);
-				const modelFamily = endpoint?.family;
+				// const endpoint = await this._endpointProvider.getChatEndpoint();
+				// const modelFamily = endpoint?.family;
 
 				// Only apply grouping for GPT-4.1 or GPT-5 models
-				if (!modelFamily || (modelFamily !== 'gpt-4.1' && !modelFamily.startsWith('gpt-5'))) {
-					return tools;
-				}
+				// For Sonnet models (claude), do not group default tools - let them expand to the 128 limit
+				// if (!modelFamily || (!modelFamily.includes('gpt-4.1') && !modelFamily.startsWith('gpt-5') && !modelFamily.startsWith('o1') && !modelFamily.startsWith('o3'))) {
+				// 	return tools;
+				// }
 
+				// Mark that we've grouped default tools so we don't aggressively expand later
+				this._hasGroupedDefaultTools = true;
 				return this.builtInToolGroupHandler.createBuiltInToolGroups(tools);
 			} else {
 				return tools;

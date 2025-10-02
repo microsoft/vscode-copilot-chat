@@ -2895,8 +2895,8 @@
 					"github.copilot.chat.virtualTools.threshold": {
 						"type": "number",
 						"minimum": 0,
-						"maximum": 24,
-						"default": 24,
+						"maximum": 28,
+						"default": 28,
 						"tags": [
 							"experimental"
 						],
