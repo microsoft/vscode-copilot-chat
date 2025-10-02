@@ -9,7 +9,7 @@ import { IWorkspaceService } from '../../../../platform/workspace/common/workspa
 import { Disposable, DisposableMap } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ILanguageModelServerConfig, LanguageModelServer } from '../../node/langModelServer';
-import { type AgentOptions, type SDKEvent, ICopilotCLISdkService } from './copilotcliClient';
+import { ICopilotCLISdkService, type AgentOptions, type SDKEvent } from './copilotcliClient';
 import { createCopilotCLIToolInvocation } from './copilotcliToolInvocationFormatter';
 
 export class CopilotCLIAgentManager extends Disposable {
@@ -110,7 +110,7 @@ export class CopilotCLISession extends Disposable {
 				type: 'anthropic',
 				model: 'claude-sonnet-4',
 				apiKey: this.serverConfig.nonce,
-				baseUrl: `http://localhost:${this.serverConfig.port}`
+				// baseUrl: `http://localhost:${this.serverConfig.port}`
 			},
 			abortController: this._abortController,
 			workingDirectory: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
@@ -122,10 +122,8 @@ export class CopilotCLISession extends Disposable {
 				'copilot-integration-id': 'vscode-chat-dev',
 			},
 			requestPermission: async (permissionRequest) => {
-				// Handle shell and write permissions
 				return {
-					behavior: 'allow',
-					persistForSession: false
+					kind: 'approved'
 				};
 			},
 			logger: {
