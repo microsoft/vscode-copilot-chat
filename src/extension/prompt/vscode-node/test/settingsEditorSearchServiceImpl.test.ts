@@ -3,7 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import assert from 'assert';
+import * as sinon from 'sinon';
 import { SettingsSearchResultKind, type Progress, type SettingsSearchProviderOptions, type SettingsSearchResult } from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { Embeddings, EmbeddingType, IEmbeddingsComputer } from '../../../../platform/embeddings/common/embeddingsComputer';
@@ -12,38 +13,46 @@ import { IEndpointProvider } from '../../../../platform/endpoint/common/endpoint
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { createExtensionUnitTestingServices } from '../../../test/node/services';
+import { createExtensionTestingServices } from '../../../test/vscode-node/services';
 import { SettingsEditorSearchServiceImpl } from '../settingsEditorSearchServiceImpl';
 
-describe('SettingsEditorSearchServiceImpl', () => {
+suite('SettingsEditorSearchServiceImpl test suite', function () {
 	let accessor: ITestingServicesAccessor;
+	let instaService: IInstantiationService;
+	let sandbox: sinon.SinonSandbox;
 	let service: SettingsEditorSearchServiceImpl;
-	let mockEmbeddingsComputer: IEmbeddingsComputer;
+	let mockEmbeddingsComputer: sinon.SinonStubbedInstance<IEmbeddingsComputer>;
 	let mockEmbeddingIndex: ICombinedEmbeddingIndex;
-	let mockAuthService: IAuthenticationService;
+	let mockAuthService: sinon.SinonStubbedInstance<IAuthenticationService>;
 	let mockEndpointProvider: IEndpointProvider;
 
-	beforeEach(() => {
-		const testingServiceCollection = createExtensionUnitTestingServices();
+	function createAccessor() {
+		const testingServiceCollection = createExtensionTestingServices();
 		accessor = testingServiceCollection.createTestingAccessor();
+		instaService = accessor.get(IInstantiationService);
+	}
 
-		// Create mock implementations
+	setup(() => {
+		sandbox = sinon.createSandbox();
+		createAccessor();
+
+		// Create mock implementations using sinon
 		mockEmbeddingsComputer = {
 			_serviceBrand: undefined,
-			computeEmbeddings: vi.fn()
-		};
+			computeEmbeddings: sandbox.stub()
+		} as any;
 
 		mockEmbeddingIndex = {
 			_serviceBrand: undefined,
-			loadIndexes: vi.fn().mockResolvedValue(undefined),
+			loadIndexes: sandbox.stub().resolves(undefined),
 			settingsIndex: {
-				nClosestValues: vi.fn().mockReturnValue([])
+				nClosestValues: sandbox.stub().returns([])
 			}
 		} as any;
 
 		mockAuthService = {
 			_serviceBrand: undefined,
-			getCopilotToken: vi.fn().mockResolvedValue({ isFreeUser: true, isNoAuthUser: false })
+			getCopilotToken: sandbox.stub().resolves({ isFreeUser: true, isNoAuthUser: false })
 		} as any;
 
 		mockEndpointProvider = {
@@ -52,12 +61,16 @@ describe('SettingsEditorSearchServiceImpl', () => {
 
 		// Create the service manually with mocks
 		service = new SettingsEditorSearchServiceImpl(
-			mockAuthService,
+			mockAuthService as any,
 			mockEndpointProvider,
 			mockEmbeddingIndex,
-			mockEmbeddingsComputer,
-			accessor.get(IInstantiationService)
+			mockEmbeddingsComputer as any,
+			instaService
 		);
+	});
+
+	teardown(() => {
+		sandbox.restore();
 	});
 
 	test('handles empty embeddings result gracefully', async () => {
@@ -66,7 +79,7 @@ describe('SettingsEditorSearchServiceImpl', () => {
 			type: EmbeddingType.text3small_512,
 			values: []
 		};
-		vi.mocked(mockEmbeddingsComputer.computeEmbeddings).mockResolvedValue(emptyEmbeddings);
+		mockEmbeddingsComputer.computeEmbeddings.resolves(emptyEmbeddings);
 
 		const results: SettingsSearchResult[] = [];
 		const progress: Progress<SettingsSearchResult> = {
@@ -81,16 +94,16 @@ describe('SettingsEditorSearchServiceImpl', () => {
 		await service.provideSettingsSearchResults('test query', options, progress, CancellationToken.None);
 
 		// Verify that nClosestValues was NOT called (since values[0] is undefined)
-		expect(mockEmbeddingIndex.settingsIndex.nClosestValues).not.toHaveBeenCalled();
+		assert.strictEqual((mockEmbeddingIndex.settingsIndex.nClosestValues as sinon.SinonStub).called, false);
 
 		// Verify that we reported empty results for both EMBEDDED and LLM_RANKED
-		expect(results).toHaveLength(2);
-		expect(results[0]).toEqual({
+		assert.strictEqual(results.length, 2);
+		assert.deepStrictEqual(results[0], {
 			query: 'test query',
 			kind: SettingsSearchResultKind.EMBEDDED,
 			settings: []
 		});
-		expect(results[1]).toEqual({
+		assert.deepStrictEqual(results[1], {
 			query: 'test query',
 			kind: SettingsSearchResultKind.LLM_RANKED,
 			settings: []
@@ -103,7 +116,7 @@ describe('SettingsEditorSearchServiceImpl', () => {
 			type: EmbeddingType.text3small_512,
 			values: []
 		};
-		vi.mocked(mockEmbeddingsComputer.computeEmbeddings).mockResolvedValue(emptyEmbeddings);
+		mockEmbeddingsComputer.computeEmbeddings.resolves(emptyEmbeddings);
 
 		const results: SettingsSearchResult[] = [];
 		const progress: Progress<SettingsSearchResult> = {
@@ -118,11 +131,11 @@ describe('SettingsEditorSearchServiceImpl', () => {
 		await service.provideSettingsSearchResults('test query', options, progress, CancellationToken.None);
 
 		// Verify that nClosestValues was NOT called (since values[0] is undefined)
-		expect(mockEmbeddingIndex.settingsIndex.nClosestValues).not.toHaveBeenCalled();
+		assert.strictEqual((mockEmbeddingIndex.settingsIndex.nClosestValues as sinon.SinonStub).called, false);
 
 		// Verify that we only reported empty results for EMBEDDED (not LLM_RANKED)
-		expect(results).toHaveLength(1);
-		expect(results[0]).toEqual({
+		assert.strictEqual(results.length, 1);
+		assert.deepStrictEqual(results[0], {
 			query: 'test query',
 			kind: SettingsSearchResultKind.EMBEDDED,
 			settings: []
@@ -138,7 +151,7 @@ describe('SettingsEditorSearchServiceImpl', () => {
 				value: [0.1, 0.2, 0.3]
 			}]
 		};
-		vi.mocked(mockEmbeddingsComputer.computeEmbeddings).mockResolvedValue(validEmbeddings);
+		mockEmbeddingsComputer.computeEmbeddings.resolves(validEmbeddings);
 
 		const results: SettingsSearchResult[] = [];
 		const progress: Progress<SettingsSearchResult> = {
@@ -153,13 +166,14 @@ describe('SettingsEditorSearchServiceImpl', () => {
 		await service.provideSettingsSearchResults('test query', options, progress, CancellationToken.None);
 
 		// Verify that nClosestValues WAS called with the first embedding
-		expect(mockEmbeddingIndex.settingsIndex.nClosestValues).toHaveBeenCalledWith(
-			validEmbeddings.values[0],
-			25
-		);
+		const nClosestValuesStub = mockEmbeddingIndex.settingsIndex.nClosestValues as sinon.SinonStub;
+		assert.strictEqual(nClosestValuesStub.called, true);
+		assert.strictEqual(nClosestValuesStub.callCount, 1);
+		assert.deepStrictEqual(nClosestValuesStub.firstCall.args[0], validEmbeddings.values[0]);
+		assert.strictEqual(nClosestValuesStub.firstCall.args[1], 25);
 
 		// Verify that we reported the result
-		expect(results).toHaveLength(1);
-		expect(results[0].kind).toBe(SettingsSearchResultKind.EMBEDDED);
+		assert.strictEqual(results.length, 1);
+		assert.strictEqual(results[0].kind, SettingsSearchResultKind.EMBEDDED);
 	});
 });
