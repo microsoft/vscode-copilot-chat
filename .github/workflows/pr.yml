@@ -127,6 +127,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Check package.nls.json
+        run: npm run check-package-nls
+
       - name: Compile
         run: npm run compile
 
@@ -209,6 +212,9 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      - name: Check package.nls.json
+        run: npm run check-package-nls
 
       - name: Compile
         run: npm run compile

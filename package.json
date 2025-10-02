@@ -4119,6 +4119,7 @@
 		"typecheck": "tsc --noEmit --project tsconfig.json && tsc --noEmit --project test/simulation/workbench/tsconfig.json && tsc --noEmit --project tsconfig.worker.json",
 		"lint": "eslint . --max-warnings=0",
 		"lint-staged": "eslint --max-warnings=0",
+		"check-package-nls": "tsx script/checkPackageNls.ts",
 		"tsfmt": "npx tsfmt -r --verify",
 		"test": "npm-run-all test:*",
 		"test:extension": "vscode-test",

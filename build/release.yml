@@ -199,6 +199,9 @@ extends:
       - script: npm run lint
         displayName: npm run lint
 
+      - script: npm run check-package-nls
+        displayName: npm run check-package-nls
+
       - script: npm run compile
         displayName: npm run compile
 
