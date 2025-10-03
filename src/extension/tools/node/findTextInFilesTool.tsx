@@ -51,14 +51,28 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		const maxResults = Math.min(options.input.maxResults ?? 20, MaxResultsCap);
 		const isRegExp = options.input.isRegexp ?? true;
 		const queryIsValidRegex = this.isValidRegex(options.input.query);
-		let results = await this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, token);
+
+		// try find text with a timeout of 10s
+		// TODO: consider making the timeout configurable
+		const timeoutInMs = 10_000;
+		let results = await Promise.race([
+			this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, token),
+			new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timeout in searching text in files")), timeoutInMs))]);
+
+		checkCancellation(token);
 		if (!results.length && queryIsValidRegex) {
-			results = await this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, token);
+			results = await Promise.race([
+				this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, token),
+				new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timeout in searching text in files")), timeoutInMs))]);
 		}
 
-		const result = new ExtendedLanguageModelToolResult([
-			new LanguageModelPromptTsxPart(
-				await renderPromptElementJSON(this.instantiationService, FindTextInFilesResult, { textResults: results, maxResults, askedForTooManyResults: Boolean(askedForTooManyResults) }, options.tokenizationOptions, token))]);
+		checkCancellation(token);
+		const prompt = await Promise.race([
+			renderPromptElementJSON(this.instantiationService, FindTextInFilesResult, { textResults: results, maxResults, askedForTooManyResults: Boolean(askedForTooManyResults) }, options.tokenizationOptions, token),
+			new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout in rendering prompt element')), timeoutInMs))
+		]);
+
+		const result = new ExtendedLanguageModelToolResult([new LanguageModelPromptTsxPart(prompt)]);
 		const textMatches = results.flatMap(r => {
 			if ('ranges' in r) {
 				return asArray(r.ranges).map(rangeInfo => new Location(r.uri, rangeInfo.sourceRange));
