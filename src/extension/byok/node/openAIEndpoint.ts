@@ -45,13 +45,17 @@ function hydrateBYOKErrorMessages(response: ChatResponse): ChatResponse {
 
 export class OpenAIEndpoint extends ChatEndpoint {
 	private static readonly _reservedHeaders: ReadonlySet<string> = new Set([
-		'authorization',
 		'api-key',
+		'authorization',
 		'content-type',
-		'x-request-id',
-		'x-interaction-type',
 		'openai-intent',
-		'x-github-api-version'
+		'x-github-api-version',
+		'x-initiator',
+		'x-interaction-id',
+		'x-interaction-type',
+		'x-onbehalf-extension-id',
+		'x-request-id',
+		'x-vscode-user-agent-library-version'
 	]);
 
 	private readonly _customHeaders: Record<string, string>;
