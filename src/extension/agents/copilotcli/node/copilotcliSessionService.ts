@@ -81,10 +81,11 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 					try {
 						// Get the full session to access chat messages
 						const sdkSession = await sessionManager.getSession(metadata.id);
+						const label = await this._generateSessionLabel(sdkSession);
 						return {
 							id: metadata.id,
 							sdkSession,
-							label: metadata.selectedModel || `Session ${metadata.id.slice(0, 8)}`,
+							label,
 							timestamp: metadata.startTime
 						};
 					} catch (error) {
@@ -132,10 +133,11 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 		const sdkSession = await sessionManager.createSession();
 
 		// Cache the new session immediately
+		const label = await this._generateSessionLabel(sdkSession);
 		const newSession: ICopilotCLISession = {
 			id: sdkSession.id,
 			sdkSession,
-			label: `Session ${sdkSession.id.slice(0, 8)}`,
+			label,
 			timestamp: new Date()
 		};
 		this._sessions.set(sdkSession.id, newSession);
@@ -149,5 +151,35 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 
 	public findSessionWrapper<T>(sessionId: string): T | undefined {
 		return this._sessionWrappers.get(sessionId) as T | undefined;
+	}
+
+	private async _generateSessionLabel(sdkSession: Session): Promise<string> {
+		try {
+			const chatMessages = await sdkSession.getChatMessages();
+
+			// Find the first user message
+			const firstUserMessage = chatMessages.find(msg => msg.role === 'user');
+			if (firstUserMessage && firstUserMessage.content) {
+				const content = typeof firstUserMessage.content === 'string'
+					? firstUserMessage.content
+					: Array.isArray(firstUserMessage.content)
+						? firstUserMessage.content
+							.filter((block): block is { type: 'text'; text: string } => typeof block === 'object' && block !== null && 'type' in block && block.type === 'text')
+							.map(block => block.text)
+							.join(' ')
+						: '';
+
+				if (content) {
+					// Return first line or first 50 characters, whichever is shorter
+					const firstLine = content.split('\n').find(l => l.trim().length > 0) ?? '';
+					return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine;
+				}
+			}
+		} catch (error) {
+			this.logService.warn(`Failed to generate session label for ${sdkSession.id}: ${error}`);
+		}
+
+		// Fallback to session ID
+		return `Session ${sdkSession.id.slice(0, 8)}`;
 	}
 }
