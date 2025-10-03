@@ -93,7 +93,7 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 		try {
 			await this._authenticationService.getPermissiveGitHubSession({
 				forceNewSession: {
-					detail: l10n.t('To get more relevant Copilot Chat results, we need permission to read the contents of your repository on GitHub.'),
+					detail: l10n.t('To get more relevant Chat results, we need permission to read the contents of your repository on GitHub.'),
 					learnMore: URI.parse('https://aka.ms/copilotRepoScope'),
 				},
 				clearSessionPreference: true
@@ -115,7 +115,7 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 		this.hasRequestedPermissiveSessionUpgrade = true;
 		stream.confirmation(
 			this._permissionRequest,
-			detail || l10n.t('To get more relevant Copilot Chat results, we need permission to read the contents of your repository on GitHub.'),
+			detail || l10n.t('To get more relevant Chat results, we need permission to read the contents of your repository on GitHub.'),
 			{ authPermissionPrompted: true, ...data },
 			[
 				this._permissionRequestGrant,

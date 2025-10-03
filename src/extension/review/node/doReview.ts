@@ -72,6 +72,13 @@ export async function doReview(
 	progressLocation: ProgressLocation,
 	cancellationToken?: CancellationToken
 ): Promise<FeedbackResult | undefined> {
+
+	if (authService.copilotToken?.isNoAuthUser) {
+		// Review requires a logged in user, so best we can do is prompt them to sign in
+		await notificationService.showQuotaExceededDialog({ isNoAuthUser: true });
+		return undefined;
+	}
+
 	const editor = tabsAndEditorsService.activeTextEditor;
 	let selection = editor?.selection;
 	if (group === 'selection') {
