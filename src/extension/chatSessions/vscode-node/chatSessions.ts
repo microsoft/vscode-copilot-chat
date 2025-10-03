@@ -12,7 +12,6 @@ import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
 import { ClaudeCodeSdkService, IClaudeCodeSdkService } from '../../agents/claude/node/claudeCodeSdkService';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
 import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
-import { CopilotCLISdkService, ICopilotCLISdkService } from '../../agents/copilotcli/node/copilotcliClient';
 import { CopilotCLISessionService, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
 import { IExtensionContribution } from '../../common/contributions';
@@ -53,7 +52,6 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const copilotcliAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
 				[ICopilotCLISessionService, new SyncDescriptor(CopilotCLISessionService)],
-				[ICopilotCLISdkService, new SyncDescriptor(CopilotCLISdkService)],
 				[ILanguageModelServer, new SyncDescriptor(LanguageModelServer)],
 			));
 

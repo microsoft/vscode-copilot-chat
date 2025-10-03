@@ -5,7 +5,7 @@
 
 import * as vscode from 'vscode';
 import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
-import { buildChatHistoryFromEvents } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
+import { buildChatHistoryFromEvents, parseChatMessagesToEvents } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
 
 export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionContentProvider {
 
@@ -15,7 +15,11 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 
 	async provideChatSessionContent(copilotcliSessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
 		const existingSession = copilotcliSessionId && await this.sessionService.getSession(copilotcliSessionId, token);
-		const history = existingSession ? buildChatHistoryFromEvents(existingSession.events) : [];
+		const sdkSession = existingSession ? existingSession.sdkSession : undefined;
+		const chatMessages = await sdkSession?.getChatMessages() ?? [];
+		const events = parseChatMessagesToEvents(chatMessages);
+
+		const history = existingSession ? buildChatHistoryFromEvents(events) : [];
 
 		return {
 			history,

@@ -3,10 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { SDKEvent } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString } from '../../../../vscodeTypes';
-import type { SDKEvent } from './copilotcliClient';
 
 /**
  * CopilotCLI tool names

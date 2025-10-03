@@ -3,18 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { AgentOptions, SDKEvent, Session } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
-import { Disposable, DisposableMap } from '../../../../util/vs/base/common/lifecycle';
+import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ILanguageModelServerConfig, LanguageModelServer } from '../../node/langModelServer';
-import { ICopilotCLISdkService, type AgentOptions, type SDKEvent } from './copilotcliClient';
+import { ICopilotCLISessionService } from './copilotcliSessionService';
 import { createCopilotCLIToolInvocation } from './copilotcliToolInvocationFormatter';
 
 export class CopilotCLIAgentManager extends Disposable {
 	private _langModelServer: LanguageModelServer | undefined;
-	private _sessions = this._register(new DisposableMap<string, CopilotCLISession>());
 
 	private async getLangModelServer(): Promise<LanguageModelServer> {
 		if (!this._langModelServer) {
@@ -27,6 +27,7 @@ export class CopilotCLIAgentManager extends Disposable {
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
 	) {
 		super();
 	}
@@ -35,7 +36,7 @@ export class CopilotCLIAgentManager extends Disposable {
 	 * Find session by SDK session ID
 	 */
 	public findSession(sessionId: string): CopilotCLISession | undefined {
-		return this._sessions.get(sessionId);
+		return this.sessionService.findSessionWrapper<CopilotCLISession>(sessionId);
 	}
 
 	async handleRequest(
@@ -51,26 +52,18 @@ export class CopilotCLIAgentManager extends Disposable {
 		const sessionIdForLog = copilotcliSessionId ?? 'new';
 		this.logService.trace(`[CopilotCLIAgentManager] Handling request for sessionId=${sessionIdForLog}.`);
 
-		let session: CopilotCLISession;
-		if (copilotcliSessionId && this._sessions.has(copilotcliSessionId)) {
+		// Check if we already have a session wrapper
+		let session = copilotcliSessionId ? this.sessionService.findSessionWrapper<CopilotCLISession>(copilotcliSessionId) : undefined;
+
+		if (session) {
 			this.logService.trace(`[CopilotCLIAgentManager] Reusing CopilotCLI session ${copilotcliSessionId}.`);
-			session = this._sessions.get(copilotcliSessionId)!;
 		} else {
-			this.logService.trace(`[CopilotCLIAgentManager] Creating CopilotCLI session for sessionId=${sessionIdForLog}.`);
-			const newSession = this.instantiationService.createInstance(CopilotCLISession, serverConfig, copilotcliSessionId);
-			if (newSession.sessionId) {
-				this._sessions.set(newSession.sessionId, newSession);
-			}
-			session = newSession;
+			const sdkSession = await this.sessionService.getOrCreateSDKSession(copilotcliSessionId);
+			session = this.instantiationService.createInstance(CopilotCLISession, serverConfig, sdkSession);
+			this.sessionService.trackSessionWrapper(sdkSession.id, session);
 		}
 
 		await session.invoke(request.prompt, request.toolInvocationToken, stream, token);
-
-		// Store the session if sessionId was assigned during invoke
-		if (session.sessionId && !this._sessions.has(session.sessionId)) {
-			this.logService.trace(`[CopilotCLIAgentManager] Tracking CopilotCLI session ${copilotcliSessionId} -> ${session.sessionId}`);
-			this._sessions.set(session.sessionId, session);
-		}
 
 		return { copilotcliSessionId: session.sessionId };
 	}
@@ -79,20 +72,28 @@ export class CopilotCLIAgentManager extends Disposable {
 export class CopilotCLISession extends Disposable {
 	private _abortController = new AbortController();
 	private _pendingToolInvocations = new Map<string, vscode.ChatToolInvocationPart>();
+	public readonly sessionId: string;
 
 	constructor(
 		private readonly serverConfig: ILanguageModelServerConfig,
-		public sessionId: string | undefined,
+		private readonly _sdkSession: Session,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
-		@ICopilotCLISdkService private readonly copilotcliSdkService: ICopilotCLISdkService
 	) {
 		super();
+		this.sessionId = _sdkSession.id;
 	}
 
 	public override dispose(): void {
 		this._abortController.abort();
 		super.dispose();
+	}
+
+	async *query(prompt: string, options: AgentOptions): AsyncGenerator<SDKEvent> {
+		// Dynamically import the SDK
+		const { Agent } = await import('@github/copilot/sdk');
+		const agent = new Agent(options);
+		yield* agent.query(prompt);
 	}
 
 	public async invoke(
@@ -104,6 +105,8 @@ export class CopilotCLISession extends Disposable {
 		if (this._store.isDisposed) {
 			throw new Error('Session disposed');
 		}
+
+		this.logService.trace(`[CopilotCLISession] Invoking session ${this.sessionId}`);
 
 		const options: AgentOptions = {
 			modelProvider: {
@@ -121,7 +124,7 @@ export class CopilotCLISession extends Disposable {
 				COPILOTCLI_DISABLE_NONESSENTIAL_TRAFFIC: '1',
 				'copilot-integration-id': 'vscode-chat-dev',
 			},
-			requestPermission: async (permissionRequest) => {
+			requestPermission: async (_permissionRequest) => {
 				return {
 					kind: 'approved'
 				};
@@ -136,11 +139,12 @@ export class CopilotCLISession extends Disposable {
 				error: (msg: string | Error) => this.logService.error(typeof msg === 'string' ? msg : msg.message),
 				startGroup: () => { },
 				endGroup: () => { }
-			}
+			},
+			session: this._sdkSession
 		};
 
 		try {
-			for await (const event of this.copilotcliSdkService.query(prompt, options)) {
+			for await (const event of this.query(prompt, options)) {
 				if (token.isCancellationRequested) {
 					break;
 				}
