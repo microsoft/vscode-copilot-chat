@@ -58,7 +58,7 @@ export class CopilotCLIAgentManager extends Disposable {
 		if (session) {
 			this.logService.trace(`[CopilotCLIAgentManager] Reusing CopilotCLI session ${copilotcliSessionId}.`);
 		} else {
-			const sdkSession = await this.sessionService.getOrCreateSDKSession(copilotcliSessionId);
+			const sdkSession = await this.sessionService.getOrCreateSDKSession(copilotcliSessionId, request.prompt);
 			session = this.instantiationService.createInstance(CopilotCLISession, serverConfig, sdkSession);
 			this.sessionService.trackSessionWrapper(sdkSession.id, session);
 		}

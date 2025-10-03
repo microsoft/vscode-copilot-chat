@@ -25,7 +25,7 @@ export interface ICopilotCLISessionService {
 
 	// SDK session management
 	getSessionManager(): Promise<CopilotCLISessionManager>;
-	getOrCreateSDKSession(sessionId: string | undefined): Promise<Session>;
+	getOrCreateSDKSession(sessionId: string | undefined, prompt: string): Promise<Session>;
 
 	// Session wrapper tracking
 	trackSessionWrapper<T>(sessionId: string, wrapper: T): void;
@@ -81,7 +81,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 					try {
 						// Get the full session to access chat messages
 						const sdkSession = await sessionManager.getSession(metadata.id);
-						const label = await this._generateSessionLabel(sdkSession);
+						const label = await this._generateSessionLabel(sdkSession, undefined);
 						return {
 							id: metadata.id,
 							sdkSession,
@@ -118,7 +118,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 		return all.find(session => session.id === sessionId);
 	}
 
-	public async getOrCreateSDKSession(sessionId: string | undefined): Promise<Session> {
+	public async getOrCreateSDKSession(sessionId: string | undefined, prompt: string): Promise<Session> {
 		const sessionManager = await this.getSessionManager();
 
 		if (sessionId) {
@@ -133,7 +133,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 		const sdkSession = await sessionManager.createSession();
 
 		// Cache the new session immediately
-		const label = await this._generateSessionLabel(sdkSession);
+		const label = await this._generateSessionLabel(sdkSession, prompt);
 		const newSession: ICopilotCLISession = {
 			id: sdkSession.id,
 			sdkSession,
@@ -153,7 +153,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 		return this._sessionWrappers.get(sessionId) as T | undefined;
 	}
 
-	private async _generateSessionLabel(sdkSession: Session): Promise<string> {
+	private async _generateSessionLabel(sdkSession: Session, prompt: string | undefined): Promise<string> {
 		try {
 			const chatMessages = await sdkSession.getChatMessages();
 
@@ -174,6 +174,8 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 					const firstLine = content.split('\n').find(l => l.trim().length > 0) ?? '';
 					return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine;
 				}
+			} else if (prompt && prompt.trim().length > 0) {
+				return prompt.trim().length > 50 ? prompt.trim().substring(0, 47) + '...' : prompt.trim();
 			}
 		} catch (error) {
 			this.logService.warn(`Failed to generate session label for ${sdkSession.id}: ${error}`);
