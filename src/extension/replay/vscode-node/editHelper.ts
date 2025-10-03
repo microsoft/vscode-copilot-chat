@@ -66,5 +66,6 @@ export class EditHelper {
 				}
 			}
 		}
+		stream.textEdit(uri, true);
 	}
 }

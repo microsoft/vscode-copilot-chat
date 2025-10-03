@@ -15,7 +15,7 @@ import {
 } from '@vscode/debugadapter';
 import type { DebugProtocol } from '@vscode/debugprotocol';
 import * as path from 'node:path';
-import { window, type WorkspaceFolder } from 'vscode';
+import { commands, window, type WorkspaceFolder } from 'vscode';
 import { createSessionIdFromFilePath } from '../common/replayParser';
 import { ChatReplaySessionProvider } from './chatReplaySessionProvider';
 
@@ -81,7 +81,8 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 				return;
 			}
 
-			await window.showChatSession('chat-replay', this._sessionId, {});
+			await window.showChatSession('chat-replay', this._sessionId, { viewColumn: -2 });
+			await commands.executeCommand('workbench.action.chat.submit');
 
 			if (this._stopOnEntry) {
 				this.sendEvent(new StoppedEvent('entry', ChatReplayDebugSession.THREAD_ID));

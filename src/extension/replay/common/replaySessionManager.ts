@@ -39,11 +39,6 @@ export class ReplaySession implements AsyncIterable<ChatStep> {
 	 * Creates an async iterable for the chat steps
 	 */
 	async *iterateSteps(): AsyncIterableIterator<ChatStep> {
-		// Yield all already-processed steps
-		for (let i = 0; i < this._currentIndex; i++) {
-			yield this._allSteps[i];
-		}
-
 		// Yield future steps as they become available
 		while (this._currentIndex < this._allSteps.length) {
 			const step = await this.waitForNextStep();
@@ -62,7 +57,7 @@ export class ReplaySession implements AsyncIterable<ChatStep> {
 		return this.iterateSteps();
 	}
 
-	private async waitForNextStep(): Promise<ChatStep | undefined> {
+	async waitForNextStep(): Promise<ChatStep | undefined> {
 		if (this._currentIndex < this._allSteps.length) {
 			// Create a deferred promise that will be resolved when stepNext is called
 			const deferred = new DeferredPromise<ChatStep | undefined>();

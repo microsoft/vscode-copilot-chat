@@ -3,19 +3,20 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, ChatRequest, ChatRequestTurn2, ChatResponseStream, ChatSession, ChatSessionContentProvider, ChatSessionItem, ChatSessionItemProvider, ChatToolInvocationPart, Event, EventEmitter, ProviderResult } from 'vscode';
+import { CancellationToken, chat, ChatRequestTurn2, ChatResponseStream, ChatSession, ChatSessionContentProvider, ChatToolInvocationPart, Event, EventEmitter } from 'vscode';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ChatStep } from '../common/chatReplayResponses';
 import { ReplaySessionManager } from '../common/replaySessionManager';
 import { EditHelper } from './editHelper';
 
-export class ChatReplaySessionProvider extends Disposable implements ChatSessionContentProvider, ChatSessionItemProvider {
+export class ChatReplaySessionProvider extends Disposable implements ChatSessionContentProvider {
 	private _onDidChangeChatSessionItems = this._register(new EventEmitter<void>());
 	readonly onDidChangeChatSessionItems: Event<void> = this._onDidChangeChatSessionItems.event;
 
 	private readonly editHelper: EditHelper;
 	private readonly _sessionManager: ReplaySessionManager;
+	private debuggingSessionId: string | undefined;
 
 	constructor(IWorkspaceService: IWorkspaceService, sessionManager?: ReplaySessionManager) {
 		super();
@@ -23,10 +24,14 @@ export class ChatReplaySessionProvider extends Disposable implements ChatSession
 		this._sessionManager = sessionManager ?? this._register(new ReplaySessionManager());
 	}
 
-	onDidCommitChatSessionItem: Event<{ original: ChatSessionItem; modified: ChatSessionItem }> = this._register(new EventEmitter<{ original: ChatSessionItem; modified: ChatSessionItem }>()).event;
-
-	provideChatSessionItems(token: CancellationToken): ProviderResult<ChatSessionItem[]> {
-		return [];
+	createParticipant() {
+		return chat.createChatParticipant('chat-replay', async (request, context, responseStream, token) => {
+			if (this.debuggingSessionId) {
+				await this.handleActiveResponse(this.debuggingSessionId, responseStream, token);
+				return;
+			}
+			responseStream.markdown('No replay is active');
+		});
 	}
 
 	// ChatSessionContentProvider implementation
@@ -35,8 +40,10 @@ export class ChatReplaySessionProvider extends Disposable implements ChatSession
 	}
 
 	initializeReplaySession(sessionId: string) {
+		this.debuggingSessionId = sessionId;
 		const session = this._sessionManager.CreateNewSession(sessionId);
-		return session.allSteps;
+		const query = session.stepNext();
+		return query && query.kind === 'userQuery' ? this.createRequestTurn(query) : undefined;
 	}
 
 	currentStep(sessionId: string): ChatStep | undefined {
@@ -48,40 +55,9 @@ export class ChatReplaySessionProvider extends Disposable implements ChatSession
 		return this._sessionManager.getSession(sessionId);
 	}
 
-	// private convertStepsToHistory(chatSteps: ChatStep[], debugMode: boolean = false): ReadonlyArray<ChatRequestTurn | ChatResponseTurn2> {
-	// 	const history: (ChatRequestTurn | ChatResponseTurn2)[] = [];
-	// 	let currentResponseSteps: ChatStep[] = [];
-
-	// 	for (const step of chatSteps) {
-	// 		if (step.kind === 'userQuery') {
-	// 			// In debug mode, only include completed response turns
-	// 			if (!debugMode && currentResponseSteps.length > 0) {
-	// 				history.push(this.createResponseTurn(currentResponseSteps));
-	// 				currentResponseSteps = [];
-	// 			}
-
-	// 			// Always create request turn for user query
-	// 			history.push(this.createRequestTurn(step));
-	// 		} else if (step.kind === 'request' || step.kind === 'toolCall') {
-	// 			// In debug mode, don't add response steps to history - they'll be streamed
-	// 			if (!debugMode) {
-	// 				currentResponseSteps.push(step);
-	// 			}
-	// 		}
-	// 	}
-
-	// 	// Complete any remaining response turn (only in non-debug mode)
-	// 	if (!debugMode && currentResponseSteps.length > 0) {
-	// 		history.push(this.createResponseTurn(currentResponseSteps));
-	// 	}
-
-	// 	return history;
-	// }
-
 	private createRequestTurn(step: ChatStep & { kind: 'userQuery' }): ChatRequestTurn2 {
 		return new ChatRequestTurn2(step.query, undefined, [], 'copilot', [], undefined);
 	}
-
 
 	// Method to start debugging/stepping through a replay session
 	public startReplayDebugging(sessionId: string, token: CancellationToken): ChatSession {
@@ -94,9 +70,8 @@ export class ChatReplaySessionProvider extends Disposable implements ChatSession
 		const history = query && query.kind === 'userQuery' ? [this.createRequestTurn(query)] : [];
 
 		return {
-			history,
-			activeResponseCallback: (stream, token) => this.handleActiveResponse(sessionId, stream, token),
-			requestHandler: undefined // This will be read-only for replay
+			history: history,
+			requestHandler: undefined // handled by chat participant
 		};
 	}
 
@@ -106,7 +81,8 @@ export class ChatReplaySessionProvider extends Disposable implements ChatSession
 			return;
 		}
 
-		for await (const step of replaySession.iterateSteps()) {
+		let step = await replaySession.waitForNextStep();
+		while (step) {
 			if (token.isCancellationRequested) {
 				break;
 			}
@@ -126,6 +102,8 @@ export class ChatReplaySessionProvider extends Disposable implements ChatSession
 
 				stream.push(toolPart);
 			}
+
+			step = await replaySession.waitForNextStep();
 		}
 	}
 
