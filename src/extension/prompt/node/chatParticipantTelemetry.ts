@@ -8,6 +8,7 @@ import type * as vscode from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { roleToString } from '../../../platform/chat/common/globalStringUtils';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { getGitHubRepoInfoFromContext, IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -36,6 +37,12 @@ type ResponseInternalTelemetryProperties = {
 	response: string;
 	baseModel: string;
 	apiType: string | undefined;
+};
+
+// EVENT: repoInfo
+type RepoInfoInternalTelemetryProperties = {
+	remoteUrl: string | undefined;
+	headCommitHash: string | undefined;
 };
 
 // EVENT: interactiveSessionResponse
@@ -299,6 +306,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		protected readonly _genericTelemetryData: readonly TelemetryData[],
 		protected readonly _availableToolCount: number,
 		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
+		@IGitService protected readonly _gitService: IGitService,
 	) {
 		// Extend the base user telemetry with message and prompt information.
 		// We don't send this telemetry yet, but we will need it later to include the off topic scores.
@@ -316,6 +324,14 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		// we are in a super-ctor and use a microtask to give sub-classes a change to initialize properties
 		// that might be used in their _sendInternalRequestTelemetryEvent-method
 		queueMicrotask(() => this._sendInternalRequestTelemetryEvent());
+
+		queueMicrotask(async () => {
+			await this._sendRepoInfoTelemetryEvent().catch(() => {
+				// IANHU: Log?
+				// IANHU: Repo info could be large / slow to calculate diffs, so add as a separate event
+				// as opposed to trying to add to the main internal request event, less invasive.
+			});
+		});
 	}
 
 	public markReceivedToken(): void {
@@ -493,6 +509,61 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		return <T>this._genericTelemetryData.find(d => d instanceof ctor);
 	}
 
+	private async _sendRepoInfoTelemetryEvent(): Promise<void> {
+		const gitInfo = await this._getGitInfo();
+
+		if (!gitInfo) {
+			// IANHU: Logging?
+			return;
+		}
+
+		// IANHU: Make sure to triple-check metadata classification, just getting quick info in for now
+		/* __GDPR__
+			"request.repoInfo" : {
+				"owner": "ianhu",
+				"comment": "Github repository information for the current chat session.",
+				"repoLink": {
+					"classification": "SystemMetaData",
+					"purpose": "FeatureInsight",
+					"comment": "The GitHub repository link"
+				},
+				"baseCommit": {
+					"classification": "SystemMetaData",
+					"purpose": "FeatureInsight",
+					"comment": "The base commit before the request was sent"
+				}
+			}
+		*/
+		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', {
+			remoteUrl: gitInfo.remoteUrl,
+			headCommitHash: gitInfo.headCommitHash
+		} as RepoInfoInternalTelemetryProperties);
+	}
+
+	private async _getGitInfo(): Promise<RepoInfoInternalTelemetryProperties | undefined> {
+		let repoContext: RepoContext | undefined;
+		if (this._documentContext?.document) {
+			repoContext = await this._gitService.getRepository(this._documentContext.document.uri);
+		} else if (this._gitService.activeRepository) {
+			repoContext = this._gitService.activeRepository.get();
+		}
+
+		if (!repoContext) {
+			return;
+		}
+
+		const githubInfo = getGitHubRepoInfoFromContext(repoContext);
+
+		if (!githubInfo) {
+			return;
+		}
+
+		return {
+			remoteUrl: githubInfo.remoteUrl,
+			headCommitHash: repoContext.headCommitHash
+		};
+	}
+
 }
 
 export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefined> {
@@ -514,6 +585,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		availableToolCount: number,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
+		@IGitService gitService: IGitService,
 	) {
 		super(ChatLocation.Panel,
 			sessionId,
@@ -530,7 +602,8 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			promptTokenLength,
 			genericTelemetryData,
 			availableToolCount,
-			telemetryService
+			telemetryService,
+			gitService
 		);
 	}
 
@@ -747,6 +820,7 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 		availableToolCount: number,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@ILanguageDiagnosticsService private readonly _languageDiagnosticsService: ILanguageDiagnosticsService,
+		@IGitService gitService: IGitService,
 	) {
 		super(ChatLocation.Editor,
 			sessionId,
@@ -763,7 +837,8 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			promptTokenLength,
 			genericTelemetryData,
 			availableToolCount,
-			telemetryService
+			telemetryService,
+			gitService
 		);
 
 		this._diagnosticsTelemetryData = findDiagnosticsTelemetry(this._documentContext.selection, this._languageDiagnosticsService.getDiagnostics(this._documentContext.document.uri));
