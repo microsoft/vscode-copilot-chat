@@ -137,7 +137,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		});
 		let tokenCount = -1;
 		const streamRecorder = new FetchStreamRecorder(finishedCb);
-		const enableRetryOnError = opts.enableRetryOnError || (opts.enableRetryOnFilter && opts.enableRetryOnError === undefined);
+		const enableRetryOnError = opts.enableRetryOnError ?? opts.enableRetryOnFilter;
 		try {
 			let response: ChatResults | ChatRequestFailed | ChatRequestCanceled;
 			const payloadValidationResult = isValidChatPayload(opts.messages, postOptions);
