@@ -830,15 +830,22 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			nLinesBelow += this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderRetryWithNMoreLinesBelow, this.expService) ?? 0;
 		}
 
-		const codeToEditStart = Math.max(0, cursorLine - nLinesAbove);
+		let codeToEditStart = Math.max(0, cursorLine - nLinesAbove);
 		let codeToEditEndExcl = Math.min(currentDocLines.length, cursorLine + nLinesBelow + 1);
 
 		if (maxMergeConflictLines) {
 			const tentativeEditWindow = new OffsetRange(codeToEditStart, codeToEditEndExcl);
 			const mergeConflictRange = findMergeConflictMarkersRange(currentDocLines, tentativeEditWindow, maxMergeConflictLines);
 			if (mergeConflictRange) {
-				this.tracer.trace(`Expanding edit window to include merge conflict markers: ${mergeConflictRange.toString()}`);
-				codeToEditEndExcl = Math.max(codeToEditEndExcl, mergeConflictRange.endExclusive);
+				const onlyMergeConflictLines = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabOnlyMergeConflictLines, this.expService);
+				if (onlyMergeConflictLines) {
+					this.tracer.trace(`Expanding edit window to include ONLY merge conflict markers: ${mergeConflictRange.toString()}`);
+					codeToEditStart = mergeConflictRange.start;
+					codeToEditEndExcl = mergeConflictRange.endExclusive;
+				} else {
+					this.tracer.trace(`Expanding edit window to include merge conflict markers: ${mergeConflictRange.toString()}; edit window range [${codeToEditStart}, ${codeToEditEndExcl})`);
+					codeToEditEndExcl = Math.max(codeToEditEndExcl, mergeConflictRange.endExclusive);
+				}
 			}
 		}
 
