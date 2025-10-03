@@ -2958,7 +2958,7 @@
 								},
 								"requestHeaders": {
 									"type": "object",
-									"description": "Additional HTTP headers to include with requests to this model. Reserved headers such as Authorization and api-key are ignored.",
+									"description": "Additional HTTP headers to include with requests to this model. These reserved headers are not allowed and ignored if present: ['api-key', 'authorization', 'content-type', 'openai-intent', 'x-github-api-version', 'x-initiator', 'x-interaction-id', 'x-interaction-type', 'x-onbehalf-extension-id', 'x-request-id', 'x-vscode-user-agent-library-version']",
 									"additionalProperties": {
 										"type": "string"
 									}
@@ -3031,6 +3031,13 @@
 									"type": "boolean",
 									"default": false,
 									"description": "Whether the model supports thinking capabilities"
+								},
+								"requestHeaders": {
+									"type": "object",
+									"description": "Additional HTTP headers to include with requests to this model. These reserved headers are not allowed and ignored if present: ['api-key', 'authorization', 'content-type', 'openai-intent', 'x-github-api-version', 'x-initiator', 'x-interaction-id', 'x-interaction-type', 'x-onbehalf-extension-id', 'x-request-id', 'x-vscode-user-agent-library-version']",
+									"additionalProperties": {
+										"type": "string"
+									}
 								}
 							},
 							"required": [
