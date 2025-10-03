@@ -71,11 +71,11 @@ const BUILT_IN_TOOL_GROUPS = {
 		]
 	},
 	'Redundant but Specific': {
-		summary: 'These tools have overlapping functionalities but are highly specialized for certain tasks. \nTools: file_search, get_terminal_selection, get_terminal_last_command, create_directory, get_doc_info, multi_replace_string_in_file, edit_files',
+		summary: 'These tools have overlapping functionalities but are highly specialized for certain tasks. \nTools: file_search, terminal_selection, terminal_last_command, create_directory, get_doc_info, multi_replace_string_in_file, edit_files',
 		tools: [
 			'file_search',
-			'get_terminal_selection',
-			'get_terminal_last_command',
+			'terminal_selection',
+			'terminal_last_command',
 			'create_directory',
 			'get_doc_info',
 			'edit_files',
