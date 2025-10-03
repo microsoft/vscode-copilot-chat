@@ -25,10 +25,6 @@ export class ChatReplaySessionProvider extends Disposable implements ChatSession
 
 	onDidCommitChatSessionItem: Event<{ original: ChatSessionItem; modified: ChatSessionItem }> = this._register(new EventEmitter<{ original: ChatSessionItem; modified: ChatSessionItem }>()).event;
 
-	provideNewChatSessionItem?(options: { readonly request: ChatRequest; metadata?: unknown }, token: CancellationToken): ProviderResult<ChatSessionItem> {
-		throw new Error('Method not implemented.');
-	}
-
 	provideChatSessionItems(token: CancellationToken): ProviderResult<ChatSessionItem[]> {
 		return [];
 	}
