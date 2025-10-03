@@ -667,7 +667,8 @@ export async function createEditConfirmation(accessor: ServicesAccessor, uris: r
 		confirmationMessages: {
 			title: t('Allow edits to sensitive files?'),
 			message: message + ' ' + t`Do you want to allow this?` + '\n\n' + asString(),
-		}
+		},
+		presentation: 'hiddenAfterComplete'
 	};
 }
 
