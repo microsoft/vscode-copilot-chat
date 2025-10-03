@@ -15,6 +15,7 @@ export interface IReplaceStringToolParams {
 	filePath: string;
 	oldString: string;
 	newString: string;
+	replaceAll?: boolean;
 }
 
 export class ReplaceStringTool extends AbstractReplaceStringTool<IReplaceStringToolParams> {
