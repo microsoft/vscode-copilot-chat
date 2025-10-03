@@ -73,7 +73,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		@IInstantiationService protected instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
 		@IExperimentationService expService: IExperimentationService,
-		@ILogService private readonly _logService: ILogService
+		@ILogService protected logService: ILogService
 	) {
 		super(
 			modelMetadata,
@@ -87,7 +87,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			instantiationService,
 			configurationService,
 			expService,
-			_logService
+			logService
 		);
 		this._customHeaders = this._sanitizeCustomHeaders(modelMetadata.requestHeaders);
 	}
@@ -104,7 +104,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			}
 			const lowerKey = key.toLowerCase();
 			if (OpenAIEndpoint._reservedHeaders.has(lowerKey)) {
-				this._logService.warn(`[OpenAIEndpoint] Ignoring reserved header '${key}' for model '${this.modelMetadata.id}'.`);
+				this.logService.warn(`[OpenAIEndpoint] Ignoring reserved header '${key}' for model '${this.modelMetadata.id}'.`);
 				continue;
 			}
 			sanitized[key] = rawValue;
@@ -192,7 +192,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			}
 			const existingKey = Object.keys(headers).find(headerKey => headerKey.toLowerCase() === lowerKey);
 			if (existingKey) {
-				this._logService.warn(`[OpenAIEndpoint] Ignoring custom header '${key}' for model '${this.modelMetadata.id}' because it conflicts with an existing header.`);
+				this.logService.warn(`[OpenAIEndpoint] Ignoring custom header '${key}' for model '${this.modelMetadata.id}' because it conflicts with an existing header.`);
 				continue;
 			}
 			headers[key] = value;
