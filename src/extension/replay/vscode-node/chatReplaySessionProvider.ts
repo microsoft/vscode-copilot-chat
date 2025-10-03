@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { CancellationToken, ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseStream, ChatResponseTurn2, ChatSession, ChatSessionContentProvider, ChatSessionItem, ChatSessionItemProvider, ChatToolInvocationPart, Event, EventEmitter, MarkdownString, ProviderResult } from 'vscode';
+import { CancellationToken, ChatRequest, ChatRequestTurn2, ChatResponseStream, ChatSession, ChatSessionContentProvider, ChatSessionItem, ChatSessionItemProvider, ChatToolInvocationPart, Event, EventEmitter, ProviderResult } from 'vscode';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { ChatStep } from '../common/chatReplayResponses';
@@ -21,6 +21,12 @@ export class ChatReplaySessionProvider extends Disposable implements ChatSession
 		super();
 		this.editHelper = new EditHelper(IWorkspaceService);
 		this._sessionManager = sessionManager ?? this._register(new ReplaySessionManager());
+	}
+
+	onDidCommitChatSessionItem: Event<{ original: ChatSessionItem; modified: ChatSessionItem }> = this._register(new EventEmitter<{ original: ChatSessionItem; modified: ChatSessionItem }>()).event;
+
+	provideNewChatSessionItem?(options: { readonly request: ChatRequest; metadata?: unknown }, token: CancellationToken): ProviderResult<ChatSessionItem> {
+		throw new Error('Method not implemented.');
 	}
 
 	provideChatSessionItems(token: CancellationToken): ProviderResult<ChatSessionItem[]> {
@@ -46,60 +52,40 @@ export class ChatReplaySessionProvider extends Disposable implements ChatSession
 		return this._sessionManager.getSession(sessionId);
 	}
 
-	private convertStepsToHistory(chatSteps: ChatStep[], debugMode: boolean = false): ReadonlyArray<ChatRequestTurn | ChatResponseTurn2> {
-		const history: (ChatRequestTurn | ChatResponseTurn2)[] = [];
-		let currentResponseSteps: ChatStep[] = [];
+	// private convertStepsToHistory(chatSteps: ChatStep[], debugMode: boolean = false): ReadonlyArray<ChatRequestTurn | ChatResponseTurn2> {
+	// 	const history: (ChatRequestTurn | ChatResponseTurn2)[] = [];
+	// 	let currentResponseSteps: ChatStep[] = [];
 
-		for (const step of chatSteps) {
-			if (step.kind === 'userQuery') {
-				// In debug mode, only include completed response turns
-				if (!debugMode && currentResponseSteps.length > 0) {
-					history.push(this.createResponseTurn(currentResponseSteps));
-					currentResponseSteps = [];
-				}
+	// 	for (const step of chatSteps) {
+	// 		if (step.kind === 'userQuery') {
+	// 			// In debug mode, only include completed response turns
+	// 			if (!debugMode && currentResponseSteps.length > 0) {
+	// 				history.push(this.createResponseTurn(currentResponseSteps));
+	// 				currentResponseSteps = [];
+	// 			}
 
-				// Always create request turn for user query
-				history.push(this.createRequestTurn(step));
-			} else if (step.kind === 'request' || step.kind === 'toolCall') {
-				// In debug mode, don't add response steps to history - they'll be streamed
-				if (!debugMode) {
-					currentResponseSteps.push(step);
-				}
-			}
-		}
+	// 			// Always create request turn for user query
+	// 			history.push(this.createRequestTurn(step));
+	// 		} else if (step.kind === 'request' || step.kind === 'toolCall') {
+	// 			// In debug mode, don't add response steps to history - they'll be streamed
+	// 			if (!debugMode) {
+	// 				currentResponseSteps.push(step);
+	// 			}
+	// 		}
+	// 	}
 
-		// Complete any remaining response turn (only in non-debug mode)
-		if (!debugMode && currentResponseSteps.length > 0) {
-			history.push(this.createResponseTurn(currentResponseSteps));
-		}
+	// 	// Complete any remaining response turn (only in non-debug mode)
+	// 	if (!debugMode && currentResponseSteps.length > 0) {
+	// 		history.push(this.createResponseTurn(currentResponseSteps));
+	// 	}
 
-		return history;
-	}
+	// 	return history;
+	// }
 
 	private createRequestTurn(step: ChatStep & { kind: 'userQuery' }): ChatRequestTurn2 {
 		return new ChatRequestTurn2(step.query, undefined, [], 'copilot', [], undefined);
 	}
 
-	private createResponseTurn(responseSteps: ChatStep[]): ChatResponseTurn2 {
-		const parts: ChatResponseMarkdownPart[] = responseSteps.map(step => {
-			let content = '';
-			if (step.kind === 'request') {
-				content = Array.isArray(step.result) ? step.result.join('') : (step.result || '');
-			} else if (step.kind === 'toolCall') {
-				content = `**Tool Call: ${step.toolName}**\n\nArguments:\n\`\`\`json\n${JSON.stringify(step.args, null, 2)}\n\`\`\`\n\nResults:\n${step.results.join('\n')}`;
-			}
-			return {
-				value: new MarkdownString(content),
-				vulnerabilities: []
-			};
-		});
-
-		return new ChatResponseTurn2(
-			parts,
-			{}, // result
-			'copilot' // participant
-		);
-	}
 
 	// Method to start debugging/stepping through a replay session
 	public startReplayDebugging(sessionId: string, token: CancellationToken): ChatSession {

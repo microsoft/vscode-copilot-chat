@@ -4,11 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 import { CancellationToken, chat, commands, debug, DebugAdapterDescriptor, DebugAdapterDescriptorFactory, DebugAdapterInlineImplementation, DebugConfiguration, DebugConfigurationProvider, DebugSession, ProviderResult, window, WorkspaceFolder } from 'vscode';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatReplaySessionProvider } from './chatReplaySessionProvider';
 import { ChatReplayDebugSession } from './replayDebugSession';
-import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 
 export class ChatReplayContribution extends Disposable {
 	private _sessionProvider: ChatReplaySessionProvider;
@@ -23,7 +23,12 @@ export class ChatReplayContribution extends Disposable {
 
 		// Register the chat session providers (new approach)
 		this._register(chat.registerChatSessionItemProvider('chat-replay', this._sessionProvider));
-		this._register(chat.registerChatSessionContentProvider('chat-replay', this._sessionProvider));
+		const chatParticipant = chat.createChatParticipant('chat-replay', async (request, context, response, token) => {
+			// Chat replay participant - replays are read-only, so this handler is mostly a stub
+			// The actual replay content is provided via the ChatSessionContentProvider
+			return {};
+		});
+		this._register(chat.registerChatSessionContentProvider('chat-replay', this._sessionProvider, chatParticipant));
 
 		// Register debug providers (original approach - still useful for detailed debugging)
 		const provider = new ChatReplayConfigProvider();
