@@ -61,8 +61,6 @@ export interface IGitService extends IDisposable {
 	diffWith(uri: URI, ref: string): Promise<Change[] | undefined>;
 	fetch(uri: URI, remote?: string, ref?: string, depth?: number): Promise<void>;
 	getMergeBase(uri: URI, ref1: string, ref2: string): Promise<string | undefined>;
-
-	getDiffsFromHEAD(repo: RepoContext): Promise<RepoDiff>;
 }
 
 /**

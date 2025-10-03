@@ -17,7 +17,7 @@ import * as path from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
 import { ILogService } from '../../log/common/logService';
 import { IGitExtensionService } from '../common/gitExtensionService';
-import { IGitService, RepoContext, RepoDiff } from '../common/gitService';
+import { IGitService, RepoContext } from '../common/gitService';
 import { parseGitRemotes } from '../common/utils';
 import { API, APIState, Change, Commit, LogOptions, Repository } from './git';
 
@@ -296,31 +296,6 @@ export class GitServiceImpl extends Disposable implements IGitService {
 		return coalesce(gitAPI.repositories
 			.filter(repository => repository.state.HEAD !== undefined)
 			.map(repository => GitServiceImpl.repoToRepoContext(repository)));
-	}
-
-	// IANHU: Pretty sure this is far too naive, but let's start here
-	public async getDiffsFromHEAD(repo: RepoContext): Promise<RepoDiff> {
-		const gitAPI = this.gitExtensionService.getExtensionApi();
-
-		const repository = gitAPI?.getRepository(repo.rootUri);
-
-		if (!repository || !repo.changes) {
-			return { diffs: [] };
-		}
-
-		// IANHU: Merge changes?
-		const fullChanges = [
-			...repo.changes.indexChanges,
-			...repo.changes.workingTree,
-			...repo.changes.untrackedChanges,
-		];
-
-		const diffs = await Promise.all(fullChanges.map(async change => ({
-			fileName: change.uri.fsPath,
-			diff: await repository.diffWithHEAD(change.uri.fsPath) ?? ''
-		})));
-
-		return { diffs };
 	}
 }
 

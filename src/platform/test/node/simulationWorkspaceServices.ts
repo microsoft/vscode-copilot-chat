@@ -27,7 +27,7 @@ import { IDialogService } from '../../dialog/common/dialogService';
 import { IFileSystemService } from '../../filesystem/common/fileSystemService';
 import { FileType, RelativePattern } from '../../filesystem/common/fileTypes';
 import { NodeFileSystemService } from '../../filesystem/node/fileSystemServiceImpl';
-import { IGitService, RepoContext, RepoDiff } from '../../git/common/gitService';
+import { IGitService, RepoContext } from '../../git/common/gitService';
 import { Change } from '../../git/vscode/git';
 import { AbstractLanguageDiagnosticsService } from '../../languages/common/languageDiagnosticsService';
 import { ILanguageFeaturesService } from '../../languages/common/languageFeaturesService';
@@ -747,10 +747,6 @@ export class TestingGitService implements IGitService {
 
 	async getMergeBase(uri: URI, ref1: string, ref2: string): Promise<string | undefined> {
 		return undefined;
-	}
-
-	async getDiffsFromHEAD(repo: RepoContext): Promise<RepoDiff> {
-		return { diffs: [] };
 	}
 }
 

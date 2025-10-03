@@ -5,9 +5,11 @@
 
 import { PromptReference, Raw } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
+import { ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { roleToString } from '../../../platform/chat/common/globalStringUtils';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
 import { getGitHubRepoInfoFromContext, IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
@@ -43,6 +45,7 @@ type ResponseInternalTelemetryProperties = {
 type RepoInfoInternalTelemetryProperties = {
 	remoteUrl: string | undefined;
 	headCommitHash: string | undefined;
+	diffsJSON: string | undefined;
 };
 
 // EVENT: interactiveSessionResponse
@@ -307,6 +310,8 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		protected readonly _availableToolCount: number,
 		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
 		@IGitService protected readonly _gitService: IGitService,
+		@IGitDiffService protected readonly _gitDiffService: IGitDiffService,
+		@ICopilotTokenStore protected readonly _copilotTokenStore: ICopilotTokenStore,
 	) {
 		// Extend the base user telemetry with message and prompt information.
 		// We don't send this telemetry yet, but we will need it later to include the off topic scores.
@@ -325,13 +330,16 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		// that might be used in their _sendInternalRequestTelemetryEvent-method
 		queueMicrotask(() => this._sendInternalRequestTelemetryEvent());
 
-		queueMicrotask(async () => {
-			await this._sendRepoInfoTelemetryEvent().catch(() => {
-				// IANHU: Log?
-				// IANHU: Repo info could be large / slow to calculate diffs, so add as a separate event
-				// as opposed to trying to add to the main internal request event, less invasive.
+		// Only send repo info telemetry for internal users
+		if (this._copilotTokenStore.copilotToken?.isInternal === true) {
+			queueMicrotask(async () => {
+				await this._sendRepoInfoTelemetryEvent().catch(() => {
+					// IANHU: Log?
+					// IANHU: Repo info could be large / slow to calculate diffs, so add as a separate event
+					// as opposed to trying to add to the main internal request event, less invasive.
+				});
 			});
-		});
+		}
 	}
 
 	public markReceivedToken(): void {
@@ -534,7 +542,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 				}
 			}
 		*/
-		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', {
+		this._telemetryService.sendInternalMSFTTelemetryEvent('request.begin.repoInfo', {
 			remoteUrl: gitInfo.remoteUrl,
 			headCommitHash: gitInfo.headCommitHash
 		} as RepoInfoInternalTelemetryProperties);
@@ -548,7 +556,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			repoContext = this._gitService.activeRepository.get();
 		}
 
-		if (!repoContext) {
+		if (!repoContext || !repoContext.changes) {
 			return;
 		}
 
@@ -558,9 +566,20 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			return;
 		}
 
+		// IANHU: Merge changes?
+		const changes = [
+			...repoContext.changes.workingTree,
+			...repoContext.changes.indexChanges,
+			...repoContext.changes.untrackedChanges
+		];
+
+		const diffs = await this._gitDiffService.getChangeDiffs(repoContext.rootUri, changes);
+
 		return {
 			remoteUrl: githubInfo.remoteUrl,
-			headCommitHash: repoContext.headCommitHash
+			headCommitHash: repoContext.headCommitHash,
+			// IANHU: Could be super large, will try using multiplex when logging
+			diffsJSON: diffs ? JSON.stringify(diffs) : undefined,
 		};
 	}
 
@@ -586,6 +605,8 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IGitService gitService: IGitService,
+		@IGitDiffService gitDiffService: IGitDiffService,
+		@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore,
 	) {
 		super(ChatLocation.Panel,
 			sessionId,
@@ -603,7 +624,9 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			genericTelemetryData,
 			availableToolCount,
 			telemetryService,
-			gitService
+			gitService,
+			gitDiffService,
+			copilotTokenStore
 		);
 	}
 
@@ -821,6 +844,8 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 		@ITelemetryService telemetryService: ITelemetryService,
 		@ILanguageDiagnosticsService private readonly _languageDiagnosticsService: ILanguageDiagnosticsService,
 		@IGitService gitService: IGitService,
+		@IGitDiffService gitDiffService: IGitDiffService,
+		@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore,
 	) {
 		super(ChatLocation.Editor,
 			sessionId,
@@ -838,7 +863,9 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			genericTelemetryData,
 			availableToolCount,
 			telemetryService,
-			gitService
+			gitService,
+			gitDiffService,
+			copilotTokenStore
 		);
 
 		this._diagnosticsTelemetryData = findDiagnosticsTelemetry(this._documentContext.selection, this._languageDiagnosticsService.getDiagnostics(this._documentContext.document.uri));
