@@ -40,14 +40,25 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 		// The input _should_ be a pattern matching inside a workspace, folder, but sometimes we get absolute paths, so try to resolve them
 		const pattern = inputGlobToPattern(options.input.query, this.workspaceService);
 
-		const results = await this.searchService.findFiles(pattern, undefined, token);
+		// try find files with a timeout of 10s
+		// TODO: consider making the timeout configurable
+		const timeoutInMs = 10_000;
+		const results = await Promise.race([
+			this.searchService.findFiles(pattern, undefined, token),
+			new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout in searching files')), timeoutInMs))
+		]);
+
 		checkCancellation(token);
 
 		const maxResults = options.input.maxResults ?? 20;
 		const resultsToShow = results.slice(0, maxResults);
-		const result = new ExtendedLanguageModelToolResult([
-			new LanguageModelPromptTsxPart(
-				await renderPromptElementJSON(this.instantiationService, FindFilesResult, { fileResults: resultsToShow, totalResults: results.length }, options.tokenizationOptions, token))]);
+		// Render the prompt element with a timeout
+		const prompt = await Promise.race([
+			renderPromptElementJSON(this.instantiationService, FindFilesResult, { fileResults: resultsToShow, totalResults: results.length }, options.tokenizationOptions, token),
+			new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout in rendering prompt element')), timeoutInMs))
+		]);
+
+		const result = new ExtendedLanguageModelToolResult([new LanguageModelPromptTsxPart(prompt)]);
 		const query = `\`${options.input.query}\``;
 		result.toolResultMessage = resultsToShow.length === 0 ?
 			new MarkdownString(l10n.t`Searched for files matching ${query}, no matches`) :
