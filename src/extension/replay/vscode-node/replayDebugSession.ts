@@ -92,7 +92,7 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 	}
 
 	protected override disconnectRequest(response: DebugProtocol.DisconnectResponse): void {
-		// Clean up any debug session state
+		this._sessionProvider.getSession(this._sessionId)?.dispose();
 		this.sendResponse(response);
 		this.sendEvent(new TerminatedEvent());
 	}
@@ -176,8 +176,12 @@ export class ChatReplayDebugSession extends LoggingDebugSession {
 
 		replaySession.stepNext();
 
-		// Send a stopped event to indicate we are at the next step
-		this.sendEvent(new StoppedEvent('next', ChatReplayDebugSession.THREAD_ID));
+		if (replaySession.currentStep) {
+			this.sendEvent(new StoppedEvent('next', ChatReplayDebugSession.THREAD_ID));
+		} else {
+			this.sendEvent(new TerminatedEvent());
+			replaySession.dispose();
+		}
 	}
 
 
