@@ -28,6 +28,7 @@ import { WorkspaceChunkEmbeddingsIndex, WorkspaceChunkEmbeddingsIndexState } fro
 import { IWorkspaceFileIndex } from './workspaceFileIndex';
 
 export enum LocalEmbeddingsIndexStatus {
+	Disabled = 'disabled',
 	Unknown = 'unknown',
 
 	UpdatingIndex = 'updatingIndex',
@@ -330,12 +331,10 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 			}
 		};
 
-		this._reindexDisposables.add(this._workspaceIndex.onDidCreateFiles(async uris => {
+		this._reindexDisposables.add(this._workspaceIndex.onDidCreateFiles(async _uris => {
 			updateIndexState();
-			this.tryTriggerReindexing(uris, new TelemetryCorrelationId('EmbeddingsChunkSearch::onDidCreateFiles'));
 		}));
 
-		this._reindexDisposables.add(this._workspaceIndex.onDidChangeFiles(uris => this.tryTriggerReindexing(uris, new TelemetryCorrelationId('EmbeddingsChunkSearch::onDidChangeFiles'))));
 		this._reindexDisposables.add(this._workspaceIndex.onDidDeleteFiles(uris => {
 			for (const uri of uris) {
 				this._reindexRequests.get(uri)?.dispose();
@@ -348,17 +347,17 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 
 	private async getAutoIndexFileCap() {
 		if (await this.getExpandedClientSideIndexingStatus() === 'enabled') {
-			return this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.expandedEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultExpandedAutomaticIndexingFileCap;
+			return this._experimentationService.getTreatmentVariable<number>('workspace.expandedEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultExpandedAutomaticIndexingFileCap;
 		}
 
-		return this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.embeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultAutomaticIndexingFileCap;
+		return this._experimentationService.getTreatmentVariable<number>('workspace.embeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultAutomaticIndexingFileCap;
 	}
 
 	private async getManualIndexFileCap() {
-		let manualCap = this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.manualEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultManualIndexingFileCap;
+		let manualCap = this._experimentationService.getTreatmentVariable<number>('workspace.manualEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultManualIndexingFileCap;
 
 		if (await this.getExpandedClientSideIndexingStatus() === 'available') {
-			manualCap = this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.expandedEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultExpandedAutomaticIndexingFileCap;
+			manualCap = this._experimentationService.getTreatmentVariable<number>('workspace.expandedEmbeddingsCacheFileCap') ?? EmbeddingsChunkSearch.defaultExpandedAutomaticIndexingFileCap;
 		}
 
 		// The manual cap should never be lower than the auto cap
@@ -366,9 +365,13 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 	}
 
 	private async getExpandedClientSideIndexingStatus(): Promise<'enabled' | 'available' | 'disabled'> {
-		const token = await this._authService.getCopilotToken();
-		if (!token?.isExpandedClientSideIndexingEnabled()) {
-			return 'disabled';
+		try {
+			const token = await this._authService.getCopilotToken();
+			if (!token?.isExpandedClientSideIndexingEnabled()) {
+				return 'disabled';
+			}
+		} catch {
+			// noop
 		}
 
 		const cache = this._extensionContext.workspaceState.get<boolean | undefined>(this._hasPromptedExpandedIndexingKey);
@@ -383,18 +386,17 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 		}
 	}
 
-	public tryTriggerReindexing(uris: readonly URI[], telemetryInfo: TelemetryCorrelationId, immediately = false): void {
+	public tryTriggerReindexing(uris: readonly URI[], telemetryInfo: TelemetryCorrelationId): void {
 		if (this._state === LocalEmbeddingsIndexStatus.TooManyFilesForAnyIndexing
 			|| this._state === LocalEmbeddingsIndexStatus.TooManyFilesForAutomaticIndexing
 		) {
 			return;
 		}
 
-		const defaultDelay = this._experimentationService.getTreatmentVariable<number>('vscode', 'workspace.embeddingIndex.automaticReindexingDelay') ?? 60000;
 		for (const uri of uris) {
 			let delayer = this._reindexRequests.get(uri);
 			if (!delayer) {
-				delayer = new Delayer<void>(defaultDelay);
+				delayer = new Delayer<void>(0);
 				this._reindexRequests.set(uri, delayer);
 			}
 
@@ -408,7 +410,7 @@ export class EmbeddingsChunkSearch extends Disposable implements IWorkspaceChunk
 				}
 
 				return this._embeddingsIndex.triggerIndexingOfFile(uri, telemetryInfo.addCaller('EmbeddingChunkSearch::tryTriggerReindexing'), this._disposeCts.token);
-			}, immediately ? 0 : defaultDelay);
+			}, 0);
 		}
 	}
 }

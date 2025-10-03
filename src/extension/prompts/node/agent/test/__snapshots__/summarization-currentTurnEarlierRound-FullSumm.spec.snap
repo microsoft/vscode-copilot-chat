@@ -5,7 +5,7 @@ summarized!
 </conversation-summary>
 
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -25,7 +25,7 @@ console.log('hi')"
 🛠️ tooluse_2
 success
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~
 
 
@@ -39,5 +39,5 @@ Focus particularly on:
 - How these recent operations connect to the overall user goals
 Include all important tool calls and their results as part of the appropriate sections, with special emphasis on the most recent operations.
 
-copilot_cache_control: { type: 'ephemeral' }
+[copilot_cache_control: { type: 'ephemeral' }]
 ~~~

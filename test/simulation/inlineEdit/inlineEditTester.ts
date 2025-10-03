@@ -47,6 +47,7 @@ import { ITestInformation } from '../testInformation';
 import { IInlineEditBaseFile, ILoadedFile } from './fileLoading';
 import { inlineEditScoringService } from './inlineEditScoringService';
 import { SpyingServerPoweredNesProvider } from './spyingServerPoweredNesProvider';
+import { IWorkspaceService } from '../../../src/platform/workspace/common/workspaceService';
 
 export interface IInlineEditTest {
 	recentEdit: IInlineEditTestDocument | IInlineEditTestDocument[];
@@ -131,6 +132,7 @@ export class InlineEditTester {
 		const expService = accessor.get(IExperimentationService);
 		const gitExtensionService = accessor.get(IGitExtensionService);
 		const notebookService = accessor.get(INotebookService);
+		const workspaceService = accessor.get(IWorkspaceService);
 
 		const history = historyContextProvider.getHistoryContext(docId)!;
 		let i = 0;
@@ -167,9 +169,9 @@ export class InlineEditTester {
 
 		const historyContext = historyContextProvider.getHistoryContext(docId)!;
 		const activeDocument = historyContext.getMostRecentDocument(); // TODO
-		const context: InlineCompletionContext = { triggerKind: 1, selectedCompletionInfo: undefined, requestUuid: generateUuid(), requestIssuedDateTime: Date.now() };
+		const context: InlineCompletionContext = { triggerKind: 1, selectedCompletionInfo: undefined, requestUuid: generateUuid(), requestIssuedDateTime: Date.now(), earliestShownDateTime: Date.now() + 200 };
 		const logContext = new InlineEditRequestLogContext(activeDocument.docId.toString(), 1, context);
-		const telemetryBuilder = new NextEditProviderTelemetryBuilder(gitExtensionService, notebookService, nextEditProvider.ID, workspace.getDocument(activeDocument.docId)!);
+		const telemetryBuilder = new NextEditProviderTelemetryBuilder(gitExtensionService, notebookService, workspaceService, nextEditProvider.ID, workspace.getDocument(activeDocument.docId)!);
 
 		let nextEditResult: NextEditResult;
 		try {

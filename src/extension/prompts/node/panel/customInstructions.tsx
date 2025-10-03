@@ -8,7 +8,9 @@ import { ConfigKey } from '../../../../platform/configuration/common/configurati
 import { CustomInstructionsKind, ICustomInstructions, ICustomInstructionsService } from '../../../../platform/customInstructions/common/customInstructionsService';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { isUri } from '../../../../util/common/types';
+import { ResourceSet } from '../../../../util/vs/base/common/map';
 import { isString } from '../../../../util/vs/base/common/types';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatVariablesCollection, isPromptInstruction } from '../../../prompt/common/chatVariablesCollection';
 import { Tag } from '../base/tag';
 
@@ -59,20 +61,23 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 
 		const chunks = [];
 
-		if (includeCodeGenerationInstructions !== false && this.props.chatVariables) {
-			for (const variable of this.props.chatVariables) {
-				if (isPromptInstruction(variable)) {
-					if (isString(variable.value)) {
-						chunks.unshift(<TextChunk>{variable.value}</TextChunk>);
-					} else if (isUri(variable.value)) {
-						const instructions = await this.customInstructionsService.fetchInstructionsFromFile(variable.value);
-						if (instructions) {
-							chunks.push(<Tag name='attachment' attrs={{ filePath: this.promptPathRepresentationService.getFilePath(variable.value) }}>
-								<references value={[new CustomInstructionPromptReference(instructions, instructions.content.map(instruction => instruction.instruction))]} />
-								{instructions.content.map(instruction => <TextChunk>{instruction.instruction}</TextChunk>)}
-							</Tag>);
+		if (includeCodeGenerationInstructions !== false) {
+			const instructionFiles = new ResourceSet(await this.customInstructionsService.getAgentInstructions());
+			if (this.props.chatVariables) {
+				for (const variable of this.props.chatVariables) {
+					if (isPromptInstruction(variable)) {
+						if (isString(variable.value)) {
+							chunks.push(<TextChunk>{variable.value}</TextChunk>);
+						} else if (isUri(variable.value)) {
+							instructionFiles.add(variable.value);
 						}
 					}
+				}
+			}
+			for (const instructionFile of instructionFiles) {
+				const chunk = await this.createElementFromURI(instructionFile);
+				if (chunk) {
+					chunks.push(chunk);
 				}
 			}
 		}
@@ -114,6 +119,17 @@ export class CustomInstructions extends PromptElement<CustomInstructionsProps> {
 			</Tag>
 
 		</>);
+	}
+
+	private async createElementFromURI(uri: URI) {
+		const instructions = await this.customInstructionsService.fetchInstructionsFromFile(uri);
+		if (instructions) {
+			return <Tag name='attachment' attrs={{ filePath: this.promptPathRepresentationService.getFilePath(uri) }}>
+				<references value={[new CustomInstructionPromptReference(instructions, instructions.content.map(instruction => instruction.instruction))]} />
+				{instructions.content.map(instruction => <TextChunk>{instruction.instruction}</TextChunk>)}
+			</Tag>;
+		}
+		return undefined;
 	}
 
 	private createInstructionElement(instructions: ICustomInstructions) {

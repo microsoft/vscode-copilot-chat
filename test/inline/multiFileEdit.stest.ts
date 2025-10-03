@@ -7,7 +7,7 @@ import type { TextDocument } from 'vscode';
 import { CHAT_MODEL, ConfigKey } from '../../src/platform/configuration/common/configurationService';
 import { IHeatmapService, SelectionPoint } from '../../src/platform/heatmap/common/heatmapService';
 import { TestingServiceCollection } from '../../src/platform/test/node/services';
-import { ExtHostDocumentData } from '../../src/util/common/test/shims/textDocument';
+import { createTextDocumentData } from '../../src/util/common/test/shims/textDocument';
 import { escapeRegExpCharacters } from '../../src/util/vs/base/common/strings';
 import { URI } from '../../src/util/vs/base/common/uri';
 import { Configuration, ssuite, stest } from '../base/stest';
@@ -76,8 +76,8 @@ forEditsAndAgent((strategy, variant, model, configurations) => {
 				_serviceBrand: undefined;
 				async getEntries(): Promise<Map<TextDocument, SelectionPoint[]>> {
 
-					const doc1 = ExtHostDocumentData.create(URI.parse('file:///test/path/index.html'), '<html><body>Hello</body></html>', 'html').document;
-					const doc2 = ExtHostDocumentData.create(URI.parse('file:///test/path/page.html'), '<html><head><title name="Page" /></head><body>Page</body></html>', 'html').document;
+					const doc1 = createTextDocumentData(URI.parse('file:///test/path/index.html'), '<html><body>Hello</body></html>', 'html').document;
+					const doc2 = createTextDocumentData(URI.parse('file:///test/path/page.html'), '<html><head><title name="Page" /></head><body>Page</body></html>', 'html').document;
 
 					return new Map([
 						[doc1, [new SelectionPoint(0, Date.now() - 1000), new SelectionPoint(14, Date.now() - 88)]],

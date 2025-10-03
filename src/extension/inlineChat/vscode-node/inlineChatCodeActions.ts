@@ -316,7 +316,7 @@ export class RefactorsProvider implements vscode.CodeActionProvider {
 			return undefined;
 		}
 
-		const title = vscode.l10n.t('Generate Documentation');
+		const title = vscode.l10n.t('Generate Docs');
 
 		const codeAction = new AICodeAction(title, RefactorsProvider.generateDocsKind);
 

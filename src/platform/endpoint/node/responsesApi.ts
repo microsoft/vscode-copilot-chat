@@ -7,28 +7,32 @@ import { Raw } from '@vscode/prompt-tsx';
 import { ClientHttp2Stream } from 'http2';
 import { OpenAI } from 'openai';
 import { Response } from '../../../platform/networking/common/fetcherService';
+import { coalesce } from '../../../util/vs/base/common/arrays';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { binaryIndexOf } from '../../../util/vs/base/common/buffer';
 import { Lazy } from '../../../util/vs/base/common/lazy';
 import { SSEParser } from '../../../util/vs/base/common/sseParser';
 import { isDefined } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, IResponseDelta, OpenAiResponsesFunctionTool } from '../../networking/common/fetch';
 import { ICreateEndpointBodyOptions, IEndpointBody } from '../../networking/common/networking';
 import { ChatCompletion, FinishedCompletionReason, TokenLogProb } from '../../networking/common/openai';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
-import { IThinkingDataService } from '../../thinking/node/thinkingDataService';
 import { IChatModelInformation } from '../common/endpointProvider';
 import { getStatefulMarkerAndIndex } from '../common/statefulMarkerContainer';
-import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
 
-export function createResponsesRequestBody(options: ICreateEndpointBodyOptions, model: string, modelInfo: IChatModelInformation): IEndpointBody {
-	return {
+export function createResponsesRequestBody(accessor: ServicesAccessor, options: ICreateEndpointBodyOptions, model: string, modelInfo: IChatModelInformation): IEndpointBody {
+	const configService = accessor.get(IConfigurationService);
+	const expService = accessor.get(IExperimentationService);
+	const body: IEndpointBody = {
 		model,
 		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
-		reasoning: modelInfo.capabilities.supports.thinking ? { summary: 'concise' } : undefined,
 		stream: true,
 		tools: options.requestOptions?.tools?.map((tool): OpenAI.Responses.FunctionTool & OpenAiResponsesFunctionTool => ({
 			...tool.function,
@@ -38,16 +42,32 @@ export function createResponsesRequestBody(options: ICreateEndpointBodyOptions, 
 		})),
 		// Only a subset of completion post options are supported, and some
 		// are renamed. Handle them manually:
-		temperature: options.postOptions.temperature,
 		top_p: options.postOptions.top_p,
 		max_output_tokens: options.postOptions.max_tokens,
 		tool_choice: typeof options.postOptions.tool_choice === 'object'
 			? { type: 'function', name: options.postOptions.tool_choice.function.name }
 			: options.postOptions.tool_choice,
-		// top_logprobs is documented but not in the API types yet
-		//@ts-expect-error
 		top_logprobs: options.postOptions.logprobs ? 3 : undefined,
-	} satisfies OpenAI.Responses.ResponseCreateParamsStreaming;
+		store: false
+	};
+
+	body.truncation = configService.getConfig(ConfigKey.Internal.UseResponsesApiTruncation) ?
+		'auto' :
+		'disabled';
+	const effortConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningEffort, expService);
+	const summaryConfig = configService.getExperimentBasedConfig(ConfigKey.ResponsesApiReasoningSummary, expService);
+	const effort = effortConfig === 'default' ? undefined : effortConfig;
+	const summary = summaryConfig === 'off' ? undefined : summaryConfig;
+	if (effort || summary) {
+		body.reasoning = {
+			...(effort ? { effort } : {}),
+			...(summary ? { summary } : {})
+		};
+	}
+
+	body.include = ['reasoning.encrypted_content'];
+
+	return body;
 }
 
 function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMessage[], ignoreStatefulMarker: boolean): { input: OpenAI.Responses.ResponseInputItem[]; previous_response_id?: string } {
@@ -63,14 +83,18 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 		switch (message.role) {
 			case Raw.ChatRole.Assistant:
 				if (message.content.length) {
-					input.push({
-						role: 'assistant',
-						content: message.content.map(rawContentToResponsesOutputContent).filter(isDefined),
-						// I don't know what this does. These seem optional but are required in the types
-						id: 'msg_123',
-						status: 'completed',
-						type: 'message',
-					} satisfies OpenAI.Responses.ResponseOutputMessage);
+					input.push(...extractThinkingData(message.content));
+					const asstContent = message.content.map(rawContentToResponsesOutputContent).filter(isDefined);
+					if (asstContent.length) {
+						input.push({
+							role: 'assistant',
+							content: asstContent,
+							// I don't think this needs to be round-tripped.
+							id: 'msg_123',
+							status: 'completed',
+							type: 'message',
+						} satisfies OpenAI.Responses.ResponseOutputMessage);
+					}
 				}
 				if (message.toolCalls) {
 					for (const toolCall of message.toolCalls) {
@@ -129,8 +153,26 @@ function rawContentToResponsesContent(part: Raw.ChatCompletionContentPart): Open
 function rawContentToResponsesOutputContent(part: Raw.ChatCompletionContentPart): OpenAI.Responses.ResponseOutputText | OpenAI.Responses.ResponseOutputRefusal | undefined {
 	switch (part.type) {
 		case Raw.ChatCompletionContentPartKind.Text:
-			return { type: 'output_text', text: part.text, annotations: [] };
+			if (part.text.trim()) {
+				return { type: 'output_text', text: part.text, annotations: [] };
+			}
 	}
+}
+
+function extractThinkingData(content: Raw.ChatCompletionContentPart[]): OpenAI.Responses.ResponseReasoningItem[] {
+	return coalesce(content.map(part => {
+		if (part.type === Raw.ChatCompletionContentPartKind.Opaque) {
+			const thinkingData = rawPartAsThinkingData(part);
+			if (thinkingData) {
+				return {
+					type: 'reasoning',
+					id: thinkingData.id,
+					summary: [],
+					encrypted_content: thinkingData.encrypted,
+				} satisfies OpenAI.Responses.ResponseReasoningItem;
+			}
+		}
+	}));
 }
 
 export async function processResponseFromChatEndpoint(instantiationService: IInstantiationService, telemetryService: ITelemetryService, logService: ILogService, response: Response, expectedNumChoices: number, finishCallback: FinishedCallback, telemetryData: TelemetryData): Promise<AsyncIterableObject<ChatCompletion>> {
@@ -158,13 +200,17 @@ export async function processResponseFromChatEndpoint(instantiationService: IIns
 	});
 }
 
+interface CapiResponsesTextDeltaEvent extends Omit<OpenAI.Responses.ResponseTextDeltaEvent, 'logprobs'> {
+	logprobs: Array<OpenAI.Responses.ResponseTextDeltaEvent.Logprob> | undefined;
+}
+
 class OpenAIResponsesProcessor {
 	private textAccumulator: string = '';
+	private hasReceivedReasoningSummary = false;
 
 	constructor(
 		private readonly telemetryData: TelemetryData,
 		private readonly requestId: string,
-		@IThinkingDataService private readonly thinkingDataService: IThinkingDataService,
 	) { }
 
 	public push(chunk: OpenAI.Responses.ResponseStreamEvent, _onProgress: FinishedCallback): ChatCompletion | undefined {
@@ -177,10 +223,16 @@ class OpenAIResponsesProcessor {
 			case 'error':
 				return onProgress({ text: '', copilotErrors: [{ agent: 'openai', code: chunk.code || 'unknown', message: chunk.message, type: 'error', identifier: chunk.param || undefined }] });
 			case 'response.output_text.delta': {
-				const haystack = new Lazy(() => new TextEncoder().encode(chunk.delta));
+				const capiChunk: CapiResponsesTextDeltaEvent = chunk;
+				const haystack = new Lazy(() => new TextEncoder().encode(capiChunk.delta));
 				return onProgress({
-					text: chunk.delta,
-					logprobs: { content: chunk.logprobs.map(lp => ({ ...mapLogProp(haystack, lp), top_logprobs: lp.top_logprobs?.map(l => mapLogProp(haystack, l)) || [] })) },
+					text: capiChunk.delta,
+					logprobs: capiChunk.logprobs && {
+						content: capiChunk.logprobs.map(lp => ({
+							...mapLogProp(haystack, lp),
+							top_logprobs: lp.top_logprobs?.map(l => mapLogProp(haystack, l)) || []
+						}))
+					},
 				});
 			}
 			case 'response.output_item.added':
@@ -201,16 +253,37 @@ class OpenAIResponsesProcessor {
 							arguments: chunk.item.arguments,
 						}],
 					});
+				} else if (chunk.item.type === 'reasoning') {
+					onProgress({
+						text: '',
+						thinking: chunk.item.encrypted_content ? {
+							id: chunk.item.id,
+							// CAPI models don't stream the reasoning summary for some reason, byok do, so don't duplicate it
+							text: this.hasReceivedReasoningSummary ?
+								undefined :
+								chunk.item.summary.map(s => s.text),
+							encrypted: chunk.item.encrypted_content,
+						} : undefined
+					});
 				}
 				return;
 			case 'response.reasoning_summary_text.delta':
-				return onProgress({ text: '', thinking: { id: chunk.item_id, text: chunk.delta } });
-			case 'response.reasoning_summary_part.done':
-				this.thinkingDataService.set('0', {
-					id: chunk.item_id,
-					text: chunk.part.text,
+				this.hasReceivedReasoningSummary = true;
+				return onProgress({
+					text: '',
+					thinking: {
+						id: chunk.item_id,
+						text: chunk.delta,
+					}
 				});
-				return onProgress({ text: '', thinking: { id: chunk.item_id, text: '' } });
+			case 'response.reasoning_summary_part.done':
+				this.hasReceivedReasoningSummary = true;
+				return onProgress({
+					text: '',
+					thinking: {
+						id: chunk.item_id
+					}
+				});
 			case 'response.completed':
 				onProgress({ text: '', statefulMarker: chunk.response.id });
 				return {

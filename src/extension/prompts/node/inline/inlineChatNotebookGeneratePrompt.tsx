@@ -52,7 +52,7 @@ export class InlineChatNotebookGeneratePrompt extends PromptElement<InlineChatEd
 			sizing.endpoint.modelMaxPromptTokens / 3 // consume one 3rd of the model window
 		);
 
-		const isTagBasedDocumentSummary = this.experimentationService.getTreatmentVariable<boolean>('vscode', 'copilotchat.tagBasedDocumentSummary') ?? false;
+		const isTagBasedDocumentSummary = this.experimentationService.getTreatmentVariable<boolean>('copilotchat.tagBasedDocumentSummary') ?? false;
 
 		return {
 			summarizedDocument,
@@ -149,7 +149,7 @@ class InlineChatNotebookGenerateSelection extends PromptElement<InlineChatNotebo
 	override async prepare(): Promise<InlineChatNotebookSelectionState> {
 		const { document, wholeRange } = this.props.documentContext;
 
-		const inSummaryExperiment = this.experimentationService.getTreatmentVariable('vscode', 'copilotchat.notebookSummary')
+		const inSummaryExperiment = this.experimentationService.getTreatmentVariable('copilotchat.notebookSummary')
 			|| this.configurationService.getConfig(ConfigKey.Internal.NotebookSummaryExperimentEnabled);
 
 		let executedCells: vscode.NotebookCell[] | undefined = undefined;

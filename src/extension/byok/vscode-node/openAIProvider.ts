@@ -38,7 +38,7 @@ export class OAIBYOKLMProvider extends BaseOpenAICompatibleLMProvider {
 
 	protected override async getModelInfo(modelId: string, apiKey: string | undefined, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
 		const modelInfo = await super.getModelInfo(modelId, apiKey, modelCapabilities);
-		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseResponsesApi, this._expService);
+		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseResponsesApi, this._expService);
 		if (enableResponsesApi) {
 			modelInfo.supported_endpoints = [
 				ModelSupportedEndpoint.ChatCompletions,

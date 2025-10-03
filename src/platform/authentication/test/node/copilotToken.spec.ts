@@ -32,7 +32,7 @@ class RefreshFakeCopilotTokenManager extends BaseCopilotTokenManager {
 		@IFetcherService fetcherService: IFetcherService,
 		@IEnvService envService: IEnvService,
 	) {
-		super(new NullBaseOctoKitService(capiClientService, fetcherService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
+		super(new NullBaseOctoKitService(capiClientService, fetcherService, logService, telemetryService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
 	}
 
 	async getCopilotToken(force?: boolean): Promise<CopilotToken> {
@@ -73,7 +73,7 @@ describe('Copilot token unit tests', function () {
 		accessor = disposables.add(testingServiceCollection.createTestingAccessor());
 
 		const tokenManager = disposables.add(accessor.get(IInstantiationService).createInstance(RefreshFakeCopilotTokenManager, 1));
-		await tokenManager.authFromGitHubToken('fake-token');
+		await tokenManager.authFromGitHubToken('fake-token', 'fake-user');
 
 		expect(fetcher.requests.size).toBe(2);
 	});
@@ -103,7 +103,7 @@ describe('Copilot token unit tests', function () {
 		testingServiceCollection.define(IFetcherService, fetcher);
 		accessor = disposables.add(testingServiceCollection.createTestingAccessor());
 
-		const tokenManager = accessor.get(IInstantiationService).createInstance(CopilotTokenManagerFromGitHubToken, 'invalid');
+		const tokenManager = accessor.get(IInstantiationService).createInstance(CopilotTokenManagerFromGitHubToken, 'invalid', 'invalid-user');
 		const result = await tokenManager.checkCopilotToken();
 		expect(result).toEqual({
 			kind: 'failure',
@@ -121,7 +121,7 @@ describe('Copilot token unit tests', function () {
 		testingServiceCollection.define(IFetcherService, new ErrorFetcherService(expectedError));
 		accessor = disposables.add(testingServiceCollection.createTestingAccessor());
 
-		const tokenManager = accessor.get(IInstantiationService).createInstance(CopilotTokenManagerFromGitHubToken, 'invalid');
+		const tokenManager = accessor.get(IInstantiationService).createInstance(CopilotTokenManagerFromGitHubToken, 'invalid', 'invalid-user');
 		try {
 			await tokenManager.checkCopilotToken();
 		} catch (err: any) {
@@ -172,7 +172,7 @@ describe('Copilot token unit tests', function () {
 		accessor = disposables.add(testingServiceCollection.createTestingAccessor());
 
 		const tokenManager = disposables.add(accessor.get(IInstantiationService).createInstance(RefreshFakeCopilotTokenManager, 1));
-		await tokenManager.authFromGitHubToken('fake-token');
+		await tokenManager.authFromGitHubToken('fake-token', 'invalid-user');
 
 		expect(fetcher.requests.size).toBe(2);
 	});

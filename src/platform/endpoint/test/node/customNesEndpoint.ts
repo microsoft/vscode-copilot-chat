@@ -9,6 +9,7 @@ import { IAuthenticationService } from '../../../authentication/common/authentic
 import { IChatMLFetcher } from '../../../chat/common/chatMLFetcher';
 import { CHAT_MODEL, IConfigurationService } from '../../../configuration/common/configurationService';
 import { IEnvService } from '../../../env/common/envService';
+import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { IEndpointBody } from '../../../networking/common/networking';
 import { IExperimentationService } from '../../../telemetry/common/nullExperimentationService';
@@ -31,7 +32,8 @@ export class CustomNesEndpoint extends ChatEndpoint {
 		@ITokenizerProvider tokenizerProvider: ITokenizerProvider,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService configurationService: IConfigurationService,
-		@IExperimentationService experimentationService: IExperimentationService
+		@IExperimentationService experimentationService: IExperimentationService,
+		@ILogService logService: ILogService
 	) {
 		const modelInfo: IChatModelInformation = {
 			id: CHAT_MODEL.CUSTOM_NES,
@@ -63,14 +65,14 @@ export class CustomNesEndpoint extends ChatEndpoint {
 			domainService,
 			capiClientService,
 			fetcherService,
-			envService,
 			telemetryService,
 			authService,
 			chatMLFetcher,
 			tokenizerProvider,
 			instantiationService,
 			configurationService,
-			experimentationService
+			experimentationService,
+			logService
 		);
 	}
 

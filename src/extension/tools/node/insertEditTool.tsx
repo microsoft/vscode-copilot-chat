@@ -16,6 +16,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { LanguageModelPromptTsxPart, LanguageModelToolResult } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
+import { IEditToolLearningService } from '../common/editToolLearningService';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
@@ -23,7 +24,7 @@ import { ActionType } from './applyPatch/parser';
 import { EditFileResult } from './editFileToolResult';
 import { createEditConfirmation } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
-import { assertFileOkForTool } from './toolUtils';
+import { assertFileNotContentExcluded } from './toolUtils';
 
 export interface IEditFileParams {
 	explanation: string;
@@ -46,6 +47,7 @@ export class EditFileTool implements ICopilotTool<IEditFileParams> {
 		@IAlternativeNotebookContentService private readonly alternativeNotebookContentService: IAlternativeNotebookContentService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
+		@IEditToolLearningService private readonly editToolLearningService: IEditToolLearningService,
 	) { }
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IEditFileParams>, token: vscode.CancellationToken) {
@@ -54,7 +56,7 @@ export class EditFileTool implements ICopilotTool<IEditFileParams> {
 			throw new Error(`Invalid file path`);
 		}
 
-		await this.instantiationService.invokeFunction(accessor => assertFileOkForTool(accessor, uri));
+		await this.instantiationService.invokeFunction(accessor => assertFileNotContentExcluded(accessor, uri));
 
 		const existingDiagnostics = this.languageDiagnosticsService.getDiagnostics(uri);
 
@@ -66,7 +68,13 @@ export class EditFileTool implements ICopilotTool<IEditFileParams> {
 				uri
 			}
 		};
-		await this.toolsService.invokeTool(InternalEditToolId, internalOptions, token);
+		try {
+			await this.toolsService.invokeTool(InternalEditToolId, internalOptions, token);
+			void this.recordEditSuccess(options, true);
+		} catch (error) {
+			void this.recordEditSuccess(options, false);
+			throw error;
+		}
 
 		const isNotebook = this.notebookService.hasSupportedNotebooks(uri);
 		const document = isNotebook ?
@@ -109,6 +117,11 @@ export class EditFileTool implements ICopilotTool<IEditFileParams> {
 		return input;
 	}
 
+	private recordEditSuccess(options: vscode.LanguageModelToolInvocationOptions<IEditFileParams>, success: boolean) {
+		if (options.model) {
+			this.editToolLearningService.didMakeEdit(options.model, ToolName.EditFile, success);
+		}
+	}
 }
 
 ToolRegistry.registerTool(EditFileTool);

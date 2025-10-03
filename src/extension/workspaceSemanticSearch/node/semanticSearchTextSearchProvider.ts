@@ -158,6 +158,7 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 				{
 					endpoint: await this.getEndpoint(),
 					tokenBudget: MAX_CHUNK_TOKEN_COUNT,
+					fullWorkspaceTokenBudget: MAX_CHUNK_TOKEN_COUNT,
 					maxResults: MAX_CHUNKS_RESULTS,
 				},
 				{
@@ -199,7 +200,8 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 					toolInvocationToken: undefined as never,
 					model: null!,
 					tools: new Map(),
-					id: '1'
+					id: '1',
+					sessionId: '1'
 				};
 				const intentInvocation = await intent.invoke({ location: ChatLocation.Other, request });
 				const progress: vscode.Progress<ChatResponseReferencePart | vscode.ChatResponseProgressPart> = {
@@ -449,7 +451,8 @@ export class SemanticSearchTextSearchProvider implements vscode.AITextSearchProv
 				toolInvocationToken: undefined as never,
 				model: null!,
 				tools: new Map(),
-				id: '1'
+				id: '1',
+				sessionId: '1'
 			};
 			const intentInvocation = await searchKeywordsIntent.invoke({ location: ChatLocation.Other, request });
 			const fakeProgress: vscode.Progress<any | any> = {

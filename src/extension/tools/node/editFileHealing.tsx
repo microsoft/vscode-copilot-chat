@@ -410,13 +410,13 @@ ${JSON.stringify(schema, null, 2)}
 		{ role: Raw.ChatRole.User, content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: prompt }] },
 	];
 
-	const result = await endpoint.makeChatRequest(
-		'healStringReplace',
-		contents,
-		undefined,
-		token,
-		ChatLocation.Other
-	);
+	const result = await endpoint.makeChatRequest2({
+		debugName: 'healStringReplace',
+		messages: contents,
+		finishedCb: undefined,
+		location: ChatLocation.Other,
+		enableRetryOnFilter: true
+	}, token);
 
 	if (result.type !== ChatFetchResponseType.Success) {
 		return undefined;

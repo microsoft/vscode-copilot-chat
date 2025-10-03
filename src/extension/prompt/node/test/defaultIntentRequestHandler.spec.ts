@@ -124,9 +124,10 @@ suite('defaultIntentRequestHandler', () => {
 		command: string | undefined;
 		references: readonly ChatPromptReference[] = [];
 		toolReferences: readonly ChatLanguageModelToolReference[] = [];
-		model: LanguageModelChat = null as any;
+		model: LanguageModelChat = { family: '' } as any;
 		tools = new Map();
 		id = generateUuid();
+		sessionId = generateUuid();
 	}
 
 	const responseStream = new ChatResponseStreamImpl(p => response.push(p), () => { });
@@ -330,14 +331,7 @@ suite('defaultIntentRequestHandler', () => {
 
 		expect(response.at(-1)).toMatchInlineSnapshot(`
 			ChatResponseMarkdownPart {
-			  "value": MarkdownString {
-			    "delegate": MarkdownString {
-			      "isTrusted": undefined,
-			      "supportHtml": false,
-			      "supportThemeIcons": false,
-			      "value": "Let me know if there's anything else I can help with!",
-			    },
-			  },
+			  "value": MarkdownString {},
 			}
 		`);
 	});

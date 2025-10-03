@@ -21,7 +21,6 @@ import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogg
 import { ISurveyService } from '../../../platform/survey/common/surveyService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { isCancellationError } from '../../../util/vs/base/common/errors';
@@ -50,6 +49,7 @@ import { IntentInvocationMetadata } from './conversation';
 import { IDocumentContext } from './documentContext';
 import { IBuildPromptResult, IIntent, IIntentInvocation, IResponseProcessor } from './intents';
 import { ConversationalBaseTelemetryData, createTelemetryWithId, sendModelMessageTelemetry } from './telemetry';
+import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 
 export interface IDefaultIntentRequestHandlerOptions {
 	maxToolCallIterations: number;
@@ -400,7 +400,7 @@ export class DefaultIntentRequestHandler {
 	}
 
 	private getModeName(): string {
-		return this.request.modeInstructions ? 'custom' :
+		return this.request.modeInstructions2 ? 'custom' :
 			this.intent.id === 'editAgent' ? 'agent' :
 				(this.intent.id === 'edit' || this.intent.id === 'edit2') ? 'edit' :
 					'ask';
@@ -523,9 +523,8 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		@IToolGroupingService private readonly toolGroupingService: IToolGroupingService,
 		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@ICopilotTokenStore private readonly _copilotTokenStore: ICopilotTokenStore,
-		@IThinkingDataService thinkingDataService: IThinkingDataService,
 	) {
-		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService, thinkingDataService);
+		super(options, instantiationService, endpointProvider, logService, requestLogger, authenticationChatUpgradeService, telemetryService);
 
 		this._register(this.onDidBuildPrompt(({ result, tools, promptTokenLength }) => {
 			if (result.metadata.get(SummarizedConversationHistoryMetadata)) {
@@ -553,6 +552,15 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 	protected override createPromptContext(availableTools: LanguageModelToolInformation[], outputStream: ChatResponseStream | undefined): Mutable<IBuildPromptContext> {
 		const context = super.createPromptContext(availableTools, outputStream);
 		this._handleVirtualCalls(context);
+
+		const extraVars = this.options.invocation.getAdditionalVariables?.(context);
+		if (extraVars?.hasVariables()) {
+			return {
+				...context,
+				chatVariables: ChatVariablesCollection.merge(context.chatVariables, extraVars),
+			};
+		}
+
 		return context;
 	}
 
@@ -580,14 +588,14 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		}
 
 		this._didParallelToolCallLoop = true;
-		if (this._experimentationService.getTreatmentVariable<boolean>('vscode', 'copilotchat.noParallelToolLoop')) {
+		if (this._experimentationService.getTreatmentVariable<boolean>('copilotchat.noParallelToolLoop')) {
 			return;
 		}
 
 		const token = CancellationToken.None;
 		const allTools = await this.options.invocation.getAvailableTools?.() ?? [];
 		const grouping = this.toolGroupingService.create(this.options.conversation.sessionId, allTools);
-		const computed = await grouping.compute(token);
+		const computed = await grouping.compute(this.options.request.prompt, token);
 
 		const container = grouping.getContainerFor(candidateCall.name);
 
@@ -695,6 +703,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 				conversationId: this.options.conversation.sessionId,
 				messageSource: this.options.intent?.id && this.options.intent.id !== UnknownIntent.ID ? `${messageSourcePrefix}.${this.options.intent.id}` : `${messageSourcePrefix}.user`,
 			},
+			enableRetryOnFilter: true
 		}, token);
 	}
 
@@ -713,7 +722,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 			return tools;
 		}
 
-		const computePromise = this.toolGrouping.compute(token);
+		const computePromise = this.toolGrouping.compute(this.options.request.prompt, token);
 
 		// Show progress if this takes a moment...
 		const timeout = setTimeout(() => {

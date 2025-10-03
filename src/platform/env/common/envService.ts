@@ -44,6 +44,7 @@ export interface IEnvService {
 	 * @see vscode.env.remoteName
 	 */
 	readonly remoteName: string | undefined;
+	readonly uiKind: 'desktop' | 'web';
 	readonly OS: OperatingSystem;
 	readonly uriScheme: string;
 	readonly extensionId: string;
@@ -61,6 +62,12 @@ export interface IEnvService {
 	openExternal(target: URI): Promise<boolean>;
 }
 
+export const INativeEnvService = createServiceIdentifier<INativeEnvService>('INativeEnvService');
+export interface INativeEnvService extends IEnvService {
+	readonly _serviceBrand: undefined;
+	userHome: URI;
+}
+
 export abstract class AbstractEnvService implements IEnvService {
 	language: string | undefined;
 	declare _serviceBrand: undefined;
@@ -70,6 +77,7 @@ export abstract class AbstractEnvService implements IEnvService {
 	abstract get extensionId(): string;
 	abstract get machineId(): string;
 	abstract get remoteName(): string | undefined;
+	abstract get uiKind(): 'desktop' | 'web';
 	abstract get OS(): OperatingSystem;
 	abstract get uriScheme(): string;
 	abstract get appRoot(): string;

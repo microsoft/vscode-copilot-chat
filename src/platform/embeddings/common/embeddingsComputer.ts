@@ -5,6 +5,7 @@
 
 import type { CancellationToken } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
+import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 
 /**
  * Fully qualified type of the embedding.
@@ -90,7 +91,6 @@ export const IEmbeddingsComputer = createServiceIdentifier<IEmbeddingsComputer>(
 
 export type ComputeEmbeddingsOptions = {
 	readonly inputType?: 'document' | 'query';
-	readonly parallelism?: number;
 };
 
 export interface IEmbeddingsComputer {
@@ -108,8 +108,9 @@ export interface IEmbeddingsComputer {
 		type: EmbeddingType,
 		inputs: readonly string[],
 		options?: ComputeEmbeddingsOptions,
+		telemetryInfo?: TelemetryCorrelationId,
 		token?: CancellationToken,
-	): Promise<Embeddings | undefined>;
+	): Promise<Embeddings>;
 }
 
 function dotProduct(a: EmbeddingVector, b: EmbeddingVector): number {

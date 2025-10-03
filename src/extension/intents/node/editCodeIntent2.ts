@@ -38,19 +38,18 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 		const endpointProvider = accessor.get<IEndpointProvider>(IEndpointProvider);
 		const notebookService = accessor.get<INotebookService>(INotebookService);
 		const configurationService = accessor.get<IConfigurationService>(IConfigurationService);
-		const experimentalService = accessor.get<IExperimentationService>(IExperimentationService);
+		const experimentationService = accessor.get<IExperimentationService>(IExperimentationService);
 		const model = await endpointProvider.getChatEndpoint(request);
 		const lookForTools = new Set<string>([ToolName.EditFile]);
-		const experimentationService = accessor.get<IExperimentationService>(IExperimentationService);
 
 
-		if (configurationService.getExperimentBasedConfig(ConfigKey.EditsCodeNewNotebookAgentEnabled, experimentalService) !== false && requestHasNotebookRefs(request, notebookService, { checkPromptAsWell: true })) {
+		if (requestHasNotebookRefs(request, notebookService, { checkPromptAsWell: true })) {
 			lookForTools.add(ToolName.CreateNewJupyterNotebook);
 		}
 
-		if (modelSupportsReplaceString(model)) {
+		if (await modelSupportsReplaceString(model)) {
 			lookForTools.add(ToolName.ReplaceString);
-			if (modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
+			if (await modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
 				lookForTools.add(ToolName.MultiReplaceString);
 			}
 		}
@@ -116,9 +115,8 @@ export class EditCode2IntentInvocation extends AgentIntentInvocation {
 		@ITelemetryService telemetryService: ITelemetryService,
 		@INotebookService notebookService: INotebookService,
 		@ILogService logService: ILogService,
-		@IExperimentationService experimentationService: IExperimentationService,
 	) {
-		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, logService, experimentationService);
+		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, logService);
 	}
 
 	public override async getAvailableTools(): Promise<vscode.LanguageModelToolInformation[]> {

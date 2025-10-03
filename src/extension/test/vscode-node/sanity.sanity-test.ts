@@ -11,7 +11,6 @@ import { timeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Event } from '../../../util/vs/base/common/event';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import type { LMResponsePart } from '../../byok/common/byokProvider';
 import { Intent } from '../../common/constants';
 import { ConversationFeature } from '../../conversation/vscode-node/conversationFeature';
 import { IConversationStore } from '../../conversationStore/node/conversationStore';
@@ -21,7 +20,7 @@ import { ContributedToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
 import { TestChatRequest } from '../node/testHelpers';
 
-suite.skip('Copilot Chat Sanity Test', function () {
+suite('Copilot Chat Sanity Test', function () {
 	this.timeout(1000 * 60 * 1); // 1 minute
 
 	let realInstaAccessor: IInstantiationService;
@@ -152,13 +151,13 @@ suite.skip('Copilot Chat Sanity Test', function () {
 		});
 	});
 
-	test('E2E Production Inline Chat Test', async function () {
+	test.skip('E2E Production Inline Chat Test', async function () {
 		assert.ok(realInstaAccessor);
 
 		await realInstaAccessor.invokeFunction(async (accessor) => {
 
 			const r = vscode.lm.registerLanguageModelChatProvider('test', new class implements vscode.LanguageModelChatProvider {
-				async prepareLanguageModelChatInformation(options: { silent: boolean }, token: vscode.CancellationToken): Promise<vscode.LanguageModelChatInformation[]> {
+				async provideLanguageModelChatInformation(options: { silent: boolean }, token: vscode.CancellationToken): Promise<vscode.LanguageModelChatInformation[]> {
 					return [{
 						id: 'test',
 						name: 'test',
@@ -166,10 +165,11 @@ suite.skip('Copilot Chat Sanity Test', function () {
 						version: '0.0.0',
 						maxInputTokens: 1000,
 						maxOutputTokens: 1000,
-						auth: true
+						requiresAuthorization: true,
+						capabilities: {}
 					}];
 				}
-				async provideLanguageModelChatResponse(model: vscode.LanguageModelChatInformation, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.LanguageModelChatRequestHandleOptions, progress: vscode.Progress<LMResponsePart>, token: vscode.CancellationToken): Promise<any> {
+				async provideLanguageModelChatResponse(model: vscode.LanguageModelChatInformation, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.ProvideLanguageModelChatResponseOptions, progress: vscode.Progress<vscode.LanguageModelResponsePart2>, token: vscode.CancellationToken): Promise<any> {
 					throw new Error('Method not implemented.');
 				}
 				async provideTokenCount(model: vscode.LanguageModelChatInformation, text: string | vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2, token: vscode.CancellationToken): Promise<number> {

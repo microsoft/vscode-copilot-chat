@@ -32,7 +32,7 @@ export class TodoListContextPrompt extends PromptElement<TodoListContextPromptPr
 			return null;
 		}
 		return (
-			<Tag name="todos">
+			<Tag name="todoList">
 				{todoContext}
 			</Tag>
 		);

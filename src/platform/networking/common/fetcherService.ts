@@ -53,7 +53,8 @@ export interface FetchOptions {
 	json?: any;
 	method?: 'GET' | 'POST';
 	signal?: IAbortSignal;
-	verifyJSONAndRetry?: boolean;
+	retryFallbacks?: boolean;
+	expectJSON?: boolean;
 }
 
 export interface IAbortSignal {
