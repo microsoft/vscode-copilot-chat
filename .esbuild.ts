@@ -178,8 +178,8 @@ const nodeExtHostBuildOptions = {
 	external: [
 		...baseNodeBuildOptions.external,
 		'vscode',
-		'@github/copilot',
-		'@github/copilot/sdk'
+		'@github/copilot-developer-action',
+		'@github/copilot-developer-action/sdk'
 	]
 } satisfies esbuild.BuildOptions;
 

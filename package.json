@@ -4272,7 +4272,7 @@
 		"undici": "^7.11.0",
 		"vscode-tas-client": "^0.1.84",
 		"web-tree-sitter": "^0.23.0",
-		"@github/copilot": "file:/Users/penlv/Code/Work/sweagentd/runtime/dist-cli"
+		"@github/copilot-developer-action": "file:/Users/penlv/Code/Work/sweagentd/runtime/dist-cli"
 	},
 	"overrides": {
 		"@aminya/node-gyp-build": "npm:node-gyp-build@4.8.1",

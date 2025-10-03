@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { CopilotCLISessionManager, Session } from '@github/copilot/sdk';
+import type { CopilotCLISessionManager, Session } from '@github/copilot-developer-action/sdk';
 import type { CancellationToken } from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
@@ -48,7 +48,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 	public async getSessionManager(): Promise<CopilotCLISessionManager> {
 		if (!this._sessionManager) {
 			try {
-				const { CopilotCLISessionManager } = await import('@github/copilot/sdk');
+				const { CopilotCLISessionManager } = await import('@github/copilot-developer-action/sdk');
 				this._sessionManager = new CopilotCLISessionManager({
 					logger: {
 						isDebug: () => false,

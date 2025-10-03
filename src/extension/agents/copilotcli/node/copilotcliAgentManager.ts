@@ -3,27 +3,16 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { AgentOptions, SDKEvent, Session } from '@github/copilot/sdk';
+import type { AgentOptions, SDKEvent, Session } from '@github/copilot-developer-action/sdk';
 import type * as vscode from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ILanguageModelServerConfig, LanguageModelServer } from '../../node/langModelServer';
 import { ICopilotCLISessionService } from './copilotcliSessionService';
 import { createCopilotCLIToolInvocation } from './copilotcliToolInvocationFormatter';
 
 export class CopilotCLIAgentManager extends Disposable {
-	private _langModelServer: LanguageModelServer | undefined;
-
-	private async getLangModelServer(): Promise<LanguageModelServer> {
-		if (!this._langModelServer) {
-			this._langModelServer = this.instantiationService.createInstance(LanguageModelServer);
-			await this._langModelServer.start();
-		}
-		return this._langModelServer;
-	}
-
 	constructor(
 		@ILogService private readonly logService: ILogService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
@@ -46,9 +35,6 @@ export class CopilotCLIAgentManager extends Disposable {
 		stream: vscode.ChatResponseStream,
 		token: vscode.CancellationToken
 	): Promise<{ copilotcliSessionId: string | undefined }> {
-		const langModelServer = await this.getLangModelServer();
-		const serverConfig = langModelServer.getConfig();
-
 		const sessionIdForLog = copilotcliSessionId ?? 'new';
 		this.logService.trace(`[CopilotCLIAgentManager] Handling request for sessionId=${sessionIdForLog}.`);
 
@@ -59,7 +45,7 @@ export class CopilotCLIAgentManager extends Disposable {
 			this.logService.trace(`[CopilotCLIAgentManager] Reusing CopilotCLI session ${copilotcliSessionId}.`);
 		} else {
 			const sdkSession = await this.sessionService.getOrCreateSDKSession(copilotcliSessionId, request.prompt);
-			session = this.instantiationService.createInstance(CopilotCLISession, serverConfig, sdkSession);
+			session = this.instantiationService.createInstance(CopilotCLISession, sdkSession);
 			this.sessionService.trackSessionWrapper(sdkSession.id, session);
 		}
 
@@ -75,7 +61,6 @@ export class CopilotCLISession extends Disposable {
 	public readonly sessionId: string;
 
 	constructor(
-		private readonly serverConfig: ILanguageModelServerConfig,
 		private readonly _sdkSession: Session,
 		@ILogService private readonly logService: ILogService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
@@ -91,7 +76,7 @@ export class CopilotCLISession extends Disposable {
 
 	async *query(prompt: string, options: AgentOptions): AsyncGenerator<SDKEvent> {
 		// Dynamically import the SDK
-		const { Agent } = await import('@github/copilot/sdk');
+		const { Agent } = await import('@github/copilot-developer-action/sdk');
 		const agent = new Agent(options);
 		yield* agent.query(prompt);
 	}
@@ -112,13 +97,11 @@ export class CopilotCLISession extends Disposable {
 			modelProvider: {
 				type: 'anthropic',
 				model: 'claude-sonnet-4',
-				apiKey: this.serverConfig.nonce,
-				// baseUrl: `http://localhost:${this.serverConfig.port}`
 			},
 			abortController: this._abortController,
 			workingDirectory: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
 			integrationId: 'vscode-chat-dev',
-			hmac: process.env.HMAC_SECRET,
+			hmacKey: process.env.HMAC_SECRET,
 			env: {
 				...process.env,
 				COPILOTCLI_DISABLE_NONESSENTIAL_TRAFFIC: '1',
