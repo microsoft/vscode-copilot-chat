@@ -1,0 +1,28 @@
+FC = gfortran
+FFLAGS_COMMON = -I./src
+# Replace proprietary '-fast' with gfortran optimization and OpenMP support
+FFLAGS_OPT = -O3 -fopenmp
+FFLAGS = $(FFLAGS_COMMON) $(FFLAGS_OPT)
+
+LDFLAGS = -fopenmp
+
+TARGET_EXEC = test_program
+OBJS_LIB = src/my_lib.o
+OBJS_MAIN = src/test_main.o
+OBJS = $(OBJS_LIB) $(OBJS_MAIN)
+
+.PHONY: all clean
+
+all: $(TARGET_EXEC)
+
+$(TARGET_EXEC): $(OBJS)
+	$(FC) $(FFLAGS) -o $(TARGET_EXEC) $(OBJS) $(LDFLAGS)
+
+src/my_lib.o: src/my_lib.f90
+	$(FC) $(FFLAGS) -c src/my_lib.f90 -o src/my_lib.o
+
+src/test_main.o: src/test_main.f90 src/my_lib.o
+	$(FC) $(FFLAGS) -c src/test_main.f90 -o src/test_main.o
+
+clean:
+	rm -f $(TARGET_EXEC) $(OBJS_LIB) $(OBJS_MAIN) output.txt src/*.mod
