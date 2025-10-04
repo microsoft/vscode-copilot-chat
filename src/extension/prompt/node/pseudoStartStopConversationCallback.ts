@@ -155,7 +155,9 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 			this.stagedDeltasToApply = [];
 			this.currentStartStop = undefined;
 			this.nonReportedDeltas = [];
-			if (delta.retryReason === FilterReason.Copyright) {
+			if (delta.retryReason === 'network_error') {
+				progress.clearToPreviousToolInvocation(ChatResponseClearToPreviousToolInvocationReason.NoReason);
+			} else if (delta.retryReason === FilterReason.Copyright) {
 				progress.clearToPreviousToolInvocation(ChatResponseClearToPreviousToolInvocationReason.CopyrightContentRetry);
 			} else {
 				progress.clearToPreviousToolInvocation(ChatResponseClearToPreviousToolInvocationReason.FilteredContentRetry);
