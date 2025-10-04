@@ -20,35 +20,29 @@ import { StringText } from '../../../util/vs/editor/common/core/text/abstractTex
 export namespace PromptTags {
 	export const CURSOR = "<|cursor|>";
 
-	export const EDIT_WINDOW = {
-		start: "<|code_to_edit|>",
-		end: "<|/code_to_edit|>"
+	type Tag = {
+		start: string;
+		end: string;
 	};
 
-	export const AREA_AROUND = {
-		start: "<|area_around_code_to_edit|>",
-		end: "<|/area_around_code_to_edit|>"
-	};
+	function createTag(key: string): Tag {
+		return {
+			start: `<|${key}|>`,
+			end: `<|/${key}|>`
+		};
+	}
 
-	export const CURRENT_FILE = {
-		start: "<|current_file_content|>",
-		end: "<|/current_file_content|>"
-	};
+	export const EDIT_WINDOW = createTag("code_to_edit");
 
-	export const EDIT_HISTORY = {
-		start: "<|edit_diff_history|>",
-		end: "<|/edit_diff_history|>"
-	};
+	export const AREA_AROUND = createTag("area_around_code_to_edit");
 
-	export const RECENT_FILES = {
-		start: "<|recently_viewed_code_snippets|>",
-		end: "<|/recently_viewed_code_snippets|>"
-	};
+	export const CURRENT_FILE = createTag("current_file_content");
 
-	export const RECENT_FILE = {
-		start: "<|recently_viewed_code_snippet|>",
-		end: "<|/recently_viewed_code_snippet|>"
-	};
+	export const EDIT_HISTORY = createTag("edit_diff_history");
+
+	export const RECENT_FILES = createTag("recently_viewed_code_snippets");
+
+	export const RECENT_FILE = createTag("recently_viewed_code_snippet");
 }
 
 export const systemPromptTemplate = `Your role as an AI assistant is to help developers complete their code tasks by assisting in editing specific sections of code marked by the ${PromptTags.EDIT_WINDOW.start} and ${PromptTags.EDIT_WINDOW.end} tags, while adhering to Microsoft's content policies and avoiding the creation of content that violates copyrights.
