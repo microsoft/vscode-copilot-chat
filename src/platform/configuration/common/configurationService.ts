@@ -522,7 +522,7 @@ export function defineExpSetting<T extends ExperimentBasedConfigType>(key: strin
 }
 
 // Max CAPI tool count limit
-export const HARD_TOOL_LIMIT = 128;
+export const HARD_TOOL_LIMIT = 28;
 
 // WARNING
 // These values are used in the request and are case sensitive. Do not change them unless advised by CAPI.
@@ -735,6 +735,7 @@ export namespace ConfigKey {
 		export const PromptFileContext = defineExpSetting<boolean>('chat.advanced.promptFileContextProvider.enabled', true);
 		export const MultiReplaceString = defineExpSetting<boolean>('chat.advanced.multiReplaceString.enabled', false, INTERNAL);
 
+		export const DefaultToolsGrouped = defineExpSetting<boolean>('chat.advanced.tools.defaultToolsGrouped', true, INTERNAL);
 		export const VirtualToolEmbeddingRanking = defineExpSetting<boolean>('chat.advanced.virtualTools.embeddingRanking', false, INTERNAL);
 		export const MultiReplaceStringGrok = defineExpSetting<boolean>('chat.advanced.multiReplaceStringGrok.enabled', false, INTERNAL);
 
