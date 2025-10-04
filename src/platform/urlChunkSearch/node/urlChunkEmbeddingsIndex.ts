@@ -13,8 +13,9 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { FileChunkAndScore, FileChunkWithEmbedding } from '../../chunking/common/chunk';
 import { ChunkableContent, ComputeBatchInfo, EmbeddingsComputeQos, IChunkingEndpointClient } from '../../chunking/common/chunkingEndpointClient';
-import { distance, Embedding, EmbeddingType, IEmbeddingsComputer } from '../../embeddings/common/embeddingsComputer';
+import { distance, Embedding, EmbeddingInputType, EmbeddingType, IEmbeddingsComputer } from '../../embeddings/common/embeddingsComputer';
 import { ILogService } from '../../log/common/logService';
+import { IGithubAvailableEmbeddingTypesService } from '../../workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
 
 /**
  * The maximum content length to sent to the chunking endpoint.
@@ -51,6 +52,7 @@ export class UrlChunkEmbeddingsIndex extends Disposable {
 		@ILogService private readonly _logService: ILogService,
 		@IEmbeddingsComputer private readonly _embeddingsComputer: IEmbeddingsComputer,
 		@IChunkingEndpointClient private readonly _chunkingEndpointClient: IChunkingEndpointClient,
+		@IGithubAvailableEmbeddingTypesService private readonly _availableEmbeddingTypesService: IGithubAvailableEmbeddingTypesService,
 	) {
 		super();
 	}
@@ -60,20 +62,25 @@ export class UrlChunkEmbeddingsIndex extends Disposable {
 		query: string,
 		token: CancellationToken,
 	): Promise<FileChunkAndScore[][]> {
+		const embeddingType = await raceCancellationError(this._availableEmbeddingTypesService.getPreferredType(/*silent*/ false), token);
+		if (!embeddingType) {
+			throw new Error('No embedding types available');
+		}
+
 		const [queryEmbedding, fileChunksAndEmbeddings] = await raceCancellationError(Promise.all([
-			this.computeEmbeddings(query, token),
-			this.getEmbeddingsForFiles(files.map(file => new UrlContent(file.uri, file.content)), EmbeddingsComputeQos.Batch, token)
+			this.computeEmbeddings(embeddingType, query, 'query', token),
+			this.getEmbeddingsForFiles(embeddingType, files.map(file => new UrlContent(file.uri, file.content)), EmbeddingsComputeQos.Batch, token)
 		]), token);
 
 		return this.computeChunkScores(fileChunksAndEmbeddings, queryEmbedding);
 	}
 
-	private async computeEmbeddings(str: string, token: CancellationToken): Promise<Embedding> {
-		const embeddings = await this._embeddingsComputer.computeEmbeddings(EmbeddingType.text3small_512, [str], {}, new TelemetryCorrelationId('UrlChunkEmbeddingsIndex::computeEmbeddings'), token);
+	private async computeEmbeddings(embeddingType: EmbeddingType, str: string, inputType: EmbeddingInputType, token: CancellationToken): Promise<Embedding> {
+		const embeddings = await this._embeddingsComputer.computeEmbeddings(embeddingType, [str], { inputType }, new TelemetryCorrelationId('UrlChunkEmbeddingsIndex::computeEmbeddings'), token);
 		return embeddings.values[0];
 	}
 
-	private async getEmbeddingsForFiles(files: readonly UrlContent[], qos: EmbeddingsComputeQos, token: CancellationToken): Promise<(readonly FileChunkWithEmbedding[])[]> {
+	private async getEmbeddingsForFiles(embeddingType: EmbeddingType, files: readonly UrlContent[], qos: EmbeddingsComputeQos, token: CancellationToken): Promise<(readonly FileChunkWithEmbedding[])[]> {
 		if (!files.length) {
 			return [];
 		}
@@ -88,7 +95,7 @@ export class UrlChunkEmbeddingsIndex extends Disposable {
 		}
 
 		const result = await Promise.all(files.map(async file => {
-			const result = await this.getChunksAndEmbeddings(authToken, file, batchInfo, qos, token);
+			const result = await this.getChunksAndEmbeddings(authToken, embeddingType, file, batchInfo, qos, token);
 			if (!result) {
 				return [];
 			}
@@ -107,13 +114,13 @@ export class UrlChunkEmbeddingsIndex extends Disposable {
 			);
 	}
 
-	private async getChunksAndEmbeddings(authToken: string, content: UrlContent, batchInfo: ComputeBatchInfo, qos: EmbeddingsComputeQos, token: CancellationToken): Promise<readonly FileChunkWithEmbedding[] | undefined> {
+	private async getChunksAndEmbeddings(authToken: string, embeddingType: EmbeddingType, content: UrlContent, batchInfo: ComputeBatchInfo, qos: EmbeddingsComputeQos, token: CancellationToken): Promise<readonly FileChunkWithEmbedding[] | undefined> {
 		const existing = await raceCancellationError(this._cache.get(content), token);
 		if (existing) {
 			return existing;
 		}
 
-		const chunksAndEmbeddings = await raceCancellationError(this._chunkingEndpointClient.computeChunksAndEmbeddings(authToken, EmbeddingType.text3small_512, content, batchInfo, qos, new Map(), new CallTracker('UrlChunkEmbeddingsIndex::getChunksAndEmbeddings'), token), token);
+		const chunksAndEmbeddings = await raceCancellationError(this._chunkingEndpointClient.computeChunksAndEmbeddings(authToken, embeddingType, content, batchInfo, qos, new Map(), new CallTracker('UrlChunkEmbeddingsIndex::getChunksAndEmbeddings'), token), token);
 		if (chunksAndEmbeddings) {
 			this._cache.set(content, chunksAndEmbeddings);
 		}

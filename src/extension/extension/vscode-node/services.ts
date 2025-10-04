@@ -103,6 +103,7 @@ import { IWorkspaceListenerService } from '../../workspaceRecorder/common/worksp
 import { WorkspacListenerService } from '../../workspaceRecorder/vscode-node/workspaceListenerService';
 import { registerServices as registerCommonServices } from '../vscode/services';
 import { NativeEnvServiceImpl } from '../../../platform/env/vscode-node/nativeEnvServiceImpl';
+import { GithubAvailableEmbeddingTypesService, IGithubAvailableEmbeddingTypesService } from '../../../platform/workspaceChunkSearch/common/githubAvailableEmbeddingTypes';
 
 // ###########################################################################################
 // ###                                                                                     ###
@@ -195,6 +196,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IWorkspaceListenerService, new SyncDescriptor(WorkspacListenerService));
 	builder.define(ICodeSearchAuthenticationService, new SyncDescriptor(VsCodeCodeSearchAuthenticationService));
 	builder.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
+	builder.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(GithubAvailableEmbeddingTypesService));
 }
 
 function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext) {
