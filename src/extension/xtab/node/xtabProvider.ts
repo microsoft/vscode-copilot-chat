@@ -247,7 +247,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const maxMergeConflictLines = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabMaxMergeConflictLines, this.expService);
 
-		const editWindowLinesRange = this.computeEditWindowLinesRange(currentFileContentLines, cursorLineIdx, request, maxMergeConflictLines, retryState);
+		const editWindowLinesRange = this.computeEditWindowLinesRange(currentFileContentLines, cursorLineIdx, request, maxMergeConflictLines, retryState, telemetryBuilder);
 
 		const cursorOriginalLinesOffset = Math.max(0, cursorLineIdx - editWindowLinesRange.start);
 		const editWindowLastLineLength = activeDocument.documentAfterEdits.getTransformer().getLineLength(editWindowLinesRange.endExclusive);
@@ -786,7 +786,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return new OffsetRange(areaAroundStart, areaAroundEndExcl);
 	}
 
-	private computeEditWindowLinesRange(currentDocLines: string[], cursorLine: number, request: StatelessNextEditRequest, maxMergeConflictLines: number | undefined, retryState: RetryState): OffsetRange {
+	private computeEditWindowLinesRange(currentDocLines: string[], cursorLine: number, request: StatelessNextEditRequest, maxMergeConflictLines: number | undefined, retryState: RetryState, telemetry: StatelessNextEditTelemetryBuilder): OffsetRange {
 		let nLinesAbove: number;
 		{
 			const useVaryingLinesAbove = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseVaryingLinesAbove, this.expService);
@@ -838,6 +838,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			const mergeConflictRange = findMergeConflictMarkersRange(currentDocLines, tentativeEditWindow, maxMergeConflictLines);
 			if (mergeConflictRange) {
 				const onlyMergeConflictLines = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabOnlyMergeConflictLines, this.expService);
+				telemetry.setMergeConflictExpanded(onlyMergeConflictLines ? 'only' : 'normal');
 				if (onlyMergeConflictLines) {
 					this.tracer.trace(`Expanding edit window to include ONLY merge conflict markers: ${mergeConflictRange.toString()}`);
 					codeToEditStart = mergeConflictRange.start;
