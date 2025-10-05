@@ -44,6 +44,7 @@ type ResponseInternalTelemetryProperties = {
 
 // EVENT: repoInfo
 type RepoInfoInternalTelemetryProperties = {
+	location: 'begin' | 'end';
 	remoteUrl: string | undefined;
 	headCommitHash: string | undefined;
 	diffsJSON: string | undefined;
@@ -497,7 +498,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			availableTools: JSON.stringify(availableTools.map(tool => tool.name))
 		}, toolCallMeasurements);
 
-		this._sendRepoInfoTelemetryEvent().catch(() => {
+		this._sendRepoInfoTelemetryEvent('end').catch(() => {
 			// IANHU: Log?
 		});
 	}
@@ -512,26 +513,23 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		return <T>this._genericTelemetryData.find(d => d instanceof ctor);
 	}
 
-	protected async _sendRepoInfoTelemetryEvent(): Promise<void> {
+	protected async _sendRepoInfoTelemetryEvent(location: 'begin' | 'end'): Promise<void> {
 		// Check early since the calculations before sending could be expensive
 		if (this._copilotTokenStore.copilotToken?.isInternal !== true) {
 			return;
 		}
 
-		const gitInfo = await this._getGitInfo();
+		const gitInfo = await this._getRepoInfoTelemetry(location);
 
 		if (!gitInfo) {
 			// IANHU: Logging?
 			return;
 		}
 
-		this._telemetryService.sendInternalMSFTTelemetryEvent('request.begin.repoInfo', {
-			remoteUrl: gitInfo.remoteUrl,
-			headCommitHash: gitInfo.headCommitHash
-		} as RepoInfoInternalTelemetryProperties);
+		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', gitInfo);
 	}
 
-	private async _getGitInfo(): Promise<RepoInfoInternalTelemetryProperties | undefined> {
+	private async _getRepoInfoTelemetry(location: 'begin' | 'end'): Promise<RepoInfoInternalTelemetryProperties | undefined> {
 		let repoContext: RepoContext | undefined;
 		if (this._documentContext?.document) {
 			repoContext = await this._gitService.getRepository(this._documentContext.document.uri);
@@ -573,6 +571,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		});
 
 		return {
+			location,
 			remoteUrl: githubInfo.remoteUrl,
 			headCommitHash: upstreamCommit,
 			// IANHU: Could be super large, will try using multiplex when logging
@@ -646,7 +645,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			turnNumber: this._conversation.turns.length,
 		} satisfies ResponseInternalPanelTelemetryMeasurements);
 
-		this._sendRepoInfoTelemetryEvent().catch(() => {
+		this._sendRepoInfoTelemetryEvent('begin').catch(() => {
 			// IANHU: Log?
 		});
 	}
