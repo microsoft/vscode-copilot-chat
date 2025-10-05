@@ -43,11 +43,15 @@ type ResponseInternalTelemetryProperties = {
 };
 
 // EVENT: repoInfo
-type RepoInfoInternalTelemetryProperties = {
-	location: 'begin' | 'end';
+type RepoInfoProperties = {
 	remoteUrl: string | undefined;
 	headCommitHash: string | undefined;
 	diffsJSON: string | undefined;
+};
+
+type RepoInfoInternalTelemetryProperties = RepoInfoProperties & {
+	location: 'begin' | 'end';
+	telemetryMessageId: string;
 };
 
 // EVENT: interactiveSessionResponse
@@ -519,17 +523,21 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			return;
 		}
 
-		const gitInfo = await this._getRepoInfoTelemetry(location);
+		const gitInfo = await this._getRepoInfoTelemetry();
 
 		if (!gitInfo) {
 			// IANHU: Logging?
 			return;
 		}
 
-		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', gitInfo);
+		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', {
+			...gitInfo,
+			location,
+			telemetryMessageId: this.telemetryMessageId
+		} as RepoInfoInternalTelemetryProperties);
 	}
 
-	private async _getRepoInfoTelemetry(location: 'begin' | 'end'): Promise<RepoInfoInternalTelemetryProperties | undefined> {
+	private async _getRepoInfoTelemetry(): Promise<RepoInfoProperties | undefined> {
 		let repoContext: RepoContext | undefined;
 		if (this._documentContext?.document) {
 			repoContext = await this._gitService.getRepository(this._documentContext.document.uri);
@@ -571,7 +579,6 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		});
 
 		return {
-			location,
 			remoteUrl: githubInfo.remoteUrl,
 			headCommitHash: upstreamCommit,
 			// IANHU: Could be super large, will try using multiplex when logging
