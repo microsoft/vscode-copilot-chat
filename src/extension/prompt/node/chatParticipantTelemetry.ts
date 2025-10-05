@@ -14,7 +14,7 @@ import { IGitExtensionService } from '../../../platform/git/common/gitExtensionS
 import { getGitHubRepoInfoFromContext, IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
-import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { ITelemetryService, multiplexProperties } from '../../../platform/telemetry/common/telemetry';
 import { isNotebookCellOrNotebookChatInput } from '../../../util/common/notebooks';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { DiagnosticsTelemetryData, findDiagnosticsTelemetry } from '../../inlineChat/node/diagnosticsTelemetry';
@@ -530,11 +530,15 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			return;
 		}
 
-		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', {
+		// IANHU: Multiplex can help with a big diffsJSON, but we still might need a check here
+		// to just not send if it's too big.
+		const properties = multiplexProperties({
 			...gitInfo,
 			location,
 			telemetryMessageId: this.telemetryMessageId
 		} as RepoInfoInternalTelemetryProperties);
+
+		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', properties);
 
 		// IANHU: Remove this later, for now just logging the event to the console so we can see it
 		console.log(JSON.stringify({
