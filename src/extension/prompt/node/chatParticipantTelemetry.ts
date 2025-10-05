@@ -336,7 +336,6 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		// we are in a super-ctor and use a microtask to give sub-classes a change to initialize properties
 		// that might be used in their _sendInternalRequestTelemetryEvent-method
 		queueMicrotask(() => this._sendInternalRequestTelemetryEvent());
-
 	}
 
 	public markReceivedToken(): void {
@@ -551,6 +550,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		}));
 	}
 
+	// From a given repo, get enough information to reconstruct the repo state versus upstream
 	private async _getRepoInfoTelemetry(): Promise<RepoInfoProperties | undefined> {
 		let repoContext: RepoContext | undefined;
 		if (this._documentContext?.document) {
@@ -564,7 +564,6 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		}
 
 		const githubInfo = getGitHubRepoInfoFromContext(repoContext);
-
 		if (!githubInfo) {
 			return;
 		}
@@ -573,18 +572,17 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		const gitAPI = this._gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(repoContext.rootUri);
 		const upstreamCommit = repository?.state.HEAD?.upstream?.commit;
-
 		if (!upstreamCommit) {
 			return;
 		}
 
 		const changes = await this._gitService.diffWith(repoContext.rootUri, '@{upstream}');
-
 		if (!changes || changes.length === 0) {
 			return;
 		}
 
 		// Reduce to just the diff information we need
+		// IANHU: We might need a couple more properties here, will revisit, but keep simple for now
 		const diffs = (await this._gitDiffService.getChangeDiffs(repoContext.rootUri, changes)).map(diff => {
 			return {
 				uri: diff.uri.toString(),

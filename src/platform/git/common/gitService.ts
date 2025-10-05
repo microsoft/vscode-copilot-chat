@@ -34,10 +34,6 @@ export interface RepoContext {
 	isIgnored(uri: URI): Promise<boolean>;
 }
 
-export interface RepoDiff {
-	readonly diffs: { fileName: string; diff: string }[];
-}
-
 export const IGitService = createServiceIdentifier<IGitService>('IGitService');
 
 export interface IGitService extends IDisposable {
