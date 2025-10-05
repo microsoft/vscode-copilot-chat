@@ -10,6 +10,7 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { roleToString } from '../../../platform/chat/common/globalStringUtils';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
+import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { getGitHubRepoInfoFromContext, IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
@@ -311,6 +312,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
 		@IGitService protected readonly _gitService: IGitService,
 		@IGitDiffService protected readonly _gitDiffService: IGitDiffService,
+		@IGitExtensionService protected readonly _gitExtensionService: IGitExtensionService,
 		@ICopilotTokenStore protected readonly _copilotTokenStore: ICopilotTokenStore,
 	) {
 		// Extend the base user telemetry with message and prompt information.
@@ -330,16 +332,6 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		// that might be used in their _sendInternalRequestTelemetryEvent-method
 		queueMicrotask(() => this._sendInternalRequestTelemetryEvent());
 
-		// Only send repo info telemetry for internal users
-		if (this._copilotTokenStore.copilotToken?.isInternal === true) {
-			queueMicrotask(async () => {
-				await this._sendRepoInfoTelemetryEvent().catch(() => {
-					// IANHU: Log?
-					// IANHU: Repo info could be large / slow to calculate diffs, so add as a separate event
-					// as opposed to trying to add to the main internal request event, less invasive.
-				});
-			});
-		}
 	}
 
 	public markReceivedToken(): void {
@@ -505,6 +497,9 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			availableTools: JSON.stringify(availableTools.map(tool => tool.name))
 		}, toolCallMeasurements);
 
+		this._sendRepoInfoTelemetryEvent().catch(() => {
+			// IANHU: Log?
+		});
 	}
 
 	protected abstract _sendInternalRequestTelemetryEvent(): void;
@@ -517,7 +512,12 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		return <T>this._genericTelemetryData.find(d => d instanceof ctor);
 	}
 
-	private async _sendRepoInfoTelemetryEvent(): Promise<void> {
+	protected async _sendRepoInfoTelemetryEvent(): Promise<void> {
+		// Check early since the calculations before sending could be expensive
+		if (this._copilotTokenStore.copilotToken?.isInternal !== true) {
+			return;
+		}
+
 		const gitInfo = await this._getGitInfo();
 
 		if (!gitInfo) {
@@ -525,23 +525,6 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			return;
 		}
 
-		// IANHU: Make sure to triple-check metadata classification, just getting quick info in for now
-		/* __GDPR__
-			"request.repoInfo" : {
-				"owner": "ianhu",
-				"comment": "Github repository information for the current chat session.",
-				"repoLink": {
-					"classification": "SystemMetaData",
-					"purpose": "FeatureInsight",
-					"comment": "The GitHub repository link"
-				},
-				"baseCommit": {
-					"classification": "SystemMetaData",
-					"purpose": "FeatureInsight",
-					"comment": "The base commit before the request was sent"
-				}
-			}
-		*/
 		this._telemetryService.sendInternalMSFTTelemetryEvent('request.begin.repoInfo', {
 			remoteUrl: gitInfo.remoteUrl,
 			headCommitHash: gitInfo.headCommitHash
@@ -566,20 +549,34 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			return;
 		}
 
-		// IANHU: Merge changes?
-		const changes = [
-			...repoContext.changes.workingTree,
-			...repoContext.changes.indexChanges,
-			...repoContext.changes.untrackedChanges
-		];
+		// Get the upstream commit from the repository
+		const gitAPI = this._gitExtensionService.getExtensionApi();
+		const repository = gitAPI?.getRepository(repoContext.rootUri);
+		const upstreamCommit = repository?.state.HEAD?.upstream?.commit;
 
-		const diffs = await this._gitDiffService.getChangeDiffs(repoContext.rootUri, changes);
+		if (!upstreamCommit) {
+			return;
+		}
+
+		const changes = await this._gitService.diffWith(repoContext.rootUri, '@{upstream}');
+
+		if (!changes || changes.length === 0) {
+			return;
+		}
+
+		// Reduce to just the diff information we need
+		const diffs = (await this._gitDiffService.getChangeDiffs(repoContext.rootUri, changes)).map(diff => {
+			return {
+				uri: diff.uri.toString(),
+				diff: diff.diff,
+			};
+		});
 
 		return {
 			remoteUrl: githubInfo.remoteUrl,
-			headCommitHash: repoContext.headCommitHash,
+			headCommitHash: upstreamCommit,
 			// IANHU: Could be super large, will try using multiplex when logging
-			diffsJSON: diffs ? JSON.stringify(diffs) : undefined,
+			diffsJSON: diffs.length > 0 ? JSON.stringify(diffs) : undefined,
 		};
 	}
 
@@ -606,6 +603,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IGitService gitService: IGitService,
 		@IGitDiffService gitDiffService: IGitDiffService,
+		@IGitExtensionService gitExtensionService: IGitExtensionService,
 		@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore,
 	) {
 		super(ChatLocation.Panel,
@@ -626,13 +624,12 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			telemetryService,
 			gitService,
 			gitDiffService,
+			gitExtensionService,
 			copilotTokenStore
 		);
 	}
 
 	protected override _sendInternalRequestTelemetryEvent(): void {
-
-
 		// Capture the created prompt in internal telemetry
 		this._telemetryService.sendInternalMSFTTelemetryEvent('interactiveSessionMessage', {
 			chatLocation: 'panel',
@@ -648,6 +645,10 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		} satisfies RequestInternalPanelTelemetryProperties, {
 			turnNumber: this._conversation.turns.length,
 		} satisfies ResponseInternalPanelTelemetryMeasurements);
+
+		this._sendRepoInfoTelemetryEvent().catch(() => {
+			// IANHU: Log?
+		});
 	}
 
 	protected override async _sendResponseTelemetryEvent(responseType: ChatFetchResponseType, response: string, interactionOutcome: InteractionOutcome, toolCalls: IToolCall[] = []): Promise<void> {
@@ -845,6 +846,7 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 		@ILanguageDiagnosticsService private readonly _languageDiagnosticsService: ILanguageDiagnosticsService,
 		@IGitService gitService: IGitService,
 		@IGitDiffService gitDiffService: IGitDiffService,
+		@IGitExtensionService gitExtensionService: IGitExtensionService,
 		@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore,
 	) {
 		super(ChatLocation.Editor,
@@ -865,6 +867,7 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			telemetryService,
 			gitService,
 			gitDiffService,
+			gitExtensionService,
 			copilotTokenStore
 		);
 
