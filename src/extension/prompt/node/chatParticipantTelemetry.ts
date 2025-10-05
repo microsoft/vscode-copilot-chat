@@ -535,6 +535,16 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			location,
 			telemetryMessageId: this.telemetryMessageId
 		} as RepoInfoInternalTelemetryProperties);
+
+		// IANHU: Remove this later, for now just logging the event to the console so we can see it
+		console.log(JSON.stringify({
+			name: 'request.repoInfo',
+			data: {
+				...gitInfo,
+				location,
+				telemetryMessageId: this.telemetryMessageId
+			}
+		}));
 	}
 
 	private async _getRepoInfoTelemetry(): Promise<RepoInfoProperties | undefined> {
