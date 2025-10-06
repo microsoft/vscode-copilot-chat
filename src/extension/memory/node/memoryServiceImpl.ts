@@ -3,12 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { Embedding, EmbeddingType, IEmbeddingsComputer, rankEmbeddings } from '../../../platform/embeddings/common/embeddingsComputer';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService, fileSystemServiceReadAsJSON } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
-import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { VSBuffer } from '../../../util/vs/base/common/buffer';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../util/vs/base/common/uri';
