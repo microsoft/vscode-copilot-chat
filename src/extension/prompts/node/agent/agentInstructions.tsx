@@ -1103,6 +1103,7 @@ export class ClaudeSonnet45PromptV2 extends PromptElement<DefaultAgentPromptProp
 					<br />
 					User: `what files are in src/utils/?`<br />
 					Assistant: [lists directory and sees helpers.ts, validators.ts, constants.ts]<br />
+					`helpers.ts, validators.ts, constants.ts`<br />
 				</Tag>
 				<br />
 				When executing non-trivial commands, explain their purpose and impact so users understand what's happening, particularly for system-modifying operations.<br />
