@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
+import { ChatCompletionContentPartKind } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
 import { FetchStreamSource } from '../../../platform/chat/common/chatMLFetcher';
 import { ChatFetchError, ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { toTextParts } from '../../../platform/chat/common/globalStringUtils';
@@ -299,19 +300,16 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const prediction = this.getPredictedOutput(editWindowLines, promptOptions.promptingStrategy);
 
-		const messages = [
-			{
-				role: Raw.ChatRole.System,
-				content: toTextParts(this.pickSystemPrompt(promptOptions.promptingStrategy))
-			},
-			{ role: Raw.ChatRole.User, content: toTextParts(userPrompt) }
-		] satisfies Raw.ChatMessage[];
+		const messages = constructMessages({
+			systemMsg: this.pickSystemPrompt(promptOptions.promptingStrategy),
+			userMsg: userPrompt,
+		});
 
 		logContext.setPrompt(messages);
 		telemetryBuilder.setPrompt(messages);
 
 		const HARD_CHAR_LIMIT = 30000 * 4; // 30K tokens, assuming 4 chars per token -- we use approximation here because counting tokens exactly is time-consuming
-		const promptCharCount = messages.reduce((total, msg) => total + msg.content.reduce((subtotal, part) => subtotal + part.text.length, 0), 0);
+		const promptCharCount = charCount(messages);
 		if (promptCharCount > HARD_CHAR_LIMIT) {
 			return Result.error(new NoNextEditReason.PromptTooLarge('final'));
 		}
@@ -1133,4 +1131,24 @@ export function findMergeConflictMarkersRange(lines: string[], editWindowRange: 
 		}
 	}
 	return undefined;
+}
+
+function constructMessages({ systemMsg, userMsg }: { systemMsg: string; userMsg: string }): Raw.ChatMessage[] {
+	return [
+		{
+			role: Raw.ChatRole.System,
+			content: toTextParts(systemMsg)
+		},
+		{
+			role: Raw.ChatRole.User,
+			content: toTextParts(userMsg)
+		}
+	] satisfies Raw.ChatMessage[];
+}
+
+function charCount(messages: Raw.ChatMessage[]): number {
+	const promptCharCount = messages.reduce((total, msg) =>
+		total + msg.content.reduce((subtotal, part) =>
+			subtotal + (part.type === ChatCompletionContentPartKind.Text ? part.text.length : 0), 0), 0);
+	return promptCharCount;
 }
