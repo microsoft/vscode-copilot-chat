@@ -165,7 +165,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			// Check against reserved headers (case-insensitive)
 			const lowerKey = key.toLowerCase();
 			if (OpenAIEndpoint._reservedHeaders.has(lowerKey)) {
-				this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' attempted to override reserved header, skipping.`);
+				this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' attempted to override reserved header '${key}', skipping.`);
 				continue;
 			}
 
