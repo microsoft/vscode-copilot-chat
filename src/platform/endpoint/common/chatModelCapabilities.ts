@@ -22,8 +22,14 @@ async function getSha256Hash(text: string): Promise<string> {
 	return hash;
 }
 
+const HIDDEN_MODEL_A_HASHES = [
+	'a99dd17dfee04155d863268596b7f6dd36d0a6531cd326348dbe7416142a21a3',
+	'6b0f165d0590bf8d508540a796b4fda77bf6a0a4ed4e8524d5451b1913100a95'
+];
+
 export async function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
-	return await getSha256Hash(model.family) === 'a99dd17dfee04155d863268596b7f6dd36d0a6531cd326348dbe7416142a21a3';
+	const h = await getSha256Hash(model.family);
+	return HIDDEN_MODEL_A_HASHES.includes(h);
 }
 
 export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint) {

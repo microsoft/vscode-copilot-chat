@@ -6,7 +6,7 @@
 import type * as vscode from 'vscode';
 import { DebugRecorder } from '../../extension/inlineEdits/node/debugRecorder';
 import { INextEditProvider, NextEditProvider } from '../../extension/inlineEdits/node/nextEditProvider';
-import { LlmNESTelemetryBuilder } from '../../extension/inlineEdits/node/nextEditProviderTelemetry';
+import { LlmNESTelemetryBuilder, NextEditProviderTelemetryBuilder, TelemetrySender } from '../../extension/inlineEdits/node/nextEditProviderTelemetry';
 import { INextEditResult } from '../../extension/inlineEdits/node/nextEditResult';
 import { ChatMLFetcherImpl } from '../../extension/prompt/node/chatMLFetcher';
 import { XtabProvider } from '../../extension/xtab/node/xtabProvider';
@@ -115,13 +115,41 @@ export interface INESProviderOptions {
 	readonly logTarget?: ILogTarget;
 }
 
-export function createNESProvider(options: INESProviderOptions): INESProvider {
+export interface INESResult {
+	readonly result?: {
+		readonly newText: string;
+		readonly range: {
+			readonly start: number;
+			readonly endExclusive: number;
+		};
+	};
+}
+
+export interface INESProvider<T extends INESResult = INESResult> {
+	getId(): string;
+	getNextEdit(documentUri: vscode.Uri, cancellationToken: CancellationToken): Promise<T>;
+	handleShown(suggestion: T): void;
+	handleAcceptance(suggestion: T): void;
+	handleRejection(suggestion: T): void;
+	handleIgnored(suggestion: T, supersededByRequestUuid: T | undefined): void;
+	dispose(): void;
+}
+
+export function createNESProvider(options: INESProviderOptions): INESProvider<INESResult> {
 	const instantiationService = setupServices(options);
 	return instantiationService.createInstance(NESProvider, options);
 }
 
-class NESProvider extends Disposable implements INESProvider {
+interface NESResult extends INESResult {
+	docId: DocumentId;
+	requestUuid: string;
+	internalResult: INextEditResult;
+	telemetryBuilder: NextEditProviderTelemetryBuilder;
+}
+
+class NESProvider extends Disposable implements INESProvider<NESResult> {
 	private readonly _nextEditProvider: INextEditProvider<INextEditResult, LlmNESTelemetryBuilder>;
+	private readonly _telemetrySender: TelemetrySender;
 	private readonly _debugRecorder: DebugRecorder;
 
 	constructor(
@@ -140,29 +168,49 @@ class NESProvider extends Disposable implements INESProvider {
 		this._debugRecorder = this._register(new DebugRecorder(this._options.workspace));
 
 		this._nextEditProvider = instantiationService.createInstance(NextEditProvider, this._options.workspace, statelessNextEditProvider, historyContextProvider, xtabHistoryTracker, this._debugRecorder);
+		this._telemetrySender = this._register(instantiationService.createInstance(TelemetrySender));
 	}
 
 	getId(): string {
 		return this._nextEditProvider.ID;
 	}
 
-	handleShown(suggestion: INextEditResult): void {
-		this._nextEditProvider.handleShown(suggestion);
+	handleShown(result: NESResult): void {
+		result.telemetryBuilder.setAsShown();
+		this._nextEditProvider.handleShown(result.internalResult);
 	}
 
-	handleAcceptance(docId: DocumentId, suggestion: INextEditResult): void {
-		this._nextEditProvider.handleAcceptance(docId, suggestion);
+	handleAcceptance(result: NESResult): void {
+		result.telemetryBuilder.setAcceptance('accepted');
+		result.telemetryBuilder.setStatus('accepted');
+		this._nextEditProvider.handleAcceptance(result.docId, result.internalResult);
+		this.handleEndOfLifetime(result);
 	}
 
-	handleRejection(docId: DocumentId, suggestion: INextEditResult): void {
-		this._nextEditProvider.handleRejection(docId, suggestion);
+	handleRejection(result: NESResult): void {
+		result.telemetryBuilder.setAcceptance('rejected');
+		result.telemetryBuilder.setStatus('rejected');
+		this._nextEditProvider.handleRejection(result.docId, result.internalResult);
+		this.handleEndOfLifetime(result);
 	}
 
-	handleIgnored(docId: DocumentId, suggestion: INextEditResult, supersededByRequestUuid: INextEditResult | undefined): void {
-		this._nextEditProvider.handleIgnored(docId, suggestion, supersededByRequestUuid);
+	handleIgnored(result: NESResult, supersededByRequestUuid: NESResult | undefined): void {
+		if (supersededByRequestUuid) {
+			result.telemetryBuilder.setSupersededBy(supersededByRequestUuid.requestUuid);
+		}
+		this._nextEditProvider.handleIgnored(result.docId, result.internalResult, supersededByRequestUuid?.internalResult);
+		this.handleEndOfLifetime(result);
 	}
 
-	async getNextEdit(documentUri: vscode.Uri, cancellationToken: CancellationToken): Promise<INextEditResult> {
+	private handleEndOfLifetime(result: NESResult): void {
+		try {
+			this._telemetrySender.sendTelemetryForBuilder(result.telemetryBuilder);
+		} finally {
+			result.telemetryBuilder.dispose();
+		}
+	}
+
+	async getNextEdit(documentUri: vscode.Uri, cancellationToken: CancellationToken): Promise<NESResult> {
 		const docId = DocumentId.create(documentUri.toString());
 
 		// Create minimal required context objects
@@ -183,28 +231,39 @@ class NESProvider extends Disposable implements INESProvider {
 		}
 
 		// Create telemetry builder - we'll need to pass null/undefined for services we don't have
-		const telemetryBuilder = new LlmNESTelemetryBuilder(
-			new NullGitExtensionService(), // IGitExtensionService
+		const telemetryBuilder = new NextEditProviderTelemetryBuilder(
+			new NullGitExtensionService(),
 			undefined, // INotebookService
-			this._workspaceService, // IWorkspaceService
-			this._nextEditProvider.ID, // providerId
-			document, // doc
-			this._debugRecorder, // debugRecorder
-			undefined // requestBookmark
+			this._workspaceService,
+			this._nextEditProvider.ID,
+			document,
+			this._debugRecorder,
+			logContext.recordingBookmark
 		);
+		telemetryBuilder.setOpportunityId(context.requestUuid);
 
-		return await this._nextEditProvider.getNextEdit(docId, context, logContext, cancellationToken, telemetryBuilder);
+		try {
+			const internalResult = await this._nextEditProvider.getNextEdit(docId, context, logContext, cancellationToken, telemetryBuilder.nesBuilder);
+			const result: NESResult = {
+				result: internalResult.result ? {
+					newText: internalResult.result.edit.newText,
+					range: internalResult.result.edit.replaceRange,
+				} : undefined,
+				docId,
+				requestUuid: context.requestUuid,
+				internalResult,
+				telemetryBuilder,
+			};
+			return result;
+		} catch (e) {
+			try {
+				this._telemetrySender.sendTelemetryForBuilder(telemetryBuilder);
+			} finally {
+				telemetryBuilder.dispose();
+			}
+			throw e;
+		}
 	}
-}
-
-export interface INESProvider {
-	getId(): string;
-	getNextEdit(documentUri: vscode.Uri, cancellationToken: CancellationToken): Promise<INextEditResult>;
-	handleShown(suggestion: INextEditResult): void;
-	handleAcceptance(docId: DocumentId, suggestion: INextEditResult): void;
-	handleRejection(docId: DocumentId, suggestion: INextEditResult): void;
-	handleIgnored(docId: DocumentId, suggestion: INextEditResult, supersededByRequestUuid: INextEditResult | undefined): void;
-	dispose(): void;
 }
 
 function setupServices(options: INESProviderOptions) {

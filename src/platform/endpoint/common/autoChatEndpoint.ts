@@ -11,7 +11,6 @@ import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IChatMLFetcher, Source } from '../../chat/common/chatMLFetcher';
 import { ChatLocation, ChatResponse } from '../../chat/common/commonTypes';
-import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, OptionalChatRequestParams } from '../../networking/common/fetch';
 import { Response } from '../../networking/common/fetcherService';
@@ -117,28 +116,6 @@ export class AutoChatEndpoint implements IChatEndpoint {
 			telemetryProperties,
 		}, token);
 	}
-}
-
-/**
- * Checks if the auto chat mode is enabled.
- * @param expService The experimentation service to use to check if the auto mode is enabled
- * @param envService The environment service to use to check if the auto mode is enabled
- * @returns True if the auto mode is enabled, false otherwise
- */
-export async function isAutoModelEnabled(expService: IExperimentationService, envService: IEnvService, authService: IAuthenticationService): Promise<boolean> {
-	if (envService.isPreRelease() || authService.copilotToken?.isNoAuthUser) {
-		return true;
-	}
-
-	if (!!expService.getTreatmentVariable<boolean>('autoModelEnabled')) {
-		try {
-			return (await authService.getCopilotToken()).isEditorPreviewFeaturesEnabled();
-		} catch (e) {
-			return false;
-		}
-	}
-
-	return false;
 }
 
 /**

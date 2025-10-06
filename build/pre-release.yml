@@ -103,7 +103,7 @@ extends:
           $oauthToken = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($basicToken)) -split ":" | Select-Object -Last 1
           $PackageJson = Get-Content -Path package.json -Raw | ConvertFrom-Json
           $CompletionsCoreVersion = $PackageJson.completionsCore
-          git clone -b completions-port https://vscode:$oauthToken@github.com/microsoft/vscode-copilot-completions.git --depth 1 src/extension/completions-core
+          git clone -b completions-port https://vscode:$oauthToken@github.com/microsoft/vscode-copilot-completions.git src/extension/completions-core
           pushd src/extension/completions-core
           git checkout $CompletionsCoreVersion
           popd
@@ -182,7 +182,7 @@ extends:
           $oauthToken = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String($basicToken)) -split ":" | Select-Object -Last 1
           $PackageJson = Get-Content -Path package.json -Raw | ConvertFrom-Json
           $CompletionsCoreVersion = $PackageJson.completionsCore
-          git clone -b completions-port https://vscode:$oauthToken@github.com/microsoft/vscode-copilot-completions.git --depth 1 src/extension/completions-core
+          git clone -b completions-port https://vscode:$oauthToken@github.com/microsoft/vscode-copilot-completions.git src/extension/completions-core
           pushd src/extension/completions-core
           git checkout $CompletionsCoreVersion
           popd
