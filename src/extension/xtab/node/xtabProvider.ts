@@ -271,24 +271,18 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		telemetryBuilder.setNLinesOfCurrentFileInPrompt(nLinesCurrentFile);
 
-		const recordingEnabled = this.configService.getConfig<boolean>(ConfigKey.Internal.InlineEditsLogContextRecorderEnabled);
+		const langCtx = await this.getAndProcessLanguageContext(
+			request,
+			delaySession,
+			activeDocument,
+			cursorPosition,
+			promptOptions,
+			logContext,
+			cancellationToken,
+		);
 
-		let langCtx: LanguageContextResponse | undefined;
-		if (promptOptions.languageContext.enabled || recordingEnabled) {
-			const langCtxPromise = this.getLanguageContext(request, delaySession, activeDocument, cursorPosition, logContext, cancellationToken);
-
-			if (promptOptions.languageContext.enabled) {
-				langCtx = await langCtxPromise;
-			}
-
-			if (recordingEnabled) {
-				logContext.setFileDiagnostics(this.langDiagService.getAllDiagnostics());
-				langCtxPromise.then(langCtxs => {
-					if (langCtxs) {
-						logContext.setLanguageContext(langCtxs);
-					}
-				});
-			}
+		if (cancellationToken.isCancellationRequested) {
+			return Result.error(new NoNextEditReason.GotCancelled('afterLanguageContextAwait'));
 		}
 
 		const promptPieces = new PromptPieces(
@@ -418,6 +412,38 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			taggedCurrentFileR,
 			areaAroundCodeToEdit,
 		}));
+	}
+
+	private getAndProcessLanguageContext(
+		request: StatelessNextEditRequest,
+		delaySession: DelaySession,
+		activeDocument: StatelessNextEditDocument,
+		cursorPosition: Position,
+		promptOptions: ModelConfig,
+		logContext: InlineEditRequestLogContext,
+		cancellationToken: CancellationToken,
+	): Promise<LanguageContextResponse | undefined> {
+		const recordingEnabled = this.configService.getConfig<boolean>(ConfigKey.Internal.InlineEditsLogContextRecorderEnabled);
+
+		if (!promptOptions.languageContext.enabled && !recordingEnabled) {
+			return Promise.resolve(undefined);
+		}
+
+		const langCtxPromise = this.getLanguageContext(request, delaySession, activeDocument, cursorPosition, logContext, cancellationToken);
+
+		// if recording, add diagnostics for the file to the recording and hook up the language context promise to write to the recording
+		if (recordingEnabled) {
+			logContext.setFileDiagnostics(this.langDiagService.getAllDiagnostics());
+			langCtxPromise.then(langCtxs => {
+				if (langCtxs) {
+					logContext.setLanguageContext(langCtxs);
+				}
+			});
+		}
+
+		return promptOptions.languageContext.enabled
+			? langCtxPromise
+			: Promise.resolve(undefined);
 	}
 
 
