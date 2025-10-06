@@ -75,7 +75,7 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		}
 
 		if (results === undefined) {
-			throw new Error('Timeout in searching files');
+			throw new Error('Timeout in searching text in files');
 		}
 
 		const prompt = await raceTimeout(
@@ -85,6 +85,10 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 			),
 			timeoutInMs
 		);
+
+		if (prompt === undefined) {
+			throw new Error('Timeout in rendering prompt');
+		}
 
 		const result = new ExtendedLanguageModelToolResult([new LanguageModelPromptTsxPart(prompt)]);
 		const textMatches = results.flatMap(r => {
@@ -127,6 +131,7 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 			token);
 		const results: vscode.TextSearchResult2[] = [];
 		for await (const item of searchResult.results) {
+			await new Promise(r => setTimeout(r, 5000)); // yield to allow cancellation to be processed
 			checkCancellation(token);
 			results.push(item);
 		}
