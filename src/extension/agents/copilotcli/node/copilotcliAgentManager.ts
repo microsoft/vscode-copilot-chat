@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { AgentOptions, SDKEvent, Session } from '@github/copilot-developer-action/sdk';
+import type { AgentOptions, SDKEvent, Session } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
@@ -76,7 +76,7 @@ export class CopilotCLISession extends Disposable {
 
 	async *query(prompt: string, options: AgentOptions): AsyncGenerator<SDKEvent> {
 		// Dynamically import the SDK
-		const { Agent } = await import('@github/copilot-developer-action/sdk');
+		const { Agent } = await import('@github/copilot/sdk');
 		const agent = new Agent(options);
 		yield* agent.query(prompt);
 	}

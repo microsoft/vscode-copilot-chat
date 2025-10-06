@@ -39,6 +39,7 @@ const baseNodeBuildOptions = {
 		'zeromq',
 		'electron', // this is for simulation workbench,
 		'sqlite3',
+		'@github/copilot',
 		...(isDev ? [] : ['dotenv', 'source-map-support'])
 	],
 	platform: 'node',
@@ -177,9 +178,7 @@ const nodeExtHostBuildOptions = {
 	plugins: [testBundlePlugin, sanityTestBundlePlugin, importMetaPlugin],
 	external: [
 		...baseNodeBuildOptions.external,
-		'vscode',
-		'@github/copilot-developer-action',
-		'@github/copilot-developer-action/sdk'
+		'vscode'
 	]
 } satisfies esbuild.BuildOptions;
 
