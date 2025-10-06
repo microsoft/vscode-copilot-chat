@@ -19,6 +19,7 @@ type RepoInfoProperties = {
 
 type RepoInfoInternalTelemetryProperties = RepoInfoProperties & {
 	location: 'begin' | 'end';
+	result: 'success' | 'failure';
 	telemetryMessageId: string;
 };
 
@@ -72,31 +73,22 @@ export class RepoInfoTelemetry {
 			return;
 		}
 
-		// IANHU: Remove
-		console.log('repoInfoTelemetry: getting repo info', location);
-
 		const gitInfo = await this._getRepoInfoTelemetry();
 		if (!gitInfo) {
 			return;
 		}
 
-		// IANHU: Remove
-		console.log('repoInfoTelemetry: got repo info', location);
-
 		const properties = multiplexProperties({
 			...gitInfo,
 			location,
+			result: 'success',
 			telemetryMessageId: this._telemetryMessageId
 		} as RepoInfoInternalTelemetryProperties);
 
-		// IANHU: Remove
-		console.log('repoInfoTelemetry: sending message', location);
-
 		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', properties);
 
-		// IANHU: Remove
-		console.log('repoInfoTelemetry: sent message', location);
 
+		// IANHU: Remove logging later
 		console.log(JSON.stringify({
 			name: 'request.repoInfo',
 			data: {
