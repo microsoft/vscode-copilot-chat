@@ -4,28 +4,35 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Readable } from 'stream';
-import { ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
+import { Config, ConfigKey, IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
-import { FetchOptions, IAbortController, IFetcherService, Response } from '../common/fetcherService';
+import { FetcherId, FetchOptions, IAbortController, IFetcherService, Response } from '../common/fetcherService';
 import { IFetcher } from '../common/networking';
 import { NodeFetcher } from '../node/nodeFetcher';
 import { NodeFetchFetcher } from '../node/nodeFetchFetcher';
 import { ElectronFetcher } from './electronFetcher';
+
+const fetcherConfigKeys: Record<FetcherId, Config<boolean>> = {
+	'electron-fetch': ConfigKey.Shared.DebugUseElectronFetcher,
+	'node-fetch': ConfigKey.Shared.DebugUseNodeFetchFetcher,
+	'node-http': ConfigKey.Shared.DebugUseNodeFetcher,
+};
 
 export class FetcherService implements IFetcherService {
 
 	declare readonly _serviceBrand: undefined;
 	private readonly _availableFetchers: IFetcher[];
 	private _fetcher: IFetcher;
+	private _knownBadFetchers = new Set<string>();
 
 	constructor(
 		fetcher: IFetcher | undefined,
 		@ILogService private readonly _logService: ILogService,
 		@IEnvService envService: IEnvService,
-		@IConfigurationService configurationService: IConfigurationService,
+		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
-		this._availableFetchers = fetcher ? [fetcher] : this._getFetchers(configurationService, envService);
+		this._availableFetchers = fetcher ? [fetcher] : this._getFetchers(_configurationService, envService);
 		this._fetcher = this._availableFetchers[0];
 	}
 
@@ -75,6 +82,7 @@ export class FetcherService implements IFetcherService {
 		if (options.verifyJSONAndRetry && this._fetcher === this._availableFetchers[0] && this._availableFetchers.length > 1) {
 			let firstResponse: Response | undefined;
 			let firstError: any;
+			const knownBadFetchers = new Set<string>();
 			for (const fetcher of this._availableFetchers) {
 				try {
 					const res = await fetcher.fetch(url, options);
@@ -82,6 +90,7 @@ export class FetcherService implements IFetcherService {
 						firstResponse = res;
 					}
 					if (!res.ok) {
+						knownBadFetchers.add(fetcher.getUserAgentLibrary());
 						this._logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} failed with status: ${res.status} ${res.statusText}`);
 						continue;
 					}
@@ -106,6 +115,7 @@ export class FetcherService implements IFetcherService {
 						}
 						this._logService.info(`FetcherService: using ${fetcher.getUserAgentLibrary()} from now on`);
 						this._fetcher = fetcher;
+						this._knownBadFetchers = knownBadFetchers;
 					}
 					return new Response(
 						res.status,
@@ -119,6 +129,7 @@ export class FetcherService implements IFetcherService {
 					if (fetcher === this._availableFetchers[0]) {
 						firstError = err;
 					}
+					knownBadFetchers.add(fetcher.getUserAgentLibrary());
 					this._logService.info(`FetcherService: ${fetcher.getUserAgentLibrary()} failed with error: ${err.message}`);
 				}
 			}
@@ -127,7 +138,26 @@ export class FetcherService implements IFetcherService {
 			}
 			throw firstError;
 		}
-		return this._fetcher.fetch(url, options);
+		let fetcher = this._fetcher;
+		if (options.useFetcher) {
+			if (this._knownBadFetchers.has(options.useFetcher)) {
+				this._logService.trace(`FetcherService: not using requested fetcher ${options.useFetcher} as it is known to be failing, using ${fetcher.getUserAgentLibrary()} instead.`);
+			} else {
+				const configKey = fetcherConfigKeys[options.useFetcher];
+				if (configKey && this._configurationService.inspectConfig(configKey)?.globalValue === false) {
+					this._logService.trace(`FetcherService: not using requested fetcher ${options.useFetcher} as it is disabled in user settings, using ${fetcher.getUserAgentLibrary()} instead.`);
+				} else {
+					const requestedFetcher = this._availableFetchers.find(f => f.getUserAgentLibrary() === options.useFetcher);
+					if (requestedFetcher) {
+						fetcher = requestedFetcher;
+						this._logService.trace(`FetcherService: using ${options.useFetcher} as requested.`);
+					} else {
+						this._logService.info(`FetcherService: could not find requested fetcher ${options.useFetcher}, using ${fetcher.getUserAgentLibrary()} instead.`);
+					}
+				}
+			}
+		}
+		return fetcher.fetch(url, options);
 	}
 	private async retryFetchJSON(fetcher: IFetcher, url: string, options: FetchOptions): Promise<{ res: Response } | { err: any }> {
 		try {

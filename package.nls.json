@@ -295,5 +295,7 @@
 	"copilot.toolSet.runTasks.description": "Run tasks in your workspace",
 	"github.copilot.config.useResponsesApi": "Use the Responses API instead of the Chat Completions API when supported. Enables reasoning and reasoning summaries.\n\n**Note**: This is an experimental feature that is not yet activated for all users.",
 	"github.copilot.config.responsesApiReasoningEffort": "Sets the reasoning effort used for the Responses API. Requires `#github.copilot.chat.useResponsesApi#`.",
-	"github.copilot.config.responsesApiReasoningSummary": "Sets the reasoning summary style used for the Responses API. Requires `#github.copilot.chat.useResponsesApi#`."
+	"github.copilot.config.responsesApiReasoningSummary": "Sets the reasoning summary style used for the Responses API. Requires `#github.copilot.chat.useResponsesApi#`.",
+	"github.copilot.config.completionsFetcher": "Sets the fetcher used for the inline completions.",
+	"github.copilot.config.nesFetcher": "Sets the fetcher used for the next edit suggestions."
 }
