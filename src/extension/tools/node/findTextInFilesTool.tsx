@@ -11,6 +11,7 @@ import { IPromptPathRepresentationService } from '../../../platform/prompts/comm
 import { ISearchService } from '../../../platform/search/common/searchService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { asArray } from '../../../util/vs/base/common/arrays';
+import { raceCancellation, raceTimeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { count } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -55,22 +56,35 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		// try find text with a timeout of 10s
 		// TODO: consider making the timeout configurable
 		const timeoutInMs = 10_000;
-		let results = await Promise.race([
-			this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, token),
-			new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timeout in searching text in files")), timeoutInMs))]);
+		let results = await raceTimeout(
+			raceCancellation(
+				this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, token),
+				token
+			),
+			timeoutInMs
+		);
 
-		checkCancellation(token);
-		if (!results.length && queryIsValidRegex) {
-			results = await Promise.race([
-				this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, token),
-				new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timeout in searching text in files")), timeoutInMs))]);
+		if (results && !results.length && queryIsValidRegex) {
+			results = await raceTimeout(
+				raceCancellation(
+					this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, token),
+					token
+				),
+				timeoutInMs
+			);
 		}
 
-		checkCancellation(token);
-		const prompt = await Promise.race([
-			renderPromptElementJSON(this.instantiationService, FindTextInFilesResult, { textResults: results, maxResults, askedForTooManyResults: Boolean(askedForTooManyResults) }, options.tokenizationOptions, token),
-			new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout in rendering prompt element')), timeoutInMs))
-		]);
+		if (results === undefined) {
+			throw new Error('Timeout in searching files');
+		}
+
+		const prompt = await raceTimeout(
+			raceCancellation(
+				renderPromptElementJSON(this.instantiationService, FindTextInFilesResult, { textResults: results, maxResults, askedForTooManyResults: Boolean(askedForTooManyResults) }, options.tokenizationOptions, token),
+				token
+			),
+			timeoutInMs
+		);
 
 		const result = new ExtendedLanguageModelToolResult([new LanguageModelPromptTsxPart(prompt)]);
 		const textMatches = results.flatMap(r => {

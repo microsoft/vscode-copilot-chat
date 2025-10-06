@@ -11,6 +11,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import * as l10n from '@vscode/l10n';
 import { ISearchService } from '../../../platform/search/common/searchService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { raceCancellation, raceTimeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, MarkdownString } from '../../../vscodeTypes';
@@ -43,20 +44,29 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 		// try find files with a timeout of 10s
 		// TODO: consider making the timeout configurable
 		const timeoutInMs = 10_000;
-		const results = await Promise.race([
-			this.searchService.findFiles(pattern, undefined, token),
-			new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout in searching files')), timeoutInMs))
-		]);
+		const results = await raceTimeout(
+			raceCancellation(
+				Promise.resolve(this.searchService.findFiles(pattern, undefined, token)),
+				token
+			),
+			timeoutInMs
+		);
+
+		if (results === undefined) {
+			throw new Error('Timeout in searching files');
+		}
 
 		checkCancellation(token);
 
 		const maxResults = options.input.maxResults ?? 20;
 		const resultsToShow = results.slice(0, maxResults);
 		// Render the prompt element with a timeout
-		const prompt = await Promise.race([
-			renderPromptElementJSON(this.instantiationService, FindFilesResult, { fileResults: resultsToShow, totalResults: results.length }, options.tokenizationOptions, token),
-			new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout in rendering prompt element')), timeoutInMs))
-		]);
+		const prompt = await raceTimeout(
+			raceCancellation(
+				renderPromptElementJSON(this.instantiationService, FindFilesResult, { fileResults: resultsToShow, totalResults: results.length }, options.tokenizationOptions, token),
+				token),
+			timeoutInMs
+		);
 
 		const result = new ExtendedLanguageModelToolResult([new LanguageModelPromptTsxPart(prompt)]);
 		const query = `\`${options.input.query}\``;
