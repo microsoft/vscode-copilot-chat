@@ -9,25 +9,18 @@ import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { getGitHubRepoInfoFromContext, IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { ITelemetryService, multiplexProperties } from '../../../platform/telemetry/common/telemetry';
+import { ITelemetryService, multiplexProperties, wouldMultiplexTelemetryPropertyBeTruncated } from '../../../platform/telemetry/common/telemetry';
 
 // EVENT: repoInfo
-type RepoInfoProperties = {
-	remoteUrl: string | undefined;
-	headCommitHash: string | undefined;
-	diffsJSON: string | undefined;
-	filesChanged: boolean;
-};
-
 type RepoInfoTelemetryProperties = {
 	remoteUrl: string | undefined;
 	headCommitHash: string | undefined;
 	diffsJSON: string | undefined;
+	result: 'success' | 'filesChanged' | 'diffTooLarge';
 };
 
 type RepoInfoInternalTelemetryProperties = RepoInfoTelemetryProperties & {
 	location: 'begin' | 'end';
-	result: 'success' | 'failure' | 'filesChanged' | 'diffTooLarge';
 	telemetryMessageId: string;
 };
 
@@ -87,12 +80,9 @@ export class RepoInfoTelemetry {
 			return;
 		}
 
-		const result = gitInfo.filesChanged ? 'filesChanged' : 'success';
-		const { filesChanged, ...gitInfoProps } = gitInfo;
 		const properties = multiplexProperties({
-			...gitInfoProps,
+			...gitInfo,
 			location,
-			result,
 			telemetryMessageId: this._telemetryMessageId
 		} as RepoInfoInternalTelemetryProperties);
 
@@ -105,13 +95,12 @@ export class RepoInfoTelemetry {
 			data: {
 				...gitInfo,
 				location,
-				result,
 				telemetryMessageId: this._telemetryMessageId
 			}
 		}));
 	}
 
-	private async _getRepoInfoTelemetry(): Promise<RepoInfoProperties | undefined> {
+	private async _getRepoInfoTelemetry(): Promise<RepoInfoTelemetryProperties | undefined> {
 		const repoContext = this._gitService.activeRepository.get();
 
 		if (!repoContext || !repoContext.changes) {
@@ -152,7 +141,7 @@ export class RepoInfoTelemetry {
 					remoteUrl: githubInfo.remoteUrl,
 					headCommitHash: upstreamCommit,
 					diffsJSON: undefined,
-					filesChanged: true,
+					result: 'filesChanged',
 				};
 			}
 
@@ -171,16 +160,27 @@ export class RepoInfoTelemetry {
 					remoteUrl: githubInfo.remoteUrl,
 					headCommitHash: upstreamCommit,
 					diffsJSON: undefined,
-					filesChanged: true,
+					result: 'filesChanged',
+				};
+			}
+
+			const diffsJSON = diffs.length > 0 ? JSON.stringify(diffs) : undefined;
+
+			// Check if the diff is too big and notify that
+			if (wouldMultiplexTelemetryPropertyBeTruncated(diffsJSON)) {
+				return {
+					remoteUrl: githubInfo.remoteUrl,
+					headCommitHash: upstreamCommit,
+					diffsJSON: undefined,
+					result: 'diffTooLarge',
 				};
 			}
 
 			return {
 				remoteUrl: githubInfo.remoteUrl,
 				headCommitHash: upstreamCommit,
-				filesChanged: false,
-				// IANHU: Could be super large, will try using multiplex when logging
-				diffsJSON: diffs.length > 0 ? JSON.stringify(diffs) : undefined,
+				diffsJSON,
+				result: 'success',
 			};
 		} finally {
 			// Always dispose of the watcher and event listeners

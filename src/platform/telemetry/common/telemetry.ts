@@ -215,3 +215,7 @@ export function multiplexProperties(properties: { [key: string]: string | undefi
 	}
 	return newProperties;
 }
+
+export function wouldMultiplexTelemetryPropertyBeTruncated(propertyValue: string | undefined): boolean {
+	return (propertyValue?.length ?? 0) > (MAX_PROPERTY_LENGTH * MAX_CONCATENATED_PROPERTIES);
+}
