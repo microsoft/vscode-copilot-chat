@@ -43,7 +43,6 @@ import { Position } from '../../../util/vs/editor/common/core/position';
 import { Range } from '../../../util/vs/editor/common/core/range';
 import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
-import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Position as VscodePosition } from '../../../vscodeTypes';
 import { Delayer, DelaySession } from '../../inlineEdits/common/delayer';
@@ -53,6 +52,7 @@ import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFilterin
 import { createTaggedCurrentFileContentUsingPagedClipping, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, nes41Miniv3SystemPrompt, PromptPieces, PromptTags, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/promptCrafting';
 import { XtabEndpoint } from './xtabEndpoint';
 import { linesWithBackticksRemoved, toLines } from './xtabUtils';
+import { CurrentDocument } from './xtabCurrentDocument';
 
 namespace ResponseTags {
 	export const NO_CHANGE = {
@@ -85,6 +85,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 	public readonly dependsOnSelection = true;
 	public readonly showNextEditPreference = ShowNextEditPreference.Always;
+
+	private static computeTokens = (s: string) => Math.floor(s.length / 4);
 
 	private readonly tracer: ITracer;
 	private readonly delayer: Delayer;
@@ -226,33 +228,28 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		logContext.setEndpointInfo(typeof endpoint.urlOrRequestMetadata === 'string' ? endpoint.urlOrRequestMetadata : JSON.stringify(endpoint.urlOrRequestMetadata.type), endpoint.model);
 		telemetryBuilder.setModelName(endpoint.model);
 
-		const computeTokens = (s: string) => Math.floor(s.length / 4);
-
 		const cursorPosition = new Position(selection.endLineNumber, selection.endColumn);
 
-		const cursorOffset = activeDocument.documentAfterEdits.getTransformer().getOffset(cursorPosition);
-
-		const currentFileContent = activeDocument.documentAfterEdits;
-		const currentFileContentLines = currentFileContent.getLines();
+		const currentDocument = new CurrentDocument(activeDocument.documentAfterEdits, cursorPosition);
 
 		const cursorLineIdx = cursorPosition.lineNumber - 1 /* to convert to 0-based */;
 
-		const cursorLine = currentFileContentLines[cursorLineIdx];
+		const cursorLine = currentDocument.lines.value[cursorLineIdx];
 		const isCursorAtEndOfLine = cursorPosition.column === cursorLine.trimEnd().length;
 		if (isCursorAtEndOfLine) {
 			delaySession.setExtraDebounce(this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsExtraDebounceEndOfLine, this.expService));
 		}
 		telemetryBuilder.setIsCursorAtLineEnd(isCursorAtEndOfLine);
 
-		const areaAroundEditWindowLinesRange = this.computeAreaAroundEditWindowLinesRange(currentFileContentLines, cursorLineIdx);
+		const areaAroundEditWindowLinesRange = this.computeAreaAroundEditWindowLinesRange(currentDocument.lines.value, cursorLineIdx);
 
-		const editWindowLinesRange = this.computeEditWindowLinesRange(currentFileContentLines, cursorLineIdx, request, retryState);
+		const editWindowLinesRange = this.computeEditWindowLinesRange(currentDocument.lines.value, cursorLineIdx, request, retryState);
 
 		const cursorOriginalLinesOffset = Math.max(0, cursorLineIdx - editWindowLinesRange.start);
 		const editWindowLastLineLength = activeDocument.documentAfterEdits.getTransformer().getLineLength(editWindowLinesRange.endExclusive);
 		const editWindow = activeDocument.documentAfterEdits.getTransformer().getOffsetRange(new Range(editWindowLinesRange.start + 1, 1, editWindowLinesRange.endExclusive, editWindowLastLineLength + 1));
 
-		const editWindowLines = currentFileContentLines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
+		const editWindowLines = currentDocument.lines.value.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
 
 		// Expected: editWindow.substring(activeDocument.documentAfterEdits.value) === editWindowLines.join('\n')
 
@@ -260,13 +257,11 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const shouldRemoveCursorTagFromResponse = !doesIncludeCursorTag; // we'd like to remove the tag only if the original edit-window didn't include the tag
 
 		const taggedCurrentFileContentResult = this.constructTaggedFile(
-			currentFileContent,
-			currentFileContentLines,
-			cursorOffset,
+			currentDocument,
 			editWindowLinesRange,
 			areaAroundEditWindowLinesRange,
 			promptOptions,
-			computeTokens,
+			XtabProvider.computeTokens,
 			{ includeLineNumbers: false }
 		);
 
@@ -304,7 +299,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			taggedCurrentFileContent,
 			areaAroundCodeToEdit,
 			langCtx,
-			computeTokens,
+			XtabProvider.computeTokens,
 			promptOptions
 		);
 
@@ -363,9 +358,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	}
 
 	private constructTaggedFile(
-		currentFileContent: StringText,
-		currentFileContentLines: string[],
-		cursorOffset: number,
+		currentDocument: CurrentDocument,
 		editWindowLinesRange: OffsetRange,
 		areaAroundEditWindowLinesRange: OffsetRange,
 		promptOptions: ModelConfig,
@@ -375,8 +368,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		}
 	) {
 		const contentWithCursorAsLinesOriginal = (() => {
-			const addCursorTagEdit = StringEdit.single(StringReplacement.insert(cursorOffset, PromptTags.CURSOR));
-			const contentWithCursor = addCursorTagEdit.applyOnText(currentFileContent);
+			const addCursorTagEdit = StringEdit.single(StringReplacement.insert(currentDocument.cursorOffset, PromptTags.CURSOR));
+			const contentWithCursor = addCursorTagEdit.applyOnText(currentDocument.content);
 			return contentWithCursor.getLines();
 		})();
 
@@ -398,9 +391,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			PromptTags.AREA_AROUND.end
 		].join('\n');
 
-		currentFileContentLines = opts.includeLineNumbers
-			? addLineNumbers(currentFileContentLines)
-			: currentFileContentLines;
+		const currentFileContentLines = opts.includeLineNumbers
+			? addLineNumbers(currentDocument.lines.value)
+			: currentDocument.lines.value;
 
 		let areaAroundCodeToEditForCurrentFile: string;
 		if (promptOptions.currentFile.includeTags) {
