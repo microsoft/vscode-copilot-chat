@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { RequestType } from '@vscode/copilot-api';
 import { Raw } from '@vscode/prompt-tsx';
 import { ChatCompletionContentPartKind } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
 import { FetchStreamSource } from '../../../platform/chat/common/chatMLFetcher';
@@ -1068,7 +1069,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const endpoint = this.instaService.createInstance(ChatEndpoint, {
 			id: modelName,
 			name: 'nes.nextCursorPosition',
-			urlOrRequestMetadata: url,
+			urlOrRequestMetadata: url ? url : { type: RequestType.ProxyChatCompletions },
 			model_picker_enabled: false,
 			is_chat_default: false,
 			is_chat_fallback: false,
@@ -1095,9 +1096,9 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				debugName: 'nes.nextCursorPosition',
 				finishedCb: undefined,
 				location: ChatLocation.Other,
-				requestOptions: {
+				requestOptions: secretKey ? {
 					secretKey,
-				}
+				} : undefined,
 			},
 			CancellationToken.None
 		);
