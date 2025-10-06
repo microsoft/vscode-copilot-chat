@@ -176,7 +176,7 @@ export function getUserPrompt(promptPieces: PromptPieces): string {
 
 	const currentFilePath = toUniquePath(activeDoc.id, activeDoc.workspaceRoot?.path);
 
-	const postScript = getPostScript(opts.promptingStrategy, currentFilePath);
+	const postScript = promptPieces.opts.includePostScript ? getPostScript(opts.promptingStrategy, currentFilePath) : '';
 
 	const mainPrompt = `${PromptTags.RECENT_FILES.start}
 ${recentlyViewedCodeSnippets}

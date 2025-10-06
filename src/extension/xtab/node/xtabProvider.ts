@@ -996,7 +996,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				maxTokens: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffMaxTokens, this.expService),
 				onlyForDocsInPrompt: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffOnlyForDocsInPrompt, this.expService),
 				useRelativePaths: this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabDiffUseRelativePaths, this.expService),
-			}
+			},
+			includePostScript: true,
 		};
 
 		const overridingModelConfig = this.configService.getConfig(ConfigKey.Internal.InlineEditsXtabProviderModelConfiguration);
@@ -1047,7 +1048,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			areaAroundCodeToEdit,
 			promptPieces.langCtx,
 			XtabProvider.computeTokens,
-			promptPieces.opts,
+			{
+				...promptPieces.opts,
+				includePostScript: false,
+			}
 		);
 
 		const userMessage = getUserPrompt(newPromptPieces);
