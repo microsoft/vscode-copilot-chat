@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { getGitHubRepoInfoFromContext, IGitService } from '../../../platform/git/common/gitService';
@@ -15,11 +16,18 @@ type RepoInfoProperties = {
 	remoteUrl: string | undefined;
 	headCommitHash: string | undefined;
 	diffsJSON: string | undefined;
+	filesChanged: boolean;
 };
 
-type RepoInfoInternalTelemetryProperties = RepoInfoProperties & {
+type RepoInfoTelemetryProperties = {
+	remoteUrl: string | undefined;
+	headCommitHash: string | undefined;
+	diffsJSON: string | undefined;
+};
+
+type RepoInfoInternalTelemetryProperties = RepoInfoTelemetryProperties & {
 	location: 'begin' | 'end';
-	result: 'success' | 'failure';
+	result: 'success' | 'failure' | 'filesChanged' | 'diffTooLarge';
 	telemetryMessageId: string;
 };
 
@@ -35,6 +43,7 @@ export class RepoInfoTelemetry {
 		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
 		@ICopilotTokenStore private readonly _copilotTokenStore: ICopilotTokenStore,
 		@ILogService private readonly _logService: ILogService,
+		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
 	) { }
 
 	public async sendBeginTelemetryIfNeeded(): Promise<void> {
@@ -78,10 +87,12 @@ export class RepoInfoTelemetry {
 			return;
 		}
 
+		const result = gitInfo.filesChanged ? 'filesChanged' : 'success';
+		const { filesChanged, ...gitInfoProps } = gitInfo;
 		const properties = multiplexProperties({
-			...gitInfo,
+			...gitInfoProps,
 			location,
-			result: 'success',
+			result,
 			telemetryMessageId: this._telemetryMessageId
 		} as RepoInfoInternalTelemetryProperties);
 
@@ -94,6 +105,7 @@ export class RepoInfoTelemetry {
 			data: {
 				...gitInfo,
 				location,
+				result,
 				telemetryMessageId: this._telemetryMessageId
 			}
 		}));
@@ -119,25 +131,63 @@ export class RepoInfoTelemetry {
 			return;
 		}
 
-		const changes = await this._gitService.diffWith(repoContext.rootUri, '@{upstream}');
-		if (!changes || changes.length === 0) {
-			return;
-		}
+		// Before we calculate our async diffs, sign up for file system change events
+		// Any changes during the async operations will invalidate our diff data and we send it
+		// as a failure without a diffs
+		const watcher = this._fileSystemService.createFileSystemWatcher('**/*');
+		let filesChanged = false;
+		const createDisposable = watcher.onDidCreate(() => filesChanged = true);
+		const changeDisposable = watcher.onDidChange(() => filesChanged = true);
+		const deleteDisposable = watcher.onDidDelete(() => filesChanged = true);
 
-		// Reduce to just the diff information we need
-		// IANHU: We might need a couple more properties here, will revisit, but keep simple for now
-		const diffs = (await this._gitDiffService.getChangeDiffs(repoContext.rootUri, changes)).map(diff => {
+		try {
+			const changes = await this._gitService.diffWith(repoContext.rootUri, '@{upstream}');
+			if (!changes || changes.length === 0) {
+				return;
+			}
+
+			// Check if files changed during the git diff operation
+			if (filesChanged) {
+				return {
+					remoteUrl: githubInfo.remoteUrl,
+					headCommitHash: upstreamCommit,
+					diffsJSON: undefined,
+					filesChanged: true,
+				};
+			}
+
+			// Reduce to just the diff information we need
+			// IANHU: We might need a couple more properties here, will revisit, but keep simple for now
+			const diffs = (await this._gitDiffService.getChangeDiffs(repoContext.rootUri, changes)).map(diff => {
+				return {
+					uri: diff.uri.toString(),
+					diff: diff.diff,
+				};
+			});
+
+			// Final check if files changed during the diff processing
+			if (filesChanged) {
+				return {
+					remoteUrl: githubInfo.remoteUrl,
+					headCommitHash: upstreamCommit,
+					diffsJSON: undefined,
+					filesChanged: true,
+				};
+			}
+
 			return {
-				uri: diff.uri.toString(),
-				diff: diff.diff,
+				remoteUrl: githubInfo.remoteUrl,
+				headCommitHash: upstreamCommit,
+				filesChanged: false,
+				// IANHU: Could be super large, will try using multiplex when logging
+				diffsJSON: diffs.length > 0 ? JSON.stringify(diffs) : undefined,
 			};
-		});
-
-		return {
-			remoteUrl: githubInfo.remoteUrl,
-			headCommitHash: upstreamCommit,
-			// IANHU: Could be super large, will try using multiplex when logging
-			diffsJSON: diffs.length > 0 ? JSON.stringify(diffs) : undefined,
-		};
+		} finally {
+			// Always dispose of the watcher and event listeners
+			createDisposable.dispose();
+			changeDisposable.dispose();
+			deleteDisposable.dispose();
+			watcher.dispose();
+		}
 	}
 }
