@@ -257,6 +257,8 @@ function f(x: number, y: string): void { }
 - Do not introduce new `types` or `values` to the global namespace
 - Use proper types. Do not use `any` unless absolutely necessary.
 - Use `readonly` whenever possible.
+- Avoid casts in TypeScript unless absolutely necessary. If you get type errors after your changes, look up the types of the variables involved and set up a proper system of types and interfaces instead of adding type casts.
+- Do not use `any` or `unknown` as the type for variables, parameters, or return values unless absolutely necessary. If they need type annotations, they should have proper types or interfaces defined.
 
 ## Key APIs and Integrations
 

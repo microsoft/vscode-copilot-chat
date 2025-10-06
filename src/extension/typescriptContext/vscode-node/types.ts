@@ -31,13 +31,12 @@ export type ContextComputedEvent = {
 	document: vscode.TextDocument;
 	position: vscode.Position;
 	source?: string;
-	results: ReadonlyArray<ResolvedRunnableResult>;
 	summary: ContextItemSummary;
 }
 
-export type OnCachePopulatedEvent = ContextComputedEvent;
-export type OnContextComputedEvent = ContextComputedEvent;
-export type OnContextComputedOnTimeoutEvent = ContextComputedEvent;
+export type OnCachePopulatedEvent = ContextComputedEvent & { items: ReadonlyArray<ResolvedRunnableResult> };
+export type OnContextComputedEvent = ContextComputedEvent & { items: ReadonlyArray<ContextItem> };
+export type OnContextComputedOnTimeoutEvent = ContextComputedEvent & { items: ReadonlyArray<ContextItem> };
 
 export interface IInternalLanguageContextService extends ILanguageContextService {
 	onCachePopulated: vscode.Event<OnCachePopulatedEvent>;
@@ -169,7 +168,7 @@ export class ContextItemResultBuilder implements ContextItemSummary {
 		this.cancelled = token.isCancellationRequested;
 	}
 
-	public *update(runnableResult: ResolvedRunnableResult, fromCache: boolean = false): IterableIterator<ContextItem> {
+	public *update(runnableResult: ResolvedRunnableResult, fromCache: boolean = false): IterableIterator<{ item: ContextItem; size: number }> {
 		if (this.seenRunnableResults.has(runnableResult.id)) {
 			return;
 		}
@@ -187,7 +186,7 @@ export class ContextItemResultBuilder implements ContextItemSummary {
 				continue;
 			}
 			Stats.yielded(this.stats);
-			yield converted;
+			yield { item: converted, size: protocol.ContextItem.sizeInChars(item) };
 		}
 	}
 

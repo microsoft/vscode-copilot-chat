@@ -7,9 +7,9 @@ import TS from './typescript';
 const ts = TS();
 
 import { CodeSnippetBuilder } from './code';
-import { AbstractContextRunnable, ComputeCost, ContextProvider, ContextResult, Search, type ComputeContextSession, type ContextRunnableCollector, type RequestContext, type RunnableResult } from './contextProvider';
+import { AbstractContextRunnable, ComputeCost, ContextProvider, ContextResult, Search, SnippetLocation, type ComputeContextSession, type ContextRunnableCollector, type RequestContext, type RunnableResult } from './contextProvider';
 import { EmitMode, Priorities, SpeculativeKind } from './protocol';
-import tss, { ClassDeclarations, ReferencedByVisitor, Symbols } from './typescripts';
+import tss, { ClassDeclarations, ReferencedByVisitor, Symbols, type DirectSuperSymbolInfo } from './typescripts';
 
 export type TypeInfo = {
 	symbol: tt.Symbol;
@@ -264,7 +264,7 @@ export class SuperClassRunnable extends AbstractContextRunnable {
 	private readonly classDeclaration: tt.ClassDeclaration;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, classDeclaration: tt.ClassDeclaration, priority: number = Priorities.Inherited) {
-		super(session, languageService, context, 'SuperClassRunnable', priority, ComputeCost.Medium);
+		super(session, languageService, context, 'SuperClassRunnable', SnippetLocation.Primary, priority, ComputeCost.Medium);
 		this.classDeclaration = classDeclaration;
 	}
 
@@ -284,9 +284,23 @@ export class SuperClassRunnable extends AbstractContextRunnable {
 			return;
 		}
 
-		const [extendsClass, extendsName] = symbols.getExtendsSymbol(clazz);
-		if (extendsClass !== undefined && extendsName !== undefined) {
-			this.handleSymbol(extendsClass, extendsName);
+		const directSuperSymbolInfo: DirectSuperSymbolInfo | undefined = symbols.getDirectSuperSymbols(clazz);
+		if (directSuperSymbolInfo === undefined) {
+			return;
+		}
+		if (directSuperSymbolInfo.extends !== undefined) {
+			const { symbol, name } = directSuperSymbolInfo.extends;
+			if (symbol !== undefined && name !== undefined) {
+				this.handleSymbol(symbol, name);
+			}
+		}
+		if (directSuperSymbolInfo.implements !== undefined) {
+			for (const impl of directSuperSymbolInfo.implements) {
+				const { symbol, name } = impl;
+				if (symbol !== undefined && name !== undefined) {
+					this.handleSymbol(symbol, name);
+				}
+			}
 		}
 	}
 }
@@ -296,7 +310,7 @@ class SimilarClassRunnable extends AbstractContextRunnable {
 	private readonly classDeclaration: tt.ClassDeclaration;
 
 	constructor(session: ComputeContextSession, languageService: tt.LanguageService, context: RequestContext, classDeclaration: tt.ClassDeclaration, priority: number = Priorities.Blueprints) {
-		super(session, languageService, context, 'SimilarClassRunnable', priority, ComputeCost.High);
+		super(session, languageService, context, 'SimilarClassRunnable', SnippetLocation.Primary, priority, ComputeCost.High);
 		this.classDeclaration = classDeclaration;
 	}
 
@@ -323,9 +337,9 @@ class SimilarClassRunnable extends AbstractContextRunnable {
 		if (foundInProgram === undefined || similarClass === undefined) {
 			return;
 		}
-		const code = new CodeSnippetBuilder(this.session, this.context.getSymbols(foundInProgram), classDeclaration.getSourceFile());
+		const code = new CodeSnippetBuilder(this.context, this.context.getSymbols(foundInProgram), classDeclaration.getSourceFile());
 		code.addDeclaration(similarClass.declaration);
-		result.addSnippet(code, undefined);
+		result.addSnippet(code, this.location, undefined);
 	}
 }
 

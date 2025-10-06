@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import type tt from 'typescript/lib/tsserverlibrary';
 import { computeContext } from '../common/api';
-import { ContextResult, LanguageServerSession, RequestContext, TokenBudget, TokenBudgetExhaustedError } from '../common/contextProvider';
+import { CharacterBudget, ContextResult, LanguageServerSession, RequestContext, TokenBudgetExhaustedError } from '../common/contextProvider';
 import { ErrorCode, type CachedContextRunnableResult, type ComputeContextRequest, type ComputeContextResponse, type ContextRunnableResultId, type PingResponse } from '../common/protocol';
 import { CancellationTokenWithTimer } from '../common/typescripts';
 
@@ -59,7 +59,8 @@ const computeContextHandler = (request: ComputeContextRequest): ComputeContextHa
 	}
 
 	const computeStart = Date.now();
-	const tokenBudget = new TokenBudget(typeof args.tokenBudget === 'number' ? args.tokenBudget : 7 * 1024);
+	const primaryCharacterBudget = new CharacterBudget(typeof args.primaryCharacterBudget === 'number' ? args.primaryCharacterBudget : 7 * 1024 * 4);
+	const secondaryCharacterBudget = new CharacterBudget(typeof args.secondaryCharacterBudget === 'number' ? args.secondaryCharacterBudget : 8 * 1024 * 4);
 	const normalizedPaths: tt.server.NormalizedPath[] = [];
 	if (args.neighborFiles !== undefined) {
 		for (const file of args.neighborFiles) {
@@ -68,8 +69,8 @@ const computeContextHandler = (request: ComputeContextRequest): ComputeContextHa
 	}
 	const clientSideRunnableResults: Map<ContextRunnableResultId, CachedContextRunnableResult> = args.clientSideRunnableResults !== undefined ? new Map(args.clientSideRunnableResults.map(item => [item.id, item])) : new Map();
 	const cancellationToken = new CancellationTokenWithTimer(languageServiceHost?.getCancellationToken ? languageServiceHost.getCancellationToken() : undefined, startTime, timeBudget, computeContextSession?.host.isDebugging() ?? false);
-	const requestContext = new RequestContext(computeContextSession!, normalizedPaths, clientSideRunnableResults);
-	const result: ContextResult = new ContextResult(tokenBudget, requestContext);
+	const requestContext = new RequestContext(computeContextSession!, normalizedPaths, clientSideRunnableResults, !!args.includeDocumentation);
+	const result: ContextResult = new ContextResult(primaryCharacterBudget, secondaryCharacterBudget, requestContext);
 	try {
 		computeContext(result, computeContextSession!, languageService, file, pos, cancellationToken);
 	} catch (error) {

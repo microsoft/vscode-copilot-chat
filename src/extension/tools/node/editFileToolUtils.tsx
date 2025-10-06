@@ -23,7 +23,7 @@ import { extUriBiasedIgnorePathCase, normalizePath, relativePath } from '../../.
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
 import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { EndOfLine, MarkdownString, Position, Range, TextEdit } from '../../../vscodeTypes';
+import { EndOfLine, Position, Range, TextEdit } from '../../../vscodeTypes';
 
 // Simplified Hunk type for the patch
 interface Hunk {
@@ -561,9 +561,10 @@ const platformConfirmationRequiredPaths = (
 
 const enum ConfirmationCheckResult {
 	NoConfirmation,
+	NoPermissions,
 	Sensitive,
 	SystemFile,
-	OutsideWorkspace
+	OutsideWorkspace,
 }
 
 /**
@@ -624,6 +625,9 @@ function makeUriConfirmationChecker(configuration: IConfigurationService, worksp
 					toCheck.push(URI.file(linked));
 				}
 			} catch (e) {
+				if ((e as NodeJS.ErrnoException).code === 'EPERM') {
+					return ConfirmationCheckResult.NoPermissions;
+				}
 				// Usually EPERM or ENOENT on the linkedFile
 			}
 		}
@@ -648,17 +652,21 @@ export async function createEditConfirmation(accessor: ServicesAccessor, uris: r
 		return '`' + (wf ? relativePath(wf, uri) : uri.fsPath) + '`';
 	}).join(', ');
 
+	let message: string;
+	if (needsConfirmation.some(r => r.reason === ConfirmationCheckResult.NoPermissions)) {
+		message = t`The model wants to edit files you don't have permission to modify (${fileParts}).`;
+	} else if (needsConfirmation.some(r => r.reason === ConfirmationCheckResult.Sensitive)) {
+		message = t`The model wants to edit sensitive files (${fileParts}).`;
+	} else if (needsConfirmation.some(r => r.reason === ConfirmationCheckResult.OutsideWorkspace)) {
+		message = t`The model wants to edit files outside of your workspace (${fileParts}).`;
+	} else {
+		message = t`The model wants to edit system files (${fileParts}).`;
+	}
+
 	return {
 		confirmationMessages: {
 			title: t('Allow edits to sensitive files?'),
-			message: new MarkdownString(
-				(needsConfirmation.some(r => r.reason === ConfirmationCheckResult.Sensitive)
-					? t`The model wants to edit sensitive files (${fileParts}).`
-					: needsConfirmation.some(r => r.reason === ConfirmationCheckResult.OutsideWorkspace)
-						? t`The model wants to edit files outside of your workspace (${fileParts}).`
-						: t`The model wants to edit system files (${fileParts}).`)
-				+ ' ' + t`Do you want to allow this?` + '\n\n' + asString()
-			),
+			message: message + ' ' + t`Do you want to allow this?` + '\n\n' + asString(),
 		}
 	};
 }

@@ -289,6 +289,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			return emptyResult;
 		}
 
+		logContext.setResult(RootedLineEdit.fromEdit(new RootedEdit(documentAtInvocationTime, new StringEdit([edit]))));
+
 		assert(currentDocument !== undefined, 'should be defined if edit is defined');
 
 		telemetryBuilder.setStatus('notAccepted'); // Acceptance pending.

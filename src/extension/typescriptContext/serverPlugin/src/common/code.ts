@@ -6,15 +6,16 @@ import type tt from 'typescript/lib/tsserverlibrary';
 import TS from './typescript';
 const ts = TS();
 
+import type { RequestContext } from './contextProvider';
 import { CodeSnippet } from './protocol';
-import { type EmitterContext, ProgramContext, RecoverableError, SnippetProvider } from './types';
+import { ProgramContext, RecoverableError, SnippetProvider } from './types';
 import { Symbols } from './typescripts';
 
 namespace Nodes {
 
-	export function getLines(node: tt.Node, sourceFile?: tt.SourceFile | undefined): string[] {
+	export function getLines(node: tt.Node, includeJSDocComment: boolean, sourceFile?: tt.SourceFile | undefined): string[] {
 		sourceFile ??= node.getSourceFile();
-		const textStartPosition = node.getStart(sourceFile, true);
+		const textStartPosition = node.getStart(sourceFile, includeJSDocComment);
 		const startRange = sourceFile.getLineAndCharacterOfPosition(textStartPosition);
 		const text = sourceFile.text.substring(textStartPosition, node.getEnd());
 		const lines = text.split(/\r?\n/g);
@@ -76,16 +77,16 @@ namespace Nodes {
 
 abstract class AbstractEmitter {
 
-	protected readonly context: EmitterContext;
+	protected readonly context: RequestContext;
 
 	private indent: number;
 
-	public readonly lines: string[];
+	private readonly lines: string[];
 	public readonly source: string;
 	protected readonly additionalSources: Set<string>;
 
 
-	constructor(context: EmitterContext, source: tt.SourceFile, indent: number = 0) {
+	constructor(context: RequestContext, source: tt.SourceFile, indent: number = 0) {
 		this.context = context;
 		this.indent = indent;
 		this.source = source.fileName;
@@ -103,7 +104,7 @@ abstract class AbstractEmitter {
 			}
 			let keys: string[] | undefined = [];
 			for (const symbol of symbols) {
-				const key = Symbols.createVersionedKey(symbol, this.context);
+				const key = Symbols.createVersionedKey(symbol, this.context.session);
 				if (key !== undefined) {
 					keys.push(key);
 				} else {
@@ -113,8 +114,12 @@ abstract class AbstractEmitter {
 			}
 			return keys === undefined ? undefined : keys.join(';');
 		} else {
-			return Symbols.createVersionedKey(symbols, this.context);
+			return Symbols.createVersionedKey(symbols, this.context.session);
 		}
+	}
+
+	public getLines(): string[] {
+		return this.lines;
 	}
 
 	public getAdditionalSources(): Set<string> {
@@ -130,13 +135,23 @@ abstract class AbstractEmitter {
 		this.indent--;
 	}
 
-	protected addConstructorDeclaration(declaration: tt.ConstructorDeclaration): void {
-		const documentation = Nodes.getDocumentation(declaration);
-		if (documentation !== undefined) {
-			this.lines.push(...documentation);
+	protected addLine(line: string): void {
+		if (this.indent === 0) {
+			this.lines.push(line);
+		} else {
+			this.lines.push('\t'.repeat(this.indent) + line);
 		}
+	}
+
+	protected addLines(lines: string[]): void {
+		for (const line of lines) {
+			this.addLine(line);
+		}
+	}
+
+	protected addConstructorDeclaration(declaration: tt.ConstructorDeclaration): void {
+		this.addDocumentation(declaration);
 		const elements: string[] = [];
-		elements.push('\t'.repeat(this.indent));
 		if (declaration.modifiers !== undefined) {
 			elements.push(declaration.modifiers.map(m => m.getText()).join(' '));
 			elements.push(' ');
@@ -145,20 +160,16 @@ abstract class AbstractEmitter {
 		elements.push('(');
 		elements.push(this.getParameters(declaration.parameters));
 		elements.push(');');
-		this.lines.push(elements.join(''));
+		this.addLine(elements.join(''));
 	}
 
 	protected addPropertyDeclaration(declaration: tt.PropertyDeclaration | tt.PropertySignature): void {
-		this.lines.push(...Nodes.getLines(declaration));
+		this.addLines(Nodes.getLines(declaration, this.context.includeDocumentation));
 	}
 
 	protected addMethodDeclaration(declaration: tt.MethodDeclaration | tt.MethodSignature): void {
-		const documentation = Nodes.getDocumentation(declaration);
-		if (documentation !== undefined) {
-			this.lines.push(...documentation);
-		}
+		this.addDocumentation(declaration);
 		const elements: string[] = [];
-		elements.push('\t'.repeat(this.indent));
 		if (declaration.modifiers !== undefined) {
 			elements.push(declaration.modifiers.map(m => m.getText()).join(' '));
 			elements.push(' ');
@@ -179,16 +190,12 @@ abstract class AbstractEmitter {
 			elements.push(declaration.type.getText());
 		}
 		elements.push(';');
-		this.lines.push(elements.join(''));
+		this.addLine(elements.join(''));
 	}
 
 	protected addCallSignatureDeclaration(declaration: tt.CallSignatureDeclaration): void {
-		const documentation = Nodes.getDocumentation(declaration);
-		if (documentation !== undefined) {
-			this.lines.push(...documentation);
-		}
+		this.addDocumentation(declaration);
 		const elements: string[] = [];
-		elements.push('\t'.repeat(this.indent));
 		if (declaration.typeParameters !== undefined) {
 			elements.push('<');
 			elements.push(declaration.typeParameters.map(p => p.getText()).join(', '));
@@ -204,7 +211,7 @@ abstract class AbstractEmitter {
 			elements.push(declaration.type.getText());
 		}
 		elements.push(';');
-		this.lines.push(elements.join(''));
+		this.addLine(elements.join(''));
 	}
 
 	protected addGetAccessorDeclaration(declaration: tt.GetAccessorDeclaration): void {
@@ -216,12 +223,8 @@ abstract class AbstractEmitter {
 	}
 
 	private addAccessorDeclaration(declaration: tt.GetAccessorDeclaration | tt.SetAccessorDeclaration, prefix: 'get' | 'set'): void {
-		const documentation = Nodes.getDocumentation(declaration);
-		if (documentation !== undefined) {
-			this.lines.push(...documentation);
-		}
+		this.addDocumentation(declaration);
 		const elements: string[] = [];
-		elements.push('\t'.repeat(this.indent));
 		if (declaration.modifiers !== undefined) {
 			elements.push(declaration.modifiers.map(m => m.getText()).join(' '));
 			elements.push(' ');
@@ -233,17 +236,13 @@ abstract class AbstractEmitter {
 			elements.push(declaration.type.getText());
 		}
 		elements.push(';');
-		this.lines.push(elements.join(''));
+		this.addLine(elements.join(''));
 	}
 
 	protected addFunctionDeclaration(declaration: tt.FunctionDeclaration, name?: string, ensureModifier?: string): void {
 		name ??= declaration.name?.getText() ?? '';
-		const documentation = Nodes.getDocumentation(declaration);
-		if (documentation !== undefined) {
-			this.lines.push(...documentation);
-		}
+		this.addDocumentation(declaration);
 		const elements: string[] = [];
-		elements.push('\t'.repeat(this.indent));
 		elements.push(this.getModifiers(declaration.modifiers, ensureModifier));
 		elements.push(' function ');
 		elements.push(name);
@@ -253,7 +252,17 @@ abstract class AbstractEmitter {
 		elements.push(')');
 		elements.push(this.getReturnTypes(declaration));
 		elements.push(';');
-		this.lines.push(elements.join(''));
+		this.addLine(elements.join(''));
+	}
+
+	protected addDocumentation(declaration: tt.Declaration): void {
+		if (!this.context.includeDocumentation) {
+			return;
+		}
+		const documentation = Nodes.getDocumentation(declaration);
+		if (documentation !== undefined) {
+			this.addLines(documentation);
+		}
 	}
 
 	protected getModifiers(modifiers: tt.NodeArray<tt.ModifierLike> | undefined, prefix?: string): string {
@@ -304,15 +313,21 @@ abstract class TypeEmitter extends AbstractEmitter {
 	protected readonly type: tt.Symbol;
 	protected readonly name: string;
 
-	constructor(context: EmitterContext, source: tt.SourceFile, type: tt.Symbol, name: string) {
+	private readonly seen: Set<tt.__String>;
+
+	constructor(context: RequestContext, source: tt.SourceFile, type: tt.Symbol, name: string) {
 		super(context, source);
 		this.type = type;
 		this.name = name;
+		this.seen = new Set();
 	}
 
 	protected processMembers(members: tt.SymbolTable): void {
 		for (const [_name, member] of members) {
-			this.processMember(member);
+			if (!this.seen.has(_name)) {
+				this.seen.add(_name);
+				this.processMember(member);
+			}
 		}
 	}
 
@@ -377,7 +392,7 @@ class ClassEmitter extends TypeEmitter {
 
 	public readonly key: string | undefined;
 
-	constructor(context: EmitterContext, symbols: Symbols, source: tt.SourceFile, clazz: tt.Symbol, name: string, includeSuperClasses: boolean, includePrivates: boolean) {
+	constructor(context: RequestContext, symbols: Symbols, source: tt.SourceFile, clazz: tt.Symbol, name: string, includeSuperClasses: boolean, includePrivates: boolean) {
 		super(context, source, clazz, name);
 		this.includePrivates = includePrivates;
 		this.key = undefined;
@@ -391,8 +406,12 @@ class ClassEmitter extends TypeEmitter {
 	}
 
 	public emit(): void {
-		this.lines.push(`declare class ${this.name}${this.getTypeParameters()} {`);
+		this.addLine(`declare class ${this.name}${this.getTypeParameters()} {`);
 		this.increaseIndent();
+		if (this.type.members !== undefined) {
+			Symbols.fillSources(this.additionalSources, this.type);
+			this.processMembers(this.type.members);
+		}
 		if (this.superClasses !== undefined) {
 			for (let i = this.superClasses.length - 1; i >= 0; i--) {
 				const superClass = this.superClasses[i];
@@ -402,12 +421,8 @@ class ClassEmitter extends TypeEmitter {
 				}
 			}
 		}
-		if (this.type.members !== undefined) {
-			Symbols.fillSources(this.additionalSources, this.type);
-			this.processMembers(this.type.members);
-		}
 		this.decreaseIndent();
-		this.lines.push('}');
+		this.addLine('}');
 	}
 
 	protected override processMember(member: tt.Symbol): void {
@@ -424,7 +439,7 @@ class InterfaceEmitter extends TypeEmitter {
 
 	public readonly key: string | undefined;
 
-	constructor(context: EmitterContext, symbols: Symbols, source: tt.SourceFile, type: tt.Symbol, name: string) {
+	constructor(context: RequestContext, symbols: Symbols, source: tt.SourceFile, type: tt.Symbol, name: string) {
 		super(context, source, type, name);
 		this.superTypes = new Array<tt.Symbol>(...symbols.getAllSuperTypes(type)).filter(t => Symbols.isInterface(t));
 		if (this.superTypes.length === 0) {
@@ -435,8 +450,12 @@ class InterfaceEmitter extends TypeEmitter {
 	}
 
 	public emit(): void {
-		this.lines.push(`interface ${this.name}${this.getTypeParameters()} {`);
+		this.addLine(`interface ${this.name}${this.getTypeParameters()} {`);
 		this.increaseIndent();
+		if (this.type.members !== undefined) {
+			Symbols.fillSources(this.additionalSources, this.type);
+			this.processMembers(this.type.members);
+		}
 		for (let i = this.superTypes.length - 1; i >= 0; i--) {
 			const superType = this.superTypes[i];
 			if (superType.members !== undefined) {
@@ -444,12 +463,8 @@ class InterfaceEmitter extends TypeEmitter {
 				this.processMembers(superType.members);
 			}
 		}
-		if (this.type.members !== undefined) {
-			Symbols.fillSources(this.additionalSources, this.type);
-			this.processMembers(this.type.members);
-		}
 		this.decreaseIndent();
-		this.lines.push('}');
+		this.addLine('}');
 	}
 }
 
@@ -460,7 +475,7 @@ class EnumEmitter extends AbstractEmitter {
 
 	public readonly key: string | undefined;
 
-	constructor(context: EmitterContext, source: tt.SourceFile, type: tt.Symbol, name: string) {
+	constructor(context: RequestContext, source: tt.SourceFile, type: tt.Symbol, name: string) {
 		super(context, source);
 		this.type = type;
 		this.name = name;
@@ -468,7 +483,7 @@ class EnumEmitter extends AbstractEmitter {
 	}
 
 	public emit(): void {
-		this.lines.push(`${Symbols.isConstEnum(this.type) ? "const " : ""}enum ${this.name} {`);
+		this.addLine(`${Symbols.isConstEnum(this.type) ? "const " : ""}enum ${this.name} {`);
 		this.increaseIndent();
 		if (this.type.exports !== undefined) {
 			let index = 0;
@@ -480,17 +495,17 @@ class EnumEmitter extends AbstractEmitter {
 				}
 				const declaration = declarations[0];
 				if (ts.isEnumMember(declaration)) {
-					const lines = Nodes.getLines(declaration);
+					const lines = Nodes.getLines(declaration, this.context.includeDocumentation);
 					if (index < last) {
 						lines[lines.length - 1] += ',';
 					}
-					this.lines.push(...lines);
+					this.addLines(lines);
 				}
 				index++;
 			}
 		}
 		this.decreaseIndent();
-		this.lines.push('}');
+		this.addLine('}');
 	}
 }
 
@@ -498,18 +513,18 @@ class TypeLiteralEmitter extends TypeEmitter {
 
 	public readonly key: string | undefined;
 
-	constructor(context: EmitterContext, source: tt.SourceFile, type: tt.Symbol, name: string) {
+	constructor(context: RequestContext, source: tt.SourceFile, type: tt.Symbol, name: string) {
 		super(context, source, type, name);
 	}
 
 	public emit(): void {
-		this.lines.push(`type ${this.name} = {`);
+		this.addLine(`type ${this.name} = {`);
 		this.increaseIndent();
 		if (this.type.members !== undefined) {
 			this.processMembers(this.type.members);
 		}
 		this.decreaseIndent();
-		this.lines.push('}');
+		this.addLine('}');
 	}
 }
 
@@ -518,7 +533,7 @@ class FunctionEmitter extends AbstractEmitter {
 	private readonly func: tt.Symbol;
 	private readonly name: string;
 
-	constructor(context: EmitterContext, source: tt.SourceFile, func: tt.Symbol, name?: string) {
+	constructor(context: RequestContext, source: tt.SourceFile, func: tt.Symbol, name?: string) {
 		super(context, source);
 		this.func = func;
 		this.name = name ?? func.getName();
@@ -551,7 +566,7 @@ class ModuleEmitter extends AbstractEmitter {
 	private readonly module: tt.Symbol;
 	private readonly name: string;
 
-	constructor(context: EmitterContext, source: tt.SourceFile, module: tt.Symbol, name?: string) {
+	constructor(context: RequestContext, source: tt.SourceFile, module: tt.Symbol, name?: string) {
 		super(context, source);
 		this.module = module;
 		this.name = name ?? module.getName();
@@ -562,14 +577,14 @@ class ModuleEmitter extends AbstractEmitter {
 	}
 
 	public emit(currentSourceFile: tt.SourceFile): void {
-		this.lines.push(`declare namespace ${this.name} {`);
+		this.addLine(`declare namespace ${this.name} {`);
 		this.increaseIndent();
 		const exports = this.module.exports;
 		if (exports !== undefined) {
 			this.addExports(exports, currentSourceFile);
 		}
 		this.decreaseIndent();
-		this.lines.push('}');
+		this.addLine('}');
 	}
 
 	private addExports(members: tt.SymbolTable, currentSourceFile: tt.SourceFile): void {
@@ -602,11 +617,11 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 	private readonly additionalSources: Set<string>;
 	private indent: number = 0;
 
-	private readonly context: EmitterContext;
+	private readonly context: RequestContext;
 	private readonly symbols: Symbols;
 	private readonly currentSourceFile: tt.SourceFile;
 
-	constructor(context: EmitterContext, symbols: Symbols, currentSourceFile: tt.SourceFile) {
+	constructor(context: RequestContext, symbols: Symbols, currentSourceFile: tt.SourceFile) {
 		super();
 		this.lines = [];
 		this.source = undefined;
@@ -671,7 +686,7 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 		if (sourceFile.fileName === this.currentSourceFile.fileName || this.skipDeclaration(declaration, sourceFile)) {
 			return;
 		}
-		this.addLines(Nodes.getLines(declaration, sourceFile));
+		this.addLines(Nodes.getLines(declaration, this.context.includeDocumentation, sourceFile));
 		this.addSource(sourceFile.fileName);
 	}
 
@@ -785,8 +800,9 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 		let lines: string[] | undefined;
 		let uri: string | undefined;
 		let additionalUris: Set<string> | undefined;
+		const session = this.context.session;
 		if (emitter.key !== undefined) {
-			const code = this.context.getCachedCode(emitter.key);
+			const code = session.getCachedCode(emitter.key);
 			if (code !== undefined) {
 				lines = code.value;
 				uri = code.uri;
@@ -795,11 +811,11 @@ export class CodeSnippetBuilder extends ProgramContext implements SnippetProvide
 		}
 		if (lines === undefined || uri === undefined) {
 			emitter.emit(this.currentSourceFile);
-			lines = emitter.lines;
+			lines = emitter.getLines();
 			uri = emitter.source;
 			additionalUris = emitter.getAdditionalSources();
 			if (emitter.key !== undefined) {
-				this.context.cacheCode(emitter.key, { value: lines, uri, additionalUris });
+				session.cacheCode(emitter.key, { value: lines, uri, additionalUris });
 			}
 		}
 		if (this.indent === 0) {

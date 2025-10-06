@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { Emitter } from '../../../util/vs/base/common/event';
+import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
 
@@ -14,9 +14,10 @@ import { IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSe
  */
 export class ClaudeChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
 	private readonly _onDidChangeChatSessionItems = this._register(new Emitter<void>());
+	public readonly onDidChangeChatSessionItems: Event<void> = this._onDidChangeChatSessionItems.event;
+
 	private readonly _onDidCommitChatSessionItem = this._register(new Emitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>());
-	public readonly onDidChangeChatSessionItems = this._onDidChangeChatSessionItems.event;
-	public readonly onDidCommitChatSessionItem = this._onDidCommitChatSessionItem.event;
+	public readonly onDidCommitChatSessionItem: Event<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }> = this._onDidCommitChatSessionItem.event;
 
 	constructor(
 		@IClaudeCodeSessionService private readonly claudeCodeSessionService: IClaudeCodeSessionService
@@ -34,15 +35,6 @@ export class ClaudeChatSessionItemProvider extends Disposable implements vscode.
 
 	public async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
 		const sessions = await this.claudeCodeSessionService.getAllSessions(token);
-		// const newSessions: vscode.ChatSessionItem[] = Array.from(this.sessionStore.getUnresolvedSessions().values()).map(session => ({
-		// 	id: session.id,
-		// 	label: session.label,
-		// 	timing: {
-		// 		startTime: Date.now()
-		// 	},
-		// 	iconPath: new vscode.ThemeIcon('star-add')
-		// }));
-
 		const diskSessions = sessions.map(session => ({
 			id: session.id,
 			label: session.label,
@@ -53,7 +45,6 @@ export class ClaudeChatSessionItemProvider extends Disposable implements vscode.
 			iconPath: new vscode.ThemeIcon('star-add')
 		} satisfies vscode.ChatSessionItem));
 
-		// return [...newSessions, ...diskSessions];
 		return diskSessions;
 	}
 }
