@@ -104,14 +104,31 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			}
 			const lowerKey = key.toLowerCase();
 			if (OpenAIEndpoint._reservedHeaders.has(lowerKey)) {
-				this.logService.warn(`[OpenAIEndpoint] Ignoring reserved header '${key}' for model '${this.modelMetadata.id}'.`);
+				this.logService.warn(`[OpenAIEndpoint] Ignoring header '${key}' for model '${this.modelMetadata.id}' due to conflict with reserved headers.`);
 				continue;
 			}
-			sanitized[key] = rawValue;
+
+			const sanitizedValue = this._sanitizeHeaderValue(rawValue, key);
+			if (sanitizedValue === undefined) {
+				this.logService.warn(`[OpenAIEndpoint] Ignoring header '${key}' for model '${this.modelMetadata.id}' due to invalid value.`);
+				continue;
+			}
+			sanitized[key] = sanitizedValue;
 		}
 		return sanitized;
 	}
 
+	private _sanitizeHeaderValue(value: string, key: string): string | undefined {
+		if (typeof value !== 'string') {
+			return undefined;
+		}
+		const trimmed = value.trim();
+		// Disallow CR, LF, and other control characters (0x00-0x1F, 0x7F)
+		if (/[\r\n\x00-\x1F\x7F]/.test(trimmed)) {
+			return undefined;
+		}
+		return trimmed;
+	}
 	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
 		if (this.useResponsesApi) {
 			// Handle Responses API: customize the body directly
@@ -186,15 +203,6 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			headers['Authorization'] = `Bearer ${this._apiKey}`;
 		}
 		for (const [key, value] of Object.entries(this._customHeaders)) {
-			const lowerKey = key.toLowerCase();
-			if (OpenAIEndpoint._reservedHeaders.has(lowerKey)) {
-				continue;
-			}
-			const existingKey = Object.keys(headers).find(headerKey => headerKey.toLowerCase() === lowerKey);
-			if (existingKey) {
-				this.logService.warn(`[OpenAIEndpoint] Ignoring custom header '${key}' for model '${this.modelMetadata.id}' because it conflicts with an existing header.`);
-				continue;
-			}
 			headers[key] = value;
 		}
 		return headers;
