@@ -12,11 +12,17 @@ export class CurrentDocument {
 	public readonly lines: Lazy<string[]>;
 	public readonly cursorOffset: number;
 
+	/**
+	 * The 0-based line number of the cursor.
+	 */
+	public readonly cursorLineOffset: number;
+
 	constructor(
 		public readonly content: StringText,
 		public readonly cursorPosition: Position,
 	) {
 		this.lines = new Lazy(() => content.getLines());
 		this.cursorOffset = content.getTransformer().getOffset(cursorPosition);
+		this.cursorLineOffset = this.cursorPosition.lineNumber - 1;
 	}
 }

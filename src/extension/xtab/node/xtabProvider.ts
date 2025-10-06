@@ -232,20 +232,18 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const currentDocument = new CurrentDocument(activeDocument.documentAfterEdits, cursorPosition);
 
-		const cursorLineIdx = cursorPosition.lineNumber - 1 /* to convert to 0-based */;
-
-		const cursorLine = currentDocument.lines.value[cursorLineIdx];
+		const cursorLine = currentDocument.lines.value[currentDocument.cursorLineOffset];
 		const isCursorAtEndOfLine = cursorPosition.column === cursorLine.trimEnd().length;
 		if (isCursorAtEndOfLine) {
 			delaySession.setExtraDebounce(this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsExtraDebounceEndOfLine, this.expService));
 		}
 		telemetryBuilder.setIsCursorAtLineEnd(isCursorAtEndOfLine);
 
-		const areaAroundEditWindowLinesRange = this.computeAreaAroundEditWindowLinesRange(currentDocument.lines.value, cursorLineIdx);
+		const areaAroundEditWindowLinesRange = this.computeAreaAroundEditWindowLinesRange(currentDocument.lines.value, currentDocument.cursorLineOffset);
 
-		const editWindowLinesRange = this.computeEditWindowLinesRange(currentDocument.lines.value, cursorLineIdx, request, retryState);
+		const editWindowLinesRange = this.computeEditWindowLinesRange(currentDocument.lines.value, currentDocument.cursorLineOffset, request, retryState);
 
-		const cursorOriginalLinesOffset = Math.max(0, cursorLineIdx - editWindowLinesRange.start);
+		const cursorOriginalLinesOffset = Math.max(0, currentDocument.cursorLineOffset - editWindowLinesRange.start);
 		const editWindowLastLineLength = activeDocument.documentAfterEdits.getTransformer().getLineLength(editWindowLinesRange.endExclusive);
 		const editWindow = activeDocument.documentAfterEdits.getTransformer().getOffsetRange(new Range(editWindowLinesRange.start + 1, 1, editWindowLinesRange.endExclusive, editWindowLastLineLength + 1));
 
