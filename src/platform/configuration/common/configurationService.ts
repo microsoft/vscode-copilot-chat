@@ -20,6 +20,7 @@ import { ResponseProcessor } from '../../inlineEdits/common/responseProcessor';
 import { AlternativeNotebookFormat } from '../../notebook/common/alternativeContentFormat';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { IValidator, vBoolean, vString } from './validator';
+import { FetcherId } from '../../networking/common/fetcherService';
 
 export const CopilotConfigPrefix = 'github.copilot';
 
@@ -811,6 +812,9 @@ export namespace ConfigKey {
 	export const GrokCodeAlternatePrompt = defineExpSetting<string>('chat.grokCodeAlternatePrompt', 'default');
 	export const ClaudeSonnet45AlternatePrompt = defineExpSetting<string>('chat.claudeSonnet45AlternatePrompt', 'default');
 	export const ExecutePromptEnabled = defineSetting<boolean>('chat.executePrompt.enabled', false);
+
+	export const CompletionsFetcher = defineExpSetting<FetcherId | undefined>('chat.completionsFetcher', undefined);
+	export const NextEditSuggestionsFetcher = defineExpSetting<FetcherId | undefined>('chat.nesFetcher', undefined);
 }
 
 export function getAllConfigKeys(): string[] {
