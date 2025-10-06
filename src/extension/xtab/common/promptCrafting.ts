@@ -16,6 +16,7 @@ import { illegalArgument } from '../../../util/vs/base/common/errors';
 import { Schemas } from '../../../util/vs/base/common/network';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
 import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
+import { CurrentDocument } from './xtabCurrentDocument';
 
 export namespace PromptTags {
 	export const CURSOR = "<|cursor|>";
@@ -147,6 +148,9 @@ export const xtab275SystemPrompt = `Predict the next code edit based on user con
 
 export class PromptPieces {
 	constructor(
+		public readonly currentDocument: CurrentDocument,
+		public readonly editWindowLinesRange: OffsetRange,
+		public readonly areaAroundEditWindowLinesRange: OffsetRange,
 		public readonly activeDoc: StatelessNextEditDocument,
 		public readonly xtabHistory: readonly IXtabHistoryEntry[],
 		public readonly currentFileContent: string,
