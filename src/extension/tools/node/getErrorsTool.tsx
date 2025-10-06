@@ -56,7 +56,7 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 			// filter any documents w/o warnings or errors
 			.filter(d => d.diagnostics.length > 0);
 
-		const getSome = (filePaths: string[]) => filePaths.flatMap((filePath, i) => {
+		const getSome = (filePaths: string[]) => filePaths.map((filePath, i) => {
 			const uri = resolveToolInputPath(filePath, this.promptPathRepresentationService);
 			const range = options.input.ranges?.[i];
 			if (!uri) {
@@ -65,7 +65,7 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 
 			let diagnostics: vscode.Diagnostic[] = [];
 			if (isJupyterNotebookUri(uri)) {
-				return this.getNotebookCellDiagnostics(uri);
+				diagnostics = this.getNotebookCellDiagnostics(uri);
 			} else {
 				diagnostics = range
 					? findDiagnosticForSelectionAndPrompt(this.languageDiagnosticsService, uri, new Range(...range), undefined)
@@ -153,12 +153,10 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 		}
 
 		return notebook.getCells()
-			.map((cell) => {
+			.flatMap((cell) => {
 				const uri = cell.document.uri;
-				return {
-					diagnostics: this.languageDiagnosticsService.getDiagnostics(uri).filter(d => d.severity <= DiagnosticSeverity.Warning),
-					uri
-				};
+				return this.languageDiagnosticsService.getDiagnostics(uri)
+					.filter(d => d.severity <= DiagnosticSeverity.Warning);
 			});
 	}
 
