@@ -5,6 +5,7 @@
 
 import type { LanguageModelToolInformation } from 'vscode';
 import { ConfigKey, HARD_TOOL_LIMIT, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { equals as arraysEqual, uniqueFilter } from '../../../../util/vs/base/common/arrays';
@@ -126,19 +127,19 @@ export class ToolGrouping implements IToolGrouping {
 		this._expandOnNext.add(toolName);
 	}
 
-	async compute(query: string, token: CancellationToken): Promise<LanguageModelToolInformation[]> {
-		await this._doCompute(query, token);
+	async compute(query: string, token: CancellationToken, endpoint?: IChatEndpoint): Promise<LanguageModelToolInformation[]> {
+		await this._doCompute(query, token, endpoint);
 		return [...this._root.tools()].filter(uniqueFilter(t => t.name));
 	}
 
-	async computeAll(query: string, token: CancellationToken): Promise<(LanguageModelToolInformation | VirtualTool)[]> {
-		await this._doCompute(query, token);
+	async computeAll(query: string, token: CancellationToken, endpoint?: IChatEndpoint): Promise<(LanguageModelToolInformation | VirtualTool)[]> {
+		await this._doCompute(query, token, endpoint);
 		return this._root.contents;
 	}
 
-	private async _doCompute(query: string, token: CancellationToken) {
+	private async _doCompute(query: string, token: CancellationToken, endpoint?: IChatEndpoint) {
 		if (this._didToolsChange) {
-			await this._grouper.addGroups(query, this._root, this._tools.slice(), token);
+			await this._grouper.addGroups(query, this._root, this._tools.slice(), token, endpoint);
 			this._didToolsChange = false;
 		}
 

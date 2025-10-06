@@ -8,6 +8,7 @@ import { CHAT_MODEL, ConfigKey, HARD_TOOL_LIMIT, IConfigurationService } from '.
 import { IEmbeddingsComputer } from '../../../../platform/embeddings/common/embeddingsComputer';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../../platform/log/common/logService';
+import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { TelemetryCorrelationId } from '../../../../util/common/telemetryCorrelationId';
@@ -51,7 +52,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 		return this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.VirtualToolEmbeddingRanking, this._expService);
 	}
 
-	async addGroups(query: string, root: VirtualTool, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<void> {
+	async addGroups(query: string, root: VirtualTool, tools: LanguageModelToolInformation[], token: CancellationToken, endpoint?: IChatEndpoint): Promise<void> {
 		// If there's no need to group tools, just add them all directly;
 		// TODO use Constant.START_GROUPING_AFTER_TOOL_COUNT to be dynamic based on model? or can I use this logic for every model?
 		if (tools.length < Constant.START_GROUPING_AFTER_TOOL_COUNT) {
@@ -86,7 +87,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 
 		// Now all toolsets (including built-in) go through _generateGroupsFromToolset
 		const grouped = await Promise.all(Object.entries(byToolset).map(([key, tools]) => {
-			return this._generateGroupsFromToolset(key, tools, previousCategorizations.get(key), token);
+			return this._generateGroupsFromToolset(key, tools, previousCategorizations.get(key), token, endpoint);
 		}));
 
 		this._cache.flush();
@@ -249,21 +250,24 @@ export class VirtualToolGrouper implements IToolCategorization {
 	}
 
 	/** Top-level request to categorize a group of tools from a single source. */
-	private async _generateGroupsFromToolset(key: string, tools: LanguageModelToolInformation[], previous: ISummarizedToolCategory[] | undefined, token: CancellationToken): Promise<(VirtualTool | LanguageModelToolInformation)[]> {
+	private async _generateGroupsFromToolset(key: string, tools: LanguageModelToolInformation[], previous: ISummarizedToolCategory[] | undefined, token: CancellationToken, endpoint?: IChatEndpoint): Promise<(VirtualTool | LanguageModelToolInformation)[]> {
 		// Handle built-in tools with predefined groups only if experimental setting is enabled
 		if (key === BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY) {
 			const defaultToolGroupingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.DefaultToolsGrouped, this._expService);
 			if (defaultToolGroupingEnabled) {
-				// TODO fix this logic to work for when the chat model is `gpt-4.1` or `gpt-5`
-				// Get the model family from the categorization endpoint to check if grouping should apply
-				// const endpoint = await this._endpointProvider.getChatEndpoint();
-				// const modelFamily = endpoint?.family;
 
-				// Only apply grouping for GPT-4.1 or GPT-5 models
-				// For Sonnet models (claude), do not group default tools - let them expand to the 128 limit
-				// if (!modelFamily || (!modelFamily.includes('gpt-4.1') && !modelFamily.startsWith('gpt-5') && !modelFamily.startsWith('o1') && !modelFamily.startsWith('o3'))) {
-				// 	return tools;
-				// }
+				// Get the model family from the current chat endpoint to check if grouping should apply
+				// Use the passed endpoint if available, otherwise fallback to default endpoint
+				const currentEndpoint = endpoint ?? (await this._endpointProvider.getAllChatEndpoints()).find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1');
+				const modelFamily = currentEndpoint?.family;
+
+				// Only apply grouping for GPT-4.1 or GPT-5
+				// For other models (like Claude/Sonnet), do not group default tools - let them expand to the limit
+				if (!modelFamily ||
+					!(modelFamily === 'gpt-4.1' ||
+						modelFamily.startsWith('gpt-5'))) {
+					return tools;
+				}
 
 				// Mark that we've grouped default tools so we don't aggressively expand later
 				this._hasGroupedDefaultTools = true;
