@@ -115,9 +115,23 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 		allowTools[ToolName.RunTests] = await testService.hasAnyTests();
 		allowTools[ToolName.CoreRunTask] = tasksService.getTasks().length > 0;
 
+		// Check model-specific TodoList settings from experiment
+		const todoListSettingsJson = configurationService.getExperimentBasedConfig(ConfigKey.TodoListModelSettings, experimentationService) as string | undefined;
+		let enableTodoListForModel: boolean | undefined;
+		if (todoListSettingsJson && typeof todoListSettingsJson === 'string') {
+			try {
+				const todoListSettings = JSON.parse(todoListSettingsJson) as Record<string, boolean>;
+				enableTodoListForModel = todoListSettings[model.model];
+			} catch {
+				// ignore
+			}
+		}
+
 		if (model.family === 'gpt-5-codex') {
-			allowTools[ToolName.CoreManageTodoList] = false;
+			allowTools[ToolName.CoreManageTodoList] = enableTodoListForModel ?? false;
 			allowTools[ToolName.Think] = false;
+		} else if (enableTodoListForModel !== undefined) {
+			allowTools[ToolName.CoreManageTodoList] = enableTodoListForModel;
 		}
 
 		allowTools[ToolName.EditFilesPlaceholder] = false;

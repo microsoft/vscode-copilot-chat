@@ -2477,6 +2477,14 @@
 						],
 						"markdownDescription": "%github.copilot.config.agent.thinkingTool%"
 					},
+					"github.copilot.chat.agent.todoList.modelSettings": {
+						"type": "string",
+						"tags": [
+							"experimental",
+							"onExp"
+						],
+						"markdownDescription": "%github.copilot.config.agent.todoList.modelSettings%"
+					},
 					"github.copilot.chat.imageUpload.enabled": {
 						"type": "boolean",
 						"default": true,

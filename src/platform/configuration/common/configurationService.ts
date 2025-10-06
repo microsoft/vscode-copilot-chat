@@ -744,6 +744,7 @@ export namespace ConfigKey {
 	}
 
 	export const AgentThinkingTool = defineSetting<boolean>('chat.agent.thinkingTool', false);
+	export const TodoListModelSettings = defineExpSetting<string | undefined>('chat.agent.todoList.modelSettings', undefined);
 	/** Use the Responses API instead of Chat Completions when supported */
 	export const UseResponsesApi = defineExpSetting<boolean | undefined>('chat.useResponsesApi', false);
 	/** Configure reasoning effort sent to Responses API */
