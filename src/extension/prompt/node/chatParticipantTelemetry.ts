@@ -5,16 +5,12 @@
 
 import { PromptReference, Raw } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
-import { ICopilotTokenStore } from '../../../platform/authentication/common/copilotTokenStore';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { roleToString } from '../../../platform/chat/common/globalStringUtils';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
-import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
-import { getGitHubRepoInfoFromContext, IGitService, RepoContext } from '../../../platform/git/common/gitService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
-import { ITelemetryService, multiplexProperties } from '../../../platform/telemetry/common/telemetry';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { isNotebookCellOrNotebookChatInput } from '../../../util/common/notebooks';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { DiagnosticsTelemetryData, findDiagnosticsTelemetry } from '../../inlineChat/node/diagnosticsTelemetry';
@@ -29,6 +25,7 @@ import { Conversation } from '../common/conversation';
 import { IToolCall, IToolCallRound } from '../common/intents';
 import { IDocumentContext } from './documentContext';
 import { IIntent, TelemetryData } from './intents';
+import { RepoInfoTelemetry } from './repoInfoTelemetry';
 import { ConversationalBaseTelemetryData, createTelemetryWithId, extendUserMessageTelemetryData, getCodeBlocks, sendModelMessageTelemetry, sendOffTopicMessageTelemetry, sendUserActionTelemetry, sendUserMessageTelemetry } from './telemetry';
 
 // #region: internal telemetry for responses
@@ -40,18 +37,6 @@ type ResponseInternalTelemetryProperties = {
 	response: string;
 	baseModel: string;
 	apiType: string | undefined;
-};
-
-// EVENT: repoInfo
-type RepoInfoProperties = {
-	remoteUrl: string | undefined;
-	headCommitHash: string | undefined;
-	diffsJSON: string | undefined;
-};
-
-type RepoInfoInternalTelemetryProperties = RepoInfoProperties & {
-	location: 'begin' | 'end';
-	telemetryMessageId: string;
 };
 
 // EVENT: interactiveSessionResponse
@@ -216,6 +201,8 @@ export class ChatTelemetryBuilder {
 
 	public readonly baseUserTelemetry: ConversationalBaseTelemetryData = createTelemetryWithId();
 
+	private readonly _repoInfoTelemetry: RepoInfoTelemetry;
+
 	public get telemetryMessageId() {
 		return this.baseUserTelemetry.properties.messageId;
 	}
@@ -227,9 +214,16 @@ export class ChatTelemetryBuilder {
 		private readonly _firstTurn: boolean,
 		private readonly _request: vscode.ChatRequest,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
-	) { }
+	) {
+		// IANHU: Remove log later
+		console.log('repoInfoTelemetry created for messageId', this.baseUserTelemetry.properties.messageId);
+		this._repoInfoTelemetry = this.instantiationService.createInstance(RepoInfoTelemetry, this.baseUserTelemetry.properties.messageId);
+	}
 
 	public makeRequest(intent: IIntent, location: ChatLocation, conversation: Conversation, messages: Raw.ChatMessage[], promptTokenLength: number, references: readonly PromptReference[], endpoint: IChatEndpoint, telemetryData: readonly TelemetryData[], availableToolCount: number): InlineChatTelemetry | PanelChatTelemetry {
+		this._repoInfoTelemetry.sendBeginTelemetryIfNeeded().catch(() => {
+			// Error logged in RepoInfoTelemetry
+		});
 
 		if (location === ChatLocation.Editor) {
 			return this.instantiationService.createInstance(InlineChatTelemetry,
@@ -247,6 +241,8 @@ export class ChatTelemetryBuilder {
 				promptTokenLength,
 				telemetryData,
 				availableToolCount,
+				// IANHU: Don't send to inline?
+				this._repoInfoTelemetry
 			);
 		} else {
 			return this.instantiationService.createInstance(PanelChatTelemetry,
@@ -264,6 +260,7 @@ export class ChatTelemetryBuilder {
 				promptTokenLength,
 				telemetryData,
 				availableToolCount,
+				this._repoInfoTelemetry
 			);
 		}
 	}
@@ -314,11 +311,8 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		promptTokenLength: number,
 		protected readonly _genericTelemetryData: readonly TelemetryData[],
 		protected readonly _availableToolCount: number,
+		protected readonly _repoInfoTelemetry: RepoInfoTelemetry,
 		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
-		@IGitService protected readonly _gitService: IGitService,
-		@IGitDiffService protected readonly _gitDiffService: IGitDiffService,
-		@IGitExtensionService protected readonly _gitExtensionService: IGitExtensionService,
-		@ICopilotTokenStore protected readonly _copilotTokenStore: ICopilotTokenStore,
 	) {
 		// Extend the base user telemetry with message and prompt information.
 		// We don't send this telemetry yet, but we will need it later to include the off topic scores.
@@ -501,8 +495,8 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			availableTools: JSON.stringify(availableTools.map(tool => tool.name))
 		}, toolCallMeasurements);
 
-		this._sendRepoInfoTelemetryEvent('end').catch(() => {
-			// IANHU: Log?
+		this._repoInfoTelemetry.sendEndTelemetry().catch(() => {
+			// Error logged in RepoInfoTelemetry
 		});
 	}
 
@@ -515,93 +509,6 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 	protected _getTelemetryData<T extends TelemetryData>(ctor: new (...args: any[]) => T): T | undefined {
 		return <T>this._genericTelemetryData.find(d => d instanceof ctor);
 	}
-
-	protected async _sendRepoInfoTelemetryEvent(location: 'begin' | 'end'): Promise<void> {
-		// IANHU: Logging only
-		console.log(`repoInfo: Starting send repo info telemetry event at ${location}`);
-
-		// Check early since the calculations before sending could be expensive
-		if (this._copilotTokenStore.copilotToken?.isInternal !== true) {
-			return;
-		}
-
-		const gitInfo = await this._getRepoInfoTelemetry();
-
-		if (!gitInfo) {
-			// IANHU: Logging?
-			return;
-		}
-
-		// IANHU: Multiplex can help with a big diffsJSON, but we still might need a check here
-		// to just not send if it's too big.
-		const properties = multiplexProperties({
-			...gitInfo,
-			location,
-			telemetryMessageId: this.telemetryMessageId
-		} as RepoInfoInternalTelemetryProperties);
-
-		console.log(`repoInfo: Sending actual repo info telemetry event ${location}`);
-		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', properties);
-
-		// IANHU: Remove this later, for now just logging the event to the console so we can see it
-		console.log(JSON.stringify({
-			name: 'request.repoInfo',
-			data: {
-				...gitInfo,
-				location,
-				telemetryMessageId: this.telemetryMessageId
-			}
-		}));
-	}
-
-	// From a given repo, get enough information to reconstruct the repo state versus upstream
-	private async _getRepoInfoTelemetry(): Promise<RepoInfoProperties | undefined> {
-		let repoContext: RepoContext | undefined;
-		if (this._documentContext?.document) {
-			repoContext = await this._gitService.getRepository(this._documentContext.document.uri);
-		} else if (this._gitService.activeRepository) {
-			repoContext = this._gitService.activeRepository.get();
-		}
-
-		if (!repoContext || !repoContext.changes) {
-			return;
-		}
-
-		const githubInfo = getGitHubRepoInfoFromContext(repoContext);
-		if (!githubInfo) {
-			return;
-		}
-
-		// Get the upstream commit from the repository
-		const gitAPI = this._gitExtensionService.getExtensionApi();
-		const repository = gitAPI?.getRepository(repoContext.rootUri);
-		const upstreamCommit = repository?.state.HEAD?.upstream?.commit;
-		if (!upstreamCommit) {
-			return;
-		}
-
-		const changes = await this._gitService.diffWith(repoContext.rootUri, '@{upstream}');
-		if (!changes || changes.length === 0) {
-			return;
-		}
-
-		// Reduce to just the diff information we need
-		// IANHU: We might need a couple more properties here, will revisit, but keep simple for now
-		const diffs = (await this._gitDiffService.getChangeDiffs(repoContext.rootUri, changes)).map(diff => {
-			return {
-				uri: diff.uri.toString(),
-				diff: diff.diff,
-			};
-		});
-
-		return {
-			remoteUrl: githubInfo.remoteUrl,
-			headCommitHash: upstreamCommit,
-			// IANHU: Could be super large, will try using multiplex when logging
-			diffsJSON: diffs.length > 0 ? JSON.stringify(diffs) : undefined,
-		};
-	}
-
 }
 
 export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefined> {
@@ -621,12 +528,9 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		promptTokenLength: number,
 		genericTelemetryData: readonly TelemetryData[],
 		availableToolCount: number,
+		repoInfoTelemetry: RepoInfoTelemetry,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IGitService gitService: IGitService,
-		@IGitDiffService gitDiffService: IGitDiffService,
-		@IGitExtensionService gitExtensionService: IGitExtensionService,
-		@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore,
 	) {
 		super(ChatLocation.Panel,
 			sessionId,
@@ -643,17 +547,9 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			promptTokenLength,
 			genericTelemetryData,
 			availableToolCount,
-			telemetryService,
-			gitService,
-			gitDiffService,
-			gitExtensionService,
-			copilotTokenStore
+			repoInfoTelemetry,
+			telemetryService
 		);
-
-		// IANHU: Move outside the microtask
-		this._sendRepoInfoTelemetryEvent('begin').catch(() => {
-			// IANHU: Log?
-		});
 	}
 
 	protected override _sendInternalRequestTelemetryEvent(): void {
@@ -672,10 +568,6 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		} satisfies RequestInternalPanelTelemetryProperties, {
 			turnNumber: this._conversation.turns.length,
 		} satisfies ResponseInternalPanelTelemetryMeasurements);
-
-		// this._sendRepoInfoTelemetryEvent('begin').catch(() => {
-		// // IANHU: Log?
-		// });
 	}
 
 	protected override async _sendResponseTelemetryEvent(responseType: ChatFetchResponseType, response: string, interactionOutcome: InteractionOutcome, toolCalls: IToolCall[] = []): Promise<void> {
@@ -869,12 +761,9 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 		promptTokenLength: number,
 		genericTelemetryData: readonly TelemetryData[],
 		availableToolCount: number,
+		repoInfoTelemetry: RepoInfoTelemetry,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@ILanguageDiagnosticsService private readonly _languageDiagnosticsService: ILanguageDiagnosticsService,
-		@IGitService gitService: IGitService,
-		@IGitDiffService gitDiffService: IGitDiffService,
-		@IGitExtensionService gitExtensionService: IGitExtensionService,
-		@ICopilotTokenStore copilotTokenStore: ICopilotTokenStore,
 	) {
 		super(ChatLocation.Editor,
 			sessionId,
@@ -891,11 +780,8 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			promptTokenLength,
 			genericTelemetryData,
 			availableToolCount,
-			telemetryService,
-			gitService,
-			gitDiffService,
-			gitExtensionService,
-			copilotTokenStore
+			repoInfoTelemetry,
+			telemetryService
 		);
 
 		this._diagnosticsTelemetryData = findDiagnosticsTelemetry(this._documentContext.selection, this._languageDiagnosticsService.getDiagnostics(this._documentContext.document.uri));
