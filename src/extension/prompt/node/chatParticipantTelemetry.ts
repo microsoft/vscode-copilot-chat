@@ -517,6 +517,9 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 	}
 
 	protected async _sendRepoInfoTelemetryEvent(location: 'begin' | 'end'): Promise<void> {
+		// IANHU: Logging only
+		console.log(`repoInfo: Starting send repo info telemetry event at ${location}`);
+
 		// Check early since the calculations before sending could be expensive
 		if (this._copilotTokenStore.copilotToken?.isInternal !== true) {
 			return;
@@ -537,6 +540,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			telemetryMessageId: this.telemetryMessageId
 		} as RepoInfoInternalTelemetryProperties);
 
+		console.log(`repoInfo: Sending actual repo info telemetry event ${location}`);
 		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', properties);
 
 		// IANHU: Remove this later, for now just logging the event to the console so we can see it
@@ -645,6 +649,11 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			gitExtensionService,
 			copilotTokenStore
 		);
+
+		// IANHU: Move outside the microtask
+		this._sendRepoInfoTelemetryEvent('begin').catch(() => {
+			// IANHU: Log?
+		});
 	}
 
 	protected override _sendInternalRequestTelemetryEvent(): void {
@@ -664,9 +673,9 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			turnNumber: this._conversation.turns.length,
 		} satisfies ResponseInternalPanelTelemetryMeasurements);
 
-		this._sendRepoInfoTelemetryEvent('begin').catch(() => {
-			// IANHU: Log?
-		});
+		// this._sendRepoInfoTelemetryEvent('begin').catch(() => {
+		// // IANHU: Log?
+		// });
 	}
 
 	protected override async _sendResponseTelemetryEvent(responseType: ChatFetchResponseType, response: string, interactionOutcome: InteractionOutcome, toolCalls: IToolCall[] = []): Promise<void> {
