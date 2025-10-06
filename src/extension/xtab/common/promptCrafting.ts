@@ -689,7 +689,7 @@ export function clipPreservingRange(
 	);
 
 	const linesOffsetStart = firstPageIdx * pageSize;
-	const linesOffsetEndExcl = lastPageIdx * pageSize + pageSize + 1 /* because excl */;
+	const linesOffsetEndExcl = lastPageIdx * pageSize + pageSize;
 
 	return Result.ok(new OffsetRange(linesOffsetStart, linesOffsetEndExcl));
 }
