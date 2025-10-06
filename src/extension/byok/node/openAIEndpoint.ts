@@ -44,10 +44,32 @@ function hydrateBYOKErrorMessages(response: ChatResponse): ChatResponse {
 }
 
 export class OpenAIEndpoint extends ChatEndpoint {
+	// Reserved headers that cannot be overridden for security and functionality reasons
 	private static readonly _reservedHeaders: ReadonlySet<string> = new Set([
+		// Authentication & Authorization
 		'api-key',
 		'authorization',
+		'cookie',
+		'set-cookie',
+		// Content & Protocol
 		'content-type',
+		'content-length',
+		'transfer-encoding',
+		'host',
+		// Routing & Proxying
+		'proxy-authorization',
+		'proxy-authenticate',
+		'x-forwarded-for',
+		'x-forwarded-host',
+		'x-forwarded-proto',
+		'forwarded',
+		// Security & CORS
+		'origin',
+		'referer',
+		'sec-fetch-site',
+		'sec-fetch-mode',
+		'sec-fetch-dest',
+		// Application-specific
 		'openai-intent',
 		'x-github-api-version',
 		'x-initiator',
@@ -55,8 +77,17 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		'x-interaction-type',
 		'x-onbehalf-extension-id',
 		'x-request-id',
-		'x-vscode-user-agent-library-version'
+		'x-vscode-user-agent-library-version',
+		'user-agent',
 	]);
+
+	// RFC 7230 compliant header name pattern: token characters only
+	private static readonly _validHeaderNamePattern = /^[!#$%&'*+\-.0-9A-Z^_`a-z|~]+$/;
+
+	// Maximum limits to prevent abuse
+	private static readonly _maxHeaderNameLength = 256;
+	private static readonly _maxHeaderValueLength = 8192;
+	private static readonly _maxCustomHeaderCount = 20;
 
 	private readonly _customHeaders: Record<string, string>;
 	constructor(
@@ -96,39 +127,91 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		if (!headers) {
 			return {};
 		}
+
+		const entries = Object.entries(headers);
+
+		// Limit number of custom headers to prevent abuse
+		if (entries.length > OpenAIEndpoint._maxCustomHeaderCount) {
+			this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' has ${entries.length} custom headers, exceeding limit of ${OpenAIEndpoint._maxCustomHeaderCount}. Only first ${OpenAIEndpoint._maxCustomHeaderCount} will be processed.`);
+		}
+
 		const sanitized: Record<string, string> = {};
-		for (const [rawKey, rawValue] of Object.entries(headers)) {
+		let processedCount = 0;
+
+		for (const [rawKey, rawValue] of entries) {
+			if (processedCount >= OpenAIEndpoint._maxCustomHeaderCount) {
+				break;
+			}
+
+			// Normalize and validate header name
 			const key = rawKey.trim();
 			if (!key) {
-				continue;
-			}
-			const lowerKey = key.toLowerCase();
-			if (OpenAIEndpoint._reservedHeaders.has(lowerKey)) {
-				this.logService.warn(`[OpenAIEndpoint] Ignoring header '${key}' for model '${this.modelMetadata.id}' due to conflict with reserved headers.`);
+				this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' has empty header name, skipping.`);
 				continue;
 			}
 
-			const sanitizedValue = this._sanitizeHeaderValue(rawValue, key);
-			if (sanitizedValue === undefined) {
-				this.logService.warn(`[OpenAIEndpoint] Ignoring header '${key}' for model '${this.modelMetadata.id}' due to invalid value.`);
+			// Check header name length
+			if (key.length > OpenAIEndpoint._maxHeaderNameLength) {
+				this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' has header name exceeding ${OpenAIEndpoint._maxHeaderNameLength} characters, skipping.`);
 				continue;
 			}
+
+			// Validate header name format (RFC 7230 token characters)
+			if (!OpenAIEndpoint._validHeaderNamePattern.test(key)) {
+				this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' has invalid header name format, skipping.`);
+				continue;
+			}
+
+			// Check against reserved headers (case-insensitive)
+			const lowerKey = key.toLowerCase();
+			if (OpenAIEndpoint._reservedHeaders.has(lowerKey)) {
+				this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' attempted to override reserved header, skipping.`);
+				continue;
+			}
+
+			// Sanitize header value
+			const sanitizedValue = this._sanitizeHeaderValue(rawValue);
+			if (sanitizedValue === undefined) {
+				this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' has invalid header value, skipping.`);
+				continue;
+			}
+
+			// Use normalized lowercase key for storage to ensure consistency
 			sanitized[key] = sanitizedValue;
+			processedCount++;
 		}
+
 		return sanitized;
 	}
 
-	private _sanitizeHeaderValue(value: string, key: string): string | undefined {
+	private _sanitizeHeaderValue(value: unknown): string | undefined {
+		// Type guard: only accept strings
 		if (typeof value !== 'string') {
 			return undefined;
 		}
+
 		const trimmed = value.trim();
-		// Disallow CR, LF, and other control characters (0x00-0x1F, 0x7F)
-		if (/[\r\n\x00-\x1F\x7F]/.test(trimmed)) {
+
+		// Check value length to prevent DoS
+		if (trimmed.length > OpenAIEndpoint._maxHeaderValueLength) {
 			return undefined;
 		}
+
+		// Disallow control characters including CR, LF, and others (0x00-0x1F, 0x7F)
+		// This prevents HTTP header injection and response splitting attacks
+		if (/[\x00-\x1F\x7F]/.test(trimmed)) {
+			return undefined;
+		}
+
+		// Additional check for potential Unicode issues (optional but recommended)
+		// Reject headers with bidirectional override characters or zero-width characters
+		if (/[\u200B-\u200D\u202A-\u202E\uFEFF]/.test(trimmed)) {
+			return undefined;
+		}
+
 		return trimmed;
 	}
+
 	override createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
 		if (this.useResponsesApi) {
 			// Handle Responses API: customize the body directly
