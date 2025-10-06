@@ -11,7 +11,7 @@ import { IPromptPathRepresentationService } from '../../../platform/prompts/comm
 import { ISearchService } from '../../../platform/search/common/searchService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { asArray } from '../../../util/vs/base/common/arrays';
-import { raceCancellation, raceTimeout } from '../../../util/vs/base/common/async';
+import { raceCancellationError, raceTimeout } from '../../../util/vs/base/common/async';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { count } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -53,24 +53,27 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		const isRegExp = options.input.isRegexp ?? true;
 		const queryIsValidRegex = this.isValidRegex(options.input.query);
 
-		// try find text with a timeout of 10s
-		// TODO: consider making the timeout configurable
-		const timeoutInMs = 10_000;
-		let results = await raceTimeout(
-			raceCancellation(
-				this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, token),
-				token
-			),
-			timeoutInMs
+		// try find text with a timeout of 20s
+		const timeoutInMs = 20_000;
+		async function raceTimeoutAndCancellationError<T>(promise: Promise<T>, timeoutMessage: string): Promise<T> {
+			const result = await raceTimeout(raceCancellationError(promise, token), timeoutInMs);
+			if (result === undefined) {
+				throw new Error(timeoutMessage);
+			}
+
+			return result;
+		}
+
+		let results = await raceTimeoutAndCancellationError(
+			this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, token),
+			'Timeout in searching text in files'
 		);
 
-		if (results && !results.length && queryIsValidRegex) {
-			results = await raceTimeout(
-				raceCancellation(
-					this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, token),
-					token
-				),
-				timeoutInMs
+		// If we still have no results, we need to try the opposite regex mode
+		if (!results.length && queryIsValidRegex) {
+			results = await raceTimeoutAndCancellationError(
+				this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, token),
+				'Timeout in searching text in files'
 			);
 		}
 
@@ -78,17 +81,10 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 			throw new Error('Timeout in searching text in files');
 		}
 
-		const prompt = await raceTimeout(
-			raceCancellation(
-				renderPromptElementJSON(this.instantiationService, FindTextInFilesResult, { textResults: results, maxResults, askedForTooManyResults: Boolean(askedForTooManyResults) }, options.tokenizationOptions, token),
-				token
-			),
-			timeoutInMs
+		const prompt = await raceTimeoutAndCancellationError(
+			renderPromptElementJSON(this.instantiationService, FindTextInFilesResult, { textResults: results, maxResults, askedForTooManyResults: Boolean(askedForTooManyResults) }, options.tokenizationOptions, token),
+			'Timeout in rendering prompt'
 		);
-
-		if (prompt === undefined) {
-			throw new Error('Timeout in rendering prompt');
-		}
 
 		const result = new ExtendedLanguageModelToolResult([new LanguageModelPromptTsxPart(prompt)]);
 		const textMatches = results.flatMap(r => {
@@ -131,7 +127,6 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 			token);
 		const results: vscode.TextSearchResult2[] = [];
 		for await (const item of searchResult.results) {
-			await new Promise(r => setTimeout(r, 5000)); // yield to allow cancellation to be processed
 			checkCancellation(token);
 			results.push(item);
 		}
@@ -243,8 +238,8 @@ interface IFindMatchProps extends BasePromptElementProps {
  * 1. Removes excessive extra character data from the match, e.g. avoiding
  * giant minified lines
  * 2. Wraps the match in a <match> tag
- * 3. Prioritizes lines in the middle of the match where the range lies
- */
+								* 3. Prioritizes lines in the middle of the match where the range lies
+								*/
 export class FindMatch extends PromptElement<IFindMatchProps> {
 	constructor(
 		props: PromptElementProps<IFindMatchProps>,
