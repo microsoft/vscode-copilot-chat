@@ -155,8 +155,7 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 		return notebook.getCells()
 			.flatMap((cell) => {
 				const uri = cell.document.uri;
-				return this.languageDiagnosticsService.getDiagnostics(uri)
-					.filter(d => d.severity <= DiagnosticSeverity.Warning);
+				return this.languageDiagnosticsService.getDiagnostics(uri);
 			});
 	}
 
