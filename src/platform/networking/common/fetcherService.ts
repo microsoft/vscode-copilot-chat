@@ -45,6 +45,8 @@ export class Response {
 	}
 }
 
+export type FetcherId = 'electron-fetch' | 'node-fetch' | 'node-http';
+
 /** These are the options we currently use, for ease of reference. */
 export interface FetchOptions {
 	headers?: { [name: string]: string };
@@ -54,6 +56,7 @@ export interface FetchOptions {
 	method?: 'GET' | 'POST';
 	signal?: IAbortSignal;
 	verifyJSONAndRetry?: boolean;
+	useFetcher?: FetcherId;
 }
 
 export interface IAbortSignal {

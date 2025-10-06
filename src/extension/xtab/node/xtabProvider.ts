@@ -488,6 +488,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	) {
 		const tracer = parentTracer.sub('streamEdits');
 
+		const useFetcher = this.configService.getExperimentBasedConfig(ConfigKey.NextEditSuggestionsFetcher, this.expService) || undefined;
+
 		const fetchStreamSource = new FetchStreamSource();
 
 		const fetchRequestStopWatch = new StopWatch();
@@ -535,6 +537,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 					requestId: request.id,
 				},
 				isFilterRetry: true, // poorly named flag -- forces ChatMLFetcher to think it's already retried and not do its own retry
+				useFetcher,
 			},
 			cancellationToken,
 		);
