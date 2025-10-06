@@ -43,6 +43,7 @@ import { Position } from '../../../util/vs/editor/common/core/position';
 import { Range } from '../../../util/vs/editor/common/core/range';
 import { LineRange } from '../../../util/vs/editor/common/core/ranges/lineRange';
 import { OffsetRange } from '../../../util/vs/editor/common/core/ranges/offsetRange';
+import { StringText } from '../../../util/vs/editor/common/core/text/abstractText';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Position as VscodePosition } from '../../../vscodeTypes';
 import { Delayer, DelaySession } from '../../inlineEdits/common/delayer';
@@ -258,43 +259,22 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const doesIncludeCursorTag = editWindowLines.some(line => line.includes(PromptTags.CURSOR));
 		const shouldRemoveCursorTagFromResponse = !doesIncludeCursorTag; // we'd like to remove the tag only if the original edit-window didn't include the tag
 
-		const addCursorTagEdit = StringEdit.single(StringReplacement.insert(cursorOffset, PromptTags.CURSOR));
-		const contentWithCursor = addCursorTagEdit.applyOnText(currentFileContent);
-		const contentWithCursorLines = contentWithCursor.getLines();
-
-		const editWindowWithCursorLines = contentWithCursorLines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
-
-		const areaAroundCodeToEdit = [
-			PromptTags.AREA_AROUND.start,
-			...contentWithCursorLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
-			PromptTags.EDIT_WINDOW.start,
-			...editWindowWithCursorLines,
-			PromptTags.EDIT_WINDOW.end,
-			...contentWithCursorLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
-			PromptTags.AREA_AROUND.end
-		].join('\n');
-
-		const areaAroundCodeToEditForCurrentFile = promptOptions.currentFile.includeTags
-			? areaAroundCodeToEdit
-			: [
-				...contentWithCursorLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
-				...editWindowLines,
-				...contentWithCursorLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
-			].join('\n');
-		const taggedCurrentFileContentResult = createTaggedCurrentFileContentUsingPagedClipping(
+		const taggedCurrentFileContentResult = this.constructTaggedFile(
+			currentFileContent,
 			currentFileContentLines,
-			areaAroundCodeToEditForCurrentFile,
+			cursorOffset,
+			editWindowLinesRange,
 			areaAroundEditWindowLinesRange,
+			promptOptions,
 			computeTokens,
-			promptOptions.pagedClipping.pageSize,
-			promptOptions.currentFile,
+			{ includeLineNumbers: false }
 		);
 
 		if (taggedCurrentFileContentResult.isError()) {
 			return Result.error(new NoNextEditReason.PromptTooLarge('currentFile'));
 		}
 
-		const { taggedCurrentFileContent, nLines: nLinesCurrentFile } = taggedCurrentFileContentResult.val;
+		const { taggedCurrentFileR: { taggedCurrentFileContent, nLines: nLinesCurrentFile }, areaAroundCodeToEdit } = taggedCurrentFileContentResult.val;
 
 		telemetryBuilder.setNLinesOfCurrentFileInPrompt(nLinesCurrentFile);
 
@@ -381,6 +361,74 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		);
 		return Result.ok<void>(undefined);
 	}
+
+	private constructTaggedFile(
+		currentFileContent: StringText,
+		currentFileContentLines: string[],
+		cursorOffset: number,
+		editWindowLinesRange: OffsetRange,
+		areaAroundEditWindowLinesRange: OffsetRange,
+		promptOptions: ModelConfig,
+		computeTokens: (s: string) => number,
+		opts: {
+			includeLineNumbers: boolean;
+		}
+	) {
+		const contentWithCursorAsLinesOriginal = (() => {
+			const addCursorTagEdit = StringEdit.single(StringReplacement.insert(cursorOffset, PromptTags.CURSOR));
+			const contentWithCursor = addCursorTagEdit.applyOnText(currentFileContent);
+			return contentWithCursor.getLines();
+		})();
+
+		const addLineNumbers = (lines: string[]) => lines.map((line, idx) => `${idx + 1}| ${line}`);
+
+		const contentWithCursorAsLines = opts.includeLineNumbers
+			? addLineNumbers(contentWithCursorAsLinesOriginal)
+			: contentWithCursorAsLinesOriginal;
+
+		const editWindowWithCursorAsLines = contentWithCursorAsLines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
+
+		const areaAroundCodeToEdit = [
+			PromptTags.AREA_AROUND.start,
+			...contentWithCursorAsLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
+			PromptTags.EDIT_WINDOW.start,
+			...editWindowWithCursorAsLines,
+			PromptTags.EDIT_WINDOW.end,
+			...contentWithCursorAsLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
+			PromptTags.AREA_AROUND.end
+		].join('\n');
+
+		currentFileContentLines = opts.includeLineNumbers
+			? addLineNumbers(currentFileContentLines)
+			: currentFileContentLines;
+
+		let areaAroundCodeToEditForCurrentFile: string;
+		if (promptOptions.currentFile.includeTags) {
+			areaAroundCodeToEditForCurrentFile = areaAroundCodeToEdit;
+		} else {
+			const editWindowLines = currentFileContentLines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
+			areaAroundCodeToEditForCurrentFile = [
+				...contentWithCursorAsLines.slice(areaAroundEditWindowLinesRange.start, editWindowLinesRange.start),
+				...editWindowLines,
+				...contentWithCursorAsLines.slice(editWindowLinesRange.endExclusive, areaAroundEditWindowLinesRange.endExclusive),
+			].join('\n');
+		}
+
+		const taggedCurrentFileContentResult = createTaggedCurrentFileContentUsingPagedClipping(
+			currentFileContentLines,
+			areaAroundCodeToEditForCurrentFile,
+			areaAroundEditWindowLinesRange,
+			computeTokens,
+			promptOptions.pagedClipping.pageSize,
+			promptOptions.currentFile,
+		);
+
+		return taggedCurrentFileContentResult.map(taggedCurrentFileR => ({
+			taggedCurrentFileR,
+			areaAroundCodeToEdit,
+		}));
+	}
+
 
 	private async getLanguageContext(
 		request: StatelessNextEditRequest,

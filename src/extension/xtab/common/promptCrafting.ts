@@ -665,9 +665,35 @@ function expandRangeToPageRange(
 	return { firstPageIdx, lastPageIdx, budgetLeft: tokenBudget };
 }
 
-/**
- * @remark exported for testing
- */
+export function clipPreservingRange(
+	docLines: string[],
+	rangeToPreserve: OffsetRange,
+	computeTokens: (s: string) => number,
+	pageSize: number,
+	opts: CurrentFileOptions,
+): Result<OffsetRange, 'outOfBudget'> {
+
+	// subtract budget consumed by rangeToPreserve
+	const availableTokenBudget = opts.maxTokens - countTokensForLines(docLines.slice(rangeToPreserve.start, rangeToPreserve.endExclusive), computeTokens);
+	if (availableTokenBudget < 0) {
+		return Result.error('outOfBudget');
+	}
+
+	const { firstPageIdx, lastPageIdx } = expandRangeToPageRange(
+		docLines,
+		rangeToPreserve,
+		pageSize,
+		availableTokenBudget,
+		computeTokens,
+		opts.prioritizeAboveCursor,
+	);
+
+	const linesOffsetStart = firstPageIdx * pageSize;
+	const linesOffsetEndExcl = lastPageIdx * pageSize + pageSize + 1 /* because excl */;
+
+	return Result.ok(new OffsetRange(linesOffsetStart, linesOffsetEndExcl));
+}
+
 export function createTaggedCurrentFileContentUsingPagedClipping(
 	currentDocLines: string[],
 	areaAroundCodeToEdit: string,
@@ -677,28 +703,24 @@ export function createTaggedCurrentFileContentUsingPagedClipping(
 	opts: CurrentFileOptions
 ): Result<{ taggedCurrentFileContent: string; nLines: number }, 'outOfBudget'> {
 
-	// subtract budget consumed by areaAroundCodeToEdit
-	const availableTokenBudget = opts.maxTokens - countTokensForLines(areaAroundCodeToEdit.split(/\r?\n/), computeTokens);
-	if (availableTokenBudget < 0) {
+	const r = clipPreservingRange(
+		currentDocLines,
+		areaAroundEditWindowLinesRange,
+		computeTokens,
+		pageSize,
+		opts
+	);
+
+	if (r.isError()) {
 		return Result.error('outOfBudget');
 	}
 
-	const { firstPageIdx, lastPageIdx } = expandRangeToPageRange(
-		currentDocLines,
-		areaAroundEditWindowLinesRange,
-		pageSize,
-		availableTokenBudget,
-		computeTokens,
-		opts.prioritizeAboveCursor,
-	);
-
-	const linesOffsetStart = firstPageIdx * pageSize;
-	const linesOffsetEnd = lastPageIdx * pageSize + pageSize;
+	const clippedRange = r.val;
 
 	const taggedCurrentFileContent = [
-		...currentDocLines.slice(linesOffsetStart, areaAroundEditWindowLinesRange.start),
+		...currentDocLines.slice(clippedRange.start, areaAroundEditWindowLinesRange.start),
 		areaAroundCodeToEdit,
-		...currentDocLines.slice(areaAroundEditWindowLinesRange.endExclusive, linesOffsetEnd),
+		...currentDocLines.slice(areaAroundEditWindowLinesRange.endExclusive, clippedRange.endExclusive),
 	];
 
 	return Result.ok({ taggedCurrentFileContent: taggedCurrentFileContent.join('\n'), nLines: taggedCurrentFileContent.length });
