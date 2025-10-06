@@ -17,7 +17,7 @@ import { IDomainService } from '../../endpoint/common/domainService';
 import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, OptionalChatRequestParams, RequestId, getProcessingTime, getRequestId } from '../../networking/common/fetch';
-import { IFetcherService, Response } from '../../networking/common/fetcherService';
+import { FetcherId, IFetcherService, Response } from '../../networking/common/fetcherService';
 import { IChatEndpoint, IEndpointBody, postRequest, stringifyUrlOrRequestMetadata } from '../../networking/common/networking';
 import { CAPIChatMessage, ChatCompletion } from '../../networking/common/openai';
 import { sendEngineMessagesTelemetry } from '../../networking/node/chatStream';
@@ -108,7 +108,8 @@ export async function fetchAndStreamChat(
 	nChoices: number | undefined,
 	userInitiatedRequest?: boolean,
 	cancel?: CancellationToken | undefined,
-	telemetryProperties?: TelemetryProperties | undefined
+	telemetryProperties?: TelemetryProperties | undefined,
+	useFetcher?: FetcherId,
 ): Promise<ChatResults | ChatRequestFailed | ChatRequestCanceled> {
 	const logService = accessor.get(ILogService);
 	const telemetryService = accessor.get(ITelemetryService);
@@ -160,7 +161,9 @@ export async function fetchAndStreamChat(
 		location,
 		userInitiatedRequest,
 		cancel,
-		{ ...telemetryProperties, modelCallId });
+		{ ...telemetryProperties, modelCallId },
+		useFetcher,
+	);
 
 	if (cancel?.isCancellationRequested) {
 		const body = await response!.body();
@@ -333,11 +336,20 @@ async function handleError(
 		}
 
 		if (response.status === 404) {
+			let errorReason: string;
+
+			// Check if response body is valid JSON
+			if (!jsonData) {
+				errorReason = text;
+			} else {
+				errorReason = JSON.stringify(jsonData);
+			}
+
 			return {
 				type: FetchResponseKind.Failed,
 				modelRequestId: modelRequestIdObj,
 				failKind: ChatFailKind.NotFound,
-				reason: 'Resource not found'
+				reason: errorReason
 			};
 		}
 
@@ -465,7 +477,8 @@ async function fetchWithInstrumentation(
 	location: ChatLocation,
 	userInitiatedRequest?: boolean,
 	cancel?: CancellationToken,
-	telemetryProperties?: TelemetryProperties
+	telemetryProperties?: TelemetryProperties,
+	useFetcher?: FetcherId,
 ): Promise<Response> {
 
 	// If request contains an image, we include this header.
@@ -514,7 +527,8 @@ async function fetchWithInstrumentation(
 		ourRequestId,
 		request,
 		additionalHeaders,
-		cancel
+		cancel,
+		useFetcher,
 	).then(response => {
 		const apim = response.headers.get('apim-request-id');
 		if (apim) {
