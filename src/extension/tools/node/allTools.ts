@@ -21,6 +21,7 @@ import './githubRepoTool';
 import './insertEditTool';
 import './installExtensionTool';
 import './listDirTool';
+import './memoryTool';
 import './multiReplaceStringTool';
 import './newNotebookTool';
 import './newWorkspace/newWorkspaceTool';
@@ -35,8 +36,9 @@ import './searchWorkspaceSymbolsTool';
 import './simpleBrowserTool';
 import './testFailureTool';
 import './thinkTool';
+import './toolReplayTool';
 import './usagesTool';
 import './userPreferencesTool';
 import './vscodeAPITool';
 import './vscodeCmdTool';
-import './toolReplayTool';
+

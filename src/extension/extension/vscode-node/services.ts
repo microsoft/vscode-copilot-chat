@@ -103,6 +103,8 @@ import { IWorkspaceListenerService } from '../../workspaceRecorder/common/worksp
 import { WorkspacListenerService } from '../../workspaceRecorder/vscode-node/workspaceListenerService';
 import { registerServices as registerCommonServices } from '../vscode/services';
 import { NativeEnvServiceImpl } from '../../../platform/env/vscode-node/nativeEnvServiceImpl';
+import { IMemoryService } from '../../memory/common/memoryService';
+import { MemoryServiceImpl } from '../../memory/node/memoryServiceImpl';
 
 // ###########################################################################################
 // ###                                                                                     ###
@@ -195,6 +197,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IWorkspaceListenerService, new SyncDescriptor(WorkspacListenerService));
 	builder.define(ICodeSearchAuthenticationService, new SyncDescriptor(VsCodeCodeSearchAuthenticationService));
 	builder.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
+	builder.define(IMemoryService, new SyncDescriptor(MemoryServiceImpl));
 }
 
 function setupMSFTExperimentationService(builder: IInstantiationServiceBuilder, extensionContext: ExtensionContext) {
