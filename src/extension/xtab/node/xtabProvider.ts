@@ -1112,6 +1112,10 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			if (isNaN(lineNumber) || lineNumber < 0) {
 				throw new Error(`parsed line number is NaN or negative: ${trimmed}`);
 			}
+			if (lineNumber > promptPieces.currentDocument.lines.length) {
+				this.tracer.trace(`Predicted line number ${lineNumber} is out of bounds, document has ${promptPieces.currentDocument.lines.length} lines`);
+				return undefined;
+			}
 
 			return lineNumber;
 		} catch (err) {
