@@ -50,9 +50,9 @@ import { editWouldDeleteWhatWasJustInserted } from '../../inlineEdits/common/ghN
 import { getOrDeduceSelectionFromLastEdit } from '../../inlineEdits/common/nearbyCursorInlineEditProvider';
 import { IgnoreImportChangesAspect } from '../../inlineEdits/node/importFiltering';
 import { createTaggedCurrentFileContentUsingPagedClipping, getUserPrompt, N_LINES_ABOVE, N_LINES_AS_CONTEXT, N_LINES_BELOW, nes41Miniv3SystemPrompt, PromptPieces, PromptTags, simplifiedPrompt, systemPromptTemplate, unifiedModelSystemPrompt, xtab275SystemPrompt } from '../common/promptCrafting';
+import { CurrentDocument } from './xtabCurrentDocument';
 import { XtabEndpoint } from './xtabEndpoint';
 import { linesWithBackticksRemoved, toLines } from './xtabUtils';
-import { CurrentDocument } from './xtabCurrentDocument';
 
 namespace ResponseTags {
 	export const NO_CHANGE = {
@@ -232,22 +232,22 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		const currentDocument = new CurrentDocument(activeDocument.documentAfterEdits, cursorPosition);
 
-		const cursorLine = currentDocument.lines.value[currentDocument.cursorLineOffset];
+		const cursorLine = currentDocument.lines[currentDocument.cursorLineOffset];
 		const isCursorAtEndOfLine = cursorPosition.column === cursorLine.trimEnd().length;
 		if (isCursorAtEndOfLine) {
 			delaySession.setExtraDebounce(this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsExtraDebounceEndOfLine, this.expService));
 		}
 		telemetryBuilder.setIsCursorAtLineEnd(isCursorAtEndOfLine);
 
-		const areaAroundEditWindowLinesRange = this.computeAreaAroundEditWindowLinesRange(currentDocument.lines.value, currentDocument.cursorLineOffset);
+		const areaAroundEditWindowLinesRange = this.computeAreaAroundEditWindowLinesRange(currentDocument);
 
-		const editWindowLinesRange = this.computeEditWindowLinesRange(currentDocument.lines.value, currentDocument.cursorLineOffset, request, retryState);
+		const editWindowLinesRange = this.computeEditWindowLinesRange(currentDocument, request, retryState);
 
 		const cursorOriginalLinesOffset = Math.max(0, currentDocument.cursorLineOffset - editWindowLinesRange.start);
-		const editWindowLastLineLength = activeDocument.documentAfterEdits.getTransformer().getLineLength(editWindowLinesRange.endExclusive);
-		const editWindow = activeDocument.documentAfterEdits.getTransformer().getOffsetRange(new Range(editWindowLinesRange.start + 1, 1, editWindowLinesRange.endExclusive, editWindowLastLineLength + 1));
+		const editWindowLastLineLength = currentDocument.transformer.getLineLength(editWindowLinesRange.endExclusive);
+		const editWindow = currentDocument.transformer.getOffsetRange(new Range(editWindowLinesRange.start + 1, 1, editWindowLinesRange.endExclusive, editWindowLastLineLength + 1));
 
-		const editWindowLines = currentDocument.lines.value.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
+		const editWindowLines = currentDocument.lines.slice(editWindowLinesRange.start, editWindowLinesRange.endExclusive);
 
 		// Expected: editWindow.substring(activeDocument.documentAfterEdits.value) === editWindowLines.join('\n')
 
@@ -390,8 +390,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		].join('\n');
 
 		const currentFileContentLines = opts.includeLineNumbers
-			? addLineNumbers(currentDocument.lines.value)
-			: currentDocument.lines.value;
+			? addLineNumbers(currentDocument.lines)
+			: currentDocument.lines;
 
 		let areaAroundCodeToEditForCurrentFile: string;
 		if (promptOptions.currentFile.includeTags) {
@@ -816,14 +816,18 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return;
 	}
 
-	private computeAreaAroundEditWindowLinesRange(currentDocLines: string[], cursorLine: number): OffsetRange {
+	private computeAreaAroundEditWindowLinesRange(currentDocument: CurrentDocument): OffsetRange {
+		const cursorLine = currentDocument.cursorLineOffset;
 		const areaAroundStart = Math.max(0, cursorLine - N_LINES_AS_CONTEXT);
-		const areaAroundEndExcl = Math.min(currentDocLines.length, cursorLine + N_LINES_AS_CONTEXT + 1);
+		const areaAroundEndExcl = Math.min(currentDocument.lines.length, cursorLine + N_LINES_AS_CONTEXT + 1);
 
 		return new OffsetRange(areaAroundStart, areaAroundEndExcl);
 	}
 
-	private computeEditWindowLinesRange(currentDocLines: string[], cursorLine: number, request: StatelessNextEditRequest, retryState: RetryState): OffsetRange {
+	private computeEditWindowLinesRange(currentDocument: CurrentDocument, request: StatelessNextEditRequest, retryState: RetryState): OffsetRange {
+		const currentDocLines = currentDocument.lines;
+		const cursorLineOffset = currentDocument.cursorLineOffset;
+
 		let nLinesAbove: number;
 		{
 			const useVaryingLinesAbove = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderUseVaryingLinesAbove, this.expService);
@@ -832,7 +836,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 				nLinesAbove = 0; // default
 
 				for (let i = 0; i < 8; ++i) {
-					const lineIdx = cursorLine - i;
+					const lineIdx = cursorLineOffset - i;
 					if (lineIdx < 0) {
 						break;
 					}
@@ -867,8 +871,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			nLinesBelow += this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderRetryWithNMoreLinesBelow, this.expService) ?? 0;
 		}
 
-		let codeToEditStart = Math.max(0, cursorLine - nLinesAbove);
-		let codeToEditEndExcl = Math.min(currentDocLines.length, cursorLine + nLinesBelow + 1);
+		let codeToEditStart = Math.max(0, cursorLineOffset - nLinesAbove);
+		let codeToEditEndExcl = Math.min(currentDocLines.length, cursorLineOffset + nLinesBelow + 1);
 
 		const maxMergeConflictLines = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabMaxMergeConflictLines, this.expService);
 		if (maxMergeConflictLines) {
