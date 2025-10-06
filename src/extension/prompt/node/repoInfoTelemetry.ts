@@ -145,11 +145,12 @@ export class RepoInfoTelemetry {
 				};
 			}
 
-			// Reduce to just the diff information we need
-			// IANHU: We might need a couple more properties here, will revisit, but keep simple for now
 			const diffs = (await this._gitDiffService.getChangeDiffs(repoContext.rootUri, changes)).map(diff => {
 				return {
 					uri: diff.uri.toString(),
+					originalUri: diff.originalUri.toString(),
+					renameUri: diff.renameUri?.toString(),
+					status: diff.status,
 					diff: diff.diff,
 				};
 			});
@@ -183,7 +184,6 @@ export class RepoInfoTelemetry {
 				result: 'success',
 			};
 		} finally {
-			// Always dispose of the watcher and event listeners
 			createDisposable.dispose();
 			changeDisposable.dispose();
 			deleteDisposable.dispose();
