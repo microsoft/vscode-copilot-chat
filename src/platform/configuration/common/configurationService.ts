@@ -798,8 +798,8 @@ export namespace ConfigKey {
 	export const Gpt5AlternatePrompt = defineExpSetting<string>('chat.gpt5AlternatePrompt', 'default');
 	export const GrokCodeAlternatePrompt = defineExpSetting<string>('chat.grokCodeAlternatePrompt', 'default');
 
-	export const CompletionsFetcher = defineSetting<FetcherId | undefined>('chat.completionsFetcher', undefined);
-	export const NextEditSuggestionsFetcher = defineSetting<FetcherId | undefined>('chat.nesFetcher', undefined);
+	export const CompletionsFetcher = defineExpSetting<FetcherId | undefined>('chat.completionsFetcher', undefined);
+	export const NextEditSuggestionsFetcher = defineExpSetting<FetcherId | undefined>('chat.nesFetcher', undefined);
 }
 
 export function getAllConfigKeys(): string[] {

@@ -488,7 +488,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 	) {
 		const tracer = parentTracer.sub('streamEdits');
 
-		const useFetcher = this.configService.getConfig(ConfigKey.NextEditSuggestionsFetcher) || undefined;
+		const useFetcher = this.configService.getExperimentBasedConfig(ConfigKey.NextEditSuggestionsFetcher, this.expService) || undefined;
 
 		const fetchStreamSource = new FetchStreamSource();
 
