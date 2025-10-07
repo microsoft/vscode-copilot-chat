@@ -154,7 +154,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			}
 
 			if (!OpenAIEndpoint._validHeaderNamePattern.test(key)) {
-				this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' has invalid header name format: '${key}'. Header names must match RFC 7230 token characters (^[!#$%&'*+.^_`|~0-9A-Za-z-]+$). Skipping.`);
+				this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' has invalid header name format: '${key}', Skipping.`);
 				continue;
 			}
 
