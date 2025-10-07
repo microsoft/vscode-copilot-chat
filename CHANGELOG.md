@@ -62,8 +62,8 @@ Previously, when an agent was still processing your chat request, you could not 
 
 To quickly navigate through your previous chat prompts in the chat session, we added keyboard shortcuts for navigating up and down through your chat messages:
 
-* Navigate previous:  `<kbd>Ctrl+Alt+Up</kbd>`  or `<kbd>Cmd+Option+Up</kbd>` on macOS
-* Navigate next:  `<kbd>Ctrl+Alt+Down</kbd>`  or `<kbd>Cmd+Option+Down</kbd>` on macOS
+* Navigate previous:  <kbd>Ctrl+Alt+Up</kbd>  or <kbd>Cmd+Option+Up</kbd> on macOS
+* Navigate next:  <kbd>Ctrl+Alt+Down</kbd>  or <kbd>Cmd+Option+Down</kbd> on macOS
 
 #### Agent sessions
 
@@ -173,7 +173,7 @@ This milestone, we adopted the following updates to the MCP specification:
 
 A new setting, `accessibility.verboseChatProgressUpdates`, enables more detailed announcements for screen reader users about chat activity.
 
-From the chat input, users can focus the last focused chat response item with `<kbd>Ctrl+Shift+Up</kbd>`.
+From the chat input, users can focus the last focused chat response item with <kbd>Ctrl+Shift+Up</kbd>.
 
 ### Source Control
 
@@ -1823,7 +1823,7 @@ The welcome screen provides options to either switch to the release version of t
 
 **Setting**: `github.copilot.chat.search.semanticTextResults:true`
 
-AI-powered semantic text search is now enabled by default in the Search view. Use the `<kbd>Ctrl+I</kbd>` keyboard shortcut to trigger a semantic search, which shows you the most relevant results based on your query, on top of the regular search results.
+AI-powered semantic text search is now enabled by default in the Search view. Use the <kbd>Ctrl+I</kbd> keyboard shortcut to trigger a semantic search, which shows you the most relevant results based on your query, on top of the regular search results.
 
 <video src="https://code.visualstudio.com/assets/updates/1_99/semantic-search.mp4" title="Video that shows semantic search improvements in Visual Studio Code." autoplay loop controls muted></video>
 
@@ -1996,7 +1996,7 @@ For the past several months, we've had a "Chat" view for asking questions to the
 
 Besides making your chat experience simpler, this unification enables a few new features for AI-powered code editing:
 
-- **Switch modes in the middle of a conversation**: For example, you might start brainstorming an app idea in ask mode, then switch to agent mode to execute the plan. Tip: press `<kbd>Ctrl+.</kbd>` to change modes quickly.
+- **Switch modes in the middle of a conversation**: For example, you might start brainstorming an app idea in ask mode, then switch to agent mode to execute the plan. Tip: press <kbd>Ctrl+.</kbd> to change modes quickly.
 - **Edit sessions in history**: Use the **Show Chats** command (clock icon at the top of the Chat view) to restore past edit sessions and keep working on them.
 - **Move chat to editor or window**: Select **Open Chat in New Editor/New Window** to pop out your chat conversation from the side bar into a new editor tab or separate VS Code window. Chat has supported this for a long time, but now you can run your edit/agent sessions from an editor pane or a separate window as well.
 - **Multiple agent sessions**: Following from the above point, this means that you can even run multiple agent sessions at the same time. You might like to have one chat in agent mode working on implementing a feature, and another independent session for doing research and using other tools. Directing two agent sessions to edit files at the same time is not recommended, it can lead to confusion.
