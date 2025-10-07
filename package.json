@@ -4167,6 +4167,7 @@
 		"package": "vsce package",
 		"web": "vscode-test-web --headless --extensionDevelopmentPath=. .",
 		"test:prompt": "mocha \"src/extension/completions-core/prompt/**/test/**/*.test.{ts,tsx}\"",
+		"test:extension-core": "tsx src/extension/completions-core/extension/test/runTest.ts",
 		"test:lib": "mocha \"src/extension/completions-core/lib/src/**/*.test.{ts,tsx}\""
 	},
 	"devDependencies": {
@@ -4260,7 +4261,9 @@
 		"vscode-languageserver-protocol": "^3.17.5",
 		"vscode-languageserver-textdocument": "^1.0.12",
 		"vscode-languageserver-types": "^3.17.5",
-		"yaml": "^2.8.0"
+		"yaml": "^2.8.0",
+        "yargs": "^17.7.2",
+        "@types/yargs": "^17.0.24"
 	},
 	"dependencies": {
 		"@anthropic-ai/claude-code": "^1.0.120",
