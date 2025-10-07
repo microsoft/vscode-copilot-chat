@@ -11,7 +11,6 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { getLanguage } from '../../../util/common/languages';
-import { isJupyterNotebookUri } from '../../../util/common/notebooks';
 import { isLocation } from '../../../util/common/types';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
@@ -27,6 +26,8 @@ import { DiagnosticContext, Diagnostics } from '../../prompts/node/inline/diagno
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { checkCancellation, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
+import { INotebookService } from '../../../platform/notebook/common/notebookService';
+import { findNotebook } from '../../../util/common/notebooks';
 
 interface IGetErrorsParams {
 	// Note that empty array is not the same as absence; empty array
@@ -45,6 +46,7 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
+		@INotebookService private readonly notebookService: INotebookService,
 		@ILogService private readonly logService: ILogService
 	) {
 		super();
@@ -64,7 +66,7 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 			}
 
 			let diagnostics: vscode.Diagnostic[] = [];
-			if (isJupyterNotebookUri(uri)) {
+			if (this.notebookService.hasSupportedNotebooks(uri)) {
 				diagnostics = this.getNotebookCellDiagnostics(uri);
 			} else {
 				diagnostics = range
@@ -145,8 +147,8 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 	}
 
 	private getNotebookCellDiagnostics(uri: URI) {
-		const notebook = this.workspaceService.notebookDocuments
-			.find((doc: { uri: URI }) => doc.uri.toString() === uri.toString());
+		const notebook = findNotebook(uri, this.workspaceService.notebookDocuments);
+
 		if (!notebook) {
 			this.logService.error(`Notebook not found: ${uri.toString()}, could not retrieve diagnostics`);
 			return [];
