@@ -1,6 +1,208 @@
+## 0.32 (2025-10-08)
+
+GitHub Copilot updates from [September 2025](https://code.visualstudio.com/updates/v1_105):
+
+### Chat
+
+#### Fully qualified tool names
+
+Prompt files and custom chat modes enable you to specify which tools can be used. To avoid naming conflicts between built-in tools and tools provided by MCP servers or extensions, we now support fully qualified tool names for prompt files and chat modes. This also helps with discovering missing extensions or MCP servers.
+
+Tool names are now qualified by the MCP server, extension, or tool set they are part of. For example, instead of `codebase`, you would use `search/codebase` or `list_issues` would be `github/github-mcp-server/list_issues`.
+
+You can still use the previous notation, however a code actions helps migrating to the new names.
+
+![Screenshot of a prompt file showing a Code Action to update an unqualified tool name.](https://code.visualstudio.com/assets/updates/1_105/qualified_tool_names.png)
+
+#### Improved edit tools for bring-your-own-key models
+
+**Setting**: `github.copilot.chat.customOAIModels`
+
+To make working with custom models better integrated with VS Code built-in tools, we improved the set of edit tools given to [Bring Your Own Key (BYOK)](https://code.visualstudio.com/docs/copilot/customization/language-models#_bring-your-own-language-model-key) custom models. In addition, we enhanced our default tools and added a 'learning' mechanism to select the optimal tool set for custom models.
+
+If you're [using OpenAI-compatible models](https://code.visualstudio.com/docs/copilot/customization/language-models#_use-an-openaicompatible-model), you can also explicitly configure the list of edit tools with the `github.copilot.chat.customOAIModels` setting.
+
+#### Chat user experience improvements
+
+##### OS notifications for chat responses
+
+**Setting**: `chat.notifyWindowOnResponseReceived`
+
+In VS Code 1.103, we introduced OS notifications for chat sessions that required a user confirmation when the VS Code window was not focused. In this release, we are expanding this functionality to show an OS badge and notification toast when a chat response is received. The notification includes a preview of the response, and selecting it brings focus to the chat input.
+
+![Screenshot showing an OS notification while the VS Code window is unfocused.](https://code.visualstudio.com/assets/updates/1_105/chat-notification.png)
+
+You can control the notification behavior with the `chat.notifyWindowOnResponseReceived` setting.
+
+##### Chain of thought (Experimental)
+
+**Setting**: `chat.agent.thinkingStyle`
+
+Chain of thought shows the model’s reasoning as it responds, which can be great for debugging or understanding suggestions the model provides. With the introduction of GPT-5-Codex, thinking tokens are now shown in chat as expandable sections in the response.
+
+![Screenshot of a chat response showing thinking tokens as expandable sections in the response.](https://code.visualstudio.com/assets/updates/1_105/chat-thinking-tokens.png)
+
+You can configure how to display or hide chain of thought with the `chat.agent.thinkingStyle` setting. Thinking tokens will soon be available in more models as well!
+
+##### Show recent chat sessions (Experimental)
+
+**Setting**: `chat.emptyState.history.enabled`
+
+Last milestone, we introduced [prompt file suggestions](https://code.visualstudio.com/updates/v1_104#_configure-prompt-file-suggestions-experimental) to help you get started when creating a new chat session (<kbd>Ctrl+L</kbd> or <kbd>Cmd+L</kbd> on macOS). In this release, we are building on that by showing your recent local chat conversations. This helps you quickly pick up where you left off or revisit past conversations.
+
+![Screenshot of the Chat view showing recent local chat conversations when there are no active chat sessions.](https://code.visualstudio.com/assets/updates/1_105/chat-history-on-empty.png)
+
+By default, this functionality is off, but you can enable it with the `chat.emptyState.history.enabled` setting.
+
+##### Keep or undo changes during an agent loop
+
+Previously, when an agent was still processing your chat request, you could not keep or undo file edits until the agent finished. Now, you can keep or undo changes to files while an edit loop is happening. This enables you to have more control, especially for long-running tasks.
+
+##### Keyboard shortcuts for navigating user chat messages
+
+To quickly navigate through your previous chat prompts in the chat session, we added keyboard shortcuts for navigating up and down through your chat messages:
+
+* Navigate previous:  <kbd>Ctrl+Alt+Up</kbd>  or <kbd>Cmd+Option+Up</kbd> on macOS
+* Navigate next:  <kbd>Ctrl+Alt+Down</kbd>  or <kbd>Cmd+Option+Down</kbd> on macOS
+
+#### Agent sessions
+
+This milestone, we made several improvements to the Chat Sessions view and the experience of delegating tasks to remote coding agents:
+
+##### Chat Sessions view enhancements
+
+**Setting**: `chat.agentSessionsViewLocation`
+
+The [Chat Sessions view](https://code.visualstudio.com/docs/copilot/copilot-coding-agent#_manage-sessions-with-dedicated-chat-editor-experimental) provides a centralized location for managing both local chat conversations and remote coding agent sessions. This view enables you to work with multiple AI sessions simultaneously, track their progress, and manage long-running tasks efficiently.
+
+In this release, we made several UI refinements and performance improvements to enhance the Chat Sessions experience.
+
+* The Chat Sessions view continues to support features like Status Bar tracking for monitoring multiple coding agents, context menus for session management, and rich descriptions to provide detailed context for each session.
+
+* Quickly initiate a new session by using the "+" button in the view header.
+
+    ![Screenshot of the Chat Sessions view with a new session open via the + button.](https://code.visualstudio.com/assets/updates/1_105/chat-sessions.png)
+
+#### Delegating to remote coding agents
+
+A typical scenario for working with remote coding agents is to first discuss and plan a task in a local chat session, where you have access to the full context of your codebase, and then delegate the implementation work to a remote coding agent. The remote agent can then work on the task in the background and create a pull request with the solution.
+
+If you're working in a repository that has [Copilot coding agent enabled](https://aka.ms/coding-agent-docs), the **Delegate to coding agent** button in the Chat view now appears by default.
+
+![Screenshot of the Chat view with the Delegate to coding agent button highlighted.](https://code.visualstudio.com/assets/updates/1_105/delegate-button.png)
+
+When you use the delegate action, all the context from your chat conversation, including file references, are forwarded to the coding agent. If your conversation exceeds the coding agent's context window, VS Code automatically summarizes and condenses the information to fit the window.
+
+#### Terminal commands
+
+##### Autoreply to prompts (Experimental)
+
+**Setting**: `chat.tools.terminal.autoReplyToPrompts`
+
+We introduced an opt-in setting, `chat.tools.terminal.autoReplyToPrompts`, which enables the agent to respond to prompts for input in the terminal automatically, like `Confirm? y/n`.
+
+##### Free form input request detection
+
+When the terminal requires free-form input, we now display a confirmation prompt. This lets you stay focused on your current work and only shift attention when input is needed.
+
+#### Model availability
+
+This milestone, we added support for the following models in chat. The available models depend on your Copilot plan and configuration.
+
+* **GPT-5-Codex**, OpenAI’s GPT-5 model, optimized for agentic coding.
+
+* **Claude Sonnet 4.5**, Anthropic’s most advanced model for coding and real-world agents.
+
+You can choose between different models with the model picker in chat. Learn more about [language models in VS Code](https://code.visualstudio.com/docs/copilot/customization/language-models).
+
+### MCP
+
+#### MCP marketplace (Preview)
+
+**Setting**: `chat.mcp.gallery.enabled`
+
+VS Code now includes a built-in MCP marketplace that enables users to browse and install MCP servers directly from the Extensions view. This is powered by the [GitHub MCP registry](https://github.com/mcp) and provides a seamless experience for discovering and managing MCP servers directly within the editor.
+
+> **Note**: This feature is currently in preview. Not all features are available yet and the experience might still have some rough edges.
+
+The MCP marketplace is disabled by default. When no MCP servers are installed, you see a welcome view in the Extensions view that provides easy access to enable the marketplace. You can also enable the MCP marketplace manually using the setting `chat.mcp.gallery.enabled`.
+
+![Screenshot showing the MCP Servers welcome view with text describing how to browse and install Model Context Protocol servers, and an "Enable MCP Servers Marketplace" button.](https://code.visualstudio.com/assets/updates/1_105/mcp-servers-welcome.png)
+
+To browse the MCP servers from the Extensions view:
+
+* Use the `@mcp` filter in the Extensions view search box
+* Select **MCP Servers** from the filter dropdown in the Extensions view
+* Search for specific MCP servers by name
+
+![Screenshot showing the GitHub MCP server details from the MCP server marketplace inside VS Code.](https://code.visualstudio.com/assets/updates/1_105/mcp-server-editor.png)
+
+#### Autostart MCP servers
+
+**Setting**: `chat.mcp.autostart`
+
+In this release, new or outdated MCP servers are now started automatically when you send a chat message. VS Code also avoids triggering interactions such as dialogs when autostarting a server, and instead adds an indicator in chat to let you know that a server needs attention.
+
+![Screenshot of the Chat view, showing a notification message that the GitHub MCP requires restarting.](https://code.visualstudio.com/assets/updates/1_105/mcp_autostart_prompt.png)
+
+With MCP autostart on by default, we no longer eagerly activate extensions and instead only activate MCP-providing extensions when the first chat message is sent.
+
+For extension developers, we also added support for the `when` clause on the `mcpServerDefinitionProviders` contribution point, so you can avoid activation when it's not relevant.
+
+#### Improved representation of MCP resources returned from tools
+
+Previously, our implementation of tool results that contain resources left it up to the model to retrieve those resources, without clear instructions on how to do so. In this version of VS Code, by default, we include a preview of the resource content and add instructions to retrieve the complete contents. This should lead to better model performance when using such tools.
+
+#### MCP specification updates
+
+This milestone, we adopted the following updates to the MCP specification:
+
+* [SEP-973](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/955), which lets MCP servers specify `icons` to associate with their data. This can be used to give a custom icon to servers, resources, and tools.
+
+    ![Screenshot of the tools picker, showing one of the MCP servers in the list with a custom icon.](https://code.visualstudio.com/assets/updates/1_105/mcp_icons.png)
+
+    HTTP MCP servers must provide icons from the same authority that the MCP server itself is listening on, while stdio servers are allowed to reference `file:///` URIs on disk.
+
+* [SEP-1034](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/1035), which lets MCP servers provide `default` values when using elicitation.
+
+### Accessibility
+
+#### Chat improvements
+
+**Setting**: `accessibility.verboseChatProgressUpdates`
+
+A new setting, `accessibility.verboseChatProgressUpdates`, enables more detailed announcements for screen reader users about chat activity.
+
+From the chat input, users can focus the last focused chat response item with <kbd>Ctrl+Shift+Up</kbd>.
+
+### Source Control
+
+#### Resolve merge conflicts with AI
+
+When opening a file with git merge conflict markers, you are now able to resolve merge conflicts with AI. We added a new action in the lower right hand corner of the editor. Selecting this new action opens the Chat view and starts an agentic flow with the merge base and changes from each branch as context.
+
+![Screenshot of the proposed merge conflict resolution in the editor.](https://code.visualstudio.com/assets/updates/1_105/merge-conflict-resolution.png)
+
+You can review the proposed merge conflict resolution in the editor and follow up with additional context if needed. You can customize the merge conflict resolution by using an `AGENTS.md` file.
+
+#### Add history item change to chat context
+
+A couple of milestones ago, we added the capability to view the files in each history item shown in the Source Control Graph view. You can now add a file from a history item as context to a chat request. This can be useful when you want to provide the contents of a specific version of a file as context to your chat prompt.
+
+To add a file from a history item to chat, select a history item to view the list of files, right-click on a particular file, and then select **Add to Chat** from the context menu.
+
+### Testing
+
+#### Run tests with code coverage
+
+If you have a testing extension installed for your code, the `runTests` tool in chat enables the agent to run tests in your codebase by using the [VS Code testing integration](https://code.visualstudio.com/docs/debugtest/testing) rather than running them from the command line.
+
+In this release, the `runTests` tool now also reports test code coverage to the agent. This enables the agent to generate and verify tests that cover the entirety of your code.
+
+
 ## 0.31 (2025-09-11)
 
-GitHub Copilot updates from [September 2025](https://code.visualstudio.com/updates/v1_104):
+GitHub Copilot updates from [August 2025](https://code.visualstudio.com/updates/v1_104):
 
 ### Chat
 
@@ -1621,7 +1823,7 @@ The welcome screen provides options to either switch to the release version of t
 
 **Setting**: `github.copilot.chat.search.semanticTextResults:true`
 
-AI-powered semantic text search is now enabled by default in the Search view. Use the `<kbd>Ctrl+I</kbd>` keyboard shortcut to trigger a semantic search, which shows you the most relevant results based on your query, on top of the regular search results.
+AI-powered semantic text search is now enabled by default in the Search view. Use the <kbd>Ctrl+I</kbd> keyboard shortcut to trigger a semantic search, which shows you the most relevant results based on your query, on top of the regular search results.
 
 <video src="https://code.visualstudio.com/assets/updates/1_99/semantic-search.mp4" title="Video that shows semantic search improvements in Visual Studio Code." autoplay loop controls muted></video>
 
@@ -1794,7 +1996,7 @@ For the past several months, we've had a "Chat" view for asking questions to the
 
 Besides making your chat experience simpler, this unification enables a few new features for AI-powered code editing:
 
-- **Switch modes in the middle of a conversation**: For example, you might start brainstorming an app idea in ask mode, then switch to agent mode to execute the plan. Tip: press `<kbd>Ctrl+.</kbd>` to change modes quickly.
+- **Switch modes in the middle of a conversation**: For example, you might start brainstorming an app idea in ask mode, then switch to agent mode to execute the plan. Tip: press <kbd>Ctrl+.</kbd> to change modes quickly.
 - **Edit sessions in history**: Use the **Show Chats** command (clock icon at the top of the Chat view) to restore past edit sessions and keep working on them.
 - **Move chat to editor or window**: Select **Open Chat in New Editor/New Window** to pop out your chat conversation from the side bar into a new editor tab or separate VS Code window. Chat has supported this for a long time, but now you can run your edit/agent sessions from an editor pane or a separate window as well.
 - **Multiple agent sessions**: Following from the above point, this means that you can even run multiple agent sessions at the same time. You might like to have one chat in agent mode working on implementing a feature, and another independent session for doing research and using other tools. Directing two agent sessions to edit files at the same time is not recommended, it can lead to confusion.
