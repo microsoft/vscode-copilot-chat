@@ -93,8 +93,7 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 
 		const languageId = doc?.languageId ?? getLanguageForResource(uri).languageId;
 		const fileExtension = extname(uri);
-		const model = options.model ?? this._promptContext.request?.model;
-		const modelId = typeof model === 'string' ? model : model?.id;
+		const modelId = options.model && (await this.endpointProvider.getChatEndpoint(options.model)).model;
 
 		if (hasSupportedNotebooks) {
 			// Its possible we have a code block with a language id
