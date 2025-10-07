@@ -63,7 +63,7 @@ export class CopilotCLISession extends Disposable {
 	constructor(
 		private readonly _sdkSession: Session,
 		@ILogService private readonly logService: ILogService,
-		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService
 	) {
 		super();
 		this.sessionId = _sdkSession.id;
@@ -104,8 +104,7 @@ export class CopilotCLISession extends Disposable {
 			hmacKey: process.env.HMAC_SECRET,
 			env: {
 				...process.env,
-				COPILOTCLI_DISABLE_NONESSENTIAL_TRAFFIC: '1',
-				'copilot-integration-id': 'vscode-chat-dev',
+				COPILOTCLI_DISABLE_NONESSENTIAL_TRAFFIC: '1'
 			},
 			requestPermission: async (_permissionRequest) => {
 				return {
