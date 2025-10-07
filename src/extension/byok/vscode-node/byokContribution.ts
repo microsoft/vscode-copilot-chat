@@ -54,6 +54,43 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			}
 		}));
 
+		this._register(commands.registerCommand('github.copilot.chat.manageBYOKAPIKey', async (vendor: string, envVarName?: string, operation?: 'update' | 'remove', modelId?: string) => {
+			const provider = this._providers.get(vendor);
+			if (!provider) {
+				this._logService.warn(`BYOK: Provider ${vendor} not found`);
+				return;
+			}
+
+			if (!envVarName) {
+				await provider.updateAPIKey();
+				return;
+			}
+
+			if (provider.authType === 2 /* BYOKAuthType.PerModelDeployment */ && !modelId) {
+				this._logService.warn(`BYOK: Model ID is required for ${vendor} provider`);
+				return;
+			}
+
+			const apiKey = process.env[envVarName];
+			if (!apiKey && operation !== 'remove') {
+				this._logService.warn(`BYOK: Environment variable ${envVarName} not found or empty`);
+				return;
+			}
+
+			try {
+				if (operation === 'remove') {
+					await this._byokStorageService.deleteAPIKey(vendor, provider.authType, modelId);
+					this._logService.info(`BYOK: API key removed for provider ${vendor}${modelId ? ` and model ${modelId}` : ''}`);
+				} else {
+					await this._byokStorageService.storeAPIKey(vendor, apiKey!, provider.authType, modelId);
+					this._logService.info(`BYOK: API key updated for provider ${vendor}${modelId ? ` and model ${modelId}` : ''} from environment variable ${envVarName}`);
+				}
+			} catch (error) {
+				this._logService.error(`BYOK: Failed to ${operation || 'update'} API key for provider ${vendor}${modelId ? ` and model ${modelId}` : ''}`, error);
+				throw error;
+			}
+		}));
+
 		this._byokStorageService = new BYOKStorageService(extensionContext);
 		this._authChange(authService, this._instantiationService);
 

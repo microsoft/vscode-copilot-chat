@@ -2207,6 +2207,11 @@
 				"command": "github.copilot.chat.manageBYOK",
 				"title": "Manage Bring Your Own Key Vendor",
 				"enablement": "false"
+			},
+			{
+				"command": "github.copilot.chat.manageBYOKAPIKey",
+				"title": "Manage Bring Your Own Key API Key",
+				"enablement": "true"
 			}
 		],
 		"configuration": [
@@ -3130,7 +3135,10 @@
 						]
 					},
 					"github.copilot.chat.completionsFetcher": {
-						"type": ["string", "null"],
+						"type": [
+							"string",
+							"null"
+						],
 						"markdownDescription": "%github.copilot.config.completionsFetcher%",
 						"tags": [
 							"experimental",
@@ -3142,7 +3150,10 @@
 						]
 					},
 					"github.copilot.chat.nesFetcher": {
-						"type": ["string", "null"],
+						"type": [
+							"string",
+							"null"
+						],
 						"markdownDescription": "%github.copilot.config.nesFetcher%",
 						"tags": [
 							"experimental",
