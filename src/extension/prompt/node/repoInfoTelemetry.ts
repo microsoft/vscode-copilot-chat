@@ -155,7 +155,7 @@ export class RepoInfoTelemetry {
 				};
 			});
 
-			// Final check if files changed during the diff processing
+			// Check if files changed during the individual file diffs
 			if (filesChanged) {
 				return {
 					remoteUrl: githubInfo.remoteUrl,
@@ -174,6 +174,16 @@ export class RepoInfoTelemetry {
 					headCommitHash: upstreamCommit,
 					diffsJSON: undefined,
 					result: 'diffTooLarge',
+				};
+			}
+
+			// Check if files changed before we send the telemetry
+			if (filesChanged) {
+				return {
+					remoteUrl: githubInfo.remoteUrl,
+					headCommitHash: upstreamCommit,
+					diffsJSON: undefined,
+					result: 'filesChanged',
 				};
 			}
 
