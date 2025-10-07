@@ -80,6 +80,8 @@ export class RepoInfoTelemetry {
 			return;
 		}
 
+		// Multiplex properties will split up the large properties (diffsJSON) into multiple properties
+		// that we can combine later.
 		const properties = multiplexProperties({
 			...gitInfo,
 			location,
