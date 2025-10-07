@@ -92,6 +92,7 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 				editTools: modelInfo.editTools,
 			};
 		}
+		this._logService.info(`CustomOAI: Loaded the following models from configuration: ${Object.keys(models).join(', ')}`);
 		return models;
 	}
 
