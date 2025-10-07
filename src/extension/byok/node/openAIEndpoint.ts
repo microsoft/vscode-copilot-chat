@@ -130,7 +130,6 @@ export class OpenAIEndpoint extends ChatEndpoint {
 
 		const entries = Object.entries(headers);
 
-		// Limit number of custom headers to prevent abuse
 		if (entries.length > OpenAIEndpoint._maxCustomHeaderCount) {
 			this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' has ${entries.length} custom headers, exceeding limit of ${OpenAIEndpoint._maxCustomHeaderCount}. Only first ${OpenAIEndpoint._maxCustomHeaderCount} will be processed.`);
 		}
@@ -143,40 +142,34 @@ export class OpenAIEndpoint extends ChatEndpoint {
 				break;
 			}
 
-			// Normalize and validate header name
 			const key = rawKey.trim();
 			if (!key) {
 				this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' has empty header name, skipping.`);
 				continue;
 			}
 
-			// Check header name length
 			if (key.length > OpenAIEndpoint._maxHeaderNameLength) {
 				this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' has header name exceeding ${OpenAIEndpoint._maxHeaderNameLength} characters, skipping.`);
 				continue;
 			}
 
-			// Validate header name format (RFC 7230 token characters)
 			if (!OpenAIEndpoint._validHeaderNamePattern.test(key)) {
 				this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' has invalid header name format, skipping.`);
 				continue;
 			}
 
-			// Check against reserved headers (case-insensitive)
 			const lowerKey = key.toLowerCase();
 			if (OpenAIEndpoint._reservedHeaders.has(lowerKey)) {
 				this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' attempted to override reserved header, skipping.`);
 				continue;
 			}
 
-			// Sanitize header value
 			const sanitizedValue = this._sanitizeHeaderValue(rawValue);
 			if (sanitizedValue === undefined) {
 				this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' has invalid header value, skipping.`);
 				continue;
 			}
 
-			// Use normalized lowercase key for storage to ensure consistency
 			sanitized[key] = sanitizedValue;
 			processedCount++;
 		}
@@ -185,14 +178,12 @@ export class OpenAIEndpoint extends ChatEndpoint {
 	}
 
 	private _sanitizeHeaderValue(value: unknown): string | undefined {
-		// Type guard: only accept strings
 		if (typeof value !== 'string') {
 			return undefined;
 		}
 
 		const trimmed = value.trim();
 
-		// Check value length to prevent DoS
 		if (trimmed.length > OpenAIEndpoint._maxHeaderValueLength) {
 			return undefined;
 		}
@@ -203,7 +194,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			return undefined;
 		}
 
-		// Additional check for potential Unicode issues (optional but recommended)
+		// Additional check for potential Unicode issues
 		// Reject headers with bidirectional override characters or zero-width characters
 		if (/[\u200B-\u200D\u202A-\u202E\uFEFF]/.test(trimmed)) {
 			return undefined;
