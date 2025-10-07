@@ -12,7 +12,7 @@ import * as l10n from '@vscode/l10n';
 import { ISearchService } from '../../../platform/search/common/searchService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { raceCancellationError, raceTimeout } from '../../../util/vs/base/common/async';
-import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, MarkdownString } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
@@ -41,11 +41,18 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 		// The input _should_ be a pattern matching inside a workspace, folder, but sometimes we get absolute paths, so try to resolve them
 		const pattern = inputGlobToPattern(options.input.query, this.workspaceService);
 
-		// try find files with a timeout of 20s
+		// try find text with a timeout of 20s
 		const timeoutInMs = 20_000;
+		// create a new cancellation token to be used in search
+		// so in the case of timeout, we can cancel the search
+		// also in the case of the parent token being cancelled, it will cancel this one too
+		const searchCancellation = new CancellationTokenSource(token);
+
 		async function raceTimeoutAndCancellationError<T>(promise: Promise<T>, timeoutMessage: string): Promise<T> {
 			const result = await raceTimeout(raceCancellationError(promise, token), timeoutInMs);
 			if (result === undefined) {
+				// we have timed out, so cancel the search
+				searchCancellation.cancel();
 				throw new Error(timeoutMessage);
 			}
 
@@ -53,8 +60,8 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 		}
 
 		const results = await raceTimeoutAndCancellationError(
-			Promise.resolve(this.searchService.findFiles(pattern, undefined, token)),
-			'Timeout in searching files'
+			Promise.resolve(this.searchService.findFiles(pattern, undefined, searchCancellation.token)),
+			'Timeout in searching files, try a more specific search pattern'
 		);
 
 		checkCancellation(token);
@@ -62,10 +69,7 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 		const maxResults = options.input.maxResults ?? 20;
 		const resultsToShow = results.slice(0, maxResults);
 		// Render the prompt element with a timeout
-		const prompt = await raceTimeoutAndCancellationError(
-			renderPromptElementJSON(this.instantiationService, FindFilesResult, { fileResults: resultsToShow, totalResults: results.length }, options.tokenizationOptions, token),
-			'Timeout in rendering prompt'
-		);
+		const prompt = await renderPromptElementJSON(this.instantiationService, FindFilesResult, { fileResults: resultsToShow, totalResults: results.length }, options.tokenizationOptions, token);
 
 		if (prompt === undefined) {
 			throw new Error('Timeout in rendering prompt');

@@ -12,7 +12,7 @@ import { ISearchService } from '../../../platform/search/common/searchService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { asArray } from '../../../util/vs/base/common/arrays';
 import { raceCancellationError, raceTimeout } from '../../../util/vs/base/common/async';
-import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { count } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
@@ -55,9 +55,17 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 
 		// try find text with a timeout of 20s
 		const timeoutInMs = 20_000;
+
+		// create a new cancellation token to be used in search
+		// so in the case of timeout, we can cancel the search
+		// also in the case of the parent token being cancelled, it will cancel this one too
+		const searchCancellation = new CancellationTokenSource(token);
+
 		async function raceTimeoutAndCancellationError<T>(promise: Promise<T>, timeoutMessage: string): Promise<T> {
 			const result = await raceTimeout(raceCancellationError(promise, token), timeoutInMs);
 			if (result === undefined) {
+				// we have timed out, so cancel the search
+				searchCancellation.cancel();
 				throw new Error(timeoutMessage);
 			}
 
@@ -65,26 +73,25 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		}
 
 		let results = await raceTimeoutAndCancellationError(
-			this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, token),
-			'Timeout in searching text in files'
+			this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, searchCancellation.token),
+			// embed message to give LLM hint about what to do next
+			`Timeout in searching text in files with ${isRegExp ? 'regex' : 'literal'} search, try a more specific search pattern or change regex/literal mode`
 		);
 
 		// If we still have no results, we need to try the opposite regex mode
 		if (!results.length && queryIsValidRegex) {
 			results = await raceTimeoutAndCancellationError(
-				this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, token),
-				'Timeout in searching text in files'
+				this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, searchCancellation.token),
+				// embed message to give LLM hint about what to do next
+				`Find ${results.length} results in searching text in files with ${isRegExp ? 'regex' : 'literal'} search, and then another searching hits timeout in with ${!isRegExp ? 'regex' : 'literal'} search, try a more specific search pattern`
 			);
 		}
 
-		if (results === undefined) {
-			throw new Error('Timeout in searching text in files');
-		}
-
-		const prompt = await raceTimeoutAndCancellationError(
-			renderPromptElementJSON(this.instantiationService, FindTextInFilesResult, { textResults: results, maxResults, askedForTooManyResults: Boolean(askedForTooManyResults) }, options.tokenizationOptions, token),
-			'Timeout in rendering prompt'
-		);
+		const prompt = await renderPromptElementJSON(this.instantiationService,
+			FindTextInFilesResult,
+			{ textResults: results, maxResults, askedForTooManyResults: Boolean(askedForTooManyResults) },
+			options.tokenizationOptions,
+			token);
 
 		const result = new ExtendedLanguageModelToolResult([new LanguageModelPromptTsxPart(prompt)]);
 		const textMatches = results.flatMap(r => {
