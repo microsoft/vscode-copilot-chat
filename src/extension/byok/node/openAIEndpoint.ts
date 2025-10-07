@@ -172,7 +172,7 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			// Sanitize header value
 			const sanitizedValue = this._sanitizeHeaderValue(rawValue);
 			if (sanitizedValue === undefined) {
-				this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' has invalid header value, skipping.`);
+				this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' has invalid value for header '${key}': '${rawValue}', skipping.`);
 				continue;
 			}
 
