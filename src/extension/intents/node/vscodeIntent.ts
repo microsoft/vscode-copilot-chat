@@ -90,6 +90,7 @@ class VSCodeResponseProcessor {
 	private async applyDelta(textDelta: string, progress: vscode.ChatResponseStream) {
 
 		textDelta = this.stagedTextToApply + textDelta;
+		this.stagedTextToApply = '';
 		const codeblockStart = textDelta.indexOf('```');
 
 		if (this._incodeblock) {
@@ -98,9 +99,9 @@ class VSCodeResponseProcessor {
 				this.stagedTextToApply = textDelta;
 			} else {
 				this._incodeblock = false;
+				this.stagedTextToApply = textDelta.substring(codeblockEnd + 3);
 				textDelta = '\n```' + textDelta.substring(0, codeblockEnd) + '```\n';
 				await this.processNonReporting(textDelta, progress);
-				this.stagedTextToApply = '';
 			}
 		}
 		else if (codeblockStart !== -1) {
