@@ -10,8 +10,8 @@ import { OffsetLineColumnConverter } from '../../../platform/editing/common/offs
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ISearchService } from '../../../platform/search/common/searchService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { raceTimeoutAndCancellationError } from '../../../util/common/racePromise';
 import { asArray } from '../../../util/vs/base/common/arrays';
-import { raceCancellationError, raceTimeout } from '../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { count } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -61,19 +61,10 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		// also in the case of the parent token being cancelled, it will cancel this one too
 		const searchCancellation = new CancellationTokenSource(token);
 
-		async function raceTimeoutAndCancellationError<T>(promise: Promise<T>, timeoutMessage: string): Promise<T> {
-			const result = await raceTimeout(raceCancellationError(promise, token), timeoutInMs);
-			if (result === undefined) {
-				// we have timed out, so cancel the search
-				searchCancellation.cancel();
-				throw new Error(timeoutMessage);
-			}
-
-			return result;
-		}
-
 		let results = await raceTimeoutAndCancellationError(
 			this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, searchCancellation.token),
+			searchCancellation,
+			timeoutInMs,
 			// embed message to give LLM hint about what to do next
 			`Timeout in searching text in files with ${isRegExp ? 'regex' : 'literal'} search, try a more specific search pattern or change regex/literal mode`
 		);
@@ -82,6 +73,8 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		if (!results.length && queryIsValidRegex) {
 			results = await raceTimeoutAndCancellationError(
 				this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, searchCancellation.token),
+				searchCancellation,
+				timeoutInMs,
 				// embed message to give LLM hint about what to do next
 				`Find ${results.length} results in searching text in files with ${isRegExp ? 'regex' : 'literal'} search, and then another searching hits timeout in with ${!isRegExp ? 'regex' : 'literal'} search, try a more specific search pattern`
 			);
@@ -245,8 +238,8 @@ interface IFindMatchProps extends BasePromptElementProps {
  * 1. Removes excessive extra character data from the match, e.g. avoiding
  * giant minified lines
  * 2. Wraps the match in a <match> tag
-								* 3. Prioritizes lines in the middle of the match where the range lies
-								*/
+ * 3. Prioritizes lines in the middle of the match where the range lies
+ */
 export class FindMatch extends PromptElement<IFindMatchProps> {
 	constructor(
 		props: PromptElementProps<IFindMatchProps>,

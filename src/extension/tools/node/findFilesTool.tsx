@@ -11,7 +11,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import * as l10n from '@vscode/l10n';
 import { ISearchService } from '../../../platform/search/common/searchService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
-import { raceCancellationError, raceTimeout } from '../../../util/vs/base/common/async';
+import { raceTimeoutAndCancellationError } from '../../../util/common/racePromise';
 import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, MarkdownString } from '../../../vscodeTypes';
@@ -48,19 +48,10 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 		// also in the case of the parent token being cancelled, it will cancel this one too
 		const searchCancellation = new CancellationTokenSource(token);
 
-		async function raceTimeoutAndCancellationError<T>(promise: Promise<T>, timeoutMessage: string): Promise<T> {
-			const result = await raceTimeout(raceCancellationError(promise, token), timeoutInMs);
-			if (result === undefined) {
-				// we have timed out, so cancel the search
-				searchCancellation.cancel();
-				throw new Error(timeoutMessage);
-			}
-
-			return result;
-		}
-
 		const results = await raceTimeoutAndCancellationError(
 			Promise.resolve(this.searchService.findFiles(pattern, undefined, searchCancellation.token)),
+			searchCancellation,
+			timeoutInMs,
 			'Timeout in searching files, try a more specific search pattern'
 		);
 
