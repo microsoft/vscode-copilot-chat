@@ -1706,11 +1706,6 @@
 				"vendor": "openrouter",
 				"displayName": "OpenRouter",
 				"managementCommand": "github.copilot.chat.manageBYOK"
-			},
-			{
-				"vendor": "customoai",
-				"displayName": "OpenAI Compatible",
-				"managementCommand": "github.copilot.chat.manageBYOK"
 			}
 		],
 		"interactiveSession": [
@@ -3130,7 +3125,10 @@
 						]
 					},
 					"github.copilot.chat.completionsFetcher": {
-						"type": ["string", "null"],
+						"type": [
+							"string",
+							"null"
+						],
 						"markdownDescription": "%github.copilot.config.completionsFetcher%",
 						"tags": [
 							"experimental",
@@ -3142,7 +3140,10 @@
 						]
 					},
 					"github.copilot.chat.nesFetcher": {
-						"type": ["string", "null"],
+						"type": [
+							"string",
+							"null"
+						],
 						"markdownDescription": "%github.copilot.config.nesFetcher%",
 						"tags": [
 							"experimental",
