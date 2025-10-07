@@ -12,7 +12,7 @@ import { IBlockedExtensionService } from '../../../platform/chat/common/blockedE
 import { ChatFetchResponseType, ChatLocation, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { getTextPart } from '../../../platform/chat/common/globalStringUtils';
 import { EmbeddingType, getWellKnownEmbeddingTypeInfo, IEmbeddingsComputer } from '../../../platform/embeddings/common/embeddingsComputer';
-import { AutoChatEndpoint, isAutoModelDefault } from '../../../platform/endpoint/common/autoChatEndpoint';
+import { AutoChatEndpoint } from '../../../platform/endpoint/common/autoChatEndpoint';
 import { IAutomodeService } from '../../../platform/endpoint/common/automodeService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { CustomDataPartMimeTypes } from '../../../platform/endpoint/common/endpointTypes';
@@ -58,7 +58,6 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@IEmbeddingsComputer private readonly _embeddingsComputer: IEmbeddingsComputer,
 		@IVSCodeExtensionContext private readonly _vsCodeExtensionContext: IVSCodeExtensionContext,
-		@IExperimentationService private readonly _expService: IExperimentationService,
 		@IAutomodeService private readonly _automodeService: IAutomodeService
 	) {
 		super();
@@ -113,7 +112,8 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		let defaultChatEndpoint = chatEndpoints.find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1') ?? chatEndpoints[0];
 		const autoEndpoint = await this._automodeService.resolveAutoModeEndpoint(undefined, chatEndpoints);
 		chatEndpoints.push(autoEndpoint);
-		if (isAutoModelDefault(this._expService, this._authenticationService)) {
+		// No Auth users always get Auto as the default model
+		if (this._authenticationService.copilotToken?.isNoAuthUser) {
 			defaultChatEndpoint = autoEndpoint;
 		}
 		const seenFamilies = new Set<string>();
