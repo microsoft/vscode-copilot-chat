@@ -61,11 +61,6 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 		const resultsToShow = results.slice(0, maxResults);
 		// Render the prompt element with a timeout
 		const prompt = await renderPromptElementJSON(this.instantiationService, FindFilesResult, { fileResults: resultsToShow, totalResults: results.length }, options.tokenizationOptions, token);
-
-		if (prompt === undefined) {
-			throw new Error('Timeout in rendering prompt');
-		}
-
 		const result = new ExtendedLanguageModelToolResult([new LanguageModelPromptTsxPart(prompt)]);
 		const query = `\`${options.input.query}\``;
 		result.toolResultMessage = resultsToShow.length === 0 ?
