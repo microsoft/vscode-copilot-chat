@@ -18,6 +18,7 @@ export class FetcherService implements IFetcherService {
 
 	declare readonly _serviceBrand: undefined;
 	private _availableFetchers: readonly IFetcher[] | undefined;
+	private _knownBadFetchers = new Set<string>();
 	private _experimentationService: IExperimentationService | undefined;
 
 	constructor(
@@ -88,9 +89,12 @@ export class FetcherService implements IFetcherService {
 	}
 
 	async fetch(url: string, options: FetchOptions): Promise<Response> {
-		const { response: res, updatedFetchers } = await fetchWithFallbacks(this._getAvailableFetchers(), url, options, this._logService);
+		const { response: res, updatedFetchers, updatedKnownBadFetchers } = await fetchWithFallbacks(this._getAvailableFetchers(), url, options, this._knownBadFetchers, this._configurationService, this._logService);
 		if (updatedFetchers) {
 			this._availableFetchers = updatedFetchers;
+		}
+		if (updatedKnownBadFetchers) {
+			this._knownBadFetchers = updatedKnownBadFetchers;
 		}
 		return res;
 	}
