@@ -506,6 +506,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 	protected _getTelemetryData<T extends TelemetryData>(ctor: new (...args: any[]) => T): T | undefined {
 		return <T>this._genericTelemetryData.find(d => d instanceof ctor);
 	}
+
 }
 
 export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefined> {
@@ -550,6 +551,8 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 	}
 
 	protected override _sendInternalRequestTelemetryEvent(): void {
+
+
 		// Capture the created prompt in internal telemetry
 		this._telemetryService.sendInternalMSFTTelemetryEvent('interactiveSessionMessage', {
 			chatLocation: 'panel',
