@@ -215,8 +215,6 @@ export class ChatTelemetryBuilder {
 		private readonly _request: vscode.ChatRequest,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) {
-		// IANHU: Remove log later
-		console.log('repoInfoTelemetry created for messageId', this.baseUserTelemetry.properties.messageId);
 		this._repoInfoTelemetry = this.instantiationService.createInstance(RepoInfoTelemetry, this.baseUserTelemetry.properties.messageId);
 	}
 
@@ -241,7 +239,6 @@ export class ChatTelemetryBuilder {
 				promptTokenLength,
 				telemetryData,
 				availableToolCount,
-				// IANHU: Don't send to inline?
 				this._repoInfoTelemetry
 			);
 		} else {

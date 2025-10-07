@@ -124,8 +124,6 @@ export class ChatResponseStreamImpl implements FinalizableChatResponseStream {
 	}
 
 	textEdit(target: Uri, editsOrDone: TextEdit | TextEdit[] | true): void {
-		// IANHU: Just debug logging
-		console.log(`repoInfo textedit ${target.fsPath}`);
 		if (Array.isArray(editsOrDone) || editsOrDone instanceof TextEdit) {
 			this._push(new ChatResponseTextEditPart(target, editsOrDone));
 		} else {

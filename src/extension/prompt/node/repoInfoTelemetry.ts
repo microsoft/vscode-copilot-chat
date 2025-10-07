@@ -40,9 +40,6 @@ export class RepoInfoTelemetry {
 	) { }
 
 	public async sendBeginTelemetryIfNeeded(): Promise<void> {
-		// IANHU: Remove
-		console.log('repoInfoTelemetry: sendBeginTelemetryIfNeeded called');
-
 		if (this._beginTelemetrySent) {
 			// Already sent or in progress
 			return this._beginTelemetryPromise;
@@ -57,9 +54,6 @@ export class RepoInfoTelemetry {
 	}
 
 	public async sendEndTelemetry(): Promise<void> {
-		// IANHU: Remove
-		console.log('repoInfoTelemetry: sendEndTelemetry called');
-
 		await this._beginTelemetryPromise;
 
 		return this._sendRepoInfoTelemetry('end').catch((error) => {
@@ -68,9 +62,6 @@ export class RepoInfoTelemetry {
 	}
 
 	private async _sendRepoInfoTelemetry(location: 'begin' | 'end'): Promise<void> {
-		// IANHU: Remove
-		console.log('repoInfoTelemetry: sendRepoInfoTelemetry called', location);
-
 		if (this._copilotTokenStore.copilotToken?.isInternal !== true) {
 			return;
 		}
@@ -87,17 +78,6 @@ export class RepoInfoTelemetry {
 		} as RepoInfoInternalTelemetryProperties);
 
 		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', properties);
-
-
-		// IANHU: Remove logging later
-		console.log(JSON.stringify({
-			name: 'request.repoInfo',
-			data: {
-				...gitInfo,
-				location,
-				telemetryMessageId: this._telemetryMessageId
-			}
-		}));
 	}
 
 	private async _getRepoInfoTelemetry(): Promise<RepoInfoTelemetryProperties | undefined> {
