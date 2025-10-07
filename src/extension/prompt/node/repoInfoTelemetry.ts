@@ -24,6 +24,9 @@ type RepoInfoInternalTelemetryProperties = RepoInfoTelemetryProperties & {
 	telemetryMessageId: string;
 };
 
+/*
+* Handles sending internal only telemetry about the current git repository
+*/
 export class RepoInfoTelemetry {
 	private _beginTelemetrySent = false;
 	private _beginTelemetryPromise: Promise<void> | undefined;
@@ -39,6 +42,9 @@ export class RepoInfoTelemetry {
 		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
 	) { }
 
+	/*
+	* Sends the begin event telemetry
+	*/
 	public async sendBeginTelemetryIfNeeded(): Promise<void> {
 		if (this._beginTelemetrySent) {
 			// Already sent or in progress
@@ -53,6 +59,9 @@ export class RepoInfoTelemetry {
 		});
 	}
 
+	/*
+	* Sends the end event telemetry
+	*/
 	public async sendEndTelemetry(): Promise<void> {
 		await this._beginTelemetryPromise;
 
