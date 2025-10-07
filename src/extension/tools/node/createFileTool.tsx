@@ -177,8 +177,8 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent('createFileToolInvoked', {
-			requestId: requestId,
-			model: model,
+			requestId,
+			model,
 			fileExtension
 		});
 	}
