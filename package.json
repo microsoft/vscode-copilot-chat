@@ -289,6 +289,64 @@
 				}
 			},
 			{
+				"displayName": "%copilot.tools.memory.name%",
+				"name": "copilot_memory",
+				"tags": [],
+				"canBeReferencedInPrompt": true,
+				"toolReferenceName": "memory",
+				"modelDescription": "Store, search, and manage persistent memory across chat sessions. This tool allows you to save important information, retrieve relevant context, and maintain continuity across conversations. Use this tool to:\n\n1. Store important user preferences, facts, or context\n2. Search for previously stored information\n3. List existing memories\n4. Store conversation summaries for later reference\n5. Delete outdated or incorrect memories\n\nMemories persist across chat sessions and can include tags for better organization.",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"action": {
+							"type": "string",
+							"enum": [
+								"store",
+								"search",
+								"list",
+								"delete",
+								"storeConversation"
+							],
+							"description": "The action to perform with memory"
+						},
+						"content": {
+							"type": "string",
+							"description": "Content to store (required for store action)"
+						},
+						"query": {
+							"type": "string",
+							"description": "Search query (required for search action)"
+						},
+						"tags": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							},
+							"description": "Tags to associate with memory or filter by"
+						},
+						"memoryId": {
+							"type": "string",
+							"description": "Memory ID (required for delete action)"
+						},
+						"maxResults": {
+							"type": "number",
+							"description": "Maximum number of results to return (default: 10)"
+						},
+						"conversationSummary": {
+							"type": "string",
+							"description": "Summary of conversation to store"
+						},
+						"conversationContext": {
+							"type": "string",
+							"description": "Additional context about the conversation"
+						}
+					},
+					"required": [
+						"action"
+					]
+				}
+			},
+			{
 				"name": "copilot_findFiles",
 				"toolReferenceName": "fileSearch",
 				"displayName": "%copilot.tools.findFiles.name%",
@@ -2282,6 +2340,11 @@
 							"quickChat",
 							"terminal"
 						]
+					},
+					"copilot.memoryStoragePath": {
+						"type": "string",
+						"default": "",
+						"description": "Optional path or file:// URI to store Copilot memories (including embeddings). If empty, uses workspace storage or extension global storage. Can be an absolute path or file URI. Relative paths are resolved against the first workspace folder if present."
 					},
 					"github.copilot.chat.scopeSelection": {
 						"type": "boolean",
