@@ -750,7 +750,7 @@ export namespace ConfigKey {
 
 	export const AgentThinkingTool = defineSetting<boolean>('chat.agent.thinkingTool', false);
 	/** Use the Responses API instead of Chat Completions when supported */
-	export const UseResponsesApi = defineExpSetting<boolean | undefined>('chat.useResponsesApi', false);
+	export const UseResponsesApi = defineExpSetting<boolean | undefined>('chat.useResponsesApi', true);
 	/** Configure reasoning effort sent to Responses API */
 	export const ResponsesApiReasoningEffort = defineExpSetting<'low' | 'medium' | 'high' | 'default'>('chat.responsesApiReasoningEffort', 'default');
 	/** Configure reasoning summary style sent to Responses API */

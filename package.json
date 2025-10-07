@@ -3086,7 +3086,7 @@
 					},
 					"github.copilot.chat.useResponsesApi": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.useResponsesApi%",
 						"tags": [
 							"experimental",
