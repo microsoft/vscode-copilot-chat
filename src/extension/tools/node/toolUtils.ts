@@ -48,7 +48,7 @@ export function formatUriForFileWidget(uriOrLocation: URI | Location): string {
 	// Empty link text -> rendered as file widget
 	return `[](${uri.toString()}${rangePart})`;
 }
-export function inputGlobToPattern(query: string, workspaceService: IWorkspaceService): vscode.GlobPattern[] {
+export function inputGlobToPattern(query: string, workspaceService: IWorkspaceService, modelFamily: string | undefined): vscode.GlobPattern[] {
 	let pattern: vscode.GlobPattern = query;
 	if (isAbsolute(query)) {
 		try {
@@ -65,11 +65,18 @@ export function inputGlobToPattern(query: string, workspaceService: IWorkspaceSe
 	}
 
 	const patterns = [pattern];
-	if (typeof pattern === 'string' && !pattern.endsWith('/**')) {
-		patterns.push(pattern + '/**');
-	} else if (typeof pattern !== 'string' && !pattern.pattern.endsWith('/**')) {
-		patterns.push(new RelativePattern(pattern.baseUri, pattern.pattern + '/**'));
+
+	// For gpt-4.1, it struggles to append /** to the pattern itself, so here we work around it by
+	// adding a second pattern with /** appended.
+	// Other models are smart enough to append the /** suffix so they don't need this workaround.
+	if (modelFamily === 'gpt-4.1') {
+		if (typeof pattern === 'string' && !pattern.endsWith('/**')) {
+			patterns.push(pattern + '/**');
+		} else if (typeof pattern !== 'string' && !pattern.pattern.endsWith('/**')) {
+			patterns.push(new RelativePattern(pattern.baseUri, pattern.pattern + '/**'));
+		}
 	}
+
 	return patterns;
 }
 
