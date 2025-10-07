@@ -48,7 +48,13 @@ export class ToolGrouping implements IToolGrouping {
 	}
 
 	public get isEnabled() {
-		return this._tools.length >= computeToolGroupingMinThreshold(this._experimentationService, this._configurationService).get();
+		// Match the logic from VirtualToolGrouper.addGroups()
+		// Enable if we could potentially trigger built-in grouping (when GPT model is used)
+		const defaultToolGroupingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.DefaultToolsGrouped, this._experimentationService);
+		const couldTriggerBuiltInGrouping = this._tools.length > Constant.START_BUILTIN_GROUPING_AFTER_TOOL_COUNT && defaultToolGroupingEnabled;
+
+		// Or if we meet the standard threshold for all tool types
+		return couldTriggerBuiltInGrouping || this._tools.length >= Constant.START_GROUPING_AFTER_TOOL_COUNT;
 	}
 
 	constructor(

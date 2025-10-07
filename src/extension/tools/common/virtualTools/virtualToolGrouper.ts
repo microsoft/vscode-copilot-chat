@@ -54,13 +54,21 @@ export class VirtualToolGrouper implements IToolCategorization {
 
 	async addGroups(query: string, root: VirtualTool, tools: LanguageModelToolInformation[], token: CancellationToken, endpoint?: IChatEndpoint): Promise<void> {
 		// If there's no need to group tools, just add them all directly;
-		// TODO use Constant.START_GROUPING_AFTER_TOOL_COUNT to be dynamic based on model? or can I use this logic for every model?
-		if (tools.length < Constant.START_GROUPING_AFTER_TOOL_COUNT) {
+
+		// if the model is gpt 4.1 or gpt-5 and there are more than START_BUILTIN_GROUPING_AFTER_TOOL_COUNT tools, we should group built-in tools
+		// otherwise, follow the existing logic of grouping all tools together
+		const currentEndpoint = endpoint ?? (await this._endpointProvider.getAllChatEndpoints()).find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1');
+		const modelFamily = currentEndpoint?.family;
+		const isGpt = modelFamily?.startsWith('gpt-4.1') || modelFamily?.startsWith('gpt-5');
+		const defaultToolGroupingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.DefaultToolsGrouped, this._expService);
+
+		const triggerBuiltInGrouping = isGpt && tools.length > Constant.START_BUILTIN_GROUPING_AFTER_TOOL_COUNT && defaultToolGroupingEnabled;
+
+		if (!triggerBuiltInGrouping && tools.length < Constant.START_GROUPING_AFTER_TOOL_COUNT) {
 			root.contents = tools;
 			return;
 		}
 
-		// TODO add logic here to group default tools for gpt models
 		const byToolset = groupBy(tools, t => {
 			if (t.source instanceof LanguageModelToolExtensionSource) {
 				return 'ext_' + t.source.id;
