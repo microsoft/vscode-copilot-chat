@@ -12,7 +12,7 @@ import * as l10n from '@vscode/l10n';
 import { ISearchService } from '../../../platform/search/common/searchService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { raceTimeoutAndCancellationError } from '../../../util/common/racePromise';
-import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, MarkdownString } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
@@ -43,14 +43,11 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 
 		// try find text with a timeout of 20s
 		const timeoutInMs = 20_000;
-		// create a new cancellation token to be used in search
-		// so in the case of timeout, we can cancel the search
-		// also in the case of the parent token being cancelled, it will cancel this one too
-		const searchCancellation = new CancellationTokenSource(token);
+
 
 		const results = await raceTimeoutAndCancellationError(
-			Promise.resolve(this.searchService.findFiles(pattern, undefined, searchCancellation.token)),
-			searchCancellation,
+			(searchToken) => Promise.resolve(this.searchService.findFiles(pattern, undefined, searchToken)),
+			token,
 			timeoutInMs,
 			'Timeout in searching files, try a more specific search pattern'
 		);
