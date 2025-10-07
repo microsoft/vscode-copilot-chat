@@ -83,6 +83,8 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 					this._logService.info(`BYOK: API key removed for provider ${vendor}${modelId ? ` and model ${modelId}` : ''}`);
 				} else {
 					await this._byokStorageService.storeAPIKey(vendor, apiKey!, provider.authType, modelId);
+					const apiKey_get = await this._byokStorageService.getAPIKey(vendor, modelId);
+					this._logService.info(`CustomOAI: Retrieved API key for ${modelId}: ${apiKey_get ? 'found' : 'not found'}`);
 					this._logService.info(`BYOK: API key updated for provider ${vendor}${modelId ? ` and model ${modelId}` : ''} from environment variable ${envVarName}`);
 				}
 			} catch (error) {
