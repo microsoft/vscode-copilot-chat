@@ -272,7 +272,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 				// Only apply grouping for GPT-4.1 or GPT-5
 				// For other models (like Claude/Sonnet), do not group default tools - let them expand to the limit
 				if (!modelFamily ||
-					!(modelFamily === 'gpt-4.1' ||
+					!(modelFamily.startsWith('gpt-4.1') ||
 						modelFamily.startsWith('gpt-5'))) {
 					return tools;
 				}
