@@ -134,7 +134,7 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 		}
 
 		this._apiKey = apiKey;
-		await this._byokStorageService.storeAPIKey(this._name, apiKey, BYOKAuthType.GlobalApiKey, modelId);
+		await this._byokStorageService.storeAPIKey(this._name, apiKey, this.authType, modelId);
 		this._logService.info(`BYOK: API key updated for provider ${this._name} from environment variable ${envVarName}`);
 	}
 }
