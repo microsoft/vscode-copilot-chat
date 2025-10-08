@@ -847,9 +847,8 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return;
 		}
 
-		// FIXME@ulugbekna: think out how it works with retrying logic
-		if (this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsNextCursorPredictionEnabled, this.expService)) {
-			// FIXME@ulugbekna: possibly convert from 1-based to 0-based
+		const nextCursorLinePredictionEnabled = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsNextCursorPredictionEnabled, this.expService);
+		if (nextCursorLinePredictionEnabled && retryState === RetryState.NotRetrying) {
 			const nextCursorLine = await this.predictNextCursorPosition(promptPieces);
 			if (nextCursorLine) {
 				this.tracer.trace(`Predicted next cursor line: ${nextCursorLine}`);
