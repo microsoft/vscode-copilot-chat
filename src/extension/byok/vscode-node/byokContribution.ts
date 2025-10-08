@@ -54,7 +54,7 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			}
 		}));
 
-		this._register(commands.registerCommand('github.copilot.chat.manageBYOKAPIKeyViaCmd', async (vendor: string, envVarName: string, action?: 'update' | 'remove', modelId?: string) => {
+		this._register(commands.registerCommand('github.copilot.chat.manageBYOKAPIKey', async (vendor: string, envVarName: string, action?: 'update' | 'remove', modelId?: string) => {
 			const provider = this._providers.get(vendor);
 			if (!provider) {
 				this._logService.error(`BYOK: Provider ${vendor} not found`);

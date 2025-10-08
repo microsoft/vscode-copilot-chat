@@ -2209,8 +2209,8 @@
 				"enablement": "false"
 			},
 			{
-				"command": "github.copilot.chat.manageBYOKAPIKeyViaCmd",
-				"title": "Manage Bring Your Own Key API Key Via Command",
+				"command": "github.copilot.chat.manageBYOKAPIKey",
+				"title": "Manage Bring Your Own Key API Key",
 				"enablement": "false"
 			}
 		],
