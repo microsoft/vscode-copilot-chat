@@ -63,7 +63,7 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 
 			try {
 				if (provider.updateAPIKeyViaCmd) {
-					await provider.updateAPIKeyViaCmd(envVarName, action || 'update', modelId);
+					await provider.updateAPIKeyViaCmd(envVarName, action ?? 'update', modelId);
 				} else {
 					this._logService.error(`BYOK: Provider ${vendor} does not support API key management via command`);
 				}

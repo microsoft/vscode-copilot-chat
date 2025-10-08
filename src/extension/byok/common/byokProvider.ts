@@ -77,7 +77,7 @@ export interface BYOKModelProvider<T extends LanguageModelChatInformation> exten
 	 * @param action - Action to perform: 'update' or 'remove'
 	 * @param modelId - Model ID (required for PerModelDeployment auth type)
 	 */
-	updateAPIKeyViaCmd?(envVarName: string, action?: 'update' | 'remove', modelId?: string): Promise<void>;
+	updateAPIKeyViaCmd?(envVarName: string, action: 'update' | 'remove', modelId?: string): Promise<void>;
 }
 
 // Many model providers don't have robust model lists. This allows us to map id -> information about models, and then if we don't know the model just let the user enter a custom id
