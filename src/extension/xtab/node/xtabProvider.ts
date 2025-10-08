@@ -369,7 +369,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return contentWithCursor.getLines();
 		})();
 
-		const addLineNumbers = (lines: string[]) => lines.map((line, idx) => `${idx + 1}| ${line}`);
+		const addLineNumbers = (lines: string[]) => lines.map((line, idx) => `${idx}| ${line}`);
 
 		const contentWithCursorAsLines = opts.includeLineNumbers
 			? addLineNumbers(contentWithCursorAsLinesOriginal)
@@ -853,7 +853,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			const nextCursorLine = await this.predictNextCursorPosition(promptPieces);
 			if (nextCursorLine) {
 				this.tracer.trace(`Predicted next cursor line: ${nextCursorLine}`);
-				this.doGetNextEditWithSelection(request, new Range(nextCursorLine, 1, nextCursorLine, 1), pushEdit, delaySession, logContext, cancellationToken, telemetryBuilder, RetryState.NotRetrying);
+				this.doGetNextEditWithSelection(request, new Range(nextCursorLine + 1, 1, nextCursorLine + 1, 1), pushEdit, delaySession, logContext, cancellationToken, telemetryBuilder, RetryState.Retrying);
 				return;
 			}
 		}
