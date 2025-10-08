@@ -310,7 +310,7 @@ stderr: ${installResult.stderr}`);
 
 		const json = await fs.readFile(serverJsonPath, 'utf8');
 		const manifest = JSON.parse(json);
-		if (manifest === null || typeof manifest !== 'object') {
+		if (manifest === null || typeof manifest !== 'object' || Array.isArray(manifest)) {
 			this.logService.warn(`Invalid JSON in NuGet package server.json at ${serverJsonPath}. Proceeding without server.json for ${id}@${version}.`);
 			return undefined;
 		}
