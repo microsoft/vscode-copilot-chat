@@ -92,43 +92,29 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 				editTools: modelInfo.editTools,
 			};
 		}
-		this._logService.info(`CustomOAI: Loaded the following models from configuration: ${Object.keys(models).join(', ')}`);
 		return models;
 	}
 
 	private async getModelsWithAPIKeys(silent: boolean): Promise<BYOKKnownModels> {
-		this._logService.info(`CustomOAI: getModelsWithAPIKeys called with silent=${silent}`);
 		const models = await this.getAllModels();
-		this._logService.info(`CustomOAI: Found ${Object.keys(models).length} models from configuration: ${Object.keys(models).join(', ')}`);
 		const modelsWithApiKeys: BYOKKnownModels = {};
 		for (const [modelId, modelInfo] of Object.entries(models)) {
 			const requireAPIKey = this.requiresAPIKey(modelId);
-			this._logService.info(`CustomOAI: Model ${modelId} requires API key: ${requireAPIKey}`);
 			if (!requireAPIKey) {
 				modelsWithApiKeys[modelId] = modelInfo;
-				this._logService.info(`CustomOAI: Added model ${modelId} without API key requirement`);
 				continue;
 			}
 			let apiKey = await this._byokStorageService.getAPIKey(this.providerName, modelId);
-			this._logService.info(`CustomOAI: Retrieved API key for ${modelId}: ${apiKey ? 'found' : 'not found'}`);
 			if (!silent && !apiKey) {
-				this._logService.info(`CustomOAI: Prompting user for API key for ${modelId}`);
 				apiKey = await promptForAPIKey(`${this.providerName} - ${modelId}`, false);
 				if (apiKey) {
-					this._logService.info(`CustomOAI: User provided API key for ${modelId}, storing it`);
 					await this._byokStorageService.storeAPIKey(this.providerName, apiKey, BYOKAuthType.PerModelDeployment, modelId);
-				} else {
-					this._logService.info(`CustomOAI: User cancelled API key prompt for ${modelId}`);
 				}
 			}
 			if (apiKey) {
 				modelsWithApiKeys[modelId] = modelInfo;
-				this._logService.info(`CustomOAI: Added model ${modelId} with API key`);
-			} else {
-				this._logService.info(`CustomOAI: Skipping model ${modelId} - no API key available`);
 			}
 		}
-		this._logService.info(`CustomOAI: Returning ${Object.keys(modelsWithApiKeys).length} models with API keys: ${Object.keys(modelsWithApiKeys).join(', ')}`);
 		return modelsWithApiKeys;
 	}
 
