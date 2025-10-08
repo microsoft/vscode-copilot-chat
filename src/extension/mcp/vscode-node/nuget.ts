@@ -285,15 +285,15 @@ stderr: ${installResult.stderr}`);
 		// The ID should match generally, but we'll protect against unexpected package IDs.
 		if (manifest?.packages) {
 			for (const pkg of manifest.packages) {
-				if (pkg?.registry_name === "nuget") {
-					if (pkg.name.toUpperCase() !== id.toUpperCase()) {
-						logService.warn(`Package ID mismatch in NuGet.mcp / server.json: expected ${id}, found ${pkg.name}.`);
+				if (pkg?.registryType === "nuget") {
+					if (pkg.identifier.toUpperCase() !== id.toUpperCase()) {
+						logService.warn(`Package ID mismatch in NuGet.mcp / server.json: expected ${id}, found ${pkg.identifier}.`);
 					}
 					if (pkg.version.toUpperCase() !== version.toUpperCase()) {
 						logService.warn(`Package version mismatch in NuGet.mcp / server.json: expected ${version}, found ${pkg.version}.`);
 					}
 
-					pkg.name = id;
+					pkg.identifier = id;
 					pkg.version = version;
 				}
 			}
