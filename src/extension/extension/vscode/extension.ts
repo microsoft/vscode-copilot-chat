@@ -9,6 +9,7 @@ import { isScenarioAutomation } from '../../../platform/env/common/envService';
 import { isProduction } from '../../../platform/env/common/packagejson';
 import { IHeatmapService } from '../../../platform/heatmap/common/heatmapService';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationServiceBuilder, InstantiationServiceBuilder } from '../../../util/common/services';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -70,6 +71,8 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 
 		const contributions = instantiationService.createInstance(ContributionCollection, configuration.contributions);
 		context.subscriptions.push(contributions);
+
+		accessor.get(ILogService).trace('Extension activated');
 	});
 
 	if (ExtensionMode.Test === context.extensionMode && !isScenarioAutomation) {
