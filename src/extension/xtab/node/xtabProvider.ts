@@ -1029,7 +1029,13 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptPieces.currentDocument,
 			promptPieces.editWindowLinesRange,
 			promptPieces.areaAroundEditWindowLinesRange,
-			promptPieces.opts,
+			{
+				...promptPieces.opts,
+				currentFile: {
+					...promptPieces.opts.currentFile,
+					includeTags: false,
+				}
+			},
 			XtabProvider.computeTokens,
 			{ includeLineNumbers: true }
 		);
