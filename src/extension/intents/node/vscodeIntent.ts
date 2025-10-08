@@ -126,10 +126,7 @@ class VSCodeResponseProcessor {
 				const codeBlock = '```' + textDelta.substring(codeblockStart + 3, codeblockEnd) + '```';
 				await this.processNonReporting(codeBlock, progress);
 				// Output any text that comes after the code block
-				const textToReport = textDelta.substring(codeblockEnd + 3);
-				if (textToReport) {
-					progress.markdown(textToReport);
-				}
+				progress.markdown(textDelta.substring(codeblockEnd + 3));
 			} else {
 				this.stagedTextToApply = textDelta.substring(codeblockStart + 3);
 				// Output any text that comes before the code block
