@@ -264,11 +264,7 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 		}
 	}
 
-	public async updateAPIKeyViaCmd(envVarName: string, action: 'update' | 'remove', modelId?: string): Promise<void> {
-		if (this.authType === BYOKAuthType.PerModelDeployment && !modelId) {
-			throw new Error(`Model ID is required for ${this.providerName} provider`);
-		}
-
+	public async updateAPIKeyViaCmd(envVarName: string, action: 'update' | 'remove', modelId: string): Promise<void> {
 		if (action === 'remove') {
 			await this._byokStorageService.deleteAPIKey(this.providerName, this.authType, modelId);
 			this._logService.info(`BYOK: API key removed for provider ${this.providerName}${modelId ? ` and model ${modelId}` : ''}`);
@@ -277,7 +273,7 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 
 		const apiKey = process.env[envVarName];
 		if (!apiKey) {
-			throw new Error(`Environment variable ${envVarName} not found or empty`);
+			throw new Error(`BYOK: Environment variable ${envVarName} not found or empty for API key management`);
 		}
 
 		await this._byokStorageService.storeAPIKey(this.providerName, apiKey, this.authType, modelId);
