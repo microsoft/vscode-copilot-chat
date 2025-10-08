@@ -80,7 +80,7 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		}
 
 		this._apiKey = apiKey;
-		await this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, apiKey, BYOKAuthType.GlobalApiKey, modelId);
+		await this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, apiKey, this.authType, modelId);
 		this._logService.info(`BYOK: API key updated for provider ${AnthropicLMProvider.providerName} from environment variable ${envVarName}`);
 	}
 
