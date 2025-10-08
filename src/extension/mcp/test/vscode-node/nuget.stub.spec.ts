@@ -32,6 +32,33 @@ describe('get nuget MCP server info using fake CLI', { timeout: 30_000 }, () => 
 		nuget = new NuGetMcpSetup(logService, fetcherService, commandExecutor);
 	});
 
+	it('handles original 2025-07-29 schema version', async () => {
+		const manifest = { packages: [{ registry_name: 'nuget', name: 'MismatchId', version: '0.1.0' }] };
+		const expected = { packages: [{ registry_name: 'nuget', name: 'CorrectId', version: '0.2.0' }] };
+
+		nuget.fixPackageReferences(manifest, "CorrectId", "0.2.0");
+
+		expect(manifest).toEqual(expected);
+	});
+
+	it('handles latest 2025-07-29 schema version', async () => {
+		const manifest = { packages: [{ registry_type: 'nuget', name: 'MismatchId', version: '0.1.0' }] };
+		const expected = { packages: [{ registry_type: 'nuget', name: 'CorrectId', version: '0.2.0' }] };
+
+		nuget.fixPackageReferences(manifest, "CorrectId", "0.2.0");
+
+		expect(manifest).toEqual(expected);
+	});
+
+	it('handles latest 2025-09-29 schema version', async () => {
+		const manifest = { packages: [{ registryType: 'nuget', name: 'MismatchId', version: '0.1.0' }] };
+		const expected = { packages: [{ registryType: 'nuget', name: 'CorrectId', version: '0.2.0' }] };
+
+		nuget.fixPackageReferences(manifest, "CorrectId", "0.2.0");
+
+		expect(manifest).toEqual(expected);
+	});
+
 	it('returns package metadata', async () => {
 		commandExecutor.fullCommandToResultMap.set(
 			'dotnet package search basetestpackage.DOTNETTOOL --source https://api.nuget.org/v3/index.json --prerelease --format json',

@@ -136,7 +136,7 @@ export class NuGetMcpSetup {
 			const localInstallSuccess = await this.installLocalTool(id, version, cwd);
 			if (!localInstallSuccess) { return undefined; }
 
-			return await this.readServerManifest(packagesDir, id, version, this.logService);
+			return await this.readServerManifest(packagesDir, id, version);
 		} catch (e) {
 			this.logService.warn(`
 Failed to install NuGet package ${id}@${version}. Proceeding without server.json.
@@ -268,18 +268,7 @@ stderr: ${installResult.stderr}`);
 		return true;
 	}
 
-	async readServerManifest(packagesDir: string, id: string, version: string, logService: ILogService): Promise<string | undefined> {
-		const serverJsonPath = path.join(packagesDir, id.toLowerCase(), version.toLowerCase(), ".mcp", "server.json");
-		try {
-			await fs.access(serverJsonPath, fs.constants.R_OK);
-		} catch {
-			logService.info(`No server.json found at ${serverJsonPath}. Proceeding without server.json for ${id}@${version}.`);
-			return undefined;
-		}
-
-		const json = await fs.readFile(serverJsonPath, 'utf8');
-		const manifest = JSON.parse(json);
-
+	fixPackageReferences(manifest: any, id: string, version: string) {
 		// Force the ID and version of matching NuGet package in the server.json to the one we installed.
 		// This handles cases where the server.json in the package is stale.
 		// The ID should match generally, but we'll protect against unexpected package IDs.
@@ -289,26 +278,44 @@ stderr: ${installResult.stderr}`);
 		if (manifest?.packages) {
 			for (const pkg of manifest.packages) {
 				if (!pkg) { continue; }
-				const registryType = pkg.registryType ?? pkg.registry_type ?? pkg.registryName;
+				const registryType = pkg.registryType ?? pkg.registry_type ?? pkg.registry_name;
 				if (registryType === "nuget") {
 					if (pkg.name && pkg.name !== id) {
-						logService.warn(`Package name mismatch in NuGet.mcp / server.json: expected ${id}, found ${pkg.name}.`);
+						this.logService.warn(`Package name mismatch in NuGet.mcp / server.json: expected ${id}, found ${pkg.name}.`);
 						pkg.name = id;
 					}
 
 					if (pkg.identifier && pkg.identifier !== id) {
-						logService.warn(`Package identifier mismatch in NuGet.mcp / server.json: expected ${id}, found ${pkg.identifier}.`);
+						this.logService.warn(`Package identifier mismatch in NuGet.mcp / server.json: expected ${id}, found ${pkg.identifier}.`);
 						pkg.identifier = id;
 					}
 
 					if (pkg.version !== version) {
-						logService.warn(`Package version mismatch in NuGet.mcp / server.json: expected ${version}, found ${pkg.version}.`);
+						this.logService.warn(`Package version mismatch in NuGet.mcp / server.json: expected ${version}, found ${pkg.version}.`);
 						pkg.version = version;
 					}
 				}
 			}
 		}
+	}
 
+	async readServerManifest(packagesDir: string, id: string, version: string): Promise<string | undefined> {
+		const serverJsonPath = path.join(packagesDir, id.toLowerCase(), version.toLowerCase(), ".mcp", "server.json");
+		try {
+			await fs.access(serverJsonPath, fs.constants.R_OK);
+		} catch {
+			this.logService.info(`No server.json found at ${serverJsonPath}. Proceeding without server.json for ${id}@${version}.`);
+			return undefined;
+		}
+
+		const json = await fs.readFile(serverJsonPath, 'utf8');
+		const manifest = JSON.parse(json);
+		if (manifest === null || typeof manifest !== 'object') {
+			this.logService.warn(`Invalid JSON in NuGet package server.json at ${serverJsonPath}. Proceeding without server.json for ${id}@${version}.`);
+			return undefined;
+		}
+
+		this.fixPackageReferences(manifest, id, version);
 		return manifest;
 	}
 }
