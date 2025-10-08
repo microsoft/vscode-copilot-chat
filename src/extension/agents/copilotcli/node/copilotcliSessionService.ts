@@ -26,6 +26,7 @@ export interface ICopilotCLISessionService {
 	// SDK session management
 	getSessionManager(): Promise<CopilotCLISessionManager>;
 	getOrCreateSDKSession(sessionId: string | undefined, prompt: string): Promise<Session>;
+	deleteSession(sessionId: string): Promise<boolean>;
 
 	// Session wrapper tracking
 	trackSessionWrapper<T>(sessionId: string, wrapper: T): void;
@@ -151,6 +152,26 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 
 	public findSessionWrapper<T>(sessionId: string): T | undefined {
 		return this._sessionWrappers.get(sessionId) as T | undefined;
+	}
+
+	public async deleteSession(sessionId: string): Promise<boolean> {
+		try {
+			// Delete from session manager first
+			const sessionManager = await this.getSessionManager();
+			const sdkSession = await sessionManager.getSession(sessionId);
+			if (sdkSession) {
+				await sessionManager.deleteSession(sdkSession);
+			}
+
+			// Clean up local caches
+			this._sessions.delete(sessionId);
+			this._sessionWrappers.deleteAndDispose(sessionId);
+
+			return true;
+		} catch (error) {
+			this.logService.error(`Failed to delete session ${sessionId}: ${error}`);
+			return false;
+		}
 	}
 
 	private async _generateSessionLabel(sdkSession: Session, prompt: string | undefined): Promise<string> {
