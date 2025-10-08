@@ -45,31 +45,39 @@ function hydrateBYOKErrorMessages(response: ChatResponse): ChatResponse {
 
 export class OpenAIEndpoint extends ChatEndpoint {
 	// Reserved headers that cannot be overridden for security and functionality reasons
+	// Including forbidden request headers: https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header
 	private static readonly _reservedHeaders: ReadonlySet<string> = new Set([
-		// Authentication & Authorization
-		'api-key',
-		'authorization',
-		'cookie',
-		'set-cookie',
-		// Content & Protocol
-		'content-type',
+		// Forbidden Request Headers
+		'accept-charset',
+		'accept-encoding',
+		'access-control-request-headers',
+		'access-control-request-method',
+		'connection',
 		'content-length',
-		'transfer-encoding',
+		'cookie',
+		'date',
+		'dnt',
+		'expect',
 		'host',
-		// Routing & Proxying
-		'proxy-authorization',
-		'proxy-authenticate',
+		'keep-alive',
+		'origin',
+		'permissions-policy',
+		'referer',
+		'te',
+		'trailer',
+		'transfer-encoding',
+		'upgrade',
+		'user-agent',
+		'via',
+		// Forwarding & Routing
+		'forwarded',
 		'x-forwarded-for',
 		'x-forwarded-host',
 		'x-forwarded-proto',
-		'forwarded',
-		// Security & CORS
-		'origin',
-		'referer',
-		'sec-fetch-site',
-		'sec-fetch-mode',
-		'sec-fetch-dest',
-		// Application-specific
+		// Others
+		'api-key',
+		'authorization',
+		'content-type',
 		'openai-intent',
 		'x-github-api-version',
 		'x-initiator',
@@ -78,7 +86,10 @@ export class OpenAIEndpoint extends ChatEndpoint {
 		'x-onbehalf-extension-id',
 		'x-request-id',
 		'x-vscode-user-agent-library-version',
-		'user-agent',
+		// Pattern-based forbidden headers are checked separately:
+		// - 'proxy-*' headers (handled in sanitization logic)
+		// - 'sec-*' headers (handled in sanitization logic)
+		// - 'x-http-method*' with forbidden methods CONNECT, TRACE, TRACK (handled in sanitization logic)
 	]);
 
 	// RFC 7230 compliant header name pattern: token characters only
@@ -162,6 +173,22 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			if (OpenAIEndpoint._reservedHeaders.has(lowerKey)) {
 				this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' attempted to override reserved header '${key}', skipping.`);
 				continue;
+			}
+
+			// Check for pattern-based forbidden headers
+			if (lowerKey.startsWith('proxy-') || lowerKey.startsWith('sec-')) {
+				this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' attempted to set forbidden header pattern '${key}', skipping.`);
+				continue;
+			}
+
+			// Check for X-HTTP-Method* headers with forbidden methods
+			if ((lowerKey === 'x-http-method' || lowerKey === 'x-http-method-override' || lowerKey === 'x-method-override')) {
+				const forbiddenMethods = ['connect', 'trace', 'track'];
+				const methodValue = String(rawValue).toLowerCase().trim();
+				if (forbiddenMethods.includes(methodValue)) {
+					this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' attempted to set forbidden method '${methodValue}' in header '${key}', skipping.`);
+					continue;
+				}
 			}
 
 			const sanitizedValue = this._sanitizeHeaderValue(rawValue);
