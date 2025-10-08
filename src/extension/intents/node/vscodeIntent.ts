@@ -72,16 +72,23 @@ class VSCodeResponseProcessor {
 		}
 	}
 
-	private async processNonReporting(textDelta: string, progress: vscode.ChatResponseStream) {
-		const parsedCommands = await parseSettingsAndCommands(this.workbenchService, textDelta);
+	/**
+	 * Parses a raw Markdown string containing a code block and either extracts settings and commands to show as buttons for the user, or shows the code block.
+	 * @param codeBlock Markdown string containing a single code block surrounded by "```"
+	 */
+	// textDelta is a string with a single Markdown code block (wrapped by ```). It might or might not be of json type.
+	private async processNonReporting(codeBlock: string, progress: vscode.ChatResponseStream) {
+		const parsedCommands = await parseSettingsAndCommands(this.workbenchService, codeBlock);
 
 		if (parsedCommands.length === 0) {
-			progress.markdown(textDelta);
-		}
-
-		for (const parsedCommand of parsedCommands) {
-			if (parsedCommand.commandToRun) {
-				progress.button(parsedCommand.commandToRun);
+			// Show code block
+			progress.markdown('\n' + codeBlock + '\n');
+		} else {
+			// Show buttons for commands to run (which can include commands to change settings)
+			for (const parsedCommand of parsedCommands) {
+				if (parsedCommand.commandToRun) {
+					progress.button(parsedCommand.commandToRun);
+				}
 			}
 		}
 	}
@@ -99,22 +106,31 @@ class VSCodeResponseProcessor {
 				this.stagedTextToApply = textDelta;
 			} else {
 				this._incodeblock = false;
-				this.stagedTextToApply = textDelta.substring(codeblockEnd + 3);
-				textDelta = '\n```' + textDelta.substring(0, codeblockEnd) + '```\n';
-				await this.processNonReporting(textDelta, progress);
+				const codeBlock = '```' + textDelta.substring(0, codeblockEnd) + '```';
+				await this.processNonReporting(codeBlock, progress);
+				const textToReport = textDelta.substring(codeblockEnd + 3);
+				if (textToReport) {
+					progress.markdown(textToReport);
+				}
 			}
 		}
 		else if (codeblockStart !== -1) {
 			this._incodeblock = true;
-			this.stagedTextToApply = textDelta.substring(codeblockStart + 3);
+
 			const codeblockEnd = textDelta.indexOf('```', codeblockStart + 3);
 			if (codeblockEnd !== -1) {
 				this._incodeblock = false;
+				// this.stagedTextToApply = textDelta.substring(codeblockEnd + 3);
 				progress.markdown(textDelta.substring(0, codeblockStart));
 				// process the codeblock
-				await this.processNonReporting(textDelta, progress);
-				progress.markdown(textDelta.substring(codeblockEnd + 3));
+				const codeBlock = '```' + textDelta.substring(codeblockStart + 3, codeblockEnd) + '```';
+				await this.processNonReporting(codeBlock, progress);
+				const textToReport = textDelta.substring(codeblockEnd + 3);
+				if (textToReport) {
+					progress.markdown(textToReport);
+				}
 			} else {
+				this.stagedTextToApply = textDelta.substring(codeblockStart + 3);
 				const textToReport = textDelta.substring(0, codeblockStart);
 				if (textToReport) {
 					progress.markdown(textToReport);
