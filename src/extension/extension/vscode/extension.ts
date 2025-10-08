@@ -64,6 +64,7 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 
 	await instantiationService.invokeFunction(async accessor => {
 		const expService = accessor.get(IExperimentationService);
+		const logService = accessor.get(ILogService);
 
 		// Await intialization of exp service. This ensure cache is fresh.
 		// It will then auto refresh every 30 minutes after that.
@@ -72,7 +73,7 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 		const contributions = instantiationService.createInstance(ContributionCollection, configuration.contributions);
 		context.subscriptions.push(contributions);
 
-		accessor.get(ILogService).trace('Extension activated');
+		logService.trace('Copilot Chat extension activated');
 	});
 
 	if (ExtensionMode.Test === context.extensionMode && !isScenarioAutomation) {
