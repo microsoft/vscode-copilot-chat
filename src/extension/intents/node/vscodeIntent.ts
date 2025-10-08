@@ -108,6 +108,7 @@ class VSCodeResponseProcessor {
 				this._incodeblock = false;
 				const codeBlock = '```' + textDelta.substring(0, codeblockEnd) + '```';
 				await this.processNonReporting(codeBlock, progress);
+				// Output any text that comes after the code block
 				const textToReport = textDelta.substring(codeblockEnd + 3);
 				if (textToReport) {
 					progress.markdown(textToReport);
@@ -119,16 +120,19 @@ class VSCodeResponseProcessor {
 			const codeblockEnd = textDelta.indexOf('```', codeblockStart + 3);
 			if (codeblockEnd !== -1) {
 				this._incodeblock = false;
+				// Output any text that comes before the code block
 				progress.markdown(textDelta.substring(0, codeblockStart));
-				// process the codeblock
+				// Process the codeblock
 				const codeBlock = '```' + textDelta.substring(codeblockStart + 3, codeblockEnd) + '```';
 				await this.processNonReporting(codeBlock, progress);
+				// Output any text that comes after the code block
 				const textToReport = textDelta.substring(codeblockEnd + 3);
 				if (textToReport) {
 					progress.markdown(textToReport);
 				}
 			} else {
 				this.stagedTextToApply = textDelta.substring(codeblockStart + 3);
+				// Output any text that comes before the code block
 				const textToReport = textDelta.substring(0, codeblockStart);
 				if (textToReport) {
 					progress.markdown(textToReport);
