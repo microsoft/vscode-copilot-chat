@@ -68,11 +68,8 @@ export async function baseActivate(configuration: IExtensionActivationConfigurat
 		// It will then auto refresh every 30 minutes after that.
 		await expService.hasTreatments();
 
-		// THIS is awaited because some contributions can block activation
-		// via `IExtensionContribution#activationBlocker`
 		const contributions = instantiationService.createInstance(ContributionCollection, configuration.contributions);
 		context.subscriptions.push(contributions);
-		await contributions.waitForActivationBlockers();
 	});
 
 	if (ExtensionMode.Test === context.extensionMode && !isScenarioAutomation) {
