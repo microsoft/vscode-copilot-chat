@@ -1149,7 +1149,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return Result.ok(lineNumber);
 		} catch (err: unknown) {
 			tracer.trace(`Failed to parse predicted line number from response '${response.value}': ${err}`);
-			return Result.fromString(`failedToParseLine:${response.value}`);
+			return Result.fromString(`failedToParseLine:"${response.value}". Error ${errors.fromUnknown(err).message}`);
 		}
 	}
 
