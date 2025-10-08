@@ -436,7 +436,7 @@
 					"type": "object",
 					"properties": {
 						"filePaths": {
-							"description": "The absolute paths to the files to check for errors. Omit 'filePaths' when retrieving all errors.",
+							"description": "The absolute paths to the files or folders to check for errors. Omit 'filePaths' when retrieving all errors.",
 							"type": "array",
 							"items": {
 								"type": "string"
@@ -3130,7 +3130,10 @@
 						]
 					},
 					"github.copilot.chat.completionsFetcher": {
-						"type": ["string", "null"],
+						"type": [
+							"string",
+							"null"
+						],
 						"markdownDescription": "%github.copilot.config.completionsFetcher%",
 						"tags": [
 							"experimental",
@@ -3142,7 +3145,10 @@
 						]
 					},
 					"github.copilot.chat.nesFetcher": {
-						"type": ["string", "null"],
+						"type": [
+							"string",
+							"null"
+						],
 						"markdownDescription": "%github.copilot.config.nesFetcher%",
 						"tags": [
 							"experimental",
