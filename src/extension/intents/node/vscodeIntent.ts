@@ -116,11 +116,9 @@ class VSCodeResponseProcessor {
 		}
 		else if (codeblockStart !== -1) {
 			this._incodeblock = true;
-
 			const codeblockEnd = textDelta.indexOf('```', codeblockStart + 3);
 			if (codeblockEnd !== -1) {
 				this._incodeblock = false;
-				// this.stagedTextToApply = textDelta.substring(codeblockEnd + 3);
 				progress.markdown(textDelta.substring(0, codeblockStart));
 				// process the codeblock
 				const codeBlock = '```' + textDelta.substring(codeblockStart + 3, codeblockEnd) + '```';
