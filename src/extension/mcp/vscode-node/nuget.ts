@@ -283,18 +283,28 @@ stderr: ${installResult.stderr}`);
 		// Force the ID and version of matching NuGet package in the server.json to the one we installed.
 		// This handles cases where the server.json in the package is stale.
 		// The ID should match generally, but we'll protect against unexpected package IDs.
+		// We handle old and new schema formats:
+		// - https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json (had breaking several changes over time)
+		// - https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json
 		if (manifest?.packages) {
 			for (const pkg of manifest.packages) {
-				if (pkg?.registryType === "nuget") {
-					if (pkg.identifier.toUpperCase() !== id.toUpperCase()) {
-						logService.warn(`Package ID mismatch in NuGet.mcp / server.json: expected ${id}, found ${pkg.identifier}.`);
-					}
-					if (pkg.version.toUpperCase() !== version.toUpperCase()) {
-						logService.warn(`Package version mismatch in NuGet.mcp / server.json: expected ${version}, found ${pkg.version}.`);
+				if (!pkg) { continue; }
+				const registryType = pkg.registryType ?? pkg.registry_type ?? pkg.registryName;
+				if (registryType === "nuget") {
+					if (pkg.name && pkg.name !== id) {
+						logService.warn(`Package name mismatch in NuGet.mcp / server.json: expected ${id}, found ${pkg.name}.`);
+						pkg.name = id;
 					}
 
-					pkg.identifier = id;
-					pkg.version = version;
+					if (pkg.identifier && pkg.identifier !== id) {
+						logService.warn(`Package identifier mismatch in NuGet.mcp / server.json: expected ${id}, found ${pkg.identifier}.`);
+						pkg.identifier = id;
+					}
+
+					if (pkg.version !== version) {
+						logService.warn(`Package version mismatch in NuGet.mcp / server.json: expected ${version}, found ${pkg.version}.`);
+						pkg.version = version;
+					}
 				}
 			}
 		}
