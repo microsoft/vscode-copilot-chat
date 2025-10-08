@@ -43,7 +43,8 @@ export class RepoInfoTelemetry {
 	) { }
 
 	/*
-	* Sends the begin event telemetry
+	* Sends the begin event telemetry, make sure to only send one time, as multiple PanelChatTelemetry instances
+	* are created per user request.
 	*/
 	public async sendBeginTelemetryIfNeeded(): Promise<void> {
 		if (this._beginTelemetrySent) {

@@ -215,13 +215,12 @@ export class ChatTelemetryBuilder {
 		private readonly _request: vscode.ChatRequest,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) {
+		// Repo info telemetry is held here as the begin event should be sent only by the first PanelChatTelemetry instance created for a user request.
+		// and a new PanelChatTelemetry instance is created per step in the request.
 		this._repoInfoTelemetry = this.instantiationService.createInstance(RepoInfoTelemetry, this.baseUserTelemetry.properties.messageId);
 	}
 
 	public makeRequest(intent: IIntent, location: ChatLocation, conversation: Conversation, messages: Raw.ChatMessage[], promptTokenLength: number, references: readonly PromptReference[], endpoint: IChatEndpoint, telemetryData: readonly TelemetryData[], availableToolCount: number): InlineChatTelemetry | PanelChatTelemetry {
-		this._repoInfoTelemetry.sendBeginTelemetryIfNeeded().catch(() => {
-			// Error logged in RepoInfoTelemetry
-		});
 
 		if (location === ChatLocation.Editor) {
 			return this.instantiationService.createInstance(InlineChatTelemetry,
@@ -568,6 +567,13 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		} satisfies RequestInternalPanelTelemetryProperties, {
 			turnNumber: this._conversation.turns.length,
 		} satisfies ResponseInternalPanelTelemetryMeasurements);
+
+		// Send the begin telemetry for repo info, this uses the same repo info telemetry instance held by the builder class
+		// as the begin event need to be sent only once per user request and PanelChatTelemetry is recreated per step. The class is
+		// guarded to only send one time.
+		this._repoInfoTelemetry.sendBeginTelemetryIfNeeded().catch(() => {
+			// Error logged in RepoInfoTelemetry
+		});
 	}
 
 	protected override async _sendResponseTelemetryEvent(responseType: ChatFetchResponseType, response: string, interactionOutcome: InteractionOutcome, toolCalls: IToolCall[] = []): Promise<void> {
