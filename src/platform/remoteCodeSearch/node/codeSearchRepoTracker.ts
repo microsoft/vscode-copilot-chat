@@ -314,6 +314,10 @@ export class CodeSearchRepoTracker extends Disposable {
 					Promise.all(adoRemoteRepos.map(workspaceRoot => {
 						// URI format: vscode-vfs://azurerepos/{OrgName}/{ProjectName}/{RepoName}
 						const adoRepoIdParts = workspaceRoot.path.slice(1).split('/');
+						if (adoRepoIdParts.length < 3) {
+							this._logService.error(`CodeSearchRepoTracker.initAdoRemoteRepos(): Invalid ADO remote repo URI format: ${workspaceRoot}. Expected format: vscode-vfs://azurerepos/{OrgName}/{ProjectName}/{RepoName}`);
+							return Promise.resolve();
+						}
 						return this.openAdoRemoteRepo(workspaceRoot, new AdoRepoId(adoRepoIdParts[0], adoRepoIdParts[1], adoRepoIdParts[2]));
 					})),
 					token);
