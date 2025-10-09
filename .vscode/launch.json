@@ -297,7 +297,25 @@
 			"presentation": {
 				"group": "2_launch"
 			}
-		}
+		},
+		{
+			"name": "Attach to Extension Host - Code OSS",
+			"type": "node",
+			"request": "attach",
+			"restart": true,
+			"timeout": 0,
+			"port": 5870,
+			"sourceMaps": true,
+			"outFiles": [
+				"${workspaceFolder}/../vscode/out/**/*.js",
+				"${workspaceFolder}/../vscode/extensions/*/out/**/*.js",
+				"${workspaceFolder}/dist/**/*.js",
+				"!**/node_modules/**"
+			],
+			"presentation": {
+				"group": "2_launch"
+			}
+		},
 	],
 	"compounds": [
 		{
