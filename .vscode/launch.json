@@ -299,7 +299,7 @@
 			}
 		},
 		{
-			"name": "Run Completions Core Extension Tests",
+			"name": "Run Completions-Core Extension Tests",
 			"type": "extensionHost",
 			"request": "launch",
 			"args": [
