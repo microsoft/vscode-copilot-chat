@@ -4167,8 +4167,7 @@
 		"package": "vsce package",
 		"web": "vscode-test-web --headless --extensionDevelopmentPath=. .",
 		"test:prompt": "mocha \"src/extension/completions-core/prompt/**/test/**/*.test.{ts,tsx}\"",
-		"test:extension-core": "tsx src/extension/completions-core/extension/test/runTest.ts",
-		"test:lib": "mocha \"src/extension/completions-core/lib/src/**/*.test.{ts,tsx}\""
+		"test:completions-core": "tsx src/extension/completions-core/extension/test/runTest.ts"
 	},
 	"devDependencies": {
 		"@azure/identity": "4.9.1",
