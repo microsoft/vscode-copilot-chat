@@ -491,9 +491,8 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			availableTools: JSON.stringify(availableTools.map(tool => tool.name))
 		}, toolCallMeasurements);
 
-		this._repoInfoTelemetry.sendEndTelemetry().catch(() => {
-			// Error logged in RepoInfoTelemetry
-		});
+		// Send internal repo info telemetry at the end of the tool loop
+		this._repoInfoTelemetry.sendEndTelemetry();
 	}
 
 	protected abstract _sendInternalRequestTelemetryEvent(): void;
@@ -571,9 +570,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		// Send the begin telemetry for repo info, this uses the same repo info telemetry instance held by the builder class
 		// as the begin event need to be sent only once per user request and PanelChatTelemetry is recreated per step. The class is
 		// guarded to only send one time.
-		this._repoInfoTelemetry.sendBeginTelemetryIfNeeded().catch(() => {
-			// Error logged in RepoInfoTelemetry
-		});
+		this._repoInfoTelemetry.sendBeginTelemetryIfNeeded();
 	}
 
 	protected override async _sendResponseTelemetryEvent(responseType: ChatFetchResponseType, response: string, interactionOutcome: InteractionOutcome, toolCalls: IToolCall[] = []): Promise<void> {

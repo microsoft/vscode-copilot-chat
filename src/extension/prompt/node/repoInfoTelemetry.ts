@@ -52,12 +52,13 @@ export class RepoInfoTelemetry {
 			return this._beginTelemetryPromise;
 		}
 
-		this._beginTelemetrySent = true;
-		this._beginTelemetryPromise = this._sendRepoInfoTelemetry('begin');
-
-		return this._beginTelemetryPromise.catch((error) => {
+		try {
+			this._beginTelemetrySent = true;
+			this._beginTelemetryPromise = this._sendRepoInfoTelemetry('begin');
+			await this._beginTelemetryPromise;
+		} catch (error) {
 			this._logService.warn(`Failed to send begin repo info telemetry ${error}`);
-		});
+		}
 	}
 
 	/*
@@ -66,9 +67,11 @@ export class RepoInfoTelemetry {
 	public async sendEndTelemetry(): Promise<void> {
 		await this._beginTelemetryPromise;
 
-		return this._sendRepoInfoTelemetry('end').catch((error) => {
+		try {
+			await this._sendRepoInfoTelemetry('end');
+		} catch (error) {
 			this._logService.warn(`Failed to send end repo info telemetry ${error}`);
-		});
+		}
 	}
 
 	private async _sendRepoInfoTelemetry(location: 'begin' | 'end'): Promise<void> {
