@@ -7,7 +7,7 @@ import { FileSystem, NotebookData, NotebookDocument, TextDocument, Uri, window, 
 import { findNotebook } from '../../../util/common/notebooks';
 import { URI } from '../../../util/vs/base/common/uri';
 import { ILogService } from '../../log/common/logService';
-import { isAzureDevOpsRemoteRepository, isGitHubRemoteRepository } from '../../remoteRepositories/common/utils';
+import { isGitHubRemoteRepository } from '../../remoteRepositories/common/utils';
 import { IRemoteRepositoriesService } from '../../remoteRepositories/vscode/remoteRepositories';
 import { AbstractWorkspaceService } from '../common/workspaceService';
 
@@ -89,7 +89,7 @@ export class ExtensionTextDocumentManager extends AbstractWorkspaceService {
 	override ensureWorkspaceIsFullyLoaded(): Promise<void> {
 		this._fullyLoadedPromise ??= (async () => {
 			for (const uri of this.getWorkspaceFolders()) {
-				if (isGitHubRemoteRepository(uri) || isAzureDevOpsRemoteRepository(uri)) {
+				if (isGitHubRemoteRepository(uri)) {
 					this._logService.debug(`Preloading virtual workspace contents for ${uri}`);
 					try {
 						const result = await this._remoteRepositoriesService.loadWorkspaceContents(uri);
