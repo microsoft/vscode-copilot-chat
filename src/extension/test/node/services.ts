@@ -47,9 +47,11 @@ import { CodeMapperService, ICodeMapperService } from '../../prompts/node/codeMa
 import { FixCookbookService, IFixCookbookService } from '../../prompts/node/inline/fixCookbookService';
 import { EditToolLearningService, IEditToolLearningService } from '../../tools/common/editToolLearningService';
 import { IToolsService } from '../../tools/common/toolsService';
+import { IToolEmbeddingsComputer } from '../../tools/common/virtualTools/toolEmbeddingsComputer';
 import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
 import '../../tools/node/allTools';
 import { TestToolsService } from '../../tools/node/test/testToolsService';
+import { TestToolEmbeddingsComputer } from '../../tools/test/node/virtualTools/testVirtualTools';
 
 export interface ISimulationModelConfig {
 	chatModel?: string;
@@ -99,6 +101,7 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(ITerminalService, new SyncDescriptor(NullTerminalService));
 	testingServiceCollection.define(IToolGroupingCache, new SyncDescriptor(ToolGroupingCache));
 	testingServiceCollection.define(IToolGroupingService, new SyncDescriptor(ToolGroupingService));
+	testingServiceCollection.define(IToolEmbeddingsComputer, new SyncDescriptor(TestToolEmbeddingsComputer));
 	testingServiceCollection.define(IEmbeddingsComputer, new SyncDescriptor(RemoteEmbeddingsComputer));
 	testingServiceCollection.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
 	testingServiceCollection.define(ILanguageModelServer, new SyncDescriptor(MockLanguageModelServer));
