@@ -12,6 +12,7 @@ import { IPromptPathRepresentationService } from '../../../platform/prompts/comm
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { getLanguage } from '../../../util/common/languages';
 import { isLocation } from '../../../util/common/types';
+import { coalesce } from '../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -25,7 +26,8 @@ import { DiagnosticContext, Diagnostics } from '../../prompts/node/inline/diagno
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { checkCancellation, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
-import { coalesce } from '../../../util/vs/base/common/arrays';
+import { INotebookService } from '../../../platform/notebook/common/notebookService';
+import { findNotebook } from '../../../util/common/notebooks';
 
 interface IGetErrorsParams {
 	// Note that empty array is not the same as absence; empty array
@@ -44,6 +46,7 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IPromptPathRepresentationService private readonly promptPathRepresentationService: IPromptPathRepresentationService,
+		@INotebookService private readonly notebookService: INotebookService,
 		@ILogService private readonly logService: ILogService
 	) {
 		super();
@@ -62,14 +65,17 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 				throw new Error(`Invalid input path ${filePath}`);
 			}
 
-			let diagnostics = range
-				? findDiagnosticForSelectionAndPrompt(this.languageDiagnosticsService, uri, new Range(...range), undefined)
-				: this.languageDiagnosticsService.getDiagnostics(uri);
-
-			diagnostics = diagnostics.filter(d => d.severity <= DiagnosticSeverity.Warning);
+			let diagnostics: vscode.Diagnostic[] = [];
+			if (this.notebookService.hasSupportedNotebooks(uri)) {
+				diagnostics = this.getNotebookCellDiagnostics(uri);
+			} else {
+				diagnostics = range
+					? findDiagnosticForSelectionAndPrompt(this.languageDiagnosticsService, uri, new Range(...range), undefined)
+					: this.languageDiagnosticsService.getDiagnostics(uri);
+			}
 
 			return {
-				diagnostics,
+				diagnostics: diagnostics.filter(d => d.severity <= DiagnosticSeverity.Warning),
 				uri,
 			};
 		});
@@ -138,6 +144,21 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 
 	private formatURIs(uris: URI[]): string {
 		return uris.map(formatUriForFileWidget).join(', ');
+	}
+
+	private getNotebookCellDiagnostics(uri: URI) {
+		const notebook = findNotebook(uri, this.workspaceService.notebookDocuments);
+
+		if (!notebook) {
+			this.logService.error(`Notebook not found: ${uri.toString()}, could not retrieve diagnostics`);
+			return [];
+		}
+
+		return notebook.getCells()
+			.flatMap((cell) => {
+				const uri = cell.document.uri;
+				return this.languageDiagnosticsService.getDiagnostics(uri);
+			});
 	}
 
 	async provideInput(promptContext: IBuildPromptContext): Promise<IGetErrorsParams | undefined> {
