@@ -254,14 +254,13 @@ suite('RepoInfoTelemetry', () => {
 		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 0);
 	});
 
-	test('should not send telemetry when no changes in repository', async () => {
+	test('should send telemetry with noChanges result when no changes from upstream', async () => {
 		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
 
-		// Mock: repository with no changes
-		vi.spyOn(gitService.activeRepository, 'get').mockReturnValue({
-			rootUri: URI.file('/test/repo'),
-			changes: undefined,
-		} as any);
+		// Mock: no changes from upstream
+		vi.spyOn(gitService, 'diffWith').mockResolvedValue([]);
 
 		const repoTelemetry = new RepoInfoTelemetry(
 			'test-message-id',
@@ -276,8 +275,13 @@ suite('RepoInfoTelemetry', () => {
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
 
-		// Assert: no telemetry sent
-		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 0);
+		// Assert: telemetry sent with noChanges result
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'noChanges');
+		assert.strictEqual(call[1].diffsJSON, undefined);
+		assert.strictEqual(call[1].remoteUrl, 'https://github.com/microsoft/vscode.git');
+		assert.strictEqual(call[1].headCommitHash, 'abc123');
 	});
 
 	test('should not send telemetry when no GitHub remote', async () => {

@@ -20,7 +20,7 @@ type RepoInfoTelemetryProperties = {
 	remoteUrl: string | undefined;
 	headCommitHash: string | undefined;
 	diffsJSON: string | undefined;
-	result: 'success' | 'filesChanged' | 'diffTooLarge';
+	result: 'success' | 'filesChanged' | 'diffTooLarge' | 'noChanges';
 };
 
 type RepoInfoInternalTelemetryProperties = RepoInfoTelemetryProperties & {
@@ -100,7 +100,7 @@ export class RepoInfoTelemetry {
 	private async _getRepoInfoTelemetry(): Promise<RepoInfoTelemetryProperties | undefined> {
 		const repoContext = this._gitService.activeRepository.get();
 
-		if (!repoContext || !repoContext.changes) {
+		if (!repoContext) {
 			return;
 		}
 
@@ -129,7 +129,12 @@ export class RepoInfoTelemetry {
 		try {
 			const changes = await this._gitService.diffWith(repoContext.rootUri, '@{upstream}');
 			if (!changes || changes.length === 0) {
-				return;
+				return {
+					remoteUrl: githubInfo.remoteUrl,
+					headCommitHash: upstreamCommit,
+					diffsJSON: undefined,
+					result: 'noChanges',
+				};
 			}
 
 			// Check if files changed during the git diff operation
