@@ -15,6 +15,7 @@ import { EditCode2Intent } from './editCodeIntent2';
 import { ExplainIntent } from './explainIntent';
 import { FixIntent } from './fixIntent';
 import { GenerateCodeIntent } from './generateCodeIntent';
+import { InlineChatIntent } from './inlineChatIntent';
 import { NewWorkspaceIntent } from './newIntent';
 import { NewNotebookIntent } from './newNotebookIntent.contribution';
 import { NotebookEditorIntent } from './notebookEditorIntent';
@@ -55,5 +56,6 @@ IntentRegistry.setIntents([
 	new SyncDescriptor(SearchKeywordsIntent),
 	new SyncDescriptor(AskAgentIntent),
 	new SyncDescriptor(NotebookEditorIntent),
+	new SyncDescriptor(InlineChatIntent),
 	new SyncDescriptor(ChatReplayIntent)
 ]);
