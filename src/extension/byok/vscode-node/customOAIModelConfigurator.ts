@@ -19,6 +19,7 @@ interface ModelConfig {
 	editTools?: EndpointEditToolName[];
 	requiresAPIKey?: boolean;
 	thinking?: boolean;
+	requestHeaders?: Record<string, string>;
 }
 
 interface ModelQuickPickItem extends QuickPickItem {

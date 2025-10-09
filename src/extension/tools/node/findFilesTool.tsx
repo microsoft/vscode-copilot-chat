@@ -11,6 +11,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import * as l10n from '@vscode/l10n';
 import { ISearchService } from '../../../platform/search/common/searchService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { raceTimeoutAndCancellationError } from '../../../util/common/racePromise';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, MarkdownString } from '../../../vscodeTypes';
@@ -40,14 +41,24 @@ export class FindFilesTool implements ICopilotTool<IFindFilesToolParams> {
 		// The input _should_ be a pattern matching inside a workspace, folder, but sometimes we get absolute paths, so try to resolve them
 		const pattern = inputGlobToPattern(options.input.query, this.workspaceService);
 
-		const results = await this.searchService.findFiles(pattern, undefined, token);
+		// try find text with a timeout of 20s
+		const timeoutInMs = 20_000;
+
+
+		const results = await raceTimeoutAndCancellationError(
+			(searchToken) => Promise.resolve(this.searchService.findFiles(pattern, undefined, searchToken)),
+			token,
+			timeoutInMs,
+			'Timeout in searching files, try a more specific search pattern'
+		);
+
 		checkCancellation(token);
 
 		const maxResults = options.input.maxResults ?? 20;
 		const resultsToShow = results.slice(0, maxResults);
-		const result = new ExtendedLanguageModelToolResult([
-			new LanguageModelPromptTsxPart(
-				await renderPromptElementJSON(this.instantiationService, FindFilesResult, { fileResults: resultsToShow, totalResults: results.length }, options.tokenizationOptions, token))]);
+		// Render the prompt element with a timeout
+		const prompt = await renderPromptElementJSON(this.instantiationService, FindFilesResult, { fileResults: resultsToShow, totalResults: results.length }, options.tokenizationOptions, token);
+		const result = new ExtendedLanguageModelToolResult([new LanguageModelPromptTsxPart(prompt)]);
 		const query = `\`${options.input.query}\``;
 		result.toolResultMessage = resultsToShow.length === 0 ?
 			new MarkdownString(l10n.t`Searched for files matching ${query}, no matches`) :

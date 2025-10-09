@@ -34,7 +34,7 @@ import { ISimulationTestContext } from '../../simulationTestContext/common/simul
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../workspace/common/workspaceService';
-import { GithubAvailableEmbeddingTypesManager } from '../common/githubAvailableEmbeddingTypes';
+import { IGithubAvailableEmbeddingTypesService } from '../common/githubAvailableEmbeddingTypes';
 import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQuery, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId, WorkspaceSearchAlert } from '../common/workspaceChunkSearch';
 import { CodeSearchChunkSearch, CodeSearchRemoteIndexState } from './codeSearchChunkSearch';
 import { EmbeddingsChunkSearch, LocalEmbeddingsIndexState, LocalEmbeddingsIndexStatus } from './embeddingsChunkSearch';
@@ -115,16 +115,14 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 	readonly onDidChangeIndexState = this._onDidChangeIndexState.event;
 
 	private _impl: WorkspaceChunkSearchServiceImpl | undefined;
-	private readonly _availableEmbeddingTypes: GithubAvailableEmbeddingTypesManager;
 
 	constructor(
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@IGithubAvailableEmbeddingTypesService private readonly _availableEmbeddingTypes: IGithubAvailableEmbeddingTypesService,
 		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
-
-		this._availableEmbeddingTypes = _instantiationService.createInstance(GithubAvailableEmbeddingTypesManager);
 
 		this.tryInit(true);
 	}

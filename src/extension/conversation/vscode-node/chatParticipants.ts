@@ -10,7 +10,9 @@ import { IInteractionService } from '../../../platform/chat/common/interactionSe
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { DeferredPromise } from '../../../util/vs/base/common/async';
 import { Event, Relay } from '../../../util/vs/base/common/event';
 import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observableInternal';
@@ -28,18 +30,18 @@ import { getAdditionalWelcomeMessage } from './welcomeMessageProvider';
 export class ChatAgentService implements IChatAgentService {
 	declare readonly _serviceBrand: undefined;
 
-	private _lastChatAgents: ChatAgents | undefined; // will be cleared when disposed
+	private _lastChatAgents: ChatParticipants | undefined; // will be cleared when disposed
 
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) { }
 
-	public debugGetCurrentChatAgents(): ChatAgents | undefined {
+	public debugGetCurrentChatAgents(): ChatParticipants | undefined {
 		return this._lastChatAgents;
 	}
 
 	register(): IDisposable {
-		const chatAgents = this.instantiationService.createInstance(ChatAgents);
+		const chatAgents = this.instantiationService.createInstance(ChatParticipants);
 		chatAgents.register();
 		this._lastChatAgents = chatAgents;
 		return {
@@ -51,10 +53,12 @@ export class ChatAgentService implements IChatAgentService {
 	}
 }
 
-class ChatAgents implements IDisposable {
+class ChatParticipants implements IDisposable {
 	private readonly _disposables = new DisposableStore();
 
 	private additionalWelcomeMessage: vscode.MarkdownString | undefined;
+
+	private requestBlocker: Promise<void>;
 
 	constructor(
 		@IOctoKitService private readonly octoKitService: IOctoKitService,
@@ -67,7 +71,22 @@ class ChatAgents implements IDisposable {
 		@IChatQuotaService private readonly _chatQuotaService: IChatQuotaService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
-	) { }
+		@ILogService private readonly logService: ILogService,
+	) {
+		// TODO@roblourens This may not be necessary - the point for now is to match the old behavior of blocking chat until auth completes
+		const requestBlockerDeferred = new DeferredPromise<void>();
+		this.requestBlocker = requestBlockerDeferred.p;
+		if (authenticationService.copilotToken) {
+			this.logService.debug(`ChatParticipants: Copilot token already available`);
+			requestBlockerDeferred.complete();
+		} else {
+			this._disposables.add(authenticationService.onDidAuthenticationChange(async () => {
+				const hasSession = !!authenticationService.copilotToken;
+				this.logService.debug(`ChatParticipants: onDidAuthenticationChange has token: ${hasSession}`);
+				requestBlockerDeferred.complete();
+			}));
+		}
+	}
 
 	dispose() {
 		this._disposables.dispose();
@@ -259,6 +278,7 @@ Learn more about [GitHub Copilot](https://docs.github.com/copilot/using-github-c
 
 	private getChatParticipantHandler(id: string, name: string, defaultIntentIdOrGetter: IntentOrGetter, onRequestPaused: Event<vscode.ChatParticipantPauseStateEvent>): vscode.ChatExtendedRequestHandler {
 		return async (request, context, stream, token): Promise<vscode.ChatResult> => {
+			await this.requestBlocker;
 
 			// If we need privacy confirmation, i.e with 3rd party models. We will return a confirmation response and return early
 			const privacyConfirmation = await this.requestPolicyConfirmation(request, stream);

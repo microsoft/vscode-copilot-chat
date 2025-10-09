@@ -106,6 +106,7 @@ export async function defaultNonStreamChatResponseProcessor(response: Response, 
 		const message: Raw.AssistantChatMessage = choice.message;
 		const messageText = getTextPart(message.content);
 		const requestId = response.headers.get('X-Request-ID') ?? generateUuid();
+		const ghRequestId = response.headers.get('x-github-request-id') ?? '';
 
 
 		const completion: ChatCompletion = {
@@ -116,7 +117,7 @@ export async function defaultNonStreamChatResponseProcessor(response: Response, 
 			message: message,
 			usage: jsonResponse.usage,
 			tokens: [], // This is used for repetition detection so not super important to be accurate
-			requestId: { headerRequestId: requestId, completionId: jsonResponse.id, created: jsonResponse.created, deploymentId: '', serverExperiments: '' },
+			requestId: { headerRequestId: requestId, gitHubRequestId: ghRequestId, completionId: jsonResponse.id, created: jsonResponse.created, deploymentId: '', serverExperiments: '' },
 			telemetryData: telemetryData
 		};
 		const functionCall: ICopilotToolCall[] = [];

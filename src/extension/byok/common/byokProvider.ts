@@ -55,6 +55,7 @@ export interface BYOKModelCapabilities {
 	vision: boolean;
 	thinking?: boolean;
 	editTools?: EndpointEditToolName[];
+	requestHeaders?: Record<string, string>;
 }
 
 export interface BYOKModelRegistry {
@@ -117,7 +118,7 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 	}
 	const modelName = knownModelInfo?.name || modelId;
 	const contextWinow = knownModelInfo ? (knownModelInfo.maxInputTokens + knownModelInfo.maxOutputTokens) : 128000;
-	return {
+	const modelInfo: IChatModelInformation = {
 		id: modelId,
 		name: modelName,
 		version: '1.0.0',
@@ -141,6 +142,10 @@ export function resolveModelInfo(modelId: string, providerName: string, knownMod
 		is_chat_fallback: false,
 		model_picker_enabled: true
 	};
+	if (knownModelInfo?.requestHeaders && Object.keys(knownModelInfo.requestHeaders).length > 0) {
+		modelInfo.requestHeaders = { ...knownModelInfo.requestHeaders };
+	}
+	return modelInfo;
 }
 
 export function byokKnownModelsToAPIInfo(providerName: string, knownModels: BYOKKnownModels | undefined): LanguageModelChatInformation[] {

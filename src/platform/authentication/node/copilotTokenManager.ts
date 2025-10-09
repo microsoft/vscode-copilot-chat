@@ -20,7 +20,7 @@ import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { CopilotToken, CopilotUserInfo, ExtendedTokenInfo, TokenInfo, TokenInfoOrError, containsInternalOrg } from '../common/copilotToken';
 import { CheckCopilotToken, ICopilotTokenManager, NotGitHubLoginFailed, nowSeconds } from '../common/copilotTokenManager';
 
-export const tokenErrorString = `Tests: either GITHUB_PAT or GITHUB_OAUTH_TOKEN must be set. Run "npm run get_token" to get one.`;
+export const tokenErrorString = `Tests: either GITHUB_PAT, GITHUB_OAUTH_TOKEN, or GITHUB_OAUTH_TOKEN+VSCODE_COPILOT_CHAT_TOKEN must be set. Run "npm run get_token" to get credentials.`;
 
 export function getStaticGitHubToken() {
 	if (process.env.GITHUB_PAT) {
@@ -33,17 +33,19 @@ export function getStaticGitHubToken() {
 }
 
 export function getOrCreateTestingCopilotTokenManager(): SyncDescriptor<ICopilotTokenManager & CheckCopilotToken> {
-	let result: SyncDescriptor<ICopilotTokenManager & CheckCopilotToken> | undefined;
-	if (process.env.GITHUB_PAT) {
-		result = new SyncDescriptor(FixedCopilotTokenManager, [process.env.GITHUB_PAT]);
+	if (process.env.VSCODE_COPILOT_CHAT_TOKEN) {
+		return new SyncDescriptor(StaticExtendedTokenInfoCopilotTokenManager, [process.env.VSCODE_COPILOT_CHAT_TOKEN]);
 	}
+
 	if (process.env.GITHUB_OAUTH_TOKEN) {
-		result = new SyncDescriptor(CopilotTokenManagerFromGitHubToken, [process.env.GITHUB_OAUTH_TOKEN]);
+		return new SyncDescriptor(CopilotTokenManagerFromGitHubToken, [process.env.GITHUB_OAUTH_TOKEN]);
 	}
-	if (!result) {
-		throw new Error(tokenErrorString);
+
+	if (process.env.GITHUB_PAT) {
+		return new SyncDescriptor(FixedCopilotTokenManager, [process.env.GITHUB_PAT]);
 	}
-	return result;
+
+	throw new Error(tokenErrorString);
 }
 
 //TODO: Move this to common
@@ -286,6 +288,43 @@ export class FixedCopilotTokenManager extends BaseCopilotTokenManager implements
 	}
 }
 
+//#endregion
+
+//#region StaticExtendedTokenInfoCopilotTokenManager
+
+/**
+ * Use the `StaticExtendedTokenInfoCopilotTokenManager` when you have a base64, JSON-encoded `ExtendedTokenInfo`
+ * in an automation scenario.
+ */
+export class StaticExtendedTokenInfoCopilotTokenManager extends BaseCopilotTokenManager implements CheckCopilotToken {
+	private readonly _initialToken: ExtendedTokenInfo;
+
+	constructor(
+		serializedToken: string,
+		@ILogService logService: ILogService,
+		@ITelemetryService telemetryService: ITelemetryService,
+		@ICAPIClientService capiClientService: ICAPIClientService,
+		@IDomainService domainService: IDomainService,
+		@IFetcherService fetcherService: IFetcherService,
+		@IEnvService envService: IEnvService
+	) {
+		super(new NullBaseOctoKitService(capiClientService, fetcherService, logService, telemetryService), logService, telemetryService, domainService, capiClientService, fetcherService, envService);
+		const data = Buffer.from(serializedToken, 'base64').toString('utf8');
+		this._initialToken = JSON.parse(data);
+	}
+
+	override async getCopilotToken(): Promise<CopilotToken> {
+		if (!this.copilotToken) {
+			this.copilotToken = { ...this._initialToken };
+		}
+
+		return new CopilotToken(this._initialToken);
+	}
+
+	async checkCopilotToken(): Promise<{ status: 'OK' }> {
+		return { status: 'OK' };
+	}
+}
 //#endregion
 
 //#region CopilotTokenManagerFromGitHubToken
