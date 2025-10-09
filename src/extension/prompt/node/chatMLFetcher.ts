@@ -623,7 +623,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 	}
 
 	private processFailedResponse(response: ChatRequestFailed, requestId: string): ChatFetchError {
-		const serverRequestId = response.modelRequestId?.headerRequestId;
+		const serverRequestId = response.modelRequestId?.gitHubRequestId;
 		const reason = response.reason;
 		if (response.failKind === ChatFailKind.RateLimited) {
 			return { type: ChatFetchResponseType.RateLimited, reason, requestId, serverRequestId, retryAfter: response.data?.retryAfter, rateLimitKey: (response.data?.rateLimitKey || ''), capiError: response.data?.capiError };
