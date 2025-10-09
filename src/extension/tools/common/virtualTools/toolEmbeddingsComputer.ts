@@ -64,7 +64,7 @@ export class ToolEmbeddingsComputer implements IToolEmbeddingsComputer {
 			embeddingType,
 			caches: [
 				precomputed,
-				instantiationService.createInstance(ToolEmbeddingLocalCache),
+				instantiationService.createInstance(ToolEmbeddingLocalCache, embeddingType),
 			],
 		};
 	}
