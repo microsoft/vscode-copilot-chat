@@ -52,7 +52,7 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 		super();
 	}
 
-	getDiagnostics(paths: { uri: URI; range: Range | undefined }[]) {
+	private getDiagnostics(paths: { uri: URI; range: Range | undefined }[]) {
 		const results: Array<{ uri: URI; diagnostics: vscode.Diagnostic[] }> = [];
 
 		// for notebooks, we need to find the cell matching the range and get diagnostics for that cell
