@@ -2960,6 +2960,13 @@
 									"type": "boolean",
 									"default": false,
 									"description": "Whether the model supports thinking capabilities"
+								},
+								"requestHeaders": {
+									"type": "object",
+									"description": "Additional HTTP headers to include with requests to this model. These reserved headers are not allowed and ignored if present: forbidden request headers (https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header), forwarding headers ('forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'), and others ('api-key', 'authorization', 'content-type', 'openai-intent', 'x-github-api-version', 'x-initiator', 'x-interaction-id', 'x-interaction-type', 'x-onbehalf-extension-id', 'x-request-id', 'x-vscode-user-agent-library-version'). Pattern-based forbidden headers ('proxy-*', 'sec-*', 'x-http-method*' with forbidden methods) are also blocked.",
+									"additionalProperties": {
+										"type": "string"
+									}
 								}
 							},
 							"required": [
@@ -3029,6 +3036,13 @@
 									"type": "boolean",
 									"default": false,
 									"description": "Whether the model supports thinking capabilities"
+								},
+								"requestHeaders": {
+									"type": "object",
+									"description": "Additional HTTP headers to include with requests to this model. These reserved headers are not allowed and ignored if present: forbidden request headers (https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header), forwarding headers ('forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'), and others ('api-key', 'authorization', 'content-type', 'openai-intent', 'x-github-api-version', 'x-initiator', 'x-interaction-id', 'x-interaction-type', 'x-onbehalf-extension-id', 'x-request-id', 'x-vscode-user-agent-library-version'). Pattern-based forbidden headers ('proxy-*', 'sec-*', 'x-http-method*' with forbidden methods) are also blocked.",
+									"additionalProperties": {
+										"type": "string"
+									}
 								}
 							},
 							"required": [
@@ -3091,7 +3105,7 @@
 					},
 					"github.copilot.chat.useResponsesApi": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.useResponsesApi%",
 						"tags": [
 							"experimental",
@@ -4274,7 +4288,7 @@
 		"yaml": "^2.8.0"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-code": "^1.0.120",
+		"@anthropic-ai/claude-agent-sdk": "^0.1.9",
 		"@anthropic-ai/sdk": "^0.63.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-code';
+import { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import Anthropic from '@anthropic-ai/sdk';
 import type { CancellationToken } from 'vscode';
 import { INativeEnvService } from '../../../../platform/env/common/envService';
