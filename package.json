@@ -1212,7 +1212,7 @@
 				"fullName": "GitHub Copilot",
 				"description": "%copilot.edits.description%",
 				"isDefault": true,
-				"when": "config.inlineChat.enableV2 || config.github.copilot.chat.advanced.inlineChat2",
+				"when": "config.inlineChat.enableV2",
 				"locations": [
 					"editor",
 					"notebook"
@@ -1221,7 +1221,7 @@
 					{
 						"name": "fix",
 						"description": "%copilot.workspace.fix.description%",
-						"when": "config.inlineChat.enableV2 || config.github.copilot.chat.advanced.inlineChat2",
+						"when": "config.inlineChat.enableV2",
 						"disambiguation": [
 							{
 								"category": "fix",
@@ -1235,7 +1235,7 @@
 					{
 						"name": "tests",
 						"description": "%copilot.workspace.tests.description%",
-						"when": "config.inlineChat.enableV2 || config.github.copilot.chat.advanced.inlineChat2",
+						"when": "config.inlineChat.enableV2",
 						"disambiguation": [
 							{
 								"category": "tests",
@@ -1249,7 +1249,7 @@
 					{
 						"name": "doc",
 						"description": "%copilot.workspace.doc.description%",
-						"when": "config.inlineChat.enableV2 || config.github.copilot.chat.advanced.inlineChat2",
+						"when": "config.inlineChat.enableV2",
 						"disambiguation": [
 							{
 								"category": "doc",
@@ -1311,7 +1311,7 @@
 				"locations": [
 					"editor"
 				],
-				"when": "!config.inlineChat.enableV2 && !config.github.copilot.chat.advanced.inlineChat2",
+				"when": "!config.inlineChat.enableV2",
 				"disambiguation": [
 					{
 						"category": "unknown",
@@ -1416,7 +1416,7 @@
 				"locations": [
 					"notebook"
 				],
-				"when": "!config.inlineChat.enableV2 && !config.github.copilot.chat.advanced.inlineChat2",
+				"when": "!config.inlineChat.enableV2",
 				"commands": [
 					{
 						"name": "fix",
