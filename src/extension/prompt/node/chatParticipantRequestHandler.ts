@@ -232,6 +232,7 @@ export class ChatParticipantRequestHandler {
 
 				const history = this.conversation.turns.slice(0, -1);
 				const intent = await this.selectIntent(command, history);
+				this._logService.trace(`[${ChatLocation.toStringShorter(this.location)}] selected intent: ${intent.id}`);
 
 				let chatResult: Promise<ChatResult>;
 				if (typeof intent.handleRequest === 'function') {

@@ -1437,7 +1437,7 @@
 				"locations": [
 					"notebook"
 				],
-				"when": "config.inlineChat.enableV2",
+				"when": "config.inlineChat.enableV2 && config.inlineChat.notebookAgent",
 				"commands": [
 					{
 						"name": "fix",
@@ -3144,7 +3144,10 @@
 						]
 					},
 					"github.copilot.chat.completionsFetcher": {
-						"type": ["string", "null"],
+						"type": [
+							"string",
+							"null"
+						],
 						"markdownDescription": "%github.copilot.config.completionsFetcher%",
 						"tags": [
 							"experimental",
@@ -3156,7 +3159,10 @@
 						]
 					},
 					"github.copilot.chat.nesFetcher": {
-						"type": ["string", "null"],
+						"type": [
+							"string",
+							"null"
+						],
 						"markdownDescription": "%github.copilot.config.nesFetcher%",
 						"tags": [
 							"experimental",
