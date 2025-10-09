@@ -9,7 +9,11 @@ import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { getGitHubRepoInfoFromContext, IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { ITelemetryService, multiplexProperties, wouldMultiplexTelemetryPropertyBeTruncated } from '../../../platform/telemetry/common/telemetry';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+
+// Max telemetry payload size is 1MB, we add shared properties in further code and JSON structure overhead to that
+// so check our diff JSON size against 900KB to be conservative with space
+const MAX_DIFFS_JSON_SIZE = 900 * 1024;
 
 // EVENT: repoInfo
 type RepoInfoTelemetryProperties = {
@@ -84,15 +88,16 @@ export class RepoInfoTelemetry {
 			return;
 		}
 
-		// Multiplex properties will split up the large properties (diffsJSON) into multiple properties
-		// that we can combine later.
-		const properties = multiplexProperties({
+		const properties: RepoInfoInternalTelemetryProperties = {
 			...gitInfo,
 			location,
 			telemetryMessageId: this._telemetryMessageId
-		} as RepoInfoInternalTelemetryProperties);
+		};
 
 		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', properties);
+
+		// IANHU: Remove, just for testing
+		console.log('RepoInfoTelemetry', properties);
 	}
 
 	private async _getRepoInfoTelemetry(): Promise<RepoInfoTelemetryProperties | undefined> {
@@ -162,8 +167,8 @@ export class RepoInfoTelemetry {
 
 			const diffsJSON = diffs.length > 0 ? JSON.stringify(diffs) : undefined;
 
-			// Check if the diff is too big and notify that
-			if (wouldMultiplexTelemetryPropertyBeTruncated(diffsJSON)) {
+			// Check against our size limit to make sure our telemetry fits in the 1MB limit
+			if (diffsJSON && Buffer.byteLength(diffsJSON, 'utf8') > MAX_DIFFS_JSON_SIZE) {
 				return {
 					remoteUrl: githubInfo.remoteUrl,
 					headCommitHash: upstreamCommit,
