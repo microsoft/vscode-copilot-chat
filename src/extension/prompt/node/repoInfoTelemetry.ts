@@ -95,9 +95,6 @@ export class RepoInfoTelemetry {
 		};
 
 		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', properties);
-
-		// IANHU: Remove, just for testing
-		console.log('RepoInfoTelemetry', properties);
 	}
 
 	private async _getRepoInfoTelemetry(): Promise<RepoInfoTelemetryProperties | undefined> {

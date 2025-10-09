@@ -567,8 +567,8 @@ suite('RepoInfoTelemetry', () => {
 			status: Status.MODIFIED
 		}] as any);
 
-		// Create a diff that is too large (> 8192 * 50 = 409600 characters)
-		const largeDiff = 'x'.repeat(450000);
+		// Create a diff that exceeds 900KB when serialized to JSON
+		const largeDiff = 'x'.repeat(901 * 1024);
 		vi.spyOn(gitDiffService, 'getChangeDiffs').mockResolvedValue([{
 			uri: URI.file('/test/repo/file.ts'),
 			originalUri: URI.file('/test/repo/file.ts'),
