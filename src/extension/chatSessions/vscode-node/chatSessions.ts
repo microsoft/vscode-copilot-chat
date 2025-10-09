@@ -117,13 +117,11 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		const terminal = vscode.window.createTerminal({
 			name: terminalName,
 			iconPath: new vscode.ThemeIcon('terminal'),
-			location: { viewColumn: vscode.ViewColumn.Active },
+			location: { viewColumn: vscode.ViewColumn.Active }
 		});
 
-		terminal.show();
-
 		// Wait for shell integration to be available
-		const shellIntegrationTimeout = 3000; // 3 seconds
+		const shellIntegrationTimeout = 3000;
 		let shellIntegrationAvailable = false;
 
 		const integrationPromise = new Promise<void>((resolve) => {
@@ -141,9 +139,11 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			}, shellIntegrationTimeout);
 		});
 
+		terminal.show();
 		await integrationPromise;
 
 		if (shellIntegrationAvailable && terminal.shellIntegration) {
+			await new Promise(resolve => setTimeout(resolve, 500)); // Wait a bit to ensure the terminal is ready
 			terminal.shellIntegration.executeCommand(command);
 		} else {
 			terminal.sendText(command);
