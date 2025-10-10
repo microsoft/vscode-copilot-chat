@@ -14,7 +14,7 @@ import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/comm
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IExtensionsService } from '../../../platform/extensions/common/extensionsService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
+import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { parseLaunchConfigFromResponse } from '../../onboardDebug/node/parseLaunchConfigFromResponse';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
@@ -33,7 +33,7 @@ export interface IStartDebuggingToolParams {
 }
 
 class StartDebuggingTool implements ICopilotTool<IStartDebuggingToolParams> {
-	public static readonly toolName = ToolName.StartDebugging as unknown as ToolName; // augmentation style
+	public static readonly toolName = ToolName.StartDebugging;
 
 	private _promptContext: IBuildPromptContext | undefined;
 
@@ -148,7 +148,7 @@ class StartDebuggingTool implements ICopilotTool<IStartDebuggingToolParams> {
 		const summary = options.input.commandLine
 			? `Deriving debug configuration from command: ${options.input.commandLine.args.join(' ')}`
 			: `Generating debug configuration for query: ${options.input.query ?? '(project overview)'}`;
-		return { invocationMessage: { value: summary } as any };
+		return { invocationMessage: new MarkdownString(summary) };
 	}
 }
 
