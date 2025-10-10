@@ -146,7 +146,7 @@ export class ToolEmbeddingsComputer implements IToolEmbeddingsComputer {
 			return undefined;
 		}
 
-		const toolNames = tools.map(t => t.name);
+		const toolNames = tools.map(t => t.name + '\n\n' + t.description);
 		const start = new StopWatch();
 		const embeddings = await this._embeddingsComputer.computeEmbeddings(this._embeddingType, toolNames, {}, new TelemetryCorrelationId('ToolEmbeddingsComputer::computeEmbeddingsForTools'), token);
 		this._logService.trace(`[virtual-tools] Computed embeddings for ${toolNames.length} tools in ${start.elapsed()}ms`);
@@ -155,7 +155,7 @@ export class ToolEmbeddingsComputer implements IToolEmbeddingsComputer {
 			return undefined;
 		}
 
-		return toolNames.map((name, index) => [name, embeddings.values[index]]);
+		return toolNames.map((name, index) => [tools[index].name, embeddings.values[index]]);
 	}
 
 	/**

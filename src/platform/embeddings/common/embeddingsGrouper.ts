@@ -445,29 +445,38 @@ export class EmbeddingsGrouper<T> {
 
 	/**
 	 * Optimize clustering by finding the best similarity percentile that results in
-	 * a target number of clusters or fewer.
+	 * a target number of clusters or fewer, aiming for the highest cluster count
+	 * that doesn't exceed the maximum. Includes a "cliff effect" to avoid over-clustering.
 	 *
 	 * @param maxClusters Maximum desired number of clusters
 	 * @param minPercentile Minimum percentile to try (default: 80)
 	 * @param maxPercentile Maximum percentile to try (default: 99)
 	 * @param precision How precise the search should be (default: 1 for 1% precision)
+	 * @param cliffThreshold Fraction of maxClusters that triggers cliff effect (default: 2/3)
+	 * @param cliffGain Minimum additional clusters needed to continue past cliff (default: 20% of maxClusters)
 	 * @returns The optimal percentile found and resulting cluster count
 	 */
 	tuneThresholdForTargetClusters(
 		maxClusters: number,
 		minPercentile: number = 80,
 		maxPercentile: number = 99,
-		precision: number = 1
+		precision: number = 1,
+		cliffThreshold: number = 2 / 3,
+		cliffGain: number = 0.2
 	): { percentile: number; clusterCount: number; threshold: number } {
 		if (this.nodes.length === 0) {
 			return { percentile: 94, clusterCount: 0, threshold: 0.8 };
 		}
 
-		let bestPercentile = minPercentile;
-		let bestClusterCount = this.nodes.length; // Worst case: all singletons
-		let bestThreshold = 0.8;
+		const cliffPoint = Math.floor(maxClusters * cliffThreshold);
+		const minGainAfterCliff = Math.max(1, Math.floor(maxClusters * cliffGain));
 
-		// Binary search for optimal percentile
+		let bestPercentile = maxPercentile;
+		let bestClusterCount = 1; // Start with worst case (very few clusters)
+		let bestThreshold = 0.95;
+		let cliffReached = false;
+
+		// Binary search for optimal percentile that maximizes clusters while staying under limit
 		let low = minPercentile;
 		let high = maxPercentile;
 
@@ -477,14 +486,32 @@ export class EmbeddingsGrouper<T> {
 			const clusterCount = this.countClustersForThreshold(threshold);
 
 			if (clusterCount <= maxClusters) {
-				// This percentile works, but maybe we can go lower (more clusters)
-				bestPercentile = mid;
-				bestClusterCount = clusterCount;
-				bestThreshold = threshold;
-				high = mid;
-			} else {
-				// Too many clusters, need higher percentile (stricter threshold)
+				// Check if this is a meaningful improvement
+				let shouldUpdate = false;
+
+				if (!cliffReached && clusterCount >= cliffPoint) {
+					// We've reached the cliff point - this is good enough
+					cliffReached = true;
+					shouldUpdate = clusterCount > bestClusterCount;
+				} else if (cliffReached) {
+					// Past cliff - only update if we get significant additional clusters
+					shouldUpdate = clusterCount >= bestClusterCount + minGainAfterCliff;
+				} else {
+					// Before cliff - any improvement is good
+					shouldUpdate = clusterCount > bestClusterCount;
+				}
+
+				if (shouldUpdate) {
+					bestPercentile = mid;
+					bestClusterCount = clusterCount;
+					bestThreshold = threshold;
+				}
+
+				// Try going to higher percentile for potentially more clusters
 				low = mid + precision;
+			} else {
+				// Too many clusters, need lower percentile (lower threshold = fewer clusters)
+				high = mid - precision;
 			}
 		}
 

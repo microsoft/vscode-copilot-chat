@@ -68,23 +68,53 @@ export class VirtualToolGrouper implements IToolCategorization {
 
 		// Separate builtin tools from extension/MCP tools
 		const builtinTools = byToolset[BUILT_IN_GROUP] || [];
-		const toolsToGroup = Object.entries(byToolset)
-			.filter(([key]) => key !== BUILT_IN_GROUP)
-			.flatMap(([, tools]) => tools);
+		const toolsetEntries = Object.entries(byToolset).filter(([key]) => key !== BUILT_IN_GROUP);
 
 		const groupedResults: (VirtualTool | LanguageModelToolInformation)[] = [];
 
 		// Add builtin tools directly
 		groupedResults.push(...builtinTools);
 
-		// Process all extension/MCP tools together with embedding-based grouping
-		if (toolsToGroup.length > 0) {
-			const embeddingGroups = await this._generateEmbeddingBasedGroups(toolsToGroup, token);
-			groupedResults.push(...embeddingGroups);
+		// Process extension/MCP tools per-toolset with proportional slot allocation
+		if (toolsetEntries.length > 0) {
+			// Calculate available slots after accounting for builtin tools
+			const availableSlots = TOOLS_AND_GROUPS_LIMIT - builtinTools.length;
+			const slotAllocation = this._allocateSlots(toolsetEntries, availableSlots);
+
+			// Process each toolset individually
+			const toolsetGrouped = await Promise.all([...toolsetEntries].map(async ([toolsetKey, tools]) => {
+				const allocatedSlots = slotAllocation.get(toolsetKey) || 0;
+				return allocatedSlots > 0 ? await this._processToolset(tools, allocatedSlots, token) : [];
+			}));
+
+			groupedResults.push(...toolsetGrouped.flat());
 		}
 
 		this._cache.flush();
 		root.contents = VirtualToolGrouper.deduplicateGroups(groupedResults);
+
+		// Send telemetry for per-toolset processing
+		if (toolsetEntries.length > 0) {
+			const totalToolsToGroup = toolsetEntries.reduce((sum, [, tools]) => sum + tools.length, 0);
+			const totalGroupsCreated = groupedResults.filter(item => item instanceof VirtualTool).length;
+
+			/* __GDPR__
+				"virtualTools.perToolsetGenerate" : {
+					"owner": "connor4312",
+					"comment": "Reports information about the per-toolset generation of virtual tools.",
+					"toolsetsProcessed": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of toolsets processed", "isMeasurement": true },
+					"toolsBefore": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools before categorization", "isMeasurement": true },
+					"groupsAfter": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of groups after categorization", "isMeasurement": true },
+					"builtinTools": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of builtin tools added directly", "isMeasurement": true }
+				}
+			*/
+			this._telemetryService.sendMSFTTelemetryEvent('virtualTools.perToolsetGenerate', {}, {
+				toolsetsProcessed: toolsetEntries.length,
+				toolsBefore: totalToolsToGroup,
+				groupsAfter: totalGroupsCreated,
+				builtinTools: builtinTools.length,
+			});
+		}
 
 		for (const tool of root.all()) {
 			if (tool instanceof VirtualTool) {
@@ -189,7 +219,92 @@ export class VirtualToolGrouper implements IToolCategorization {
 		return result;
 	}
 
+	/**
+	 * Allocate slots proportionally to each toolset based on tool count, ensuring every toolset gets at least one slot
+	 */
+	private _allocateSlots(toolsetEntries: Array<[string, LanguageModelToolInformation[]]>, availableSlots: number): Map<string, number> {
+		const allocation = new Map<string, number>();
+
+		// If we have more toolsets than slots, give each one slot
+		if (toolsetEntries.length >= availableSlots) {
+			for (let i = 0; i < toolsetEntries.length; i++) {
+				allocation.set(toolsetEntries[i][0], i < availableSlots ? 1 : 0);
+			}
+			return allocation;
+		}
+
+		// Calculate total tools to group
+		const totalTools = toolsetEntries.reduce((sum, [, tools]) => sum + tools.length, 0);
+
+		// Give each toolset at least one slot
+		let remainingSlots = availableSlots - toolsetEntries.length;
+		for (const [toolsetKey] of toolsetEntries) {
+			allocation.set(toolsetKey, 1);
+		}
+
+		// Distribute remaining slots proportionally
+		if (remainingSlots > 0) {
+			const proportions = toolsetEntries.map(([toolsetKey, tools]) => ({
+				toolsetKey,
+				proportion: tools.length / totalTools,
+				toolCount: tools.length
+			}));
+
+			// Sort by proportion descending to handle rounding better
+			proportions.sort((a, b) => b.proportion - a.proportion);
+
+			// Allocate additional slots based on proportion
+			for (const { toolsetKey, proportion } of proportions) {
+				const additionalSlots = Math.round(proportion * remainingSlots);
+				const slotsToAdd = Math.min(additionalSlots, remainingSlots);
+				allocation.set(toolsetKey, allocation.get(toolsetKey)! + slotsToAdd);
+				remainingSlots -= slotsToAdd;
+			}
+
+			// Distribute any remaining slots to toolsets with the most tools
+			while (remainingSlots > 0) {
+				for (const { toolsetKey } of proportions) {
+					if (remainingSlots <= 0) {
+						break;
+					}
+					allocation.set(toolsetKey, allocation.get(toolsetKey)! + 1);
+					remainingSlots--;
+				}
+			}
+		}
+
+		return allocation;
+	}
+
+	/**
+	 * Process a single toolset based on allocated slots
+	 */
+	private async _processToolset(
+		tools: LanguageModelToolInformation[],
+		allocatedSlots: number,
+		token: CancellationToken
+	): Promise<(VirtualTool | LanguageModelToolInformation)[]> {
+		// If allocated slots >= tool count, return all tools individually
+		if (allocatedSlots >= tools.length) {
+			return tools;
+		}
+
+		// If only one slot allocated, return all tools in a single group with LLM-generated summary
+		if (allocatedSlots === 1) {
+			const groupDescriptions = await this._generateBulkGroupDescriptions([tools], token);
+			const group = groupDescriptions.groups[0];
+			return [new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX + group.name, SUMMARY_PREFIX + group.summary + SUMMARY_SUFFIX, 0, {}, group.tools)];
+		}
+
+		// Otherwise, use embedding-based grouping with the allocated slot limit
+		return await this._generateEmbeddingBasedGroups(tools, allocatedSlots, token);
+	}
+
 	private async _getPredictedTools(query: string, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<LanguageModelToolInformation[]> {
+		if (!query) {
+			return [];
+		}
+
 		// compute the embeddings for the query
 		const queryEmbedding = await this.embeddingsComputer.computeEmbeddings(EMBEDDING_TYPE_FOR_TOOL_GROUPING, [query], {}, new TelemetryCorrelationId('VirtualToolGrouper::_getPredictedTools'), token);
 		if (!queryEmbedding || queryEmbedding.values.length === 0) {
@@ -218,22 +333,18 @@ export class VirtualToolGrouper implements IToolCategorization {
 	}
 
 	/**
-	 * Generate embedding-based groups for all extension/MCP tools together
+	 * Generate embedding-based groups for tools with a specific limit
 	 */
-	private async _generateEmbeddingBasedGroups(tools: LanguageModelToolInformation[], token: CancellationToken): Promise<VirtualTool[]> {
+	private async _generateEmbeddingBasedGroups(tools: LanguageModelToolInformation[], limit: number, token: CancellationToken): Promise<(VirtualTool | LanguageModelToolInformation)[]> {
 		if (tools.length <= Constant.MIN_TOOLSET_SIZE_TO_GROUP) {
 			// If too few tools, return them as individual tools instead of creating groups
 			return [];
 		}
 
-		const sw = StopWatch.create();
 		let embeddingGroups: LanguageModelToolInformation[][] = [];
 
 		try {
-			// Calculate the limit: available slots minus builtin tools that won't be grouped
-			const limit = Math.min(TOOLS_AND_GROUPS_LIMIT, Math.ceil(tools.length / 4));
-
-			// Use embedding-based clustering
+			// Use the provided limit for embedding-based clustering
 			embeddingGroups = await this._toolEmbeddingsComputer.computeToolGroupings(tools, limit, token);
 
 			this._logService.trace(`[virtual-tools] Embedding-based grouping created ${embeddingGroups.length} groups from ${tools.length} tools`);
@@ -243,36 +354,17 @@ export class VirtualToolGrouper implements IToolCategorization {
 			throw e;
 		}
 
-		const embeddingMs = sw.elapsed();
-		sw.reset();
+		const singles = embeddingGroups.filter(g => g.length === 1).map(g => g[0]);
+		const grouped = embeddingGroups.filter(g => g.length > 1);
 
 		// Generate descriptions for the groups using LLM in bulk
-		const groupDescriptions = await this._generateBulkGroupDescriptions(embeddingGroups, token);
+		const groupDescriptions = await this._generateBulkGroupDescriptions(grouped, token);
 
-		/* __GDPR__
-			"virtualTools.generate" : {
-				"owner": "connor4312",
-				"comment": "Reports information about the generation of virtual tools.",
-				"toolsBefore": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools before categorization", "isMeasurement": true },
-				"toolsAfter": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of tools after categorization", "isMeasurement": true },
-				"embeddingDuration": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Total duration of the embedding operation", "isMeasurement": true },
-				"summaryDuration": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Total duration of the summary operation", "isMeasurement": true },
-				"summaryMissed": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Groups missed during summary", "isMeasurement": true }
-			}
-		*/
-		this._telemetryService.sendMSFTTelemetryEvent('virtualTools.generate', {
-		}, {
-			toolsBefore: tools.length,
-			toolsAfter: groupDescriptions.groups.length,
-			embeddingDuration: embeddingMs,
-			summaryDuration: sw.elapsed(),
-			summaryMissed: groupDescriptions.missed,
-		});
+		this._logService.trace(`[virtual-tools] Embedding-based grouping created ${groupDescriptions.groups.length} groups from ${tools.length} tools`);
 
-
-		return groupDescriptions.groups.map(v => {
-			return new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX + v.name, SUMMARY_PREFIX + v.summary + SUMMARY_SUFFIX, 0, {}, v.tools);
-		});
+		return groupDescriptions.groups
+			.map((v): VirtualTool | LanguageModelToolInformation => new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX + v.name, SUMMARY_PREFIX + v.summary + SUMMARY_SUFFIX, 0, {}, v.tools))
+			.concat(singles);
 	}
 
 	/**
@@ -291,7 +383,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 		}
 
 		const endpoint = await this._endpointProvider.getChatEndpoint(CATEGORIZATION_ENDPOINT);
-		const described = await describeBulkToolGroups(endpoint, embeddingGroups, token);
+		const described = await describeBulkToolGroups(endpoint, missing.map(m => m.tools), token);
 		let missed = 0;
 		for (let i = 0; i < described.length; i++) {
 			const d = described[i];
