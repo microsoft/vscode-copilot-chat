@@ -113,7 +113,7 @@ class StartDebuggingTool implements ICopilotTool<IStartDebuggingToolParams> {
 		}
 
 		if (this._promptContext?.stream) {
-			this._promptContext.stream.markdown(l10n.t('Proposed debug configuration (pending). Review then choose an action.\n'));
+			this._promptContext.stream.markdown(l10n.t('Review the below proposed debug configuration then choose an action:'));
 			if (synthesizedJson) {
 				this._promptContext.stream.markdown(synthesizedJson);
 			}
