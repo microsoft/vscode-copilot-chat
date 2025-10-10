@@ -47,22 +47,10 @@ export class ToolGrouping implements IToolGrouping {
 		}
 	}
 
-	public get isEnabled() {
-		// Match the logic from VirtualToolGrouper.addGroups()
-		// Enable if we could potentially trigger built-in grouping (when GPT model is used)
-		const defaultToolGroupingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.DefaultToolsGrouped, this._experimentationService);
-		const couldTriggerBuiltInGrouping = this._tools.length > Constant.START_BUILTIN_GROUPING_AFTER_TOOL_COUNT && defaultToolGroupingEnabled;
-
-		// Or if we meet the standard threshold for all tool types
-		return couldTriggerBuiltInGrouping || this._tools.length >= Constant.START_GROUPING_AFTER_TOOL_COUNT;
-	}
-
 	constructor(
 		private _tools: readonly LanguageModelToolInformation[],
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IExperimentationService private readonly _experimentationService: IExperimentationService
+		@ITelemetryService private readonly _telemetryService: ITelemetryService
 	) {
 		this._root.isExpanded = true;
 	}
@@ -138,8 +126,9 @@ export class ToolGrouping implements IToolGrouping {
 		return [...this._root.tools()].filter(uniqueFilter(t => t.name));
 	}
 
-	async computeAll(query: string, token: CancellationToken, endpoint?: IChatEndpoint): Promise<(LanguageModelToolInformation | VirtualTool)[]> {
-		await this._doCompute(query, token, endpoint);
+	async computeAll(query: string, token: CancellationToken): Promise<(LanguageModelToolInformation | VirtualTool)[]> {
+		// Don't pass endpoint for display - prevents model-specific built-in grouping
+		await this._doCompute(query, token, undefined);
 		return this._root.contents;
 	}
 

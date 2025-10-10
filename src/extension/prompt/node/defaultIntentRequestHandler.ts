@@ -576,8 +576,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 	private _didParallelToolCallLoop?: boolean;
 	private async _doMirroredCallWithVirtualTools(delta: IResponseDelta, messages: Raw.ChatMessage[], requestOptions: OptionalChatRequestParams) {
 		const shouldDo = !this._didParallelToolCallLoop
-			&& this._copilotTokenStore.copilotToken?.isInternal
-			&& !this.toolGrouping?.isEnabled;
+			&& this._copilotTokenStore.copilotToken?.isInternal;
 		if (!shouldDo) {
 			return;
 		}
@@ -718,13 +717,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 			}
 		}
 
-		if (!this.toolGrouping.isEnabled) {
-			return tools;
-		}
-
-		const computePromise = this.toolGrouping.compute(this.options.request.prompt, token, this.options.invocation.endpoint);
-
-		// Show progress if this takes a moment...
+		const computePromise = this.toolGrouping.compute(this.options.request.prompt, token, this.options.invocation.endpoint);		// Show progress if this takes a moment...
 		const timeout = setTimeout(() => {
 			outputStream?.progress(localize('computingTools', 'Optimizing tool selection...'), async () => {
 				await computePromise;
