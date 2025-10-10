@@ -25,6 +25,7 @@ import { Conversation } from '../common/conversation';
 import { IToolCall, IToolCallRound } from '../common/intents';
 import { IDocumentContext } from './documentContext';
 import { IIntent, TelemetryData } from './intents';
+import { RepoInfoTelemetry } from './repoInfoTelemetry';
 import { ConversationalBaseTelemetryData, createTelemetryWithId, extendUserMessageTelemetryData, getCodeBlocks, sendModelMessageTelemetry, sendOffTopicMessageTelemetry, sendUserActionTelemetry, sendUserMessageTelemetry } from './telemetry';
 
 // #region: internal telemetry for responses
@@ -200,6 +201,8 @@ export class ChatTelemetryBuilder {
 
 	public readonly baseUserTelemetry: ConversationalBaseTelemetryData = createTelemetryWithId();
 
+	private readonly _repoInfoTelemetry: RepoInfoTelemetry;
+
 	public get telemetryMessageId() {
 		return this.baseUserTelemetry.properties.messageId;
 	}
@@ -211,7 +214,11 @@ export class ChatTelemetryBuilder {
 		private readonly _firstTurn: boolean,
 		private readonly _request: vscode.ChatRequest,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
-	) { }
+	) {
+		// Repo info telemetry is held here as the begin event should be sent only by the first PanelChatTelemetry instance created for a user request.
+		// and a new PanelChatTelemetry instance is created per step in the request.
+		this._repoInfoTelemetry = this.instantiationService.createInstance(RepoInfoTelemetry, this.baseUserTelemetry.properties.messageId);
+	}
 
 	public makeRequest(intent: IIntent, location: ChatLocation, conversation: Conversation, messages: Raw.ChatMessage[], promptTokenLength: number, references: readonly PromptReference[], endpoint: IChatEndpoint, telemetryData: readonly TelemetryData[], availableToolCount: number): InlineChatTelemetry | PanelChatTelemetry {
 
@@ -231,6 +238,7 @@ export class ChatTelemetryBuilder {
 				promptTokenLength,
 				telemetryData,
 				availableToolCount,
+				this._repoInfoTelemetry
 			);
 		} else {
 			return this.instantiationService.createInstance(PanelChatTelemetry,
@@ -248,6 +256,7 @@ export class ChatTelemetryBuilder {
 				promptTokenLength,
 				telemetryData,
 				availableToolCount,
+				this._repoInfoTelemetry
 			);
 		}
 	}
@@ -298,6 +307,7 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 		promptTokenLength: number,
 		protected readonly _genericTelemetryData: readonly TelemetryData[],
 		protected readonly _availableToolCount: number,
+		protected readonly _repoInfoTelemetry: RepoInfoTelemetry,
 		@ITelemetryService protected readonly _telemetryService: ITelemetryService,
 	) {
 		// Extend the base user telemetry with message and prompt information.
@@ -481,6 +491,8 @@ export abstract class ChatTelemetry<C extends IDocumentContext | undefined = IDo
 			availableTools: JSON.stringify(availableTools.map(tool => tool.name))
 		}, toolCallMeasurements);
 
+		// Send internal repo info telemetry at the end of the tool loop
+		this._repoInfoTelemetry.sendEndTelemetry();
 	}
 
 	protected abstract _sendInternalRequestTelemetryEvent(): void;
@@ -512,6 +524,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		promptTokenLength: number,
 		genericTelemetryData: readonly TelemetryData[],
 		availableToolCount: number,
+		repoInfoTelemetry: RepoInfoTelemetry,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 	) {
@@ -530,6 +543,7 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 			promptTokenLength,
 			genericTelemetryData,
 			availableToolCount,
+			repoInfoTelemetry,
 			telemetryService
 		);
 	}
@@ -552,6 +566,11 @@ export class PanelChatTelemetry extends ChatTelemetry<IDocumentContext | undefin
 		} satisfies RequestInternalPanelTelemetryProperties, {
 			turnNumber: this._conversation.turns.length,
 		} satisfies ResponseInternalPanelTelemetryMeasurements);
+
+		// Send the begin telemetry for repo info, this uses the same repo info telemetry instance held by the builder class
+		// as the begin event need to be sent only once per user request and PanelChatTelemetry is recreated per step. The class is
+		// guarded to only send one time.
+		this._repoInfoTelemetry.sendBeginTelemetryIfNeeded();
 	}
 
 	protected override async _sendResponseTelemetryEvent(responseType: ChatFetchResponseType, response: string, interactionOutcome: InteractionOutcome, toolCalls: IToolCall[] = []): Promise<void> {
@@ -745,6 +764,7 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 		promptTokenLength: number,
 		genericTelemetryData: readonly TelemetryData[],
 		availableToolCount: number,
+		repoInfoTelemetry: RepoInfoTelemetry,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@ILanguageDiagnosticsService private readonly _languageDiagnosticsService: ILanguageDiagnosticsService,
 	) {
@@ -763,6 +783,7 @@ export class InlineChatTelemetry extends ChatTelemetry<IDocumentContext> {
 			promptTokenLength,
 			genericTelemetryData,
 			availableToolCount,
+			repoInfoTelemetry,
 			telemetryService
 		);
 
