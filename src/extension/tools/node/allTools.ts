@@ -32,11 +32,12 @@ import './runNotebookCellTool';
 import './scmChangesTool';
 import './searchWorkspaceSymbolsTool';
 import './simpleBrowserTool';
+import './startDebuggingTool';
 import './testFailureTool';
 import './thinkTool';
+import './toolReplayTool';
 import './usagesTool';
 import './userPreferencesTool';
 import './vscodeAPITool';
 import './vscodeCmdTool';
-import './toolReplayTool';
-import './startDebuggingTool';
+
