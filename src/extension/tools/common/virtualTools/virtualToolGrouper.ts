@@ -52,19 +52,26 @@ export class VirtualToolGrouper implements IToolCategorization {
 		return this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.VirtualToolEmbeddingRanking, this._expService);
 	}
 
+	/**
+	 * Determines if built-in tool grouping should be triggered based on model type, configuration, and tool count
+	 */
+	private async shouldTriggerBuiltInGrouping(tools: LanguageModelToolInformation[], endpoint?: IChatEndpoint): Promise<boolean> {
+		const currentEndpoint = endpoint ?? (await this._endpointProvider.getAllChatEndpoints()).find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1');
+		const modelFamily = currentEndpoint?.family;
+		const isGpt = modelFamily?.startsWith('gpt-4.1') || modelFamily?.startsWith('gpt-5') || false;
+		const defaultToolGroupingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.DefaultToolsGrouped, this._expService);
+
+		return isGpt && tools.length > Constant.START_BUILTIN_GROUPING_AFTER_TOOL_COUNT && defaultToolGroupingEnabled;
+	}
+
 	async addGroups(query: string, root: VirtualTool, tools: LanguageModelToolInformation[], token: CancellationToken, endpoint?: IChatEndpoint): Promise<void> {
 		// If there's no need to group tools, just add them all directly;
 
 		// if the model is gpt 4.1 or gpt-5 and there are more than START_BUILTIN_GROUPING_AFTER_TOOL_COUNT tools, we should group built-in tools
 		// otherwise, follow the existing logic of grouping all tools together
-		const currentEndpoint = endpoint ?? (await this._endpointProvider.getAllChatEndpoints()).find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1');
-		const modelFamily = currentEndpoint?.family;
-		const isGpt = modelFamily?.startsWith('gpt-4.1') || modelFamily?.startsWith('gpt-5');
-		const defaultToolGroupingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.DefaultToolsGrouped, this._expService);
+		const shouldGroup = await this.shouldTriggerBuiltInGrouping(tools, endpoint);
 
-		const triggerBuiltInGrouping = isGpt && tools.length > Constant.START_BUILTIN_GROUPING_AFTER_TOOL_COUNT && defaultToolGroupingEnabled;
-
-		if (!triggerBuiltInGrouping && tools.length < Constant.START_GROUPING_AFTER_TOOL_COUNT) {
+		if (!shouldGroup && tools.length < Constant.START_GROUPING_AFTER_TOOL_COUNT) {
 			root.contents = tools;
 			return;
 		}
@@ -261,28 +268,15 @@ export class VirtualToolGrouper implements IToolCategorization {
 	private async _generateGroupsFromToolset(key: string, tools: LanguageModelToolInformation[], previous: ISummarizedToolCategory[] | undefined, token: CancellationToken, endpoint?: IChatEndpoint): Promise<(VirtualTool | LanguageModelToolInformation)[]> {
 		// Handle built-in tools with predefined groups only if experimental setting is enabled
 		if (key === BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY) {
-			const defaultToolGroupingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.DefaultToolsGrouped, this._expService);
-			if (defaultToolGroupingEnabled) {
-
-				// Get the model family from the current chat endpoint to check if grouping should apply
-				// Use the passed endpoint if available, otherwise fallback to default endpoint
-				const currentEndpoint = endpoint ?? (await this._endpointProvider.getAllChatEndpoints()).find(e => e.isDefault) ?? await this._endpointProvider.getChatEndpoint('gpt-4.1');
-				const modelFamily = currentEndpoint?.family;
-
-				// Only apply grouping for GPT-4.1 or GPT-5
-				// For other models (like Claude/Sonnet), do not group default tools - let them expand to the limit
-				if (!modelFamily ||
-					!(modelFamily.startsWith('gpt-4.1') ||
-						modelFamily.startsWith('gpt-5'))) {
-					return tools;
-				}
-
-				// Mark that we've grouped default tools so we don't aggressively expand later
-				this._hasGroupedDefaultTools = true;
-				return this.builtInToolGroupHandler.createBuiltInToolGroups(tools);
-			} else {
+			// Check if we should trigger built-in grouping for this model and tool count
+			const shouldGroup = await this.shouldTriggerBuiltInGrouping(tools, endpoint);
+			if (!shouldGroup) {
 				return tools;
 			}
+
+			// Mark that we've grouped default tools so we don't aggressively expand later
+			this._hasGroupedDefaultTools = true;
+			return this.builtInToolGroupHandler.createBuiltInToolGroups(tools);
 		}
 
 		if (tools.length <= Constant.MIN_TOOLSET_SIZE_TO_GROUP) {
