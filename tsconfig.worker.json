@@ -23,5 +23,5 @@
 		"src/**/vscode-worker/**/*.ts",
 		"src/**/*.d.ts"
 	],
-	"exclude": ["src/**/test/**", "src/**/fixtures/**"]
+	"exclude": ["src/**/test/**", "src/**/fixtures/**", "src/extension/completions-core/**/*.test.ts"]
 }
