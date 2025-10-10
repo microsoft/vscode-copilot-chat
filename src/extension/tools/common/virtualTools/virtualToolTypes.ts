@@ -92,7 +92,7 @@ export interface IToolGroupingCache {
 	/**
 	 * Gets or inserts the grouping for the given set of tools.
 	 */
-	getOrInsert(tools: LanguageModelToolInformation[], factory: () => Promise<ISummarizedToolCategory[] | undefined>): Promise<ISummarizedToolCategory[] | undefined>;
+	getDescription(tools: LanguageModelToolInformation[]): Promise<ISummarizedToolCategoryUpdatable>;
 }
 
 export const IToolGroupingCache = createServiceIdentifier<IToolGroupingCache>('IToolGroupingCache');
@@ -116,6 +116,12 @@ export interface ISummarizedToolCategory {
 	summary: string;
 	name: string;
 	tools: LanguageModelToolInformation[];
+}
+
+export interface ISummarizedToolCategoryUpdatable {
+	category: ISummarizedToolCategory | undefined;
+	tools: LanguageModelToolInformation[];
+	update(up: ISummarizedToolCategory): void;
 }
 
 export class SummarizerError extends Error { }

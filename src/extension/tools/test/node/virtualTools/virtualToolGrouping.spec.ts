@@ -69,7 +69,7 @@ describe('Virtual Tools - Grouping', () => {
 						`${VIRTUAL_TOOL_NAME_PREFIX}${groupName}`,
 						`Group of tools: ${groupName}`,
 						0,
-						{ groups: [], toolsetKey: '', wasExpandedByDefault: true }
+						{ wasExpandedByDefault: true }
 					);
 					groupTool.contents = groupTools;
 					root.contents.push(groupTool);
@@ -450,7 +450,7 @@ describe('Virtual Tools - Grouping', () => {
 						`${VIRTUAL_TOOL_NAME_PREFIX}collapsible`,
 						'Collapsible group',
 						0,
-						{ groups: [], toolsetKey: '', canBeCollapsed: true, wasExpandedByDefault: true }
+						{ canBeCollapsed: true, wasExpandedByDefault: true }
 					);
 					collapsibleGroup.contents = tools.slice(0, 2);
 					collapsibleGroup.isExpanded = true;
@@ -459,7 +459,7 @@ describe('Virtual Tools - Grouping', () => {
 						`${VIRTUAL_TOOL_NAME_PREFIX}noncollapsible`,
 						'Non-collapsible group',
 						0,
-						{ groups: [], toolsetKey: '', canBeCollapsed: false, wasExpandedByDefault: true }
+						{ canBeCollapsed: false, wasExpandedByDefault: true }
 					);
 					nonCollapsibleGroup.contents = tools.slice(2, 4);
 					nonCollapsibleGroup.isExpanded = true;
@@ -508,7 +508,7 @@ describe('Virtual Tools - Grouping', () => {
 						`${VIRTUAL_TOOL_NAME_PREFIX}noncollapsible`,
 						'Non-collapsible group',
 						5, // Initial lastUsedOnTurn
-						{ groups: [], toolsetKey: '', canBeCollapsed: false, wasExpandedByDefault: true }
+						{ canBeCollapsed: false, wasExpandedByDefault: true }
 					);
 					nonCollapsibleGroup.contents = tools.slice(0, 3);
 					nonCollapsibleGroup.isExpanded = true;
