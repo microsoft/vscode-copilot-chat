@@ -112,7 +112,15 @@ export async function parseSettingsAndCommands(workbenchService: IWorkbenchServi
 				const allcommands = (await workbenchService.getAllCommands(/* filterByPreCondition */true));
 				const commandItem = allcommands.find(commandItem => commandItem.command === item.details?.key);
 				if (!commandItem) {
-					return [];
+					// If we can't find the command on the list, just open the command palette without any pre-filled filter
+					parsedMetadata.push({
+						commandToRun: {
+							command: 'workbench.action.quickOpen',
+							arguments: [`>`],
+							title: l10n.t("Open Command Palette"),
+						}
+					});
+					return parsedMetadata;
 				}
 				parsedMetadata.push({
 					commandToRun: {
