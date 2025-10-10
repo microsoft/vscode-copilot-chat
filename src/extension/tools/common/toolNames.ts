@@ -223,23 +223,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.CoreConfirmationTool]: ToolCategory.VSCodeInteraction,
 } as const;
 
-/**
- * External tool categories for tools not in the ToolName enum (e.g., MCP tools).
- * These tools are categorized by their string names.
- */
-export const externalToolCategories: Record<string, ToolCategory> = {
-	// Python/Notebook related tools
-	'configure_notebook': ToolCategory.JupyterNotebook,
-	'notebook_install_packages': ToolCategory.JupyterNotebook,
-	'notebook_list_packages': ToolCategory.JupyterNotebook,
-	'configure_python_environment': ToolCategory.JupyterNotebook,
-	'get_python_environment_details': ToolCategory.JupyterNotebook,
-	'get_python_executable_details': ToolCategory.JupyterNotebook,
-	'install_python_packages': ToolCategory.JupyterNotebook,
 
-	// VS Code related tools
-	'vscode_searchExtensions_internal': ToolCategory.VSCodeInteraction,
-} as const;
 
 /**
  * Get the category for a tool, checking both ToolName enum and external tools.
@@ -251,7 +235,6 @@ export function getToolCategory(toolName: string): ToolCategory | undefined {
 			return toolCategories[enumValue];
 		}
 	}
-	return externalToolCategories[toolName];
 }
 
 /**
@@ -262,13 +245,6 @@ export function getToolsForCategory(category: ToolCategory): string[] {
 
 	// Add tools from ToolName enum
 	for (const [toolName, toolCategory] of Object.entries(toolCategories)) {
-		if (toolCategory === category) {
-			result.push(toolName);
-		}
-	}
-
-	// Add external tools
-	for (const [toolName, toolCategory] of Object.entries(externalToolCategories)) {
 		if (toolCategory === category) {
 			result.push(toolName);
 		}
