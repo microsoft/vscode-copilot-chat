@@ -326,7 +326,8 @@
 				"--disable-extensions"
 			],
 			"env": {
-				"TSX_TSCONFIG_PATH": "${workspaceFolder}/tsconfig.json"
+				"TSX_TSCONFIG_PATH": "${workspaceFolder}/tsconfig.json",
+				"VITEST": "true"
 			},
 			"internalConsoleOptions": "openOnSessionStart",
 			"outFiles": [
