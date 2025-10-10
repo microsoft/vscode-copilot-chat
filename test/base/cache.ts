@@ -18,7 +18,7 @@ import { CurrentTestRunInfo } from './simulationContext';
 const compress = promisify(zlib.brotliCompress);
 const decompress = promisify(zlib.brotliDecompress);
 
-const DefaultCachePath = process.env.VITEST ?? process.env.CORETEST ? path.resolve(__dirname, '..', 'simulation', 'cache') : path.resolve(__dirname, '..', 'test', 'simulation', 'cache');
+const DefaultCachePath = (process.env.VITEST ?? process.env.CORETEST) ? path.resolve(__dirname, '..', 'simulation', 'cache') : path.resolve(__dirname, '..', 'test', 'simulation', 'cache');
 
 async function getGitRoot(cwd: string): Promise<string> {
 	const execAsync = promisify(exec);
