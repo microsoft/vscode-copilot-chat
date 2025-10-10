@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { LanguageModelToolInformation } from 'vscode';
-import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { ToolCategory, getToolsForCategory } from '../toolNames';
 import { VIRTUAL_TOOL_NAME_PREFIX, VirtualTool } from './virtualTool';
 import * as Constant from './virtualToolsConstants';
@@ -39,9 +38,7 @@ function getCategorySummary(category: ToolCategory): string {
 }
 
 export class BuiltInToolGroupHandler {
-	constructor(
-		private readonly _telemetryService: ITelemetryService,
-	) { }
+	constructor() { }
 
 	/** Creates groups for built-in tools based on the type-safe categorization system */
 	createBuiltInToolGroups(tools: LanguageModelToolInformation[]): (VirtualTool | LanguageModelToolInformation)[] {
@@ -87,18 +84,6 @@ export class BuiltInToolGroupHandler {
 
 		// Add any remaining uncategorized tools individually
 		const uncategorizedTools = tools.filter(tool => !usedTools.has(tool.name));
-
-		// Send telemetry for built-in tool grouping
-		this._telemetryService.sendMSFTTelemetryEvent('virtualTools.generate', {
-			groupKey: BUILT_IN_GROUP,
-		}, {
-			uncategorized: uncategorizedTools.length,
-			toolsBefore: tools.length,
-			toolsAfter: virtualTools.length,
-			retries: 0, // No retries for predefined groups
-			durationMs: 0, // Instant for predefined groups
-		});
-
 		return [...virtualTools, ...uncategorizedTools];
 	}
 

@@ -170,6 +170,14 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.Think]: ToolCategory.Core,
 	[ToolName.CoreGetTerminalOutput]: ToolCategory.Core,
 	[ToolName.CoreManageTodoList]: ToolCategory.Core,
+	[ToolName.MultiReplaceString]: ToolCategory.Core,
+	[ToolName.FindFiles]: ToolCategory.Core,
+	[ToolName.CreateDirectory]: ToolCategory.Core,
+	[ToolName.ReadProjectStructure]: ToolCategory.Core,
+
+	// already enabled only when tasks are enabled
+	[ToolName.CoreRunTask]: ToolCategory.Core,
+	[ToolName.CoreGetTaskOutput]: ToolCategory.Core,
 
 	// Jupyter Notebook Tools
 	[ToolName.CreateNewJupyterNotebook]: ToolCategory.JupyterNotebook,
@@ -193,11 +201,10 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.InstallExtension]: ToolCategory.VSCodeInteraction,
 	[ToolName.GetProjectSetupInfo]: ToolCategory.VSCodeInteraction,
 	[ToolName.CoreCreateAndRunTask]: ToolCategory.VSCodeInteraction,
-	[ToolName.CoreRunTask]: ToolCategory.VSCodeInteraction,
-	[ToolName.CoreGetTaskOutput]: ToolCategory.VSCodeInteraction,
 	[ToolName.RunVscodeCmd]: ToolCategory.VSCodeInteraction,
 	[ToolName.SearchViewResults]: ToolCategory.VSCodeInteraction,
-	[ToolName.ReadProjectStructure]: ToolCategory.VSCodeInteraction,
+	[ToolName.CoreTerminalSelection]: ToolCategory.VSCodeInteraction,
+	[ToolName.CoreTerminalLastCommand]: ToolCategory.VSCodeInteraction,
 
 	// Testing
 	[ToolName.RunTests]: ToolCategory.Testing,
@@ -206,13 +213,8 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.CoreRunTest]: ToolCategory.Testing,
 
 	// Redundant but Specific
-	[ToolName.FindFiles]: ToolCategory.RedundantButSpecific,
-	[ToolName.CoreTerminalSelection]: ToolCategory.RedundantButSpecific,
-	[ToolName.CoreTerminalLastCommand]: ToolCategory.RedundantButSpecific,
-	[ToolName.CreateDirectory]: ToolCategory.RedundantButSpecific,
 	[ToolName.DocInfo]: ToolCategory.RedundantButSpecific,
 	[ToolName.EditFilesPlaceholder]: ToolCategory.RedundantButSpecific,
-	[ToolName.MultiReplaceString]: ToolCategory.RedundantButSpecific,
 
 	// Other tools - categorize appropriately
 	[ToolName.UpdateUserPreferences]: ToolCategory.VSCodeInteraction,

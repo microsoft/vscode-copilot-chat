@@ -45,7 +45,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 		@IToolEmbeddingsComputer private readonly _toolEmbeddingsComputer: IToolEmbeddingsComputer,
 		@IInstantiationService _instantiationService: IInstantiationService,
 	) {
-		this.builtInToolGroupHandler = new BuiltInToolGroupHandler(_telemetryService);
+		this.builtInToolGroupHandler = new BuiltInToolGroupHandler();
 	}
 
 	private get virtualToolEmbeddingRankingEnabled() {
