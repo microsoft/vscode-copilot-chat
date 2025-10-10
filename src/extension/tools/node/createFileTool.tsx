@@ -17,6 +17,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { getLanguageForResource } from '../../../util/common/languages';
 import { removeLeadingFilepathComment } from '../../../util/common/markdown';
+import { extname } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
@@ -30,7 +31,6 @@ import { IToolsService } from '../common/toolsService';
 import { ActionType } from './applyPatch/parser';
 import { EditFileResult } from './editFileToolResult';
 import { createEditConfirmation } from './editFileToolUtils';
-import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileNotContentExcluded, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
 
 export interface ICreateFileParams {
@@ -92,6 +92,9 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 		}
 
 		const languageId = doc?.languageId ?? getLanguageForResource(uri).languageId;
+		const fileExtension = extname(uri);
+		const modelId = options.model && (await this.endpointProvider.getChatEndpoint(options.model)).model;
+
 		if (hasSupportedNotebooks) {
 			// Its possible we have a code block with a language id
 			// Also possible we have file paths in the content.
@@ -102,11 +105,12 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 			content = removeLeadingFilepathComment(options.input.content, languageId, options.input.filePath);
 			await processFullRewriteNewNotebook(uri, content, this._promptContext.stream, this.alternativeNotebookEditGenerator, { source: NotebookEditGenrationSource.createFile, requestId: options.chatRequestId, model: options.model ? this.endpointProvider.getChatEndpoint(options.model).then(m => m.model) : undefined }, token);
 			this._promptContext.stream.notebookEdit(uri, true);
-			sendEditNotebookTelemetry(this.telemetryService, this.endpointProvider, 'createFile', uri, this._promptContext.requestId, options.model ?? this._promptContext.request?.model);
+			this.sendTelemetry(options.chatRequestId, modelId, fileExtension);
 		} else {
 			const content = removeLeadingFilepathComment(options.input.content, languageId, options.input.filePath);
 			await processFullRewrite(uri, doc as TextDocumentSnapshot | undefined, content, this._promptContext.stream, token, []);
 			this._promptContext.stream.textEdit(uri, true);
+			this.sendTelemetry(options.chatRequestId, modelId, fileExtension);
 			return new LanguageModelToolResult([
 				new LanguageModelPromptTsxPart(
 					await renderPromptElementJSON(
@@ -160,6 +164,22 @@ export class CreateFileTool implements ICopilotTool<ICreateFileParams> {
 			invocationMessage: new MarkdownString(l10n.t`Creating ${formatUriForFileWidget(uri)}`),
 			pastTenseMessage: new MarkdownString(l10n.t`Created ${formatUriForFileWidget(uri)}`)
 		};
+	}
+
+	private sendTelemetry(requestId: string | undefined, model: string | undefined, fileExtension: string) {
+		/* __GDPR__
+			"createFileToolInvoked" : {
+				"owner": "bhavyaus",
+				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The id of the current request turn." },
+				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model that invoked the tool" },
+				"fileExtension": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The file extension of the created file" }
+			}
+		*/
+		this.telemetryService.sendMSFTTelemetryEvent('createFileToolInvoked', {
+			requestId,
+			model,
+			fileExtension
+		});
 	}
 }
 

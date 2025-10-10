@@ -91,6 +91,7 @@ export interface IModelAPIResponse {
 export type IChatModelInformation = IModelAPIResponse & {
 	capabilities: IChatModelCapabilities;
 	urlOrRequestMetadata?: string | RequestMetadata;
+	requestHeaders?: Readonly<Record<string, string>>;
 };
 
 export function isChatModelInformation(model: IModelAPIResponse): model is IChatModelInformation {
@@ -111,7 +112,7 @@ export function isCompletionModelInformation(model: IModelAPIResponse): model is
 	return model.capabilities.type === 'completion';
 }
 
-export type ChatEndpointFamily = 'gpt-4.1' | 'gpt-4o-mini' | 'copilot-base';
+export type ChatEndpointFamily = 'gpt-4.1' | 'gpt-4o-mini' | 'gpt-5-mini' | 'copilot-base';
 export type EmbeddingsEndpointFamily = 'text3small' | 'metis';
 
 export interface IEndpointProvider {

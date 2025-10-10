@@ -299,6 +299,12 @@ export interface IStatelessNextEditTelemetry {
 	readonly nextEditLogprob: number | undefined;
 	readonly noNextEditReasonKind: string | undefined;
 	readonly noNextEditReasonMessage: string | undefined;
+
+	/* next cursor line info */
+
+	readonly nextCursorLineError: string | undefined;
+	/** nextCursorLineNumber - currentCursorLineNumber */
+	readonly nextCursorLineDistance: number | undefined;
 }
 
 export type FetchResultWithStats = {
@@ -366,6 +372,8 @@ export class StatelessNextEditTelemetryBuilder {
 			response: this._response,
 			nEditsSuggested: this._nEditsSuggested,
 			nextEditLogprob: this._nextEditLogProb,
+			nextCursorLineError: this._nextCursorLineError,
+			nextCursorLineDistance: this._nextCursorLineDistance,
 			lineDistanceToMostRecentEdit: this._lineDistanceToMostRecentEdit,
 		};
 	}
@@ -461,6 +469,21 @@ export class StatelessNextEditTelemetryBuilder {
 	private _lineDistanceToMostRecentEdit: number | undefined;
 	public setLineDistanceToMostRecentEdit(distanceToMostRecentEdit: number): this {
 		this._lineDistanceToMostRecentEdit = distanceToMostRecentEdit;
+		return this;
+	}
+
+	private _nextCursorLineError: string | undefined;
+	public setNextCursorLineError(error: string): this {
+		this._nextCursorLineError = error;
+		return this;
+	}
+
+	private _nextCursorLineDistance: number | undefined;
+	/**
+	 * nextCursorLineNumber - currentCursorLineNumber
+	 */
+	public setNextCursorLineDistance(distance: number): this {
+		this._nextCursorLineDistance = distance;
 		return this;
 	}
 }
