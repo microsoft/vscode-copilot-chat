@@ -5,6 +5,19 @@
 
 import { cloneAndChange } from '../../../util/vs/base/common/objects';
 
+/**
+ * Categories for tool grouping in the virtual tools system
+ */
+export enum ToolCategory {
+	JupyterNotebook = 'Jupyter Notebook Tools',
+	WebInteraction = 'Web Interaction',
+	VSCodeInteraction = 'VS Code Interaction',
+	Testing = 'Testing',
+	RedundantButSpecific = 'Redundant but Specific',
+	// Core tools that should not be grouped
+	Core = 'Core'
+}
+
 export enum ToolName {
 	ApplyPatch = 'apply_patch',
 	Codebase = 'semantic_search',
@@ -136,4 +149,128 @@ export function mapContributedToolNamesInString(str: string): string {
 
 export function mapContributedToolNamesInSchema(inputSchema: object): object {
 	return cloneAndChange(inputSchema, value => typeof value === 'string' ? mapContributedToolNamesInString(value) : undefined);
+}
+
+/**
+ * Type-safe mapping of all ToolName enum values to their categories.
+ * This ensures that every tool is properly categorized and provides compile-time safety.
+ * When new tools are added to ToolName, they must be added here or TypeScript will error.
+ */
+export const toolCategories: Record<ToolName, ToolCategory> = {
+	// Core tools (not grouped - expanded by default)
+	[ToolName.Codebase]: ToolCategory.Core,
+	[ToolName.FindTextInFiles]: ToolCategory.Core,
+	[ToolName.ReadFile]: ToolCategory.Core,
+	[ToolName.CreateFile]: ToolCategory.Core,
+	[ToolName.ApplyPatch]: ToolCategory.Core,
+	[ToolName.ReplaceString]: ToolCategory.Core,
+	[ToolName.EditFile]: ToolCategory.Core,
+	[ToolName.CoreRunInTerminal]: ToolCategory.Core,
+	[ToolName.ListDirectory]: ToolCategory.Core,
+	[ToolName.Think]: ToolCategory.Core,
+	[ToolName.CoreGetTerminalOutput]: ToolCategory.Core,
+	[ToolName.CoreManageTodoList]: ToolCategory.Core,
+
+	// Jupyter Notebook Tools
+	[ToolName.CreateNewJupyterNotebook]: ToolCategory.JupyterNotebook,
+	[ToolName.EditNotebook]: ToolCategory.JupyterNotebook,
+	[ToolName.RunNotebookCell]: ToolCategory.JupyterNotebook,
+	[ToolName.GetNotebookSummary]: ToolCategory.JupyterNotebook,
+	[ToolName.ReadCellOutput]: ToolCategory.JupyterNotebook,
+
+	// Web Interaction
+	[ToolName.FetchWebPage]: ToolCategory.WebInteraction,
+	[ToolName.SimpleBrowser]: ToolCategory.WebInteraction,
+	[ToolName.GithubRepo]: ToolCategory.WebInteraction,
+
+	// VS Code Interaction
+	[ToolName.SearchWorkspaceSymbols]: ToolCategory.VSCodeInteraction,
+	[ToolName.Usages]: ToolCategory.VSCodeInteraction,
+	[ToolName.GetErrors]: ToolCategory.VSCodeInteraction,
+	[ToolName.VSCodeAPI]: ToolCategory.VSCodeInteraction,
+	[ToolName.GetScmChanges]: ToolCategory.VSCodeInteraction,
+	[ToolName.CreateNewWorkspace]: ToolCategory.VSCodeInteraction,
+	[ToolName.InstallExtension]: ToolCategory.VSCodeInteraction,
+	[ToolName.GetProjectSetupInfo]: ToolCategory.VSCodeInteraction,
+	[ToolName.CoreCreateAndRunTask]: ToolCategory.VSCodeInteraction,
+	[ToolName.CoreRunTask]: ToolCategory.VSCodeInteraction,
+	[ToolName.CoreGetTaskOutput]: ToolCategory.VSCodeInteraction,
+	[ToolName.RunVscodeCmd]: ToolCategory.VSCodeInteraction,
+	[ToolName.SearchViewResults]: ToolCategory.VSCodeInteraction,
+	[ToolName.ReadProjectStructure]: ToolCategory.VSCodeInteraction,
+
+	// Testing
+	[ToolName.RunTests]: ToolCategory.Testing,
+	[ToolName.TestFailure]: ToolCategory.Testing,
+	[ToolName.FindTestFiles]: ToolCategory.Testing,
+	[ToolName.CoreRunTest]: ToolCategory.Testing,
+
+	// Redundant but Specific
+	[ToolName.FindFiles]: ToolCategory.RedundantButSpecific,
+	[ToolName.CoreTerminalSelection]: ToolCategory.RedundantButSpecific,
+	[ToolName.CoreTerminalLastCommand]: ToolCategory.RedundantButSpecific,
+	[ToolName.CreateDirectory]: ToolCategory.RedundantButSpecific,
+	[ToolName.DocInfo]: ToolCategory.RedundantButSpecific,
+	[ToolName.EditFilesPlaceholder]: ToolCategory.RedundantButSpecific,
+	[ToolName.MultiReplaceString]: ToolCategory.RedundantButSpecific,
+
+	// Other tools - categorize appropriately
+	[ToolName.UpdateUserPreferences]: ToolCategory.VSCodeInteraction,
+	[ToolName.ToolReplay]: ToolCategory.RedundantButSpecific,
+	[ToolName.ExecutePrompt]: ToolCategory.RedundantButSpecific,
+	[ToolName.CoreConfirmationTool]: ToolCategory.VSCodeInteraction,
+} as const;
+
+/**
+ * External tool categories for tools not in the ToolName enum (e.g., MCP tools).
+ * These tools are categorized by their string names.
+ */
+export const externalToolCategories: Record<string, ToolCategory> = {
+	// Python/Notebook related tools
+	'configure_notebook': ToolCategory.JupyterNotebook,
+	'notebook_install_packages': ToolCategory.JupyterNotebook,
+	'notebook_list_packages': ToolCategory.JupyterNotebook,
+	'configure_python_environment': ToolCategory.JupyterNotebook,
+	'get_python_environment_details': ToolCategory.JupyterNotebook,
+	'get_python_executable_details': ToolCategory.JupyterNotebook,
+	'install_python_packages': ToolCategory.JupyterNotebook,
+
+	// VS Code related tools
+	'vscode_searchExtensions_internal': ToolCategory.VSCodeInteraction,
+} as const;
+
+/**
+ * Get the category for a tool, checking both ToolName enum and external tools.
+ */
+export function getToolCategory(toolName: string): ToolCategory | undefined {
+	// First check if it's a known ToolName enum value
+	for (const [, enumValue] of Object.entries(ToolName)) {
+		if (enumValue === toolName) {
+			return toolCategories[enumValue];
+		}
+	}
+	return externalToolCategories[toolName];
+}
+
+/**
+ * Get all tools for a specific category.
+ */
+export function getToolsForCategory(category: ToolCategory): string[] {
+	const result: string[] = [];
+
+	// Add tools from ToolName enum
+	for (const [toolName, toolCategory] of Object.entries(toolCategories)) {
+		if (toolCategory === category) {
+			result.push(toolName);
+		}
+	}
+
+	// Add external tools
+	for (const [toolName, toolCategory] of Object.entries(externalToolCategories)) {
+		if (toolCategory === category) {
+			result.push(toolName);
+		}
+	}
+
+	return result;
 }

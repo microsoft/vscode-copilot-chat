@@ -5,6 +5,7 @@
 
 import type { LanguageModelToolInformation } from 'vscode';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
+import { ToolCategory, getToolsForCategory } from '../toolNames';
 import { VIRTUAL_TOOL_NAME_PREFIX, VirtualTool } from './virtualTool';
 import * as Constant from './virtualToolsConstants';
 
@@ -12,84 +13,37 @@ const BUILT_IN_GROUP = 'builtin';
 const SUMMARY_PREFIX = 'Call this tool when you need access to a new category of tools. The category of tools is described as follows:\n\n';
 const SUMMARY_SUFFIX = '\n\nBe sure to call this tool if you need a capability related to the above.';
 
-// categorize all tools except for the 12 default tools
-// 12 default tools = semantic_search, grep_search, read_file, create_file, apply_patch, replace_string_in_file,
-// insert_edit_into_file, run_in_terminal, list_dir, think, get_terminal_output, manage_todo_list
-const BUILT_IN_TOOL_GROUPS = {
-	'Jupyter Notebook Tools': {
-		summary: 'Call tools from this group when you need to work with Jupyter notebooks - creating, editing, running cells, and managing notebook operations.',
-		tools: [
-			'create_new_jupyter_notebook',
-			'edit_notebook_file',
-			'run_notebook_cell',
-			'copilot_getNotebookSummary',
-			'read_notebook_cell_output',
-			'configure_notebook',
-			'notebook_install_packages',
-			'notebook_list_packages',
-			'configure_python_environment',
-			'get_python_environment_details',
-			'get_python_executable_details'
-		]
-	},
-	'Web Interaction': {
-		summary: 'Call tools from this group when you need to interact with web content, browse websites, or access external resources.',
-		tools: [
-			'fetch_webpage',
-			'open_simple_browser',
-			'github_repo'
-		]
-	},
-	'VS Code Interaction': {
-		summary: 'Call tools from this group when you need to interact with the VS Code workspace and access VS Code features.',
-		tools: [
-			'search_workspace_symbols',
-			'list_code_usages',
-			'get_errors',
-			'get_vscode_api',
-			'get_changed_files',
-			'create_new_workspace',
-			'install_extension',
-			'get_project_setup_info',
-			'create_and_run_task',
-			'run_task',
-			'get_task_output',
-			'run_vscode_command',
-			'install_python_packages',
-			'get_search_view_results',
-			'vscode_searchExtensions_internal',
-			'read_project_structure'
-		]
-	},
-	'Testing': {
-		summary: 'Call tools from this group when you need to run tests, analyze test failures, and manage test workflows.',
-		tools: [
-			'run_tests',
-			'test_failure',
-			'test_search',
-			'runTests'
-		]
-	},
-	'Redundant but Specific': {
-		summary: 'These tools have overlapping functionalities but are highly specialized for certain tasks. \nTools: file_search, terminal_selection, terminal_last_command, create_directory, get_doc_info, multi_replace_string_in_file, edit_files',
-		tools: [
-			'file_search',
-			'terminal_selection',
-			'terminal_last_command',
-			'create_directory',
-			'get_doc_info',
-			'edit_files',
-			'multi_replace_string_in_file'
-		]
+/**
+ * Get the summary description for a tool category.
+ * For RedundantButSpecific, dynamically includes the list of tool names.
+ */
+function getCategorySummary(category: ToolCategory): string {
+	switch (category) {
+		case ToolCategory.JupyterNotebook:
+			return 'Call tools from this group when you need to work with Jupyter notebooks - creating, editing, running cells, and managing notebook operations.';
+		case ToolCategory.WebInteraction:
+			return 'Call tools from this group when you need to interact with web content, browse websites, or access external resources.';
+		case ToolCategory.VSCodeInteraction:
+			return 'Call tools from this group when you need to interact with the VS Code workspace and access VS Code features.';
+		case ToolCategory.Testing:
+			return 'Call tools from this group when you need to run tests, analyze test failures, and manage test workflows.';
+		case ToolCategory.RedundantButSpecific: {
+			const toolNames = getToolsForCategory(category);
+			return `These tools have overlapping functionalities but are highly specialized for certain tasks. Tools: ${toolNames.join(', ')}`;
+		}
+		case ToolCategory.Core:
+			return 'Core tools that should always be available without grouping.';
+		default:
+			return 'Tools in this category.';
 	}
-} as const;
+}
 
 export class BuiltInToolGroupHandler {
 	constructor(
 		private readonly _telemetryService: ITelemetryService,
 	) { }
 
-	/** Creates groups for built-in tools based on the pre-defined enum above*/
+	/** Creates groups for built-in tools based on the type-safe categorization system */
 	createBuiltInToolGroups(tools: LanguageModelToolInformation[]): (VirtualTool | LanguageModelToolInformation)[] {
 		// If there are too few tools, don't group them
 		if (tools.length <= Constant.MIN_TOOLSET_SIZE_TO_GROUP) {
@@ -97,13 +51,18 @@ export class BuiltInToolGroupHandler {
 		}
 
 		const toolMap = new Map(tools.map(tool => [tool.name, tool]));
-
 		const virtualTools: VirtualTool[] = [];
 		const usedTools = new Set<string>();
 
-		// Create virtual tools for each predefined group
-		for (const [groupName, groupDef] of Object.entries(BUILT_IN_TOOL_GROUPS)) {
-			const groupTools = groupDef.tools
+		// Process each tool category (except Core which should not be grouped)
+		for (const category of Object.values(ToolCategory)) {
+			if (category === ToolCategory.Core) {
+				continue; // Core tools are not grouped
+			}
+
+			// Get all tools for this category using the type-safe mapping
+			const categoryToolNames = getToolsForCategory(category);
+			const groupTools = categoryToolNames
 				.map(toolName => toolMap.get(toolName))
 				.filter((tool): tool is LanguageModelToolInformation => tool !== undefined);
 
@@ -112,8 +71,8 @@ export class BuiltInToolGroupHandler {
 				groupTools.forEach(tool => usedTools.add(tool.name));
 
 				const virtualTool = new VirtualTool(
-					VIRTUAL_TOOL_NAME_PREFIX + groupName.toLowerCase().replace(/\s+/g, '_'),
-					SUMMARY_PREFIX + groupDef.summary + SUMMARY_SUFFIX,
+					VIRTUAL_TOOL_NAME_PREFIX + category.toLowerCase().replace(/\s+/g, '_'),
+					SUMMARY_PREFIX + getCategorySummary(category) + SUMMARY_SUFFIX,
 					0,
 					{
 						toolsetKey: BUILT_IN_GROUP,
