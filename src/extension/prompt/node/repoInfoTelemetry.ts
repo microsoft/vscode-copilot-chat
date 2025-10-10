@@ -10,6 +10,7 @@ import { IGitExtensionService } from '../../../platform/git/common/gitExtensionS
 import { getOrderedRepoInfosFromContext, IGitService, normalizeFetchUrl } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { IWorkspaceFileIndex } from '../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
 
 // Max telemetry payload size is 1MB, we add shared properties in further code and JSON structure overhead to that
 // so check our diff JSON size against 900KB to be conservative with space
@@ -29,6 +30,16 @@ type RepoInfoTelemetryProperties = {
 	result: RepoInfoTelemetryResult;
 };
 
+type RepoInfoTelemetryMeasurements = {
+	workspaceFileCount: number;
+	changedFileCount: number;
+};
+
+type RepoInfoTelemetryData = {
+	properties: RepoInfoTelemetryProperties;
+	measurements: RepoInfoTelemetryMeasurements;
+};
+
 type RepoInfoInternalTelemetryProperties = RepoInfoTelemetryProperties & {
 	location: 'begin' | 'end';
 	telemetryMessageId: string;
@@ -44,7 +55,7 @@ function shouldSendEndTelemetry(result: RepoInfoTelemetryResult | undefined): bo
 */
 export class RepoInfoTelemetry {
 	private _beginTelemetrySent = false;
-	private _beginTelemetryPromise: Promise<RepoInfoTelemetryProperties | undefined> | undefined;
+	private _beginTelemetryPromise: Promise<RepoInfoTelemetryData | undefined> | undefined;
 	private _beginTelemetryResult: RepoInfoTelemetryResult | undefined;
 
 	constructor(
@@ -56,6 +67,7 @@ export class RepoInfoTelemetry {
 		@ICopilotTokenStore private readonly _copilotTokenStore: ICopilotTokenStore,
 		@ILogService private readonly _logService: ILogService,
 		@IFileSystemService private readonly _fileSystemService: IFileSystemService,
+		@IWorkspaceFileIndex private readonly _workspaceFileIndex: IWorkspaceFileIndex,
 	) { }
 
 	/*
@@ -73,7 +85,7 @@ export class RepoInfoTelemetry {
 			this._beginTelemetrySent = true;
 			this._beginTelemetryPromise = this._sendRepoInfoTelemetry('begin');
 			const gitInfo = await this._beginTelemetryPromise;
-			this._beginTelemetryResult = gitInfo?.result;
+			this._beginTelemetryResult = gitInfo?.properties.result;
 		} catch (error) {
 			this._logService.warn(`Failed to send begin repo info telemetry ${error}`);
 		}
@@ -97,28 +109,28 @@ export class RepoInfoTelemetry {
 		}
 	}
 
-	private async _sendRepoInfoTelemetry(location: 'begin' | 'end'): Promise<RepoInfoTelemetryProperties | undefined> {
+	private async _sendRepoInfoTelemetry(location: 'begin' | 'end'): Promise<RepoInfoTelemetryData | undefined> {
 		if (this._copilotTokenStore.copilotToken?.isInternal !== true) {
 			return undefined;
 		}
 
-		const gitInfo = await this._getRepoInfoTelemetry();
-		if (!gitInfo) {
+		const repoInfo = await this._getRepoInfoTelemetry();
+		if (!repoInfo) {
 			return undefined;
 		}
 
 		const properties: RepoInfoInternalTelemetryProperties = {
-			...gitInfo,
+			...repoInfo.properties,
 			location,
 			telemetryMessageId: this._telemetryMessageId
 		};
 
-		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', properties);
+		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', properties, repoInfo.measurements);
 
-		return gitInfo;
+		return repoInfo;
 	}
 
-	private async _getRepoInfoTelemetry(): Promise<RepoInfoTelemetryProperties | undefined> {
+	private async _getRepoInfoTelemetry(): Promise<RepoInfoTelemetryData | undefined> {
 		const repoContext = this._gitService.activeRepository.get();
 
 		if (!repoContext) {
@@ -140,6 +152,7 @@ export class RepoInfoTelemetry {
 			return;
 		}
 
+
 		// Before we calculate our async diffs, sign up for file system change events
 		// Any changes during the async operations will invalidate our diff data and we send it
 		// as a failure without a diffs
@@ -150,25 +163,45 @@ export class RepoInfoTelemetry {
 		const deleteDisposable = watcher.onDidDelete(() => filesChanged = true);
 
 		try {
+			// Workspace file index will be used to get a rough count of files in the repository
+			await this._workspaceFileIndex.initialize(); // This should be initialized already, but make sure, it won't initialize again
+
 			const baseProperties: Omit<RepoInfoTelemetryProperties, 'diffsJSON' | 'result'> = {
 				remoteUrl: normalizedFetchUrl,
 				repoType: repoInfo.repoId.type,
 				headCommitHash: upstreamCommit,
 			};
 
+			const measurements: RepoInfoTelemetryMeasurements = {
+				workspaceFileCount: this._workspaceFileIndex.fileCount,
+				changedFileCount: 0, // Will be updated after diff
+			};
+
 			const changes = await this._gitService.diffWith(repoContext.rootUri, '@{upstream}');
 			if (!changes || changes.length === 0) {
-				return { ...baseProperties, diffsJSON: undefined, result: 'noChanges' };
+				return {
+					properties: { ...baseProperties, diffsJSON: undefined, result: 'noChanges' },
+					measurements
+				};
 			}
+
+			// Update changed file count
+			measurements.changedFileCount = changes.length;
 
 			// Check if there are too many changes (e.g., mass renames)
 			if (changes.length > MAX_CHANGES) {
-				return { ...baseProperties, diffsJSON: undefined, result: 'tooManyChanges' };
+				return {
+					properties: { ...baseProperties, diffsJSON: undefined, result: 'tooManyChanges' },
+					measurements
+				};
 			}
 
 			// Check if files changed during the git diff operation
 			if (filesChanged) {
-				return { ...baseProperties, diffsJSON: undefined, result: 'filesChanged' };
+				return {
+					properties: { ...baseProperties, diffsJSON: undefined, result: 'filesChanged' },
+					measurements
+				};
 			}
 
 			const diffs = (await this._gitDiffService.getChangeDiffs(repoContext.rootUri, changes)).map(diff => {
@@ -183,17 +216,26 @@ export class RepoInfoTelemetry {
 
 			// Check if files changed during the individual file diffs
 			if (filesChanged) {
-				return { ...baseProperties, diffsJSON: undefined, result: 'filesChanged' };
+				return {
+					properties: { ...baseProperties, diffsJSON: undefined, result: 'filesChanged' },
+					measurements
+				};
 			}
 
 			const diffsJSON = diffs.length > 0 ? JSON.stringify(diffs) : undefined;
 
 			// Check against our size limit to make sure our telemetry fits in the 1MB limit
 			if (diffsJSON && Buffer.byteLength(diffsJSON, 'utf8') > MAX_DIFFS_JSON_SIZE) {
-				return { ...baseProperties, diffsJSON: undefined, result: 'diffTooLarge' };
+				return {
+					properties: { ...baseProperties, diffsJSON: undefined, result: 'diffTooLarge' },
+					measurements
+				};
 			}
 
-			return { ...baseProperties, diffsJSON, result: 'success' };
+			return {
+				properties: { ...baseProperties, diffsJSON, result: 'success' },
+				measurements
+			};
 		} finally {
 			createDisposable.dispose();
 			changeDisposable.dispose();
