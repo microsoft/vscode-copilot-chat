@@ -16,7 +16,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 	async provideChatSessionContent(copilotcliSessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
 		const existingSession = copilotcliSessionId && await this.sessionService.getSession(copilotcliSessionId, token);
 		const sdkSession = existingSession ? existingSession.sdkSession : undefined;
-		const chatMessages = await sdkSession?.getChatMessages() ?? [];
+		const chatMessages = sdkSession?.chatMessages || [];
 		const events = parseChatMessagesToEvents(chatMessages);
 
 		const history = existingSession ? buildChatHistoryFromEvents(events) : [];

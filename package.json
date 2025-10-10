@@ -1793,13 +1793,13 @@
 			},
 			{
 				"command": "github.copilot.cli.sessions.resumeInTerminal",
-				"title": "Resume Copilot CLI Session in Terminal",
+				"title": "Resume Session in Terminal",
 				"icon": "$(terminal)",
 				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.cli.sessions.newTerminalSession",
-				"title": "New Copilot CLI Terminal Session",
+				"title": "New Session in Terminal",
 				"icon": "$(terminal)",
 				"category": "Copilot CLI"
 			},
@@ -3450,14 +3450,9 @@
 					"group": "navigation@1"
 				},
 				{
-					"command": "github.copilot.cli.sessions.newTerminalSession",
-					"when": "view == workbench.view.chat.sessions.copilotcli",
-					"group": "navigation@1"
-				},
-				{
 					"command": "github.copilot.cli.sessions.refresh",
 					"when": "view == workbench.view.chat.sessions.copilotcli",
-					"group": "navigation@2"
+					"group": "navigation@1"
 				},
 				{
 					"submenu": "github.copilot.chat.debug.filter",
@@ -3755,6 +3750,11 @@
 					"command": "github.copilot.cli.sessions.delete",
 					"when": "chatSessionType == copilotcli",
 					"group": "inline@2"
+				},
+				{
+					"command": "github.copilot.cli.sessions.newTerminalSession",
+					"when": "view == workbench.view.chat.sessions.copilotcli",
+					"group": "submenu"
 				}
 			]
 		},
@@ -4314,7 +4314,7 @@
 	"dependencies": {
 		"@anthropic-ai/claude-code": "^1.0.120",
 		"@anthropic-ai/sdk": "^0.63.0",
-		"@github/copilot": "^0.0.336",
+		"@github/copilot": "^0.0.338",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@vscode/copilot-api": "^0.1.10",

@@ -3,11 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { CopilotCLISessionManager, Session } from '@github/copilot/sdk';
+import type { Session, SessionManager } from '@github/copilot/sdk';
 import type { CancellationToken } from 'vscode';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
-import { DisposableMap } from '../../../../util/vs/base/common/lifecycle';
+import { DisposableMap, IDisposable } from '../../../../util/vs/base/common/lifecycle';
 
 export interface ICopilotCLISession {
 	readonly id: string;
@@ -24,13 +24,13 @@ export interface ICopilotCLISessionService {
 	getSession(sessionId: string, token: CancellationToken): Promise<ICopilotCLISession | undefined>;
 
 	// SDK session management
-	getSessionManager(): Promise<CopilotCLISessionManager>;
+	getSessionManager(): Promise<SessionManager>;
 	getOrCreateSDKSession(sessionId: string | undefined, prompt: string): Promise<Session>;
 	deleteSession(sessionId: string): Promise<boolean>;
 
 	// Session wrapper tracking
-	trackSessionWrapper<T>(sessionId: string, wrapper: T): void;
-	findSessionWrapper<T>(sessionId: string): T | undefined;
+	trackSessionWrapper<T extends IDisposable>(sessionId: string, wrapper: T): void;
+	findSessionWrapper<T extends IDisposable>(sessionId: string): T | undefined;
 }
 
 export const ICopilotCLISessionService = createServiceIdentifier<ICopilotCLISessionService>('ICopilotCLISessionService');
@@ -38,19 +38,19 @@ export const ICopilotCLISessionService = createServiceIdentifier<ICopilotCLISess
 export class CopilotCLISessionService implements ICopilotCLISessionService {
 	declare _serviceBrand: undefined;
 
-	private _sessionManager: CopilotCLISessionManager | undefined;
-	private _sessionWrappers = new DisposableMap<string, any>();
+	private _sessionManager: SessionManager | undefined;
+	private _sessionWrappers = new DisposableMap<string, IDisposable>();
 	private _sessions = new Map<string, ICopilotCLISession>();
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
 	) { }
 
-	public async getSessionManager(): Promise<CopilotCLISessionManager> {
+	public async getSessionManager(): Promise<SessionManager> {
 		if (!this._sessionManager) {
 			try {
-				const { CopilotCLISessionManager } = await import('@github/copilot/sdk');
-				this._sessionManager = new CopilotCLISessionManager({
+				const { SessionManager } = await import('@github/copilot/sdk');
+				this._sessionManager = new SessionManager({
 					logger: {
 						isDebug: () => false,
 						debug: (msg: string) => this.logService.debug(msg),
@@ -64,7 +64,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 					}
 				});
 			} catch (error) {
-				this.logService.error(`Failed to initialize CopilotCLISessionManager: ${error}`);
+				this.logService.error(`Failed to initialize SessionManager: ${error}`);
 				throw error;
 			}
 		}
@@ -81,16 +81,20 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 				sessionMetadataList.map(async (metadata) => {
 					try {
 						// Get the full session to access chat messages
-						const sdkSession = await sessionManager.getSession(metadata.id);
+						const sdkSession = await sessionManager.getSession(metadata.sessionId);
+						if (!sdkSession) {
+							throw new Error(`Session ${metadata.sessionId} not found`);
+						}
+
 						const label = await this._generateSessionLabel(sdkSession, undefined);
 						return {
-							id: metadata.id,
+							id: metadata.sessionId,
 							sdkSession,
 							label,
 							timestamp: metadata.startTime
 						};
 					} catch (error) {
-						this.logService.warn(`Failed to load session ${metadata.id}: ${error}`);
+						this.logService.warn(`Failed to load session ${metadata.sessionId}: ${error}`);
 						throw error;
 					}
 				})
@@ -125,7 +129,10 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 		if (sessionId) {
 			try {
 				const sdkSession = await sessionManager.getSession(sessionId);
-				return sdkSession;
+
+				if (sdkSession) {
+					return sdkSession;
+				}
 			} catch (error) {
 				// Fall through to create new session
 			}
@@ -136,21 +143,21 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 		// Cache the new session immediately
 		const label = await this._generateSessionLabel(sdkSession, prompt);
 		const newSession: ICopilotCLISession = {
-			id: sdkSession.id,
+			id: sdkSession.sessionId,
 			sdkSession,
 			label,
 			timestamp: new Date()
 		};
-		this._sessions.set(sdkSession.id, newSession);
+		this._sessions.set(sdkSession.sessionId, newSession);
 
 		return sdkSession;
 	}
 
-	public trackSessionWrapper<T>(sessionId: string, wrapper: T): void {
+	public trackSessionWrapper<T extends IDisposable>(sessionId: string, wrapper: T): void {
 		this._sessionWrappers.set(sessionId, wrapper);
 	}
 
-	public findSessionWrapper<T>(sessionId: string): T | undefined {
+	public findSessionWrapper<T extends IDisposable>(sessionId: string): T | undefined {
 		return this._sessionWrappers.get(sessionId) as T | undefined;
 	}
 
@@ -176,7 +183,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 
 	private async _generateSessionLabel(sdkSession: Session, prompt: string | undefined): Promise<string> {
 		try {
-			const chatMessages = await sdkSession.getChatMessages();
+			const chatMessages = sdkSession.chatMessages;
 
 			// Find the first user message
 			const firstUserMessage = chatMessages.find(msg => msg.role === 'user');
@@ -199,10 +206,10 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 				return prompt.trim().length > 50 ? prompt.trim().substring(0, 47) + '...' : prompt.trim();
 			}
 		} catch (error) {
-			this.logService.warn(`Failed to generate session label for ${sdkSession.id}: ${error}`);
+			this.logService.warn(`Failed to generate session label for ${sdkSession.sessionId}: ${error}`);
 		}
 
 		// Fallback to session ID
-		return `Session ${sdkSession.id.slice(0, 8)}`;
+		return `Session ${sdkSession.sessionId.slice(0, 8)}`;
 	}
 }

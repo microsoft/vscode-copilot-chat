@@ -5,12 +5,17 @@
 
 import type { AgentOptions, SDKEvent, Session } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
+import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { LanguageModelTextPart } from '../../../../vscodeTypes';
+import { ToolName } from '../../../tools/common/toolNames';
+import { IToolsService } from '../../../tools/common/toolsService';
 import { ICopilotCLISessionService } from './copilotcliSessionService';
-import { createCopilotCLIToolInvocation } from './copilotcliToolInvocationFormatter';
+import { createCopilotCLIToolInvocation, PermissionRequest } from './copilotcliToolInvocationFormatter';
 
 export class CopilotCLIAgentManager extends Disposable {
 	constructor(
@@ -46,7 +51,7 @@ export class CopilotCLIAgentManager extends Disposable {
 		} else {
 			const sdkSession = await this.sessionService.getOrCreateSDKSession(copilotcliSessionId, request.prompt);
 			session = this.instantiationService.createInstance(CopilotCLISession, sdkSession);
-			this.sessionService.trackSessionWrapper(sdkSession.id, session);
+			this.sessionService.trackSessionWrapper(sdkSession.sessionId, session);
 		}
 
 		await session.invoke(request.prompt, request.toolInvocationToken, stream, token);
@@ -63,10 +68,12 @@ export class CopilotCLISession extends Disposable {
 	constructor(
 		private readonly _sdkSession: Session,
 		@ILogService private readonly logService: ILogService,
-		@IWorkspaceService private readonly workspaceService: IWorkspaceService
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@IToolsService private readonly toolsService: IToolsService,
 	) {
 		super();
-		this.sessionId = _sdkSession.id;
+		this.sessionId = _sdkSession.sessionId;
 	}
 
 	public override dispose(): void {
@@ -92,6 +99,7 @@ export class CopilotCLISession extends Disposable {
 		}
 
 		this.logService.trace(`[CopilotCLISession] Invoking session ${this.sessionId}`);
+		const copilotToken = await this._authenticationService.getCopilotToken();
 
 		const options: AgentOptions = {
 			modelProvider: {
@@ -99,17 +107,15 @@ export class CopilotCLISession extends Disposable {
 				model: 'claude-sonnet-4',
 			},
 			abortController: this._abortController,
+			// TODO@rebornix handle workspace properly
 			workingDirectory: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
-			integrationId: 'vscode-chat-dev',
-			hmacKey: process.env.HMAC_SECRET,
+			copilotToken: copilotToken.token,
 			env: {
 				...process.env,
 				COPILOTCLI_DISABLE_NONESSENTIAL_TRAFFIC: '1'
 			},
-			requestPermission: async (_permissionRequest) => {
-				return {
-					kind: 'approved'
-				};
+			requestPermission: async (permissionRequest) => {
+				return await this.requestPermission(permissionRequest, toolInvocationToken);
 			},
 			logger: {
 				isDebug: () => false,
@@ -204,5 +210,43 @@ export class CopilotCLISession extends Disposable {
 				stream.markdown(`\n\n❌ Error: ${event.error.message}`);
 				break;
 		}
+	}
+
+	private async requestPermission(
+		permissionRequest: PermissionRequest,
+		toolInvocationToken: vscode.ChatParticipantToolToken
+	): Promise<{ kind: 'approved' } | { kind: 'denied-interactively-by-user' }> {
+		try {
+			const result = await this.toolsService.invokeTool(ToolName.CoreConfirmationTool, {
+				input: this.getConfirmationToolParams(permissionRequest),
+				toolInvocationToken,
+			}, CancellationToken.None);
+
+			const firstResultPart = result.content.at(0);
+			if (firstResultPart instanceof LanguageModelTextPart && firstResultPart.value === 'yes') {
+				return { kind: 'approved' };
+			}
+		} catch (error) {
+			this.logService.error(`[CopilotCLISession] Permission request error: ${error}`);
+		}
+
+		return { kind: 'denied-interactively-by-user' };
+	}
+
+	private getConfirmationToolParams(permissionRequest: Record<string, unknown>) {
+		if (permissionRequest.kind === 'shell') {
+			return {
+				title: permissionRequest.intention || 'Copilot CLI Permission Request',
+				message: permissionRequest.fullCommandText || `\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
+				confirmationType: 'terminal',
+				terminalCommand: permissionRequest.fullCommandText as string | undefined
+
+			};
+		}
+		return {
+			title: 'Copilot CLI Permission Request',
+			message: `\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
+			confirmationType: 'basic'
+		};
 	}
 }
