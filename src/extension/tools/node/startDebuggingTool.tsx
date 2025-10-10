@@ -113,9 +113,9 @@ class StartDebuggingTool implements ICopilotTool<IStartDebuggingToolParams> {
 		}
 
 		if (this._promptContext?.stream) {
-			this._promptContext.stream.markdown(l10n.t('Review the below proposed debug configuration then choose an action:'));
+			this._promptContext.stream.markdown(l10n.t('Review the below proposed debug configuration then choose an action:\n'));
 			if (synthesizedJson) {
-				this._promptContext.stream.markdown(synthesizedJson);
+				this._promptContext.stream.markdown(synthesizedJson + '\n');
 			}
 			if (parsedConfig) {
 				this._promptContext.stream.button({
@@ -132,7 +132,7 @@ class StartDebuggingTool implements ICopilotTool<IStartDebuggingToolParams> {
 			return new LanguageModelToolResult([]);
 		}
 
-		return new LanguageModelToolResult([new LanguageModelTextPart(augmented)]);
+		return new LanguageModelToolResult([new LanguageModelTextPart('The following debug config has been offered to the user: ' + augmented)]);
 	}
 
 	async resolveInput(input: IStartDebuggingToolParams, promptContext: IBuildPromptContext, _mode: CopilotToolMode): Promise<IStartDebuggingToolParams> {
