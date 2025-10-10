@@ -15,12 +15,15 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 // so check our diff JSON size against 900KB to be conservative with space
 const MAX_DIFFS_JSON_SIZE = 900 * 1024;
 
+// Max changes to avoid degenerate cases like mass renames
+const MAX_CHANGES = 100;
+
 // EVENT: repoInfo
 type RepoInfoTelemetryProperties = {
 	remoteUrl: string | undefined;
 	headCommitHash: string | undefined;
 	diffsJSON: string | undefined;
-	result: 'success' | 'filesChanged' | 'diffTooLarge' | 'noChanges';
+	result: 'success' | 'filesChanged' | 'diffTooLarge' | 'noChanges' | 'tooManyChanges';
 };
 
 type RepoInfoInternalTelemetryProperties = RepoInfoTelemetryProperties & {
@@ -95,6 +98,9 @@ export class RepoInfoTelemetry {
 		};
 
 		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', properties);
+
+		// IANHU: Just for debugging
+		console.log('RepoInfo', properties);
 	}
 
 	private async _getRepoInfoTelemetry(): Promise<RepoInfoTelemetryProperties | undefined> {
@@ -137,6 +143,16 @@ export class RepoInfoTelemetry {
 				};
 			}
 
+			// Check if there are too many changes (e.g., mass renames)
+			if (changes.length > MAX_CHANGES) {
+				return {
+					remoteUrl: githubInfo.remoteUrl,
+					headCommitHash: upstreamCommit,
+					diffsJSON: undefined,
+					result: 'tooManyChanges',
+				};
+			}
+
 			// Check if files changed during the git diff operation
 			if (filesChanged) {
 				return {
@@ -176,16 +192,6 @@ export class RepoInfoTelemetry {
 					headCommitHash: upstreamCommit,
 					diffsJSON: undefined,
 					result: 'diffTooLarge',
-				};
-			}
-
-			// Check if files changed before we send the telemetry
-			if (filesChanged) {
-				return {
-					remoteUrl: githubInfo.remoteUrl,
-					headCommitHash: upstreamCommit,
-					diffsJSON: undefined,
-					result: 'filesChanged',
 				};
 			}
 

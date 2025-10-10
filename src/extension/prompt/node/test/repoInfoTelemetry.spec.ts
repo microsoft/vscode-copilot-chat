@@ -559,6 +559,43 @@ suite('RepoInfoTelemetry', () => {
 	// Diff Too Big Tests
 	// ========================================
 
+	test('should detect when there are too many changes', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+
+		// Create 101 changes (exceeds MAX_CHANGES of 100)
+		const manyChanges = Array.from({ length: 101 }, (_, i) => ({
+			uri: URI.file(`/test/repo/file${i}.ts`),
+			originalUri: URI.file(`/test/repo/file${i}.ts`),
+			renameUri: undefined,
+			status: Status.MODIFIED
+		}));
+
+		vi.spyOn(gitService, 'diffWith').mockResolvedValue(manyChanges as any);
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			copilotTokenStore,
+			logService,
+			fileSystemService
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: tooManyChanges result
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'tooManyChanges');
+		assert.strictEqual(call[1].diffsJSON, undefined);
+		assert.strictEqual(call[1].remoteUrl, 'https://github.com/microsoft/vscode.git');
+		assert.strictEqual(call[1].headCommitHash, 'abc123');
+	});
+
 	test('should detect when diff is too large', async () => {
 		setupInternalUser();
 		mockGitServiceWithRepository();
