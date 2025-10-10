@@ -744,6 +744,54 @@
 				}
 			},
 			{
+				"name": "copilot_startDebugging",
+				"toolReferenceName": "startDebugging",
+				"displayName": "Generate Debug Configuration",
+				"modelDescription": "Create or locate a Visual Studio Code debug configuration (launch.json, and tasks.json if needed) based on either a natural language query or a concrete command line invocation. Use this tool when the user wants to start debugging but lacks (or wants to refine) a launch configuration. Behavior guidelines: 1) If the command requires a build step include a preLaunchTask and emit a tasks.json entry. 2) If paths or values are ambiguous, add an inputs section with promptString or pickString (no defaults). 3) Always output valid JSON for launch.json (and tasks.json if present). 4) Prefer platform-appropriate debug types (e.g. debugpy for Python, node for Node.js). 5) Never fabricate files—only reference those likely or described by the user. 6) If an existing configuration matches the query, return just that configuration. 7) Keep auxiliary prose minimal.",
+				"canBeReferencedInPrompt": true,
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"query": {
+							"type": "string",
+							"description": "Natural language description of what to debug (language, framework, target, special args)."
+						},
+						"commandLine": {
+							"type": "object",
+							"description": "Explicit command the user runs to execute the program they want to debug.",
+							"properties": {
+								"args": {
+									"type": "array",
+									"items": {
+										"type": "string"
+									},
+									"description": "Command and its arguments split into an array. First element is the executable or tool (e.g. node, python, cargo)."
+								},
+								"cwd": {
+									"type": "string",
+									"description": "Absolute working directory where the command was run."
+								}
+							},
+							"required": [
+								"args"
+							]
+						}
+					},
+					"oneOf": [
+						{
+							"required": [
+								"query"
+							]
+						},
+						{
+							"required": [
+								"commandLine"
+							]
+						}
+					]
+				}
+			},
+			{
 				"name": "copilot_replaceString",
 				"toolReferenceName": "replaceString",
 				"displayName": "%copilot.tools.replaceString.name%",
@@ -1598,12 +1646,6 @@
 						"name": "search",
 						"description": "%copilot.vscode.search.description%",
 						"sampleRequest": "%copilot.vscode.search.sampleRequest%"
-					},
-					{
-						"name": "startDebugging",
-						"description": "%copilot.vscode.startDebugging.description%",
-						"sampleRequest": "%copilot.vscode.startDebugging.sampleRequest%",
-						"when": "config.github.copilot.chat.startDebugging.enabled"
 					}
 				]
 			},
@@ -2054,15 +2096,6 @@
 				"category": "Developer"
 			},
 			{
-				"command": "github.copilot.debug.generateConfiguration",
-				"title": "%github.copilot.command.generateConfiguration%",
-				"category": "Chat",
-				"enablement": "config.github.copilot.chat.startDebugging.enabled",
-				"tags": [
-					"experimental"
-				]
-			},
-			{
 				"command": "github.copilot.open.walkthrough",
 				"title": "%github.copilot.command.openWalkthrough%",
 				"category": "Chat"
@@ -2344,14 +2377,6 @@
 				"title": "Preview",
 				"id": "preview",
 				"properties": {
-					"github.copilot.chat.startDebugging.enabled": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.startDebugging.enabled%",
-						"tags": [
-							"preview"
-						]
-					},
 					"github.copilot.chat.reviewAgent.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -3144,7 +3169,10 @@
 						]
 					},
 					"github.copilot.chat.completionsFetcher": {
-						"type": ["string", "null"],
+						"type": [
+							"string",
+							"null"
+						],
 						"markdownDescription": "%github.copilot.config.completionsFetcher%",
 						"tags": [
 							"experimental",
@@ -3156,7 +3184,10 @@
 						]
 					},
 					"github.copilot.chat.nesFetcher": {
-						"type": ["string", "null"],
+						"type": [
+							"string",
+							"null"
+						],
 						"markdownDescription": "%github.copilot.config.nesFetcher%",
 						"tags": [
 							"experimental",
@@ -3668,13 +3699,6 @@
 					"command": "github.copilot.tests.fixTestFailure",
 					"when": "testing.testItemHasUri",
 					"group": "inline@1"
-				}
-			],
-			"debug/createConfiguration": [
-				{
-					"command": "github.copilot.debug.generateConfiguration",
-					"group": "z_commands",
-					"when": "config.github.copilot.chat.startDebugging.enabled"
 				}
 			],
 			"issue/reporter": [
