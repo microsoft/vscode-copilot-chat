@@ -39,8 +39,8 @@ const baseNodeBuildOptions = {
 		'zeromq',
 		'electron', // this is for simulation workbench,
 		'sqlite3',
-		'node-pty', // for @github/copilot package
-		'@github/copilot', // exclude to avoid bundling test private keys
+		'node-pty',
+		'@github/copilot',
 		...(isDev ? [] : ['dotenv', 'source-map-support'])
 	],
 	platform: 'node',
