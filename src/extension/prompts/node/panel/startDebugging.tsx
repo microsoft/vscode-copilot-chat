@@ -416,10 +416,10 @@ export class StartDebuggingPrompt extends PromptElement<StartDebuggingPromptProp
 					{this.props.input.type === StartDebuggingType.UserQuery && state.resources?.some(r => r.path.endsWith('launch.json')) && (
 						<>
 							{this.props.input.userQuery
-								? <>Search in that provided launch.json file for an existing configuration based on the query "{this.props.input.userQuery}". Pay particular attention to the name of the launch configuration and compare it to the query. If a match is found, include that configuration. Do not include the whole launch.json context. End the response with HAS_MATCH.<br /></>
-								: <>Scan any provided documentation to determine which configuration in the provided launch.json file is recommended, if any. Show some, not all, of the launch configurations that are available. End the response with HAS_CONFIG_NO_QUERY.<br /></>
+								? <>Search in the provided launch.json file for an existing configuration that matches the query "{this.props.input.userQuery}" (compare the configuration name to the query). If a match is found, return only that configuration (do not dump the entire file).<br /></>
+								: <>Scan any provided documentation and the launch.json file to recommend one or a few existing configurations. Show only relevant configurations, not all of them.<br /></>
 							}
-							If no match is found, include the new configuration that was generated. End the response with GENERATED_CONFIG.<br />
+							If no suitable configuration exists, generate a new one and return only the new configuration (plus tasks.json if needed). Do not append marker tokens.<br />
 						</>
 					)}
 				</UserMessage>

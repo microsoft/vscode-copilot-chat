@@ -54,7 +54,8 @@ export enum ToolName {
 	ToolReplay = 'tool_replay',
 	EditFilesPlaceholder = 'edit_files',
 	ExecutePrompt = 'execute_prompt',
-	CoreConfirmationTool = 'vscode_get_confirmation'
+	CoreConfirmationTool = 'vscode_get_confirmation',
+	StartDebugging = 'start_debugging'
 }
 
 export enum ContributedToolName {
@@ -99,6 +100,7 @@ export enum ContributedToolName {
 	ToolReplay = 'copilot_toolReplay',
 	EditFilesPlaceholder = 'copilot_editFiles',
 	ExecutePrompt = 'execute_prompt',
+	StartDebugging = 'copilot_startDebugging',
 }
 
 export const byokEditToolNamesToToolNames = {
