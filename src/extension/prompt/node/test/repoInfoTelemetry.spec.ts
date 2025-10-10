@@ -227,6 +227,103 @@ suite('RepoInfoTelemetry', () => {
 		assert.strictEqual(beginCall[1].telemetryMessageId, endCall[1].telemetryMessageId);
 	});
 
+	test('should send end telemetry when begin has success result', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+		mockGitDiffService([{ uri: '/test/repo/file.ts', diff: 'some diff' }]);
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			copilotTokenStore,
+			logService,
+			fileSystemService
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+		await repoTelemetry.sendEndTelemetry();
+
+		// Assert: both begin and end telemetry sent
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 2);
+		const beginCall = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		const endCall = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[1];
+		assert.strictEqual(beginCall[1].location, 'begin');
+		assert.strictEqual(beginCall[1].result, 'success');
+		assert.strictEqual(endCall[1].location, 'end');
+		assert.strictEqual(endCall[1].result, 'success');
+	});
+
+	test('should send end telemetry when begin has noChanges result', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+
+		// Mock: no changes from upstream
+		vi.spyOn(gitService, 'diffWith').mockResolvedValue([]);
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			copilotTokenStore,
+			logService,
+			fileSystemService
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+		await repoTelemetry.sendEndTelemetry();
+
+		// Assert: both begin and end telemetry sent
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 2);
+		const beginCall = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		const endCall = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[1];
+		assert.strictEqual(beginCall[1].location, 'begin');
+		assert.strictEqual(beginCall[1].result, 'noChanges');
+		assert.strictEqual(endCall[1].location, 'end');
+		assert.strictEqual(endCall[1].result, 'noChanges');
+	});
+
+	test('should skip end telemetry when begin has failure result', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+
+		// Mock: too many changes (failure result)
+		const manyChanges = Array.from({ length: 101 }, (_, i) => ({
+			uri: URI.file(`/test/repo/file${i}.ts`),
+			originalUri: URI.file(`/test/repo/file${i}.ts`),
+			renameUri: undefined,
+			status: Status.MODIFIED
+		}));
+		vi.spyOn(gitService, 'diffWith').mockResolvedValue(manyChanges as any);
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			copilotTokenStore,
+			logService,
+			fileSystemService
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+		await repoTelemetry.sendEndTelemetry();
+
+		// Assert: only begin telemetry sent, end was skipped
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const beginCall = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(beginCall[1].location, 'begin');
+		assert.strictEqual(beginCall[1].result, 'tooManyChanges');
+	});
+
 	// ========================================
 	// Git Repository Detection Tests
 	// ========================================

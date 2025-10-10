@@ -19,11 +19,13 @@ const MAX_DIFFS_JSON_SIZE = 900 * 1024;
 const MAX_CHANGES = 100;
 
 // EVENT: repoInfo
+type RepoInfoTelemetryResult = 'success' | 'filesChanged' | 'diffTooLarge' | 'noChanges' | 'tooManyChanges';
+
 type RepoInfoTelemetryProperties = {
 	remoteUrl: string | undefined;
 	headCommitHash: string | undefined;
 	diffsJSON: string | undefined;
-	result: 'success' | 'filesChanged' | 'diffTooLarge' | 'noChanges' | 'tooManyChanges';
+	result: RepoInfoTelemetryResult;
 };
 
 type RepoInfoInternalTelemetryProperties = RepoInfoTelemetryProperties & {
@@ -31,12 +33,18 @@ type RepoInfoInternalTelemetryProperties = RepoInfoTelemetryProperties & {
 	telemetryMessageId: string;
 };
 
+// Only send ending telemetry on states where we capture repo info or no changes currently
+function shouldSendEndTelemetry(result: RepoInfoTelemetryResult | undefined): boolean {
+	return result === 'success' || result === 'noChanges';
+}
+
 /*
 * Handles sending internal only telemetry about the current git repository
 */
 export class RepoInfoTelemetry {
 	private _beginTelemetrySent = false;
-	private _beginTelemetryPromise: Promise<void> | undefined;
+	private _beginTelemetryPromise: Promise<RepoInfoTelemetryProperties | undefined> | undefined;
+	private _beginTelemetryResult: RepoInfoTelemetryResult | undefined;
 
 	constructor(
 		private readonly _telemetryMessageId: string,
@@ -56,13 +64,15 @@ export class RepoInfoTelemetry {
 	public async sendBeginTelemetryIfNeeded(): Promise<void> {
 		if (this._beginTelemetrySent) {
 			// Already sent or in progress
-			return this._beginTelemetryPromise;
+			await this._beginTelemetryPromise;
+			return;
 		}
 
 		try {
 			this._beginTelemetrySent = true;
 			this._beginTelemetryPromise = this._sendRepoInfoTelemetry('begin');
-			await this._beginTelemetryPromise;
+			const gitInfo = await this._beginTelemetryPromise;
+			this._beginTelemetryResult = gitInfo?.result;
 		} catch (error) {
 			this._logService.warn(`Failed to send begin repo info telemetry ${error}`);
 		}
@@ -74,6 +84,11 @@ export class RepoInfoTelemetry {
 	public async sendEndTelemetry(): Promise<void> {
 		await this._beginTelemetryPromise;
 
+		// Skip end telemetry if begin wasn't successful
+		if (!shouldSendEndTelemetry(this._beginTelemetryResult)) {
+			return;
+		}
+
 		try {
 			await this._sendRepoInfoTelemetry('end');
 		} catch (error) {
@@ -81,14 +96,14 @@ export class RepoInfoTelemetry {
 		}
 	}
 
-	private async _sendRepoInfoTelemetry(location: 'begin' | 'end'): Promise<void> {
+	private async _sendRepoInfoTelemetry(location: 'begin' | 'end'): Promise<RepoInfoTelemetryProperties | undefined> {
 		if (this._copilotTokenStore.copilotToken?.isInternal !== true) {
-			return;
+			return undefined;
 		}
 
 		const gitInfo = await this._getRepoInfoTelemetry();
 		if (!gitInfo) {
-			return;
+			return undefined;
 		}
 
 		const properties: RepoInfoInternalTelemetryProperties = {
@@ -99,8 +114,7 @@ export class RepoInfoTelemetry {
 
 		this._telemetryService.sendInternalMSFTTelemetryEvent('request.repoInfo', properties);
 
-		// IANHU: Just for debugging
-		console.log('RepoInfo', properties);
+		return gitInfo;
 	}
 
 	private async _getRepoInfoTelemetry(): Promise<RepoInfoTelemetryProperties | undefined> {
