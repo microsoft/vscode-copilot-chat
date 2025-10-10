@@ -3169,10 +3169,7 @@
 						]
 					},
 					"github.copilot.chat.completionsFetcher": {
-						"type": [
-							"string",
-							"null"
-						],
+						"type": ["string", "null"],
 						"markdownDescription": "%github.copilot.config.completionsFetcher%",
 						"tags": [
 							"experimental",
@@ -3184,10 +3181,7 @@
 						]
 					},
 					"github.copilot.chat.nesFetcher": {
-						"type": [
-							"string",
-							"null"
-						],
+						"type": ["string", "null"],
 						"markdownDescription": "%github.copilot.config.nesFetcher%",
 						"tags": [
 							"experimental",
