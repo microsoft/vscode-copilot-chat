@@ -7,7 +7,7 @@ import { ICopilotTokenStore } from '../../../platform/authentication/common/copi
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
-import { getGitHubRepoInfoFromContext, IGitService } from '../../../platform/git/common/gitService';
+import { getOrderedRepoInfosFromContext, IGitService, normalizeFetchUrl } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 
@@ -23,6 +23,7 @@ type RepoInfoTelemetryResult = 'success' | 'filesChanged' | 'diffTooLarge' | 'no
 
 type RepoInfoTelemetryProperties = {
 	remoteUrl: string | undefined;
+	repoType: 'github' | 'ado';
 	headCommitHash: string | undefined;
 	diffsJSON: string | undefined;
 	result: RepoInfoTelemetryResult;
@@ -124,10 +125,12 @@ export class RepoInfoTelemetry {
 			return;
 		}
 
-		const githubInfo = getGitHubRepoInfoFromContext(repoContext);
-		if (!githubInfo) {
+		// Get our best repo info from the active repository context
+		const repoInfo = Array.from(getOrderedRepoInfosFromContext(repoContext))[0];
+		if (!repoInfo || !repoInfo.fetchUrl) {
 			return;
 		}
+		const normalizedFetchUrl = normalizeFetchUrl(repoInfo.fetchUrl);
 
 		// Get the upstream commit from the repository
 		const gitAPI = this._gitExtensionService.getExtensionApi();
@@ -147,34 +150,25 @@ export class RepoInfoTelemetry {
 		const deleteDisposable = watcher.onDidDelete(() => filesChanged = true);
 
 		try {
+			const baseProperties: Omit<RepoInfoTelemetryProperties, 'diffsJSON' | 'result'> = {
+				remoteUrl: normalizedFetchUrl,
+				repoType: repoInfo.repoId.type,
+				headCommitHash: upstreamCommit,
+			};
+
 			const changes = await this._gitService.diffWith(repoContext.rootUri, '@{upstream}');
 			if (!changes || changes.length === 0) {
-				return {
-					remoteUrl: githubInfo.remoteUrl,
-					headCommitHash: upstreamCommit,
-					diffsJSON: undefined,
-					result: 'noChanges',
-				};
+				return { ...baseProperties, diffsJSON: undefined, result: 'noChanges' };
 			}
 
 			// Check if there are too many changes (e.g., mass renames)
 			if (changes.length > MAX_CHANGES) {
-				return {
-					remoteUrl: githubInfo.remoteUrl,
-					headCommitHash: upstreamCommit,
-					diffsJSON: undefined,
-					result: 'tooManyChanges',
-				};
+				return { ...baseProperties, diffsJSON: undefined, result: 'tooManyChanges' };
 			}
 
 			// Check if files changed during the git diff operation
 			if (filesChanged) {
-				return {
-					remoteUrl: githubInfo.remoteUrl,
-					headCommitHash: upstreamCommit,
-					diffsJSON: undefined,
-					result: 'filesChanged',
-				};
+				return { ...baseProperties, diffsJSON: undefined, result: 'filesChanged' };
 			}
 
 			const diffs = (await this._gitDiffService.getChangeDiffs(repoContext.rootUri, changes)).map(diff => {
@@ -189,32 +183,17 @@ export class RepoInfoTelemetry {
 
 			// Check if files changed during the individual file diffs
 			if (filesChanged) {
-				return {
-					remoteUrl: githubInfo.remoteUrl,
-					headCommitHash: upstreamCommit,
-					diffsJSON: undefined,
-					result: 'filesChanged',
-				};
+				return { ...baseProperties, diffsJSON: undefined, result: 'filesChanged' };
 			}
 
 			const diffsJSON = diffs.length > 0 ? JSON.stringify(diffs) : undefined;
 
 			// Check against our size limit to make sure our telemetry fits in the 1MB limit
 			if (diffsJSON && Buffer.byteLength(diffsJSON, 'utf8') > MAX_DIFFS_JSON_SIZE) {
-				return {
-					remoteUrl: githubInfo.remoteUrl,
-					headCommitHash: upstreamCommit,
-					diffsJSON: undefined,
-					result: 'diffTooLarge',
-				};
+				return { ...baseProperties, diffsJSON: undefined, result: 'diffTooLarge' };
 			}
 
-			return {
-				remoteUrl: githubInfo.remoteUrl,
-				headCommitHash: upstreamCommit,
-				diffsJSON,
-				result: 'success',
-			};
+			return { ...baseProperties, diffsJSON, result: 'success' };
 		} finally {
 			createDisposable.dispose();
 			changeDisposable.dispose();
