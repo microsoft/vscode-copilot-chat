@@ -38,7 +38,7 @@ interface IGetErrorsParams {
 	ranges?: ([a: number, b: number, c: number, d: number] | undefined)[];
 }
 
-class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams> {
+export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams> {
 	public static readonly toolName = ToolName.GetErrors;
 
 	constructor(
