@@ -23,8 +23,8 @@ describe('replace_string_in_file - applyEdit', () => {
 	let alternatveContentService: IAlternativeNotebookContentService;
 	let doc: IExtHostDocumentData;
 
-	async function doApplyEdit(oldString: string, newString: string, uri = doc.document.uri) {
-		const r = await applyEdit(uri, oldString, newString, workspaceService, notebookService as INotebookService, alternatveContentService, undefined);
+	async function doApplyEdit(oldString: string, newString: string, uri = doc.document.uri, replaceAll = false) {
+		const r = await applyEdit(uri, oldString, newString, workspaceService, notebookService as INotebookService, alternatveContentService, undefined, replaceAll);
 		workspaceEdit.set(uri, r.edits);
 		return r;
 	}
@@ -62,6 +62,41 @@ describe('replace_string_in_file - applyEdit', () => {
 	test('multiple exact matches - should throw error', async () => {
 		setText('test\ntest\nother');
 		await expect(doApplyEdit('test', 'replacement')).rejects.toThrow(MultipleMatchesError);
+	});
+
+	test('multiple exact matches - replaceAll should replace all occurrences', async () => {
+		setText('test\ntest\nother');
+		const result = await doApplyEdit('test', 'replacement', doc.document.uri, true);
+		expect(result.updatedFile).toBe('replacement\nreplacement\nother');
+	});
+
+	test('multiple fuzzy matches - replaceAll should replace all occurrences', async () => {
+		setText('line one\nline two\nline three');
+		const result = await doApplyEdit('line', 'item', doc.document.uri, true);
+		expect(result.updatedFile).toBe('item one\nitem two\nitem three');
+	});
+
+	test('multiple exact matches - error message includes line numbers', async () => {
+		setText('test\ntest\nother\ntest');
+		try {
+			await doApplyEdit('test', 'replacement');
+			expect.fail('Should have thrown MultipleMatchesError');
+		} catch (error) {
+			expect(error).toBeInstanceOf(MultipleMatchesError);
+			expect(error.message).toContain('lines 1, 2, 4');
+			expect(error.message).toContain('replaceAll: true');
+		}
+	});
+
+	test('replaceAll with single occurrence should work normally', async () => {
+		setText('single test here');
+		const result = await doApplyEdit('test', 'replacement', doc.document.uri, true);
+		expect(result.updatedFile).toBe('single replacement here');
+	});
+
+	test('replaceAll with no matches should fail normally', async () => {
+		setText('no match here');
+		await expect(doApplyEdit('test', 'replacement', doc.document.uri, true)).rejects.toThrow(NoMatchError);
 	});
 
 	test('whitespace flexible matching - different indentation', async () => {
