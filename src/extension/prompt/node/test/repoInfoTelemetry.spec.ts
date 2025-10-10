@@ -381,10 +381,10 @@ suite('RepoInfoTelemetry', () => {
 		assert.strictEqual(call[1].headCommitHash, 'abc123');
 	});
 
-	test('should not send telemetry when no GitHub remote', async () => {
+	test('should not send telemetry when no GitHub or ADO remote', async () => {
 		setupInternalUser();
 
-		// Mock: repository with changes but no GitHub remote
+		// Mock: repository with changes but no GitHub or ADO remote
 		vi.spyOn(gitService.activeRepository, 'get').mockReturnValue({
 			rootUri: URI.file('/test/repo'),
 			changes: {
@@ -415,6 +415,108 @@ suite('RepoInfoTelemetry', () => {
 
 		// Assert: no telemetry sent
 		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 0);
+	});
+
+	test('should send telemetry with correct repoType for Azure DevOps repository', async () => {
+		setupInternalUser();
+
+		// Mock: ADO repository
+		vi.spyOn(gitService.activeRepository, 'get').mockReturnValue({
+			rootUri: URI.file('/test/repo'),
+			changes: {
+				mergeChanges: [],
+				indexChanges: [],
+				workingTree: [{
+					uri: URI.file('/test/repo/file.ts'),
+					originalUri: URI.file('/test/repo/file.ts'),
+					renameUri: undefined,
+					status: Status.MODIFIED
+				}],
+				untrackedChanges: []
+			},
+			remotes: ['origin'],
+			remoteFetchUrls: ['https://dev.azure.com/myorg/myproject/_git/myrepo'],
+			upstreamRemote: 'origin',
+			headBranchName: 'main',
+			headCommitHash: 'abc123',
+			upstreamBranchName: 'origin/main',
+			isRebasing: false,
+		} as any);
+
+		mockGitExtensionWithUpstream('abc123def456', 'https://dev.azure.com/myorg/myproject/_git/myrepo');
+		mockGitDiffService([{ uri: '/test/repo/file.ts', diff: 'some diff' }]);
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			copilotTokenStore,
+			logService,
+			fileSystemService
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: telemetry sent with repoType = 'ado'
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[0], 'request.repoInfo');
+		assert.strictEqual(call[1].repoType, 'ado');
+		assert.strictEqual(call[1].remoteUrl, 'https://dev.azure.com/myorg/myproject/_git/myrepo');
+		assert.strictEqual(call[1].headCommitHash, 'abc123def456');
+		assert.strictEqual(call[1].result, 'success');
+	});
+
+	test('should normalize remote URL when logging telemetry', async () => {
+		setupInternalUser();
+
+		// Mock: repository with SSH-style URL that needs normalization
+		const sshUrl = 'git@github.com:microsoft/vscode.git';
+		vi.spyOn(gitService.activeRepository, 'get').mockReturnValue({
+			rootUri: URI.file('/test/repo'),
+			changes: {
+				mergeChanges: [],
+				indexChanges: [],
+				workingTree: [{
+					uri: URI.file('/test/repo/file.ts'),
+					originalUri: URI.file('/test/repo/file.ts'),
+					renameUri: undefined,
+					status: Status.MODIFIED
+				}],
+				untrackedChanges: []
+			},
+			remotes: ['origin'],
+			remoteFetchUrls: [sshUrl],
+			upstreamRemote: 'origin',
+			headBranchName: 'main',
+			headCommitHash: 'abc123',
+			upstreamBranchName: 'origin/main',
+			isRebasing: false,
+		} as any);
+
+		mockGitExtensionWithUpstream('abc123def456', sshUrl);
+		mockGitDiffService([{ uri: '/test/repo/file.ts', diff: 'some diff' }]);
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			copilotTokenStore,
+			logService,
+			fileSystemService
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: URL is normalized to HTTPS
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].remoteUrl, 'https://github.com/microsoft/vscode.git');
+		assert.notStrictEqual(call[1].remoteUrl, sshUrl);
 	});
 
 	test('should not send telemetry when no upstream commit', async () => {
