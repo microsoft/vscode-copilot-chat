@@ -21,6 +21,17 @@ const EMBEDDING_CACHE_FILE_NAME = 'toolEmbeddingsCache.bin';
 const CACHE_VERSION = 1;
 const SHA1_DIGEST_LENGTH = 20; // SHA-1 produces 20 bytes
 
+/**
+ * A local cache for tool embeddings that stores data in an efficient binary format.
+ *
+ * Binary format:
+ * ```
+ * [Version(VLQ)][TypeLen(VLQ)][TypeString][EntryCount(VLQ)]
+ * [Entry1: Key(20bytes) + EmbedLen(VLQ) + EmbedData]
+ * [Entry2: Key(20bytes) + EmbedLen(VLQ) + EmbedData]
+ * ...
+ * ```
+ */
 export class ToolEmbeddingLocalCache extends Disposable implements IToolEmbeddingsCache {
 	private readonly _storageUri: URI;
 	private readonly _lru = new LRUCache<string, Embedding>(1000);
