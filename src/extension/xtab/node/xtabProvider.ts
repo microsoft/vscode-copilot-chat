@@ -73,7 +73,7 @@ namespace ResponseTags {
 
 const enum RetryState {
 	NotRetrying,
-	RetryingWithExpandedWindow
+	Retrying
 }
 
 interface ModelConfig extends xtabPromptOptions.PromptOptions {
@@ -369,7 +369,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			return contentWithCursor.getLines();
 		})();
 
-		const addLineNumbers = (lines: string[]) => lines.map((line, idx) => `${idx + 1}| ${line}`);
+		const addLineNumbers = (lines: string[]) => lines.map((line, idx) => `${idx}| ${line}`);
 
 		const contentWithCursorAsLines = opts.includeLineNumbers
 			? addLineNumbers(contentWithCursorAsLinesOriginal)
@@ -843,18 +843,34 @@ export class XtabProvider implements IStatelessNextEditProvider {
 
 		// if allowed to retry and not retrying already, flip the retry state and try again
 		if (allowRetryWithExpandedWindow && retryState === RetryState.NotRetrying && request.expandedEditWindowNLines === undefined) {
-			this.doGetNextEdit(request, pushEdit, delaySession, logContext, cancellationToken, telemetryBuilder, RetryState.RetryingWithExpandedWindow);
+			this.doGetNextEdit(request, pushEdit, delaySession, logContext, cancellationToken, telemetryBuilder, RetryState.Retrying);
 			return;
 		}
 
-		// FIXME@ulugbekna: think out how it works with retrying logic
-		if (this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsNextCursorPredictionEnabled, this.expService)) {
-			// FIXME@ulugbekna: possibly convert from 1-based to 0-based
-			const nextCursorLine = await this.predictNextCursorPosition(promptPieces);
-			if (nextCursorLine) {
+		const nextCursorLinePredictionEnabled = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsNextCursorPredictionEnabled, this.expService);
+		if (nextCursorLinePredictionEnabled && retryState === RetryState.NotRetrying) {
+			const nextCursorLineR = await this.predictNextCursorPosition(promptPieces);
+			if (nextCursorLineR.isError()) {
+				this.tracer.trace(`Predicted next cursor line error: ${nextCursorLineR.err.message}`);
+				telemetryBuilder.setNextCursorLineError(nextCursorLineR.err.message);
+			} else {
+				const nextCursorLine = nextCursorLineR.val;
+
+				const lineDistanceFromCursorLine = nextCursorLine - promptPieces.currentDocument.cursorLineOffset;
+				telemetryBuilder.setNextCursorLineDistance(lineDistanceFromCursorLine);
+
 				this.tracer.trace(`Predicted next cursor line: ${nextCursorLine}`);
-				this.doGetNextEditWithSelection(request, new Range(nextCursorLine, 1, nextCursorLine, 1), pushEdit, delaySession, logContext, cancellationToken, telemetryBuilder, RetryState.NotRetrying);
-				return;
+
+				if (nextCursorLine >= promptPieces.currentDocument.lines.length) { // >= because the line index is zero-based
+					this.tracer.trace(`Predicted next cursor line error: exceedsDocumentLines`);
+					telemetryBuilder.setNextCursorLineError('exceedsDocumentLines');
+				} else if (promptPieces.editWindowLinesRange.contains(nextCursorLine)) {
+					this.tracer.trace(`Predicted next cursor line error: withinEditWindow`);
+					telemetryBuilder.setNextCursorLineError('withinEditWindow');
+				} else {
+					this.doGetNextEditWithSelection(request, new Range(nextCursorLine + 1, 1, nextCursorLine + 1, 1), pushEdit, delaySession, logContext, cancellationToken, telemetryBuilder, RetryState.Retrying);
+					return;
+				}
 			}
 		}
 
@@ -913,7 +929,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			}
 		}
 
-		if (retryState === RetryState.RetryingWithExpandedWindow) {
+		if (retryState === RetryState.Retrying) {
 			nLinesBelow += this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsXtabProviderRetryWithNMoreLinesBelow, this.expService) ?? 0;
 		}
 
@@ -1019,7 +1035,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		return sourcedModelConfig;
 	}
 
-	private async predictNextCursorPosition(promptPieces: PromptPieces) {
+	private async predictNextCursorPosition(promptPieces: PromptPieces): Promise<Result</* zero-based line number */ number, Error>> {
 
 		const tracer = this.tracer.sub('predictNextCursorPosition');
 
@@ -1029,14 +1045,20 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			promptPieces.currentDocument,
 			promptPieces.editWindowLinesRange,
 			promptPieces.areaAroundEditWindowLinesRange,
-			promptPieces.opts,
+			{
+				...promptPieces.opts,
+				currentFile: {
+					...promptPieces.opts.currentFile,
+					includeTags: false,
+				}
+			},
 			XtabProvider.computeTokens,
 			{ includeLineNumbers: true }
 		);
 
 		if (currentFileContentR.isError()) {
 			tracer.trace(`Failed to construct tagged file: ${currentFileContentR.err}`);
-			return;
+			return Result.fromString(currentFileContentR.err);
 		}
 
 		const { taggedCurrentFileR: { taggedCurrentFileContent }, areaAroundCodeToEdit } = currentFileContentR.val;
@@ -1067,7 +1089,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		const modelName = this.configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsNextCursorPredictionModelName, this.expService);
 		if (modelName === undefined) {
 			tracer.trace('Model name for cursor prediction is not defined; skipping prediction');
-			return;
+			return Result.fromString('modelNameNotDefined');
 		}
 
 		const url = this.configService.getConfig(ConfigKey.Internal.InlineEditsNextCursorPredictionUrl);
@@ -1111,26 +1133,24 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		);
 
 		if (response.type !== ChatFetchResponseType.Success) {
-			return;
+			return Result.fromString(`fetchError:${response.type}`);
 		}
 
 		try {
 			const trimmed = response.value.trim();
 			const lineNumber = parseInt(trimmed, 10);
-			if (isNaN(lineNumber) || lineNumber < 0) {
-				throw new Error(`parsed line number is NaN or negative: ${trimmed}`);
+			if (isNaN(lineNumber)) {
+				return Result.fromString(`gotNaN`);
 			}
-			if (lineNumber > promptPieces.currentDocument.lines.length) {
-				this.tracer.trace(`Predicted line number ${lineNumber} is out of bounds, document has ${promptPieces.currentDocument.lines.length} lines`);
-				return undefined;
+			if (lineNumber < 0) {
+				return Result.fromString(`negativeLineNumber`);
 			}
 
-			return lineNumber;
-		} catch (err) {
+			return Result.ok(lineNumber);
+		} catch (err: unknown) {
 			tracer.trace(`Failed to parse predicted line number from response '${response.value}': ${err}`);
-			return undefined;
+			return Result.fromString(`failedToParseLine:"${response.value}". Error ${errors.fromUnknown(err).message}`);
 		}
-
 	}
 
 	private determinePromptingStrategy(): xtabPromptOptions.PromptingStrategy | undefined {

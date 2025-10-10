@@ -17,11 +17,12 @@ import { Iterable } from '../../../../util/vs/base/common/iterator';
 import { StopWatch } from '../../../../util/vs/base/common/stopwatch';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelToolExtensionSource, LanguageModelToolMCPSource } from '../../../../vscodeTypes';
-import { EMBEDDING_TYPE_FOR_TOOL_GROUPING, ToolEmbeddingsComputer } from './toolEmbeddingsCache';
+import { EMBEDDING_TYPE_FOR_TOOL_GROUPING } from './preComputedToolEmbeddingsCache';
+import { IToolEmbeddingsComputer } from './toolEmbeddingsComputer';
 import { EMBEDDINGS_GROUP_NAME, VIRTUAL_TOOL_NAME_PREFIX, VirtualTool } from './virtualTool';
+import * as Constant from './virtualToolsConstants';
 import { divideToolsIntoExistingGroups, divideToolsIntoGroups, summarizeToolGroup } from './virtualToolSummarizer';
 import { ISummarizedToolCategory, IToolCategorization, IToolGroupingCache } from './virtualToolTypes';
-import * as Constant from './virtualToolsConstants';
 
 const BUILT_IN_GROUP = 'builtin';
 const CATEGORIZATION_ENDPOINT = CHAT_MODEL.GPT4OMINI;
@@ -29,8 +30,6 @@ const SUMMARY_PREFIX = 'Call this tool when you need access to a new category of
 const SUMMARY_SUFFIX = '\n\nBe sure to call this tool if you need a capability related to the above.';
 
 export class VirtualToolGrouper implements IToolCategorization {
-	private readonly toolEmbeddingsComputer: ToolEmbeddingsComputer;
-
 	constructor(
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@IToolGroupingCache private readonly _cache: IToolGroupingCache,
@@ -39,9 +38,9 @@ export class VirtualToolGrouper implements IToolCategorization {
 		@IEmbeddingsComputer private readonly embeddingsComputer: IEmbeddingsComputer,
 		@IConfigurationService private readonly _configurationService: IConfigurationService,
 		@IExperimentationService private readonly _expService: IExperimentationService,
+		@IToolEmbeddingsComputer private readonly _toolEmbeddingsComputer: IToolEmbeddingsComputer,
 		@IInstantiationService _instantiationService: IInstantiationService,
 	) {
-		this.toolEmbeddingsComputer = _instantiationService.createInstance(ToolEmbeddingsComputer);
 	}
 
 	private get virtualToolEmbeddingRankingEnabled() {
@@ -328,8 +327,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 		);
 
 		// Get the top 10 tool embeddings for the non-built-in tools
-		const availableToolNames = new Set(nonBuiltInTools.map(tool => tool.name));
-		const toolEmbeddings = await this.toolEmbeddingsComputer.retrieveSimilarEmbeddingsForAvailableTools(queryEmbeddingVector, availableToolNames, 10, token);
+		const toolEmbeddings = await this._toolEmbeddingsComputer.retrieveSimilarEmbeddingsForAvailableTools(queryEmbeddingVector, nonBuiltInTools, 10, token);
 		if (!toolEmbeddings) {
 			return [];
 		}
