@@ -17,6 +17,7 @@ import { Iterable } from '../../../../util/vs/base/common/iterator';
 import { StopWatch } from '../../../../util/vs/base/common/stopwatch';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelToolExtensionSource, LanguageModelToolMCPSource } from '../../../../vscodeTypes';
+import { BuiltInToolGroupHandler } from './builtInToolGroupHandler';
 import { EMBEDDING_TYPE_FOR_TOOL_GROUPING } from './preComputedToolEmbeddingsCache';
 import { IToolEmbeddingsComputer } from './toolEmbeddingsComputer';
 import { EMBEDDINGS_GROUP_NAME, VIRTUAL_TOOL_NAME_PREFIX, VirtualTool } from './virtualTool';
@@ -24,12 +25,14 @@ import * as Constant from './virtualToolsConstants';
 import { divideToolsIntoExistingGroups, divideToolsIntoGroups, summarizeToolGroup } from './virtualToolSummarizer';
 import { ISummarizedToolCategory, IToolCategorization, IToolGroupingCache } from './virtualToolTypes';
 
-const BUILT_IN_GROUP = 'builtin';
 const CATEGORIZATION_ENDPOINT = CHAT_MODEL.GPT4OMINI;
 const SUMMARY_PREFIX = 'Call this tool when you need access to a new category of tools. The category of tools is described as follows:\n\n';
 const SUMMARY_SUFFIX = '\n\nBe sure to call this tool if you need a capability related to the above.';
 
 export class VirtualToolGrouper implements IToolCategorization {
+	private _hasGroupedDefaultTools = false;
+	private builtInToolGroupHandler: BuiltInToolGroupHandler;
+
 	constructor(
 		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
 		@IToolGroupingCache private readonly _cache: IToolGroupingCache,
@@ -41,15 +44,30 @@ export class VirtualToolGrouper implements IToolCategorization {
 		@IToolEmbeddingsComputer private readonly _toolEmbeddingsComputer: IToolEmbeddingsComputer,
 		@IInstantiationService _instantiationService: IInstantiationService,
 	) {
+		this.builtInToolGroupHandler = new BuiltInToolGroupHandler();
 	}
 
 	private get virtualToolEmbeddingRankingEnabled() {
 		return this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.VirtualToolEmbeddingRanking, this._expService);
 	}
 
+	/**
+	 * Determines if built-in tool grouping should be triggered based on configuration and tool count
+	 */
+	private shouldTriggerBuiltInGrouping(tools: LanguageModelToolInformation[]): boolean {
+		const defaultToolGroupingEnabled = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.DefaultToolsGrouped, this._expService);
+
+		return tools.length > Constant.START_BUILTIN_GROUPING_AFTER_TOOL_COUNT && defaultToolGroupingEnabled;
+	}
+
 	async addGroups(query: string, root: VirtualTool, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<void> {
 		// If there's no need to group tools, just add them all directly;
-		if (tools.length < Constant.START_GROUPING_AFTER_TOOL_COUNT) {
+
+		// if there are more than START_BUILTIN_GROUPING_AFTER_TOOL_COUNT tools, we should group built-in tools
+		// otherwise, follow the existing logic of grouping all tools together
+		const shouldGroup = this.shouldTriggerBuiltInGrouping(tools);
+
+		if (!shouldGroup && tools.length < Constant.START_GROUPING_AFTER_TOOL_COUNT) {
 			root.contents = tools;
 			return;
 		}
@@ -60,7 +78,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 			} else if (t.source instanceof LanguageModelToolMCPSource) {
 				return 'mcp_' + t.source.label;
 			} else {
-				return BUILT_IN_GROUP;
+				return BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY;
 			}
 		});
 
@@ -78,12 +96,9 @@ export class VirtualToolGrouper implements IToolCategorization {
 		const predictedToolsSw = new StopWatch();
 		const predictedToolsPromise = this.virtualToolEmbeddingRankingEnabled && this._getPredictedTools(query, tools, token).then(tools => ({ tools, durationMs: predictedToolsSw.elapsed() }));
 
+		// Now all toolsets (including built-in) go through _generateGroupsFromToolset
 		const grouped = await Promise.all(Object.entries(byToolset).map(([key, tools]) => {
-			if (key === BUILT_IN_GROUP) {
-				return tools;
-			} else {
-				return this._generateGroupsFromToolset(key, tools, previousCategorizations.get(key), token);
-			}
+			return this._generateGroupsFromToolset(key, tools, previousCategorizations.get(key), token);
 		}));
 
 		this._cache.flush();
@@ -214,8 +229,18 @@ export class VirtualToolGrouper implements IToolCategorization {
 		}
 
 		// Get unexpanded virtual tools, sorted by the ranker function (ascending order).
+		// If we've grouped default tools, exclude built-in tool groups from expansion
 		const expandable = root.contents
-			.filter((t): t is VirtualTool => t instanceof VirtualTool && !t.isExpanded)
+			.filter((t): t is VirtualTool => {
+				if (!(t instanceof VirtualTool) || t.isExpanded) {
+					return false;
+				}
+				// Skip built-in tool groups if we've grouped default tools
+				if (this._hasGroupedDefaultTools && t.metadata.toolsetKey === BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY) {
+					return false;
+				}
+				return true;
+			})
 			.sort((a, b) => ranker(a) - ranker(b));
 
 		// Expand them until we hit the target limit
@@ -237,6 +262,19 @@ export class VirtualToolGrouper implements IToolCategorization {
 
 	/** Top-level request to categorize a group of tools from a single source. */
 	private async _generateGroupsFromToolset(key: string, tools: LanguageModelToolInformation[], previous: ISummarizedToolCategory[] | undefined, token: CancellationToken): Promise<(VirtualTool | LanguageModelToolInformation)[]> {
+		// Handle built-in tools with predefined groups only if experimental setting is enabled
+		if (key === BuiltInToolGroupHandler.BUILT_IN_GROUP_KEY) {
+			// Check if we should trigger built-in grouping for this tool count
+			const shouldGroup = this.shouldTriggerBuiltInGrouping(tools);
+			if (!shouldGroup) {
+				return tools;
+			}
+
+			// Mark that we've grouped default tools so we don't aggressively expand later
+			this._hasGroupedDefaultTools = true;
+			return this.builtInToolGroupHandler.createBuiltInToolGroups(tools);
+		}
+
 		if (tools.length <= Constant.MIN_TOOLSET_SIZE_TO_GROUP) {
 			return tools;
 		}
@@ -311,6 +349,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 
 		return virtualTools.concat(uncategorized);
 	}
+
 
 	private async _getPredictedTools(query: string, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<LanguageModelToolInformation[]> {
 		// compute the embeddings for the query

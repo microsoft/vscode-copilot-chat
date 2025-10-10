@@ -5,8 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LanguageModelTextPart, LanguageModelToolInformation } from 'vscode';
-import { HARD_TOOL_LIMIT, IConfigurationService } from '../../../../../platform/configuration/common/configurationService';
-import { IExperimentationService } from '../../../../../platform/telemetry/common/nullExperimentationService';
+import { HARD_TOOL_LIMIT } from '../../../../../platform/configuration/common/configurationService';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry';
 import { ITestingServicesAccessor } from '../../../../../platform/test/node/services';
 import { shuffle } from '../../../../../util/vs/base/common/arrays';
@@ -28,11 +27,9 @@ describe('Virtual Tools - Grouping', () => {
 		constructor(
 			_tools: readonly LanguageModelToolInformation[],
 			@IInstantiationService _instantiationService: IInstantiationService,
-			@ITelemetryService _telemetryService: ITelemetryService,
-			@IConfigurationService _configurationService: IConfigurationService,
-			@IExperimentationService _experimentationService: IExperimentationService
+			@ITelemetryService _telemetryService: ITelemetryService
 		) {
-			super(_tools, _instantiationService, _telemetryService, _configurationService, _experimentationService);
+			super(_tools, _instantiationService, _telemetryService);
 			this._grouper = mockGrouper;
 		}
 

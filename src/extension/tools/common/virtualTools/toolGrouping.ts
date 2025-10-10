@@ -46,16 +46,10 @@ export class ToolGrouping implements IToolGrouping {
 		}
 	}
 
-	public get isEnabled() {
-		return this._tools.length >= computeToolGroupingMinThreshold(this._experimentationService, this._configurationService).get();
-	}
-
 	constructor(
 		private _tools: readonly LanguageModelToolInformation[],
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IExperimentationService private readonly _experimentationService: IExperimentationService
+		@ITelemetryService private readonly _telemetryService: ITelemetryService
 	) {
 		this._root.isExpanded = true;
 	}
@@ -132,6 +126,7 @@ export class ToolGrouping implements IToolGrouping {
 	}
 
 	async computeAll(query: string, token: CancellationToken): Promise<(LanguageModelToolInformation | VirtualTool)[]> {
+		// Don't pass endpoint for display - prevents model-specific built-in grouping
 		await this._doCompute(query, token);
 		return this._root.contents;
 	}
