@@ -33,6 +33,7 @@ type RepoInfoTelemetryProperties = {
 type RepoInfoTelemetryMeasurements = {
 	workspaceFileCount: number;
 	changedFileCount: number;
+	diffSizeBytes: number;
 };
 
 type RepoInfoTelemetryData = {
@@ -174,7 +175,8 @@ export class RepoInfoTelemetry {
 
 			const measurements: RepoInfoTelemetryMeasurements = {
 				workspaceFileCount: this._workspaceFileIndex.fileCount,
-				changedFileCount: 0, // Will be updated after diff
+				changedFileCount: 0, // Will be updated
+				diffSizeBytes: 0, // Will be updated
 			};
 
 			const changes = await this._gitService.diffWith(repoContext.rootUri, '@{upstream}');
@@ -225,11 +227,16 @@ export class RepoInfoTelemetry {
 			const diffsJSON = diffs.length > 0 ? JSON.stringify(diffs) : undefined;
 
 			// Check against our size limit to make sure our telemetry fits in the 1MB limit
-			if (diffsJSON && Buffer.byteLength(diffsJSON, 'utf8') > MAX_DIFFS_JSON_SIZE) {
-				return {
-					properties: { ...baseProperties, diffsJSON: undefined, result: 'diffTooLarge' },
-					measurements
-				};
+			if (diffsJSON) {
+				const diffSizeBytes = Buffer.byteLength(diffsJSON, 'utf8');
+				measurements.diffSizeBytes = diffSizeBytes;
+
+				if (diffSizeBytes > MAX_DIFFS_JSON_SIZE) {
+					return {
+						properties: { ...baseProperties, diffsJSON: undefined, result: 'diffTooLarge' },
+						measurements
+					};
+				}
 			}
 
 			return {

@@ -17,6 +17,8 @@ import { NullGitExtensionService } from '../../../../platform/git/common/nullGit
 import { ILogService } from '../../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { createPlatformServices } from '../../../../platform/test/node/services';
+import { NullWorkspaceFileIndex } from '../../../../platform/workspaceChunkSearch/node/nullWorkspaceFileIndex';
+import { IWorkspaceFileIndex } from '../../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
 import { Event } from '../../../../util/vs/base/common/event';
 import { observableValue } from '../../../../util/vs/base/common/observableInternal/observables/observableValue';
 import { URI } from '../../../../util/vs/base/common/uri';
@@ -55,6 +57,7 @@ suite('RepoInfoTelemetry', () => {
 	let copilotTokenStore: ICopilotTokenStore;
 	let logService: ILogService;
 	let fileSystemService: IFileSystemService;
+	let workspaceFileIndex: IWorkspaceFileIndex;
 	let mockWatcher: MockFileSystemWatcher;
 
 	beforeEach(() => {
@@ -62,6 +65,7 @@ suite('RepoInfoTelemetry', () => {
 		// Register extension-level services not in platform services by default
 		services.define(IGitDiffService, new SyncDescriptor(NullGitDiffService));
 		services.define(IGitExtensionService, new NullGitExtensionService());
+		services.define(IWorkspaceFileIndex, new SyncDescriptor(NullWorkspaceFileIndex));
 
 		// Override IGitService with a proper mock that has an observable activeRepository
 		const mockGitService: IGitService = {
@@ -93,6 +97,7 @@ suite('RepoInfoTelemetry', () => {
 		copilotTokenStore = accessor.get(ICopilotTokenStore);
 		logService = accessor.get(ILogService);
 		fileSystemService = accessor.get(IFileSystemService);
+		workspaceFileIndex = accessor.get(IWorkspaceFileIndex);
 
 		// Create a new mock watcher for each test
 		mockWatcher = new MockFileSystemWatcher();
@@ -134,7 +139,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -159,7 +165,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -170,6 +177,9 @@ suite('RepoInfoTelemetry', () => {
 		assert.strictEqual(call[0], 'request.repoInfo');
 		assert.strictEqual(call[1].location, 'begin');
 		assert.strictEqual(call[1].telemetryMessageId, 'test-message-id');
+		// Check measurements parameter exists
+		assert.ok(call[2], 'measurements parameter should be present');
+		assert.strictEqual(typeof call[2].workspaceFileCount, 'number');
 	});
 
 	test('should send begin telemetry only once', async () => {
@@ -186,7 +196,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -211,7 +222,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -241,7 +253,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -273,7 +286,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -311,7 +325,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -342,7 +357,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -367,7 +383,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -408,7 +425,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -454,7 +472,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -507,7 +526,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -534,7 +554,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -557,7 +578,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -600,7 +622,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -637,7 +660,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -674,7 +698,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -719,7 +744,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -745,7 +771,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -781,7 +808,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -825,7 +853,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -869,7 +898,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -943,7 +973,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -988,7 +1019,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		await repoTelemetry.sendBeginTelemetryIfNeeded();
@@ -1002,6 +1034,281 @@ suite('RepoInfoTelemetry', () => {
 		assert.strictEqual(diffs.length, 1);
 		assert.strictEqual(diffs[0].status, Status.INDEX_RENAMED);
 		assert.ok(diffs[0].renameUri);
+	});
+
+	// ========================================
+	// Measurements Tests
+	// ========================================
+
+	test('should include workspaceFileCount in measurements', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+		mockGitDiffService([{ uri: '/test/repo/file.ts', diff: 'some diff' }]);
+
+		// Set a specific file count
+		(workspaceFileIndex as any).fileCount = 250;
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			copilotTokenStore,
+			logService,
+			fileSystemService,
+			workspaceFileIndex
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: measurements contain workspaceFileCount
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.ok(call[2], 'measurements parameter should exist');
+		assert.strictEqual(call[2].workspaceFileCount, 250);
+	});
+
+	test('should include changedFileCount in measurements', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+
+		// Mock 5 changes
+		const changes = Array.from({ length: 5 }, (_, i) => ({
+			uri: URI.file(`/test/repo/file${i}.ts`),
+			originalUri: URI.file(`/test/repo/file${i}.ts`),
+			renameUri: undefined,
+			status: Status.MODIFIED
+		}));
+
+		vi.spyOn(gitService, 'diffWith').mockResolvedValue(changes as any);
+
+		vi.spyOn(gitDiffService, 'getChangeDiffs').mockResolvedValue(
+			changes.map((c, i) => ({
+				uri: URI.file(`/test/repo/file${i}.ts`),
+				originalUri: URI.file(`/test/repo/file${i}.ts`),
+				renameUri: undefined,
+				status: Status.MODIFIED,
+				diff: `diff for file${i}`
+			}))
+		);
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			copilotTokenStore,
+			logService,
+			fileSystemService,
+			workspaceFileIndex
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: measurements contain changedFileCount
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.ok(call[2], 'measurements parameter should exist');
+		assert.strictEqual(call[2].changedFileCount, 5);
+	});
+
+	test('should set changedFileCount to 0 when no changes', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+
+		// Mock: no changes from upstream
+		vi.spyOn(gitService, 'diffWith').mockResolvedValue([]);
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			copilotTokenStore,
+			logService,
+			fileSystemService,
+			workspaceFileIndex
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: changedFileCount is 0
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.ok(call[2], 'measurements parameter should exist');
+		assert.strictEqual(call[2].changedFileCount, 0);
+	});
+
+	test('should include measurements in both begin and end telemetry', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+		mockGitDiffService([{ uri: '/test/repo/file.ts', diff: 'some diff' }]);
+
+		(workspaceFileIndex as any).fileCount = 150;
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			copilotTokenStore,
+			logService,
+			fileSystemService,
+			workspaceFileIndex
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+		await repoTelemetry.sendEndTelemetry();
+
+		// Assert: both begin and end have measurements
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 2);
+
+		const beginCall = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.ok(beginCall[2], 'begin measurements should exist');
+		assert.strictEqual(beginCall[2].workspaceFileCount, 150);
+		assert.strictEqual(beginCall[2].changedFileCount, 1);
+
+		const endCall = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[1];
+		assert.ok(endCall[2], 'end measurements should exist');
+		assert.strictEqual(endCall[2].workspaceFileCount, 150);
+		assert.strictEqual(endCall[2].changedFileCount, 1);
+	});
+
+	test('should include measurements even when diff is too large', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+
+		vi.spyOn(gitService, 'diffWith').mockResolvedValue([{
+			uri: URI.file('/test/repo/file.ts'),
+			originalUri: URI.file('/test/repo/file.ts'),
+			renameUri: undefined,
+			status: Status.MODIFIED
+		}] as any);
+
+		// Create a diff that exceeds 900KB when serialized to JSON
+		const largeDiff = 'x'.repeat(901 * 1024);
+		vi.spyOn(gitDiffService, 'getChangeDiffs').mockResolvedValue([{
+			uri: URI.file('/test/repo/file.ts'),
+			originalUri: URI.file('/test/repo/file.ts'),
+			renameUri: undefined,
+			status: Status.MODIFIED,
+			diff: largeDiff
+		}]);
+
+		(workspaceFileIndex as any).fileCount = 200;
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			copilotTokenStore,
+			logService,
+			fileSystemService,
+			workspaceFileIndex
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: diffTooLarge result but measurements still present
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'diffTooLarge');
+		assert.ok(call[2], 'measurements should still be present');
+		assert.strictEqual(call[2].workspaceFileCount, 200);
+		assert.strictEqual(call[2].changedFileCount, 1);
+	});
+
+	test('should include measurements when there are too many changes', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+
+		// Create 101 changes (exceeds MAX_CHANGES of 100)
+		const manyChanges = Array.from({ length: 101 }, (_, i) => ({
+			uri: URI.file(`/test/repo/file${i}.ts`),
+			originalUri: URI.file(`/test/repo/file${i}.ts`),
+			renameUri: undefined,
+			status: Status.MODIFIED
+		}));
+
+		vi.spyOn(gitService, 'diffWith').mockResolvedValue(manyChanges as any);
+
+		(workspaceFileIndex as any).fileCount = 300;
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			copilotTokenStore,
+			logService,
+			fileSystemService,
+			workspaceFileIndex
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: tooManyChanges result but measurements still present
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'tooManyChanges');
+		assert.ok(call[2], 'measurements should still be present');
+		assert.strictEqual(call[2].workspaceFileCount, 300);
+		assert.strictEqual(call[2].changedFileCount, 101);
+	});
+
+	test('should include diffSizeBytes in measurements when diffs are present', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+		mockGitExtensionWithUpstream('abc123');
+
+		const testDiff = 'diff --git a/file.ts b/file.ts\n--- a/file.ts\n+++ b/file.ts\n@@ -1,1 +1,1 @@\n-old\n+new';
+		mockGitDiffService([{ uri: '/test/repo/file.ts', diff: testDiff }]);
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			copilotTokenStore,
+			logService,
+			fileSystemService,
+			workspaceFileIndex
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: diffSizeBytes measurement is set
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'success');
+		assert.ok(call[2], 'measurements parameter should be present');
+		assert.strictEqual(typeof call[2].diffSizeBytes, 'number');
+		assert.ok(call[2].diffSizeBytes > 0, 'diffSizeBytes should be greater than 0');
+
+		// Calculate expected size from the mock data
+		const expectedDiffsJSON = JSON.stringify([{
+			uri: 'file:///test/repo/file.ts',
+			originalUri: 'file:///test/repo/file.ts',
+			renameUri: undefined,
+			status: Status.MODIFIED,
+			diff: testDiff
+		}]);
+		const expectedSize = Buffer.byteLength(expectedDiffsJSON, 'utf8');
+		assert.strictEqual(call[2].diffSizeBytes, expectedSize);
 	});
 
 	// ========================================
@@ -1024,7 +1331,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		// Should not throw
@@ -1057,7 +1365,8 @@ suite('RepoInfoTelemetry', () => {
 			gitExtensionService,
 			copilotTokenStore,
 			logService,
-			fileSystemService
+			fileSystemService,
+			workspaceFileIndex
 		);
 
 		// Should not throw
