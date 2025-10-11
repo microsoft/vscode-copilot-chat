@@ -6,10 +6,12 @@
 import type { AgentOptions, SDKEvent, Session } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
+import { IEnvService } from '../../../../platform/env/common/envService';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
+import { isWindows } from '../../../../util/vs/base/common/platform';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { LanguageModelTextPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
@@ -71,6 +73,7 @@ export class CopilotCLISession extends Disposable {
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IToolsService private readonly toolsService: IToolsService,
+		@IEnvService private readonly envService: IEnvService,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -100,6 +103,7 @@ export class CopilotCLISession extends Disposable {
 
 		this.logService.trace(`[CopilotCLISession] Invoking session ${this.sessionId}`);
 		const copilotToken = await this._authenticationService.getCopilotToken();
+		const pathSep = isWindows ? ';' : ':';
 
 		const options: AgentOptions = {
 			modelProvider: {
@@ -112,7 +116,8 @@ export class CopilotCLISession extends Disposable {
 			copilotToken: copilotToken.token,
 			env: {
 				...process.env,
-				COPILOTCLI_DISABLE_NONESSENTIAL_TRAFFIC: '1'
+				COPILOTCLI_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+				PATH: `${this.envService.appRoot}/node_modules/@vscode/ripgrep/bin${pathSep}${process.env.PATH}`
 			},
 			requestPermission: async (permissionRequest) => {
 				return await this.requestPermission(permissionRequest, toolInvocationToken);
