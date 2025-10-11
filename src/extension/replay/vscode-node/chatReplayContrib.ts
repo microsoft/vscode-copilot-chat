@@ -2,23 +2,42 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { CancellationToken, commands, debug, DebugAdapterDescriptor, DebugAdapterDescriptorFactory, DebugAdapterInlineImplementation, DebugConfiguration, DebugConfigurationProvider, DebugSession, ProviderResult, window, WorkspaceFolder } from 'vscode';
+import { CancellationToken, chat, commands, debug, DebugAdapterDescriptor, DebugAdapterDescriptorFactory, DebugAdapterInlineImplementation, DebugConfiguration, DebugConfigurationProvider, DebugSession, ProviderResult, window, WorkspaceFolder } from 'vscode';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatReplaySessionProvider } from './chatReplaySessionProvider';
 import { ChatReplayDebugSession } from './replayDebugSession';
 
 export class ChatReplayContribution extends Disposable {
+	private _sessionProvider: ChatReplaySessionProvider;
+
 	constructor(
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IWorkspaceService private readonly _workspaceService: IWorkspaceService
 	) {
 		super();
 
+		this._sessionProvider = this._register(new ChatReplaySessionProvider(this._workspaceService));
+
+		// Register the chat session providers (new approach)
+		this._register(chat.registerChatSessionItemProvider('chat-replay', this._sessionProvider));
+		const chatParticipant = chat.createChatParticipant('chat-replay', async (request, context, response, token) => {
+			// Chat replay participant - replays are read-only, so this handler is mostly a stub
+			// The actual replay content is provided via the ChatSessionContentProvider
+			return {};
+		});
+		this._register(chat.registerChatSessionContentProvider('chat-replay', this._sessionProvider, chatParticipant));
+
+		// Register debug providers (original approach - still useful for detailed debugging)
 		const provider = new ChatReplayConfigProvider();
 		this._register(debug.registerDebugConfigurationProvider('vscode-chat-replay', provider));
 
-		const factory = new InlineDebugAdapterFactory();
+		const factory = new InlineDebugAdapterFactory(this._sessionProvider);
 		this._register(debug.registerDebugAdapterDescriptorFactory('vscode-chat-replay', factory));
+
+		// Register commands
 		this.registerStartReplayCommand();
 		this.registerEnableWorkspaceEditTracingCommand();
 		this.registerDisableWorkspaceEditTracingCommand();
@@ -64,9 +83,10 @@ export class ChatReplayContribution extends Disposable {
 }
 
 class InlineDebugAdapterFactory implements DebugAdapterDescriptorFactory {
+	constructor(private readonly sessionProvider: ChatReplaySessionProvider) { }
 
 	createDebugAdapterDescriptor(session: DebugSession): ProviderResult<DebugAdapterDescriptor> {
-		return new DebugAdapterInlineImplementation(new ChatReplayDebugSession(session.workspaceFolder));
+		return new DebugAdapterInlineImplementation(new ChatReplayDebugSession(session.workspaceFolder, this.sessionProvider));
 	}
 }
 
