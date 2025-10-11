@@ -71,8 +71,9 @@ export namespace ChatLocation {
 	export function toStringShorter(chatLocation: ChatLocation): string {
 		switch (chatLocation) {
 			case ChatLocation.Editor:
-			case ChatLocation.Notebook:
 				return 'inline';
+			case ChatLocation.Notebook:
+				return 'notebook';
 			case ChatLocation.Panel:
 				return 'panel';
 			case ChatLocation.EditingSession:
