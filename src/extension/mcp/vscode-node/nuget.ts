@@ -352,7 +352,7 @@ stderr: ${installResult.stderr}`);
 			this.logService.warn(`Invalid JSON in NuGet package server.json at ${serverJsonPath}. Proceeding without server.json for ${id}@${version}.`);
 			return undefined;
 		}
-		if (manifest === null || typeof manifest !== 'object') {
+		if (manifest === null || typeof manifest !== 'object' || Array.isArray(manifest)) {
 			this.logService.warn(`Invalid JSON in NuGet package server.json at ${serverJsonPath}. Proceeding without server.json for ${id}@${version}.`);
 			return undefined;
 		}
