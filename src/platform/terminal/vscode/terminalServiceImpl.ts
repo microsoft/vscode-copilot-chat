@@ -5,6 +5,8 @@
 
 import { Event, ExtensionTerminalOptions, Terminal, TerminalExecutedCommand, TerminalOptions, TerminalShellExecutionEndEvent, TerminalShellIntegrationChangeEvent, window, type TerminalDataWriteEvent } from 'vscode';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import * as path from '../../../util/vs/base/common/path';
+import { IVSCodeExtensionContext } from '../../extContext/common/extensionContext';
 import { ITerminalService } from '../common/terminalService';
 import { getActiveTerminalBuffer, getActiveTerminalLastCommand, getActiveTerminalSelection, getActiveTerminalShellType, getBufferForTerminal, getLastCommandForTerminal, installTerminalBufferListeners } from './terminalBufferListener';
 
@@ -12,7 +14,11 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 
 	declare readonly _serviceBrand: undefined;
 
-	constructor() {
+	private readonly pathContributions = new Map<string, { path: string; description?: string }>();
+
+	constructor(
+		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
+	) {
 		super();
 		for (const l of installTerminalBufferListeners()) {
 			this._register(l);
@@ -83,5 +89,39 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 
 	get terminalShellType(): string {
 		return getActiveTerminalShellType();
+	}
+
+	contributePath(contributor: string, pathLocation: string, description?: string): void {
+		this.pathContributions.set(contributor, { path: pathLocation, description });
+		this.updateEnvironmentPath();
+	}
+
+	removePathContribution(contributor: string): void {
+		this.pathContributions.delete(contributor);
+		this.updateEnvironmentPath();
+	}
+
+	private updateEnvironmentPath(): void {
+		const pathVariable = 'PATH';
+
+		// Clear existing PATH modification
+		this.context.environmentVariableCollection.delete(pathVariable);
+
+		if (this.pathContributions.size === 0) {
+			return;
+		}
+
+		// Build combined path from all contributions
+		const allPaths = Array.from(this.pathContributions.values()).map(c => c.path);
+		const pathVariableChange = path.delimiter + allPaths.join(path.delimiter);
+
+		// Build combined description
+		const allDescriptions = Array.from(this.pathContributions.values())
+			.map(c => c.description)
+			.filter(d => d)
+			.join(' and ');
+
+		this.context.environmentVariableCollection.description = allDescriptions || 'Enables additional commands in the terminal.';
+		this.context.environmentVariableCollection.append(pathVariable, pathVariableChange);
 	}
 }
