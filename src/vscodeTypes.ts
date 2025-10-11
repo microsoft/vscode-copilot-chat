@@ -95,6 +95,7 @@ export import SymbolKind = vscode.SymbolKind;
 export import SnippetString = vscode.SnippetString;
 export import SnippetTextEdit = vscode.SnippetTextEdit;
 export import FileType = vscode.FileType;
+export import SettingsSearchResultKind = vscode.SettingsSearchResultKind;
 
 export const l10n = {
 	/**
