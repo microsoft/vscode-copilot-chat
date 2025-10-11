@@ -5,6 +5,7 @@
 
 import { promises as fs } from 'fs';
 import * as vscode from 'vscode';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ITerminalService } from '../../../platform/terminal/common/terminalService';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
@@ -23,6 +24,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		@ICopilotCLISessionService private readonly copilotcliSessionService: ICopilotCLISessionService,
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 		@ITerminalService private readonly terminalService: ITerminalService,
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 	) {
 		super();
 		this.setupCopilotCLIPath();
@@ -102,6 +104,11 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		if (existingTerminal) {
 			existingTerminal.show();
 			return;
+		}
+
+		const session = await this._authenticationService.getAnyGitHubSession();
+		if (session) {
+			this.context.environmentVariableCollection.replace('GH_TOKEN', session.accessToken);
 		}
 
 		const terminal = vscode.window.createTerminal({
