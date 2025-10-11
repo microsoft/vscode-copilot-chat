@@ -37,6 +37,10 @@ interface DotnetCli {
 	args: Array<string>;
 }
 
+const MCP_SERVER_SCHEMA_2025_07_09_GH = "https://modelcontextprotocol.io/schemas/draft/2025-07-09/server.json";
+const MCP_SERVER_SCHEMA_2025_07_09 = "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json";
+const MCP_SERVER_SCHEMA_2025_09_29 = "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json";
+
 export class NuGetMcpSetup {
 	constructor(
 		public readonly logService: ILogService,
@@ -136,7 +140,7 @@ export class NuGetMcpSetup {
 			const localInstallSuccess = await this.installLocalTool(id, version, cwd);
 			if (!localInstallSuccess) { return undefined; }
 
-			return await this.readServerManifest(packagesDir, id, version, this.logService);
+			return await this.readServerManifest(packagesDir, id, version);
 		} catch (e) {
 			this.logService.warn(`
 Failed to install NuGet package ${id}@${version}. Proceeding without server.json.
@@ -268,37 +272,91 @@ stderr: ${installResult.stderr}`);
 		return true;
 	}
 
-	async readServerManifest(packagesDir: string, id: string, version: string, logService: ILogService): Promise<string | undefined> {
-		const serverJsonPath = path.join(packagesDir, id.toLowerCase(), version.toLowerCase(), ".mcp", "server.json");
-		try {
-			await fs.access(serverJsonPath, fs.constants.R_OK);
-		} catch {
-			logService.info(`No server.json found at ${serverJsonPath}. Proceeding without server.json for ${id}@${version}.`);
-			return undefined;
-		}
-
-		const json = await fs.readFile(serverJsonPath, 'utf8');
-		const manifest = JSON.parse(json);
-
+	prepareServerJson(manifest: any, id: string, version: string): any {
 		// Force the ID and version of matching NuGet package in the server.json to the one we installed.
 		// This handles cases where the server.json in the package is stale.
 		// The ID should match generally, but we'll protect against unexpected package IDs.
+		// We handle old and new schema formats:
+		// - https://modelcontextprotocol.io/schemas/draft/2025-07-09/server.json (only hosted in GitHub)
+		// - https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json (had several breaking changes over time)
+		// - https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json
 		if (manifest?.packages) {
 			for (const pkg of manifest.packages) {
-				if (pkg?.registry_name === "nuget") {
-					if (pkg.name.toUpperCase() !== id.toUpperCase()) {
-						logService.warn(`Package ID mismatch in NuGet.mcp / server.json: expected ${id}, found ${pkg.name}.`);
-					}
-					if (pkg.version.toUpperCase() !== version.toUpperCase()) {
-						logService.warn(`Package version mismatch in NuGet.mcp / server.json: expected ${version}, found ${pkg.version}.`);
+				if (!pkg) { continue; }
+				const registryType = pkg.registryType ?? pkg.registry_type ?? pkg.registry_name;
+				if (registryType === "nuget") {
+					if (pkg.name && pkg.name !== id) {
+						this.logService.warn(`Package name mismatch in NuGet.mcp / server.json: expected ${id}, found ${pkg.name}.`);
+						pkg.name = id;
 					}
 
-					pkg.name = id;
-					pkg.version = version;
+					if (pkg.identifier && pkg.identifier !== id) {
+						this.logService.warn(`Package identifier mismatch in NuGet.mcp / server.json: expected ${id}, found ${pkg.identifier}.`);
+						pkg.identifier = id;
+					}
+
+					if (pkg.version !== version) {
+						this.logService.warn(`Package version mismatch in NuGet.mcp / server.json: expected ${version}, found ${pkg.version}.`);
+						pkg.version = version;
+					}
 				}
 			}
 		}
 
+		// the original .NET MCP server project template used a schema URL that is deprecated
+		if (manifest["$schema"] === MCP_SERVER_SCHEMA_2025_07_09_GH) {
+			manifest["$schema"] = MCP_SERVER_SCHEMA_2025_07_09;
+		}
+
+		if (manifest["$schema"] !== MCP_SERVER_SCHEMA_2025_07_09
+			&& manifest["$schema"] !== MCP_SERVER_SCHEMA_2025_09_29) {
+			this.logService.info(`NuGet package server.json has unrecognized schema version: '${manifest["$schema"]}'.`);
+		}
+
+		// provide empty publisher provided metadata to enable VS Code data mapping
+		if (!manifest["_meta"]) {
+			manifest["_meta"] = {};
+		}
+
+		// starting from 2025-09-29, the server.json schema root was changed to have a "server" property
+		if (manifest["$schema"] === MCP_SERVER_SCHEMA_2025_09_29) {
+			manifest = { server: manifest };
+		}
+
+		// provide empty registry metadata to enable VS Code data mapping
+		if (!manifest["_meta"]) {
+			manifest["_meta"] = {};
+		}
+
+		if (!manifest["_meta"]["io.modelcontextprotocol.registry/official"]) {
+			manifest["_meta"]["io.modelcontextprotocol.registry/official"] = {};
+		}
+
 		return manifest;
+	}
+
+	async readServerManifest(packagesDir: string, id: string, version: string): Promise<string | undefined> {
+		const serverJsonPath = path.join(packagesDir, id.toLowerCase(), version.toLowerCase(), ".mcp", "server.json");
+		try {
+			await fs.access(serverJsonPath, fs.constants.R_OK);
+		} catch {
+			this.logService.info(`No server.json found at ${serverJsonPath}. Proceeding without server.json for ${id}@${version}.`);
+			return undefined;
+		}
+
+		const json = await fs.readFile(serverJsonPath, 'utf8');
+		let manifest;
+		try {
+			manifest = JSON.parse(json);
+		} catch {
+			this.logService.warn(`Invalid JSON in NuGet package server.json at ${serverJsonPath}. Proceeding without server.json for ${id}@${version}.`);
+			return undefined;
+		}
+		if (manifest === null || typeof manifest !== 'object' || Array.isArray(manifest)) {
+			this.logService.warn(`Invalid JSON in NuGet package server.json at ${serverJsonPath}. Proceeding without server.json for ${id}@${version}.`);
+			return undefined;
+		}
+
+		return this.prepareServerJson(manifest, id, version);
 	}
 }
