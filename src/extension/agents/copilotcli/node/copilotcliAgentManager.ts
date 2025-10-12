@@ -6,6 +6,8 @@
 import type { AgentOptions, SDKEvent, Session } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
+import { IEnvService } from '../../../../platform/env/common/envService';
+import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
@@ -16,6 +18,7 @@ import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ICopilotCLISessionService } from './copilotcliSessionService';
 import { createCopilotCLIToolInvocation, PermissionRequest } from './copilotcliToolInvocationFormatter';
+import { ensureNodePtyShim } from './nodePtyShim';
 
 export class CopilotCLIAgentManager extends Disposable {
 	constructor(
@@ -71,6 +74,8 @@ export class CopilotCLISession extends Disposable {
 		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IToolsService private readonly toolsService: IToolsService,
+		@IEnvService private readonly envService: IEnvService,
+		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 	) {
 		super();
 		this.sessionId = _sdkSession.sessionId;
@@ -82,6 +87,10 @@ export class CopilotCLISession extends Disposable {
 	}
 
 	async *query(prompt: string, options: AgentOptions): AsyncGenerator<SDKEvent> {
+		// Ensure node-pty shim exists before importing SDK
+		// @github/copilot has hardcoded: import{spawn}from"node-pty"
+		await ensureNodePtyShim(this.extensionContext.extensionPath, this.envService.appRoot);
+
 		// Dynamically import the SDK
 		const { Agent } = await import('@github/copilot/sdk');
 		const agent = new Agent(options);
@@ -237,12 +246,21 @@ export class CopilotCLISession extends Disposable {
 		if (permissionRequest.kind === 'shell') {
 			return {
 				title: permissionRequest.intention || 'Copilot CLI Permission Request',
-				message: permissionRequest.fullCommandText || `\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
+				message: permissionRequest.fullCommandText || `\`\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
 				confirmationType: 'terminal',
 				terminalCommand: permissionRequest.fullCommandText as string | undefined
 
 			};
 		}
+
+		if (permissionRequest.kind === 'write') {
+			return {
+				title: permissionRequest.intention || 'Copilot CLI Permission Request',
+				message: permissionRequest.fileName ? `Edit ${permissionRequest.fileName}` : `\`\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
+				confirmationType: 'basic'
+			};
+		}
+
 		return {
 			title: 'Copilot CLI Permission Request',
 			message: `\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,

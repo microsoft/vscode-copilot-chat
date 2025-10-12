@@ -5,9 +5,12 @@
 
 import type { Session, SessionManager } from '@github/copilot/sdk';
 import type { CancellationToken } from 'vscode';
+import { IEnvService } from '../../../../platform/env/common/envService';
+import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { DisposableMap, IDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { ensureNodePtyShim } from './nodePtyShim';
 
 export interface ICopilotCLISession {
 	readonly id: string;
@@ -44,11 +47,17 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
+		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
+		@IEnvService private readonly envService: IEnvService,
 	) { }
 
 	public async getSessionManager(): Promise<SessionManager> {
 		if (!this._sessionManager) {
 			try {
+				// Ensure node-pty shim exists before importing SDK
+				// @github/copilot has hardcoded: import{spawn}from"node-pty"
+				await ensureNodePtyShim(this.extensionContext.extensionPath, this.envService.appRoot);
+
 				const { SessionManager } = await import('@github/copilot/sdk');
 				this._sessionManager = new SessionManager({
 					logger: {

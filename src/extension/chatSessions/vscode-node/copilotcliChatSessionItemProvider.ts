@@ -79,6 +79,9 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			await fs.access(copilotPackageIndexJs);
 			await fs.mkdir(storageLocation, { recursive: true });
 
+			// Note: node-pty shim is created in agent manager before first SDK import
+			// This allows @github/copilot to import node-pty before extension activation
+
 			if (process.platform === 'win32') {
 				// Windows: Create batch file
 				const batPath = path.join(storageLocation, 'copilot.bat');
@@ -98,6 +101,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			// @github/copilot package not found, no need to add to PATH
 		}
 	}
+
 
 	private async createAndExecuteInTerminal(terminalName: string, command: string): Promise<void> {
 		const existingTerminal = vscode.window.terminals.find(t => t.name === terminalName);
