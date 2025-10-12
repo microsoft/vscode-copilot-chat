@@ -194,7 +194,9 @@ changed code
 changed code
 // ...existing code...
 
-Here is an example of how you should format an edit to an existing Person class:
+Example workflow - always try replace_string_in_file first, then fall back to insert_edit_into_file if it fails:
+1. First attempt: replace_string_in_file returns error
+2. Fallback: Use insert_edit_into_file to add a getAge method to an existing Person class:
 class Person {
 	// ...existing code...
 	age: number;
@@ -330,7 +332,9 @@ changed code
 changed code
 // ...existing code...
 
-Here is an example of how you should format an edit to an existing Person class:
+Example workflow - always try replace_string_in_file first, then fall back to insert_edit_into_file if it fails:
+1. First attempt: replace_string_in_file returns error
+2. Fallback: Use insert_edit_into_file to add a getAge method to an existing Person class:
 class Person {
 	// ...existing code...
 	age: number;
@@ -1472,7 +1476,9 @@ changed code
 changed code
 // ...existing code...
 
-Here is an example of how you should format an edit to an existing Person class:
+Example workflow - always try replace_string_in_file first, then fall back to insert_edit_into_file if it fails:
+1. First attempt: replace_string_in_file returns error
+2. Fallback: Use insert_edit_into_file to add a getAge method to an existing Person class:
 class Person {
 	// ...existing code...
 	age: number;
@@ -1612,7 +1618,9 @@ changed code
 changed code
 // ...existing code...
 
-Here is an example of how you should format an edit to an existing Person class:
+Example workflow - always try replace_string_in_file first, then fall back to insert_edit_into_file if it fails:
+1. First attempt: replace_string_in_file returns error
+2. Fallback: Use insert_edit_into_file to add a getAge method to an existing Person class:
 class Person {
 	// ...existing code...
 	age: number;
@@ -2896,7 +2904,9 @@ changed code
 changed code
 // ...existing code...
 
-Here is an example of how you should format an edit to an existing Person class:
+Example workflow - always try replace_string_in_file first, then fall back to insert_edit_into_file if it fails:
+1. First attempt: replace_string_in_file returns error
+2. Fallback: Use insert_edit_into_file to add a getAge method to an existing Person class:
 class Person {
 	// ...existing code...
 	age: number;
@@ -3103,7 +3113,9 @@ changed code
 changed code
 // ...existing code...
 
-Here is an example of how you should format an edit to an existing Person class:
+Example workflow - always try replace_string_in_file first, then fall back to insert_edit_into_file if it fails:
+1. First attempt: replace_string_in_file returns error
+2. Fallback: Use insert_edit_into_file to add a getAge method to an existing Person class:
 class Person {
 	// ...existing code...
 	age: number;

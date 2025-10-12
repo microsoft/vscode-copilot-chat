@@ -170,7 +170,9 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				changed code<br />
 				// {EXISTING_CODE_MARKER}<br />
 				<br />
-				Here is an example of how you should format an edit to an existing Person class:<br />
+				Example workflow - always try {tools[ToolName.ReplaceString] ? `${ToolName.ReplaceString}` : 'replace_string_in_file'} first, then fall back to {ToolName.EditFile} if it fails:<br />
+				1. First attempt: {tools[ToolName.ReplaceString] ? `${ToolName.ReplaceString}` : 'replace_string_in_file'} returns error<br />
+				2. Fallback: Use {ToolName.EditFile} to add a getAge method to an existing Person class:<br />
 				{[
 					`class Person {`,
 					`	// ${EXISTING_CODE_MARKER}`,
@@ -776,7 +778,9 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 				changed code<br />
 				// {EXISTING_CODE_MARKER}<br />
 				<br />
-				Here is an example of how you should format an edit to an existing Person class:<br />
+				Example workflow - always try {tools[ToolName.ReplaceString] ? `${ToolName.ReplaceString}` : 'replace_string_in_file'} first, then fall back to {ToolName.EditFile} if it fails:<br />
+				1. First attempt: {tools[ToolName.ReplaceString] ? `${ToolName.ReplaceString}` : 'replace_string_in_file'} returns error "Could not find the exact string in the file due to formatting differences"<br />
+				2. Fallback: Use {ToolName.EditFile} to add a getAge method to an existing Person class:<br />
 				{[
 					`class Person {`,
 					`	// ${EXISTING_CODE_MARKER}`,
@@ -1002,7 +1006,9 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 				changed code<br />
 				// {EXISTING_CODE_MARKER}<br />
 				<br />
-				Here is an example of how you should format an edit to an existing Person class:<br />
+				Example workflow - always try {ToolName.ReplaceString} first, then fall back to {ToolName.EditFile} if it fails:<br />
+				1. First attempt: {ToolName.ReplaceString} returns error "Could not find the exact string in the file due to formatting differences"<br />
+				2. Fallback: Use {ToolName.EditFile} to add a getAge method to an existing Person class:<br />
 				{[
 					`class Person {`,
 					`	// ${EXISTING_CODE_MARKER}`,
