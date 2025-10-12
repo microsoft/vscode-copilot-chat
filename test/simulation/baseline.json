@@ -1261,6 +1261,14 @@
     "score": 0.8
   },
   {
+    "name": "edit tool fallback (toolCalling) [panel] - should prefer replace_string_in_file for simple edits",
+    "optional": true,
+    "contentFilterCount": 0,
+    "passCount": 9,
+    "failCount": 1,
+    "score": 0.9
+  },
+  {
     "name": "edit-agent [panel] [typescript] - issue #8098: extract function to unseen file",
     "optional": true,
     "contentFilterCount": 0,

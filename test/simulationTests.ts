@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 import './codeMapper/codeMapper.stest';
 import './e2e/edit.stest';
+import './e2e/editToolFallback.stest';
 import './e2e/explain.stest';
 import './e2e/fetchWebPageTool.stest';
 import './e2e/findFilesTool.stest';
