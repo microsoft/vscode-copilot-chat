@@ -164,15 +164,16 @@ export class RepoInfoTelemetry {
 		const deleteDisposable = watcher.onDidDelete(() => filesChanged = true);
 
 		try {
-			// Workspace file index will be used to get a rough count of files in the repository
-			await this._workspaceFileIndex.initialize(); // This should be initialized already, but make sure, it won't initialize again
-
 			const baseProperties: Omit<RepoInfoTelemetryProperties, 'diffsJSON' | 'result'> = {
 				remoteUrl: normalizedFetchUrl,
 				repoType: repoInfo.repoId.type,
 				headCommitHash: upstreamCommit,
 			};
 
+			// Workspace file index will be used to get a rough count of files in the repository
+			// We need to call initialize here to have the count, but after first initialize call
+			// further calls are no-ops so only a hit first time.
+			await this._workspaceFileIndex.initialize();
 			const measurements: RepoInfoTelemetryMeasurements = {
 				workspaceFileCount: this._workspaceFileIndex.fileCount,
 				changedFileCount: 0, // Will be updated
@@ -186,8 +187,6 @@ export class RepoInfoTelemetry {
 					measurements
 				};
 			}
-
-			// Update changed file count
 			measurements.changedFileCount = changes.length;
 
 			// Check if there are too many changes (e.g., mass renames)
