@@ -140,8 +140,9 @@ async function main() {
 	}
 
 	await copyStaticAssets([
-		`node_modules/@anthropic-ai/claude-agent-sdk/cli.js`,
-		`node_modules/@anthropic-ai/claude-agent-sdk/yoga.wasm`,
+		`node_modules/@anthropic-ai/claude-code/cli.js`,
+		`node_modules/@anthropic-ai/claude-code/yoga.wasm`,
+		// `node_modules/@anthropic-ai/claude-code/vendor/ripgrep/${process.arch}-${process.platform}/ripgrep`,
 	], 'dist');
 }
 
