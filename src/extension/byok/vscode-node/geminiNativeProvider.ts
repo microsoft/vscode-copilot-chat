@@ -63,7 +63,7 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 			return modelList;
 		} catch (error) {
 			this._logService.error(error, `Error fetching available ${GeminiNativeBYOKLMProvider.providerName} models`);
-			throw new Error(error.message ? error.message : error);
+			throw new Error(toErrorMessage(error, true));
 		}
 	}
 
@@ -149,6 +149,13 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 			})
 		}] : [];
 
+		// Bridge VS Code cancellation token to Gemini abortSignal for early network termination
+		const abortController = new AbortController();
+		const cancelSub = token.onCancellationRequested(() => {
+			abortController.abort();
+			this._logService.trace('Gemini request aborted via VS Code cancellation token');
+		});
+
 		const params: GenerateContentParameters = {
 			model: model.id,
 			contents: contents,
@@ -156,16 +163,9 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 				systemInstruction: systemInstruction,
 				tools: tools.length > 0 ? tools : undefined,
 				maxOutputTokens: model.maxOutputTokens,
+				abortSignal: abortController.signal
 			}
 		};
-
-		// Bridge VS Code cancellation token to Gemini abortSignal for early network termination
-		const abortController = new AbortController();
-		const cancelSub = token.onCancellationRequested(() => {
-			abortController.abort();
-			this._logService.trace('Gemini request aborted via VS Code cancellation token');
-		});
-		(params.config as any).abortSignal = abortController.signal;
 
 		const wrappedProgress = new RecordedProgress(progress);
 
@@ -214,7 +214,7 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 	}
 
 	async provideTokenCount(model: LanguageModelChatInformation, text: string | LanguageModelChatMessage | LanguageModelChatMessage2, token: CancellationToken): Promise<number> {
-		// Simple estimation - actual token count would require Gemini's tokenizer
+		// Simple estimation for approximate token count - actual token count would require Gemini's tokenizer
 		return Math.ceil(text.toString().length / 4);
 	}
 
@@ -276,6 +276,7 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 				// Extract usage information if available in the chunk
 				if (chunk.usageMetadata) {
 					usage = {
+						// Use -1 as a sentinel value to indicate that the token count is unavailable
 						completion_tokens: chunk.usageMetadata.candidatesTokenCount || -1,
 						prompt_tokens: chunk.usageMetadata.promptTokenCount || -1,
 						total_tokens: chunk.usageMetadata.totalTokenCount || -1,

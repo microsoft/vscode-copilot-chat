@@ -33,7 +33,7 @@ function mapType(jsonType: string): Type {
 		case "boolean":
 			return Type.BOOLEAN;
 		default:
-			throw new Error(`Unknown type: ${jsonType}`);
+			throw new Error(`Unsupported type: ${jsonType}`);
 	}
 }
 
@@ -67,7 +67,10 @@ function transformProperties(props: Record<string, ToolJsonSchema>): Record<stri
 
 
 		const transformed: any = {
-			type: mapType(effectiveValue.type ?? "object")
+			// If type is undefined, throw an error to avoid incorrect assumptions
+			type: effectiveValue.type
+				? mapType(effectiveValue.type)
+				: (() => { throw new Error(`Property "${key}" is missing a "type" field in the schema.`); })()
 		};
 
 		if (effectiveValue.description) {

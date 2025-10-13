@@ -144,40 +144,36 @@ export function apiMessageToGeminiMessage(messages: LanguageModelChatMessage[]):
 		}
 	}
 
-	// Idempotence: avoid re-processing if a marker flag is present
-	if (!Object.hasOwnProperty.call(contents, '_geminiPostProcessed')) {
-		// Post-process: ensure functionResponse parts are not embedded in 'model' role messages.
-		// Gemini expects tool responses to be supplied by the *user*/caller after the model issues a functionCall.
-		// If upstream accidentally placed tool result parts inside an assistant/model role, we split them out here.
-		for (let i = 0; i < contents.length; i++) {
-			const c = contents[i];
-			if (c.role === 'model' && c.parts && c.parts.some(p => 'functionResponse' in p)) {
-				const modelParts: Part[] = [];
-				const toolResultParts: Part[] = [];
-				for (const p of c.parts) {
-					if ('functionResponse' in p) {
-						toolResultParts.push(p);
-					} else {
-						modelParts.push(p);
-					}
-				}
-				// Replace original with model-only parts
-				c.parts = modelParts;
-				// Insert a new user role content immediately after with the function responses
-				if (toolResultParts.length) {
-					contents.splice(i + 1, 0, { role: 'user', parts: toolResultParts });
-					i++; // Skip over inserted element
+	// Post-process: ensure functionResponse parts are not embedded in 'model' role messages.
+	// Gemini expects tool responses to be supplied by the *user*/caller after the model issues a functionCall.
+	// If upstream accidentally placed tool result parts inside an assistant/model role, we split them out here.
+	for (let i = 0; i < contents.length; i++) {
+		const c = contents[i];
+		if (c.role === 'model' && c.parts && c.parts.some(p => 'functionResponse' in p)) {
+			const modelParts: Part[] = [];
+			const toolResultParts: Part[] = [];
+			for (const p of c.parts) {
+				if ('functionResponse' in p) {
+					toolResultParts.push(p);
+				} else {
+					modelParts.push(p);
 				}
 			}
-		}
-		// Cleanup: remove any model messages that became empty after extraction
-		for (let i = contents.length - 1; i >= 0; i--) {
-			const c = contents[i];
-			if (c.role === 'model' && (!c.parts || c.parts.length === 0)) {
-				contents.splice(i, 1);
+			// Replace original with model-only parts
+			c.parts = modelParts;
+			// Insert a new user role content immediately after with the function responses
+			if (toolResultParts.length) {
+				contents.splice(i + 1, 0, { role: 'user', parts: toolResultParts });
+				i++; // Skip over inserted element
 			}
 		}
-		Object.defineProperty(contents, '_geminiPostProcessed', { value: true, enumerable: false });
+	}
+	// Cleanup: remove any model messages that became empty after extraction
+	for (let i = contents.length - 1; i >= 0; i--) {
+		const c = contents[i];
+		if (c.role === 'model' && (!c.parts || c.parts.length === 0)) {
+			contents.splice(i, 1);
+		}
 	}
 
 	return { contents, systemInstruction };
