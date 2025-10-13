@@ -261,9 +261,24 @@ export class CopilotCLISession extends Disposable {
 			};
 		}
 
+		if (permissionRequest.kind === 'mcp') {
+			const serverName = permissionRequest.serverName as string | undefined;
+			const toolTitle = permissionRequest.toolTitle as string | undefined;
+			const toolName = permissionRequest.toolName as string | undefined;
+			const args = permissionRequest.args;
+
+			return {
+				title: toolTitle || `MCP Tool: ${toolName || 'Unknown'}`,
+				message: serverName
+					? `Server: ${serverName}\n\`\`\`json\n${JSON.stringify(args, null, 2)}\n\`\`\``
+					: `\`\`\`json\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
+				confirmationType: 'basic'
+			};
+		}
+
 		return {
 			title: 'Copilot CLI Permission Request',
-			message: `\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
+			message: `\`\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
 			confirmationType: 'basic'
 		};
 	}
