@@ -70,7 +70,7 @@ export class ChatReplayIntent implements IIntent {
 				break;
 			case 'toolCall':
 				{
-					replay.setToolResult(step.id, step.results);
+
 					const result = await this.toolsService.invokeTool(ToolName.ToolReplay,
 						{
 							toolInvocationToken: toolToken,

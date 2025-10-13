@@ -41,7 +41,7 @@ type Request = {
 	id: string;
 	line: number;
 	prompt: string;
-	result: string;
+	result: string | string[];
 }
 
 export type ChatStep = UserQuery | Request | ToolStep;
@@ -49,7 +49,6 @@ export type ChatStep = UserQuery | Request | ToolStep;
 export class ChatReplayResponses {
 	private pendingRequests: DeferredPromise<ChatStep | 'finished'>[] = [];
 	private responses: (ChatStep | 'finished')[] = [];
-	private toolResults: Map<string, string[]> = new Map();
 
 	public static instance: ChatReplayResponses;
 
@@ -86,14 +85,6 @@ export class ChatReplayResponses {
 		const deferred = new DeferredPromise<ChatStep | 'finished'>();
 		this.pendingRequests.push(deferred);
 		return deferred.p;
-	}
-
-	public setToolResult(id: string, result: string[]): void {
-		this.toolResults.set(id, result);
-	}
-
-	public getToolResult(id: string): string[] | undefined {
-		return this.toolResults.get(id);
 	}
 
 	public markDone(): void {
