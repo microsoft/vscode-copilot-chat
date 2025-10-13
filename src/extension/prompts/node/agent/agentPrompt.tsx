@@ -204,7 +204,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			}
 		}
 
-		if (this.supportsClaudeAltPrompt(this.props.endpoint.model)) {
+		if (this.supportsClaudeAltPrompt(this.props.endpoint.family)) {
 			const promptType = this.configurationService.getExperimentBasedConfig(ConfigKey.ClaudeSonnet45AlternatePrompt, this.experimentationService);
 			switch (promptType) {
 				case 'v2':
@@ -237,13 +237,13 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		/>;
 	}
 
-	private supportsClaudeAltPrompt(name: string): boolean {
-		if (!name.startsWith('claude-')) {
+	private supportsClaudeAltPrompt(family: string): boolean {
+		if (!family.startsWith('claude-')) {
 			return false;
 		}
 
 		const excludedVersions = ['claude-3.5-sonnet', 'claude-3.7-sonnet', 'claude-sonnet-4'];
-		return !excludedVersions.includes(name);
+		return !excludedVersions.includes(family);
 	}
 
 	private async getAgentCustomInstructions() {
