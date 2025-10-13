@@ -21,11 +21,6 @@ assets/walkthroughs/**
 !node_modules/@github/copilot/**/package.json
 !node_modules/@github/copilot/**/*.js
 !node_modules/@github/copilot/**/*.wasm
-!node_modules/sharp/package.json
-!node_modules/sharp/lib/**
-!node_modules/detect-libc/**
-!node_modules/semver/**
-!node_modules/@img/**
 !CHANGELOG.md
 !README.md
 !package.json
