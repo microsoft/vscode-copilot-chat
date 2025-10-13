@@ -18,7 +18,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import * as glob from '../../../util/vs/base/common/glob';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
-import { isWindows } from '../../../util/vs/base/common/platform';
+import { isMacintosh, isWindows } from '../../../util/vs/base/common/platform';
 import { extUriBiasedIgnorePathCase, normalizePath, relativePath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
@@ -552,12 +552,16 @@ const ALWAYS_CHECKED_EDIT_PATTERNS: Readonly<Record<string, boolean>> = {
 	'**/.vscode/*.json': false,
 };
 
+const allPlatformPatterns = [homedir() + '/.*', homedir() + '/.*/**'];
+
 // Path prefixes under which confirmation is unconditionally required
 const platformConfirmationRequiredPaths = (
 	isWindows
-		? [process.env.APPDATA + '/**', process.env.LOCALAPPDATA + '/**', homedir() + '/.*', homedir() + '/.*/**']
-		: [homedir() + '/.*', homedir() + '/.*/**']
-).map(p => glob.parse(p));
+		? [process.env.APPDATA + '/**', process.env.LOCALAPPDATA + '/**']
+		: isMacintosh
+			? [homedir() + '/Library/**']
+			: []
+).concat(allPlatformPatterns).map(p => glob.parse(p));
 
 const enum ConfirmationCheckResult {
 	NoConfirmation,
