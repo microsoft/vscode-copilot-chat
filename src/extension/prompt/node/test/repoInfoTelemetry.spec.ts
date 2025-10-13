@@ -686,7 +686,7 @@ suite('RepoInfoTelemetry', () => {
 				uri: URI.file('/test/repo/file.ts'),
 				originalUri: URI.file('/test/repo/file.ts'),
 				renameUri: undefined,
-				status: Status.DELETED
+				status: Status.MODIFIED
 			}] as any;
 		});
 
