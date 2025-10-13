@@ -373,6 +373,40 @@ suite('applyPatch parser', () => {
 		expect(Object.values(commit.changes).at(0)?.newContent).toMatchFileSnapshot(`${__dirname}/corpus/262549-output.txt`);
 	});
 
+	it('reindents unindented code', async () => {
+		const input = await fs.readFile(`${__dirname}/corpus/reindent-input.txt`, 'utf-8');
+		const patch = await fs.readFile(`${__dirname}/corpus/reindent-call.txt`, 'utf-8');
+
+		const docs = {
+			'/Users/connor/Downloads/hello.yml': new StringTextDocumentWithLanguageId(input, 'text/plain')
+		};
+		const [parsed] = text_to_patch(patch, docs);
+		const commit = patch_to_commit(parsed, docs);
+		expect(Object.values(commit.changes).at(0)?.newContent).toMatchInlineSnapshot(`
+			"- hello
+			- world
+			- list:
+			    - item1
+			    - item2
+			    - item3
+			    - item1a
+			    - item2a
+			    - item3a
+			    - item1b
+			    - item20b
+			      - nested3
+			      - nested2
+			    - item3b
+			    - item1c
+			    - item2c
+			    - item3c
+			    - item1d
+			    - item2d
+			    - item3d
+			"
+		`);
+	});
+
 
 	it('issue#267547', async () => {
 		const input = await fs.readFile(`${__dirname}/corpus/267547-input.txt`, 'utf-8');
