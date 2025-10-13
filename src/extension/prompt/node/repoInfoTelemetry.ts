@@ -148,7 +148,19 @@ export class RepoInfoTelemetry {
 		// Get the upstream commit from the repository
 		const gitAPI = this._gitExtensionService.getExtensionApi();
 		const repository = gitAPI?.getRepository(repoContext.rootUri);
-		const upstreamCommit = repository?.state.HEAD?.upstream?.commit;
+		if (!repository) {
+			return;
+		}
+
+		let upstreamCommit = await repository.getMergeBase('HEAD', '{@upstream}');
+		if (!upstreamCommit) {
+			const baseBranch = await repository.getBranchBase('HEAD');
+			if (baseBranch) {
+				const baseRef = `${baseBranch.remote}/${baseBranch.name}`;
+				upstreamCommit = await repository.getMergeBase('HEAD', baseRef);
+			}
+		}
+
 		if (!upstreamCommit) {
 			return;
 		}
@@ -180,7 +192,7 @@ export class RepoInfoTelemetry {
 				diffSizeBytes: 0, // Will be updated
 			};
 
-			const changes = await this._gitService.diffWith(repoContext.rootUri, '@{upstream}');
+			const changes = await this._gitService.diffWith(repoContext.rootUri, upstreamCommit);
 			if (!changes || changes.length === 0) {
 				return {
 					properties: { ...baseProperties, diffsJSON: undefined, result: 'noChanges' },
