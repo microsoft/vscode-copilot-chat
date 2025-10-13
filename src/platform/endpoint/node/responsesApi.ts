@@ -179,7 +179,8 @@ export async function processResponseFromChatEndpoint(instantiationService: IIns
 	const body = (await response.body()) as ClientHttp2Stream;
 	return new AsyncIterableObject<ChatCompletion>(async feed => {
 		const requestId = response.headers.get('X-Request-ID') ?? generateUuid();
-		const processor = instantiationService.createInstance(OpenAIResponsesProcessor, telemetryData, requestId);
+		const ghRequestId = response.headers.get('x-github-request-id') ?? '';
+		const processor = instantiationService.createInstance(OpenAIResponsesProcessor, telemetryData, requestId, ghRequestId);
 		const parser = new SSEParser((ev) => {
 			try {
 				logService.trace(`SSE: ${ev.data}`);
@@ -211,6 +212,7 @@ class OpenAIResponsesProcessor {
 	constructor(
 		private readonly telemetryData: TelemetryData,
 		private readonly requestId: string,
+		private readonly ghRequestId: string,
 	) { }
 
 	public push(chunk: OpenAI.Responses.ResponseStreamEvent, _onProgress: FinishedCallback): ChatCompletion | undefined {
@@ -291,7 +293,7 @@ class OpenAIResponsesProcessor {
 					choiceIndex: 0,
 					tokens: [],
 					telemetryData: this.telemetryData,
-					requestId: { headerRequestId: this.requestId, completionId: chunk.response.id, created: chunk.response.created_at, deploymentId: '', serverExperiments: '' },
+					requestId: { headerRequestId: this.requestId, gitHubRequestId: this.ghRequestId, completionId: chunk.response.id, created: chunk.response.created_at, deploymentId: '', serverExperiments: '' },
 					usage: {
 						prompt_tokens: chunk.response.usage?.input_tokens ?? 0,
 						completion_tokens: chunk.response.usage?.output_tokens ?? 0,

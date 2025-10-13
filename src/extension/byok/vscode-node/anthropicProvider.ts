@@ -66,6 +66,24 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		}
 	}
 
+	async updateAPIKeyViaCmd(envVarName: string, action: 'update' | 'remove' = 'update', modelId?: string): Promise<void> {
+		if (action === 'remove') {
+			this._apiKey = undefined;
+			await this._byokStorageService.deleteAPIKey(AnthropicLMProvider.providerName, this.authType, modelId);
+			this._logService.info(`BYOK: API key removed for provider ${AnthropicLMProvider.providerName}`);
+			return;
+		}
+
+		const apiKey = process.env[envVarName];
+		if (!apiKey) {
+			throw new Error(`BYOK: Environment variable ${envVarName} not found or empty for API key management`);
+		}
+
+		this._apiKey = apiKey;
+		await this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, apiKey, this.authType, modelId);
+		this._logService.info(`BYOK: API key updated for provider ${AnthropicLMProvider.providerName} from environment variable ${envVarName}`);
+	}
+
 	async provideLanguageModelChatInformation(options: { silent: boolean }, token: CancellationToken): Promise<LanguageModelChatInformation[]> {
 		if (!this._apiKey) { // If we don't have the API key it might just be in storage, so we try to read it first
 			this._apiKey = await this._byokStorageService.getAPIKey(AnthropicLMProvider.providerName);

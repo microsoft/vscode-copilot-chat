@@ -115,4 +115,26 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 			await this._byokStorageService.storeAPIKey(this._name, this._apiKey, BYOKAuthType.GlobalApiKey);
 		}
 	}
+
+	async updateAPIKeyViaCmd(envVarName: string, action: 'update' | 'remove' = 'update', modelId?: string): Promise<void> {
+		if (this.authType === BYOKAuthType.None) {
+			return;
+		}
+
+		if (action === 'remove') {
+			this._apiKey = undefined;
+			await this._byokStorageService.deleteAPIKey(this._name, this.authType, modelId);
+			this._logService.info(`BYOK: API key removed for provider ${this._name}`);
+			return;
+		}
+
+		const apiKey = process.env[envVarName];
+		if (!apiKey) {
+			throw new Error(`BYOK: Environment variable ${envVarName} not found or empty for API key management`);
+		}
+
+		this._apiKey = apiKey;
+		await this._byokStorageService.storeAPIKey(this._name, apiKey, this.authType, modelId);
+		this._logService.info(`BYOK: API key updated for provider ${this._name} from environment variable ${envVarName}`);
+	}
 }

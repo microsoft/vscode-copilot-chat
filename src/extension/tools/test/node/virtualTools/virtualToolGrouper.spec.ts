@@ -578,7 +578,7 @@ describe('Virtual Tools - Grouper', () => {
 			});
 
 			// Mock the tool embeddings computer to return specific predicted tools
-			vi.spyOn(grouper['toolEmbeddingsComputer'], 'retrieveSimilarEmbeddingsForAvailableTools')
+			vi.spyOn(grouper['_toolEmbeddingsComputer'], 'retrieveSimilarEmbeddingsForAvailableTools')
 				.mockResolvedValue(['predicted_tool1', 'predicted_tool2']);
 
 			const query = 'test query for embeddings';
@@ -636,7 +636,7 @@ describe('Virtual Tools - Grouper', () => {
 				}]
 			});
 
-			vi.spyOn(grouper['toolEmbeddingsComputer'], 'retrieveSimilarEmbeddingsForAvailableTools')
+			vi.spyOn(grouper['_toolEmbeddingsComputer'], 'retrieveSimilarEmbeddingsForAvailableTools')
 				.mockResolvedValue(['predicted1', 'predicted2']);
 
 			await grouper.recomputeEmbeddingRankings('test query', root, CancellationToken.None);
@@ -673,7 +673,7 @@ describe('Virtual Tools - Grouper', () => {
 			});
 
 			// First call - predict tool1
-			vi.spyOn(grouper['toolEmbeddingsComputer'], 'retrieveSimilarEmbeddingsForAvailableTools')
+			vi.spyOn(grouper['_toolEmbeddingsComputer'], 'retrieveSimilarEmbeddingsForAvailableTools')
 				.mockResolvedValueOnce(['tool1']);
 
 			await grouper.recomputeEmbeddingRankings('query1', root, CancellationToken.None);
@@ -685,7 +685,7 @@ describe('Virtual Tools - Grouper', () => {
 			expect(embeddingsGroup.contents[0].name).toBe('tool1');
 
 			// Second call - predict tool2 and tool3
-			vi.spyOn(grouper['toolEmbeddingsComputer'], 'retrieveSimilarEmbeddingsForAvailableTools')
+			vi.spyOn(grouper['_toolEmbeddingsComputer'], 'retrieveSimilarEmbeddingsForAvailableTools')
 				.mockResolvedValueOnce(['tool2', 'tool3']);
 
 			await grouper.recomputeEmbeddingRankings('query2', root, CancellationToken.None);
@@ -711,7 +711,7 @@ describe('Virtual Tools - Grouper', () => {
 			});
 
 			// Return no predicted tools
-			vi.spyOn(grouper['toolEmbeddingsComputer'], 'retrieveSimilarEmbeddingsForAvailableTools')
+			vi.spyOn(grouper['_toolEmbeddingsComputer'], 'retrieveSimilarEmbeddingsForAvailableTools')
 				.mockResolvedValue([]);
 
 			await grouper.recomputeEmbeddingRankings('query', root, CancellationToken.None);
@@ -741,7 +741,7 @@ describe('Virtual Tools - Grouper', () => {
 			});
 
 			// Return predicted tools that don't exist in root
-			vi.spyOn(grouper['toolEmbeddingsComputer'], 'retrieveSimilarEmbeddingsForAvailableTools')
+			vi.spyOn(grouper['_toolEmbeddingsComputer'], 'retrieveSimilarEmbeddingsForAvailableTools')
 				.mockResolvedValue(['nonexistent1', 'nonexistent2']);
 
 			await grouper.recomputeEmbeddingRankings('query', root, CancellationToken.None);
