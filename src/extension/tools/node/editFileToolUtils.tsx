@@ -12,6 +12,7 @@ import { ICustomInstructionsService } from '../../../platform/customInstructions
 import { OffsetLineColumnConverter } from '../../../platform/editing/common/offsetLineColumnConverter';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -681,4 +682,13 @@ export function canExistingFileBeEdited(accessor: ServicesAccessor, uri: URI): P
 
 	const fileSystemService = accessor.get(IFileSystemService);
 	return fileSystemService.stat(uri).then(() => true, () => false);
+}
+
+
+export function logEditToolResult(logService: ILogService, requestId: string | undefined, ...opts: {
+	input: unknown;
+	success: boolean;
+	healed?: unknown | undefined;
+}[]) {
+	logService.debug(`[edit-tool:${requestId}] ${JSON.stringify(opts)}`);
 }
