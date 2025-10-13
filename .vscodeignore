@@ -25,7 +25,7 @@ assets/walkthroughs/**
 !node_modules/sharp/lib/**
 !node_modules/detect-libc/**
 !node_modules/semver/**
-!node_modules/@img/colour/**
+!node_modules/@img/**
 !CHANGELOG.md
 !README.md
 !package.json
