@@ -263,8 +263,8 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 
 			const data: IModelAPIResponse[] = (await response.json()).data;
 			this._requestLogger.logModelListCall(requestId, requestMetadata, data);
-			for (let model of data) {
-				model = await this._hydrateResolvedModel(model);
+			for (const rawModel of data) {
+				const model = await this._hydrateResolvedModel(rawModel);
 				const isCompletionModel = isCompletionModelInformation(model);
 				// The base model is whatever model is deemed "fallback" by the server
 				if (model.is_chat_fallback && !isCompletionModel) {
