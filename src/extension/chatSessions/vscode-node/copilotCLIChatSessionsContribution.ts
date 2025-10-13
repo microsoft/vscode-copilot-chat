@@ -5,13 +5,17 @@
 
 import { promises as fs } from 'fs';
 import * as vscode from 'vscode';
+import { ChatExtendedRequestHandler } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ITerminalService } from '../../../platform/terminal/common/terminalService';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
-import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
+import { localize } from '../../../util/vs/nls';
+import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
 import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
+import { buildChatHistoryFromEvents, parseChatMessagesToEvents } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
 
 export class CopilotCLIChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
 	private readonly _onDidChangeChatSessionItems = this._register(new Emitter<void>());
@@ -151,4 +155,101 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			terminal.sendText(command);
 		}
 	}
+}
+
+export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionContentProvider {
+
+	constructor(
+		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
+	) { }
+
+	async provideChatSessionContent(copilotcliSessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
+		const existingSession = copilotcliSessionId && await this.sessionService.getSession(copilotcliSessionId, token);
+		const sdkSession = existingSession ? existingSession.sdkSession : undefined;
+		const chatMessages = sdkSession?.chatMessages || [];
+		const events = parseChatMessagesToEvents(chatMessages);
+
+		const history = existingSession ? buildChatHistoryFromEvents(events) : [];
+
+		return {
+			history,
+			activeResponseCallback: undefined,
+			requestHandler: undefined,
+		};
+	}
+}
+
+export class CopilotCLIChatSessionParticipant {
+	constructor(
+		private readonly sessionType: string,
+		private readonly copilotcliAgentManager: CopilotCLIAgentManager,
+		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
+	) { }
+
+	createHandler(): ChatExtendedRequestHandler {
+		return this.handleRequest.bind(this);
+	}
+
+	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
+		const create = async () => {
+			const { copilotcliSessionId } = await this.copilotcliAgentManager.handleRequest(undefined, request, context, stream, token);
+			if (!copilotcliSessionId) {
+				stream.warning(localize('copilotcli.failedToCreateSession', "Failed to create a new CopilotCLI session."));
+				return undefined;
+			}
+			return copilotcliSessionId;
+		};
+		const { chatSessionContext } = context;
+		if (chatSessionContext) {
+			if (chatSessionContext.isUntitled) {
+				const copilotcliSessionId = await create();
+				if (copilotcliSessionId) {
+					this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { id: copilotcliSessionId, label: request.prompt ?? 'CopilotCLI' });
+				}
+				return {};
+			}
+
+			const { id } = chatSessionContext.chatSessionItem;
+			await this.copilotcliAgentManager.handleRequest(id, request, context, stream, token);
+			return {};
+		}
+
+		stream.markdown(localize('copilotcli.viaAtCopilotcli', "Start a new CopilotCLI session"));
+		stream.button({ command: `workbench.action.chat.openNewSessionEditor.${this.sessionType}`, title: localize('copilotcli.startNewSession', "Start Session") });
+		return {};
+	}
+}
+
+export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCLIChatSessionItemProvider, copilotCLISessionService: ICopilotCLISessionService): IDisposable {
+	const disposableStore = new DisposableStore();
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.copilotcli.sessions.refresh', () => {
+		copilotcliSessionItemProvider.refresh();
+	}));
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.refresh', () => {
+		copilotcliSessionItemProvider.refresh();
+	}));
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.delete', async (sessionItem?: vscode.ChatSessionItem) => {
+		if (sessionItem?.id) {
+			const result = await vscode.window.showWarningMessage(
+				`Are you sure you want to delete the session?`,
+				{ modal: true },
+				'Delete',
+				'Cancel'
+			);
+
+			if (result === 'Delete') {
+				await copilotCLISessionService.deleteSession(sessionItem.id);
+			}
+		}
+	}));
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.resumeInTerminal', async (sessionItem?: vscode.ChatSessionItem) => {
+		if (sessionItem?.id) {
+			await copilotcliSessionItemProvider.resumeCopilotCLISessionInTerminal(sessionItem);
+		}
+	}));
+
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.newTerminalSession', async () => {
+		await copilotcliSessionItemProvider.createCopilotCLITerminal();
+	}));
+	return disposableStore;
 }

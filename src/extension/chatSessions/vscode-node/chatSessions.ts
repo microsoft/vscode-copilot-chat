@@ -18,9 +18,7 @@ import { IExtensionContribution } from '../../common/contributions';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
 import { ClaudeChatSessionItemProvider } from './claudeChatSessionItemProvider';
 import { ClaudeChatSessionParticipant } from './claudeChatSessionParticipant';
-import { CopilotCLIChatSessionContentProvider } from './copilotcliChatSessionContentProvider';
-import { CopilotCLIChatSessionItemProvider } from './copilotcliChatSessionItemProvider';
-import { CopilotCLIChatSessionParticipant } from './copilotcliChatSessionParticipant';
+import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, registerCLIChatCommands } from './copilotCLIChatSessionsContribution';
 
 export class ChatSessionsContrib extends Disposable implements IExtensionContribution {
 	readonly id = 'chatSessions';
@@ -59,41 +57,11 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 
 		const copilotcliSessionItemProvider = this._register(copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionItemProvider));
 		this._register(vscode.chat.registerChatSessionItemProvider(this.copilotcliSessionType, copilotcliSessionItemProvider));
-		this._register(vscode.commands.registerCommand('github.copilot.copilotcli.sessions.refresh', () => {
-			copilotcliSessionItemProvider.refresh();
-		}));
-		this._register(vscode.commands.registerCommand('github.copilot.cli.sessions.refresh', () => {
-			copilotcliSessionItemProvider.refresh();
-		}));
-		this._register(vscode.commands.registerCommand('github.copilot.cli.sessions.delete', async (sessionItem?: vscode.ChatSessionItem) => {
-			if (sessionItem?.id) {
-				const result = await vscode.window.showWarningMessage(
-					`Are you sure you want to delete the session?`,
-					{ modal: true },
-					'Delete',
-					'Cancel'
-				);
-
-				if (result === 'Delete') {
-					await copilotCLISessionService.deleteSession(sessionItem.id);
-				}
-			}
-		}));
-
 		const copilotcliAgentManager = this._register(copilotcliAgentInstaService.createInstance(CopilotCLIAgentManager));
 		const copilotcliChatSessionContentProvider = copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionContentProvider);
 		const copilotcliChatSessionParticipant = new CopilotCLIChatSessionParticipant(this.copilotcliSessionType, copilotcliAgentManager, copilotcliSessionItemProvider);
 		const copilotcliParticipant = vscode.chat.createChatParticipant(this.copilotcliSessionType, copilotcliChatSessionParticipant.createHandler());
 		this._register(vscode.chat.registerChatSessionContentProvider(this.copilotcliSessionType, copilotcliChatSessionContentProvider, copilotcliParticipant));
-
-		this._register(vscode.commands.registerCommand('github.copilot.cli.sessions.resumeInTerminal', async (sessionItem?: vscode.ChatSessionItem) => {
-			if (sessionItem?.id) {
-				await copilotcliSessionItemProvider.resumeCopilotCLISessionInTerminal(sessionItem);
-			}
-		}));
-
-		this._register(vscode.commands.registerCommand('github.copilot.cli.sessions.newTerminalSession', async () => {
-			await copilotcliSessionItemProvider.createCopilotCLITerminal();
-		}));
+		this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCLISessionService));
 	}
 }
