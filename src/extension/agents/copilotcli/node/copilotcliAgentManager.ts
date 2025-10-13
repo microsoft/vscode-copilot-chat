@@ -57,7 +57,7 @@ export class CopilotCLIAgentManager extends Disposable {
 			this.sessionService.trackSessionWrapper(sdkSession.sessionId, session);
 		}
 
-		await session.invoke(request.prompt, request.toolInvocationToken, stream, token);
+		await session.invoke(request.prompt, request.toolInvocationToken, stream, token, request);
 
 		return { copilotcliSessionId: session.sessionId };
 	}
@@ -101,7 +101,8 @@ export class CopilotCLISession extends Disposable {
 		prompt: string,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
-		token: vscode.CancellationToken
+		token: vscode.CancellationToken,
+		request?: vscode.ChatRequest
 	): Promise<void> {
 		if (this._store.isDisposed) {
 			throw new Error('Session disposed');
@@ -116,8 +117,7 @@ export class CopilotCLISession extends Disposable {
 				model: 'claude-sonnet-4',
 			},
 			abortController: this._abortController,
-			// TODO@rebornix handle workspace properly
-			workingDirectory: this.workspaceService.getWorkspaceFolders().at(0)?.fsPath,
+			workingDirectory: this.getWorkingDirectory(request),
 			copilotToken: copilotToken.token,
 			env: {
 				...process.env,
@@ -281,5 +281,43 @@ export class CopilotCLISession extends Disposable {
 			message: `\`\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
 			confirmationType: 'basic'
 		};
+	}
+
+	/**
+	 * Determines the appropriate working directory based on the request context.
+	 * Handles multi-root workspaces by checking the request's document/editor context.
+	 */
+	private getWorkingDirectory(request?: vscode.ChatRequest): string | undefined {
+		const workspaceFolders = this.workspaceService.getWorkspaceFolders();
+
+		// No workspace folders available
+		if (workspaceFolders.length === 0) {
+			return undefined;
+		}
+
+		// Try to determine workspace from request context (editor or notebook location)
+		if (request?.location2) {
+			let documentUri: vscode.Uri | undefined;
+
+			// Check if the request is from an editor
+			if ('document' in request.location2) {
+				documentUri = request.location2.document.uri;
+			}
+			// Check if the request is from a notebook cell
+			else if ('cell' in request.location2) {
+				documentUri = request.location2.cell.uri;
+			}
+
+			// Find the workspace folder that contains this document
+			if (documentUri) {
+				const workspaceFolder = this.workspaceService.getWorkspaceFolder(documentUri);
+				if (workspaceFolder) {
+					return workspaceFolder.fsPath;
+				}
+			}
+		}
+
+		// Fall back to the first workspace folder
+		return workspaceFolders[0]?.fsPath;
 	}
 }
