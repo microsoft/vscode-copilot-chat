@@ -5,7 +5,7 @@
 
 import { RequestType } from '@vscode/copilot-api';
 import * as readline from 'readline';
-import type { TextDocument } from 'vscode';
+import type { Selection, TextDocument, TextEditor } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
@@ -39,7 +39,8 @@ export async function githubReview(
 	envService: IEnvService,
 	ignoreService: IIgnoreService,
 	workspaceService: IWorkspaceService,
-	group: 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
+	group: 'selection' | 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
+	editor: TextEditor | undefined,
 	progress: Progress<ReviewComment[]>,
 	cancellationToken: CancellationToken
 ): Promise<FeedbackResult> {
@@ -47,7 +48,17 @@ export async function githubReview(
 	if (!git) {
 		return { type: 'success', comments: [] };
 	}
-	const changes = (typeof group === 'string'
+	const changes = group === 'selection' ? [
+		{
+			repository: git.getRepository(editor!.document.uri) || undefined,
+			uri: editor!.document.uri,
+			relativePath: workspaceService.asRelativePath(editor!.document.uri),
+			before: '',
+			after: editor!.document.getText(),
+			selection: editor!.selection,
+			document: editor!.document,
+		}
+	] : (typeof group === 'string'
 		? (await Promise.all(git.repositories.map(async repository => {
 			const uris = new Set<Uri>();
 			if (group === 'all' || group === 'index') {
@@ -136,9 +147,10 @@ export async function githubReview(
 		capiClientService,
 		fetcherService,
 		envService,
+		group === 'selection' ? 'snippet' : 'diff',
 		filteredChanges[0].repository,
 		filteredChanges.map(change => ({ path: change.relativePath, content: change.before })),
-		filteredChanges.map(change => ({ path: change.relativePath, content: change.after })),
+		filteredChanges.map(change => ({ path: change.relativePath, content: change.after, selection: 'selection' in change ? change.selection : undefined })),
 		cancellationToken,
 	) : {
 		requestId: 'test-request-id',
@@ -223,6 +235,8 @@ interface FileState {
 	path: string;
 	// The file's contents. If the file does not exist in this state, this should be an empty string.
 	content: string;
+	// The selection within the file, if any
+	selection?: Selection;
 }
 
 // A generated pull request comment returned by the agent.
@@ -295,14 +309,24 @@ function parseLine(line: string): ResponseReference[] {
 	}
 }
 
-async function fetchComments(logService: ILogService, authService: IAuthenticationService, capiClientService: ICAPIClientService, fetcherService: IFetcherService, envService: IEnvService, repository: Repository | undefined, baseFileContents: FileState[], headFileContents: FileState[], cancellationToken: CancellationToken) {
+async function fetchComments(logService: ILogService, authService: IAuthenticationService, capiClientService: ICAPIClientService, fetcherService: IFetcherService, envService: IEnvService, kind: 'snippet' | 'diff', repository: Repository | undefined, baseFileContents: FileState[], headFileContents: FileState[], cancellationToken: CancellationToken) {
 	const codingGuidlines = repository ? await loadCodingGuidelines(logService, authService, capiClientService, repository) : [];
 
 	const requestBody = {
 		messages: [{
 			role: 'user',
-			// This is the minimum reference required to get the agent to generate comments.
-			// NOTE: The shape of these references is under active development and is likely to change.
+			...(kind === 'snippet' ? {
+				review_type: "snippet",
+				snippet_files: headFileContents.map(f => ({
+					path: f.path,
+					regions: [
+						{
+							start_line: f.selection!.start.line + 1,
+							end_line: f.selection!.end.line + (f.selection!.end.character > 0 ? 1 : 0), // If selection ends at start of line, don't include that line
+						}
+					]
+				})),
+			} : {}),
 			copilot_references: [
 				{
 					type: 'github.pull_request',

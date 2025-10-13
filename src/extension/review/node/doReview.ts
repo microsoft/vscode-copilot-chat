@@ -126,8 +126,8 @@ export async function doReview(
 		let result: FeedbackResult;
 		try {
 			const copilotToken = await authService.getCopilotToken();
-			const canUseGitHubAgent = (group === 'index' || group === 'workingTree' || group === 'all' || typeof group === 'object') && copilotToken.isCopilotCodeReviewEnabled;
-			result = canUseGitHubAgent ? await githubReview(logService, gitExtensionService, authService, capiClientService, domainService, fetcherService, envService, ignoreService, workspaceService, group, progress, tokenSource.token) : await review(instantiationService, gitExtensionService, workspaceService, typeof group === 'object' && 'group' in group ? group.group : group, editor, progress, tokenSource.token);
+			const canUseGitHubAgent = copilotToken.isCopilotCodeReviewEnabled;
+			result = canUseGitHubAgent ? await githubReview(logService, gitExtensionService, authService, capiClientService, domainService, fetcherService, envService, ignoreService, workspaceService, group, editor, progress, tokenSource.token) : await review(instantiationService, gitExtensionService, workspaceService, typeof group === 'object' && 'group' in group ? group.group : group, editor, progress, tokenSource.token);
 		} catch (err) {
 			result = { type: 'error', reason: err.message, severity: err.severity };
 		} finally {
