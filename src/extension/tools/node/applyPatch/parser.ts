@@ -22,7 +22,7 @@ import { getFilepathComment } from '../../../../util/common/markdown';
 import { computeLevenshteinDistance } from '../../../../util/vs/base/common/diff/diff';
 import { count, isFalsyOrWhitespace } from '../../../../util/vs/base/common/strings';
 import { Lines } from '../../../prompt/node/editGeneration';
-import { computeIndentLevel2, getIndentationChar, guessIndentation, IGuessedIndentation, transformIndentation } from '../../../prompt/node/indentationGuesser';
+import { guessIndentation, IGuessedIndentation, transformIndentation } from '../../../prompt/node/indentationGuesser';
 import {
 	ADD_FILE_PREFIX,
 	DELETE_FILE_PREFIX,
@@ -399,14 +399,6 @@ export class Parser {
 				targetIndentStyle.insertSpaces
 			);
 
-			let additionalIndentation = '';
-			if (match.fuzz & Fuzz.IgnoredWhitespace) {
-				const matchedLineIndent = computeIndentLevel2(fileLines[match.line], targetIndentStyle.tabSize);
-				const contextLineIndent = computeIndentLevel2(nextSection.nextChunkContext[0], targetIndentStyle.tabSize);
-				if (matchedLineIndent > contextLineIndent) {
-					additionalIndentation = getIndentationChar(targetIndentStyle).repeat(matchedLineIndent - contextLineIndent);
-				}
-			}
 
 			for (const ch of nextSection.chunks) {
 				ch.origIndex += match.line;
@@ -416,7 +408,7 @@ export class Parser {
 				}
 
 				ch.insLines = ch.insLines.map(replace_explicit_tabs);
-				ch.insLines = ch.insLines.map(ins => isFalsyOrWhitespace(ins) ? ins : additionalIndentation + transformIndentation(ins, srcIndentStyle, targetIndentStyle));
+				ch.insLines = ch.insLines.map(ins => isFalsyOrWhitespace(ins) ? ins : transformIndentation(ins, srcIndentStyle, targetIndentStyle));
 
 				if (match.fuzz & Fuzz.NormalizedExplicitTab) {
 					ch.delLines = ch.delLines.map(replace_explicit_tabs);

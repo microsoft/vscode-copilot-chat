@@ -374,6 +374,23 @@ suite('applyPatch parser', () => {
 	});
 
 
+	it('issue#267547', async () => {
+		const input = await fs.readFile(`${__dirname}/corpus/267547-input.txt`, 'utf-8');
+		let patchFmt = await fs.readFile(`${__dirname}/corpus/267547-call.txt`, 'utf-8');
+		patchFmt = patchFmt.replaceAll("\r\n", "\n");
+		const expectedOutput = await fs.readFile(`${__dirname}/corpus/267547-output.txt`, 'utf-8');
+
+		const docs = {
+			'267547.txt': new StringTextDocumentWithLanguageId(input.replaceAll("\r\n", "\n"), 'text/plain')
+		};
+		const [parsed] = text_to_patch(patchFmt, docs);
+		const commit = patch_to_commit(parsed, docs);
+		const actualOutput = Object.values(commit.changes).at(0)?.newContent;
+
+		// Normalize line endings for consistent comparison
+		expect(actualOutput?.replaceAll("\r\n", "\n")).toBe(expectedOutput.replaceAll("\r\n", "\n"));
+	});
+
 	suite('corpus', () => {
 		const corpusPath = path.join(__dirname, 'corpus');
 		it('applies corpus', async () => {
