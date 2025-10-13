@@ -14,7 +14,7 @@ import { RecordedProgress } from '../../../util/common/progressRecorder';
 import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider, LMResponsePart } from '../common/byokProvider';
-import { toGeminiFunction, ToolJsonSchema } from '../common/geminiFunctionDeclarationConverter';
+import { toGeminiFunction as toGeminiFunctionDeclaration, ToolJsonSchema } from '../common/geminiFunctionDeclarationConverter';
 import { apiMessageToGeminiMessage, geminiMessagesToRawMessagesForLogging } from '../common/geminiMessageConverter';
 import { IBYOKStorageService } from './byokStorageService';
 import { promptForAPIKey } from './byokUIService';
@@ -143,7 +143,7 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 				}
 
 				// Transform the input schema to match Gemini's expectations
-				const finalTool = toGeminiFunction(tool.name, tool.description, tool.inputSchema as ToolJsonSchema);
+				const finalTool = toGeminiFunctionDeclaration(tool.name, tool.description, tool.inputSchema as ToolJsonSchema);
 				finalTool.description = tool.description || finalTool.description;
 				return finalTool;
 			})
@@ -158,6 +158,14 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 				maxOutputTokens: model.maxOutputTokens,
 			}
 		};
+
+		// Bridge VS Code cancellation token to Gemini abortSignal for early network termination
+		const abortController = new AbortController();
+		const cancelSub = token.onCancellationRequested(() => {
+			abortController.abort();
+			this._logService.trace('Gemini request aborted via VS Code cancellation token');
+		});
+		(params.config as any).abortSignal = abortController.signal;
 
 		const wrappedProgress = new RecordedProgress(progress);
 
@@ -185,10 +193,10 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 		} catch (err) {
 			this._logService.error(`BYOK GeminiNative error: ${toErrorMessage(err, true)}`);
 			pendingLoggedChatRequest.resolve({
-				type: ChatFetchResponseType.Unknown,
+				type: token.isCancellationRequested ? ChatFetchResponseType.Canceled : ChatFetchResponseType.Unknown,
 				requestId,
 				serverRequestId: requestId,
-				reason: err.message
+				reason: token.isCancellationRequested ? 'cancelled' : toErrorMessage(err)
 			}, wrappedProgress.items.map((i): IResponseDelta => {
 				return {
 					text: i instanceof LanguageModelTextPart ? i.value : '',
@@ -200,6 +208,8 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 				};
 			}));
 			throw err;
+		} finally {
+			cancelSub.dispose();
 		}
 	}
 
@@ -236,7 +246,7 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 
 				// Process the streaming response chunks
 				if (chunk.candidates && chunk.candidates.length > 0) {
-					// choose primary candidate only for now
+					// choose the primary candidate
 					const candidate = chunk.candidates[0];
 
 					if (candidate.content && candidate.content.parts) {
@@ -247,10 +257,13 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 							} else if (part.functionCall && part.functionCall.name) {
 								if (hasText && firstTool) {
 									// Flush the linkifier stream otherwise it pauses before the tool call if the last word ends with a punctuation mark.
+									// Only insert if previous char likely ends a sentence / clause to avoid extra stray spaces.
 									progress.report(new LanguageModelTextPart(' '));
 								}
+								// Generate a synthetic call id
+								const callId = `${part.functionCall.name}_${Date.now()}`;
 								progress.report(new LanguageModelToolCallPart(
-									`${part.functionCall.name}_${Date.now()}`, // Generate unique ID
+									callId,
 									part.functionCall.name,
 									part.functionCall.args || {}
 								));
@@ -272,6 +285,10 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 
 			return { ttft, usage };
 		} catch (error) {
+			if ((error as any)?.name === 'AbortError' || token.isCancellationRequested) {
+				this._logService.trace('Gemini streaming aborted');
+				return { ttft, usage: undefined };
+			}
 			this._logService.error(`Gemini streaming error: ${toErrorMessage(error, true)}`);
 			throw error;
 		}

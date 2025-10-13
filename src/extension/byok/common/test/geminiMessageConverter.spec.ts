@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { LanguageModelChatMessage } from 'vscode';
-import { LanguageModelChatMessageRole, LanguageModelTextPart } from '../../../../vscodeTypes';
+import { LanguageModelChatMessageRole, LanguageModelTextPart, LanguageModelToolResultPart, LanguageModelTextPart as LMText } from '../../../../vscodeTypes';
 import { apiMessageToGeminiMessage } from '../geminiMessageConverter';
 
 describe('GeminiMessageConverter', () => {
@@ -76,5 +76,44 @@ describe('GeminiMessageConverter', () => {
 		expect(result.contents[0].parts!).toHaveLength(2); // Empty string filtered out, whitespace kept
 		expect(result.contents[0].parts![0].text).toBe('  ');
 		expect(result.contents[0].parts![1].text).toBe('Hello!');
+	});
+
+	it('should extract functionResponse parts from model message into subsequent user message and prune empty model', () => {
+		// Simulate a model message that (incorrectly) contains only a tool result part
+		const toolResult = new LanguageModelToolResultPart('myTool_12345', [new LanguageModelTextPart('{"foo":"bar"}')]);
+		const messages: LanguageModelChatMessage[] = [
+			{
+				role: LanguageModelChatMessageRole.Assistant,
+				content: [toolResult],
+				name: undefined
+			}
+		];
+
+		const { contents } = apiMessageToGeminiMessage(messages);
+
+		// The original (empty) model message should be pruned; we expect a single user message with functionResponse
+		expect(contents).toHaveLength(1);
+		expect(contents[0].role).toBe('user');
+		expect(contents[0].parts![0]).toHaveProperty('functionResponse');
+		const fr: any = contents[0].parts![0];
+		expect(fr.functionResponse.name).toBe('myTool'); // extracted from callId prefix
+		expect(fr.functionResponse.response).toEqual({ foo: 'bar' });
+	});
+
+	it('should be idempotent when called multiple times (no duplication)', () => {
+		const toolResult = new LanguageModelToolResultPart('doThing_12345', [new LMText('{"value":42}')]);
+		const messages: LanguageModelChatMessage[] = [
+			{ role: LanguageModelChatMessageRole.Assistant, content: [new LMText('Result:'), toolResult], name: undefined }
+		];
+		const first = apiMessageToGeminiMessage(messages);
+		const second = apiMessageToGeminiMessage(messages); // Re-run with same original messages
+
+		// Both runs should yield identical normalized structure (model text + user tool response) without growth
+		expect(first.contents.length).toBe(2);
+		expect(second.contents.length).toBe(2);
+		expect(first.contents[0].role).toBe('model');
+		expect(first.contents[1].role).toBe('user');
+		expect(second.contents[0].role).toBe('model');
+		expect(second.contents[1].role).toBe('user');
 	});
 });

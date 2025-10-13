@@ -61,7 +61,7 @@ function transformProperties(props: Record<string, ToolJsonSchema>): Record<stri
 
 	for (const [key, value] of Object.entries(props)) {
 
-		// 🩹 Handle anyOf, oneOf, allOf by picking the first valid entry
+		// Handle anyOf, oneOf, allOf by picking the first valid entry
 		const effectiveValue =
 			(value.anyOf?.[0] || value.oneOf?.[0] || value.allOf?.[0] || value) as ToolJsonSchema;
 
@@ -74,7 +74,7 @@ function transformProperties(props: Record<string, ToolJsonSchema>): Record<stri
 			transformed.description = effectiveValue.description;
 		}
 
-		// ✅ Enum support
+		// Enum support
 		if (effectiveValue.enum) {
 			transformed.enum = effectiveValue.enum;
 		}
@@ -111,7 +111,3 @@ function transformProperties(props: Record<string, ToolJsonSchema>): Record<stri
 
 	return result;
 }
-
-
-//const geminiFunction = toGeminiFunction("list_github_issues", githubIssuesSchema);
-//console.log(JSON.stringify(geminiFunction, null, 2));

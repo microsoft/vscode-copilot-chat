@@ -28,23 +28,34 @@ function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageMod
 				});
 			}
 		} else if (part instanceof LanguageModelToolResultPart || part instanceof LanguageModelToolResultPart2) {
-			// Convert tool result content
+			// Convert tool result content (aggregate text parts only; other part types ignored for now)
 			const textContent = part.content
 				.filter((p): p is LanguageModelTextPart => p instanceof LanguageModelTextPart)
 				.map(p => p.value)
 				.join('');
 
-			// Extract function name from callId (format: functionName_timestamp)
+			// extraction: functionName_timestamp => split on first underscore
 			const functionName = part.callId?.split('_')[0] || 'unknown_function';
+
+			// Preserve structured JSON if possible
+			let responsePayload: any = {};
+			if (textContent) {
+				try {
+					responsePayload = JSON.parse(textContent);
+					if (typeof responsePayload !== 'object' || responsePayload === null) {
+						responsePayload = { result: responsePayload };
+					}
+				} catch {
+					responsePayload = { result: textContent };
+				}
+			}
 
 			const functionResponse: FunctionResponse = {
 				name: functionName,
-				response: textContent ? { result: textContent } : {}
+				response: responsePayload
 			};
 
-			convertedContent.push({
-				functionResponse
-			});
+			convertedContent.push({ functionResponse });
 		} else {
 			// Text content - only filter completely empty strings, keep whitespace
 			if (part.value !== '') {
@@ -100,6 +111,42 @@ export function apiMessageToGeminiMessage(messages: LanguageModelChatMessage[]):
 				parts
 			});
 		}
+	}
+
+	// Idempotence: avoid re-processing if a marker flag is present
+	if (!(contents as any)._geminiPostProcessed) {
+		// Post-process: ensure functionResponse parts are not embedded in 'model' role messages.
+		// Gemini expects tool responses to be supplied by the *user*/caller after the model issues a functionCall.
+		// If upstream accidentally placed tool result parts inside an assistant/model role, we split them out here.
+		for (let i = 0; i < contents.length; i++) {
+			const c = contents[i];
+			if (c.role === 'model' && c.parts && c.parts.some(p => (p as any).functionResponse)) {
+				const modelParts: Part[] = [];
+				const toolResultParts: Part[] = [];
+				for (const p of c.parts) {
+					if ((p as any).functionResponse) {
+						toolResultParts.push(p);
+					} else {
+						modelParts.push(p);
+					}
+				}
+				// Replace original with model-only parts
+				c.parts = modelParts;
+				// Insert a new user role content immediately after with the function responses
+				if (toolResultParts.length) {
+					contents.splice(i + 1, 0, { role: 'user', parts: toolResultParts });
+					i++; // Skip over inserted element
+				}
+			}
+		}
+		// Cleanup: remove any model messages that became empty after extraction
+		for (let i = contents.length - 1; i >= 0; i--) {
+			const c = contents[i];
+			if (c.role === 'model' && (!c.parts || c.parts.length === 0)) {
+				contents.splice(i, 1);
+			}
+		}
+		Object.defineProperty(contents, '_geminiPostProcessed', { value: true, enumerable: false });
 	}
 
 	return { contents, systemInstruction };
