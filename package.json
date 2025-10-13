@@ -3130,10 +3130,7 @@
 						]
 					},
 					"github.copilot.chat.completionsFetcher": {
-						"type": [
-							"string",
-							"null"
-						],
+						"type": ["string", "null"],
 						"markdownDescription": "%github.copilot.config.completionsFetcher%",
 						"tags": [
 							"experimental",
@@ -3145,10 +3142,7 @@
 						]
 					},
 					"github.copilot.chat.nesFetcher": {
-						"type": [
-							"string",
-							"null"
-						],
+						"type": ["string", "null"],
 						"markdownDescription": "%github.copilot.config.nesFetcher%",
 						"tags": [
 							"experimental",
@@ -4271,7 +4265,7 @@
 	"dependencies": {
 		"@anthropic-ai/claude-agent-sdk": "^0.1.9",
 		"@anthropic-ai/sdk": "^0.63.0",
-		"@google/genai": "^1.23.0",
+		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@vscode/copilot-api": "^0.1.10",
