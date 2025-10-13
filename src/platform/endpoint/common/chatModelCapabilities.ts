@@ -33,7 +33,7 @@ export async function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
 }
 
 export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint) {
-	return await getSha256Hash(model.family) === '42029ef215256f8fa9fedb53542ee6553eef76027b116f8fac5346211b1e473c';
+	return await getSha256Hash(model.family) === '4243b479ae1f345e3b3beff413f628c1c3edf2b54bc75859e736f0254231aafb';
 }
 
 /**
