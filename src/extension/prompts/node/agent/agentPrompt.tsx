@@ -45,7 +45,7 @@ import { UserPreferences } from '../panel/preferences';
 import { ChatToolCalls } from '../panel/toolCalling';
 import { MultirootWorkspaceStructure } from '../panel/workspace/workspaceStructure';
 import { AgentConversationHistory } from './agentConversationHistory';
-import { AlternateGPTPrompt, CodexStyleGPT5CodexPrompt, CodexStyleGPTPrompt, DefaultAgentPrompt, DefaultAgentPromptV2, SweBenchAgentPrompt } from './agentInstructions';
+import { AlternateGPTPrompt, ClaudeSonnet45PromptV2, CodexStyleGPT5CodexPrompt, CodexStyleGPTPrompt, DefaultAgentPrompt, DefaultAgentPromptV2, SweBenchAgentPrompt } from './agentInstructions';
 import { SummarizedConversationHistory } from './summarizedConversationHistory';
 
 export interface AgentPromptProps extends GenericBasePromptElementProps {
@@ -191,6 +191,24 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			switch (promptType) {
 				case 'v2':
 					return <DefaultAgentPromptV2
+						availableTools={this.props.promptContext.tools?.availableTools}
+						modelFamily={this.props.endpoint.family}
+						codesearchMode={this.props.codesearchMode}
+					/>;
+				default:
+					return <DefaultAgentPrompt
+						availableTools={this.props.promptContext.tools?.availableTools}
+						modelFamily={this.props.endpoint.family}
+						codesearchMode={this.props.codesearchMode}
+					/>;
+			}
+		}
+
+		if (this.props.endpoint.family.startsWith('claude-sonnet-4.5')) {
+			const promptType = this.configurationService.getExperimentBasedConfig(ConfigKey.ClaudeSonnet45AlternatePrompt, this.experimentationService);
+			switch (promptType) {
+				case 'v2':
+					return <ClaudeSonnet45PromptV2
 						availableTools={this.props.promptContext.tools?.availableTools}
 						modelFamily={this.props.endpoint.family}
 						codesearchMode={this.props.codesearchMode}
