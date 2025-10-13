@@ -128,7 +128,9 @@ async function createCopilotCliSharpShim() {
 
 	const copilotPackageJsonFile = path.join(copilotCli, 'package.json');
 	const copilotPackageJson = JSON.parse(fs.readFileSync(copilotPackageJsonFile, 'utf-8'));
-	delete copilotPackageJson.dependencies.sharp;
+	if (copilotPackageJson.dependencies) {
+		delete copilotPackageJson.dependencies.sharp;
+	}
 
 	await fs.promises.writeFile(copilotPackageJsonFile, JSON.stringify(copilotPackageJson, undefined, 2), 'utf-8');
 	await fs.promises.rm(sharpShim, { recursive: true, force: true });
