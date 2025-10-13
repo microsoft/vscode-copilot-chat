@@ -275,11 +275,18 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 
 				// Extract usage information if available in the chunk
 				if (chunk.usageMetadata) {
+					const promptTokens = chunk.usageMetadata.promptTokenCount || -1;
+					const completionTokens = chunk.usageMetadata.candidatesTokenCount || -1;
+
 					usage = {
 						// Use -1 as a sentinel value to indicate that the token count is unavailable
-						completion_tokens: chunk.usageMetadata.candidatesTokenCount || -1,
-						prompt_tokens: chunk.usageMetadata.promptTokenCount || -1,
-						total_tokens: chunk.usageMetadata.totalTokenCount || -1,
+						completion_tokens: completionTokens,
+						prompt_tokens: promptTokens,
+						total_tokens: chunk.usageMetadata.totalTokenCount ||
+							(promptTokens !== -1 && completionTokens !== -1 ? promptTokens + completionTokens : -1),
+						prompt_tokens_details: {
+							cached_tokens: chunk.usageMetadata.cachedContentTokenCount || 0,
+						}
 					};
 				}
 			}

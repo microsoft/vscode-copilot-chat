@@ -70,7 +70,7 @@ function transformProperties(props: Record<string, ToolJsonSchema>): Record<stri
 			// If type is undefined, throw an error to avoid incorrect assumptions
 			type: effectiveValue.type
 				? mapType(effectiveValue.type)
-				: (() => { throw new Error(`Property "${key}" is missing a "type" field in the schema.`); })()
+				: Type.OBJECT
 		};
 
 		if (effectiveValue.description) {
