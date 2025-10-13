@@ -28,11 +28,25 @@ function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageMod
 				});
 			}
 		} else if (part instanceof LanguageModelToolResultPart || part instanceof LanguageModelToolResultPart2) {
-			// Convert tool result content (aggregate text parts only; other part types ignored for now)
+			// Convert tool result content - handle both text and image parts
 			const textContent = part.content
 				.filter((p): p is LanguageModelTextPart => p instanceof LanguageModelTextPart)
 				.map(p => p.value)
 				.join('');
+
+			// Handle image parts in tool results
+			const imageParts = part.content.filter((p): p is LanguageModelDataPart =>
+				p instanceof LanguageModelDataPart &&
+				p.mimeType !== CustomDataPartMimeTypes.StatefulMarker &&
+				p.mimeType !== CustomDataPartMimeTypes.CacheControl
+			);
+
+			// If there are images, we need to handle them differently
+			// For now, we'll include image info in the text response since Gemini function responses expect structured data
+			let imageDescription = '';
+			if (imageParts.length > 0) {
+				imageDescription = `\n[Contains ${imageParts.length} image(s) with types: ${imageParts.map(p => p.mimeType).join(', ')}]`;
+			}
 
 			// extraction: functionName_timestamp => split on first underscore
 			const functionName = part.callId?.split('_')[0] || 'unknown_function';
@@ -40,14 +54,31 @@ function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageMod
 			// Preserve structured JSON if possible
 			let responsePayload: any = {};
 			if (textContent) {
+				// Handle case with text content (may also have images)
 				try {
 					responsePayload = JSON.parse(textContent);
 					if (typeof responsePayload !== 'object' || responsePayload === null) {
 						responsePayload = { result: responsePayload };
 					}
 				} catch {
-					responsePayload = { result: textContent };
+					responsePayload = { result: textContent + imageDescription };
 				}
+				// Add image info if present
+				if (imageParts.length > 0) {
+					responsePayload.images = imageParts.map(p => ({
+						mimeType: p.mimeType,
+						size: p.data.length
+					}));
+				}
+			} else if (imageParts.length > 0) {
+				// Only images, no text content
+				responsePayload = {
+					images: imageParts.map(p => ({
+						mimeType: p.mimeType,
+						size: p.data.length,
+						data: Buffer.from(p.data).toString('base64')
+					}))
+				};
 			}
 
 			const functionResponse: FunctionResponse = {
@@ -114,17 +145,17 @@ export function apiMessageToGeminiMessage(messages: LanguageModelChatMessage[]):
 	}
 
 	// Idempotence: avoid re-processing if a marker flag is present
-	if (!(contents as any)._geminiPostProcessed) {
+	if (!Object.hasOwnProperty.call(contents, '_geminiPostProcessed')) {
 		// Post-process: ensure functionResponse parts are not embedded in 'model' role messages.
 		// Gemini expects tool responses to be supplied by the *user*/caller after the model issues a functionCall.
 		// If upstream accidentally placed tool result parts inside an assistant/model role, we split them out here.
 		for (let i = 0; i < contents.length; i++) {
 			const c = contents[i];
-			if (c.role === 'model' && c.parts && c.parts.some(p => (p as any).functionResponse)) {
+			if (c.role === 'model' && c.parts && c.parts.some(p => 'functionResponse' in p)) {
 				const modelParts: Part[] = [];
 				const toolResultParts: Part[] = [];
 				for (const p of c.parts) {
-					if ((p as any).functionResponse) {
+					if ('functionResponse' in p) {
 						toolResultParts.push(p);
 					} else {
 						modelParts.push(p);
@@ -223,9 +254,38 @@ export function geminiMessagesToRawMessages(contents: Content[], systemInstructi
 					});
 				} else if (part.functionResponse && part.functionResponse.name) {
 					// Function responses should be emitted as tool messages
+					const toolContent: Raw.ChatCompletionContentPart[] = [];
+
+					// Handle structured response that might contain image data
+					const response = part.functionResponse.response;
+					if (response && typeof response === 'object' && 'images' in response && Array.isArray(response.images)) {
+						// Extract images from structured response and convert to Raw format
+						for (const img of response.images) {
+							if (img && typeof img === 'object' && 'data' in img && 'mimeType' in img) {
+								toolContent.push({
+									type: Raw.ChatCompletionContentPartKind.Image,
+									imageUrl: { url: `data:${img.mimeType};base64,${img.data}` }
+								});
+							}
+						}
+
+						// Create a clean response object without the raw image data for text content
+						const cleanResponse = { ...response };
+						if ('images' in cleanResponse) {
+							cleanResponse.images = response.images.map((img: any) => ({
+								mimeType: img.mimeType,
+								size: img.size || (img.data ? img.data.length : 0)
+							}));
+						}
+						toolContent.push({ type: Raw.ChatCompletionContentPartKind.Text, text: JSON.stringify(cleanResponse) });
+					} else {
+						// Standard text-only response
+						toolContent.push({ type: Raw.ChatCompletionContentPartKind.Text, text: JSON.stringify(response) });
+					}
+
 					rawMessages.push({
 						role: Raw.ChatRole.Tool,
-						content: [{ type: Raw.ChatCompletionContentPartKind.Text, text: JSON.stringify(part.functionResponse.response) }],
+						content: toolContent,
 						toolCallId: part.functionResponse.name
 					});
 				}
