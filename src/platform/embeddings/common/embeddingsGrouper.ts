@@ -17,8 +17,8 @@ export interface Cluster<T> {
 }
 
 export interface GroupingOptions {
-	/** Similarity percentile to use for threshold (92-96 recommended). Default: 94 */
-	readonly similarityPercentile?: number;
+	/** Similarity threshold for clustering (0.0-1.0). Higher values create tighter clusters. Default: 0.9 */
+	readonly eps?: number;
 	/** Minimum cluster size. Smaller clusters become singletons. Default: 2 */
 	readonly minClusterSize?: number;
 	/** Threshold for inserting new nodes into existing clusters. Default: same as clustering threshold */
@@ -26,11 +26,11 @@ export interface GroupingOptions {
 }
 
 /**
- * Groups embeddings using cosine similarity thresholding and connected components.
+ * Groups embeddings using similarity-based clustering with cosine similarity.
  *
- * This approach builds a similarity graph by connecting embeddings above a threshold,
- * then finds connected components as clusters. It automatically determines the number
- * of clusters and handles outliers naturally.
+ * This approach finds cluster seeds (nodes with many similar neighbors) and builds
+ * clusters around them. It avoids the transitive clustering issues of connected
+ * components while being more suitable for cosine similarity than DBSCAN.
  */
 export class EmbeddingsGrouper<T> {
 	private nodes: Node<T>[] = [];
@@ -40,14 +40,14 @@ export class EmbeddingsGrouper<T> {
 	private normalizedEmbeddings = new Map<Node<T>, EmbeddingVector>();
 	private cachedSimilarities: number[] | undefined;
 	private readonly options: {
-		similarityPercentile: number;
+		eps: number;
 		minClusterSize: number;
 		insertThreshold?: number;
 	};
 
 	constructor(options?: GroupingOptions) {
 		this.options = {
-			similarityPercentile: 94,
+			eps: 0.9, // Higher similarity threshold for cosine similarity
 			minClusterSize: 2,
 			...options,
 		};
@@ -66,7 +66,7 @@ export class EmbeddingsGrouper<T> {
 
 		// If we have existing clusters, try to insert into the best matching one
 		if (this.clusters.length > 0) {
-			const insertThreshold = this.options.insertThreshold ?? this.getLastUsedThreshold();
+			const insertThreshold = this.options.insertThreshold ?? this.lastUsedThreshold;
 			const bestCluster = this.findBestClusterForNode(node, insertThreshold);
 
 			if (bestCluster) {
@@ -134,8 +134,7 @@ export class EmbeddingsGrouper<T> {
 	}
 
 	/**
-	 * Perform full reclustering of all nodes. Use when embeddings have changed
-	 * significantly or when incremental updates aren't sufficient.
+	 * Perform full reclustering of all nodes using similarity-based clustering.
 	 */
 	recluster(): void {
 		if (this.nodes.length === 0) {
@@ -148,15 +147,11 @@ export class EmbeddingsGrouper<T> {
 		this.clusters = [];
 		this.nodeToClusterId.clear();
 
-		// Build similarity graph using adaptive threshold
-		const threshold = this.computeAdaptiveThreshold();
-		const adjacencyList = this.buildSimilarityGraph(threshold);
+		// Run similarity-based clustering that avoids transitive issues
+		const clusterAssignments = this.runSimilarityBasedClustering(this.options.eps, this.options.minClusterSize);
 
-		// Find connected components
-		const components = this.findConnectedComponents(adjacencyList);
-
-		// Create clusters from components
-		this.createClustersFromComponents(components);
+		// Create clusters from results
+		this.createClustersFromAssignments(clusterAssignments);
 	}
 
 	/**
@@ -174,33 +169,23 @@ export class EmbeddingsGrouper<T> {
 		return clusterId ? this.clusters.find(c => c.id === clusterId) : undefined;
 	}
 
-	private lastUsedThreshold = 0.8; // Fallback default
-
-	private getLastUsedThreshold(): number {
-		return this.lastUsedThreshold;
-	}
+	private lastUsedThreshold = 0.9; // Fallback default
 
 	/**
-	 * Compute adaptive threshold based on similarity distribution percentile
+	 * Compute similarity threshold based on percentile.
+	 * Higher percentiles result in stricter clustering (higher similarity required).
 	 */
-	private computeAdaptiveThreshold(): number {
-		return this.computeThresholdForPercentile(this.options.similarityPercentile);
-	}
-
-	/**
-	 * Compute threshold for a specific percentile using cached similarities
-	 */
-	private computeThresholdForPercentile(percentile: number): number {
+	private computeEpsFromPercentile(percentile: number): number {
 		if (this.nodes.length < 2) {
-			return 0.8; // Fallback for small datasets
+			return 0.9; // High similarity for small datasets
 		}
 
 		const similarities = this.getSimilarities();
 		if (similarities.length === 0) {
-			return 0.8;
+			return 0.9;
 		}
 
-		// Find percentile (similarities are already sorted)
+		// Higher percentiles = higher similarity thresholds for tighter clusters
 		const index = Math.floor((percentile / 100) * similarities.length);
 		const threshold = similarities[Math.min(index, similarities.length - 1)];
 
@@ -209,81 +194,125 @@ export class EmbeddingsGrouper<T> {
 	}
 
 	/**
-	 * Build adjacency list representation of similarity graph
+	 * Run similarity-based clustering that avoids transitive clustering issues
+	 * @param threshold Minimum similarity for nodes to be clustered together
+	 * @param minClusterSize Minimum size for a valid cluster
+	 * @returns Array where each index corresponds to a node and value is cluster ID (-1 for unassigned)
 	 */
-	private buildSimilarityGraph(threshold: number): number[][] {
-		const adjacencyList: number[][] = Array.from({ length: this.nodes.length }, () => []);
+	private runSimilarityBasedClustering(threshold: number, minClusterSize: number): number[] {
+		const assignments: number[] = new Array(this.nodes.length).fill(-1);
+		const processed: boolean[] = new Array(this.nodes.length).fill(false);
+		let clusterId = 0;
 
-		for (let i = 0; i < this.nodes.length; i++) {
-			for (let j = i + 1; j < this.nodes.length; j++) {
-				const sim = this.cachedCosineSimilarity(this.nodes[i], this.nodes[j]);
+		// Find cluster seeds - nodes with high similarity to multiple others
+		const seeds = this.findClusterSeeds(threshold, minClusterSize);
 
-				if (sim >= threshold) {
-					adjacencyList[i].push(j);
-					adjacencyList[j].push(i);
-				}
-			}
-		}
-
-		return adjacencyList;
-	}
-
-	/**
-	 * Find connected components using DFS
-	 */
-	private findConnectedComponents(adjacencyList: number[][]): number[][] {
-		const visited = new Set<number>();
-		const components: number[][] = [];
-
-		for (let i = 0; i < this.nodes.length; i++) {
-			if (visited.has(i)) {
+		// Assign nodes to clusters based on best similarity to seed
+		for (const seed of seeds) {
+			if (processed[seed]) {
 				continue;
 			}
 
-			const component: number[] = [];
-			const stack = [i];
-
-			while (stack.length > 0) {
-				const node = stack.pop()!;
-				if (visited.has(node)) {
-					continue;
+			const cluster = this.buildClusterAroundSeed(seed, threshold, processed);
+			if (cluster.length >= minClusterSize) {
+				for (const nodeIndex of cluster) {
+					assignments[nodeIndex] = clusterId;
+					processed[nodeIndex] = true;
 				}
-
-				visited.add(node);
-				component.push(node);
-
-				// Add unvisited neighbors to stack
-				for (const neighbor of adjacencyList[node]) {
-					if (!visited.has(neighbor)) {
-						stack.push(neighbor);
-					}
-				}
+				clusterId++;
 			}
-
-			components.push(component);
 		}
 
-		return components;
+		return assignments;
 	}
 
 	/**
-	 * Create clusters from connected components
+	 * Find potential cluster seeds - nodes that are similar to many others
 	 */
-	private createClustersFromComponents(components: number[][]): void {
-		const minSize = this.options.minClusterSize;
+	private findClusterSeeds(threshold: number, minClusterSize: number): number[] {
+		const seeds: number[] = [];
+		const similarityCounts: number[] = new Array(this.nodes.length).fill(0);
 
-		for (const component of components) {
-			// Filter small components based on minimum cluster size
-			if (component.length < minSize) {
-				// Create singleton clusters for small components
-				for (const nodeIndex of component) {
-					this.createSingletonCluster(this.nodes[nodeIndex]);
+		// Count how many nodes each node is similar to
+		for (let i = 0; i < this.nodes.length; i++) {
+			for (let j = i + 1; j < this.nodes.length; j++) {
+				const similarity = this.cachedCosineSimilarity(this.nodes[i], this.nodes[j]);
+				if (similarity >= threshold) {
+					similarityCounts[i]++;
+					similarityCounts[j]++;
 				}
-			} else {
-				// Create regular cluster
-				const clusterNodes = component.map(i => this.nodes[i]);
-				this.createCluster(clusterNodes);
 			}
+		}
+
+		// Select nodes that could form clusters as seeds
+		for (let i = 0; i < this.nodes.length; i++) {
+			if (similarityCounts[i] >= minClusterSize - 1) {
+				seeds.push(i);
+			}
+		}
+
+		// Sort seeds by similarity count (most connected first)
+		seeds.sort((a, b) => similarityCounts[b] - similarityCounts[a]);
+		return seeds;
+	}
+
+	/**
+	 * Build a cluster around a seed node by finding all nodes similar to the seed
+	 */
+	private buildClusterAroundSeed(seed: number, threshold: number, processed: boolean[]): number[] {
+		const cluster = [seed];
+
+		for (let i = 0; i < this.nodes.length; i++) {
+			if (i === seed || processed[i]) {
+				continue;
+			}
+
+			const similarity = this.cachedCosineSimilarity(this.nodes[seed], this.nodes[i]);
+			if (similarity >= threshold) {
+				cluster.push(i);
+			}
+		}
+
+		return cluster;
+	}
+
+	/**
+	 * Create clusters from assignment results
+	 */
+	private createClustersFromAssignments(clusterAssignments: number[]): void {
+		const clusterMap = new Map<number, Node<T>[]>();
+		const unassigned: Node<T>[] = [];
+
+		// Group nodes by cluster ID
+		for (let i = 0; i < clusterAssignments.length; i++) {
+			const clusterId = clusterAssignments[i];
+			const node = this.nodes[i];
+
+			if (clusterId === -1) {
+				unassigned.push(node);
+			} else {
+				if (!clusterMap.has(clusterId)) {
+					clusterMap.set(clusterId, []);
+				}
+				clusterMap.get(clusterId)!.push(node);
+			}
+		}
+
+		// Create clusters from grouped nodes
+		for (const [, nodes] of clusterMap) {
+			if (nodes.length >= this.options.minClusterSize) {
+				this.createCluster(nodes);
+			} else {
+				// Small clusters become singletons
+				for (const node of nodes) {
+					this.createSingletonCluster(node);
+				}
+			}
+		}
+
+		// Handle unassigned points as singletons
+		for (const node of unassigned) {
+			this.createSingletonCluster(node);
 		}
 	}
 
@@ -444,46 +473,44 @@ export class EmbeddingsGrouper<T> {
 	}
 
 	/**
-	 * Optimize clustering by finding the best similarity percentile that results in
+	 * Optimize clustering by finding the best similarity threshold that results in
 	 * a target number of clusters or fewer, aiming for the highest cluster count
 	 * that doesn't exceed the maximum. Includes a "cliff effect" to avoid over-clustering.
 	 *
 	 * @param maxClusters Maximum desired number of clusters
-	 * @param minPercentile Minimum percentile to try (default: 80)
-	 * @param maxPercentile Maximum percentile to try (default: 99)
-	 * @param precision How precise the search should be (default: 1 for 1% precision)
+	 * @param minThreshold Minimum similarity threshold to try (default: 0.7 - loose clustering)
+	 * @param maxThreshold Maximum similarity threshold to try (default: 0.99 - very strict)
+	 * @param precision How precise the search should be (default: 0.02)
 	 * @param cliffThreshold Fraction of maxClusters that triggers cliff effect (default: 2/3)
 	 * @param cliffGain Minimum additional clusters needed to continue past cliff (default: 20% of maxClusters)
-	 * @returns The optimal percentile found and resulting cluster count
+	 * @returns The optimal threshold found and resulting cluster count
 	 */
 	tuneThresholdForTargetClusters(
 		maxClusters: number,
-		minPercentile: number = 80,
-		maxPercentile: number = 99,
-		precision: number = 1,
+		minThreshold: number = 0.7,
+		maxThreshold: number = 0.99,
+		precision: number = 0.02,
 		cliffThreshold: number = 2 / 3,
 		cliffGain: number = 0.2
 	): { percentile: number; clusterCount: number; threshold: number } {
 		if (this.nodes.length === 0) {
-			return { percentile: 94, clusterCount: 0, threshold: 0.8 };
+			return { percentile: 90, clusterCount: 0, threshold: 0.9 };
 		}
 
 		const cliffPoint = Math.floor(maxClusters * cliffThreshold);
 		const minGainAfterCliff = Math.max(1, Math.floor(maxClusters * cliffGain));
 
-		let bestPercentile = maxPercentile;
+		let bestThreshold = maxThreshold;
 		let bestClusterCount = 1; // Start with worst case (very few clusters)
-		let bestThreshold = 0.95;
 		let cliffReached = false;
 
-		// Binary search for optimal percentile that maximizes clusters while staying under limit
-		let low = minPercentile;
-		let high = maxPercentile;
+		// Binary search for optimal threshold that maximizes clusters while staying under limit
+		let low = minThreshold;
+		let high = maxThreshold;
 
 		while (high - low > precision) {
-			const mid = Math.floor((low + high) / 2);
-			const threshold = this.computeThresholdForPercentile(mid);
-			const clusterCount = this.countClustersForThreshold(threshold);
+			const mid = (low + high) / 2;
+			const clusterCount = this.countClustersForThreshold(mid, this.options.minClusterSize);
 
 			if (clusterCount <= maxClusters) {
 				// Check if this is a meaningful improvement
@@ -502,96 +529,99 @@ export class EmbeddingsGrouper<T> {
 				}
 
 				if (shouldUpdate) {
-					bestPercentile = mid;
+					bestThreshold = mid;
 					bestClusterCount = clusterCount;
-					bestThreshold = threshold;
 				}
 
-				// Try going to higher percentile for potentially more clusters
+				// Try going to lower threshold for potentially more clusters
 				low = mid + precision;
 			} else {
-				// Too many clusters, need lower percentile (lower threshold = fewer clusters)
+				// Too many clusters, need higher threshold (stricter clustering)
 				high = mid - precision;
 			}
 		}
 
+		// Convert threshold to approximate percentile for compatibility
+		const similarities = this.getSimilarities();
+		let approximatePercentile = 90;
+		if (similarities.length > 0) {
+			const position = similarities.findIndex(s => s >= bestThreshold);
+			if (position >= 0) {
+				approximatePercentile = Math.round((position / similarities.length) * 100);
+			}
+		}
+
 		return {
-			percentile: bestPercentile,
+			percentile: approximatePercentile,
 			clusterCount: bestClusterCount,
 			threshold: bestThreshold
 		};
 	}
 
 	/**
-	 * Apply a specific similarity percentile and recluster
+	 * Apply a specific similarity threshold and recluster
 	 *
-	 * @param percentile The similarity percentile to use (80-99)
+	 * @param percentile The similarity percentile to convert to threshold
 	 */
 	applyPercentileAndRecluster(percentile: number): void {
-		// Temporarily override the percentile option
-		const originalPercentile = this.options.similarityPercentile;
-		(this.options as any).similarityPercentile = percentile;
+		// Convert percentile to similarity threshold
+		const eps = this.computeEpsFromPercentile(percentile);
+		// Temporarily override the eps option
+		const originalEps = this.options.eps;
+		(this.options as any).eps = eps;
 
 		try {
 			this.recluster();
 		} finally {
-			// Restore original percentile
-			(this.options as any).similarityPercentile = originalPercentile;
+			// Restore original eps
+			(this.options as any).eps = originalEps;
 		}
 	}
 
 	/**
-	 * Count how many clusters would result from a given threshold without actually clustering
+	 * Count how many clusters would result from a given similarity threshold without actually clustering
 	 */
-	private countClustersForThreshold(threshold: number): number {
+	private countClustersForThreshold(threshold: number, minClusterSize: number): number {
 		if (this.nodes.length === 0) {
 			return 0;
 		}
 
-		// Build adjacency list with the given threshold
-		const adjacencyList: number[][] = Array.from({ length: this.nodes.length }, () => []);
+		// Run clustering with given parameters
+		const clusterAssignments = this.runSimilarityBasedClustering(threshold, minClusterSize);
 
-		for (let i = 0; i < this.nodes.length; i++) {
-			for (let j = i + 1; j < this.nodes.length; j++) {
-				const sim = this.cachedCosineSimilarity(this.nodes[i], this.nodes[j]);
-				if (sim >= threshold) {
-					adjacencyList[i].push(j);
-					adjacencyList[j].push(i);
-				}
+		// Count unique cluster IDs (excluding -1 which is unassigned)
+		const clusterIds = new Set<number>();
+		for (const clusterId of clusterAssignments) {
+			if (clusterId !== -1) {
+				clusterIds.add(clusterId);
 			}
 		}
 
-		// Count connected components
-		const visited = new Set<number>();
-		let componentCount = 0;
+		// Add singleton clusters for unassigned points and small clusters
+		const clusterSizes = new Map<number, number>();
+		let unassignedCount = 0;
 
-		for (let i = 0; i < this.nodes.length; i++) {
-			if (visited.has(i)) {
-				continue;
-			}
-
-			// Found a new component
-			componentCount++;
-			const stack = [i];
-
-			while (stack.length > 0) {
-				const node = stack.pop()!;
-				if (visited.has(node)) {
-					continue;
-				}
-
-				visited.add(node);
-
-				// Add unvisited neighbors
-				for (const neighbor of adjacencyList[node]) {
-					if (!visited.has(neighbor)) {
-						stack.push(neighbor);
-					}
-				}
+		for (const clusterId of clusterAssignments) {
+			if (clusterId === -1) {
+				unassignedCount++;
+			} else {
+				clusterSizes.set(clusterId, (clusterSizes.get(clusterId) || 0) + 1);
 			}
 		}
 
-		return componentCount;
+		// Count valid clusters (meeting minClusterSize) and singletons
+		let validClusters = 0;
+		let singletons = unassignedCount; // Unassigned points become singletons
+
+		for (const [, size] of clusterSizes) {
+			if (size >= minClusterSize) {
+				validClusters++;
+			} else {
+				singletons += size;
+			}
+		}
+
+		return validClusters + singletons;
 	}
 
 	/**

@@ -53,7 +53,7 @@ describe('EmbeddingsGrouper', () => {
 
 		it('should accept custom options', () => {
 			const options: GroupingOptions = {
-				similarityPercentile: 90,
+				eps: 0.85, // High similarity threshold
 				minClusterSize: 3,
 				insertThreshold: 0.7
 			};
@@ -341,8 +341,8 @@ describe('EmbeddingsGrouper', () => {
 
 	describe('adaptive threshold behavior', () => {
 		it('should work with different similarity percentiles', () => {
-			const strictGrouper = new EmbeddingsGrouper<TestTool>({ similarityPercentile: 98 });
-			const lenientGrouper = new EmbeddingsGrouper<TestTool>({ similarityPercentile: 85 });
+			const strictGrouper = new EmbeddingsGrouper<TestTool>({ eps: 0.95 }); // High similarity required
+			const lenientGrouper = new EmbeddingsGrouper<TestTool>({ eps: 0.8 }); // Lower similarity required
 
 			const embeddings = createSimilarEmbeddings();
 			const nodes = embeddings.map((emb, i) =>
