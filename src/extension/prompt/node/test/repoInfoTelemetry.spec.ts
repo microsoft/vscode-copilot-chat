@@ -606,6 +606,9 @@ suite('RepoInfoTelemetry', () => {
 		vi.spyOn(gitService, 'diffWith').mockImplementation(async () => {
 			// Simulate file creation during diff
 			mockWatcher.triggerCreate(URI.file('/test/repo/newfile.ts') as any);
+
+			// Mock a change being returned from diffWith, we don't want to see this in the final telemetry
+			// instead we want to see the 'filesChanged' result due to the file system change
 			return [{
 				uri: URI.file('/test/repo/file.ts'),
 				originalUri: URI.file('/test/repo/file.ts'),
@@ -644,6 +647,9 @@ suite('RepoInfoTelemetry', () => {
 		vi.spyOn(gitService, 'diffWith').mockImplementation(async () => {
 			// Simulate file modification during diff
 			mockWatcher.triggerChange(URI.file('/test/repo/file.ts') as any);
+
+			// Mock a change being returned from diffWith, we don't want to see this in the final telemetry
+			// instead we want to see the 'filesChanged' result due to the file system change
 			return [{
 				uri: URI.file('/test/repo/file.ts'),
 				originalUri: URI.file('/test/repo/file.ts'),
@@ -682,6 +688,9 @@ suite('RepoInfoTelemetry', () => {
 		vi.spyOn(gitService, 'diffWith').mockImplementation(async () => {
 			// Simulate file deletion during diff
 			mockWatcher.triggerDelete(URI.file('/test/repo/oldfile.ts') as any);
+
+			// Mock a change being returned from diffWith, we don't want to see this in the final telemetry
+			// instead we want to see the 'filesChanged' result due to the file system change
 			return [{
 				uri: URI.file('/test/repo/file.ts'),
 				originalUri: URI.file('/test/repo/file.ts'),
