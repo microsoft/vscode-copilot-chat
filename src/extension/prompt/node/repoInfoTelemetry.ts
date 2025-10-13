@@ -152,7 +152,7 @@ export class RepoInfoTelemetry {
 			return;
 		}
 
-		let upstreamCommit = await repository.getMergeBase('HEAD', '{@upstream}');
+		let upstreamCommit = await repository.getMergeBase('HEAD', '@{upstream}');
 		if (!upstreamCommit) {
 			const baseBranch = await repository.getBranchBase('HEAD');
 			if (baseBranch) {

@@ -1420,23 +1420,38 @@ suite('RepoInfoTelemetry', () => {
 	}
 
 	function mockGitExtensionWithUpstream(upstreamCommit: string | undefined, remoteUrl: string = 'https://github.com/microsoft/vscode.git') {
-		const mockApi = {
-			getRepository: () => ({
-				state: {
-					HEAD: {
-						upstream: upstreamCommit ? {
-							commit: upstreamCommit,
-							remote: 'origin',
-						} : undefined,
-					},
-					remotes: [{
-						name: 'origin',
-						fetchUrl: remoteUrl,
-						pushUrl: remoteUrl,
-						isReadOnly: false,
-					}],
+		const mockRepo = {
+			getMergeBase: vi.fn(),
+			getBranchBase: vi.fn(),
+			state: {
+				HEAD: {
+					upstream: upstreamCommit ? {
+						commit: upstreamCommit,
+						remote: 'origin',
+					} : undefined,
 				},
-			}),
+				remotes: [{
+					name: 'origin',
+					fetchUrl: remoteUrl,
+					pushUrl: remoteUrl,
+					isReadOnly: false,
+				}],
+			},
+		};
+
+		// Set up getMergeBase to return upstreamCommit when called with 'HEAD' and '@upstream'
+		mockRepo.getMergeBase.mockImplementation(async (ref1: string, ref2: string) => {
+			if (ref1 === 'HEAD' && ref2 === '@{upstream}') {
+				return upstreamCommit;
+			}
+			return undefined;
+		});
+
+		// Set up getBranchBase to return undefined by default
+		mockRepo.getBranchBase.mockResolvedValue(undefined);
+
+		const mockApi = {
+			getRepository: () => mockRepo,
 		};
 		vi.spyOn(gitExtensionService, 'getExtensionApi').mockReturnValue(mockApi as any);
 	}
