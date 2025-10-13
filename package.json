@@ -4282,7 +4282,7 @@
 		"shiki": "~1.15.0"
 	},
 	"dependencies": {
-		"@anthropic-ai/claude-agent-sdk": "^0.1.9",
+		"@anthropic-ai/claude-code": "^1.0.120",
 		"@anthropic-ai/sdk": "^0.63.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
