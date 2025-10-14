@@ -230,8 +230,8 @@ export class CopilotCLIChatSessionParticipant {
 			return request.prompt; // likely a slash command, don't modify
 		}
 
-		const extraRefsTexts: string[] = [];
-		let prompt = request.prompt;
+		const allRefsTexts: string[] = [];
+		const prompt = request.prompt;
 		request.references.forEach(ref => {
 			const valueText = URI.isUri(ref.value) ?
 				ref.value.fsPath :
@@ -239,16 +239,18 @@ export class CopilotCLIChatSessionParticipant {
 					`${ref.value.uri.fsPath}:${ref.value.range.start.line + 1}` :
 					undefined;
 			if (valueText) {
-				if (ref.range) {
-					prompt = prompt.slice(0, ref.range[0]) + valueText + prompt.slice(ref.range[1]);
+				// Keep the original prompt untouched, just collect resolved paths
+				const variableText = ref.range ? prompt.substring(ref.range[0], ref.range[1]) : undefined;
+				if (variableText) {
+					allRefsTexts.push(`- ${variableText} → ${valueText}`);
 				} else {
-					extraRefsTexts.push(`- ${valueText}`);
+					allRefsTexts.push(`- ${valueText}`);
 				}
 			}
 		});
 
-		if (extraRefsTexts.length > 0) {
-			prompt = `<system-reminder>\nThe user provided the following references:\n${extraRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>\n\n` + prompt;
+		if (allRefsTexts.length > 0) {
+			return `<system-reminder>\nThe user provided the following references:\n${allRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>\n\n${prompt}`;
 		}
 
 		return prompt;
