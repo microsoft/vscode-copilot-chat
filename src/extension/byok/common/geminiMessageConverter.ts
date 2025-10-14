@@ -67,7 +67,8 @@ function apiContentToGeminiContent(content: (LanguageModelTextPart | LanguageMod
 				if (imageParts.length > 0) {
 					responsePayload.images = imageParts.map(p => ({
 						mimeType: p.mimeType,
-						size: p.data.length
+						size: p.data.length,
+						data: Buffer.from(p.data).toString('base64')
 					}));
 				}
 			} else if (imageParts.length > 0) {
