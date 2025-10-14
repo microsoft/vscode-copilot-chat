@@ -9,9 +9,11 @@ import { ChatExtendedRequestHandler } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ITerminalService } from '../../../platform/terminal/common/terminalService';
+import { isLocation } from '../../../util/common/types';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
+import { URI } from '../../../util/vs/base/common/uri';
 import { localize } from '../../../util/vs/nls';
 import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
 import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
@@ -47,7 +49,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		const diskSessions = sessions.map(session => ({
 			id: session.id,
 			label: session.label,
-			tooltip: `CopilotCLI session: ${session.label}`,
+			tooltip: `Copilot CLI session: ${session.label}`,
 			timing: {
 				startTime: session.timestamp.getTime()
 			},
@@ -191,8 +193,12 @@ export class CopilotCLIChatSessionParticipant {
 	}
 
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
+		// Resolve the prompt with references before processing
+		const resolvedPrompt = this.resolvePrompt(request);
+		const processedRequest = { ...request, prompt: resolvedPrompt };
+
 		const create = async () => {
-			const { copilotcliSessionId } = await this.copilotcliAgentManager.handleRequest(undefined, request, context, stream, token);
+			const { copilotcliSessionId } = await this.copilotcliAgentManager.handleRequest(undefined, processedRequest, context, stream, token);
 			if (!copilotcliSessionId) {
 				stream.warning(localize('copilotcli.failedToCreateSession', "Failed to create a new CopilotCLI session."));
 				return undefined;
@@ -204,19 +210,48 @@ export class CopilotCLIChatSessionParticipant {
 			if (chatSessionContext.isUntitled) {
 				const copilotcliSessionId = await create();
 				if (copilotcliSessionId) {
-					this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { id: copilotcliSessionId, label: request.prompt ?? 'CopilotCLI' });
+					this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { id: copilotcliSessionId, label: processedRequest.prompt ?? 'CopilotCLI' });
 				}
 				return {};
 			}
 
 			const { id } = chatSessionContext.chatSessionItem;
-			await this.copilotcliAgentManager.handleRequest(id, request, context, stream, token);
+			await this.copilotcliAgentManager.handleRequest(id, processedRequest, context, stream, token);
 			return {};
 		}
 
 		stream.markdown(localize('copilotcli.viaAtCopilotcli', "Start a new CopilotCLI session"));
 		stream.button({ command: `workbench.action.chat.openNewSessionEditor.${this.sessionType}`, title: localize('copilotcli.startNewSession', "Start Session") });
 		return {};
+	}
+
+	private resolvePrompt(request: vscode.ChatRequest): string {
+		if (request.prompt.startsWith('/')) {
+			return request.prompt; // likely a slash command, don't modify
+		}
+
+		const extraRefsTexts: string[] = [];
+		let prompt = request.prompt;
+		request.references.forEach(ref => {
+			const valueText = URI.isUri(ref.value) ?
+				ref.value.fsPath :
+				isLocation(ref.value) ?
+					`${ref.value.uri.fsPath}:${ref.value.range.start.line + 1}` :
+					undefined;
+			if (valueText) {
+				if (ref.range) {
+					prompt = prompt.slice(0, ref.range[0]) + valueText + prompt.slice(ref.range[1]);
+				} else {
+					extraRefsTexts.push(`- ${valueText}`);
+				}
+			}
+		});
+
+		if (extraRefsTexts.length > 0) {
+			prompt = `<system-reminder>\nThe user provided the following references:\n${extraRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>\n\n` + prompt;
+		}
+
+		return prompt;
 	}
 }
 

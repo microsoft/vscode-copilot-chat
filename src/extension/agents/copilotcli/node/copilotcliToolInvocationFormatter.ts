@@ -101,6 +101,11 @@ export function parseChatMessagesToEvents(chatMessages: readonly ChatCompletionM
 	return events;
 }
 
+function stripSystemReminders(text: string): string {
+	// Remove any <system-reminder> ... </system-reminder> blocks, including newlines
+	return text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, '').trim();
+}
+
 /**
  * Build chat history from SDK events for VS Code chat session
  * Converts SDKEvents into ChatRequestTurn2 and ChatResponseTurn2 objects
@@ -118,7 +123,7 @@ export function buildChatHistoryFromEvents(events: readonly SDKEvent[]): (ChatRe
 					turns.push(new ChatResponseTurn2(currentResponseParts, {}, ''));
 					currentResponseParts = [];
 				}
-				turns.push(new ChatRequestTurn2(event.content || '', undefined, [], '', [], undefined));
+				turns.push(new ChatRequestTurn2(stripSystemReminders(event.content || ''), undefined, [], '', [], undefined));
 			} else if (event.role === 'assistant' && event.content) {
 				currentResponseParts.push(
 					new ChatResponseMarkdownPart(new MarkdownString(event.content))
