@@ -231,7 +231,6 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 
 			let usage: APIUsage | undefined;
 			let hasText = false;
-			let firstTool = true;
 
 			for await (const chunk of stream) {
 				if (token.isCancellationRequested) {
@@ -255,11 +254,6 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 								progress.report(new LanguageModelTextPart(part.text));
 								hasText ||= part.text.length > 0;
 							} else if (part.functionCall && part.functionCall.name) {
-								if (hasText && firstTool) {
-									// Flush the linkifier stream otherwise it pauses before the tool call if the last word ends with a punctuation mark.
-									// Only insert if previous char likely ends a sentence / clause to avoid extra stray spaces.
-									progress.report(new LanguageModelTextPart(' '));
-								}
 								// Generate a synthetic call id
 								const callId = `${part.functionCall.name}_${Date.now()}`;
 								progress.report(new LanguageModelToolCallPart(
@@ -267,7 +261,6 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 									part.functionCall.name,
 									part.functionCall.args || {}
 								));
-								firstTool = false;
 							}
 						}
 					}
