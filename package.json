@@ -1214,8 +1214,7 @@
 				"isDefault": true,
 				"when": "config.inlineChat.enableV2 || config.github.copilot.chat.advanced.inlineChat2",
 				"locations": [
-					"editor",
-					"notebook"
+					"editor"
 				],
 				"commands": [
 					{
@@ -1416,7 +1415,7 @@
 				"locations": [
 					"notebook"
 				],
-				"when": "!config.inlineChat.enableV2 && !config.github.copilot.chat.advanced.inlineChat2",
+				"when": "!config.inlineChat.notebookAgent",
 				"commands": [
 					{
 						"name": "fix",
@@ -1437,7 +1436,7 @@
 				"locations": [
 					"notebook"
 				],
-				"when": "config.inlineChat.enableV2",
+				"when": "config.inlineChat.notebookAgent",
 				"commands": [
 					{
 						"name": "fix",
