@@ -22,7 +22,7 @@ import { getFilepathComment } from '../../../../util/common/markdown';
 import { computeLevenshteinDistance } from '../../../../util/vs/base/common/diff/diff';
 import { count, isFalsyOrWhitespace } from '../../../../util/vs/base/common/strings';
 import { Lines } from '../../../prompt/node/editGeneration';
-import { guessIndentation, IGuessedIndentation, transformIndentation } from '../../../prompt/node/indentationGuesser';
+import { computeIndentLevel2, getIndentationChar, guessIndentation, IGuessedIndentation, transformIndentation } from '../../../prompt/node/indentationGuesser';
 import {
 	ADD_FILE_PREFIX,
 	DELETE_FILE_PREFIX,
@@ -154,6 +154,21 @@ export class InvalidContextError extends DiffError {
 export class InvalidPatchFormatError extends DiffError {
 	constructor(message: string, public readonly kindForTelemetry: string) {
 		super(message);
+	}
+}
+
+class AdditionalIndentationDetails {
+	private _indentation: string;
+	public isAdditionalIndentationSet: boolean;
+	constructor(indentation: string, needed: boolean) {
+		this._indentation = indentation;
+		this.isAdditionalIndentationSet = needed;
+	}
+	public get indentation() {
+		return this._indentation;
+	}
+	public set indentation(value: string) {
+		this._indentation = value;
 	}
 }
 
@@ -399,6 +414,12 @@ export class Parser {
 				targetIndentStyle.insertSpaces
 			);
 
+			let matchedLineIndent = 0;
+			let additionalIndentation: AdditionalIndentationDetails | undefined;
+			if (match.fuzz & Fuzz.IgnoredWhitespace) {
+				matchedLineIndent = computeIndentLevel2(fileLines[match.line], targetIndentStyle.tabSize);
+				additionalIndentation = new AdditionalIndentationDetails('', false);
+			}
 
 			for (const ch of nextSection.chunks) {
 				ch.origIndex += match.line;
@@ -408,7 +429,9 @@ export class Parser {
 				}
 
 				ch.insLines = ch.insLines.map(replace_explicit_tabs);
-				ch.insLines = ch.insLines.map(ins => isFalsyOrWhitespace(ins) ? ins : transformIndentation(ins, srcIndentStyle, targetIndentStyle));
+
+				const insLength = ch.insLines.length;
+				ch.insLines = ch.insLines.map(ins => isFalsyOrWhitespace(ins) ? ins : this.updateIndentation(insLength, ins, srcIndentStyle, targetIndentStyle, matchedLineIndent, additionalIndentation));
 
 				if (match.fuzz & Fuzz.NormalizedExplicitTab) {
 					ch.delLines = ch.delLines.map(replace_explicit_tabs);
@@ -420,6 +443,29 @@ export class Parser {
 			this.index = nextSection.endPatchIndex;
 		}
 		return action;
+	}
+
+
+	private updateIndentation(insLength: number, ins: string, srcIndentStyle: IGuessedIndentation, targetIndentStyle: IGuessedIndentation, matchedLineIndent: number, additionalIndentationDetails: AdditionalIndentationDetails | undefined): string {
+		let result = ins;
+		let additionalIndentation = '';
+
+		if (insLength > 1) {
+			result = transformIndentation(ins, srcIndentStyle, targetIndentStyle);
+		}
+		if (additionalIndentationDetails && !additionalIndentationDetails.isAdditionalIndentationSet) {
+			const insIndent = computeIndentLevel2(result, targetIndentStyle.tabSize);
+			additionalIndentationDetails.isAdditionalIndentationSet = true;
+			if (matchedLineIndent > insIndent) {
+				additionalIndentation = getIndentationChar(targetIndentStyle).repeat(matchedLineIndent - insIndent);
+				additionalIndentationDetails.indentation = additionalIndentation;
+			}
+		} else {
+
+			additionalIndentation = additionalIndentationDetails?.indentation ?? '';
+		}
+
+		return additionalIndentation + result;
 	}
 
 	private parse_add_file(): PatchAction {
