@@ -7,6 +7,8 @@ import { RequestType } from '@vscode/copilot-api';
 import * as readline from 'readline';
 import type { Selection, TextDocument, TextEditor } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { ConfigKey } from '../../../platform/configuration/common/configurationService';
+import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
@@ -39,6 +41,7 @@ export async function githubReview(
 	envService: IEnvService,
 	ignoreService: IIgnoreService,
 	workspaceService: IWorkspaceService,
+	customInstructionsService: ICustomInstructionsService,
 	group: 'selection' | 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
 	editor: TextEditor | undefined,
 	progress: Progress<ReviewComment[]>,
@@ -147,10 +150,12 @@ export async function githubReview(
 		capiClientService,
 		fetcherService,
 		envService,
-		group === 'selection' ? 'snippet' : 'diff',
+		customInstructionsService,
+		workspaceService,
+		group === 'selection' ? 'selection' : 'diff',
 		filteredChanges[0].repository,
-		filteredChanges.map(change => ({ path: change.relativePath, content: change.before })),
-		filteredChanges.map(change => ({ path: change.relativePath, content: change.after, selection: 'selection' in change ? change.selection : undefined })),
+		filteredChanges.map(change => ({ path: change.relativePath, content: change.before, languageId: change.document.languageId })),
+		filteredChanges.map(change => ({ path: change.relativePath, content: change.after, languageId: change.document.languageId, selection: 'selection' in change ? change.selection : undefined })),
 		cancellationToken,
 	) : {
 		requestId: 'test-request-id',
@@ -235,6 +240,8 @@ interface FileState {
 	path: string;
 	// The file's contents. If the file does not exist in this state, this should be an empty string.
 	content: string;
+	// The language ID of the file
+	languageId: string;
 	// The selection within the file, if any
 	selection?: Selection;
 }
@@ -309,13 +316,27 @@ function parseLine(line: string): ResponseReference[] {
 	}
 }
 
-async function fetchComments(logService: ILogService, authService: IAuthenticationService, capiClientService: ICAPIClientService, fetcherService: IFetcherService, envService: IEnvService, kind: 'snippet' | 'diff', repository: Repository | undefined, baseFileContents: FileState[], headFileContents: FileState[], cancellationToken: CancellationToken) {
+async function fetchComments(logService: ILogService, authService: IAuthenticationService, capiClientService: ICAPIClientService, fetcherService: IFetcherService, envService: IEnvService, customInstructionsService: ICustomInstructionsService, workspaceService: IWorkspaceService, kind: 'selection' | 'diff', repository: Repository | undefined, baseFileContents: FileState[], headFileContents: FileState[], cancellationToken: CancellationToken) {
 	const codingGuidlines = repository ? await loadCodingGuidelines(logService, authService, capiClientService, repository) : [];
+
+	// Collect languageId to file patterns mapping
+	const languageIdToFilePatterns = new Map<string, Set<string>>();
+	for (const file of [...baseFileContents, ...headFileContents]) {
+		const ext = path.extname(file.path);
+		if (ext) {
+			if (!languageIdToFilePatterns.has(file.languageId)) {
+				languageIdToFilePatterns.set(file.languageId, new Set());
+			}
+			languageIdToFilePatterns.get(file.languageId)!.add(`*${ext}`);
+		}
+	}
+
+	const customInstructions = await loadCustomInstructions(customInstructionsService, workspaceService, kind, languageIdToFilePatterns, codingGuidlines.length + 2);
 
 	const requestBody = {
 		messages: [{
 			role: 'user',
-			...(kind === 'snippet' ? {
+			...(kind === 'selection' ? {
 				review_type: "snippet",
 				snippet_files: headFileContents.map(f => ({
 					path: f.path,
@@ -333,12 +354,12 @@ async function fetchComments(logService: ILogService, authService: IAuthenticati
 					id: '1',
 					data: {
 						type: 'pull-request',
-						headFileContents,
-						baseFileContents,
-						// TODO: Refer to the repository so custom coding guidelines can be selected
+						headFileContents: headFileContents.map(({ path, content }) => ({ path, content })),
+						baseFileContents: baseFileContents.map(({ path, content }) => ({ path, content })),
 					},
 				},
 				...codingGuidlines,
+				...customInstructions,
 			],
 		}]
 	};
@@ -440,7 +461,19 @@ function reverseParsedPatch(fileLines: string[], patch: LineChange[]): string[] 
 	return fileLines;
 }
 
-async function loadCodingGuidelines(logService: ILogService, authService: IAuthenticationService, capiClientService: ICAPIClientService, repository: Repository) {
+interface CodingGuideline {
+	type: string;
+	id: string;
+	data: {
+		id: number;
+		type: string;
+		name: string;
+		description: string;
+		filePatterns: string[];
+	};
+}
+
+async function loadCodingGuidelines(logService: ILogService, authService: IAuthenticationService, capiClientService: ICAPIClientService, repository: Repository): Promise<CodingGuideline[]> {
 	const { state } = repository;
 	const remote = state.HEAD?.upstream?.remote || state.HEAD?.remote;
 	const pushUrl = remote && state.remotes.find(r => r.name === remote)?.pushUrl || state.remotes.find(r => r.pushUrl)?.pushUrl;
@@ -477,17 +510,83 @@ async function loadCodingGuidelines(logService: ILogService, authService: IAuthe
 
 	const text = await response.text();
 	logService.debug(`[github review agent] coding guidelines: ${text}`);
-	const codingGuidelines = JSON.parse(text) as { name: string; description: string; filePatterns: string }[];
+	const codingGuidelines = JSON.parse(text) as { name: string; description: string; filePatterns: string[] }[];
 	const codingGuidelineRefs = codingGuidelines.map((input, index) => ({
-		type: "github.coding_guideline",
+		type: 'github.coding_guideline',
 		id: `${index + 2}`,
 		data: {
 			id: index + 2,
-			type: "coding-guideline",
+			type: 'coding-guideline',
 			name: input.name,
 			description: input.description,
 			filePatterns: input.filePatterns,
 		},
 	}));
 	return codingGuidelineRefs;
+}
+
+async function loadCustomInstructions(customInstructionsService: ICustomInstructionsService, workspaceService: IWorkspaceService, kind: 'selection' | 'diff', languageIdToFilePatterns: Map<string, Set<string>>, firstId: number): Promise<CodingGuideline[]> {
+	const customInstructionRefs = [];
+	let nextId = firstId;
+
+	// Collect instruction files from agent instructions
+	const agentInstructionUris = await customInstructionsService.getAgentInstructions();
+	for (const uri of agentInstructionUris) {
+		const instructions = await customInstructionsService.fetchInstructionsFromFile(Uri.from(uri));
+		if (instructions) {
+			const relativePath = workspaceService.asRelativePath(Uri.from(uri));
+			for (const instruction of instructions.content) {
+				// Skip instructions with languageId if not in map
+				if (instruction.languageId && !languageIdToFilePatterns.has(instruction.languageId)) {
+					continue;
+				}
+				const filePatterns = instruction.languageId ? Array.from(languageIdToFilePatterns.get(instruction.languageId)!) : ['*'];
+				customInstructionRefs.push({
+					type: 'github.coding_guideline',
+					id: `${nextId}`,
+					data: {
+						id: nextId,
+						type: 'coding-guideline',
+						name: `Instruction from ${relativePath}`,
+						description: instruction.instruction,
+						filePatterns,
+					},
+				});
+				nextId++;
+			}
+		}
+	}
+
+	// Collect instructions from settings
+	const settingsConfigs = [
+		{ config: ConfigKey.CodeGenerationInstructions, name: 'Code Generation Instruction' },
+		...(kind === 'selection' ? [{ config: ConfigKey.CodeFeedbackInstructions, name: 'Code Review Instruction' }] : []),
+	];
+
+	for (const { config, name } of settingsConfigs) {
+		const instructionsGroups = await customInstructionsService.fetchInstructionsFromSetting(config);
+		for (const instructionsGroup of instructionsGroups) {
+			for (const instruction of instructionsGroup.content) {
+				// Skip instructions with languageId if not in map
+				if (instruction.languageId && !languageIdToFilePatterns.has(instruction.languageId)) {
+					continue;
+				}
+				const filePatterns = instruction.languageId ? Array.from(languageIdToFilePatterns.get(instruction.languageId)!) : ['*'];
+				customInstructionRefs.push({
+					type: 'github.coding_guideline',
+					id: `${nextId}`,
+					data: {
+						id: nextId,
+						type: 'coding-guideline',
+						name,
+						description: instruction.instruction,
+						filePatterns,
+					},
+				});
+				nextId++;
+			}
+		}
+	}
+
+	return customInstructionRefs;
 }
