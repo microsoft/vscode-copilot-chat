@@ -131,7 +131,67 @@ const scriptLocations = [
 ];
 
 
-export class CopilotExternalCLITerminalIntegration implements ICopilotBundledCLITerminalIntegration {
+export class CopilotExternalCLINodeTerminalIntegration implements ICopilotBundledCLITerminalIntegration {
+	private readonly completedSetup: Promise<void>;
+	constructor(
+		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+	) {
+		this.completedSetup = this.setupCopilotCLIPath();
+	}
+
+	private async setupCopilotCLIPath(): Promise<void> {
+		const enabled = this.configurationService.getConfig(ConfigKey.Internal.CopilotCLIEnabled);
+		if (!enabled) {
+			return;
+		}
+		const globalStorageUri = this.context.globalStorageUri;
+		if (!globalStorageUri) {
+			// globalStorageUri is not available in extension tests
+			return;
+		}
+
+		const storageLocation = path.join(globalStorageUri.fsPath, 'copilotCli', 'node');
+		const scriptLocation = path.join(this.context.extensionPath, 'resources', 'scripts');
+
+		await fs.mkdir(storageLocation, { recursive: true });
+
+		// Copy the scripts to the storage location
+		const sourcePath = path.join(scriptLocation, 'copilot');
+		const targetPath = path.join(storageLocation, 'copilot');
+		await fs.copyFile(sourcePath, targetPath);
+		if (process.platform !== 'win32') {
+			await fs.chmod(targetPath, 0o755);
+		}
+	}
+
+	public async createTerminal(options: vscode.TerminalOptions) {
+		const enabled = this.configurationService.getConfig(ConfigKey.Internal.CopilotCLIEnabled);
+		if (enabled) {
+			await this.completedSetup;
+			const session = await this._authenticationService.getAnyGitHubSession();
+			if (session) {
+				this.context.environmentVariableCollection.replace('GH_TOKEN', session.accessToken);
+			}
+
+			const globalStorageUri = this.context.globalStorageUri;
+			if (globalStorageUri) {
+				// Figure out the default shell (look at the settings for default profile)
+				// If extensions create terminals, then this might not work as expected as the shell might be different
+				// from the default one.
+				// However this is a best effort attempt.
+				// If we cannot figure out the shell, we will add bash scripts to the PATH
+				const storageLocation = path.join(globalStorageUri.fsPath, 'copilotCli', 'node');
+				this.context.environmentVariableCollection.prepend('PATH', `${storageLocation}${path.delimiter}`);
+			}
+		}
+
+		return vscode.window.createTerminal(options);
+	}
+}
+
+export class CopilotExternalCLIScriptsTerminalIntegration implements ICopilotBundledCLITerminalIntegration {
 	private readonly completedSetup: Promise<void>;
 	constructor(
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,

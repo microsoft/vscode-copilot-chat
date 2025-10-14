@@ -5,9 +5,6 @@
 
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler } from 'vscode';
-import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { ITerminalService } from '../../../platform/terminal/common/terminalService';
 import { isLocation } from '../../../util/common/types';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -15,8 +12,10 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
-import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
-import { buildChatHistoryFromEvents, parseChatMessagesToEvents } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
+import { ExtendedChatRequest, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
+import { buildChatHistoryFromEvents, parseChatMessagesToEvents, stripSystemReminders } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
+import { CopilotBundledCLITerminalIntegration, CopilotExternalCLINodeTerminalIntegration, CopilotExternalCLIScriptsTerminalIntegration, ICopilotBundledCLITerminalIntegration } from './copilotCLITerminalIntegration';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 
 export class CopilotCLIChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
 	private readonly _onDidChangeChatSessionItems = this._register(new Emitter<void>());
@@ -27,12 +26,12 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	private readonly _terminalIntegration: ICopilotBundledCLITerminalIntegration;
 	constructor(
 		@ICopilotCLISessionService private readonly copilotcliSessionService: ICopilotCLISessionService,
-		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
-		@ITerminalService private readonly terminalService: ITerminalService,
-		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super();
-		this.setupCopilotCLIPath();
+		const cliIntegration = this.configurationService.getConfig(ConfigKey.Internal.CopilotCLIKind);
+		this._terminalIntegration = cliIntegration === 'bundled' ? this.instantiationService.createInstance(CopilotBundledCLITerminalIntegration) : (cliIntegration === 'node' ? this.instantiationService.createInstance(CopilotExternalCLINodeTerminalIntegration) : this.instantiationService.createInstance(CopilotExternalCLIScriptsTerminalIntegration));
 	}
 
 	public refresh(): void {
