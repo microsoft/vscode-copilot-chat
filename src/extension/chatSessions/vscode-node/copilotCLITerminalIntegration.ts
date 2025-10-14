@@ -5,10 +5,11 @@
 
 import { promises as fs } from 'fs';
 import * as vscode from 'vscode';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ITerminalService } from '../../../platform/terminal/common/terminalService';
 import * as path from '../../../util/vs/base/common/path';
-import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 
 export interface ICopilotBundledCLITerminalIntegration {
@@ -91,7 +92,9 @@ const scriptLocations = [
 	{
 		shell: 'pwsh',
 		files: {
-			'copilot.ps1': 'copilot.ps1'
+			'copilot.ps1': 'copilot.ps1',
+			'copilot.pwsh': 'copilot.pwsh',
+			'copilot.cmd': 'copilot.cmd'
 		}
 	},
 	{
@@ -134,6 +137,7 @@ export class CopilotExternalCLITerminalIntegration implements ICopilotBundledCLI
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IEnvService private readonly envService: IEnvService,
 	) {
 		this.completedSetup = this.setupCopilotCLIPath();
 	}
@@ -179,16 +183,32 @@ export class CopilotExternalCLITerminalIntegration implements ICopilotBundledCLI
 
 			const globalStorageUri = this.context.globalStorageUri;
 			if (globalStorageUri) {
-				// TODO: Figure out the default shell (look at the settings for default profile)
+				// Figure out the default shell (look at the settings for default profile)
 				// If extensions create terminals, then this might not work as expected as the shell might be different
 				// from the default one.
 				// However this is a best effort attempt.
 				// If we cannot figure out the shell, we will add bash scripts to the PATH
-				const storageLocation = path.join(globalStorageUri.fsPath, 'copilotCli', 'bash');
-				this.context.environmentVariableCollection.prepend('PATH', `${storageLocation}:`);
+				const storageLocation = path.join(globalStorageUri.fsPath, 'copilotCli', this.getDefaultShell());
+				this.context.environmentVariableCollection.prepend('PATH', `${storageLocation}${path.delimiter}`);
 			}
 		}
 
 		return vscode.window.createTerminal(options);
+	}
+
+	private getDefaultShell(): string {
+		const defaultPlatformShell = process.platform === 'win32' ? 'pwsh' : 'bash';
+		const platform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux';
+		const setting = `integrated.defaultProfile.${platform}`;
+		const shell = vscode.workspace.getConfiguration('terminal').get<string>(setting) ?? this.envService.shell ?? (process.platform === 'win32' ? 'pwsh' : 'bash');
+
+		if (scriptLocations.some(s => s.shell === shell)) {
+			return shell;
+		}
+		if (scriptLocations.some(s => s.shell === this.envService.shell)) {
+			return shell;
+		}
+
+		return defaultPlatformShell;
 	}
 }

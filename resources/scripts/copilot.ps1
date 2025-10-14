@@ -9,13 +9,15 @@ function Find-RealCopilot {
     $CurrentScript = $MyInvocation.PSCommandPath
     if (-not $CurrentScript) { $CurrentScript = $PSCommandPath }
     $CopilotPath = (Get-Command copilot -ErrorAction SilentlyContinue).Source
-    
+
     # Check if the copilot command would point to this script
     if ($CurrentScript -eq $CopilotPath -or (Resolve-Path $CurrentScript -ErrorAction SilentlyContinue).Path -eq (Resolve-Path $CopilotPath -ErrorAction SilentlyContinue).Path) {
         # The copilot in PATH is this script, find the real one by temporarily removing this script's directory from PATH
         $ScriptDir = Split-Path $CurrentScript -Parent
         $OldPath = $env:PATH
-        $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -ne $ScriptDir }) -join ';'
+        # Use appropriate path delimiter based on OS
+        $PathDelimiter = if ($IsWindows -or $env:OS -eq "Windows_NT") { ';' } else { ':' }
+        $env:PATH = ($env:PATH -split $PathDelimiter | Where-Object { $_ -ne $ScriptDir }) -join $PathDelimiter
         $RealCopilot = (Get-Command copilot -ErrorAction SilentlyContinue).Source
         $env:PATH = $OldPath
         
@@ -110,7 +112,7 @@ function Test-AndLaunchCopilot {
             throw "Command failed"
         }
     } catch {
-        Write-Host "Error: Unable to check copilot version."
+        # Write-Host "Error: Unable to check copilot version."
         $answer = Read-Host "Would you like to reinstall GitHub Copilot CLI? (y/N)"
         if ($answer -eq "y" -or $answer -eq "Y") {
             Write-Host "Reinstalling GitHub Copilot CLI..."
