@@ -1598,12 +1598,6 @@
 						"name": "search",
 						"description": "%copilot.vscode.search.description%",
 						"sampleRequest": "%copilot.vscode.search.sampleRequest%"
-					},
-					{
-						"name": "startDebugging",
-						"description": "%copilot.vscode.startDebugging.description%",
-						"sampleRequest": "%copilot.vscode.startDebugging.sampleRequest%",
-						"when": "config.github.copilot.chat.startDebugging.enabled"
 					}
 				]
 			},
@@ -2078,15 +2072,6 @@
 				"category": "Developer"
 			},
 			{
-				"command": "github.copilot.debug.generateConfiguration",
-				"title": "%github.copilot.command.generateConfiguration%",
-				"category": "Chat",
-				"enablement": "config.github.copilot.chat.startDebugging.enabled",
-				"tags": [
-					"experimental"
-				]
-			},
-			{
 				"command": "github.copilot.open.walkthrough",
 				"title": "%github.copilot.command.openWalkthrough%",
 				"category": "Chat"
@@ -2373,14 +2358,6 @@
 				"title": "Preview",
 				"id": "preview",
 				"properties": {
-					"github.copilot.chat.startDebugging.enabled": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.startDebugging.enabled%",
-						"tags": [
-							"preview"
-						]
-					},
 					"github.copilot.chat.reviewAgent.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -3724,13 +3701,6 @@
 					"command": "github.copilot.tests.fixTestFailure",
 					"when": "testing.testItemHasUri",
 					"group": "inline@1"
-				}
-			],
-			"debug/createConfiguration": [
-				{
-					"command": "github.copilot.debug.generateConfiguration",
-					"group": "z_commands",
-					"when": "config.github.copilot.chat.startDebugging.enabled"
 				}
 			],
 			"issue/reporter": [
