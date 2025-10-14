@@ -208,7 +208,7 @@ class DocumentEditCache {
 		if (cachedEdit) {
 			const editWindow = cachedEdit.editWindow;
 			const cursorRange = currentSelection[0];
-			if (editWindow && cursorRange && !editWindow.containsRange(cursorRange)) {
+			if (editWindow && !editWindow.containsRange(cursorRange)) {
 				return undefined;
 			}
 			return cachedEdit;
