@@ -212,6 +212,8 @@ export class DefaultIntentRequestHandler {
 				() => {
 					const codeBlocksMetaData = codeBlockTrackingResponseStream.finish();
 					this.turn.setMetadata(codeBlocksMetaData);
+					// Show "Start Debugging" button if launch.json was edited
+					this.showDebugButtonIfNeeded(codeBlocksMetaData, stream);
 				}
 			);
 		});
@@ -256,6 +258,27 @@ export class DefaultIntentRequestHandler {
 		}));
 
 		return participants;
+	}
+
+	/**
+	 * Shows a "Start Debugging" button if any code blocks reference launch.json
+	 */
+	private showDebugButtonIfNeeded(codeBlocksMetaData: CodeBlocksMetadata, stream: ChatResponseStream): void {
+		// Check if any code blocks reference launch.json
+		const hasLaunchJsonEdit = codeBlocksMetaData.codeBlocks.some(codeBlock => {
+			if (codeBlock.resource) {
+				const path = codeBlock.resource.path;
+				return path.endsWith('launch.json') || path.includes('/.vscode/launch.json');
+			}
+			return false;
+		});
+
+		if (hasLaunchJsonEdit) {
+			stream.button({
+				title: l10n.t('Start Debugging'),
+				command: 'workbench.action.debug.selectandstart'
+			});
+		}
 	}
 
 	private async _onDidReceiveResponse({ response, toolCalls, interactionOutcome }: IToolCallingResponseEvent) {
