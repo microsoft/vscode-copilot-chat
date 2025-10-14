@@ -83,7 +83,7 @@ export class CopilotBundledCLITerminalIntegration implements ICopilotBundledCLIT
 	}
 }
 
-// * Note that the possible values for shells are currently defined as any of the following:
+// * Note that the possible values for shells are currently defined as any of the following (from vscode.d.ts):
 // * 'bash', 'cmd', 'csh', 'fish', 'gitbash', 'julia', 'ksh', 'node', 'nu', 'pwsh', 'python',
 // * 'sh', 'wsl', 'zsh'.
 // Here w have a list of the shells and default is `bash`
