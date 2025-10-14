@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Session, SessionManager } from '@github/copilot/sdk';
-import type { CancellationToken } from 'vscode';
+import type { CancellationToken, ChatContext, ChatRequest } from 'vscode';
 import { IEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -19,6 +19,8 @@ export interface ICopilotCLISession {
 	readonly label: string;
 	readonly timestamp: Date;
 }
+
+export type ExtendedChatRequest = ChatRequest & { prompt: string };
 
 export interface ICopilotCLISessionService {
 	readonly _serviceBrand: undefined;
@@ -37,8 +39,8 @@ export interface ICopilotCLISessionService {
 	findSessionWrapper<T extends IDisposable>(sessionId: string): T | undefined;
 
 	// Pending request tracking (for untitled sessions)
-	setPendingRequest(sessionId: string, request: any, context: any): void;
-	getPendingRequest(sessionId: string): { request: any; context: any } | undefined;
+	setPendingRequest(sessionId: string, request: ExtendedChatRequest, context: ChatContext): void;
+	getPendingRequest(sessionId: string): { request: ExtendedChatRequest; context: ChatContext } | undefined;
 	clearPendingRequest(sessionId: string): void;
 }
 
@@ -230,11 +232,11 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 		return `Session ${sdkSession.sessionId.slice(0, 8)}`;
 	}
 
-	public setPendingRequest(sessionId: string, request: any, context: any): void {
+	public setPendingRequest(sessionId: string, request: ExtendedChatRequest, context: ChatContext): void {
 		this._pendingRequests.set(sessionId, { request, context });
 	}
 
-	public getPendingRequest(sessionId: string): { request: any; context: any } | undefined {
+	public getPendingRequest(sessionId: string): { request: ExtendedChatRequest; context: ChatContext } | undefined {
 		return this._pendingRequests.get(sessionId);
 	}
 

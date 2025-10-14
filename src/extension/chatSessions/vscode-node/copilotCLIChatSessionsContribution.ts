@@ -17,7 +17,7 @@ import * as path from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
 import { localize } from '../../../util/vs/nls';
 import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
-import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
+import { ExtendedChatRequest, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { buildChatHistoryFromEvents, parseChatMessagesToEvents, stripSystemReminders } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
 
 export class CopilotCLIChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
@@ -203,7 +203,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 			const requestTurn = new vscode.ChatRequestTurn2(
 				stripSystemReminders(request.prompt),
 				undefined,
-				request.references,
+				[...request.references],
 				'',
 				[],
 				undefined
@@ -223,6 +223,7 @@ export class CopilotCLIChatSessionParticipant {
 	constructor(
 		private readonly sessionType: string,
 		private readonly copilotcliAgentManager: CopilotCLIAgentManager,
+		private readonly sessionService: ICopilotCLISessionService,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
 	) { }
 
@@ -233,20 +234,21 @@ export class CopilotCLIChatSessionParticipant {
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
 		// Resolve the prompt with references before processing
 		const resolvedPrompt = this.resolvePrompt(request);
-		const processedRequest = { ...request, prompt: resolvedPrompt };
+		const processedRequest: ExtendedChatRequest = { ...request, prompt: resolvedPrompt };
 
 		const { chatSessionContext } = context;
 		if (chatSessionContext) {
 			if (chatSessionContext.isUntitled) {
 				// Create a new session (just get the session ID, don't run the request yet)
-				const copilotcliSessionId = await this.copilotcliAgentManager.createSession(processedRequest.prompt);
+				const newSdkSession = await this.sessionService.getOrCreateSDKSession(undefined, processedRequest.prompt);
+				const copilotcliSessionId = newSdkSession?.sessionId;
 				if (!copilotcliSessionId) {
 					stream.warning(localize('copilotcli.failedToCreateSession', "Failed to create a new CopilotCLI session."));
 					return {};
 				}
 
 				// Store the pending request that will be executed by activeResponseCallback
-				this.copilotcliAgentManager.setPendingRequest(copilotcliSessionId, processedRequest, context);
+				this.sessionService.setPendingRequest(copilotcliSessionId, processedRequest, context);
 
 				// Immediately swap to the new session (this will trigger provideChatSessionContent)
 				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { id: copilotcliSessionId, label: processedRequest.prompt ?? 'CopilotCLI' });

@@ -36,27 +36,6 @@ export class CopilotCLIAgentManager extends Disposable {
 		return this.sessionService.findSessionWrapper<CopilotCLISession>(sessionId);
 	}
 
-	/**
-	 * Create a new session without processing a request yet
-	 */
-	public async createSession(prompt: string): Promise<string | undefined> {
-		try {
-			this.logService.trace(`[CopilotCLIAgentManager] Creating new session with prompt: ${prompt}`);
-			const sdkSession = await this.sessionService.getOrCreateSDKSession(undefined, prompt);
-			return sdkSession.sessionId;
-		} catch (error) {
-			this.logService.error(`[CopilotCLIAgentManager] Failed to create session: ${error}`);
-			return undefined;
-		}
-	}
-
-	/**
-	 * Store a pending request that will be executed later via activeResponseCallback
-	 */
-	public setPendingRequest(sessionId: string, request: any, context: any): void {
-		this.sessionService.setPendingRequest(sessionId, request, context);
-	}
-
 	async handleRequest(
 		copilotcliSessionId: string | undefined,
 		request: vscode.ChatRequest,
