@@ -267,8 +267,9 @@ export class DefaultIntentRequestHandler {
 		// Check if any code blocks reference launch.json
 		const hasLaunchJsonEdit = codeBlocksMetaData.codeBlocks.some(codeBlock => {
 			if (codeBlock.resource) {
-				const path = codeBlock.resource.path;
-				return path.endsWith('launch.json') || path.includes('/.vscode/launch.json');
+				const path = codeBlock.resource.path.toLowerCase();
+				// Check for launch.json in .vscode folder (both Unix and Windows path separators)
+				return path.endsWith('launch.json') && (path.includes('/.vscode/') || path.includes('\\.vscode\\'));
 			}
 			return false;
 		});
