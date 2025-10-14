@@ -1780,6 +1780,30 @@
 				"category": "Claude Code"
 			},
 			{
+				"command": "github.copilot.cli.sessions.refresh",
+				"title": "Refresh Copilot CLI Sessions",
+				"icon": "$(refresh)",
+				"category": "Copilot CLI"
+			},
+			{
+				"command": "github.copilot.cli.sessions.delete",
+				"title": "Delete Copilot CLI Session",
+				"icon": "$(close)",
+				"category": "Copilot CLI"
+			},
+			{
+				"command": "github.copilot.cli.sessions.resumeInTerminal",
+				"title": "Resume Session in Terminal",
+				"icon": "$(terminal)",
+				"category": "Copilot CLI"
+			},
+			{
+				"command": "github.copilot.cli.sessions.newTerminalSession",
+				"title": "New Session in Terminal",
+				"icon": "$(terminal)",
+				"category": "Copilot CLI"
+			},
+			{
 				"command": "github.copilot.chat.replay",
 				"title": "Start Chat Replay",
 				"icon": "$(debug-line-by-line)",
@@ -3450,12 +3474,33 @@
 				{
 					"command": "github.copilot.debug.showOutputChannel",
 					"when": "false"
+				},
+				{
+					"command": "github.copilot.cli.sessions.delete",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.cli.sessions.refresh",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.cli.sessions.resumeInTerminal",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.cli.sessions.newTerminalSession",
+					"when": "false"
 				}
 			],
 			"view/title": [
 				{
 					"command": "github.copilot.claude.sessions.refresh",
 					"when": "view == workbench.view.chat.sessions.claude-code",
+					"group": "navigation@1"
+				},
+				{
+					"command": "github.copilot.cli.sessions.refresh",
+					"when": "view == workbench.view.chat.sessions.copilotcli",
 					"group": "navigation@1"
 				},
 				{
@@ -3742,6 +3787,23 @@
 					"command": "github.copilot.git.resolveMergeConflicts",
 					"group": "z_chat@1",
 					"when": "config.git.enabled && !git.missing && !isInDiffEditor && !isMergeEditor && resource in git.mergeChanges && git.activeResourceHasMergeConflicts"
+				}
+			],
+			"chat/chatSessions": [
+				{
+					"command": "github.copilot.cli.sessions.resumeInTerminal",
+					"when": "chatSessionType == copilotcli",
+					"group": "inline@1"
+				},
+				{
+					"command": "github.copilot.cli.sessions.delete",
+					"when": "chatSessionType == copilotcli",
+					"group": "inline@2"
+				},
+				{
+					"command": "github.copilot.cli.sessions.newTerminalSession",
+					"when": "view == workbench.view.chat.sessions.copilotcli",
+					"group": "submenu"
 				}
 			]
 		},
@@ -4105,6 +4167,17 @@
 						"description": "Complete a security review of the pending changes on the current branch"
 					}
 				]
+			},
+			{
+				"type": "copilotcli",
+				"name": "copilotcli",
+				"displayName": "Copilot CLI",
+				"description": "The Copilot CLI agent",
+				"when": "config.github.copilot.chat.advanced.copilotCLI.enabled",
+				"capabilities": {
+					"supportsFileAttachments": true,
+					"supportsToolAttachments": false
+				}
 			}
 		],
 		"debuggers": [
@@ -4284,6 +4357,7 @@
 	"dependencies": {
 		"@anthropic-ai/claude-code": "^1.0.120",
 		"@anthropic-ai/sdk": "^0.63.0",
+		"@github/copilot": "^0.0.338",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@vscode/copilot-api": "^0.1.10",

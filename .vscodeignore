@@ -18,6 +18,9 @@ assets/walkthroughs/**
 !dist/cli.js
 !node_modules/@vscode/copilot-typescript-server-plugin/package.json
 !node_modules/@vscode/copilot-typescript-server-plugin/dist/*.js
+!node_modules/@github/copilot/**/package.json
+!node_modules/@github/copilot/**/*.js
+!node_modules/@github/copilot/**/*.wasm
 !CHANGELOG.md
 !README.md
 !package.json
