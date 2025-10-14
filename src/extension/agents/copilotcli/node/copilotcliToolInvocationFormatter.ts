@@ -101,7 +101,7 @@ export function parseChatMessagesToEvents(chatMessages: readonly ChatCompletionM
 	return events;
 }
 
-function stripSystemReminders(text: string): string {
+export function stripSystemReminders(text: string): string {
 	// Remove any <system-reminder> ... </system-reminder> blocks, including newlines
 	return text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, '').trim();
 }
@@ -178,6 +178,7 @@ export function createCopilotCLIToolInvocation(
 ): ChatToolInvocationPart | undefined {
 	const invocation = new ChatToolInvocationPart(toolName, toolCallId ?? '', false);
 	invocation.isConfirmed = true;
+	invocation.isComplete = true;
 
 	if (resultType) {
 		invocation.isError = resultType === 'failure' || resultType === 'denied';

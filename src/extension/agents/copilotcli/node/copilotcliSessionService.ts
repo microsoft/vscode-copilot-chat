@@ -10,6 +10,7 @@ import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/
 import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { DisposableMap, IDisposable } from '../../../../util/vs/base/common/lifecycle';
+import { stripSystemReminders } from './copilotcliToolInvocationFormatter';
 import { ensureNodePtyShim } from './nodePtyShim';
 
 export interface ICopilotCLISession {
@@ -207,8 +208,9 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 						: '';
 
 				if (content) {
-					// Return first line or first 50 characters, whichever is shorter
-					const firstLine = content.split('\n').find(l => l.trim().length > 0) ?? '';
+					// Strip system reminders and return first line or first 50 characters, whichever is shorter
+					const cleanContent = stripSystemReminders(content);
+					const firstLine = cleanContent.split('\n').find((l: string) => l.trim().length > 0) ?? '';
 					return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine;
 				}
 			} else if (prompt && prompt.trim().length > 0) {
