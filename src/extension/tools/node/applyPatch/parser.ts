@@ -450,9 +450,7 @@ export class Parser {
 		let result = ins;
 		let additionalIndentation = '';
 
-		if (insLength > 1) {
-			result = transformIndentation(ins, srcIndentStyle, targetIndentStyle);
-		}
+		result = transformIndentation(ins, srcIndentStyle, targetIndentStyle);
 		if (additionalIndentationDetails && !additionalIndentationDetails.isAdditionalIndentationSet) {
 			const insIndent = computeIndentLevel2(result, targetIndentStyle.tabSize);
 			additionalIndentationDetails.isAdditionalIndentationSet = true;

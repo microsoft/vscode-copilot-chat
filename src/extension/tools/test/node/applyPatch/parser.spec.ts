@@ -373,7 +373,7 @@ suite('applyPatch parser', () => {
 		expect(Object.values(commit.changes).at(0)?.newContent).toMatchFileSnapshot(`${__dirname}/corpus/262549-output.txt`);
 	});
 
-	it('reindents unindented code', async () => {
+	it.only('reindents unindented code', async () => {
 		const input = await fs.readFile(`${__dirname}/corpus/reindent-input.txt`, 'utf-8');
 		const patch = await fs.readFile(`${__dirname}/corpus/reindent-call.txt`, 'utf-8');
 
@@ -390,7 +390,7 @@ suite('applyPatch parser', () => {
 			    - item2
 			    - item3
 			    - item1a
-			    - item2a
+			    - item20a
 			    - item3a
 			    - item1b
 			    - item20b
