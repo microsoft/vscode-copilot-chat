@@ -14,7 +14,6 @@ import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
-import { normalizeFetchUrl } from '../../../platform/git/common/gitService';
 import { Repository } from '../../../platform/git/vscode/git';
 import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -317,8 +316,6 @@ function parseLine(line: string): ResponseReference[] {
 }
 
 async function fetchComments(logService: ILogService, authService: IAuthenticationService, capiClientService: ICAPIClientService, fetcherService: IFetcherService, envService: IEnvService, customInstructionsService: ICustomInstructionsService, workspaceService: IWorkspaceService, kind: 'selection' | 'diff', repository: Repository | undefined, baseFileContents: FileState[], headFileContents: FileState[], cancellationToken: CancellationToken) {
-	const codingGuidlines = repository ? await loadCodingGuidelines(logService, authService, capiClientService, repository) : [];
-
 	// Collect languageId to file patterns mapping
 	const languageIdToFilePatterns = new Map<string, Set<string>>();
 	for (const file of [...baseFileContents, ...headFileContents]) {
@@ -331,7 +328,7 @@ async function fetchComments(logService: ILogService, authService: IAuthenticati
 		}
 	}
 
-	const customInstructions = await loadCustomInstructions(customInstructionsService, workspaceService, kind, languageIdToFilePatterns, codingGuidlines.length + 2);
+	const customInstructions = await loadCustomInstructions(customInstructionsService, workspaceService, kind, languageIdToFilePatterns, 2);
 
 	const requestBody = {
 		messages: [{
@@ -358,7 +355,6 @@ async function fetchComments(logService: ILogService, authService: IAuthenticati
 						baseFileContents: baseFileContents.map(({ path, content }) => ({ path, content })),
 					},
 				},
-				...codingGuidlines,
 				...customInstructions,
 			],
 		}]
@@ -471,58 +467,6 @@ interface CodingGuideline {
 		description: string;
 		filePatterns: string[];
 	};
-}
-
-async function loadCodingGuidelines(logService: ILogService, authService: IAuthenticationService, capiClientService: ICAPIClientService, repository: Repository): Promise<CodingGuideline[]> {
-	const { state } = repository;
-	const remote = state.HEAD?.upstream?.remote || state.HEAD?.remote;
-	const pushUrl = remote && state.remotes.find(r => r.name === remote)?.pushUrl || state.remotes.find(r => r.pushUrl)?.pushUrl;
-	if (!pushUrl) {
-		return [];
-	}
-	const normalized = new URL(normalizeFetchUrl(pushUrl));
-	if (normalized.hostname !== 'github.com') {
-		return [];
-	}
-	const pathSegments = normalized.pathname.split('/');
-	const owner = pathSegments[1];
-	const repo = pathSegments[2].endsWith('.git') ? pathSegments[2].substring(0, pathSegments[2].length - 4) : pathSegments[2];
-	const ghToken = (await authService.getAnyGitHubSession())?.accessToken;
-	if (!ghToken) {
-		logService.info(`Failed to fetch coding guidelines for ${owner}/${repo}: Not signed in.`);
-		return [];
-	}
-	const response = await capiClientService.makeRequest<Response>({
-		headers: {
-			'Authorization': `Bearer ${ghToken}`
-		},
-	}, { type: RequestType.CodingGuidelines, repoWithOwner: `${owner}/${repo}` });
-
-	const requestId = response.headers.get('x-github-request-id') || undefined;
-	logService.info(`[github review agent] coding guidelines request id: ${requestId}`);
-
-	if (!response.ok) {
-		if (response.status !== 404) { // 404: No coding guidelines or user not part of coding guidelines feature flag.
-			logService.info(`Failed to fetch coding guidelines for ${owner}/${repo}: ${response.statusText}`);
-		}
-		return [];
-	}
-
-	const text = await response.text();
-	logService.debug(`[github review agent] coding guidelines: ${text}`);
-	const codingGuidelines = JSON.parse(text) as { name: string; description: string; filePatterns: string[] }[];
-	const codingGuidelineRefs = codingGuidelines.map((input, index) => ({
-		type: 'github.coding_guideline',
-		id: `${index + 2}`,
-		data: {
-			id: index + 2,
-			type: 'coding-guideline',
-			name: input.name,
-			description: input.description,
-			filePatterns: input.filePatterns,
-		},
-	}));
-	return codingGuidelineRefs;
 }
 
 async function loadCustomInstructions(customInstructionsService: ICustomInstructionsService, workspaceService: IWorkspaceService, kind: 'selection' | 'diff', languageIdToFilePatterns: Map<string, Set<string>>, firstId: number): Promise<CodingGuideline[]> {
