@@ -73,7 +73,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	}
 
 	public async resumeCopilotCLISessionInTerminal(sessionItem: vscode.ChatSessionItem): Promise<void> {
-		const terminalName = `Copilot CLI - ${sessionItem.label || sessionItem.id}`;
+		const terminalName = sessionItem.label || sessionItem.id;
 		const command = `copilot --resume ${sessionItem.id}`;
 		await this.createAndExecuteInTerminal(terminalName, command);
 	}
