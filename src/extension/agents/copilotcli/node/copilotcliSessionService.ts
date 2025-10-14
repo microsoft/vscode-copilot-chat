@@ -35,6 +35,11 @@ export interface ICopilotCLISessionService {
 	// Session wrapper tracking
 	trackSessionWrapper<T extends IDisposable>(sessionId: string, wrapper: T): void;
 	findSessionWrapper<T extends IDisposable>(sessionId: string): T | undefined;
+
+	// Pending request tracking (for untitled sessions)
+	setPendingRequest(sessionId: string, request: any, context: any): void;
+	getPendingRequest(sessionId: string): { request: any; context: any } | undefined;
+	clearPendingRequest(sessionId: string): void;
 }
 
 export const ICopilotCLISessionService = createServiceIdentifier<ICopilotCLISessionService>('ICopilotCLISessionService');
@@ -45,6 +50,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 	private _sessionManager: SessionManager | undefined;
 	private _sessionWrappers = new DisposableMap<string, IDisposable>();
 	private _sessions = new Map<string, ICopilotCLISession>();
+	private _pendingRequests = new Map<string, { request: any; context: any }>();
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
@@ -222,5 +228,17 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 
 		// Fallback to session ID
 		return `Session ${sdkSession.sessionId.slice(0, 8)}`;
+	}
+
+	public setPendingRequest(sessionId: string, request: any, context: any): void {
+		this._pendingRequests.set(sessionId, { request, context });
+	}
+
+	public getPendingRequest(sessionId: string): { request: any; context: any } | undefined {
+		return this._pendingRequests.get(sessionId);
+	}
+
+	public clearPendingRequest(sessionId: string): void {
+		this._pendingRequests.delete(sessionId);
 	}
 }
