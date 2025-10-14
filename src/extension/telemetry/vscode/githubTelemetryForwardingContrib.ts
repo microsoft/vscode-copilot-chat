@@ -16,25 +16,11 @@ export class GithubTelemetryForwardingContrib extends Disposable implements IExt
 
 		const channel = env.getDataChannel<IEditTelemetryData>('editTelemetry');
 		this._register(channel.onDidReceiveData((args) => {
-			if (!isGithubExtensionDataEvent(args.data.eventName, args.data.data)) {
-				return;
-			}
 			const data = translateToGithubProperties(args.data.eventName, args.data.data);
 			const { properties, measurements } = dataToPropsAndMeasurements(data);
 			this._telemetryService.sendGHTelemetryEvent('vscode.' + args.data.eventName, properties, measurements);
 		}));
 	}
-}
-
-function isGithubExtensionDataEvent(eventName: string, data: Record<string, unknown>): boolean {
-	// TODO: should this also apply to other/all events?
-	if (eventName === 'inlineCompletion.endOfLife' && 'extensionId' in data) {
-		const extId = data['extensionId'];
-		if (typeof extId === 'string' && extId !== 'github.copilot' && extId !== 'github.copilot-chat') {
-			return false;
-		}
-	}
-	return true;
 }
 
 function translateToGithubProperties(eventName: string, data: Record<string, unknown>): Record<string, unknown> {

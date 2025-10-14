@@ -7,6 +7,7 @@ import { promises as fs } from 'fs';
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ITerminalService } from '../../../platform/terminal/common/terminalService';
 import { isLocation } from '../../../util/common/types';
@@ -31,9 +32,15 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 		@ITerminalService private readonly terminalService: ITerminalService,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super();
-		this.setupCopilotCLIPath();
+
+		const enabled = this.configurationService.getConfig(ConfigKey.Internal.CopilotCLIEnabled);
+
+		if (enabled) {
+			this.setupCopilotCLIPath();
+		}
 	}
 
 	public refresh(): void {
