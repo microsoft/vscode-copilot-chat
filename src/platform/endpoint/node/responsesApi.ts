@@ -5,7 +5,7 @@
 
 import { Raw } from '@vscode/prompt-tsx';
 import { ClientHttp2Stream } from 'http2';
-import { OpenAI } from 'openai';
+import type { OpenAI } from 'openai';
 import { Response } from '../../../platform/networking/common/fetcherService';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';

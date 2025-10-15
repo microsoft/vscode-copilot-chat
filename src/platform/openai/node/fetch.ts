@@ -13,8 +13,6 @@ import { IChatQuotaService } from '../../chat/common/chatQuotaService';
 import { ChatLocation } from '../../chat/common/commonTypes';
 import { IInteractionService } from '../../chat/common/interactionService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
-import { IDomainService } from '../../endpoint/common/domainService';
-import { IEnvService } from '../../env/common/envService';
 import { ILogService } from '../../log/common/logService';
 import { FinishedCallback, OptionalChatRequestParams, RequestId, getProcessingTime, getRequestId } from '../../networking/common/fetch';
 import { FetcherId, IFetcherService, Response } from '../../networking/common/fetcherService';
@@ -113,13 +111,8 @@ export async function fetchAndStreamChat(
 ): Promise<ChatResults | ChatRequestFailed | ChatRequestCanceled> {
 	const logService = accessor.get(ILogService);
 	const telemetryService = accessor.get(ITelemetryService);
-	const fetcherService = accessor.get(IFetcherService);
-	const envService = accessor.get(IEnvService);
 	const chatQuotaService = accessor.get(IChatQuotaService);
-	const domainService = accessor.get(IDomainService);
-	const capiClientService = accessor.get(ICAPIClientService);
 	const authenticationService = accessor.get(IAuthenticationService);
-	const interactionService = accessor.get(IInteractionService);
 	const instantiationService = accessor.get(IInstantiationService);
 	if (cancel?.isCancellationRequested) {
 		return { type: FetchResponseKind.Canceled, reason: 'before fetch request' };
@@ -146,24 +139,19 @@ export async function fetchAndStreamChat(
 	// Generate unique ID to link input and output messages
 	const modelCallId = generateUuid();
 
-	const response = await fetchWithInstrumentation(
-		logService,
-		telemetryService,
-		fetcherService,
-		envService,
-		domainService,
-		capiClientService,
-		interactionService,
-		chatEndpointInfo,
-		ourRequestId,
-		request,
-		secretKey,
-		location,
-		userInitiatedRequest,
-		cancel,
-		{ ...telemetryProperties, modelCallId },
-		useFetcher,
-	);
+	const response = await instantiationService.invokeFunction(accessor =>
+		fetchWithInstrumentation(
+			accessor,
+			chatEndpointInfo,
+			ourRequestId,
+			request,
+			secretKey,
+			location,
+			userInitiatedRequest,
+			cancel,
+			{ ...telemetryProperties, modelCallId },
+			useFetcher,
+		));
 
 	if (cancel?.isCancellationRequested) {
 		const body = await response!.body();
@@ -463,13 +451,7 @@ async function handleError(
 }
 
 async function fetchWithInstrumentation(
-	logService: ILogService,
-	telemetryService: ITelemetryService,
-	fetcherService: IFetcherService,
-	envService: IEnvService,
-	domainService: IDomainService,
-	capiClientService: ICAPIClientService,
-	interactionService: IInteractionService,
+	accessor: ServicesAccessor,
 	chatEndpoint: IChatEndpoint,
 	ourRequestId: string,
 	request: IEndpointBody,
@@ -480,6 +462,11 @@ async function fetchWithInstrumentation(
 	telemetryProperties?: TelemetryProperties,
 	useFetcher?: FetcherId,
 ): Promise<Response> {
+	const logService = accessor.get(ILogService);
+	const telemetryService = accessor.get(ITelemetryService);
+	const fetcherService = accessor.get(IFetcherService);
+	const capiClientService = accessor.get(ICAPIClientService);
+	const interactionService = accessor.get(IInteractionService);
 
 	// If request contains an image, we include this header.
 	const additionalHeaders: Record<string, string> = {
