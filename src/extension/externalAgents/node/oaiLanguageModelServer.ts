@@ -9,7 +9,7 @@ import * as http from 'http';
 import { ClientHttp2Stream } from 'http2';
 import OpenAI from 'openai';
 import { IChatMLFetcher, Source } from '../../../platform/chat/common/chatMLFetcher';
-import { ChatFetchResponseType, ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
+import { ChatLocation, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { CustomModel, EndpointEditToolName, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { responseApiInputToRawMessagesForLogging } from '../../../platform/endpoint/node/responsesApi';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -24,7 +24,6 @@ import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelError } from '../../../vscodeTypes';
 
 export interface ILanguageModelServerConfig {
 	readonly port: number;
@@ -113,6 +112,9 @@ export class OpenAILanguageModelServer {
 	}
 
 	private async handleResponsesAPIRequest(bodyString: string, res: http.ServerResponse): Promise<void> {
+		// Create cancellation token for the request
+		const tokenSource = new CancellationTokenSource();
+
 		try {
 			// Weird type but ok
 			const requestBody: OpenAI.Responses.ResponseCreateParams = JSON.parse(bodyString);
@@ -144,9 +146,6 @@ export class OpenAILanguageModelServer {
 				'Connection': 'keep-alive',
 			});
 
-			// Create cancellation token for the request
-			const tokenSource = new CancellationTokenSource();
-
 			// Handle client disconnect
 			let requestComplete = false;
 			res.on('close', () => {
@@ -157,54 +156,30 @@ export class OpenAILanguageModelServer {
 				tokenSource.cancel();
 			});
 
-			try {
-				const endpointRequestBody = requestBody as IEndpointBody;
-				const streamingEndpoint = this.instantiationService.createInstance(StreamingPassThroughEndpoint, selectedEndpoint, res, endpointRequestBody);
+			const endpointRequestBody = requestBody as IEndpointBody;
+			const streamingEndpoint = this.instantiationService.createInstance(StreamingPassThroughEndpoint, selectedEndpoint, res, endpointRequestBody);
 
-				const chatResponse = await streamingEndpoint.makeChatRequest2({
-					debugName: 'oaiLMServer',
-					messages: Array.isArray(requestBody.input) ?
-						responseApiInputToRawMessagesForLogging(requestBody) :
-						[],
-					finishedCb: async () => undefined,
-					location: ChatLocation.Agent,
-					userInitiatedRequest: isUserInitiatedMessage
-				}, tokenSource.token);
+			await streamingEndpoint.makeChatRequest2({
+				debugName: 'oaiLMServer',
+				messages: Array.isArray(requestBody.input) ?
+					responseApiInputToRawMessagesForLogging(requestBody) :
+					[],
+				finishedCb: async () => undefined,
+				location: ChatLocation.Agent,
+				userInitiatedRequest: isUserInitiatedMessage
+			}, tokenSource.token);
 
-				requestComplete = true;
+			requestComplete = true;
 
-				if (chatResponse.type !== ChatFetchResponseType.Success) {
-					res.end();
-					return;
-				}
-
-				res.end();
-			} catch (error) {
-				requestComplete = true;
-				if (error instanceof LanguageModelError) {
-					res.write(JSON.stringify({
-						error: 'Language model error',
-						code: error.code,
-						message: error.message,
-						cause: error.cause
-					}));
-				} else {
-					res.write(JSON.stringify({
-						error: 'Request failed',
-						message: error instanceof Error ? error.message : String(error)
-					}));
-				}
-				res.end();
-			} finally {
-				tokenSource.dispose();
-			}
-
+			res.end();
 		} catch (error) {
 			res.writeHead(500, { 'Content-Type': 'application/json' });
 			res.end(JSON.stringify({
 				error: 'Failed to process chat request',
 				details: error instanceof Error ? error.message : String(error)
 			}));
+		} finally {
+			tokenSource.dispose();
 		}
 	}
 
@@ -212,7 +187,6 @@ export class OpenAILanguageModelServer {
 		if (requestedModel) {
 			// Try to find exact match first
 			const selectedEndpoint = endpoints.find(e => e.family === requestedModel);
-
 			return selectedEndpoint;
 		}
 
@@ -382,7 +356,7 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 
 		try {
 			for await (const chunk of body) {
-				logService.trace(`[LanguageModelServer] Processing chunk: ${chunk.toString()}`);
+				logService.trace(`[StreamingPassThroughEndpoint] chunk: ${chunk.toString()}`);
 				if (cancellationToken?.isCancellationRequested) {
 					break;
 				}
@@ -446,7 +420,6 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 	public createRequestBody(
 		options: ICreateEndpointBodyOptions
 	): IEndpointBody {
-		void options;
 		return this.requestBody;
 	}
 
