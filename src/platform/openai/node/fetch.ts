@@ -486,7 +486,7 @@ async function fetchWithInstrumentation(
 	});
 
 	for (const [key, value] of Object.entries(request)) {
-		if (key === 'messages') {
+		if (key === 'messages' || key === 'input') {
 			continue;
 		} // Skip messages (PII)
 		telemetryData.properties[`request.option.${key}`] = JSON.stringify(value) ?? 'undefined';
