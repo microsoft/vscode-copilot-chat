@@ -73,8 +73,9 @@ export class BuiltInToolGroupHandler {
 					0,
 					{
 						toolsetKey: BUILT_IN_GROUP,
-						groups: [],
-						possiblePrefix: 'builtin_'
+						possiblePrefix: 'builtin_',
+						wasExpandedByDefault: false,
+						canBeCollapsed: true
 					},
 					groupTools
 				);

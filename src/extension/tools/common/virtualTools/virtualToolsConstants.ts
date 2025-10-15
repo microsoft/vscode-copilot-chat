@@ -28,8 +28,17 @@ export const GROUP_WITHIN_TOOLSET = HARD_TOOL_LIMIT / 8; // 16, currently
 /** Minimum number of tools in a toolset to group, vs always just including them individually. */
 export const MIN_TOOLSET_SIZE_TO_GROUP = 2;
 
+/** Number of tool embedding matches to include. */
+export const NUM_EMBED_MATCHED_TOOLS = 10;
+
+/** Maximum number of tools and groups that will be presented to the LLM when all collapsed. */
+export const TOOLS_AND_GROUPS_LIMIT = HARD_TOOL_LIMIT - NUM_EMBED_MATCHED_TOOLS - 30;
+
 /** Max number of times to retrying categorization in the event of failures. */
 export const MAX_CATEGORIZATION_RETRIES = 3;
+
+/** Maximum number of groups to process in a single LLM request for bulk description. */
+export const MAX_GROUPS_PER_CHUNK = 16;
 
 /** Name for the group containing tools that could not be automatically categorized */
 export const UNCATEGORIZED_TOOLS_GROUP_NAME = 'uncategorized_tools';

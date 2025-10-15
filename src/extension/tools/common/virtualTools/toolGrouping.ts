@@ -26,8 +26,7 @@ export function computeToolGroupingMinThreshold(experimentationService: IExperim
 }
 
 export class ToolGrouping implements IToolGrouping {
-
-	private readonly _root = new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX, '', Infinity, { groups: [], toolsetKey: '', wasExpandedByDefault: true });
+	private readonly _root = new VirtualTool(VIRTUAL_TOOL_NAME_PREFIX, '', Infinity, { wasExpandedByDefault: true });
 	protected _grouper: IToolCategorization = this._instantiationService.createInstance(VirtualToolGrouper);
 	private _didToolsChange = true;
 	private _turnNo = 0;
