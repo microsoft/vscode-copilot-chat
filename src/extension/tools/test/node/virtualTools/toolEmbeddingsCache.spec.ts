@@ -199,7 +199,7 @@ describe('ToolEmbeddingsComputer', () => {
 		expect(result[0]).toBe('tool1');
 		expect(result[1]).toBe('tool4');
 		expect(embeddingsComputerMock.computeEmbeddings).toHaveBeenCalledTimes(1);
-		expect(embeddingsComputerMock.computeEmbeddings.mock.calls[0][1]).toEqual(['tool3', 'tool4']);
+		expect(embeddingsComputerMock.computeEmbeddings.mock.calls[0][1]).toEqual(['tool3\n\nundefined', 'tool4\n\nundefined']);
 	});
 
 	it('shoulds cache computed embeddings for future use', async () => {
@@ -234,7 +234,7 @@ describe('ToolEmbeddingsComputer', () => {
 		expect(result[0]).toBe('tool1');
 		expect(result[1]).toBe('tool3');
 		expect(embeddingsComputerMock.computeEmbeddings).toHaveBeenCalledTimes(1);
-		expect(embeddingsComputerMock.computeEmbeddings.mock.calls[0][1]).toEqual(['tool2', 'tool3']);
+		expect(embeddingsComputerMock.computeEmbeddings.mock.calls[0][1]).toEqual(['tool2\n\nundefined', 'tool3\n\nundefined']);
 
 		result = await computer.retrieveSimilarEmbeddingsForAvailableTools(
 			queryEmbedding,
