@@ -31,6 +31,8 @@ import { CopilotToolMode } from '../../tools/common/toolsRegistry';
 import { isToolValidationError, isValidatedToolInput, IToolsService } from '../../tools/common/toolsService';
 
 
+const INLINE_CHAT_EXIT_TOOL_NAME = 'inline_chat_exit';
+
 export class InlineChat2Intent implements IIntent {
 
 	static readonly ID = Intent.InlineChat;
@@ -71,7 +73,7 @@ export class InlineChat2Intent implements IIntent {
 
 		const endpoint = await this._endpointProvider.getChatEndpoint(request);
 
-		if (!endpoint.supportsToolCalls || !endpoint.supportedEditTools || !endpoint.supportedEditTools.length) {
+		if (!endpoint.supportsToolCalls) {
 			return {
 				errorDetails: {
 					message: localize('inlineChat.model', "{0} cannot be used for inline chat", endpoint.name),
@@ -85,7 +87,8 @@ export class InlineChat2Intent implements IIntent {
 
 		const renderer = PromptRenderer.create(this._instantiationService, endpoint, InlineChat2Prompt, {
 			request,
-			data: request.location2
+			data: request.location2,
+			exitToolName: INLINE_CHAT_EXIT_TOOL_NAME
 		});
 
 		const renderResult = await renderer.render(undefined, token, { trace: true });
@@ -178,6 +181,9 @@ export class InlineChat2Intent implements IIntent {
 
 	private async _getAvailableTools(request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> {
 
+		const exitTool = this._toolsService.getTool(INLINE_CHAT_EXIT_TOOL_NAME);
+		assertType(exitTool);
+
 		const inlineChatToolFilter = new Set<string>([
 			// -- editing
 			...InlineChat2Intent._EDIT_TOOLS,
@@ -189,6 +195,7 @@ export class InlineChat2Intent implements IIntent {
 
 		const agentTools = await getAgentTools(this._instantiationService, request);
 		const inlineChatTools = agentTools.filter(tool => inlineChatToolFilter.has(tool.name));
-		return inlineChatTools;
+
+		return [exitTool, ...inlineChatTools];
 	}
 }

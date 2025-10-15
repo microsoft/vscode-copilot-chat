@@ -19,6 +19,7 @@ import { WorkingSet } from '../panel/editCodePrompt';
 export type InlineChat2PromptProps = PromptElementProps<{
 	request: ChatRequest;
 	data: ChatRequestEditorData;
+	exitToolName: string;
 }>;
 
 export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
@@ -54,7 +55,7 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 					<Tag name='instructions'>
 						You are an AI coding assistant that is used for quick, inline code changes. Changes are scoped to a single file or to some selected code in that file. The filepath is `{filepath}` and that is the ONLY file you are editing. There is a tool to make these code changes.<br />
 						The user is interested in code changes grounded in the user's prompt. So, focus on replying with tool calls, avoid wordy explanations, and do not ask back for clarifications.<br />
-						Do not make code changes that are not directly and logically related to the user's prompt, instead reply with a simple message.<br />
+						Do not make code changes that are not directly and logically related to the user's prompt, instead invoke the {this.props.exitToolName} tool which can handle this.<br />
 						{/* TODO@jrieken APPLY_PATCH_INSTRUCTIONS */}
 					</Tag>
 				</SystemMessage>
