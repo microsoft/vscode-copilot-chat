@@ -5,6 +5,7 @@
 
 
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
+import { InlineChatIntent } from '../../inlineChat/node/inlineChatIntent';
 import { IntentRegistry } from '../../prompt/node/intentRegistry';
 import { AgentIntent } from './agentIntent';
 import { AskAgentIntent } from './askAgentIntent';
@@ -15,7 +16,6 @@ import { EditCode2Intent } from './editCodeIntent2';
 import { ExplainIntent } from './explainIntent';
 import { FixIntent } from './fixIntent';
 import { GenerateCodeIntent } from './generateCodeIntent';
-import { InlineChatIntent } from './inlineChatIntent';
 import { NewWorkspaceIntent } from './newIntent';
 import { NewNotebookIntent } from './newNotebookIntent.contribution';
 import { NotebookEditorIntent } from './notebookEditorIntent';

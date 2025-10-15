@@ -5,6 +5,7 @@
 
 import { PromptElement, PromptElementProps, PromptSizing, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
 import { TextDocumentSnapshot } from '../../../../platform/editing/common/textDocumentSnapshot';
+import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
 import { ChatRequest, ChatRequestEditorData } from '../../../../vscodeTypes';
 import { ChatVariablesCollection } from '../../../prompt/common/chatVariablesCollection';
 import { ITextDocumentWorkingSetEntry, IWorkingSet, WorkingSetEntryState } from '../../../prompt/common/intents';
@@ -22,6 +23,13 @@ export type InlineChat2PromptProps = PromptElementProps<{
 
 export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 
+	constructor(
+		props: InlineChat2PromptProps,
+		@IPromptPathRepresentationService private readonly _promptPathRepresentationService: IPromptPathRepresentationService,
+	) {
+		super(props);
+	}
+
 
 	override render(state: void, sizing: PromptSizing): Promise<any> {
 
@@ -32,13 +40,19 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 			range: this.props.data.selection
 		} satisfies ITextDocumentWorkingSetEntry];
 
+		const variables = new ChatVariablesCollection(this.props.request.references);
+		const filepath = this._promptPathRepresentationService.getFilePath(this.props.data.document.uri);
+
+		// TODO@jrieken: if the selection is empty and if the line with the selection is empty we could hint to add code and
+		// generally with empty selections we could allow the model to be a bit more creative
+
 		return (
 			<>
 				<SystemMessage priority={1000}>
 					<CopilotIdentityRules />
 					<SafetyRules />
 					<Tag name='instructions'>
-						You are an AI coding assistant that is used for quick, inline code changes. Changes are scoped to a single file or to some selected code. There is a tool to make these code changes.<br />
+						You are an AI coding assistant that is used for quick, inline code changes. Changes are scoped to a single file or to some selected code in that file. The filepath is `{filepath}` and that is the ONLY file you are editing. There is a tool to make these code changes.<br />
 						The user is interested in code changes grounded in the user's prompt. So, focus on replying with tool calls, avoid wordy explanations, and do not ask back for clarifications.<br />
 						Do not make code changes that are not directly and logically related to the user's prompt, instead reply with a simple message.<br />
 						{/* TODO@jrieken APPLY_PATCH_INSTRUCTIONS */}
@@ -46,50 +60,17 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 				</SystemMessage>
 				<UserMessage>
 					<WorkingSet flexGrow={1} priority={950} workingSet={workingSet} />
-					<InlineChatUserMessage flexGrow={2} priority={900} {...this.props} />
+					<ChatVariables flexGrow={3} priority={898} chatVariables={variables} />
+					<Tag name='reminder'>
+						If there is a user selection, focus on it, and try to make changes to the selected code and its context.<br />
+						If there is no user selection, make changes or write new code anywhere in the file.<br />
+						Do not make code changes that are not directly and logically related to the user's prompt.<br />
+						ONLY change the `{filepath}` file and NO other file.
+					</Tag>
+					<Tag name='prompt'>
+						<UserQuery flexGrow={7} priority={900} chatVariables={variables} query={this.props.request.prompt} />
+					</Tag>
 				</UserMessage>
-			</>
-		);
-	}
-}
-
-
-interface InlineChatUserMessageProps extends PromptElementProps<InlineChat2PromptProps> { }
-
-class InlineChatUserMessage extends PromptElement<InlineChatUserMessageProps> {
-
-	override render(state: void, sizing: PromptSizing) {
-
-		const { prompt, references } = this.props.request;
-		const variables = new ChatVariablesCollection(references);
-
-		return (
-			<>
-				<ChatVariables flexGrow={3} priority={898} chatVariables={variables} />
-				<Tag name='reminder'>
-					<InlineChatReminder />
-				</Tag>
-				<Tag name='prompt'>
-					<UserQuery flexGrow={7} priority={900} chatVariables={variables} query={prompt} />
-				</Tag>
-
-			</>
-		);
-	}
-}
-
-
-type InlineChatReminderProps = PromptElementProps<{}>;
-
-class InlineChatReminder extends PromptElement<InlineChatReminderProps> {
-
-	async render(state: void, sizing: PromptSizing) {
-
-		return (
-			<>
-				If there is a user selection, focus on it, and try to make changes to the selected code and its context.<br />
-				If there is no user selection, make changes or write new code anywhere in the file.<br />
-				Do not make code changes that are not directly and logically related to the user's prompt.
 			</>
 		);
 	}

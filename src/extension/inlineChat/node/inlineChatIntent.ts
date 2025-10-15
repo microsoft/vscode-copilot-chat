@@ -17,6 +17,7 @@ import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestEditorData } from '../../../vscodeTypes';
 import { Intent } from '../../common/constants';
+import { getAgentTools } from '../../intents/node/agentIntent';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
 import { Conversation } from '../../prompt/common/conversation';
 import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
@@ -28,7 +29,6 @@ import { ToolName } from '../../tools/common/toolNames';
 import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { CopilotToolMode } from '../../tools/common/toolsRegistry';
 import { isToolValidationError, isValidatedToolInput, IToolsService } from '../../tools/common/toolsService';
-import { getAgentTools } from './agentIntent';
 
 
 export class InlineChatIntent implements IIntent {
