@@ -263,7 +263,7 @@ export class InlineEditTriggerer extends Disposable {
 			return false;
 		}
 		if (isSameDoc) {
-			tracer.returns(`document switch didn't happened`);
+			tracer.returns(`document switch didn't happen`);
 			return false;
 		}
 		tracer.returns('triggering on document switch');
