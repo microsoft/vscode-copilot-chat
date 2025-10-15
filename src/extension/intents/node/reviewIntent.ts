@@ -182,7 +182,7 @@ class ReviewReplyInterpreter implements ReplyInterpreter {
 		};
 
 		for await (const part of inputStream) {
-			this.text = part.text;
+			this.text += part.delta.text;
 			if (!this.updating) {
 				this.updating = true;
 				const content = new MarkdownString(l10n.t({
