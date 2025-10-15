@@ -382,6 +382,7 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 
 		try {
 			for await (const chunk of body) {
+				logService.trace(`[LanguageModelServer] Processing chunk: ${chunk.toString()}`);
 				if (cancellationToken?.isCancellationRequested) {
 					break;
 				}
