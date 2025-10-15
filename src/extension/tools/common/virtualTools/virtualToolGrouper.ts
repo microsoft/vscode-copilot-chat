@@ -30,7 +30,6 @@ const SUMMARY_PREFIX = 'Call this tool when you need access to a new category of
 const SUMMARY_SUFFIX = '\n\nBe sure to call this tool if you need a capability related to the above.';
 
 export class VirtualToolGrouper implements IToolCategorization {
-	private _hasGroupedDefaultTools = false;
 	private builtInToolGroupHandler: BuiltInToolGroupHandler;
 
 	constructor(
@@ -97,7 +96,6 @@ export class VirtualToolGrouper implements IToolCategorization {
 		// Handle built-in tools - apply grouping logic if needed
 		const shouldGroupBuiltin = this.shouldTriggerBuiltInGrouping(builtinTools);
 		if (shouldGroupBuiltin) {
-			this._hasGroupedDefaultTools = true;
 			const builtinGroups = this.builtInToolGroupHandler.createBuiltInToolGroups(builtinTools);
 			groupedResults.push(...builtinGroups);
 		} else {
