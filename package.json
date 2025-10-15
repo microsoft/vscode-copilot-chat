@@ -1213,8 +1213,7 @@
 				"isDefault": true,
 				"when": "config.inlineChat.enableV2",
 				"locations": [
-					"editor",
-					"notebook"
+					"editor"
 				],
 				"commands": [
 					{

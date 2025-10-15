@@ -31,7 +31,7 @@ import { CopilotToolMode } from '../../tools/common/toolsRegistry';
 import { isToolValidationError, isValidatedToolInput, IToolsService } from '../../tools/common/toolsService';
 
 
-export class InlineChatIntent implements IIntent {
+export class InlineChat2Intent implements IIntent {
 
 	static readonly ID = Intent.InlineChat;
 
@@ -42,7 +42,7 @@ export class InlineChatIntent implements IIntent {
 		ToolName.MultiReplaceString,
 	]);
 
-	readonly id = InlineChatIntent.ID;
+	readonly id = InlineChat2Intent.ID;
 
 	readonly locations = [ChatLocation.Editor];
 
@@ -61,7 +61,6 @@ export class InlineChatIntent implements IIntent {
 
 		assertType(request.location2 instanceof ChatRequestEditorData);
 
-
 		if (await this._ignoreService.isCopilotIgnored(request.location2.document.uri, token)) {
 			return {
 				errorDetails: {
@@ -72,7 +71,15 @@ export class InlineChatIntent implements IIntent {
 
 		const endpoint = await this._endpointProvider.getChatEndpoint(request);
 
-		const inlineChatTools = await this.getAvailableTools(request);
+		if (!endpoint.supportsToolCalls || !endpoint.supportedEditTools || !endpoint.supportedEditTools.length) {
+			return {
+				errorDetails: {
+					message: localize('inlineChat.model', "{0} cannot be used for inline chat", endpoint.name),
+				}
+			};
+		}
+
+		const inlineChatTools = await this._getAvailableTools(request);
 
 		const chatVariables = new ChatVariablesCollection([...request.references]);
 
@@ -84,8 +91,9 @@ export class InlineChatIntent implements IIntent {
 		const renderResult = await renderer.render(undefined, token, { trace: true });
 
 		const fetchResult = await endpoint.makeChatRequest2({
-			debugName: 'InlineChatIntent',
+			debugName: 'InlineChat2Intent',
 			messages: renderResult.messages,
+			userInitiatedRequest: true,
 			location: ChatLocation.Editor,
 			finishedCb: async (_text, _index, delta) => {
 
@@ -94,7 +102,7 @@ export class InlineChatIntent implements IIntent {
 				if (isNonEmptyArray(delta.copilotToolCalls)) {
 					for (const toolCall of delta.copilotToolCalls) {
 
-						didSeeEditTool = didSeeEditTool || InlineChatIntent._EDIT_TOOLS.has(toolCall.name);
+						didSeeEditTool = didSeeEditTool || InlineChat2Intent._EDIT_TOOLS.has(toolCall.name);
 
 						const validationResult = this._toolsService.validateToolInput(toolCall.name, toolCall.arguments);
 
@@ -168,11 +176,11 @@ export class InlineChatIntent implements IIntent {
 		throw new Error('Method not implemented.');
 	}
 
-	private async getAvailableTools(request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> {
+	private async _getAvailableTools(request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> {
 
 		const inlineChatToolFilter = new Set<string>([
 			// -- editing
-			...InlineChatIntent._EDIT_TOOLS,
+			...InlineChat2Intent._EDIT_TOOLS,
 			// -- getting errors
 			// ToolName.GetErrors,
 			// -- TODO@jrieken SLASH commands
@@ -184,71 +192,3 @@ export class InlineChatIntent implements IIntent {
 		return inlineChatTools;
 	}
 }
-
-// class InlineChatIntentInvocation extends AgentIntentInvocation {
-
-
-// 	private _snapshot: TextDocumentSnapshot | undefined;
-
-// 	protected override prompt = InlineChat2Prompt;
-
-// 	public override async getAvailableTools(): Promise<vscode.LanguageModelToolInformation[]> {
-
-// 		const inlineChatToolFilter = new Set<string>([
-// 			// -- editing
-// 			ToolName.ApplyPatch,
-// 			ToolName.EditFile,
-// 			ToolName.ReplaceString,
-// 			ToolName.MultiReplaceString,
-// 			// -- getting errors
-// 			ToolName.GetErrors,
-// 			// -- TODO@jrieken SLASH commands
-// 		]);
-
-
-// 		const agentTools = await getAgentTools(this.instantiationService, this.request);
-// 		const inlineChatTools = agentTools.filter(tool => inlineChatToolFilter.has(tool.name));
-// 		return inlineChatTools;
-// 	}
-
-// 	public override async buildPrompt(promptContext: IBuildPromptContext, progress: vscode.Progress<vscode.ChatResponseReferencePart | vscode.ChatResponseProgressPart>, token: vscode.CancellationToken): Promise<IBuildPromptResult> {
-
-// 		assertType(this.request.location2 instanceof ChatRequestEditorData);
-
-// 		const { document, selection } = this.request.location2;
-
-// 		// TODO@jrieken FISHY but helps with repeated rendering, esp after making the edit
-// 		// and therefore ruining the selection etc...
-// 		this._snapshot ??= TextDocumentSnapshot.create(document);
-
-// 		const { query, commandToolReferences } = this.processSlashCommand(promptContext.query);
-
-// 		return super.buildPrompt({
-// 			...promptContext,
-// 			workingSet: [{ document: this._snapshot, range: selection, state: WorkingSetEntryState.Initial, isMarkedReadonly: undefined }],
-// 			chatVariables: new ChatVariablesCollection([...this.request.references]),
-// 			query,
-// 			tools: promptContext.tools && {
-// 				...promptContext.tools,
-// 				toolReferences: this.stableToolReferences.filter((r) => r.name !== ToolName.Codebase).concat(commandToolReferences),
-// 			},
-// 		}, progress, token);
-// 	}
-
-// 	// TODO@jrieken does this make sense?
-// 	private processSlashCommand(query: string): { query: string; commandToolReferences: InternalToolReference[] } {
-// 		const commandToolReferences: InternalToolReference[] = [];
-// 		const command = this.request.command && this.commandService.getCommand(this.request.command, this.location);
-// 		if (command) {
-// 			if (command.toolEquivalent) {
-// 				commandToolReferences.push({
-// 					id: `${this.request.command}->${generateUuid()}`,
-// 					name: getToolName(command.toolEquivalent)
-// 				});
-// 			}
-// 			query = query ? `${command.details}.\n${query}` : command.details;
-// 		}
-
-// 		return { query, commandToolReferences };
-// 	}
-// }
