@@ -62,6 +62,9 @@ import { generateUuid } from '../../util/vs/base/common/uuid';
 import { SyncDescriptor } from '../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../util/vs/platform/instantiation/common/instantiation';
 
+import { getInlineCompletions } from '../../extension/completions-core/lib/src/inlineCompletion';
+export { getInlineCompletions };
+
 /**
  * Log levels (taken from vscode.d.ts)
  */
