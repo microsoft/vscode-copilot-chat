@@ -449,8 +449,10 @@ export class Parser {
 	private updateIndentation(insLength: number, ins: string, srcIndentStyle: IGuessedIndentation, targetIndentStyle: IGuessedIndentation, matchedLineIndent: number, additionalIndentationDetails: AdditionalIndentationDetails | undefined): string {
 		let result = ins;
 		let additionalIndentation = '';
-
-		result = transformIndentation(ins, srcIndentStyle, targetIndentStyle);
+		// additionalIndentationDetails holds the cached additional indentation to apply to each line.
+		if (srcIndentStyle.insertSpaces === targetIndentStyle.insertSpaces && srcIndentStyle.tabSize < targetIndentStyle.tabSize) {
+			result = transformIndentation(ins, srcIndentStyle, targetIndentStyle);
+		}
 		if (additionalIndentationDetails && !additionalIndentationDetails.isAdditionalIndentationSet) {
 			const insIndent = computeIndentLevel2(result, targetIndentStyle.tabSize);
 			additionalIndentationDetails.isAdditionalIndentationSet = true;
