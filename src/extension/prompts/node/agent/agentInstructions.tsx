@@ -424,7 +424,7 @@ export class CodexStyleGPT5CodexPrompt extends PromptElement<DefaultAgentPromptP
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
 		return <InstructionMessage>
-			You are a coding agent based on GPT-5-Codex. You are running as a coding agent in the Codex CLI on a user's computer.<br />
+			You are a coding agent based on GPT-5-Codex.<br />
 			<br />
 			## Editing constraints<br />
 			<br />
