@@ -204,7 +204,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			}
 		}
 
-		if (this.props.endpoint.family.startsWith('claude-sonnet-4.5')) {
+		if (this.supportsClaudeAltPrompt(this.props.endpoint.family)) {
 			const promptType = this.configurationService.getExperimentBasedConfig(ConfigKey.ClaudeSonnet45AlternatePrompt, this.experimentationService);
 			switch (promptType) {
 				case 'v2':
@@ -235,6 +235,15 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			modelFamily={this.props.endpoint.family}
 			codesearchMode={this.props.codesearchMode}
 		/>;
+	}
+
+	private supportsClaudeAltPrompt(family: string): boolean {
+		if (!family.startsWith('claude-')) {
+			return false;
+		}
+
+		const excludedVersions = ['claude-3.5-sonnet', 'claude-3.7-sonnet', 'claude-sonnet-4'];
+		return !excludedVersions.includes(family);
 	}
 
 	private async getAgentCustomInstructions() {
@@ -424,6 +433,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<KeepGoingReminder modelFamily={this.props.endpoint.family} />
 						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint), hasMultiReplaceStringTool)}
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
+						{getFileCreationReminder(this.props.endpoint.family)}
 						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
 					</Tag>
 					{query && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
@@ -819,6 +829,13 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 			}
 		}
 	}
+}
+
+function getFileCreationReminder(modelFamily: string | undefined) {
+	if (modelFamily !== 'claude-sonnet-4.5') {
+		return;
+	}
+	return <>Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.<br /></>;
 }
 
 function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {

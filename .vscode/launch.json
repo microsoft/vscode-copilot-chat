@@ -316,6 +316,30 @@
 				"group": "2_launch"
 			}
 		},
+		{
+			"name": "Run Completions-Core Extension Tests",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"--extensionTestsPath=${workspaceFolder}/src/extension/completions-core/extension/test/run",
+				"--disable-extensions"
+			],
+			"env": {
+				"TSX_TSCONFIG_PATH": "${workspaceFolder}/tsconfig.json",
+				"VITEST": "true"
+			},
+			"internalConsoleOptions": "openOnSessionStart",
+			"outFiles": [
+				"${workspaceFolder}/**/*.ts",
+				"${workspaceFolder}/dist/**/*.js",
+				"!**/node_modules/**"
+			],
+			"autoAttachChildProcesses": true,
+			"presentation": {
+				"group": "1_launch"
+			}
+		},
 	],
 	"compounds": [
 		{

@@ -14,6 +14,7 @@ import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession } from '../..
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { IAlternativeNotebookContentEditGenerator, NotebookEditGenerationTelemtryOptions, NotebookEditGenrationSource } from '../../../platform/notebook/common/alternativeContentEditGenerator';
 import { getDefaultLanguage } from '../../../platform/notebook/common/helpers';
@@ -44,7 +45,7 @@ import { IToolsService } from '../common/toolsService';
 import { PATCH_PREFIX, PATCH_SUFFIX } from './applyPatch/parseApplyPatch';
 import { ActionType, Commit, DiffError, FileChange, identify_files_needed, InvalidContextError, InvalidPatchFormatError, processPatch } from './applyPatch/parser';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
-import { canExistingFileBeEdited, createEditConfirmation } from './editFileToolUtils';
+import { canExistingFileBeEdited, createEditConfirmation, logEditToolResult } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileNotContentExcluded, resolveToolInputPath } from './toolUtils';
 
@@ -76,6 +77,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IEditToolLearningService private readonly editToolLearningService: IEditToolLearningService,
+		@ILogService private readonly logService: ILogService,
 	) { }
 
 	private getTrailingDocumentEmptyLineCount(document: vscode.TextDocument): number {
@@ -195,6 +197,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 		const docText: DocText = {};
 		try {
 			({ commit, healed } = await this.buildCommitWithHealing(options.model, options.input.input, docText, options.input.explanation, token));
+			logEditToolResult(this.logService, options.chatRequestId, { input: options.input.input, success: true, healed });
 		} catch (error) {
 			if (error instanceof HealedError) {
 				healed = error.healedPatch;
@@ -209,6 +212,8 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 			} else {
 				this.sendApplyPatchTelemetry('processPatchFailed', options, error.file, !!healed, !!notebookUri, error);
 			}
+
+			logEditToolResult(this.logService, options.chatRequestId, { input: options.input.input, success: false, healed });
 
 
 			if (notebookUri) {

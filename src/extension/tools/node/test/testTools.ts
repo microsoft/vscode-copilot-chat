@@ -7,6 +7,7 @@ import type * as vscode from 'vscode';
 import { IEndpointProvider } from '../../../../platform/endpoint/common/endpointProvider';
 import { packageJson } from '../../../../platform/env/common/packagejson';
 import { ILanguageDiagnosticsService } from '../../../../platform/languages/common/languageDiagnosticsService';
+import { ILogService } from '../../../../platform/log/common/logService';
 import { IAlternativeNotebookContentService } from '../../../../platform/notebook/common/alternativeContent';
 import { INotebookService } from '../../../../platform/notebook/common/notebookService';
 import { IPromptPathRepresentationService } from '../../../../platform/prompts/common/promptPathRepresentationService';
@@ -48,8 +49,9 @@ export class TestEditFileTool extends EditFileTool {
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IEndpointProvider endpointProvider: IEndpointProvider,
 		@IEditToolLearningService editToolLearningService: IEditToolLearningService,
+		@ILogService logService: ILogService,
 	) {
-		super(promptPathRepresentationService, instantiationService, workspaceService, toolsService, notebookService, languageDiagnosticsService, alternativeNotebookContentService, telemetryService, endpointProvider, editToolLearningService);
+		super(promptPathRepresentationService, instantiationService, workspaceService, toolsService, notebookService, languageDiagnosticsService, alternativeNotebookContentService, telemetryService, endpointProvider, editToolLearningService, logService);
 		const contributedTool = packageJson.contributes.languageModelTools.find(contributedTool => contributedTool.name === ContributedToolName.EditFile);
 		if (!contributedTool) {
 			throw new Error(`Tool ${ContributedToolName.EditFile} is not in package.json`);

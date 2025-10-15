@@ -6,7 +6,7 @@
 import assert from 'assert';
 import { suite, test } from 'vitest';
 import { Embedding, EmbeddingType } from '../../../embeddings/common/embeddingsComputer';
-import { packEmbedding, unpackEmbedding } from '../../node/workspaceChunkAndEmbeddingCache';
+import { packEmbedding, unpackEmbedding } from '../../common/embeddingsStorage';
 
 suite('Pack Embedding', () => {
 	test('Text3small should pack and unpack to same values', () => {
