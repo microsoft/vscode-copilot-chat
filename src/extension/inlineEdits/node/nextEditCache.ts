@@ -3,10 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { DocumentId } from '../../../platform/inlineEdits/common/dataTypes/documentId';
 import { IObservableDocument, ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
 import { autorunWithChanges } from '../../../platform/inlineEdits/common/utils/observable';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { LRUCache } from '../../../util/common/cache';
 import { createTracer, ITracer } from '../../../util/common/tracing';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -46,6 +48,8 @@ export class NextEditCache extends Disposable {
 	constructor(
 		public readonly workspace: ObservableWorkspace,
 		private readonly _logService: ILogService,
+		_configService: IConfigurationService,
+		_expService: IExperimentationService,
 	) {
 		super();
 
@@ -59,6 +63,15 @@ export class NextEditCache extends Disposable {
 				for (const edit of data.value.changes) {
 					if (!edit.isEmpty()) {
 						state.handleEdit(edit);
+					}
+				}
+				// if editor-change triggering is allowed,
+				// 	it means an edit in file A can result in a cached edit for file B to be less relevant than with the edits in file A included
+				if (_configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsTriggerOnEditorChange, _expService)) {
+					for (const [k, v] of this._sharedCache.entries()) {
+						if (v.docId !== doc.id) {
+							this._sharedCache.deleteKey(k);
+						}
 					}
 				}
 			}));
