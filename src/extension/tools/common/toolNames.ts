@@ -178,6 +178,9 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	// already enabled only when tasks are enabled
 	[ToolName.CoreRunTask]: ToolCategory.Core,
 	[ToolName.CoreGetTaskOutput]: ToolCategory.Core,
+	// never enabled, so it doesn't matter where it's categorized
+	[ToolName.EditFilesPlaceholder]: ToolCategory.Core,
+
 
 	// Jupyter Notebook Tools
 	[ToolName.CreateNewJupyterNotebook]: ToolCategory.JupyterNotebook,
@@ -214,7 +217,6 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 
 	// Redundant but Specific
 	[ToolName.DocInfo]: ToolCategory.RedundantButSpecific,
-	[ToolName.EditFilesPlaceholder]: ToolCategory.RedundantButSpecific,
 
 	// Other tools - categorize appropriately
 	[ToolName.UpdateUserPreferences]: ToolCategory.VSCodeInteraction,
