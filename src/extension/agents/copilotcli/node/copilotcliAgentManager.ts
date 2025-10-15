@@ -113,7 +113,7 @@ export class CopilotCLISession extends Disposable {
 		const options: AgentOptions = {
 			modelProvider: {
 				type: 'anthropic',
-				model: 'claude-sonnet-4',
+				model: 'claude-sonnet-4.5',
 			},
 			abortController: this._abortController,
 			// TODO@rebornix handle workspace properly
@@ -198,8 +198,8 @@ export class CopilotCLISession extends Disposable {
 						event.result.error
 					);
 				} else {
-					invocation.isConfirmed = true;
-					invocation.isError = event.result.resultType === 'failure' || event.result.resultType === 'denied';
+					invocation.isConfirmed = event.result.resultType !== 'rejected' && event.result.resultType !== 'denied';
+					invocation.isError = event.result.resultType === 'failure';
 				}
 
 				if (invocation) {

@@ -3,21 +3,19 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { promises as fs } from 'fs';
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler } from 'vscode';
-import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { ITerminalService } from '../../../platform/terminal/common/terminalService';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isLocation } from '../../../util/common/types';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
-import * as path from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
 import { localize } from '../../../util/vs/nls';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
-import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
-import { buildChatHistoryFromEvents, parseChatMessagesToEvents } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
+import { ExtendedChatRequest, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
+import { buildChatHistoryFromEvents, parseChatMessagesToEvents, stripReminders } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
+import { CopilotBundledCLITerminalIntegration, CopilotExternalCLINodeTerminalIntegration, CopilotExternalCLIScriptsTerminalIntegration, ICopilotBundledCLITerminalIntegration } from './copilotCLITerminalIntegration';
 
 export class CopilotCLIChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
 	private readonly _onDidChangeChatSessionItems = this._register(new Emitter<void>());
@@ -25,15 +23,20 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	private readonly _onDidCommitChatSessionItem = this._register(new Emitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>());
 	public readonly onDidCommitChatSessionItem: Event<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }> = this._onDidCommitChatSessionItem.event;
-
+	private readonly _terminalIntegration: ICopilotBundledCLITerminalIntegration;
 	constructor(
 		@ICopilotCLISessionService private readonly copilotcliSessionService: ICopilotCLISessionService,
-		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
-		@ITerminalService private readonly terminalService: ITerminalService,
-		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super();
-		this.setupCopilotCLIPath();
+
+		this._register(this.copilotcliSessionService.onDidChangeSessions(() => {
+			this.refresh();
+		}));
+
+		const cliIntegration = this.configurationService.getConfig(ConfigKey.Internal.CopilotCLIKind);
+		this._terminalIntegration = cliIntegration === 'bundled' ? this.instantiationService.createInstance(CopilotBundledCLITerminalIntegration) : (cliIntegration === 'node' ? this.instantiationService.createInstance(CopilotExternalCLINodeTerminalIntegration) : this.instantiationService.createInstance(CopilotExternalCLIScriptsTerminalIntegration));
 	}
 
 	public refresh(): void {
@@ -53,7 +56,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			timing: {
 				startTime: session.timestamp.getTime()
 			},
-			iconPath: new vscode.ThemeIcon('terminal')
+			status: this.copilotcliSessionService.getSessionStatus(session.id) ?? vscode.ChatSessionStatus.Completed,
 		} satisfies vscode.ChatSessionItem));
 
 		return diskSessions;
@@ -66,46 +69,9 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	}
 
 	public async resumeCopilotCLISessionInTerminal(sessionItem: vscode.ChatSessionItem): Promise<void> {
-		const terminalName = `Copilot CLI - ${sessionItem.label || sessionItem.id}`;
+		const terminalName = sessionItem.label || sessionItem.id;
 		const command = `copilot --resume ${sessionItem.id}`;
 		await this.createAndExecuteInTerminal(terminalName, command);
-	}
-
-	private async setupCopilotCLIPath(): Promise<void> {
-		const globalStorageUri = this.context.globalStorageUri;
-		if (!globalStorageUri) {
-			// globalStorageUri is not available in extension tests
-			return;
-		}
-
-		const storageLocation = path.join(globalStorageUri.fsPath, 'copilotCli');
-		const copilotPackageIndexJs = path.join(this.context.extensionPath, 'node_modules', '@github', 'copilot', 'index.js');
-
-		try {
-			await fs.access(copilotPackageIndexJs);
-			await fs.mkdir(storageLocation, { recursive: true });
-
-			// Note: node-pty shim is created in agent manager before first SDK import
-			// This allows @github/copilot to import node-pty before extension activation
-
-			if (process.platform === 'win32') {
-				// Windows: Create batch file
-				const batPath = path.join(storageLocation, 'copilot.bat');
-				const batScript = `@echo off\nnode "${copilotPackageIndexJs}" %*`;
-				await fs.writeFile(batPath, batScript);
-			} else {
-				// Unix: Create shell script
-				const shPath = path.join(storageLocation, 'copilot');
-				const shScript = `#!/bin/sh\nnode "${copilotPackageIndexJs}" "$@"`;
-				await fs.writeFile(shPath, shScript);
-				await fs.chmod(shPath, 0o755);
-			}
-
-			// Contribute the storage location to PATH
-			this.terminalService.contributePath('copilot-cli', storageLocation, 'Enables use of the `copilot` command in the terminal.');
-		} catch {
-			// @github/copilot package not found, no need to add to PATH
-		}
 	}
 
 
@@ -116,12 +82,8 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			return;
 		}
 
-		const session = await this._authenticationService.getAnyGitHubSession();
-		if (session) {
-			this.context.environmentVariableCollection.replace('GH_TOKEN', session.accessToken);
-		}
 
-		const terminal = vscode.window.createTerminal({
+		const terminal = await this._terminalIntegration.createTerminal({
 			name: terminalName,
 			iconPath: new vscode.ThemeIcon('terminal'),
 			location: { viewColumn: vscode.ViewColumn.Active }
@@ -152,7 +114,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		if (shellIntegrationAvailable && terminal.shellIntegration) {
 			// TODO@rebornix fix in VS Code
 			await new Promise(resolve => setTimeout(resolve, 500)); // Wait a bit to ensure the terminal is ready
-			terminal.shellIntegration.executeCommand(command);
+			terminal.shellIntegration.executeCommand('copilot');
 		} else {
 			terminal.sendText(command);
 		}
@@ -162,6 +124,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionContentProvider {
 
 	constructor(
+		private readonly copilotcliAgentManager: CopilotCLIAgentManager,
 		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
 	) { }
 
@@ -173,9 +136,41 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 
 		const history = existingSession ? buildChatHistoryFromEvents(events) : [];
 
+		// Check if there's a pending request for this new session
+		const pendingRequest = this.sessionService.getPendingRequest(copilotcliSessionId);
+
+		const activeResponseCallback = pendingRequest
+			? async (stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => {
+				this.sessionService.clearPendingRequest(copilotcliSessionId);
+				this.sessionService.setSessionStatus(copilotcliSessionId, vscode.ChatSessionStatus.InProgress);
+				await this.copilotcliAgentManager.handleRequest(
+					copilotcliSessionId,
+					pendingRequest.request,
+					pendingRequest.context,
+					stream,
+					token
+				);
+				this.sessionService.setSessionStatus(copilotcliSessionId, vscode.ChatSessionStatus.Completed);
+			}
+			: undefined;
+
+		// If there's a pending request, add it to the history as the first request turn
+		if (pendingRequest) {
+			const request = pendingRequest.request;
+			const requestTurn = new vscode.ChatRequestTurn2(
+				stripReminders(request.prompt),
+				undefined,
+				[...request.references],
+				'',
+				[],
+				undefined
+			);
+			history.push(requestTurn);
+		}
+
 		return {
 			history,
-			activeResponseCallback: undefined,
+			activeResponseCallback,
 			requestHandler: undefined,
 		};
 	}
@@ -185,6 +180,7 @@ export class CopilotCLIChatSessionParticipant {
 	constructor(
 		private readonly sessionType: string,
 		private readonly copilotcliAgentManager: CopilotCLIAgentManager,
+		private readonly sessionService: ICopilotCLISessionService,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
 	) { }
 
@@ -195,28 +191,31 @@ export class CopilotCLIChatSessionParticipant {
 	private async handleRequest(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<vscode.ChatResult | void> {
 		// Resolve the prompt with references before processing
 		const resolvedPrompt = this.resolvePrompt(request);
-		const processedRequest = { ...request, prompt: resolvedPrompt };
+		const processedRequest: ExtendedChatRequest = { ...request, prompt: resolvedPrompt };
 
-		const create = async () => {
-			const { copilotcliSessionId } = await this.copilotcliAgentManager.handleRequest(undefined, processedRequest, context, stream, token);
-			if (!copilotcliSessionId) {
-				stream.warning(localize('copilotcli.failedToCreateSession', "Failed to create a new CopilotCLI session."));
-				return undefined;
-			}
-			return copilotcliSessionId;
-		};
 		const { chatSessionContext } = context;
 		if (chatSessionContext) {
 			if (chatSessionContext.isUntitled) {
-				const copilotcliSessionId = await create();
-				if (copilotcliSessionId) {
-					this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { id: copilotcliSessionId, label: processedRequest.prompt ?? 'CopilotCLI' });
+				// Create a new session (just get the session ID, don't run the request yet)
+				const newSdkSession = await this.sessionService.getOrCreateSDKSession(undefined, processedRequest.prompt);
+				const copilotcliSessionId = newSdkSession?.sessionId;
+				if (!copilotcliSessionId) {
+					stream.warning(localize('copilotcli.failedToCreateSession', "Failed to create a new CopilotCLI session."));
+					return {};
 				}
+
+				// Store the pending request that will be executed by activeResponseCallback
+				this.sessionService.setPendingRequest(copilotcliSessionId, processedRequest, context);
+
+				// Immediately swap to the new session (this will trigger provideChatSessionContent)
+				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { id: copilotcliSessionId, label: processedRequest.prompt ?? 'CopilotCLI' });
 				return {};
 			}
 
 			const { id } = chatSessionContext.chatSessionItem;
+			this.sessionService.setSessionStatus(id, vscode.ChatSessionStatus.InProgress);
 			await this.copilotcliAgentManager.handleRequest(id, processedRequest, context, stream, token);
+			this.sessionService.setSessionStatus(id, vscode.ChatSessionStatus.Completed);
 			return {};
 		}
 
@@ -250,7 +249,7 @@ export class CopilotCLIChatSessionParticipant {
 		});
 
 		if (allRefsTexts.length > 0) {
-			return `<system-reminder>\nThe user provided the following references:\n${allRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>\n\n${prompt}`;
+			return `<reminder>\nThe user provided the following references:\n${allRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</reminder>\n\n${prompt}`;
 		}
 
 		return prompt;

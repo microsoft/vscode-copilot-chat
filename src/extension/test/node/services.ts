@@ -14,6 +14,11 @@ import { RemoteEmbeddingsComputer } from '../../../platform/embeddings/common/re
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IModelConfig } from '../../../platform/endpoint/test/node/openaiCompatibleEndpoint';
 import { TestEndpointProvider } from '../../../platform/endpoint/test/node/testEndpointProvider';
+import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
+import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
+import { IGitService } from '../../../platform/git/common/gitService';
+import { NullGitDiffService } from '../../../platform/git/common/nullGitDiffService';
+import { NullGitExtensionService } from '../../../platform/git/common/nullGitExtensionService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { EditLogService, IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
 import { IMultiFileEditInternalTelemetryService, MultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
@@ -106,6 +111,9 @@ export function createExtensionUnitTestingServices(disposables: Pick<DisposableS
 	testingServiceCollection.define(ITodoListContextProvider, new SyncDescriptor(TodoListContextProvider));
 	testingServiceCollection.define(ILanguageModelServer, new SyncDescriptor(MockLanguageModelServer));
 	testingServiceCollection.define(IEditToolLearningService, new SyncDescriptor(EditToolLearningService));
+	testingServiceCollection.define(IGitService, new SyncDescriptor(NullGitExtensionService));
+	testingServiceCollection.define(IGitExtensionService, new SyncDescriptor(NullGitExtensionService));
+	testingServiceCollection.define(IGitDiffService, new SyncDescriptor(NullGitDiffService));
 	testingServiceCollection.define(IGithubAvailableEmbeddingTypesService, new SyncDescriptor(MockGithubAvailableEmbeddingTypesService));
 	return testingServiceCollection;
 }

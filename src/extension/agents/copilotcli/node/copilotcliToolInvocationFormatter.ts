@@ -101,9 +101,9 @@ export function parseChatMessagesToEvents(chatMessages: readonly ChatCompletionM
 	return events;
 }
 
-export function stripSystemReminders(text: string): string {
-	// Remove any <system-reminder> ... </system-reminder> blocks, including newlines
-	return text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>\s*/g, '').trim();
+export function stripReminders(text: string): string {
+	// Remove any <reminder> ... </reminder> blocks, including newlines
+	return text.replace(/<reminder>[\s\S]*?<\/reminder>\s*/g, '').trim();
 }
 
 /**
@@ -123,7 +123,7 @@ export function buildChatHistoryFromEvents(events: readonly SDKEvent[]): (ChatRe
 					turns.push(new ChatResponseTurn2(currentResponseParts, {}, ''));
 					currentResponseParts = [];
 				}
-				turns.push(new ChatRequestTurn2(stripSystemReminders(event.content || ''), undefined, [], '', [], undefined));
+				turns.push(new ChatRequestTurn2(stripReminders(event.content || ''), undefined, [], '', [], undefined));
 			} else if (event.role === 'assistant' && event.content) {
 				currentResponseParts.push(
 					new ChatResponseMarkdownPart(new MarkdownString(event.content))
@@ -149,8 +149,8 @@ export function buildChatHistoryFromEvents(events: readonly SDKEvent[]): (ChatRe
 			if (event.toolCallId) {
 				const invocation = pendingToolInvocations.get(event.toolCallId);
 				if (invocation) {
-					invocation.isConfirmed = true;
-					invocation.isError = event.result.resultType === 'failure' || event.result.resultType === 'denied';
+					invocation.isConfirmed = event.result.resultType !== 'rejected' && event.result.resultType !== 'denied';
+					invocation.isError = event.result.resultType === 'failure';
 					pendingToolInvocations.delete(event.toolCallId);
 				}
 			}
@@ -177,11 +177,11 @@ export function createCopilotCLIToolInvocation(
 	error?: string
 ): ChatToolInvocationPart | undefined {
 	const invocation = new ChatToolInvocationPart(toolName, toolCallId ?? '', false);
-	invocation.isConfirmed = true;
+	invocation.isConfirmed = resultType === 'success';
 	invocation.isComplete = true;
 
 	if (resultType) {
-		invocation.isError = resultType === 'failure' || resultType === 'denied';
+		invocation.isError = resultType === 'failure';
 	}
 
 	// Format based on tool name

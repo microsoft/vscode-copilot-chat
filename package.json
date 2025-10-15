@@ -117,7 +117,7 @@
 		"authLearnMore",
 		"testObserver",
 		"aiTextSearchProvider@2",
-		"chatParticipantPrivate@10",
+		"chatParticipantPrivate@11",
 		"chatProvider@4",
 		"contribDebugCreateConfiguration",
 		"chatReferenceDiagnostic",
@@ -126,7 +126,6 @@
 		"languageModelSystem",
 		"languageModelCapabilities",
 		"inlineCompletionsAdditions",
-		"languageModelDataPart@3",
 		"chatStatusItem",
 		"taskProblemMatcherStatus",
 		"contribLanguageModelToolSets",
@@ -266,27 +265,6 @@
 				},
 				"tags": [],
 				"canBeReferencedInPrompt": true
-			},
-			{
-				"displayName": "%copilot.tools.think.name%",
-				"name": "copilot_think",
-				"tags": [],
-				"canBeReferencedInPrompt": true,
-				"toolReferenceName": "think",
-				"when": "config.github.copilot.chat.agent.thinkingTool",
-				"modelDescription": "Use this tool to think deeply about the user's request and organize your thoughts. This tool helps improve response quality by allowing the model to consider the request carefully, brainstorm solutions, and plan complex tasks. It's particularly useful for:\n\n1. Exploring repository issues and brainstorming bug fixes\n2. Analyzing test results and planning fixes\n3. Planning complex refactoring approaches\n4. Designing new features and architecture\n5. Organizing debugging hypotheses\n\nThe tool logs your thought process for transparency but doesn't execute any code or make changes.",
-				"inputSchema": {
-					"type": "object",
-					"properties": {
-						"thoughts": {
-							"type": "string",
-							"description": "Your thoughts about the current task or problem. This should be a clear, structured explanation of your reasoning, analysis, or planning process."
-						}
-					},
-					"required": [
-						"thoughts"
-					]
-				}
 			},
 			{
 				"name": "copilot_findFiles",
@@ -1214,8 +1192,7 @@
 				"isDefault": true,
 				"when": "config.inlineChat.enableV2 || config.github.copilot.chat.advanced.inlineChat2",
 				"locations": [
-					"editor",
-					"notebook"
+					"editor"
 				],
 				"commands": [
 					{
@@ -1416,7 +1393,7 @@
 				"locations": [
 					"notebook"
 				],
-				"when": "!config.inlineChat.enableV2 && !config.github.copilot.chat.advanced.inlineChat2",
+				"when": "!config.inlineChat.notebookAgent",
 				"commands": [
 					{
 						"name": "fix",
@@ -1437,7 +1414,7 @@
 				"locations": [
 					"notebook"
 				],
-				"when": "config.inlineChat.enableV2",
+				"when": "config.inlineChat.notebookAgent",
 				"commands": [
 					{
 						"name": "fix",
@@ -2475,14 +2452,6 @@
 				"title": "Experimental",
 				"id": "experimental",
 				"properties": {
-					"github.copilot.chat.agent.thinkingTool": {
-						"type": "boolean",
-						"default": false,
-						"tags": [
-							"experimental"
-						],
-						"markdownDescription": "%github.copilot.config.agent.thinkingTool%"
-					},
 					"github.copilot.chat.imageUpload.enabled": {
 						"type": "boolean",
 						"default": true,
@@ -4147,6 +4116,16 @@
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsToolAttachments": false
+				}
+			},
+			{
+				"type": "copilot-cloud-agent",
+				"name": "copilot",
+				"displayName": "GitHub Copilot cloud agent",
+				"description": "Delegate tasks to the GitHub Copilot coding agent. The agent works asynchronously to implement changes, iterates via chat, and can create or update pull requests as needed.",
+				"when": "config.github.copilot.chat.advanced.copilotCodingAgent.enabled",
+				"capabilities": {
+					"supportsFileAttachments": true
 				}
 			}
 		],

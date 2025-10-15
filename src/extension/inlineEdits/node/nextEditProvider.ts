@@ -100,7 +100,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		super();
 
 		this._tracer = createTracer(['NES', 'NextEditProvider'], (s) => this._logService.trace(s));
-		this._nextEditCache = new NextEditCache(this._workspace, this._logService);
+		this._nextEditCache = new NextEditCache(this._workspace, this._logService, this._configService, this._expService);
 
 		mapObservableArrayCached(this, this._workspace.openDocuments, (doc, store) => {
 			store.add(runOnChange(doc.value, (value) => {
@@ -584,7 +584,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 									Math.max(reducedEndOffset, lineEndOffset)
 								);
 							}
-							this._nextEditCache.setNoNextEdit(curDocId, documentBeforeEdits, reducedWindow, req, nesConfigs);
+							this._nextEditCache.setNoNextEdit(curDocId, documentBeforeEdits, reducedWindow, req);
 						}
 					}
 					{

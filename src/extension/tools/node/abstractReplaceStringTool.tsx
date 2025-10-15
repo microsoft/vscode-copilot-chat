@@ -11,6 +11,7 @@ import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocum
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { IAlternativeNotebookContentEditGenerator, NotebookEditGenerationTelemtryOptions, NotebookEditGenrationSource } from '../../../platform/notebook/common/alternativeContentEditGenerator';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
@@ -36,7 +37,7 @@ import { IToolsService } from '../common/toolsService';
 import { ActionType } from './applyPatch/parser';
 import { CorrectedEditResult, healReplaceStringParams } from './editFileHealing';
 import { EditFileResult, IEditedFile } from './editFileToolResult';
-import { EditError, NoChangeError, NoMatchError, applyEdit, canExistingFileBeEdited, createEditConfirmation } from './editFileToolUtils';
+import { EditError, NoChangeError, NoMatchError, applyEdit, canExistingFileBeEdited, createEditConfirmation, logEditToolResult } from './editFileToolUtils';
 import { sendEditNotebookTelemetry } from './editNotebookTool';
 import { assertFileNotContentExcluded, resolveToolInputPath } from './toolUtils';
 
@@ -49,7 +50,7 @@ export interface IAbstractReplaceStringInput {
 export interface IPrepareEdit {
 	document: NotebookDocumentSnapshot | TextDocumentSnapshot | undefined;
 	uri: URI;
-	didHeal: boolean;
+	healed?: IAbstractReplaceStringInput;
 	input: IAbstractReplaceStringInput;
 	generatedEdit: { success: true; textEdits: vscode.TextEdit[]; notebookEdits?: CellOrNotebookEdit[] } | { success: false; errorMessage: string };
 }
@@ -74,6 +75,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IConfigurationService protected readonly configurationService: IConfigurationService,
 		@IEditToolLearningService private readonly editToolLearningService: IEditToolLearningService,
+		@ILogService private readonly logService: ILogService,
 	) { }
 
 	public abstract invoke(options: vscode.LanguageModelToolInvocationOptions<T>, token: vscode.CancellationToken): Promise<LanguageModelToolResult>;
@@ -102,7 +104,6 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		if (!exists) {
 			return {
 				uri,
-				didHeal: false,
 				document: undefined,
 				generatedEdit: input.oldString
 					? { success: false, errorMessage: `File does not exist: ${input.filePath}. Use the ${ToolName.CreateFile} tool to create it, or correct your filepath.` }
@@ -116,7 +117,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 			await this.workspaceService.openNotebookDocumentAndSnapshot(uri, this.alternativeNotebookContent.getFormat(this._promptContext?.request?.model)) :
 			await this.workspaceService.openTextDocumentAndSnapshot(uri);
 
-		const didHealRef = { didHeal: false };
+		const didHealRef: { healed?: IAbstractReplaceStringInput } = {};
 		try {
 			if (input.oldString === input.newString) {
 				throw new NoChangeError('Input and output are identical', input.filePath);
@@ -135,8 +136,8 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 				sendEditNotebookTelemetry(this.telemetryService, this.endpointProvider, 'stringReplace', document.uri, this._promptContext.requestId, options.model ?? this._promptContext.request?.model);
 			}
 
-			void this.sendReplaceTelemetry('success', options, input, document.getText(), isNotebook, didHealRef.didHeal);
-			return { document, uri, input, didHeal: didHealRef.didHeal, generatedEdit: { success: true, textEdits: edits, notebookEdits } };
+			void this.sendReplaceTelemetry('success', options, input, document.getText(), isNotebook, !!didHealRef.healed);
+			return { document, uri, input, healed: didHealRef.healed, generatedEdit: { success: true, textEdits: edits, notebookEdits } };
 		} catch (error) {
 			// Enhanced error message with more helpful details
 			let errorMessage = 'String replacement failed: ';
@@ -159,9 +160,9 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 				errorMessage += `${error.message}`;
 			}
 
-			void this.sendReplaceTelemetry(outcome, options, input, document.getText(), isNotebook, didHealRef.didHeal);
+			void this.sendReplaceTelemetry(outcome, options, input, document.getText(), isNotebook, !!didHealRef.healed);
 
-			return { document, uri, input, didHeal: didHealRef.didHeal, generatedEdit: { success: false, errorMessage } };
+			return { document, uri, input, healed: didHealRef.healed, generatedEdit: { success: false, errorMessage } };
 		}
 	}
 
@@ -169,6 +170,8 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		if (!this._promptContext?.stream) {
 			throw new Error('no prompt context found');
 		}
+
+		logEditToolResult(this.logService, options.chatRequestId, ...edits.map(e => ({ input: e.input, success: e.generatedEdit.success, healed: e.healed })));
 
 		const fileResults: IEditedFile[] = [];
 		const existingDiagnosticMap = new ResourceMap<vscode.Diagnostic[]>();
@@ -276,7 +279,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		]);
 	}
 
-	private async generateEdit(uri: URI, document: TextDocumentSnapshot | NotebookDocumentSnapshot, options: vscode.LanguageModelToolInvocationOptions<T>, input: IAbstractReplaceStringInput, didHealRef: { didHeal: boolean }, token: vscode.CancellationToken) {
+	private async generateEdit(uri: URI, document: TextDocumentSnapshot | NotebookDocumentSnapshot, options: vscode.LanguageModelToolInvocationOptions<T>, input: IAbstractReplaceStringInput, didHealRef: { healed?: IAbstractReplaceStringInput }, token: vscode.CancellationToken) {
 		const filePath = this.promptPathRepresentationService.getFilePath(document.uri);
 		const eol = document instanceof TextDocumentSnapshot && document.eol === EndOfLine.CRLF ? '\r\n' : '\n';
 		const oldString = removeLeadingFilepathComment(input.oldString, document.languageId, filePath).replace(/\r?\n/g, eol);
@@ -308,7 +311,6 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 				throw e; // failsafe for next release.
 			}
 
-			didHealRef.didHeal = true;
 
 			let healed: CorrectedEditResult;
 			try {
@@ -332,6 +334,8 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 				this.sendHealingTelemetry(options, String(e2), undefined);
 				throw e; // original error
 			}
+
+			didHealRef.healed = healed.params;
 
 			try {
 				const result = await applyEdit(

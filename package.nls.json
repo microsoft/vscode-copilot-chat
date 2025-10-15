@@ -264,7 +264,7 @@
 	"copilot.tools.searchWorkspaceSymbols.name": "Workspace Symbols",
 	"copilot.tools.listCodeUsages.name": "Find Usages",
 	"copilot.tools.getVSCodeAPI.name": "Get VS Code API References",
-	"copilot.tools.think.name": "Think",
+
 	"copilot.tools.findFiles.name": "Find Files",
 	"copilot.tools.findTextInFiles.name": "Find Text In Files",
 	"copilot.tools.applyPatch.name": "Apply Patch",

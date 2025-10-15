@@ -665,6 +665,7 @@ export namespace ConfigKey {
 		export const InlineEditsHideInternalInterface = defineValidatedSetting<boolean>('chat.advanced.inlineEdits.hideInternalInterface', vBoolean(), false, INTERNAL_RESTRICTED);
 		export const InlineEditsLogCancelledRequests = defineValidatedSetting<boolean>('chat.advanced.inlineEdits.logCancelledRequests', vBoolean(), false, INTERNAL_RESTRICTED);
 		export const InlineEditsUnification = defineExpSetting<boolean>('chat.advanced.inlineEdits.unification', false, INTERNAL_RESTRICTED);
+		export const InlineEditsTriggerOnEditorChange = defineExpSetting<boolean>('chat.advanced.inlineEdits.triggerOnEditorChange', { defaultValue: false, teamDefaultValue: true }, INTERNAL);
 		export const InlineEditsNextCursorPredictionEnabled = defineExpSetting<boolean>('chat.advanced.inlineEdits.nextCursorPrediction.enabled', { defaultValue: false, teamDefaultValue: true }, INTERNAL_RESTRICTED);
 		export const InlineEditsNextCursorPredictionModelName = defineExpSetting<string | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.modelName', { defaultValue: undefined, teamDefaultValue: "xtab-cursor-jump-v2" }, INTERNAL_RESTRICTED);
 		export const InlineEditsNextCursorPredictionUrl = defineValidatedSetting<string | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.url', vString(), undefined, INTERNAL_RESTRICTED);
@@ -746,10 +747,10 @@ export namespace ConfigKey {
 		export const EnableClaudeCodeAgent = defineSetting<boolean | string | undefined>('chat.advanced.claudeCode.enabled', false);
 		export const ClaudeCodeDebugEnabled = defineSetting<boolean>('chat.advanced.claudeCode.debug', false);
 		export const CopilotCLIEnabled = defineSetting<boolean | undefined>('chat.advanced.copilotCLI.enabled', false);
+		export const CopilotCLIKind = defineSetting<'bundled' | 'node' | 'scripts' | undefined>('chat.advanced.copilotCLI.kind', 'bundled');
 		export const Gpt5AlternativePatch = defineExpSetting<boolean>('chat.advanced.gpt5AlternativePatch', false);
 	}
 
-	export const AgentThinkingTool = defineSetting<boolean>('chat.agent.thinkingTool', false);
 	/** Use the Responses API instead of Chat Completions when supported */
 	export const UseResponsesApi = defineExpSetting<boolean | undefined>('chat.useResponsesApi', true);
 	/** Configure reasoning effort sent to Responses API */

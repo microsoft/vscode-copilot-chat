@@ -4,13 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Session, SessionManager } from '@github/copilot/sdk';
-import type { CancellationToken } from 'vscode';
+import type { CancellationToken, ChatContext, ChatRequest, ChatSessionStatus } from 'vscode';
 import { IEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
+import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableMap, IDisposable } from '../../../../util/vs/base/common/lifecycle';
-import { stripSystemReminders } from './copilotcliToolInvocationFormatter';
+import { stripReminders } from './copilotcliToolInvocationFormatter';
 import { ensureNodePtyShim } from './nodePtyShim';
 
 export interface ICopilotCLISession {
@@ -20,8 +21,12 @@ export interface ICopilotCLISession {
 	readonly timestamp: Date;
 }
 
+export type ExtendedChatRequest = ChatRequest & { prompt: string };
+
 export interface ICopilotCLISessionService {
 	readonly _serviceBrand: undefined;
+
+	onDidChangeSessions: Event<void>;
 
 	// Session metadata querying
 	getAllSessions(token: CancellationToken): Promise<readonly ICopilotCLISession[]>;
@@ -31,10 +36,17 @@ export interface ICopilotCLISessionService {
 	getSessionManager(): Promise<SessionManager>;
 	getOrCreateSDKSession(sessionId: string | undefined, prompt: string): Promise<Session>;
 	deleteSession(sessionId: string): Promise<boolean>;
+	setSessionStatus(sessionId: string, status: ChatSessionStatus): void;
+	getSessionStatus(sessionId: string): ChatSessionStatus | undefined;
 
 	// Session wrapper tracking
 	trackSessionWrapper<T extends IDisposable>(sessionId: string, wrapper: T): void;
 	findSessionWrapper<T extends IDisposable>(sessionId: string): T | undefined;
+
+	// Pending request tracking (for untitled sessions)
+	setPendingRequest(sessionId: string, request: ExtendedChatRequest, context: ChatContext): void;
+	getPendingRequest(sessionId: string): { request: ExtendedChatRequest; context: ChatContext } | undefined;
+	clearPendingRequest(sessionId: string): void;
 }
 
 export const ICopilotCLISessionService = createServiceIdentifier<ICopilotCLISessionService>('ICopilotCLISessionService');
@@ -45,6 +57,11 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 	private _sessionManager: SessionManager | undefined;
 	private _sessionWrappers = new DisposableMap<string, IDisposable>();
 	private _sessions = new Map<string, ICopilotCLISession>();
+	private _pendingRequests = new Map<string, { request: any; context: any }>();
+
+	private readonly _onDidChangeSessions = new Emitter<void>();
+	public readonly onDidChangeSessions = this._onDidChangeSessions.event;
+	private readonly _sessionStatuses = new Map<string, ChatSessionStatus>();
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
@@ -163,6 +180,15 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 		return sdkSession;
 	}
 
+	public setSessionStatus(sessionId: string, status: ChatSessionStatus): void {
+		this._sessionStatuses.set(sessionId, status);
+		this._onDidChangeSessions.fire();
+	}
+
+	public getSessionStatus(sessionId: string): ChatSessionStatus | undefined {
+		return this._sessionStatuses.get(sessionId);
+	}
+
 	public trackSessionWrapper<T extends IDisposable>(sessionId: string, wrapper: T): void {
 		this._sessionWrappers.set(sessionId, wrapper);
 	}
@@ -209,7 +235,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 
 				if (content) {
 					// Strip system reminders and return first line or first 50 characters, whichever is shorter
-					const cleanContent = stripSystemReminders(content);
+					const cleanContent = stripReminders(content);
 					const firstLine = cleanContent.split('\n').find((l: string) => l.trim().length > 0) ?? '';
 					return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine;
 				}
@@ -222,5 +248,17 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 
 		// Fallback to session ID
 		return `Session ${sdkSession.sessionId.slice(0, 8)}`;
+	}
+
+	public setPendingRequest(sessionId: string, request: ExtendedChatRequest, context: ChatContext): void {
+		this._pendingRequests.set(sessionId, { request, context });
+	}
+
+	public getPendingRequest(sessionId: string): { request: ExtendedChatRequest; context: ChatContext } | undefined {
+		return this._pendingRequests.get(sessionId);
+	}
+
+	public clearPendingRequest(sessionId: string): void {
+		this._pendingRequests.delete(sessionId);
 	}
 }

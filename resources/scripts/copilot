@@ -1,0 +1,186 @@
+#!/usr/bin/env node
+/*
+ * Universal GitHub Copilot CLI bootstrapper
+ *
+ * Works from any interactive shell (bash, zsh, sh, PowerShell Core (pwsh), Nushell, csh/tcsh) via shebang.
+ * Responsibilities:
+ *   1. Locate the real Copilot CLI binary (avoid recursion if this file shadows it).
+ *   2. Offer to install if missing (npm -g @github/copilot).
+ *   3. Enforce minimum version (>= REQUIRED_VERSION) with interactive update.
+ *   4. Execute the real binary with original arguments and exit with its status.
+ *
+ * Non-interactive automation:
+ *   Set COPILOT_AUTO_YES=1 to auto-accept install / update / reinstall prompts.
+ *
+ * NOTE: This file intentionally keeps logic self‑contained (no external deps) so it can be dropped into PATH directly.
+ */
+
+const REQUIRED_VERSION = '0.0.339';
+const PACKAGE_NAME = '@github/copilot';
+const AUTO_YES = process.env.COPILOT_AUTO_YES === '1';
+
+const { spawnSync } = require('node:child_process');
+const { realpathSync, existsSync, statSync, readSync } = require('node:fs');
+const { join, dirname } = require('node:path');
+
+function log(msg) { process.stdout.write(msg + '\n'); }
+function warn(msg) { process.stderr.write(msg + '\n'); }
+
+function promptYes(question) {
+	if (AUTO_YES) return true;
+	process.stdout.write(`${question} (y/N): `);
+	try {
+		let input = '';
+		const buf = Buffer.alloc(1);
+		while (true) {
+			const r = readSync(0, buf, 0, 1);
+			if (r <= 0) break;
+			const ch = buf.toString();
+			if (ch === '\n' || ch === '\r') break;
+			input += ch;
+		}
+		input = input.trim().toLowerCase();
+		return input === 'y' || input === 'yes';
+	} catch {
+		return false;
+	}
+}
+
+function semverParts(v) {
+	const cleaned = v.replace(/^v/, '').split('.');
+	return [0,1,2].map(i => parseInt((cleaned[i] || '0').replace(/[^0-9].*$/, ''), 10) || 0);
+}
+
+function versionGte(a, b) {
+	const aa = semverParts(a), bb = semverParts(b);
+	for (let i = 0; i < 3; i++) {
+		if (aa[i] > bb[i]) return true;
+		if (aa[i] < bb[i]) return false;
+	}
+	return true;
+}
+
+function which(cmd) {
+	const pathVar = process.env.PATH || '';
+	const sep = process.platform === 'win32' ? ';' : ':';
+	const exts = process.platform === 'win32'
+		? (process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';')
+		: [''];
+	for (const dir of pathVar.split(sep)) {
+		if (!dir) continue;
+		for (const ext of exts) {
+			const full = join(dir, cmd + ext);
+			try {
+				if (existsSync(full) && statSync(full).isFile()) return full;
+			} catch { /* ignore */ }
+		}
+	}
+	return null;
+}
+
+function safeReal(p) { try { return realpathSync(p); } catch { return p; } }
+
+function findRealCopilot() {
+	const selfReal = safeReal(process.argv[1]);
+	let found = which('copilot');
+	if (!found) return null;
+	const foundReal = safeReal(found);
+	if (foundReal === selfReal) {
+		// Shadowing: remove our directory from PATH temporarily and retry
+		const selfDir = dirname(selfReal);
+		const sep = process.platform === 'win32' ? ';' : ':';
+		const filtered = (process.env.PATH || '')
+			.split(sep)
+			.filter(p => safeReal(p) !== selfDir)
+			.join(sep);
+		try {
+			process.env.PATH = filtered;
+			found = which('copilot');
+		} finally {
+			// Not restoring is fine for this short-lived process
+		}
+		return found ? safeReal(found) : null;
+	}
+	return foundReal;
+}
+
+function runNpm(args, label) {
+	const result = spawnSync('npm', args, { stdio: 'inherit' });
+	if (result.error) {
+		warn(`${label} failed: ${result.error.message}`);
+		return false;
+	}
+	if (result.status !== 0) {
+		warn(`${label} failed with exit code ${result.status}`);
+		return false;
+	}
+	return true;
+}
+
+function ensureInstalled() {
+	let real = findRealCopilot();
+	if (!real) {
+		if (promptYes('GitHub Copilot CLI is not installed. Install now?')) {
+			if (runNpm(['install', '-g', PACKAGE_NAME], 'Installation')) {
+				return ensureInstalled();
+			}
+			process.exit(1);
+		} else {
+			log('Installation cancelled.');
+			process.exit(0);
+		}
+	}
+	return real;
+}
+
+function getVersion(binary) {
+	const r = spawnSync(binary, ['--version'], { encoding: 'utf8' });
+	if (r.status !== 0) return null;
+	const m = r.stdout.match(/[0-9]+\.[0-9]+\.[0-9]+/);
+	return m ? m[0] : null;
+}
+
+function verifyVersion(real) {
+	let v = getVersion(real);
+	if (!v) {
+		if (promptYes('Unable to determine Copilot version. Reinstall?')) {
+			if (runNpm(['install', '-g', PACKAGE_NAME], 'Reinstallation')) {
+				return verifyVersion(findRealCopilot());
+			}
+			process.exit(1);
+		} else {
+			log('Reinstallation cancelled.');
+			process.exit(0);
+		}
+	}
+	if (!versionGte(v, REQUIRED_VERSION)) {
+		log(`GitHub Copilot CLI version ${v} < required ${REQUIRED_VERSION}.`);
+		if (promptYes('Update now?')) {
+			if (runNpm(['update', '-g', PACKAGE_NAME], 'Update')) {
+				return verifyVersion(findRealCopilot());
+			}
+			process.exit(1);
+		} else {
+			log('Update cancelled.');
+			process.exit(0);
+		}
+	}
+	return true;
+}
+
+function execReal(binary, args) {
+	const r = spawnSync(binary, args, { stdio: 'inherit' });
+	process.exit(r.status == null ? 1 : r.status);
+}
+
+(function main() {
+	const real = ensureInstalled();
+	verifyVersion(real);
+	const finalReal = findRealCopilot();
+	if (!finalReal) {
+		warn('Error: Could not locate Copilot CLI after update.');
+		warn(`Try manually reinstalling with: npm install -g ${PACKAGE_NAME}`);
+		process.exit(1);
+	}
+	execReal(finalReal, process.argv.slice(2));
+})();

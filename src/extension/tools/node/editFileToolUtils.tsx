@@ -12,6 +12,7 @@ import { ICustomInstructionsService } from '../../../platform/customInstructions
 import { OffsetLineColumnConverter } from '../../../platform/editing/common/offsetLineColumnConverter';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
@@ -578,18 +579,19 @@ const enum ConfirmationCheckResult {
 function makeUriConfirmationChecker(configuration: IConfigurationService, workspaceService: IWorkspaceService, customInstructionsService: ICustomInstructionsService) {
 	const patterns = configuration.getNonExtensionConfig<Record<string, boolean>>('chat.tools.edits.autoApprove');
 
-	const checks = new ResourceMap<{ pattern: glob.ParsedPattern; isApproved: boolean }[]>();
+	const checks = new ResourceMap<{ patterns: { pattern: glob.ParsedPattern; isApproved: boolean }[]; ignoreCasing: boolean }>();
 	const getPatterns = (wf: URI) => {
 		let arr = checks.get(wf);
 		if (arr) {
 			return arr;
 		}
 
-		arr = [];
+		const ignoreCasing = extUriBiasedIgnorePathCase.ignorePathCasing(wf);
+		arr = { patterns: [], ignoreCasing };
 		for (const obj of [patterns, ALWAYS_CHECKED_EDIT_PATTERNS]) {
 			if (obj) {
 				for (const [pattern, isApproved] of Object.entries(obj)) {
-					arr.push({ pattern: glob.parse({ base: wf.fsPath, pattern }), isApproved });
+					arr.patterns.push({ pattern: glob.parse({ base: wf.fsPath, pattern: ignoreCasing ? pattern.toLowerCase() : pattern }), isApproved });
 				}
 			}
 		}
@@ -605,13 +607,18 @@ function makeUriConfirmationChecker(configuration: IConfigurationService, worksp
 		}
 
 		let ok = true;
-		const fsPath = uri.fsPath;
+		let fsPath = uri.fsPath;
 
 		if (platformConfirmationRequiredPaths.some(p => p(fsPath))) {
 			return ConfirmationCheckResult.SystemFile;
 		}
 
-		for (const { pattern, isApproved } of getPatterns(workspaceFolder || URI.file('/'))) {
+		const { patterns, ignoreCasing } = getPatterns(workspaceFolder || URI.file('/'));
+		if (ignoreCasing) {
+			fsPath = fsPath.toLowerCase();
+		}
+
+		for (const { pattern, isApproved } of patterns) {
 			if (isApproved !== ok && pattern(fsPath)) {
 				ok = isApproved;
 			}
@@ -685,4 +692,13 @@ export function canExistingFileBeEdited(accessor: ServicesAccessor, uri: URI): P
 
 	const fileSystemService = accessor.get(IFileSystemService);
 	return fileSystemService.stat(uri).then(() => true, () => false);
+}
+
+
+export function logEditToolResult(logService: ILogService, requestId: string | undefined, ...opts: {
+	input: unknown;
+	success: boolean;
+	healed?: unknown | undefined;
+}[]) {
+	logService.debug(`[edit-tool:${requestId}] ${JSON.stringify(opts)}`);
 }
