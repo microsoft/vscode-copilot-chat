@@ -181,7 +181,7 @@ export function createCopilotCLIToolInvocation(
 	invocation.isComplete = true;
 
 	if (resultType) {
-		invocation.isError = resultType === 'failure' || resultType === 'denied' || resultType === 'rejected';
+		invocation.isError = resultType === 'failure';
 	}
 
 	// Format based on tool name
