@@ -584,7 +584,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 									Math.max(reducedEndOffset, lineEndOffset)
 								);
 							}
-							this._nextEditCache.setNoNextEdit(curDocId, documentBeforeEdits, reducedWindow, req, nesConfigs);
+							this._nextEditCache.setNoNextEdit(curDocId, documentBeforeEdits, reducedWindow, req);
 						}
 					}
 					{

@@ -6,7 +6,7 @@
 import type * as vscode from 'vscode';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatPrepareToolInvocationPart, ExtendedLanguageModelToolResult, LanguageModelTextPart } from '../../../vscodeTypes';
+import { ChatPrepareToolInvocationPart, ChatResponseNotebookEditPart, ChatResponseTextEditPart, ExtendedLanguageModelToolResult, LanguageModelTextPart } from '../../../vscodeTypes';
 import { Conversation, Turn } from '../../prompt/common/conversation';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ExecutePromptToolCallingLoop } from '../../prompt/node/executePromptToolCalling';
@@ -39,7 +39,7 @@ class ExecutePromptTool implements ICopilotTool<IExecutePromptParams> {
 		// I want to render this content as thinking blocks when we they include tool calls
 		const stream = this._inputContext?.stream && ChatResponseStreamImpl.filter(
 			this._inputContext.stream,
-			part => part instanceof ChatPrepareToolInvocationPart
+			part => part instanceof ChatPrepareToolInvocationPart || part instanceof ChatResponseTextEditPart || part instanceof ChatResponseNotebookEditPart
 		);
 
 		const loopResult = await loop.run(stream, token);

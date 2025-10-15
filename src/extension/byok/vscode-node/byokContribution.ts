@@ -54,6 +54,25 @@ export class BYOKContrib extends Disposable implements IExtensionContribution {
 			}
 		}));
 
+		this._register(commands.registerCommand('github.copilot.chat.manageBYOKAPIKey', async (vendor: string, envVarName: string, action?: 'update' | 'remove', modelId?: string) => {
+			const provider = this._providers.get(vendor);
+			if (!provider) {
+				this._logService.error(`BYOK: Provider ${vendor} not found`);
+				return;
+			}
+
+			try {
+				if (provider.updateAPIKeyViaCmd) {
+					await provider.updateAPIKeyViaCmd(envVarName, action ?? 'update', modelId);
+				} else {
+					this._logService.error(`BYOK: Provider ${vendor} does not support API key management via command`);
+				}
+			} catch (error) {
+				this._logService.error(`BYOK: Failed to ${action || 'update'} API key for provider ${vendor}${modelId ? ` and model ${modelId}` : ''}`, error);
+				throw error;
+			}
+		}));
+
 		this._byokStorageService = new BYOKStorageService(extensionContext);
 		this._authChange(authService, this._instantiationService);
 

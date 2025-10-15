@@ -838,6 +838,12 @@ export class TestingTerminalService extends Disposable implements ITerminalServi
 	getBufferWithPid(pid: number, maxChars?: number): Promise<string> {
 		throw new Error('Method not implemented.');
 	}
+	contributePath(contributor: string, pathLocation: string, description?: string): void {
+		// No-op for test service
+	}
+	removePathContribution(contributor: string): void {
+		// No-op for test service
+	}
 }
 
 class SimulationTerminal extends Disposable implements vscode.Terminal {

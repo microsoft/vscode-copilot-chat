@@ -59,6 +59,7 @@ async function fetchSecrets(): Promise<{ [key: string]: string | undefined }> {
 	if (!process.stdin.isTTY) { // only in automation
 		const automationVaultClient = await setupSecretClient("https://copilot-automation.vault.azure.net/");
 		secrets["GITHUB_OAUTH_TOKEN"] = await fetchSecret(automationVaultClient, "capi-oauth");
+		secrets["VSCODE_COPILOT_CHAT_TOKEN"] = await fetchSecret(automationVaultClient, "copilot-token");
 		secrets["GHCR_PAT"] = await fetchSecret(automationVaultClient, "ghcr-pat");
 		secrets["BLACKBIRD_EMBEDDINGS_KEY"] = await fetchSecret(automationVaultClient, "vsc-aoai-key");
 		secrets["BLACKBIRD_REDIS_CACHE_KEY"] = await fetchSecret(automationVaultClient, "blackbird-redis-cache-key");
