@@ -42,50 +42,31 @@ export class BuiltInToolGroupHandler {
 
 	/** Creates groups for built-in tools based on the type-safe categorization system */
 	createBuiltInToolGroups(tools: LanguageModelToolInformation[]): (VirtualTool | LanguageModelToolInformation)[] {
-		// If there are too few tools, don't group them
-		if (tools.length <= Constant.MIN_TOOLSET_SIZE_TO_GROUP) {
-			return tools;
-		}
 
-		const toolMap = new Map(tools.map(tool => [tool.name, tool]));
-		const virtualTools: VirtualTool[] = [];
-		const usedTools = new Set<string>();
+		const contributedTools = tools.filter(t => !toolCategories.hasOwnProperty(t.name));
+		const builtInTools = tools.filter(t => toolCategories.hasOwnProperty(t.name));
 
-		// Process each tool category (except Core which should not be grouped)
-		for (const category of Object.values(ToolCategory)) {
-			if (category === ToolCategory.Core) {
-				continue; // Core tools are not grouped
+		const categories = groupBy(builtInTools, t => toolCategories[t.name as ToolName]);
+		const virtualTools = Object.entries(categories).flatMap<VirtualTool|LanguageModelToolInformation>(([category, tools]) => {
+			if (tools.length <= Constant.MIN_TOOLSET_SIZE_TO_GROUP) {
+				return tools;
 			}
 
-			// Get all tools for this category using the type-safe mapping
-			const categoryToolNames = getToolsForCategory(category);
-			const groupTools = categoryToolNames
-				.map(toolName => toolMap.get(toolName))
-				.filter((tool): tool is LanguageModelToolInformation => tool !== undefined);
+			return new VirtualTool(
+				VIRTUAL_TOOL_NAME_PREFIX + category.toLowerCase().replace(/\s+/g, '_'),
+				SUMMARY_PREFIX + getCategorySummary(category) + SUMMARY_SUFFIX,
+				0,
+				{
+					toolsetKey: BUILT_IN_GROUP,
+					possiblePrefix: 'builtin_',
+					wasExpandedByDefault: false,
+					canBeCollapsed: true
+				},
+				tools
+			);
+		});
 
-			if (groupTools.length > 0) {
-				// Mark each tool that has already been added to a group
-				groupTools.forEach(tool => usedTools.add(tool.name));
-
-				const virtualTool = new VirtualTool(
-					VIRTUAL_TOOL_NAME_PREFIX + category.toLowerCase().replace(/\s+/g, '_'),
-					SUMMARY_PREFIX + getCategorySummary(category) + SUMMARY_SUFFIX,
-					0,
-					{
-						toolsetKey: BUILT_IN_GROUP,
-						possiblePrefix: 'builtin_',
-						wasExpandedByDefault: false,
-						canBeCollapsed: true
-					},
-					groupTools
-				);
-				virtualTools.push(virtualTool);
-			}
-		}
-
-		// Add any remaining uncategorized tools individually
-		const uncategorizedTools = tools.filter(tool => !usedTools.has(tool.name));
-		return [...virtualTools, ...uncategorizedTools];
+		return [...virtualTools, ...contributedTools];
 	}
 
 	static get BUILT_IN_GROUP_KEY(): string {
