@@ -4178,6 +4178,16 @@
 					"supportsFileAttachments": true,
 					"supportsToolAttachments": false
 				}
+			},
+			{
+				"type": "copilot-cloud-agent",
+				"name": "copilot",
+				"displayName": "GitHub Copilot cloud agent",
+				"description": "Delegate tasks to the GitHub Copilot coding agent. The agent works asynchronously to implement changes, iterates via chat, and can create or update pull requests as needed.",
+				"when": "config.github.copilot.chat.advanced.copilotCodingAgent.enabled",
+				"capabilities": {
+					"supportsFileAttachments": true
+				}
 			}
 		],
 		"debuggers": [

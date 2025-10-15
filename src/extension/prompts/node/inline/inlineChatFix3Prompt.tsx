@@ -234,11 +234,12 @@ export class PatchEditFixReplyInterpreter implements ReplyInterpreter {
 	async processResponse(context: IResponseProcessorContext, inputStream: AsyncIterable<IResponsePart>, outputStream: ChatResponseStream, token: CancellationToken): Promise<void> {
 		let inFirstParagraph = true; // print only the frist paragraph
 		let charactersSent = 0;
+		let newText = '';
 		for await (const part of inputStream) {
 			if (token.isCancellationRequested) {
 				return;
 			}
-			const newText = part.text;
+			newText += part.delta.text;
 			if (newText.length > this._lastText.length) {
 				this._lastText = newText; // the new complete text
 				if (inFirstParagraph) {

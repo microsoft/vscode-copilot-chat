@@ -7,6 +7,7 @@ import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
+import { PullRequestSearchItem, SessionInfo } from './githubAPI';
 import { BaseOctoKitService, IOctoKitService, IOctoKitUser } from './githubService';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
@@ -38,5 +39,44 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			return undefined;
 		}
 		return await this.getTeamMembershipWithToken(teamId, token, username);
+	}
+
+	async getCopilotPullRequestsForUser(owner: string, repo: string): Promise<PullRequestSearchItem[]> {
+		const auth = (await this._authService.getAnyGitHubSession());
+		if (!auth?.accessToken) {
+			return [];
+		}
+		const response = await this.getCopilotPullRequestForUserWithToken(
+			owner,
+			repo,
+			auth.account.label,
+			auth.accessToken,
+		);
+		return response;
+	}
+
+	async getCopilotSessionsForPR(prId: string): Promise<SessionInfo[]> {
+		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		if (!authToken) {
+			return [];
+		}
+		const response = await this.getCopilotSessionsForPRWithToken(
+			prId,
+			authToken,
+		);
+		const { sessions } = response;
+		return sessions;
+	}
+
+	async getSessionLogs(sessionId: string): Promise<string> {
+		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		if (!authToken) {
+			return '';
+		}
+		const response = await this.getSessionLogsWithToken(
+			sessionId,
+			authToken,
+		);
+		return response;
 	}
 }

@@ -3,22 +3,19 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { promises as fs } from 'fs';
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler } from 'vscode';
-import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { ITerminalService } from '../../../platform/terminal/common/terminalService';
 import { isLocation } from '../../../util/common/types';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
-import * as path from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
 import { localize } from '../../../util/vs/nls';
+import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
 import { ExtendedChatRequest, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { buildChatHistoryFromEvents, parseChatMessagesToEvents, stripSystemReminders } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
+import { CopilotBundledCLITerminalIntegration, CopilotExternalCLINodeTerminalIntegration, CopilotExternalCLIScriptsTerminalIntegration, ICopilotBundledCLITerminalIntegration } from './copilotCLITerminalIntegration';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 
 export class CopilotCLIChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
 	private readonly _onDidChangeChatSessionItems = this._register(new Emitter<void>());
@@ -26,12 +23,10 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	private readonly _onDidCommitChatSessionItem = this._register(new Emitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>());
 	public readonly onDidCommitChatSessionItem: Event<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }> = this._onDidCommitChatSessionItem.event;
-
+	private readonly _terminalIntegration: ICopilotBundledCLITerminalIntegration;
 	constructor(
 		@ICopilotCLISessionService private readonly copilotcliSessionService: ICopilotCLISessionService,
-		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
-		@ITerminalService private readonly terminalService: ITerminalService,
-		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super();
@@ -40,11 +35,8 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			this.refresh();
 		}));
 
-		const enabled = this.configurationService.getConfig(ConfigKey.Internal.CopilotCLIEnabled);
-
-		if (enabled) {
-			this.setupCopilotCLIPath();
-		}
+		const cliIntegration = this.configurationService.getConfig(ConfigKey.Internal.CopilotCLIKind);
+		this._terminalIntegration = cliIntegration === 'bundled' ? this.instantiationService.createInstance(CopilotBundledCLITerminalIntegration) : (cliIntegration === 'node' ? this.instantiationService.createInstance(CopilotExternalCLINodeTerminalIntegration) : this.instantiationService.createInstance(CopilotExternalCLIScriptsTerminalIntegration));
 	}
 
 	public refresh(): void {
@@ -82,43 +74,6 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		await this.createAndExecuteInTerminal(terminalName, command);
 	}
 
-	private async setupCopilotCLIPath(): Promise<void> {
-		const globalStorageUri = this.context.globalStorageUri;
-		if (!globalStorageUri) {
-			// globalStorageUri is not available in extension tests
-			return;
-		}
-
-		const storageLocation = path.join(globalStorageUri.fsPath, 'copilotCli');
-		const copilotPackageIndexJs = path.join(this.context.extensionPath, 'node_modules', '@github', 'copilot', 'index.js');
-
-		try {
-			await fs.access(copilotPackageIndexJs);
-			await fs.mkdir(storageLocation, { recursive: true });
-
-			// Note: node-pty shim is created in agent manager before first SDK import
-			// This allows @github/copilot to import node-pty before extension activation
-
-			if (process.platform === 'win32') {
-				// Windows: Create batch file
-				const batPath = path.join(storageLocation, 'copilot.bat');
-				const batScript = `@echo off\nnode "${copilotPackageIndexJs}" %*`;
-				await fs.writeFile(batPath, batScript);
-			} else {
-				// Unix: Create shell script
-				const shPath = path.join(storageLocation, 'copilot');
-				const shScript = `#!/bin/sh\nnode "${copilotPackageIndexJs}" "$@"`;
-				await fs.writeFile(shPath, shScript);
-				await fs.chmod(shPath, 0o755);
-			}
-
-			// Contribute the storage location to PATH
-			this.terminalService.contributePath('copilot-cli', storageLocation, 'Enables use of the `copilot` command in the terminal.');
-		} catch {
-			// @github/copilot package not found, no need to add to PATH
-		}
-	}
-
 
 	private async createAndExecuteInTerminal(terminalName: string, command: string): Promise<void> {
 		const existingTerminal = vscode.window.terminals.find(t => t.name === terminalName);
@@ -127,12 +82,8 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 			return;
 		}
 
-		const session = await this._authenticationService.getAnyGitHubSession();
-		if (session) {
-			this.context.environmentVariableCollection.replace('GH_TOKEN', session.accessToken);
-		}
 
-		const terminal = vscode.window.createTerminal({
+		const terminal = await this._terminalIntegration.createTerminal({
 			name: terminalName,
 			iconPath: new vscode.ThemeIcon('terminal'),
 			location: { viewColumn: vscode.ViewColumn.Active }
@@ -163,7 +114,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		if (shellIntegrationAvailable && terminal.shellIntegration) {
 			// TODO@rebornix fix in VS Code
 			await new Promise(resolve => setTimeout(resolve, 500)); // Wait a bit to ensure the terminal is ready
-			terminal.shellIntegration.executeCommand(command);
+			terminal.shellIntegration.executeCommand('copilot');
 		} else {
 			terminal.sendText(command);
 		}
