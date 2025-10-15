@@ -76,13 +76,6 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 
 	private async createAndExecuteInTerminal(terminalName: string, command: string): Promise<void> {
-		const existingTerminal = vscode.window.terminals.find(t => t.name === terminalName);
-		if (existingTerminal) {
-			existingTerminal.show();
-			return;
-		}
-
-
 		const terminal = await this._terminalIntegration.createTerminal({
 			name: terminalName,
 			iconPath: new vscode.ThemeIcon('terminal'),
