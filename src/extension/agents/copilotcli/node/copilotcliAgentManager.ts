@@ -17,7 +17,7 @@ import { ChatResponseThinkingProgressPart, LanguageModelTextPart } from '../../.
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ICopilotCLISessionService } from './copilotcliSessionService';
-import { createCopilotCLIToolInvocation, PermissionRequest } from './copilotcliToolInvocationFormatter';
+import { CopilotCLIToolNames, createCopilotCLIToolInvocation, PermissionRequest } from './copilotcliToolInvocationFormatter';
 import { ensureNodePtyShim } from './nodePtyShim';
 
 export class CopilotCLIAgentManager extends Disposable {
@@ -188,7 +188,7 @@ export class CopilotCLISession extends Disposable {
 			case 'tool_result': {
 				const toolCallId = event.toolCallId;
 
-				if (event.toolName === 'think') {
+				if (event.toolName === CopilotCLIToolNames.Think) {
 					const sessionLog = event.result.sessionLog;
 					if (sessionLog && typeof sessionLog === 'string') {
 						stream.push(new ChatResponseThinkingProgressPart(sessionLog));

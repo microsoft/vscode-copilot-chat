@@ -13,7 +13,7 @@ import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseThinkingProgres
 /**
  * CopilotCLI tool names
  */
-const enum CopilotCLIToolNames {
+export const enum CopilotCLIToolNames {
 	StrReplaceEditor = 'str_replace_editor',
 	Bash = 'bash',
 	Think = 'think'
