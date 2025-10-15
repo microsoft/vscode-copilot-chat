@@ -77,12 +77,12 @@ export class NextEditCache extends Disposable {
 		return docCache.setKthNextEdit(documentContents, editWindow, nextEdit, nextEdits, userEditSince, subsequentN, source);
 	}
 
-	public setNoNextEdit(docId: DocumentId, documentContents: StringText, editWindow: OffsetRange | undefined, source: NextEditFetchRequest, nesConfigs: INesConfigs) {
+	public setNoNextEdit(docId: DocumentId, documentContents: StringText, editWindow: OffsetRange | undefined, source: NextEditFetchRequest) {
 		const docCache = this._documentCaches.get(docId);
 		if (!docCache) {
 			return;
 		}
-		docCache.setNoNextEdit(documentContents, editWindow, source, nesConfigs);
+		docCache.setNoNextEdit(documentContents, editWindow, source);
 	}
 
 	public lookupNextEdit(docId: DocumentId, currentDocumentContents: StringText, currentSelection: readonly OffsetRange[], nesConfigs: INesConfigs): CachedOrRebasedEdit | undefined {
@@ -188,7 +188,7 @@ class DocumentEditCache {
 		return cachedEdit;
 	}
 
-	public setNoNextEdit(documentContents: StringText, editWindow: OffsetRange | undefined, source: NextEditFetchRequest, nesConfigs: INesConfigs) {
+	public setNoNextEdit(documentContents: StringText, editWindow: OffsetRange | undefined, source: NextEditFetchRequest) {
 		const key = this._getKey(documentContents.value);
 		const cachedEdit: CachedEdit = { docId: this.docId, edits: [], detailedEdits: [], source, documentBeforeEdit: documentContents, editWindow, cacheTime: Date.now() };
 		const existing = this._sharedCache.get(key);
@@ -208,7 +208,7 @@ class DocumentEditCache {
 		if (cachedEdit) {
 			const editWindow = cachedEdit.editWindow;
 			const cursorRange = currentSelection[0];
-			if (editWindow && cursorRange && !editWindow.containsRange(cursorRange)) {
+			if (editWindow && !editWindow.containsRange(cursorRange)) {
 				return undefined;
 			}
 			return cachedEdit;

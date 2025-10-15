@@ -117,7 +117,7 @@
 		"authLearnMore",
 		"testObserver",
 		"aiTextSearchProvider@2",
-		"chatParticipantPrivate@10",
+		"chatParticipantPrivate@11",
 		"chatProvider@4",
 		"contribDebugCreateConfiguration",
 		"chatReferenceDiagnostic",
@@ -126,7 +126,6 @@
 		"languageModelSystem",
 		"languageModelCapabilities",
 		"inlineCompletionsAdditions",
-		"languageModelDataPart@3",
 		"chatStatusItem",
 		"taskProblemMatcherStatus",
 		"contribLanguageModelToolSets",
@@ -1214,8 +1213,7 @@
 				"isDefault": true,
 				"when": "config.inlineChat.enableV2 || config.github.copilot.chat.advanced.inlineChat2",
 				"locations": [
-					"editor",
-					"notebook"
+					"editor"
 				],
 				"commands": [
 					{
@@ -1416,7 +1414,7 @@
 				"locations": [
 					"notebook"
 				],
-				"when": "!config.inlineChat.enableV2 && !config.github.copilot.chat.advanced.inlineChat2",
+				"when": "!config.inlineChat.notebookAgent",
 				"commands": [
 					{
 						"name": "fix",
@@ -1437,7 +1435,7 @@
 				"locations": [
 					"notebook"
 				],
-				"when": "config.inlineChat.enableV2",
+				"when": "config.inlineChat.notebookAgent",
 				"commands": [
 					{
 						"name": "fix",
@@ -4177,6 +4175,16 @@
 				"capabilities": {
 					"supportsFileAttachments": true,
 					"supportsToolAttachments": false
+				}
+			},
+			{
+				"type": "copilot-cloud-agent",
+				"name": "copilot",
+				"displayName": "GitHub Copilot cloud agent",
+				"description": "Delegate tasks to the GitHub Copilot coding agent. The agent works asynchronously to implement changes, iterates via chat, and can create or update pull requests as needed.",
+				"when": "config.github.copilot.chat.advanced.copilotCodingAgent.enabled",
+				"capabilities": {
+					"supportsFileAttachments": true
 				}
 			}
 		],

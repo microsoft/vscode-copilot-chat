@@ -7,14 +7,69 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 
+export interface PullRequestSearchItem {
+	number: number;
+	title: string;
+	state: string;
+	url: string;
+	createdAt: string;
+	updatedAt: string;
+	author: {
+		login: string;
+	} | null;
+	repository: {
+		owner: {
+			login: string;
+		};
+		name: string;
+	};
+	additions: number;
+	deletions: number;
+	fullDatabaseId: number;
+	headRefOid: number;
+}
 
-export async function makeGitHubAPIRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, routeSlug: string, method: 'GET' | 'POST', token: string | undefined, body?: { [key: string]: any }) {
+export interface PullRequestSearchResult {
+	search: {
+		nodes: PullRequestSearchItem[];
+		pageInfo: {
+			hasNextPage: boolean;
+			endCursor: string | null;
+		};
+		issueCount: number;
+	};
+}
+
+export interface SessionInfo {
+	id: string;
+	name: string;
+	user_id: number;
+	agent_id: number;
+	logs: string;
+	logs_blob_id: string;
+	state: 'completed' | 'in_progress' | 'failed' | 'queued';
+	owner_id: number;
+	repo_id: number;
+	resource_type: string;
+	resource_id: number;
+	last_updated_at: string;
+	created_at: string;
+	completed_at: string;
+	event_type: string;
+	workflow_run_id: number;
+	premium_requests: number;
+	error: string | null;
+}
+
+export async function makeGitHubAPIRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, routeSlug: string, method: 'GET' | 'POST', token: string | undefined, body?: { [key: string]: any }, version?: string, type: 'json' | 'text' = 'json') {
 	const headers: any = {
 		'Accept': 'application/vnd.github+json',
-		'X-GitHub-Api-Version': '2022-11-28'
 	};
 	if (token) {
 		headers['Authorization'] = `Bearer ${token}`;
+	}
+	if (version) {
+		headers['X-GitHub-Api-Version'] = version;
 	}
 
 	const response = await fetcherService.fetch(`${host}/${routeSlug}`, {
@@ -27,7 +82,7 @@ export async function makeGitHubAPIRequest(fetcherService: IFetcherService, logS
 	}
 
 	try {
-		const result = await response.json();
+		const result = type === 'json' ? await response.json() : await response.text();
 		const rateLimit = Number(response.headers.get('x-ratelimit-remaining'));
 		const logMessage = `[RateLimit] REST rate limit remaining: ${rateLimit}, ${routeSlug}`;
 		if (rateLimit < 1000) {
@@ -41,4 +96,102 @@ export async function makeGitHubAPIRequest(fetcherService: IFetcherService, logS
 	} catch {
 		return undefined;
 	}
+}
+
+export async function makeGitHubGraphQLRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, query: string, token: string | undefined, variables?: { [key: string]: any }) {
+	const headers: any = {
+		'Accept': 'application/vnd.github+json',
+		'Content-Type': 'application/json',
+	};
+	if (token) {
+		headers['Authorization'] = `Bearer ${token}`;
+	}
+
+	const body = JSON.stringify({
+		query,
+		variables
+	});
+
+	const response = await fetcherService.fetch(`${host}/graphql`, {
+		method: 'POST',
+		headers,
+		body
+	});
+
+	if (!response.ok) {
+		return undefined;
+	}
+
+	try {
+		const result = await response.json();
+		const rateLimit = Number(response.headers.get('x-ratelimit-remaining'));
+		const logMessage = `[RateLimit] GraphQL rate limit remaining: ${rateLimit}, query: ${query}`;
+		if (rateLimit < 1000) {
+			// Danger zone
+			logService.warn(logMessage);
+			telemetry.sendMSFTTelemetryEvent('githubAPI.approachingRateLimit', { rateLimit: rateLimit.toString() });
+		} else {
+			logService.debug(logMessage);
+		}
+		return result;
+	} catch {
+		return undefined;
+	}
+}
+
+export async function makeSearchGraphQLRequest(
+	fetcherService: IFetcherService,
+	logService: ILogService,
+	telemetry: ITelemetryService,
+	host: string,
+	token: string | undefined,
+	searchQuery: string,
+	first: number = 20,
+): Promise<PullRequestSearchItem[]> {
+	const query = `
+		query FetchCopilotAgentPullRequests($searchQuery: String!, $first: Int!, $after: String) {
+			search(query: $searchQuery, type: ISSUE, first: $first, after: $after) {
+				nodes {
+					... on PullRequest {
+						number
+						id
+						fullDatabaseId
+						headRefOid
+						title
+						state
+						url
+						createdAt
+						updatedAt
+						additions
+						deletions
+						author {
+							login
+						}
+						repository {
+							owner {
+								login
+							}
+							name
+						}
+					}
+				}
+				pageInfo {
+					hasNextPage
+					endCursor
+				}
+				issueCount
+			}
+		}
+	`;
+
+	logService.debug(`[FolderRepositoryManager+0] Fetch pull request category ${searchQuery}`);
+
+	const variables = {
+		searchQuery,
+		first
+	};
+
+	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
+
+	return result ? result.data.search.nodes : [];
 }

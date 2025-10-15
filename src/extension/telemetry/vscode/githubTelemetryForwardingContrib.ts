@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { env } from 'vscode';
+import { getGitHubRepoInfoFromContext, GithubRepoId, IGitService } from '../../../platform/git/common/gitService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { IExtensionContribution } from '../../common/contributions';
@@ -11,19 +12,22 @@ import { IExtensionContribution } from '../../common/contributions';
 export class GithubTelemetryForwardingContrib extends Disposable implements IExtensionContribution {
 	constructor(
 		@ITelemetryService private readonly _telemetryService: ITelemetryService,
+		@IGitService private readonly _gitService: IGitService,
 	) {
 		super();
 
 		const channel = env.getDataChannel<IEditTelemetryData>('editTelemetry');
 		this._register(channel.onDidReceiveData((args) => {
-			const data = translateToGithubProperties(args.data.eventName, args.data.data);
+			const r = this._gitService.activeRepository.get();
+			const id = r ? getGitHubRepoInfoFromContext(r)?.id : undefined;
+			const data = translateToGithubProperties(args.data.eventName, args.data.data, id);
 			const { properties, measurements } = dataToPropsAndMeasurements(data);
 			this._telemetryService.sendGHTelemetryEvent('vscode.' + args.data.eventName, properties, measurements);
 		}));
 	}
 }
 
-function translateToGithubProperties(eventName: string, data: Record<string, unknown>): Record<string, unknown> {
+function translateToGithubProperties(eventName: string, data: Record<string, unknown>, githubRepo: GithubRepoId | undefined): Record<string, unknown> {
 	const githubProperties: Record<string, unknown> = { ...data };
 	for (const [key, value] of Object.entries(data)) {
 		const translatedProperty = translateToGithubProperty(eventName, key, value);
@@ -31,6 +35,10 @@ function translateToGithubProperties(eventName: string, data: Record<string, unk
 			githubProperties[translatedProperty.key] = translatedProperty.value;
 			delete githubProperties[key];
 		}
+	}
+	if (githubRepo) {
+		githubProperties['githubOrg'] = githubRepo.org;
+		githubProperties['githubRepo'] = githubRepo.repo;
 	}
 	return githubProperties;
 }
