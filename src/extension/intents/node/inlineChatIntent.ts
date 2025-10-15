@@ -4,163 +4,251 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
-import { ChatLocation } from '../../../platform/chat/common/commonTypes';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { modelSupportsMultiReplaceString, modelSupportsReplaceString } from '../../../platform/endpoint/common/chatModelCapabilities';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { ChatFetchResponseType, ChatLocation, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
-import { IEnvService } from '../../../platform/env/common/envService';
+import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
-import { IEditLogService } from '../../../platform/multiFileEdit/common/editLogService';
-import { IChatEndpoint } from '../../../platform/networking/common/networking';
-import { INotebookService } from '../../../platform/notebook/common/notebookService';
-import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
-import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
-import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { isNonEmptyArray } from '../../../util/vs/base/common/arrays';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { Event } from '../../../util/vs/base/common/event';
 import { assertType } from '../../../util/vs/base/common/types';
-import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequestEditorData, Location } from '../../../vscodeTypes';
-import { ICommandService } from '../../commands/node/commandService';
+import { ChatRequestEditorData } from '../../../vscodeTypes';
 import { Intent } from '../../common/constants';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
-import { IBuildPromptContext, InternalToolReference } from '../../prompt/common/intents';
-import { IDefaultIntentRequestHandlerOptions } from '../../prompt/node/defaultIntentRequestHandler';
-import { IBuildPromptResult, IIntent } from '../../prompt/node/intents';
-import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperService';
-import { getToolName, ToolName } from '../../tools/common/toolNames';
-import { IToolsService } from '../../tools/common/toolsService';
-import { EditCodeIntent, EditCodeIntentOptions } from './editCodeIntent';
-import { EditCode2IntentInvocation } from './editCodeIntent2';
-import { getRequestedToolCallIterationLimit } from './toolCallingLoop';
+import { Conversation } from '../../prompt/common/conversation';
+import { ChatTelemetryBuilder } from '../../prompt/node/chatParticipantTelemetry';
+import { IDocumentContext } from '../../prompt/node/documentContext';
+import { IIntent } from '../../prompt/node/intents';
+import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
+import { InlineChat2Prompt } from '../../prompts/node/inline/inlineChat2Prompt';
+import { ToolName } from '../../tools/common/toolNames';
+import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
+import { CopilotToolMode } from '../../tools/common/toolsRegistry';
+import { isToolValidationError, isValidatedToolInput, IToolsService } from '../../tools/common/toolsService';
+import { getAgentTools } from './agentIntent';
 
 
-function getInlineChatTools(instaService: IInstantiationService, request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> {
-	return instaService.invokeFunction(async accessor => {
-		const toolsService = accessor.get<IToolsService>(IToolsService);
-		const endpointProvider = accessor.get<IEndpointProvider>(IEndpointProvider);
-		// const notebookService = accessor.get<INotebookService>(INotebookService);
-		const configurationService = accessor.get<IConfigurationService>(IConfigurationService);
-		const experimentationService = accessor.get<IExperimentationService>(IExperimentationService);
-		const model = await endpointProvider.getChatEndpoint(request);
-		const lookForTools = new Set<string>([ToolName.EditFile]);
+export class InlineChatIntent implements IIntent {
 
-		// if (requestHasNotebookRefs(request, notebookService, { checkPromptAsWell: true })) {
-		// 	lookForTools.add(ToolName.CreateNewJupyterNotebook);
-		// }
+	static readonly ID = Intent.InlineChat;
 
-		if (await modelSupportsReplaceString(model)) {
-			lookForTools.add(ToolName.ReplaceString);
-			if (await modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
-				lookForTools.add(ToolName.MultiReplaceString);
-			}
+	private static readonly _EDIT_TOOLS = new Set<string>([
+		ToolName.ApplyPatch,
+		ToolName.EditFile,
+		ToolName.ReplaceString,
+		ToolName.MultiReplaceString,
+	]);
+
+	readonly id = InlineChatIntent.ID;
+
+	readonly locations = [ChatLocation.Editor];
+
+	readonly description: string = '';
+
+	constructor(
+		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@ILogService private readonly _logService: ILogService,
+		@IToolsService private readonly _toolsService: IToolsService,
+		@IIgnoreService private readonly _ignoreService: IIgnoreService,
+	) { }
+
+	async handleRequest(_conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, agentName: string, location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
+
+		assertType(request.location2 instanceof ChatRequestEditorData);
+
+
+		if (await this._ignoreService.isCopilotIgnored(request.location2.document.uri, token)) {
+			return {
+				errorDetails: {
+					message: localize('inlineChat.ignored', "Copilot is disabled for this file."),
+				}
+			};
 		}
 
-		// lookForTools.add(ToolName.EditNotebook);
-		// lookForTools.add(ToolName.GetNotebookSummary);
-		// lookForTools.add(ToolName.RunNotebookCell);
-		// lookForTools.add(ToolName.ReadCellOutput);
+		const endpoint = await this._endpointProvider.getChatEndpoint(request);
 
-		return toolsService.getEnabledTools(request, tool => lookForTools.has(tool.name) || tool.tags.includes('notebooks'));
-	});
-}
+		const inlineChatTools = await this.getAvailableTools(request);
 
-export class InlineChatIntent extends EditCodeIntent {
+		const chatVariables = new ChatVariablesCollection([...request.references]);
 
-	static override readonly ID = Intent.InlineChat;
+		const renderer = PromptRenderer.create(this._instantiationService, endpoint, InlineChat2Prompt, {
+			request,
+			data: request.location2
+		});
 
-	override readonly id = InlineChatIntent.ID;
+		const renderResult = await renderer.render(undefined, token, { trace: true });
 
-	override readonly locations = [ChatLocation.Editor];
+		const fetchResult = await endpoint.makeChatRequest2({
+			debugName: 'InlineChatIntent',
+			messages: renderResult.messages,
+			location: ChatLocation.Editor,
+			finishedCb: async (_text, _index, delta) => {
 
-	constructor(
-		@IInstantiationService instantiationService: IInstantiationService,
-		@IEndpointProvider endpointProvider: IEndpointProvider,
-		@IConfigurationService configurationService: IConfigurationService,
-		@IExperimentationService expService: IExperimentationService,
-		@ICodeMapperService codeMapperService: ICodeMapperService,
-		@IWorkspaceService workspaceService: IWorkspaceService,
-	) {
-		super(instantiationService, endpointProvider, configurationService, expService, codeMapperService, workspaceService, { processCodeblocks: false, intentInvocation: InlineChatIntentInvocation });
-	}
+				let didSeeEditTool = false;
 
-	protected override getIntentHandlerOptions(request: vscode.ChatRequest): IDefaultIntentRequestHandlerOptions | undefined {
-		return {
-			maxToolCallIterations: getRequestedToolCallIterationLimit(request) ?? this.configurationService.getNonExtensionConfig('chat.agent.maxRequests') ?? 15,
-			temperature: this.configurationService.getConfig(ConfigKey.Internal.AgentTemperature) ?? 0,
-			overrideRequestLocation: ChatLocation.Editor,
-		};
-	}
-}
+				if (isNonEmptyArray(delta.copilotToolCalls)) {
+					for (const toolCall of delta.copilotToolCalls) {
 
-class InlineChatIntentInvocation extends EditCode2IntentInvocation {
+						didSeeEditTool = didSeeEditTool || InlineChatIntent._EDIT_TOOLS.has(toolCall.name);
 
-	constructor(
-		intent: IIntent,
-		location: ChatLocation,
-		endpoint: IChatEndpoint,
-		request: vscode.ChatRequest,
-		intentOptions: EditCodeIntentOptions,
-		@IInstantiationService instantiationService: IInstantiationService,
-		@ICodeMapperService codeMapperService: ICodeMapperService,
-		@IEnvService envService: IEnvService,
-		@IPromptPathRepresentationService promptPathRepresentationService: IPromptPathRepresentationService,
-		@IEndpointProvider endpointProvider: IEndpointProvider,
-		@IWorkspaceService workspaceService: IWorkspaceService,
-		@IToolsService toolsService: IToolsService,
-		@IConfigurationService configurationService: IConfigurationService,
-		@IEditLogService editLogService: IEditLogService,
-		@ICommandService commandService: ICommandService,
-		@ITelemetryService telemetryService: ITelemetryService,
-		@INotebookService notebookService: INotebookService,
-		@ILogService logService: ILogService,
-	) {
-		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, logService);
-	}
+						const validationResult = this._toolsService.validateToolInput(toolCall.name, toolCall.arguments);
 
-	public override async getAvailableTools(): Promise<vscode.LanguageModelToolInformation[]> {
-		return getInlineChatTools(this.instantiationService, this.request);
-	}
+						if (isToolValidationError(validationResult)) {
+							console.log(validationResult);
+							break;
+						}
 
-	public override buildPrompt(promptContext: IBuildPromptContext, progress: vscode.Progress<vscode.ChatResponseReferencePart | vscode.ChatResponseProgressPart>, token: vscode.CancellationToken): Promise<IBuildPromptResult> {
+						const input = isValidatedToolInput(validationResult)
+							? validationResult.inputObj
+							: JSON.parse(toolCall.arguments);
 
-		assertType(this.request.location2 instanceof ChatRequestEditorData);
+						const copilotTool = this._toolsService.getCopilotTool(toolCall.name as ToolName);
+						if (copilotTool?.resolveInput) {
+							copilotTool.resolveInput(input, {
+								request,
+								stream,
+								query: request.prompt,
+								chatVariables,
+								history: [],
+							}, CopilotToolMode.FullContext);
+						}
 
-		const { document, selection } = this.request.location2;
+						await this._toolsService.invokeTool(toolCall.name, {
+							input,
+							toolInvocationToken: request.toolInvocationToken,
+						}, token);
+					}
+				}
 
-		const inlineChatEditorReference: vscode.ChatPromptReference = {
-			id: document.uri.toString(),
-			value: selection.isEmpty ? document.uri : new Location(document.uri, selection),
-			name: 'Inline Chat Editor'
-		};
+				if (didSeeEditTool) {
+					return 1; // stop generating further
+				}
 
-		const { query, commandToolReferences } = this.processSlashCommand(promptContext.query);
-
-		return super.buildPrompt({
-			...promptContext,
-			chatVariables: new ChatVariablesCollection([...this.request.references, inlineChatEditorReference]),
-			query,
-			tools: promptContext.tools && {
-				...promptContext.tools,
-				toolReferences: this.stableToolReferences.filter((r) => r.name !== ToolName.Codebase).concat(commandToolReferences),
+				return undefined;
 			},
-		}, progress, token);
-	}
-
-	// TODO@jrieken does this make sense?
-	private processSlashCommand(query: string): { query: string; commandToolReferences: InternalToolReference[] } {
-		const commandToolReferences: InternalToolReference[] = [];
-		const command = this.request.command && this.commandService.getCommand(this.request.command, this.location);
-		if (command) {
-			if (command.toolEquivalent) {
-				commandToolReferences.push({
-					id: `${this.request.command}->${generateUuid()}`,
-					name: getToolName(command.toolEquivalent)
-				});
+			requestOptions: {
+				tool_choice: 'auto',
+				tools: normalizeToolSchema(
+					endpoint.family,
+					inlineChatTools.map(tool => ({
+						type: 'function',
+						function: {
+							name: tool.name,
+							description: tool.description,
+							parameters: tool.inputSchema && Object.keys(tool.inputSchema).length ? tool.inputSchema : undefined
+						},
+					})),
+					(tool, rule) => {
+						this._logService.warn(`Tool ${tool} failed validation: ${rule}`);
+					},
+				)
 			}
-			query = query ? `${command.details}.\n${query}` : command.details;
+		}, token);
+
+		if (fetchResult.type !== ChatFetchResponseType.Success) {
+			const details = getErrorDetailsFromChatFetchError(fetchResult, (await this._authenticationService.getCopilotToken()).copilotPlan);
+			return {
+				errorDetails: {
+					message: details.message,
+					responseIsFiltered: details.responseIsFiltered
+				}
+			};
 		}
 
-		return { query, commandToolReferences };
+		return {};
+
+	}
+
+	invoke(): Promise<never> {
+		throw new Error('Method not implemented.');
+	}
+
+	private async getAvailableTools(request: vscode.ChatRequest): Promise<vscode.LanguageModelToolInformation[]> {
+
+		const inlineChatToolFilter = new Set<string>([
+			// -- editing
+			...InlineChatIntent._EDIT_TOOLS,
+			// -- getting errors
+			// ToolName.GetErrors,
+			// -- TODO@jrieken SLASH commands
+		]);
+
+
+		const agentTools = await getAgentTools(this._instantiationService, request);
+		const inlineChatTools = agentTools.filter(tool => inlineChatToolFilter.has(tool.name));
+		return inlineChatTools;
 	}
 }
+
+// class InlineChatIntentInvocation extends AgentIntentInvocation {
+
+
+// 	private _snapshot: TextDocumentSnapshot | undefined;
+
+// 	protected override prompt = InlineChat2Prompt;
+
+// 	public override async getAvailableTools(): Promise<vscode.LanguageModelToolInformation[]> {
+
+// 		const inlineChatToolFilter = new Set<string>([
+// 			// -- editing
+// 			ToolName.ApplyPatch,
+// 			ToolName.EditFile,
+// 			ToolName.ReplaceString,
+// 			ToolName.MultiReplaceString,
+// 			// -- getting errors
+// 			ToolName.GetErrors,
+// 			// -- TODO@jrieken SLASH commands
+// 		]);
+
+
+// 		const agentTools = await getAgentTools(this.instantiationService, this.request);
+// 		const inlineChatTools = agentTools.filter(tool => inlineChatToolFilter.has(tool.name));
+// 		return inlineChatTools;
+// 	}
+
+// 	public override async buildPrompt(promptContext: IBuildPromptContext, progress: vscode.Progress<vscode.ChatResponseReferencePart | vscode.ChatResponseProgressPart>, token: vscode.CancellationToken): Promise<IBuildPromptResult> {
+
+// 		assertType(this.request.location2 instanceof ChatRequestEditorData);
+
+// 		const { document, selection } = this.request.location2;
+
+// 		// TODO@jrieken FISHY but helps with repeated rendering, esp after making the edit
+// 		// and therefore ruining the selection etc...
+// 		this._snapshot ??= TextDocumentSnapshot.create(document);
+
+// 		const { query, commandToolReferences } = this.processSlashCommand(promptContext.query);
+
+// 		return super.buildPrompt({
+// 			...promptContext,
+// 			workingSet: [{ document: this._snapshot, range: selection, state: WorkingSetEntryState.Initial, isMarkedReadonly: undefined }],
+// 			chatVariables: new ChatVariablesCollection([...this.request.references]),
+// 			query,
+// 			tools: promptContext.tools && {
+// 				...promptContext.tools,
+// 				toolReferences: this.stableToolReferences.filter((r) => r.name !== ToolName.Codebase).concat(commandToolReferences),
+// 			},
+// 		}, progress, token);
+// 	}
+
+// 	// TODO@jrieken does this make sense?
+// 	private processSlashCommand(query: string): { query: string; commandToolReferences: InternalToolReference[] } {
+// 		const commandToolReferences: InternalToolReference[] = [];
+// 		const command = this.request.command && this.commandService.getCommand(this.request.command, this.location);
+// 		if (command) {
+// 			if (command.toolEquivalent) {
+// 				commandToolReferences.push({
+// 					id: `${this.request.command}->${generateUuid()}`,
+// 					name: getToolName(command.toolEquivalent)
+// 				});
+// 			}
+// 			query = query ? `${command.details}.\n${query}` : command.details;
+// 		}
+
+// 		return { query, commandToolReferences };
+// 	}
+// }
