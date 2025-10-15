@@ -48,8 +48,8 @@ export class NextEditCache extends Disposable {
 	constructor(
 		public readonly workspace: ObservableWorkspace,
 		private readonly _logService: ILogService,
-		_configService: IConfigurationService,
-		_expService: IExperimentationService,
+		configService: IConfigurationService,
+		expService: IExperimentationService,
 	) {
 		super();
 
@@ -67,7 +67,7 @@ export class NextEditCache extends Disposable {
 				}
 				// if editor-change triggering is allowed,
 				// 	it means an edit in file A can result in a cached edit for file B to be less relevant than with the edits in file A included
-				if (_configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsTriggerOnEditorChange, _expService)) {
+				if (configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsTriggerOnEditorChange, expService)) {
 					for (const [k, v] of this._sharedCache.entries()) {
 						if (v.docId !== doc.id) {
 							this._sharedCache.deleteKey(k);
