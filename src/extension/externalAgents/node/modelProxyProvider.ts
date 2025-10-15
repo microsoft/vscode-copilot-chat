@@ -4,40 +4,36 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { OpenAILanguageModelServer } from './oaiLanguageModelServer';
 
 export class LanguageModelProxyProvider implements vscode.LanguageModelProxyProvider {
-	private readonly langModelServers = new Map<string, OpenAILanguageModelServer>();
-
 	constructor(
 		@IInstantiationService private readonly instantiationService: IInstantiationService
 	) { }
 
-	async provideModelProxy(forExtensionId: string, token: vscode.CancellationToken): Promise<vscode.LanguageModelProxyInfo | undefined> {
-		const server = await this.getLangModelServer(forExtensionId);
-		const config = server.getConfig();
+	async provideModelProxy(forExtensionId: string, token: vscode.CancellationToken): Promise<vscode.LanguageModelProxy | undefined> {
+		const server = this.instantiationService.createInstance(OpenAILanguageModelServer);
+		await server.start();
 
-		return {
-			uri: URI.parse(`http://localhost:${config.port}`),
-			key: config.nonce
-		};
+		return new OpenAILanguageModelProxy(server);
 	}
+}
 
-	private async getLangModelServer(forExtensionId: string): Promise<OpenAILanguageModelServer> {
-		let server = this.langModelServers.get(forExtensionId);
-		if (!server) {
-			server = this.instantiationService.createInstance(OpenAILanguageModelServer);
-			this.langModelServers.set(forExtensionId, server);
-			try {
-				await server.start();
-			} catch (startError) {
-				this.langModelServers.delete(forExtensionId);
-				throw startError;
-			}
-		}
+class OpenAILanguageModelProxy extends Disposable implements vscode.LanguageModelProxy {
+	public readonly uri: vscode.Uri;
+	public readonly key: string;
 
-		return server;
+	constructor(
+		runningServer: OpenAILanguageModelServer,
+	) {
+		super();
+		this._register(runningServer);
+
+		const config = runningServer.getConfig();
+		this.uri = URI.parse(`http://localhost:${config.port}`);
+		this.key = config.nonce;
 	}
 }

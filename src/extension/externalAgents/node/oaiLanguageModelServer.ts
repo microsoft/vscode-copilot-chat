@@ -22,6 +22,7 @@ import { TelemetryData } from '../../../platform/telemetry/common/telemetryData'
 import { ITokenizer, TokenizerType } from '../../../util/common/tokenizer';
 import { AsyncIterableObject } from '../../../util/vs/base/common/async';
 import { CancellationToken, CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
+import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 
@@ -34,7 +35,7 @@ export interface ILanguageModelServerConfig {
  * HTTP server that provides an OpenAI Responses API compatible endpoint.
  * Acts as a pure pass-through proxy to the underlying model endpoint.
  */
-export class OpenAILanguageModelServer {
+export class OpenAILanguageModelServer extends Disposable {
 	private server: http.Server;
 	private config: ILanguageModelServerConfig;
 
@@ -43,12 +44,14 @@ export class OpenAILanguageModelServer {
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) {
+		super();
 		this.config = {
 			port: 0, // Will be set to random available port
 			nonce: 'vscode-lm-' + generateUuid()
 		};
 
 		this.server = this.createServer();
+		this._register(toDisposable(() => this.stop()));
 	}
 
 	private createServer(): http.Server {
