@@ -4,11 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Session, SessionManager } from '@github/copilot/sdk';
-import type { CancellationToken, ChatContext, ChatRequest } from 'vscode';
+import type { CancellationToken, ChatContext, ChatRequest, ChatSessionStatus } from 'vscode';
 import { IEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
+import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableMap, IDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { stripSystemReminders } from './copilotcliToolInvocationFormatter';
 import { ensureNodePtyShim } from './nodePtyShim';
@@ -25,6 +26,8 @@ export type ExtendedChatRequest = ChatRequest & { prompt: string };
 export interface ICopilotCLISessionService {
 	readonly _serviceBrand: undefined;
 
+	onDidChangeSessions: Event<void>;
+
 	// Session metadata querying
 	getAllSessions(token: CancellationToken): Promise<readonly ICopilotCLISession[]>;
 	getSession(sessionId: string, token: CancellationToken): Promise<ICopilotCLISession | undefined>;
@@ -33,6 +36,8 @@ export interface ICopilotCLISessionService {
 	getSessionManager(): Promise<SessionManager>;
 	getOrCreateSDKSession(sessionId: string | undefined, prompt: string): Promise<Session>;
 	deleteSession(sessionId: string): Promise<boolean>;
+	setSessionStatus(sessionId: string, status: ChatSessionStatus): void;
+	getSessionStatus(sessionId: string): ChatSessionStatus | undefined;
 
 	// Session wrapper tracking
 	trackSessionWrapper<T extends IDisposable>(sessionId: string, wrapper: T): void;
@@ -53,6 +58,10 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 	private _sessionWrappers = new DisposableMap<string, IDisposable>();
 	private _sessions = new Map<string, ICopilotCLISession>();
 	private _pendingRequests = new Map<string, { request: any; context: any }>();
+
+	private readonly _onDidChangeSessions = new Emitter<void>();
+	public readonly onDidChangeSessions = this._onDidChangeSessions.event;
+	private readonly _sessionStatuses = new Map<string, ChatSessionStatus>();
 
 	constructor(
 		@ILogService private readonly logService: ILogService,
@@ -169,6 +178,15 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 		this._sessions.set(sdkSession.sessionId, newSession);
 
 		return sdkSession;
+	}
+
+	public setSessionStatus(sessionId: string, status: ChatSessionStatus): void {
+		this._sessionStatuses.set(sessionId, status);
+		this._onDidChangeSessions.fire();
+	}
+
+	public getSessionStatus(sessionId: string): ChatSessionStatus | undefined {
+		return this._sessionStatuses.get(sessionId);
 	}
 
 	public trackSessionWrapper<T extends IDisposable>(sessionId: string, wrapper: T): void {
