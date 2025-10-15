@@ -11,7 +11,7 @@ import { ILogService } from '../../../../platform/log/common/logService';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableMap, IDisposable } from '../../../../util/vs/base/common/lifecycle';
-import { stripSystemReminders } from './copilotcliToolInvocationFormatter';
+import { stripReminders } from './copilotcliToolInvocationFormatter';
 import { ensureNodePtyShim } from './nodePtyShim';
 
 export interface ICopilotCLISession {
@@ -235,7 +235,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 
 				if (content) {
 					// Strip system reminders and return first line or first 50 characters, whichever is shorter
-					const cleanContent = stripSystemReminders(content);
+					const cleanContent = stripReminders(content);
 					const firstLine = cleanContent.split('\n').find((l: string) => l.trim().length > 0) ?? '';
 					return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine;
 				}
