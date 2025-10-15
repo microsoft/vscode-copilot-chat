@@ -8,6 +8,7 @@ import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 
 export interface PullRequestSearchItem {
+	id: number;
 	number: number;
 	title: string;
 	state: string;
@@ -61,7 +62,18 @@ export interface SessionInfo {
 	error: string | null;
 }
 
-export async function makeGitHubAPIRequest(fetcherService: IFetcherService, logService: ILogService, telemetry: ITelemetryService, host: string, routeSlug: string, method: 'GET' | 'POST', token: string | undefined, body?: { [key: string]: any }, version?: string, type: 'json' | 'text' = 'json') {
+export async function makeGitHubAPIRequest(
+	fetcherService: IFetcherService,
+	logService: ILogService,
+	telemetry: ITelemetryService,
+	host: string,
+	routeSlug: string,
+	method: 'GET' | 'POST',
+	token: string | undefined,
+	body?: { [key: string]: any },
+	version?: string,
+	type: 'json' | 'text' = 'json',
+	userAgent?: string) {
 	const headers: any = {
 		'Accept': 'application/vnd.github+json',
 	};
@@ -70,6 +82,9 @@ export async function makeGitHubAPIRequest(fetcherService: IFetcherService, logS
 	}
 	if (version) {
 		headers['X-GitHub-Api-Version'] = version;
+	}
+	if (userAgent) {
+		headers['User-Agent'] = userAgent;
 	}
 
 	const response = await fetcherService.fetch(`${host}/${routeSlug}`, {
