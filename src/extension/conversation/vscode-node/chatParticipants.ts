@@ -83,7 +83,9 @@ class ChatParticipants implements IDisposable {
 			this._disposables.add(authenticationService.onDidAuthenticationChange(async () => {
 				const hasSession = !!authenticationService.copilotToken;
 				this.logService.debug(`ChatParticipants: onDidAuthenticationChange has token: ${hasSession}`);
-				requestBlockerDeferred.complete();
+				if (hasSession) {
+					requestBlockerDeferred.complete();
+				}
 			}));
 		}
 	}
