@@ -611,6 +611,7 @@ function addNotebookTelemetry(document: TextDocument, position: Position, newTex
 	const isNextEditorRangeVisible = nextEditor && nextEditor.visibleRanges.some(range => range.contains(documents[0][1]));
 	const notebookId = getNotebookId(notebook);
 	const lineSuffix = `(${position.line}:${position.character})`;
+	const suggestionLineSuffix = `(->${documents[0][1].start.line}:${documents[0][1].start.character})`;
 	const getCellPrefix = (c: NotebookCell) => {
 		if (c === cell) {
 			return `*`;
@@ -622,7 +623,7 @@ function addNotebookTelemetry(document: TextDocument, position: Position, newTex
 	};
 	const lineCounts = notebook.getCells()
 		.filter(c => c.kind === NotebookCellKind.Code)
-		.map(c => `${getCellPrefix(c)}${c.document.lineCount}${c === cell ? lineSuffix : ''}`).join(',');
+		.map(c => `${getCellPrefix(c)}${c.document.lineCount}${c === cell ? lineSuffix : ''}${c.document === documents[0][0] ? suggestionLineSuffix : ''}`).join(',');
 	telemetryBuilder.
 		setNotebookCellMarkerIndex(cellMarkerIndex)
 		.setNotebookCellMarkerCount(cellMarkerCount)

@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Options, Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { Options, Query, SDKUserMessage } from '@anthropic-ai/claude-code';
 import { createServiceIdentifier } from '../../../../util/common/services';
 
 export interface IClaudeCodeSdkService {
@@ -32,7 +32,7 @@ export class ClaudeCodeSdkService implements IClaudeCodeSdkService {
 		prompt: AsyncIterable<SDKUserMessage>;
 		options: Options;
 	}): Promise<Query> {
-		const { query } = await import('@anthropic-ai/claude-agent-sdk');
+		const { query } = await import('@anthropic-ai/claude-code');
 		return query(options);
 	}
 }

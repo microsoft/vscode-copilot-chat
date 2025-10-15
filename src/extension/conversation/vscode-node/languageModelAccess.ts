@@ -28,7 +28,7 @@ import { isEncryptedThinkingDelta } from '../../../platform/thinking/common/thin
 import { BaseTokensPerCompletion } from '../../../platform/tokenizer/node/tokenizer';
 import { TelemetryCorrelationId } from '../../../util/common/telemetryCorrelationId';
 import { Emitter } from '../../../util/vs/base/common/event';
-import { Disposable, MutableDisposable } from '../../../util/vs/base/common/lifecycle';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { isDefined, isNumber, isString, isStringArray } from '../../../util/vs/base/common/types';
 import { localize } from '../../../util/vs/nls';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -42,8 +42,6 @@ import { LanguageModelAccessPrompt } from './languageModelAccessPrompt';
 export class LanguageModelAccess extends Disposable implements IExtensionContribution {
 
 	readonly id = 'languageModelAccess';
-
-	readonly activationBlocker?: Promise<any>;
 
 	private readonly _onDidChange = this._register(new Emitter<void>());
 	private _currentModels: vscode.LanguageModelChatInformation[] = []; // Store current models for reference
@@ -71,10 +69,8 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		}
 
 		// initial
-		this.activationBlocker = Promise.all([
-			this._registerChatProvider(),
-			this._registerEmbeddings(),
-		]);
+		this._registerChatProvider();
+		this._registerEmbeddings();
 	}
 
 	override dispose(): void {
@@ -85,7 +81,7 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 		return this._currentModels;
 	}
 
-	private async _registerChatProvider(): Promise<void> {
+	private _registerChatProvider(): void {
 		const provider: vscode.LanguageModelChatProvider = {
 			onDidChangeLanguageModelChatInformation: this._onDidChange.event,
 			provideLanguageModelChatInformation: this._provideLanguageModelChatInfo.bind(this),
@@ -231,34 +227,22 @@ export class LanguageModelAccess extends Disposable implements IExtensionContrib
 
 	private async _registerEmbeddings(): Promise<void> {
 
-		const dispo = this._register(new MutableDisposable());
+		const embeddingsComputer = this._embeddingsComputer;
+		const embeddingType = EmbeddingType.text3small_512;
+		const model = getWellKnownEmbeddingTypeInfo(embeddingType)?.model;
+		if (!model) {
+			throw new Error(`No model found for embedding type ${embeddingType.id}`);
+		}
 
+		const that = this;
+		this._register(vscode.lm.registerEmbeddingsProvider(`copilot.${model}`, new class implements vscode.EmbeddingsProvider {
+			async provideEmbeddings(input: string[], token: vscode.CancellationToken): Promise<vscode.Embedding[]> {
+				await that._getToken();
 
-		const update = async () => {
-
-			if (!await this._getToken()) {
-				dispo.clear();
-				return;
+				const result = await embeddingsComputer.computeEmbeddings(embeddingType, input, {}, new TelemetryCorrelationId('EmbeddingsProvider::provideEmbeddings'), token);
+				return result.values.map(embedding => ({ values: embedding.value.slice(0) }));
 			}
-
-			const embeddingsComputer = this._embeddingsComputer;
-			const embeddingType = EmbeddingType.text3small_512;
-			const model = getWellKnownEmbeddingTypeInfo(embeddingType)?.model;
-			if (!model) {
-				throw new Error(`No model found for embedding type ${embeddingType.id}`);
-			}
-
-			dispo.clear();
-			dispo.value = vscode.lm.registerEmbeddingsProvider(`copilot.${model}`, new class implements vscode.EmbeddingsProvider {
-				async provideEmbeddings(input: string[], token: vscode.CancellationToken): Promise<vscode.Embedding[]> {
-					const result = await embeddingsComputer.computeEmbeddings(embeddingType, input, {}, new TelemetryCorrelationId('EmbeddingsProvider::provideEmbeddings'), token);
-					return result.values.map(embedding => ({ values: embedding.value.slice(0) }));
-				}
-			});
-		};
-
-		this._register(this._authenticationService.onDidAuthenticationChange(() => update()));
-		await update();
+		}));
 	}
 
 	private async _getToken(): Promise<CopilotToken | undefined> {
