@@ -1437,7 +1437,7 @@
 				"locations": [
 					"notebook"
 				],
-				"when": "config.inlineChat.enableV2",
+				"when": "config.inlineChat.enableV2 && config.inlineChat.notebookAgent",
 				"commands": [
 					{
 						"name": "fix",
