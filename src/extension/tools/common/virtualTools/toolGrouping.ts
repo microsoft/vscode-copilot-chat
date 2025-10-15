@@ -125,7 +125,6 @@ export class ToolGrouping implements IToolGrouping {
 	}
 
 	async computeAll(query: string, token: CancellationToken): Promise<(LanguageModelToolInformation | VirtualTool)[]> {
-		// Don't pass endpoint for display - prevents model-specific built-in grouping
 		await this._doCompute(query, token);
 		return this._root.contents;
 	}
