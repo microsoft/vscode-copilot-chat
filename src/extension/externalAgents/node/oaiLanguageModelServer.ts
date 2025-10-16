@@ -70,14 +70,15 @@ export class OpenAILanguageModelServer extends Disposable {
 					const body = await this.readRequestBody(req);
 
 					// Verify nonce for authentication
-					// const authHeader = req.headers.authorization;
-					// const authKey = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined;
-					// if (authKey !== this.config.nonce) {
-					// 	this.logService.trace(`[LanguageModelServer] Invalid auth key`);
-					// 	res.writeHead(401, { 'Content-Type': 'application/json' });
-					// 	res.end(JSON.stringify({ error: 'Invalid authentication' }));
-					// 	return;
-					// }
+					const authHeader = req.headers.authorization;
+					const bearerSpace = 'Bearer ';
+					const authKey = authHeader?.startsWith(bearerSpace) ? authHeader.substring(bearerSpace.length) : undefined;
+					if (authKey !== this.config.nonce) {
+						this.logService.trace(`[LanguageModelServer] Invalid auth key`);
+						res.writeHead(401, { 'Content-Type': 'application/json' });
+						res.end(JSON.stringify({ error: 'Invalid authentication' }));
+						return;
+					}
 
 					await this.handleResponsesAPIRequest(body, res);
 				} catch (error) {
