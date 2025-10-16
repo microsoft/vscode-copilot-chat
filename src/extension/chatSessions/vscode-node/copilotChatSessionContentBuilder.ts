@@ -94,12 +94,12 @@ export interface ParsedToolCallDetails {
 export class ChatSessionContentBuilder {
 	constructor(
 		private type: string,
-		private getLogsForSession: (id: string) => Promise<string>,
 	) { }
 
 	public async buildSessionHistory(
 		sessions: SessionInfo[],
 		pullRequest: PullRequestSearchItem,
+		getLogsForSession: (id: string) => Promise<string>,
 	): Promise<Array<ChatRequestTurn | ChatResponseTurn2>> {
 		const sortedSessions = sessions
 			.filter((session, index, array) =>
@@ -113,7 +113,7 @@ export class ChatSessionContentBuilder {
 		// Process all sessions concurrently while maintaining order
 		await Promise.all(
 			sortedSessions.map(async (session, sessionIndex) => {
-				const logs = await this.getLogsForSession(session.id);
+				const logs = await getLogsForSession(session.id);
 				// Create response turn
 				const response = await this.createResponseTurn(pullRequest, logs, session);
 				history.push(new ChatRequestTurn2(
@@ -187,7 +187,7 @@ export class ChatSessionContentBuilder {
 		}
 	}
 
-	private parseSessionLogs(rawText: string): SessionResponseLogChunk[] {
+	public parseSessionLogs(rawText: string): SessionResponseLogChunk[] {
 		const parts = rawText
 			.split(/\r?\n/)
 			.filter(part => part.startsWith('data: '))
@@ -262,7 +262,7 @@ export class ChatSessionContentBuilder {
 		return currentResponseContent;
 	}
 
-	private createToolInvocationPart(pullRequest: PullRequestSearchItem, toolCall: ToolCall, deltaContent: string = ''): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+	public createToolInvocationPart(pullRequest: PullRequestSearchItem, toolCall: ToolCall, deltaContent: string = ''): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 		if (!toolCall.function?.name || !toolCall.id) {
 			return undefined;
 		}

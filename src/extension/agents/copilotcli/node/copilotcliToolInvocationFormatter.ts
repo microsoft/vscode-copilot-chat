@@ -8,14 +8,15 @@ import * as l10n from '@vscode/l10n';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import type { ExtendedChatResponsePart } from 'vscode';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString } from '../../../../vscodeTypes';
+import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString } from '../../../../vscodeTypes';
 
 /**
  * CopilotCLI tool names
  */
-const enum CopilotCLIToolNames {
+export const enum CopilotCLIToolNames {
 	StrReplaceEditor = 'str_replace_editor',
-	Bash = 'bash'
+	Bash = 'bash',
+	Think = 'think'
 }
 
 interface StrReplaceEditorArgs {
@@ -149,13 +150,22 @@ export function buildChatHistoryFromEvents(events: readonly SDKEvent[]): (ChatRe
 				currentResponseParts.push(toolInvocation);
 			}
 		} else if (event.type === 'tool_result') {
-			// Update the pending tool invocation with the result
-			if (event.toolCallId) {
-				const invocation = pendingToolInvocations.get(event.toolCallId);
-				if (invocation) {
-					invocation.isConfirmed = event.result.resultType !== 'rejected' && event.result.resultType !== 'denied';
-					invocation.isError = event.result.resultType === 'failure';
-					pendingToolInvocations.delete(event.toolCallId);
+			if (event.toolName === CopilotCLIToolNames.Think) {
+				const sessionLog = event.result.sessionLog;
+				if (sessionLog && typeof sessionLog === 'string') {
+					currentResponseParts.push(
+						new ChatResponseThinkingProgressPart(sessionLog)
+					);
+				}
+			} else {
+				// Update the pending tool invocation with the result
+				if (event.toolCallId) {
+					const invocation = pendingToolInvocations.get(event.toolCallId);
+					if (invocation) {
+						invocation.isConfirmed = event.result.resultType !== 'rejected' && event.result.resultType !== 'denied';
+						invocation.isError = event.result.resultType === 'failure';
+						pendingToolInvocations.delete(event.toolCallId);
+					}
 				}
 			}
 			// Tool results themselves are not displayed - they update the invocation state
