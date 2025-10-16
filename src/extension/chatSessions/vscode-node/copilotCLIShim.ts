@@ -8,7 +8,7 @@ import * as readline from 'readline';
 import * as path from '../../../util/vs/base/common/path';
 
 // ⚠️⚠️⚠️
-// This file is built into a standlone bundle, executed from the terminal.
+// This file is built into a standalone bundle, executed from the terminal.
 // Avoid including unnecessary dependencies!
 //
 // This is used on macOS and Linux. On Windows, you'll need to make changes
