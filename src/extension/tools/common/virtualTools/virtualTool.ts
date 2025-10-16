@@ -12,7 +12,6 @@ export interface IVirtualToolMetadata {
 	wasEmbeddingsMatched?: boolean;
 	wasExpandedByDefault?: boolean;
 	canBeCollapsed?: boolean;
-	toolsetKey?: string;
 	possiblePrefix?: string;
 }
 

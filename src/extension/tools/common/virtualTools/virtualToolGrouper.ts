@@ -106,9 +106,7 @@ export class VirtualToolGrouper implements IToolCategorization {
 		// Process extension/MCP tools per-toolset with proportional slot allocation
 		if (toolsetEntries.length > 0) {
 			// Calculate available slots after accounting for builtin tools/groups
-			const builtinSlotCount = shouldGroupBuiltin
-				? groupedResults.filter(item => item instanceof VirtualTool).length
-				: builtinTools.length;
+			const builtinSlotCount = groupedResults.length;
 			const availableSlots = TOOLS_AND_GROUPS_LIMIT - builtinSlotCount;
 			const slotAllocation = this._allocateSlots(toolsetEntries, availableSlots);
 

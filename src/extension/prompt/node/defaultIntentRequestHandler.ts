@@ -594,7 +594,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		const token = CancellationToken.None;
 		const allTools = await this.options.invocation.getAvailableTools?.() ?? [];
 		const grouping = this.toolGroupingService.create(this.options.conversation.sessionId, allTools);
-		const computed = await grouping.compute(this.options.request.prompt, token, this.options.invocation.endpoint);
+		const computed = await grouping.compute(this.options.request.prompt, token);
 
 		const container = grouping.getContainerFor(candidateCall.name);
 
@@ -717,7 +717,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 			}
 		}
 
-		const computePromise = this.toolGrouping.compute(this.options.request.prompt, token, this.options.invocation.endpoint);		// Show progress if this takes a moment...
+		const computePromise = this.toolGrouping.compute(this.options.request.prompt, token);		// Show progress if this takes a moment...
 		const timeout = setTimeout(() => {
 			outputStream?.progress(localize('computingTools', 'Optimizing tool selection...'), async () => {
 				await computePromise;

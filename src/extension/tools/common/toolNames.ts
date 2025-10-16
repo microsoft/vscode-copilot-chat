@@ -231,7 +231,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
  * Get the category for a tool, checking both ToolName enum and external tools.
  */
 export function getToolCategory(toolName: string): ToolCategory | undefined {
-	return toolCategories.hasOwnProperty(toolName) ? toolCategories[toolName] : undefined
+	return toolCategories.hasOwnProperty(toolName) ? toolCategories[toolName as ToolName] : undefined;
 }
 
 /**

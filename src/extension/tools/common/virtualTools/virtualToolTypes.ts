@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { LanguageModelToolInformation, LanguageModelToolResult } from 'vscode';
-import { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { createServiceIdentifier } from '../../../../util/common/services';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { IObservable } from '../../../../util/vs/base/common/observableInternal';
@@ -49,12 +48,12 @@ export interface IToolGrouping {
 	 * Returns a list of tools that should be used for the given request.
 	 * Internally re-reads the request and conversation state.
 	 */
-	compute(query: string, token: CancellationToken, endpoint?: IChatEndpoint): Promise<LanguageModelToolInformation[]>;
+	compute(query: string, token: CancellationToken): Promise<LanguageModelToolInformation[]>;
 
 	/**
 	 * Returns the complete tree of tools, used for diagnostic purposes.
 	 */
-	computeAll(query: string, token: CancellationToken, endpoint?: IChatEndpoint): Promise<(LanguageModelToolInformation | VirtualTool)[]>;
+	computeAll(query: string, token: CancellationToken): Promise<(LanguageModelToolInformation | VirtualTool)[]>;
 }
 
 export interface IToolGroupingService {
@@ -99,7 +98,7 @@ export interface IToolCategorization {
 	 * Called whenever new tools are added. The function should add each tool into
 	 * the appropriate virtual tool or top-level tool in the `root`.
 	 */
-	addGroups(query: string, root: VirtualTool, tools: LanguageModelToolInformation[], token: CancellationToken, endpoint?: IChatEndpoint): Promise<void>;
+	addGroups(query: string, root: VirtualTool, tools: LanguageModelToolInformation[], token: CancellationToken): Promise<void>;
 
 	/**
 	 * Recalculates the "embeddings" group, when enabled, so relevant tools

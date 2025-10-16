@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { LanguageModelToolInformation } from 'vscode';
-import { ToolCategory, getToolsForCategory } from '../toolNames';
+import { groupBy } from '../../../../util/vs/base/common/collections';
+import { getToolsForCategory, toolCategories, ToolCategory, ToolName } from '../toolNames';
 import { VIRTUAL_TOOL_NAME_PREFIX, VirtualTool } from './virtualTool';
 import * as Constant from './virtualToolsConstants';
 
@@ -42,22 +43,29 @@ export class BuiltInToolGroupHandler {
 
 	/** Creates groups for built-in tools based on the type-safe categorization system */
 	createBuiltInToolGroups(tools: LanguageModelToolInformation[]): (VirtualTool | LanguageModelToolInformation)[] {
+		// If there are too few tools, don't group them
+		if (tools.length <= Constant.MIN_TOOLSET_SIZE_TO_GROUP) {
+			return tools;
+		}
 
 		const contributedTools = tools.filter(t => !toolCategories.hasOwnProperty(t.name));
 		const builtInTools = tools.filter(t => toolCategories.hasOwnProperty(t.name));
 
-		const categories = groupBy(builtInTools, t => toolCategories[t.name as ToolName]);
-		const virtualTools = Object.entries(categories).flatMap<VirtualTool|LanguageModelToolInformation>(([category, tools]) => {
-			if (tools.length <= Constant.MIN_TOOLSET_SIZE_TO_GROUP) {
+		// Filter out Core tools from grouping (they should remain individual)
+		const toolsToGroup = builtInTools.filter(t => toolCategories[t.name as ToolName] !== ToolCategory.Core);
+		const coreTools = builtInTools.filter(t => toolCategories[t.name as ToolName] === ToolCategory.Core);
+
+		const categories = groupBy(toolsToGroup, t => toolCategories[t.name as ToolName]);
+		const virtualTools = Object.entries(categories).flatMap<VirtualTool | LanguageModelToolInformation>(([category, tools]) => {
+			if (tools.length < Constant.MIN_TOOLSET_SIZE_TO_GROUP) {
 				return tools;
 			}
 
 			return new VirtualTool(
 				VIRTUAL_TOOL_NAME_PREFIX + category.toLowerCase().replace(/\s+/g, '_'),
-				SUMMARY_PREFIX + getCategorySummary(category) + SUMMARY_SUFFIX,
+				SUMMARY_PREFIX + getCategorySummary(category as ToolCategory) + SUMMARY_SUFFIX,
 				0,
 				{
-					toolsetKey: BUILT_IN_GROUP,
 					possiblePrefix: 'builtin_',
 					wasExpandedByDefault: false,
 					canBeCollapsed: true
@@ -66,7 +74,8 @@ export class BuiltInToolGroupHandler {
 			);
 		});
 
-		return [...virtualTools, ...contributedTools];
+		// Return: virtual tool groups + individual core tools + contributed tools
+		return [...virtualTools, ...coreTools, ...contributedTools];
 	}
 
 	static get BUILT_IN_GROUP_KEY(): string {
