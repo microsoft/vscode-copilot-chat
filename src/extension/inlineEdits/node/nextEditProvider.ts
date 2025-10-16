@@ -206,7 +206,10 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		} else {
 			tracer.trace(`fetching next edit with shouldExpandEditWindow=${shouldExpandEditWindow}`);
-			req = new NextEditFetchRequest(context.requestUuid, logContext, nesConfigs.debounceUseCoreRequestTime ? (context.requestIssuedDateTime ?? undefined) : undefined);
+			const providerRequestStartDateTime = (this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounceUseCoreRequestTime, this._expService)
+				? (context.requestIssuedDateTime ?? undefined)
+				: undefined);
+			req = new NextEditFetchRequest(context.requestUuid, logContext, providerRequestStartDateTime);
 			telemetryBuilder.setHeaderRequestId(req.headerRequestId);
 
 			const startVersion = doc.value.get();
@@ -298,9 +301,8 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	}
 
 	private determineNesConfigs(telemetryBuilder: LlmNESTelemetryBuilder, logContext: InlineEditRequestLogContext): INesConfigs {
-		const nesConfigs = {
+		const nesConfigs: INesConfigs = {
 			isAsyncCompletions: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsAsyncCompletions, this._expService),
-			debounceUseCoreRequestTime: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounceUseCoreRequestTime, this._expService),
 		};
 
 		telemetryBuilder.setNESConfigs({ ...nesConfigs });
