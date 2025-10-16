@@ -46,18 +46,9 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 					continue; // Skip models without names
 				}
 
+				// Enable only known models.
 				if (this._knownModels && this._knownModels[modelId]) {
 					modelList[modelId] = this._knownModels[modelId];
-				} else {
-					// Mix in generic capabilities for models we don't know
-					// Use model metadata from the API response if available
-					modelList[modelId] = {
-						maxInputTokens: model.inputTokenLimit || 100000,
-						maxOutputTokens: model.outputTokenLimit || 16000,
-						name: model.displayName || modelId,
-						toolCalling: true,
-						vision: false
-					};
 				}
 			}
 			return modelList;
