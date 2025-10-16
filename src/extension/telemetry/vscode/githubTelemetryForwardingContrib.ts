@@ -20,37 +20,19 @@ export class GithubTelemetryForwardingContrib extends Disposable implements IExt
 		this._register(channel.onDidReceiveData((args) => {
 			const r = this._gitService.activeRepository.get();
 			const id = r ? getGitHubRepoInfoFromContext(r)?.id : undefined;
-			const data = translateToGithubProperties(args.data.eventName, args.data.data, id);
+			const data = translateToGithubProperties(args.data.data, id);
 			const { properties, measurements } = dataToPropsAndMeasurements(data);
 			this._telemetryService.sendGHTelemetryEvent('vscode.' + args.data.eventName, properties, measurements);
 		}));
 	}
 }
 
-function translateToGithubProperties(eventName: string, data: Record<string, unknown>, githubRepo: GithubRepoId | undefined): Record<string, unknown> {
-	const githubProperties: Record<string, unknown> = { ...data };
-	for (const [key, value] of Object.entries(data)) {
-		const translatedProperty = translateToGithubProperty(eventName, key, value);
-		if (translatedProperty) {
-			githubProperties[translatedProperty.key] = translatedProperty.value;
-			delete githubProperties[key];
-		}
-	}
+function translateToGithubProperties(data: Record<string, unknown>, githubRepo: GithubRepoId | undefined): Record<string, unknown> {
 	if (githubRepo) {
-		githubProperties['githubOrg'] = githubRepo.org;
-		githubProperties['githubRepo'] = githubRepo.repo;
+		data['githubOrg'] = githubRepo.org;
+		data['githubRepo'] = githubRepo.repo;
 	}
-	return githubProperties;
-}
-
-function translateToGithubProperty(eventName: string, key: string, value: unknown): { key: string; value: unknown } | undefined {
-	if (eventName === 'inlineCompletion.endOfLife') {
-		switch (key as keyof InlineCompletionEndOfLifeEvent) {
-			case 'id': return { key: 'opportunityId', value };
-		}
-	}
-
-	return undefined;
+	return data;
 }
 
 function dataToPropsAndMeasurements(data: Record<string, unknown>): { properties: Record<string, string>; measurements: Record<string, number> } {
