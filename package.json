@@ -4236,7 +4236,6 @@
 		"@types/tar": "^6.1.13",
 		"@types/vinyl": "^2.0.12",
 		"@types/vscode": "^1.102.0",
-		"@types/yargs": "^17.0.24",
 		"@typescript-eslint/eslint-plugin": "^8.35.0",
 		"@typescript-eslint/parser": "^8.32.0",
 		"@typescript-eslint/typescript-estree": "^8.26.1",
@@ -4286,7 +4285,6 @@
 		"react-dom": "17.0.2",
 		"rimraf": "^6.0.1",
 		"run-script-os": "^1.1.6",
-		"shiki": "~1.15.0",
 		"sinon": "^21.0.0",
 		"source-map-support": "^0.5.21",
 		"tar": "^7.4.3",
@@ -4302,12 +4300,14 @@
 		"vscode-languageserver-textdocument": "^1.0.12",
 		"vscode-languageserver-types": "^3.17.5",
 		"yaml": "^2.8.0",
-		"yargs": "^17.7.2"
+		"yargs": "^17.7.2",
+		"@types/yargs": "^17.0.24",
+		"shiki": "~1.15.0"
 	},
 	"dependencies": {
 		"@anthropic-ai/claude-code": "^1.0.120",
 		"@anthropic-ai/sdk": "^0.63.0",
-		"@github/copilot": "^0.0.343-9",
+		"@github/copilot": "^0.0.338",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",
 		"@vscode/copilot-api": "^0.1.10",
