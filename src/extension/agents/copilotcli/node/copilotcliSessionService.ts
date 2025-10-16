@@ -219,7 +219,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 
 	private async _generateSessionLabel(sdkSession: Session, prompt: string | undefined): Promise<string> {
 		try {
-			const chatMessages = sdkSession.chatMessages;
+			const chatMessages = await sdkSession.getChatMessages();
 
 			// Find the first user message
 			const firstUserMessage = chatMessages.find(msg => msg.role === 'user');
