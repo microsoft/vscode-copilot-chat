@@ -301,7 +301,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		const nesConfigs = {
 			isAsyncCompletions: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsAsyncCompletions, this._expService),
 			isRevisedCacheStrategy: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRevisedCacheStrategy, this._expService),
-			isCacheTracksRejections: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheTracksRejections, this._expService),
 			debounceUseCoreRequestTime: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounceUseCoreRequestTime, this._expService),
 		};
 
@@ -733,9 +732,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			// we can argue that the user had the time to review this
 			// so it wasn't an accidental rejection
 			this._rejectionCollector.reject(docId, suggestion.result.edit);
-			if (this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheTracksRejections, this._expService)) {
-				this._nextEditCache.rejectedNextEdit(suggestion.source.headerRequestId);
-			}
+			this._nextEditCache.rejectedNextEdit(suggestion.source.headerRequestId);
 		}
 
 		this._lastRejectionTime = Date.now();
