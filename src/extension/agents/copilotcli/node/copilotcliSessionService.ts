@@ -215,8 +215,6 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 		} catch (error) {
 			this.logService.error(`Failed to delete session ${sessionId}: ${error}`);
 			return false;
-		} finally {
-
 		}
 	}
 
