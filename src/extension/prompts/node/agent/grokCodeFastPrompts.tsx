@@ -288,7 +288,7 @@ class GrokCodeFastPromptResolver implements IAgentPrompt {
 			case 'v2':
 				return GrokCodeFastAgentPromptV2;
 			default:
-				return DefaulGrokCodeFastAgentPrompt;
+				return DefaultGrokCodeFastAgentPrompt;
 		}
 	}
 }
