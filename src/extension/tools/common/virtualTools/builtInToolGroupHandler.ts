@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { LanguageModelToolInformation } from 'vscode';
+import { assertNever } from '../../../../util/vs/base/common/assert';
 import { groupBy } from '../../../../util/vs/base/common/collections';
 import { getToolsForCategory, toolCategories, ToolCategory, ToolName } from '../toolNames';
 import { VIRTUAL_TOOL_NAME_PREFIX, VirtualTool } from './virtualTool';
@@ -34,7 +35,7 @@ function getCategorySummary(category: ToolCategory): string {
 		case ToolCategory.Core:
 			return 'Core tools that should always be available without grouping.';
 		default:
-			return 'Tools in this category.';
+			return assertNever(category);
 	}
 }
 
