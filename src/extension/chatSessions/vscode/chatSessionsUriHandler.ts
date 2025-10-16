@@ -49,11 +49,11 @@ export class ChatSessionsUriHandler implements CustomUriHandler {
 			return;
 		}
 		const pullRequests = await this._octoKitService.getCopilotPullRequestsForUser(repoId.org, repoId.repo);
-		const pullRequest = pullRequests.filter(pr => pr.id === id);
-		if (!pullRequest || pullRequest.length === 0) {
+		const pullRequest = pullRequests.find(pr => pr.id === id);
+		if (!pullRequest) {
 			return;
 		}
-		const encodedId = encodeBase64(VSBuffer.wrap(new TextEncoder().encode(pullRequest[0].number.toString())), false, true);
+		const encodedId = encodeBase64(VSBuffer.wrap(new TextEncoder().encode(pullRequest.number.toString())), false, true);
 		const uri = vscode.Uri.from({ scheme: 'vscode-chat-session', authority: type, path: '/' + encodedId });
 		await vscode.commands.executeCommand('vscode.open', uri);
 	}
