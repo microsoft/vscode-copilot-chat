@@ -119,7 +119,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		const history = await sessionContentBuilder.buildSessionHistory(sessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId));
 		return {
 			history,
-			activeResponseCallback: async () => { },
+			activeResponseCallback: undefined,
 			requestHandler: undefined
 		};
 	}
