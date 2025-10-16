@@ -7,13 +7,13 @@ import { promises as fs } from 'fs';
 import { TerminalOptions, ThemeIcon, ViewColumn, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ITerminalService } from '../../../platform/terminal/common/terminalService';
 import { createServiceIdentifier } from '../../../util/common/services';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
-import { IEnvService } from '../../../platform/env/common/envService';
 
 //@ts-ignore
 import powershellScript from './copilotCLIShim.ps1';
@@ -62,6 +62,7 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 
 		if (process.platform === 'win32') {
 			this.shellScriptPath = path.join(storageLocation, `${COPILOT_CLI_COMMAND}.ps1`);
+			this.powershellScriptPath = this.shellScriptPath;
 			await fs.writeFile(this.shellScriptPath, powershellScript);
 			const copilotPowershellScript = `@echo off
 powershell -ExecutionPolicy Bypass -File "${this.shellScriptPath}" %*
@@ -158,31 +159,45 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			//
 		}
 		const shellArgs = Array.isArray(profile.args) ? profile.args : [];
+		const shellPath = ((Array.isArray(profile.path) && profile.path.length) ? profile.path[0] : !Array.isArray(profile.path) ? profile.path : undefined) || this.envService.shell;
 		if (defaultProfile === 'zsh' && this.shellScriptPath) {
 			return {
-				shellPath: profile.path || 'zsh',
+				shellPath: shellPath || 'zsh',
 				shellArgs: [`-ci${shellArgs.includes('-l') ? 'l' : ''}`, quoteArgsForShell(this.shellScriptPath, cliArgs)],
 				iconPath
 			};
 		} else if (defaultProfile === 'bash' && this.shellScriptPath) {
 			return {
-				shellPath: profile.path || 'bash',
+				shellPath: shellPath || 'bash',
 				shellArgs: [`-${shellArgs.includes('-l') ? 'l' : ''}ic`, quoteArgsForShell(this.shellScriptPath, cliArgs)],
 				iconPath
 			};
 		} else if (defaultProfile === 'pwsh' && this.powershellScriptPath && configPlatform !== 'windows') {
 			return {
-				shellPath: profile.path || 'pwsh',
+				shellPath: shellPath || 'pwsh',
 				shellArgs: ['-File', this.powershellScriptPath, ...cliArgs],
 				iconPath
 			};
+		} else if (defaultProfile === 'PowerShell' && this.powershellScriptPath && configPlatform === 'windows' && shellPath) {
+			return {
+				shellPath,
+				shellArgs: ['-File', this.powershellScriptPath, ...cliArgs],
+				iconPath
+			};
+		} else if (defaultProfile === 'Command Prompt' && this.shellScriptPath && configPlatform === 'windows') {
+			// return {
+			// 	shellPath: this.shellScriptPath,
+			// 	shellArgs: cliArgs,
+			// 	iconPath
+			// };
+			return;
 		}
 	}
 	private getDefaultShellProfile(): string | undefined {
 		const configPlatform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux';
 		const defaultProfile = workspace.getConfiguration('terminal').get<string | undefined>(`integrated.defaultProfile.${configPlatform}`);
 		if (defaultProfile) {
-			return defaultProfile;
+			return defaultProfile === 'Windows PowerShell' ? 'PowerShell' : defaultProfile;
 		}
 		const shell = this.envService.shell;
 		switch (configPlatform) {

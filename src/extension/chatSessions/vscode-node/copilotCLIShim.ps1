@@ -22,7 +22,10 @@ function Find-RealCopilot {
     $CopilotPath = (Get-Command copilot -ErrorAction SilentlyContinue).Source
 
     # Check if the copilot command would point to this script
-    if ($CurrentScript -eq $CopilotPath -or (Resolve-Path $CurrentScript -ErrorAction SilentlyContinue).Path -eq (Resolve-Path $CopilotPath -ErrorAction SilentlyContinue).Path) {
+    $CurrentScriptResolved = if ($CurrentScript) { (Resolve-Path $CurrentScript -ErrorAction SilentlyContinue).Path } else { $null }
+    $CopilotPathResolved = if ($CopilotPath) { (Resolve-Path $CopilotPath -ErrorAction SilentlyContinue).Path } else { $null }
+
+    if ($CurrentScript -eq $CopilotPath -or ($CurrentScriptResolved -and $CopilotPathResolved -and $CurrentScriptResolved -eq $CopilotPathResolved)) {
         # The copilot in PATH is this script, find the real one by temporarily removing this script's directory from PATH
         $ScriptDir = Split-Path $CurrentScript -Parent
         $OldPath = $env:PATH
