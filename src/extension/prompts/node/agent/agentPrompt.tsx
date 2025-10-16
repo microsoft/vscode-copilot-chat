@@ -86,7 +86,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const instructions = this.getInstructions();
+		const instructions = await this.getInstructions();
 
 		const omitBaseAgentInstructions = this.configurationService.getConfig(ConfigKey.Internal.OmitBaseAgentInstructions);
 		const baseAgentInstructions = <>
@@ -141,7 +141,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		}
 	}
 
-	private getInstructions() {
+	private async getInstructions() {
 		const modelFamily = this.props.endpoint.family ?? 'unknown';
 
 		if (this.props.endpoint.family.startsWith('gpt-') && this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService)) {
@@ -150,6 +150,24 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 				modelFamily={this.props.endpoint.family}
 				codesearchMode={this.props.codesearchMode}
 			/>;
+		}
+
+		// Check for hidden model A (includes oswe-vscode with hash: 6b0f165d0590bf8d508540a796b4fda77bf6a0a4ed4e8524d5451b1913100a95)
+		const { isHiddenModelA } = await import('../../../../platform/endpoint/common/chatModelCapabilities');
+		if (await isHiddenModelA(this.props.endpoint)) {
+			// Try VSCModel prompt for hidden models
+			const hiddenModelPrompt = PromptRegistry.getPrompt('vscModel');
+			if (hiddenModelPrompt) {
+				const resolver = this.instantiationService.createInstance(hiddenModelPrompt);
+				const PromptClass = resolver.resolvePrompt();
+				if (PromptClass) {
+					return <PromptClass
+						availableTools={this.props.promptContext.tools?.availableTools}
+						modelFamily={modelFamily}
+						codesearchMode={this.props.codesearchMode}
+					/>;
+				}
+			}
 		}
 
 		const agentPromptResolver = PromptRegistry.getPrompt(modelFamily);
