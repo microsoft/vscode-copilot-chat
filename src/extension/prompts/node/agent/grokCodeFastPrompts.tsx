@@ -16,7 +16,7 @@ import { KeepGoingReminder } from './agentPrompt';
 import { ApplyPatchInstructions, CodesearchModeInstructions, DefaultAgentPromptProps, detectToolCapabilities, GenericEditingTips, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
 import { IAgentPrompt, PromptConstructor, PromptRegistry } from './promptRegistry';
 
-class DefaulGrokCodeFastAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
+class DefaultGrokCodeFastAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
 
