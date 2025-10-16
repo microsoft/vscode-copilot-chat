@@ -112,7 +112,7 @@ async function validateVersion(version: string) {
 	if (!versionGte(version, REQUIRED_VERSION)) {
 		warn(`GitHub Copilot CLI version ${version} is not compatible.`);
 		log(`Version ${REQUIRED_VERSION} or later is required.`);
-		if (await promptYes('Update Github Copilot CLI?')) {
+		if (await promptYes('Update GitHub Copilot CLI?')) {
 			if (runNpm(['update', '-g', PACKAGE_NAME], 'Update')) {
 				return true;
 			}

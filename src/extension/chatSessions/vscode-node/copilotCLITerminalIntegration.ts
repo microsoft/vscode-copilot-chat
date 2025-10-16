@@ -96,11 +96,11 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			const terminal = this.terminalService.createTerminal(options);
 			terminal.show();
 		} else {
-			await this.openTerminalAndSendComand(name, cliArgs);
+			await this.openTerminalAndSendCommand(name, cliArgs);
 		}
 	}
 
-	private async openTerminalAndSendComand(name: string, cliArgs: string[] = []) {
+	private async openTerminalAndSendCommand(name: string, cliArgs: string[] = []) {
 		const options = getCommonTerminalOptions(name);
 		const terminal = this._register(this.terminalService.createTerminal(options));
 		terminal.show();
