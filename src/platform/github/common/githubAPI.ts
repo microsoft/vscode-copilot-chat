@@ -8,7 +8,7 @@ import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 
 export interface PullRequestSearchItem {
-	id: number;
+	id: string;
 	number: number;
 	title: string;
 	state: string;
