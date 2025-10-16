@@ -1,5 +1,16 @@
-# GitHub Copilot CLI wrapper script for PowerShell
-# This script checks for copilot installation and version compatibility
+#---------------------------------------------------------------------------------------------
+#  Copyright (c) Microsoft Corporation. All rights reserved.
+#---------------------------------------------------------------------------------------------
+
+# Windows GitHub Copilot CLI bootstrapper
+#
+# Responsibilities:
+#   1. Locate the real Copilot CLI binary (avoid recursion if this file shadows it).
+#   2. Offer to install if missing (npm -g @github/copilot).
+#   3. Enforce minimum version (>= REQUIRED_VERSION) with interactive update.
+#   4. Execute the real binary with original arguments and exit with its status.
+#
+# NOTE: This file intentionally keeps logic self‑contained (no external deps) so it can be dropped into PATH directly.
 
 # Minimum required Copilot CLI version
 $RequiredVersion = "0.0.339"
@@ -20,7 +31,7 @@ function Find-RealCopilot {
         $env:PATH = ($env:PATH -split $PathDelimiter | Where-Object { $_ -ne $ScriptDir }) -join $PathDelimiter
         $RealCopilot = (Get-Command copilot -ErrorAction SilentlyContinue).Source
         $env:PATH = $OldPath
-        
+
         if ($RealCopilot -and (Test-Path $RealCopilot)) {
             return $RealCopilot
         } else {
@@ -51,18 +62,16 @@ function Test-VersionCompatibility {
 
 function Test-AndLaunchCopilot {
     param([string[]]$Arguments)
-    
+
     # Check if real copilot command exists
     $realCopilot = Find-RealCopilot
     if (-not $realCopilot) {
-        Write-Host "GitHub Copilot CLI is not installed."
-        $answer = Read-Host "Would you like to install it now? (y/N)"
+        Write-Host "Cannot find GitHub Copilot CLI (https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli)"
+        $answer = Read-Host "Install GitHub Copilot CLI? (y/N)"
         if ($answer -eq "y" -or $answer -eq "Y") {
-            Write-Host "Installing GitHub Copilot CLI..."
             try {
                 & npm install -g @github/copilot
                 if ($LASTEXITCODE -eq 0) {
-                    Write-Host "Installation completed successfully."
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
@@ -74,7 +83,6 @@ function Test-AndLaunchCopilot {
                 exit 1
             }
         } else {
-            Write-Host "Installation cancelled."
             exit 0
         }
     }
@@ -89,7 +97,6 @@ function Test-AndLaunchCopilot {
             try {
                 & npm install -g @github/copilot
                 if ($LASTEXITCODE -eq 0) {
-                    Write-Host "Reinstallation completed successfully."
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
@@ -101,11 +108,10 @@ function Test-AndLaunchCopilot {
                 exit 1
             }
         } else {
-            Write-Host "Reinstallation cancelled."
             exit 0
         }
     }
-    
+
     try {
         $versionOutput = & $realCopilot --version 2>$null
         if ($LASTEXITCODE -ne 0) {
@@ -115,11 +121,9 @@ function Test-AndLaunchCopilot {
         # Write-Host "Error: Unable to check copilot version."
         $answer = Read-Host "Would you like to reinstall GitHub Copilot CLI? (y/N)"
         if ($answer -eq "y" -or $answer -eq "Y") {
-            Write-Host "Reinstalling GitHub Copilot CLI..."
             try {
                 & npm install -g @github/copilot
                 if ($LASTEXITCODE -eq 0) {
-                    Write-Host "Reinstallation completed successfully."
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
@@ -131,23 +135,29 @@ function Test-AndLaunchCopilot {
                 exit 1
             }
         } else {
-            Write-Host "Reinstallation cancelled."
             exit 0
         }
     }
 
-    # Extract version number from output
-    $version = if ($versionOutput -match '[0-9]+\.[0-9]+\.[0-9]+') { $matches[0] } else { $null }
+    # Extract version number from output (search through all lines)
+    $version = $null
+    if ($versionOutput) {
+        foreach ($line in ($versionOutput -split "`n")) {
+            $trimmedLine = $line.Trim()
+            if ($trimmedLine -match '[0-9]+\.[0-9]+\.[0-9]+') {
+                $version = $matches[0]
+                break
+            }
+        }
+    }
 
     if (-not $version) {
         Write-Host "Error: Unable to parse copilot version from: $versionOutput"
-        $answer = Read-Host "Would you like to reinstall GitHub Copilot CLI? (y/N)"
+        $answer = Read-Host "Reinstall GitHub Copilot CLI? (y/N)"
         if ($answer -eq "y" -or $answer -eq "Y") {
-            Write-Host "Reinstalling GitHub Copilot CLI..."
             try {
                 & npm install -g @github/copilot
                 if ($LASTEXITCODE -eq 0) {
-                    Write-Host "Reinstallation completed successfully."
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
@@ -159,7 +169,6 @@ function Test-AndLaunchCopilot {
                 exit 1
             }
         } else {
-            Write-Host "Reinstallation cancelled."
             exit 0
         }
     }
@@ -167,13 +176,11 @@ function Test-AndLaunchCopilot {
     if (-not (Test-VersionCompatibility $version)) {
         Write-Host "GitHub Copilot CLI version $version is not compatible."
         Write-Host "Version $RequiredVersion or later is required."
-        $answer = Read-Host "Would you like to update it now? (y/N)"
+        $answer = Read-Host "Update GitHub Copilot CLI? (y/N)"
         if ($answer -eq "y" -or $answer -eq "Y") {
-            Write-Host "Updating GitHub Copilot CLI..."
             try {
                 & npm update -g @github/copilot
                 if ($LASTEXITCODE -eq 0) {
-                    Write-Host "Update completed successfully."
                     Test-AndLaunchCopilot $Arguments
                     return
                 } else {
@@ -185,7 +192,6 @@ function Test-AndLaunchCopilot {
                 exit 1
             }
         } else {
-            Write-Host "Update cancelled."
             exit 0
         }
     }
