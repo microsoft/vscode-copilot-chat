@@ -419,7 +419,6 @@ export class Parser {
 			const matchedLineIndent = computeIndentLevel2(fileLines[match.line], targetIndentStyle.tabSize);
 
 			for (const ch of nextSection.chunks) {
-				console.log("Processing chunk with original index:", ch);
 				ch.origIndex += match.line;
 				if (match.fuzz & Fuzz.NormalizedExplicitNL) {
 					ch.insLines = ch.insLines.map(replace_explicit_nl);
