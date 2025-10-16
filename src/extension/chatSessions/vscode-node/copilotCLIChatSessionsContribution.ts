@@ -216,7 +216,7 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 		if (sessionItem?.id) {
 			const deleteLabel = l10n.t('Delete');
 			const result = await vscode.window.showWarningMessage(
-				l10n.t(`Are you sure you want to delete the session?`),
+				l10n.t('Are you sure you want to delete the session?'),
 				{ modal: true },
 				deleteLabel
 			);
