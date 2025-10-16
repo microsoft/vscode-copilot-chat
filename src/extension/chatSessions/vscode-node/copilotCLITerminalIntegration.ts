@@ -13,10 +13,10 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { disposableTimeout } from '../../../util/vs/base/common/async';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
+import { IEnvService } from '../../../platform/env/common/envService';
 
 //@ts-ignore
 import powershellScript from './copilotCLIShim.ps1';
-import { IEnvService } from '../../../platform/env/common/envService';
 
 const COPILOT_CLI_SHIM_JS = 'copilotCLIShim.js';
 const COPILOT_CLI_COMMAND = 'copilot';
@@ -90,11 +90,12 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			}
 		}
 
-		const shellPathAndArgs = this.getShellPathAndArgs(cliArgs);
+		const shellPathAndArgs = this.getShellInfo(cliArgs);
 		if (shellPathAndArgs) {
 			const options = getCommonTerminalOptions(name);
 			options.shellPath = shellPathAndArgs.shellPath;
 			options.shellArgs = shellPathAndArgs.shellArgs;
+			options.iconPath = shellPathAndArgs.iconPath ?? options.iconPath;
 			const terminal = this.terminalService.createTerminal(options);
 			terminal.show();
 		} else {
@@ -137,35 +138,47 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		}
 	}
 
-	private getShellPathAndArgs(cliArgs: string[]): { shellPath: string; shellArgs: string[] } | undefined {
+	private getShellInfo(cliArgs: string[]): { shellPath: string; shellArgs: string[]; iconPath?: ThemeIcon } | undefined {
 		const configPlatform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux';
 		const defaultProfile = this.getDefaultShellProfile();
 		if (!defaultProfile) {
 			return;
 		}
-		const profile = workspace.getConfiguration('terminal').get<Record<string, { args: string[] }>>(`integrated.profiles.${configPlatform}`);
-		if (!profile || !profile[defaultProfile] || !Array.isArray(profile[defaultProfile].args)) {
+		const profiles = workspace.getConfiguration('terminal').get<Record<string, { path: string; args?: string[]; icon?: string }>>(`integrated.profiles.${configPlatform}`);
+		const profile = profiles ? profiles[defaultProfile] : undefined;
+		if (!profile) {
 			return;
 		}
-		const shellArgs = profile[defaultProfile].args;
+		let iconPath: ThemeIcon | undefined = undefined;
+		try {
+			if (profile.icon) {
+				iconPath = new ThemeIcon(profile.icon);
+			}
+		} catch {
+			//
+		}
+		const shellArgs = Array.isArray(profile.args) ? profile.args : [];
 		if (defaultProfile === 'zsh' && this.shellScriptPath) {
 			return {
-				shellPath: 'zsh',
-				shellArgs: [`-ci${shellArgs.includes('-l') ? 'l' : ''}`, quoteArgsForShell(this.shellScriptPath, cliArgs)]
+				shellPath: profile.path || 'zsh',
+				shellArgs: [`-ci${shellArgs.includes('-l') ? 'l' : ''}`, quoteArgsForShell(this.shellScriptPath, cliArgs)],
+				iconPath
 			};
 		} else if (defaultProfile === 'bash' && this.shellScriptPath) {
 			return {
-				shellPath: 'bash',
-				shellArgs: [`-${shellArgs.includes('-l') ? 'l' : ''}ic`, quoteArgsForShell(this.shellScriptPath, cliArgs)]
+				shellPath: profile.path || 'bash',
+				shellArgs: [`-${shellArgs.includes('-l') ? 'l' : ''}ic`, quoteArgsForShell(this.shellScriptPath, cliArgs)],
+				iconPath
 			};
 		} else if (defaultProfile === 'pwsh' && this.powershellScriptPath && configPlatform !== 'windows') {
 			return {
-				shellPath: 'pwsh',
-				shellArgs: ['-File', this.powershellScriptPath, ...cliArgs]
+				shellPath: profile.path || 'pwsh',
+				shellArgs: ['-File', this.powershellScriptPath, ...cliArgs],
+				iconPath
 			};
 		}
 	}
-	private getDefaultShellProfile() {
+	private getDefaultShellProfile(): string | undefined {
 		const configPlatform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux';
 		const defaultProfile = workspace.getConfiguration('terminal').get<string | undefined>(`integrated.defaultProfile.${configPlatform}`);
 		if (defaultProfile) {
@@ -174,10 +187,12 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		const shell = this.envService.shell;
 		switch (configPlatform) {
 			case 'osx':
-			case 'linux':
+			case 'linux': {
 				return shell.includes('zsh') ? 'zsh' : shell.includes('bash') ? 'bash' : undefined;
-			case 'windows':
-				return shell.includes('pwsh') ? 'pwsh' : shell.includes('powershell') ? 'powershell' : undefined;
+			}
+			case 'windows': {
+				return shell.includes('pwsh') ? 'PowerShell' : shell.includes('powershell') ? 'PowerShell' : undefined;
+			}
 		}
 	}
 }
