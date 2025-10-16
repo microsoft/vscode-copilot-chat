@@ -2242,18 +2242,18 @@
 						"enumDescriptions": [
 							"Use VS Code's configured display language",
 							"English",
-							"français",
+							"fran\u00e7ais",
 							"italiano",
 							"Deutsch",
-							"español",
-							"русский",
-							"中文(简体)",
-							"中文(繁體)",
-							"日本語",
-							"한국어",
-							"čeština",
-							"português",
-							"Türkçe",
+							"espa\u00f1ol",
+							"\u0440\u0443\u0441\u0441\u043a\u0438\u0439",
+							"\u4e2d\u6587(\u7b80\u4f53)",
+							"\u4e2d\u6587(\u7e41\u9ad4)",
+							"\u65e5\u672c\u8a9e",
+							"\ud55c\uad6d\uc5b4",
+							"\u010de\u0161tina",
+							"portugu\u00eas",
+							"T\u00fcrk\u00e7e",
 							"polski"
 						],
 						"default": "auto",
@@ -3147,6 +3147,1046 @@
 							"electron-fetch",
 							"node-fetch"
 						]
+					}
+				}
+			},
+			{
+				"title": "Advanced",
+				"id": "advanced",
+				"properties": {
+					"github.copilot.chat.advanced.debug.overrideChatEngine": {
+						"type": "string",
+						"description": "Note: this should not be used while self-hosting because it might lead to a fundamental different experience compared to our end-users.",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.debug.overrideChatMaxTokenNum": {
+						"type": "number",
+						"default": 0,
+						"description": "Note: this should not be used while self-hosting because it might lead to a fundamental different experience compared to our end-users.",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.debug.reportFeedback": {
+						"type": "boolean",
+						"default": false,
+						"description": "Allow reporting issue when clicking on the Unhelpful button Requires a window reload to take effect",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.debug.collectFetcherTelemetry": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for DebugCollectFetcherTelemetry",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.debug.useNodeFetchFetcher": {
+						"type": "boolean",
+						"description": "Advanced setting for DebugExpUseNodeFetchFetcher",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.debug.useNodeFetcher": {
+						"type": "boolean",
+						"description": "Advanced setting for DebugExpUseNodeFetcher",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.debug.useElectronFetcher": {
+						"type": "boolean",
+						"description": "Advanced setting for DebugExpUseElectronFetcher",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.suggestRelatedFilesFromGitHistory.useEmbeddings": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for GitHistoryRelatedFilesUsingEmbeddings",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.projectLabels.expanded": {
+						"type": "boolean",
+						"default": false,
+						"description": "Uses new expanded project labels",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.projectLabels.chat": {
+						"type": "boolean",
+						"default": false,
+						"description": "Add project labels in default agent",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.projectLabels.inline": {
+						"type": "boolean",
+						"default": false,
+						"description": "Add project labels in default agent",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.workspace.maxLocalIndexSize": {
+						"type": "number",
+						"default": 100000,
+						"description": "Advanced setting for WorkspaceMaxLocalIndexSize",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.workspace.enableFullWorkspace": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for WorkspaceEnableFullWorkspace",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.workspace.enableCodeSearch": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for WorkspaceEnableCodeSearch",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.workspace.enableEmbeddingsSearch": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for WorkspaceEnableEmbeddingsSearch",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.workspace.preferredEmbeddingsModel": {
+						"type": "string",
+						"default": "",
+						"description": "Advanced setting for WorkspacePreferredEmbeddingsModel",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.workspace.prototypeAdoCodeSearchEndpointOverride": {
+						"type": "string",
+						"default": "",
+						"description": "Advanced setting for WorkspacePrototypeAdoCodeSearchEndpointOverride",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.feedback.onChange": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for FeedbackOnChange",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.review.intent": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for ReviewIntent",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.notebook.summaryExperimentEnabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Enable the new notebook priorities experiment",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.notebook.variableFilteringEnabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Enable filtering variables by cell document symbols",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.notebook.alternativeFormat": {
+						"type": "string",
+						"default": "xml",
+						"description": "Advanced setting for NotebookAlternativeDocumentFormat",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.notebook.alternativeNESFormat.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for UseAlternativeNESNotebookFormat",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.debugTerminalCommandPatterns": {
+						"type": "array",
+						"default": [],
+						"description": "Advanced setting for TerminalToDebuggerPatterns",
+						"advanced": true,
+						"items": {
+							"type": "string"
+						}
+					},
+					"github.copilot.chat.advanced.inlineEdits.ignoreCompletionsDisablement": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsIgnoreCompletionsDisablement",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.asyncCompletions": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for InlineEditsAsyncCompletions",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.revisedCacheStrategy": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for InlineEditsRevisedCacheStrategy",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.cacheTracksRejections": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for InlineEditsCacheTracksRejections",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.recentlyShownCacheEnabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsRecentlyShownCacheEnabled",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.debounceUseCoreRequestTime": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsDebounceUseCoreRequestTime",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.yieldToCopilot": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsYieldToCopilot",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.excludedProviders": {
+						"type": "string",
+						"description": "Advanced setting for InlineEditsExcludedProviders",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.completionsProvider.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsEnableCompletionsProvider",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.githubCompletionsProvider.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsEnableGhCompletionsProvider",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.completionsProvider.url": {
+						"type": "string",
+						"description": "Advanced setting for InlineEditsCompletionsUrl",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.logContextRecorder.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsLogContextRecorderEnabled",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.debounce": {
+						"type": "number",
+						"default": 200,
+						"description": "Advanced setting for InlineEditsDebounce",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.cacheDelay": {
+						"type": "number",
+						"default": 300,
+						"description": "Advanced setting for InlineEditsCacheDelay",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.subsequentCacheDelay": {
+						"type": "number",
+						"description": "Advanced setting for InlineEditsSubsequentCacheDelay",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.rebasedCacheDelay": {
+						"type": "number",
+						"description": "Advanced setting for InlineEditsRebasedCacheDelay",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.backoffDebounceEnabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for InlineEditsBackoffDebounceEnabled",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.extraDebounceEndOfLine": {
+						"type": "number",
+						"default": 0,
+						"description": "Advanced setting for InlineEditsExtraDebounceEndOfLine",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.debounceOnSelectionChange": {
+						"type": "number",
+						"description": "Advanced setting for InlineEditsDebounceOnSelectionChange",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.providerId": {
+						"type": "string",
+						"description": "Advanced setting for InlineEditsProviderId",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.hideInternalInterface": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsHideInternalInterface",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.logCancelledRequests": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsLogCancelledRequests",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.unification": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsUnification",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.triggerOnEditorChange": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsTriggerOnEditorChange",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.nextCursorPrediction.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsNextCursorPredictionEnabled",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.nextCursorPrediction.modelName": {
+						"type": "string",
+						"description": "Advanced setting for InlineEditsNextCursorPredictionModelName",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.nextCursorPrediction.url": {
+						"type": "string",
+						"default": "",
+						"description": "Advanced setting for InlineEditsNextCursorPredictionUrl",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.nextCursorPrediction.apiKey": {
+						"type": "string",
+						"default": "",
+						"description": "Advanced setting for InlineEditsNextCursorPredictionApiKey",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.url": {
+						"type": "string",
+						"default": "",
+						"description": "Advanced setting for InlineEditsXtabProviderUrl",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.apiKey": {
+						"type": "string",
+						"default": "",
+						"description": "Advanced setting for InlineEditsXtabProviderApiKey",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.modelConfiguration": {
+						"type": "object",
+						"default": {},
+						"description": "Advanced setting for InlineEditsXtabProviderModelConfiguration",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.modelName": {
+						"type": "string",
+						"description": "Advanced setting for InlineEditsXtabProviderModelName",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.inlineCompletions.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsInlineCompletionsEnabled",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.usePrediction": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsXtabProviderUsePrediction",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.useVaryingLinesAbove": {
+						"type": "boolean",
+						"description": "Advanced setting for InlineEditsXtabProviderUseVaryingLinesAbove",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.nLinesAbove": {
+						"type": "number",
+						"description": "Advanced setting for InlineEditsXtabProviderNLinesAbove",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.nLinesBelow": {
+						"type": "number",
+						"description": "Advanced setting for InlineEditsXtabProviderNLinesBelow",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.retryWithNMoreLinesBelow": {
+						"type": "number",
+						"description": "Advanced setting for InlineEditsXtabProviderRetryWithNMoreLinesBelow",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.autoExpandEditWindowLines": {
+						"type": "number",
+						"description": "Advanced setting for InlineEditsAutoExpandEditWindowLines",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.nRecentlyViewedDocuments": {
+						"type": "number",
+						"default": {},
+						"description": "Advanced setting for InlineEditsXtabNRecentlyViewedDocuments",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.recentlyViewedDocuments.maxTokens": {
+						"type": "number",
+						"default": {},
+						"description": "Advanced setting for InlineEditsXtabRecentlyViewedDocumentsMaxTokens",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.diffNEntries": {
+						"type": "number",
+						"default": {},
+						"description": "Advanced setting for InlineEditsXtabDiffNEntries",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.diffMaxTokens": {
+						"type": "number",
+						"default": {},
+						"description": "Advanced setting for InlineEditsXtabDiffMaxTokens",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.emitFastCursorLineChange": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for InlineEditsXtabProviderEmitFastCursorLineChange",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.includeViewedFiles": {
+						"type": "boolean",
+						"default": {},
+						"description": "Advanced setting for InlineEditsXtabIncludeViewedFiles",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.pageSize": {
+						"type": "number",
+						"default": {},
+						"description": "Advanced setting for InlineEditsXtabPageSize",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.includeTagsInCurrentFile": {
+						"type": "boolean",
+						"default": {},
+						"description": "Advanced setting for InlineEditsXtabIncludeTagsInCurrentFile",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.currentFileMaxTokens": {
+						"type": "number",
+						"default": {},
+						"description": "Advanced setting for InlineEditsXtabCurrentFileMaxTokens",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.currentFile.prioritizeAboveCursor": {
+						"type": "boolean",
+						"default": {},
+						"description": "Advanced setting for InlineEditsXtabPrioritizeAboveCursor",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.diffOnlyForDocsInPrompt": {
+						"type": "boolean",
+						"default": {},
+						"description": "Advanced setting for InlineEditsXtabDiffOnlyForDocsInPrompt",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.diffUseRelativePaths": {
+						"type": "boolean",
+						"default": {},
+						"description": "Advanced setting for InlineEditsXtabDiffUseRelativePaths",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.nNonSignificantLinesToConverge": {
+						"type": "number",
+						"default": 4,
+						"description": "Advanced setting for InlineEditsXtabNNonSignificantLinesToConverge",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.nSignificantLinesToConverge": {
+						"type": "number",
+						"default": 2,
+						"description": "Advanced setting for InlineEditsXtabNSignificantLinesToConverge",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.languageContext.enabled": {
+						"type": "boolean",
+						"default": {},
+						"description": "Advanced setting for InlineEditsXtabLanguageContextEnabled",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.languageContext.enabledLanguages": {
+						"type": "object",
+						"default": {},
+						"description": "Advanced setting for InlineEditsXtabLanguageContextEnabledLanguages",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.languageContext.maxTokens": {
+						"type": "number",
+						"default": {},
+						"description": "Advanced setting for InlineEditsXtabLanguageContextMaxTokens",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.useUnifiedModel": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsXtabUseUnifiedModel",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.simplifiedPrompt": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsXtabProviderUseSimplifiedPrompt",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.xtab275Prompting": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsXtabProviderUseXtab275Prompting",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.useNes41Miniv3Prompting": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsXtabUseNes41Miniv3Prompting",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.codexv21nesUnified": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsXtabCodexV21NesUnified",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.maxMergeConflictLines": {
+						"type": "number",
+						"description": "Advanced setting for InlineEditsXtabMaxMergeConflictLines",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.xtabProvider.onlyMergeConflictLines": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsXtabOnlyMergeConflictLines",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.undoInsertionFilteringEnabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for InlineEditsUndoInsertionFilteringEnabled",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.inlineEditsDiagnosticsExplorationEnabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsDiagnosticsExplorationEnabled",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.editSourceTracking.showDecorations": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for EditSourceTrackingShowDecorations",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.editSourceTracking.showStatusBar": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for EditSourceTrackingShowStatusBar",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.localWorkspaceRecording.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for WorkspaceRecordingEnabled",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.editRecording.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for EditRecordingEnabled",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.welcomePageHint.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InternalWelcomeHintEnabled",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.temporalContext.maxAge": {
+						"type": "number",
+						"default": 100,
+						"description": "Configure temporal context max age",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.temporalContext.preferSameLang": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for TemporalContextPreferSameLang",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.codesearch.agent.enabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for CodeSearchAgentEnabled",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.agent.temperature": {
+						"type": "number",
+						"description": "Advanced setting for AgentTemperature",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineChat.useCodeMapper": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineChatUseCodeMapper",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.instantApply.modelName": {
+						"type": "string",
+						"default": "gpt-4o-instant-apply-full-ft-v66",
+						"description": "Advanced setting for InstantApplyModelName",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.instantApply.shortContextModelName": {
+						"type": "string",
+						"default": "gpt-4o-instant-apply-short",
+						"description": "Advanced setting for InstantApplyShortModelName",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.instantApply.shortContextLimit": {
+						"type": "number",
+						"default": 8000,
+						"description": "Advanced setting for InstantApplyShortContextLimit",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.enableUserPreferences": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for EnableUserPreferences",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.swebench.agentPrompt": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for SweBenchAgentPrompt",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.summarizeAgentConversationHistoryThreshold": {
+						"type": "number",
+						"description": "Advanced setting for SummarizeAgentConversationHistoryThreshold",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.agentHistorySummarizationMode": {
+						"type": "string",
+						"description": "Advanced setting for AgentHistorySummarizationMode",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.agentHistorySummarizationWithPromptCache": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for AgentHistorySummarizationWithPromptCache",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.agentHistorySummarizationForceGpt41": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for AgentHistorySummarizationForceGpt41",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.useResponsesApiTruncation": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for UseResponsesApiTruncation",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.enableReadFileV2": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for EnableReadFileV2",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.enableAskAgent": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for AskAgent",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.inlineEdits.verifyTextDocumentChanges": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for VerifyTextDocumentChanges",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.omitBaseAgentInstructions": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for OmitBaseAgentInstructions",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.promptFileContextProvider.enabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for PromptFileContext",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.multiReplaceString.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for MultiReplaceString",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.virtualTools.embeddingRanking": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for VirtualToolEmbeddingRanking",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.multiReplaceStringGrok.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for MultiReplaceStringGrok",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.claudeCode.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for EnableClaudeCodeAgent",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.claudeCode.debug": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for ClaudeCodeDebugEnabled",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.copilotCLI.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for CopilotCLIEnabled",
+						"advanced": true
+					},
+					"github.copilot.chat.advanced.gpt5AlternativePatch": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for Gpt5AlternativePatch",
+						"advanced": true
+					},
+					"github.copilot.chat.useResponsesApi": {
+						"type": "boolean",
+						"default": true,
+						"description": "Use the Responses API instead of Chat Completions when supported",
+						"advanced": true
+					},
+					"github.copilot.chat.responsesApiReasoningEffort": {
+						"type": "string",
+						"default": "default",
+						"description": "Configure reasoning effort sent to Responses API",
+						"advanced": true
+					},
+					"github.copilot.chat.responsesApiReasoningSummary": {
+						"type": "string",
+						"default": "detailed",
+						"description": "Configure reasoning summary style sent to Responses API",
+						"advanced": true
+					},
+					"github.copilot.chat.imageUpload.enabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for EnableChatImageUpload",
+						"advanced": true
+					},
+					"github.copilot.chat.editor.temporalContext.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Add context from recently used files",
+						"advanced": true
+					},
+					"github.copilot.chat.edits.temporalContext.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for TemporalContextEditsEnabled",
+						"advanced": true
+					},
+					"github.copilot.chat.codeGeneration.instructions": {
+						"type": "array",
+						"default": [],
+						"description": "User provided code generation instructions for the chat",
+						"advanced": true
+					},
+					"github.copilot.chat.testGeneration.instructions": {
+						"type": "array",
+						"default": [],
+						"description": "Advanced setting for TestGenerationInstructions",
+						"advanced": true
+					},
+					"github.copilot.chat.commitMessageGeneration.instructions": {
+						"type": "array",
+						"default": [],
+						"description": "Advanced setting for CommitMessageGenerationInstructions",
+						"advanced": true
+					},
+					"github.copilot.chat.pullRequestDescriptionGeneration.instructions": {
+						"type": "array",
+						"default": [],
+						"description": "Advanced setting for PullRequestDescriptionGenerationInstructions",
+						"advanced": true
+					},
+					"github.copilot.chat.generateTests.codeLens": {
+						"type": "boolean",
+						"default": false,
+						"description": "Show code lens \"Generate tests\" when we have test coverage info about this symbol and it's not covered",
+						"advanced": true
+					},
+					"github.copilot.chat.setupTests.enabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "Whether new flows around setting up tests are enabled",
+						"advanced": true
+					},
+					"github.copilot.chat.languageContext.typescript.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Whether the Copilot TypeScript context provider is enabled and if how",
+						"advanced": true
+					},
+					"github.copilot.chat.languageContext.typescript.items": {
+						"type": "string",
+						"default": "minimal",
+						"description": "Advanced setting for TypeScriptLanguageContextMode",
+						"advanced": true
+					},
+					"github.copilot.chat.languageContext.typescript.includeDocumentation": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for TypeScriptLanguageContextIncludeDocumentation",
+						"advanced": true
+					},
+					"github.copilot.chat.languageContext.typescript.cacheTimeout": {
+						"type": "number",
+						"default": 500,
+						"description": "Advanced setting for TypeScriptLanguageContextCacheTimeout",
+						"advanced": true
+					},
+					"github.copilot.chat.languageContext.fix.typescript.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for TypeScriptLanguageContextFix",
+						"advanced": true
+					},
+					"github.copilot.chat.languageContext.inline.typescript.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for TypeScriptLanguageContextInline",
+						"advanced": true
+					},
+					"github.copilot.chat.codeGeneration.useInstructionFiles": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for UseInstructionFiles",
+						"advanced": true
+					},
+					"github.copilot.chat.reviewAgent.enabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for ReviewAgent",
+						"advanced": true
+					},
+					"github.copilot.chat.reviewSelection.enabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for CodeFeedback",
+						"advanced": true
+					},
+					"github.copilot.chat.reviewSelection.instructions": {
+						"type": "array",
+						"default": [],
+						"description": "Advanced setting for CodeFeedbackInstructions",
+						"advanced": true
+					},
+					"github.copilot.chat.useProjectTemplates": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for UseProjectTemplates",
+						"advanced": true
+					},
+					"github.copilot.chat.scopeSelection": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for ExplainScopeSelection",
+						"advanced": true
+					},
+					"github.copilot.editor.enableCodeActions": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for EnableCodeActions",
+						"advanced": true
+					},
+					"github.copilot.chat.localeOverride": {
+						"type": "string",
+						"default": "auto",
+						"description": "Advanced setting for LocaleOverride",
+						"advanced": true
+					},
+					"github.copilot.chat.terminalChatLocation": {
+						"type": "string",
+						"default": "chatView",
+						"description": "Advanced setting for TerminalChatLocation",
+						"advanced": true
+					},
+					"github.copilot.renameSuggestions.triggerAutomatically": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for AutomaticRenameSuggestions",
+						"advanced": true
+					},
+					"github.copilot.chat.edits.suggestRelatedFilesFromGitHistory": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for GitHistoryRelatedFilesProvider",
+						"advanced": true
+					},
+					"github.copilot.chat.edits.suggestRelatedFilesForTests": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for Test2SrcRelatedFilesProvider",
+						"advanced": true
+					},
+					"github.copilot.chat.copilotDebugCommand.enabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for TerminalToDebuggerEnabled",
+						"advanced": true
+					},
+					"github.copilot.chat.codesearch.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for CodeSearchAgentEnabled",
+						"advanced": true
+					},
+					"github.copilot.nextEditSuggestions.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for InlineEditsEnabled",
+						"advanced": true
+					},
+					"github.copilot.nextEditSuggestions.fixes": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for InlineEditsEnableDiagnosticsProvider",
+						"advanced": true
+					},
+					"github.copilot.nextEditSuggestions.allowWhitespaceOnlyChanges": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for InlineEditsAllowWhitespaceOnlyChanges",
+						"advanced": true
+					},
+					"github.copilot.chat.newWorkspaceCreation.enabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for NewWorkspaceCreationAgentEnabled",
+						"advanced": true
+					},
+					"github.copilot.chat.newWorkspace.useContext7": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for NewWorkspaceUseContext7",
+						"advanced": true
+					},
+					"github.copilot.chat.summarizeAgentConversationHistory.enabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for SummarizeAgentConversationHistory",
+						"advanced": true
+					},
+					"github.copilot.chat.virtualTools.threshold": {
+						"type": "number",
+						"default": 128,
+						"description": "Advanced setting for VirtualToolThreshold",
+						"advanced": true
+					},
+					"github.copilot.chat.agent.currentEditorContext.enabled": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for CurrentEditorAgentContext",
+						"advanced": true
+					},
+					"github.copilot.chat.byok.ollamaEndpoint": {
+						"type": "string",
+						"default": "http://localhost:11434",
+						"description": "BYOK",
+						"advanced": true
+					},
+					"github.copilot.chat.agent.autoFix": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for AutoFixDiagnostics",
+						"advanced": true
+					},
+					"github.copilot.chat.notebook.followCellExecution.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for NotebookFollowCellExecution",
+						"advanced": true
+					},
+					"github.copilot.chat.notebook.enhancedNextEditSuggestions.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for UseAlternativeNESNotebookFormat",
+						"advanced": true
+					},
+					"github.copilot.chat.customInstructionsInSystemMessage": {
+						"type": "boolean",
+						"default": true,
+						"description": "Advanced setting for CustomInstructionsInSystemMessage",
+						"advanced": true
+					},
+					"github.copilot.chat.alternateGptPrompt.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for EnableAlternateGptPrompt",
+						"advanced": true
+					},
+					"github.copilot.chat.gpt5AlternatePrompt": {
+						"type": "string",
+						"default": "default",
+						"description": "Advanced setting for Gpt5AlternatePrompt",
+						"advanced": true
+					},
+					"github.copilot.chat.gpt5CodexAlternatePrompt": {
+						"type": "string",
+						"default": "codex",
+						"description": "Advanced setting for Gpt5CodexAlternatePrompt",
+						"advanced": true
+					},
+					"github.copilot.chat.grokCodeAlternatePrompt": {
+						"type": "string",
+						"default": "default",
+						"description": "Advanced setting for GrokCodeAlternatePrompt",
+						"advanced": true
+					},
+					"github.copilot.chat.claudeSonnet45AlternatePrompt": {
+						"type": "string",
+						"default": "default",
+						"description": "Advanced setting for ClaudeSonnet45AlternatePrompt",
+						"advanced": true
+					},
+					"github.copilot.chat.executePrompt.enabled": {
+						"type": "boolean",
+						"default": false,
+						"description": "Advanced setting for ExecutePromptEnabled",
+						"advanced": true
+					},
+					"github.copilot.chat.completionsFetcher": {
+						"type": "string",
+						"description": "Advanced setting for CompletionsFetcher",
+						"advanced": true
+					},
+					"github.copilot.chat.nesFetcher": {
+						"type": "string",
+						"description": "Advanced setting for NextEditSuggestionsFetcher",
+						"advanced": true
+					},
+					"github.copilot.advanced.debug.overrideProxyUrl": {
+						"type": "string",
+						"description": "Allows for overriding the base domain we use for making requests to the CAPI. This helps CAPI devs develop against a local instance.",
+						"advanced": true
+					},
+					"github.copilot.advanced.debug.overrideCapiUrl": {
+						"type": "string",
+						"description": "Allows for overriding the CAPI URL. This helps CAPI devs develop against a local instance.",
+						"advanced": true
 					}
 				}
 			}
