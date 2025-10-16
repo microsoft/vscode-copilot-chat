@@ -6,14 +6,14 @@
 import * as vscode from 'vscode';
 import { ChatSessionItem } from 'vscode';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
-import { getGithubRepoIdFromFetchUrl, GithubRepoId, IGitService } from '../../../platform/git/common/gitService';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
 import { IOctoKitService, JobInfo, RemoteAgentJobPayload } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { UriHandlerPaths, UriHandlers } from '../vscode/chatSessionsUriHandler';
-import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, JOBS_API_VERSION, RemoteAgentResult, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
+import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getRepoId, JOBS_API_VERSION, RemoteAgentResult, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
 import { ChatSessionContentBuilder } from './copilotChatSessionContentBuilder';
 
 type ConfirmationResult = { step: string; accepted: boolean; metadata?: CreatePromptMetadata /* | SomeOtherMetadata */ };
@@ -76,7 +76,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			return this.chatSessionItemsPromise;
 		}
 		this.chatSessionItemsPromise = (async () => {
-			const repoId = await this.getRepoId();
+			const repoId = await getRepoId(this._gitService);
 			if (!repoId) {
 				return [];
 			}
@@ -129,7 +129,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		if (pr) {
 			return pr;
 		}
-		const repoId = await this.getRepoId();
+		const repoId = await getRepoId(this._gitService);
 		if (!repoId) {
 			this.logService.warn('Failed to determine GitHub repo from workspace');
 			return undefined;
@@ -162,22 +162,6 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		const query = JSON.stringify(params);
 		const extensionId = UriHandlers[UriHandlerPaths.External_OpenPullRequestWebview];
 		return await vscode.env.asExternalUri(vscode.Uri.from({ scheme: vscode.env.uriScheme, authority: extensionId, path: UriHandlerPaths.External_OpenPullRequestWebview, query }));
-	}
-
-	private async getRepoId(): Promise<GithubRepoId | undefined> {
-		let timeout = 5000;
-		while (!this._gitService.isInitialized) {
-			await new Promise(resolve => setTimeout(resolve, 100));
-			timeout -= 100;
-			if (timeout <= 0) {
-				break;
-			}
-		}
-
-		const repo = this._gitService.activeRepository.get();
-		if (repo && repo.remoteFetchUrls?.[0]) {
-			return getGithubRepoIdFromFetchUrl(repo.remoteFetchUrls[0]);
-		}
 	}
 
 	private async chatParticipantImpl(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
@@ -669,7 +653,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 	async invokeRemoteAgent(prompt: string, problemContext?: string, token?: vscode.CancellationToken, autoPushAndCommit = true, chatStream?: vscode.ChatResponseStream): Promise<RemoteAgentResult> {
 		// TODO: support selecting remote
 		// await this.promptAndUpdatePreferredGitHubRemote(true);
-		const repoId = await this.getRepoId();
+		const repoId = await getRepoId(this._gitService);
 		if (!repoId) {
 			return { error: vscode.l10n.t('Repository information is not available.'), state: 'error' };
 		}
