@@ -20,7 +20,7 @@ import type { TextDocument } from 'vscode';
 import { AbstractDocumentWithLanguageId } from '../../../../platform/editing/common/abstractText';
 import { getFilepathComment } from '../../../../util/common/markdown';
 import { computeLevenshteinDistance } from '../../../../util/vs/base/common/diff/diff';
-import { count, isFalsyOrWhitespace } from '../../../../util/vs/base/common/strings';
+import { count, firstNonWhitespaceIndex, isFalsyOrWhitespace } from '../../../../util/vs/base/common/strings';
 import { Lines } from '../../../prompt/node/editGeneration';
 import { computeIndentLevel2, getIndentationChar, guessIndentation, IGuessedIndentation, transformIndentation } from '../../../prompt/node/indentationGuesser';
 import {
@@ -154,21 +154,6 @@ export class InvalidContextError extends DiffError {
 export class InvalidPatchFormatError extends DiffError {
 	constructor(message: string, public readonly kindForTelemetry: string) {
 		super(message);
-	}
-}
-
-class AdditionalIndentationDetails {
-	private _indentation: string;
-	public isAdditionalIndentationSet: boolean;
-	constructor(indentation: string, needed: boolean) {
-		this._indentation = indentation;
-		this.isAdditionalIndentationSet = needed;
-	}
-	public get indentation() {
-		return this._indentation;
-	}
-	public set indentation(value: string) {
-		this._indentation = value;
 	}
 }
 
@@ -408,57 +393,39 @@ export class Parser {
 			}
 			this.fuzz += match.fuzz;
 
-			const srcIndentStyle = guessIndentation(
-				nextSection.chunks.flatMap(c => c.insLines).concat(nextSection.nextChunkContext),
-				targetIndentStyle.tabSize,
-				targetIndentStyle.insertSpaces
-			);
-
-
-			const additionalIndentation = new AdditionalIndentationDetails('', false);
-			const matchedLineIndent = computeIndentLevel2(fileLines[match.line], targetIndentStyle.tabSize);
-
 			for (const ch of nextSection.chunks) {
-				ch.origIndex += match.line;
 				if (match.fuzz & Fuzz.NormalizedExplicitNL) {
 					ch.insLines = ch.insLines.map(replace_explicit_nl);
 					ch.delLines = ch.delLines.map(replace_explicit_nl);
 				}
 
 				ch.insLines = ch.insLines.map(replace_explicit_tabs);
-
-				const insLength = ch.insLines.length;
-				ch.insLines = ch.insLines.map(ins => isFalsyOrWhitespace(ins) ? ins : this.updateIndentation(insLength, ins, srcIndentStyle, targetIndentStyle, matchedLineIndent, additionalIndentation));
-
 				if (match.fuzz & Fuzz.NormalizedExplicitTab) {
 					ch.delLines = ch.delLines.map(replace_explicit_tabs);
 				}
+			}
 
+			// Insight: if all patch lines have the same indentation level (context
+			// and insertions) then we can replace the indentation literally and have
+			// it match. Otherwise (and only otherwise) we can accurately guess the
+			// identation the model gave to us and do a full transformation.
+			const allPatchLines = nextSection.chunks
+				.flatMap(c => c.insLines)
+				.concat(nextSection.nextChunkContext.map(replace_explicit_tabs));
+
+			const indentTransformer = linesHaveVariedIndentation(allPatchLines)
+				? makeTransformingIndentReindenter(fileLines, allPatchLines, match.line, nextSection, targetIndentStyle)
+				: makeConstantIndentReindenter(fileLines, match.line, targetIndentStyle);
+
+			for (const ch of nextSection.chunks) {
+				ch.origIndex += match.line;
+				ch.insLines = ch.insLines.map(indentTransformer);
 				action.chunks.push(ch);
 			}
 			index = match.line + nextSection.nextChunkContext.length;
 			this.index = nextSection.endPatchIndex;
 		}
 		return action;
-	}
-
-
-	private updateIndentation(insLength: number, ins: string, srcIndentStyle: IGuessedIndentation, targetIndentStyle: IGuessedIndentation, matchedLineIndent: number, additionalIndentationDetails: AdditionalIndentationDetails): string {
-		let result = ins;
-		let additionalIndentation = '';
-		result = transformIndentation(ins, srcIndentStyle, targetIndentStyle);
-		// additionalIndentationDetails holds the indentation of the first line of the context for each section('@@' in a patch).
-		if (!additionalIndentationDetails.isAdditionalIndentationSet) {
-			const insIndent = computeIndentLevel2(result, targetIndentStyle.tabSize);
-			additionalIndentationDetails.isAdditionalIndentationSet = true;
-			if (matchedLineIndent > insIndent) {
-				additionalIndentation = getIndentationChar(targetIndentStyle).repeat(matchedLineIndent - insIndent);
-				additionalIndentationDetails.indentation = additionalIndentation;
-			}
-		} else {
-			additionalIndentation = additionalIndentationDetails.indentation;
-		}
-		return additionalIndentation + result;
 	}
 
 	private parse_add_file(): PatchAction {
@@ -782,6 +749,62 @@ function peek_next_section(
 	}
 
 	return { nextChunkContext: old, chunks, endPatchIndex: index, eof: false, fuzzMerges: fuzzMergeNo };
+}
+
+function linesHaveVariedIndentation(lines: string[]): boolean {
+	let first: string | undefined;
+	for (let i = 0; i < lines.length; i++) {
+		if (isFalsyOrWhitespace(lines[i])) {
+			// empty line, not informative
+		} else if (first === undefined) {
+			first = getIndentationOnLine(lines[i]);
+		} else if (getIndentationOnLine(lines[i]) !== first) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+function getIndentationOnLine(line: string): string {
+	const idx = firstNonWhitespaceIndex(line);
+	return idx === -1 ? '' : line.substring(0, idx);
+}
+
+function makeTransformingIndentReindenter(
+	fileLines: readonly string[],
+	allPatchLines: readonly string[],
+	matchLine: number,
+	nextSection: ReturnType<typeof peek_next_section>,
+	targetIndentStyle: IGuessedIndentation,
+) {
+	const srcIndentStyle = guessIndentation(allPatchLines, targetIndentStyle.tabSize, targetIndentStyle.insertSpaces);
+
+	const targetLineIndent = computeIndentLevel2(fileLines[matchLine], targetIndentStyle.tabSize);
+	const srcLineIndent = computeIndentLevel2(nextSection.nextChunkContext[0], srcIndentStyle.tabSize);
+	const additionalIndentation = getIndentationChar(targetIndentStyle).repeat(Math.max(0, targetLineIndent - srcLineIndent));
+
+	return (line: string) => {
+		if (isFalsyOrWhitespace(line)) {
+			return line;
+		}
+
+		return additionalIndentation + transformIndentation(line, srcIndentStyle, targetIndentStyle);
+	};
+}
+
+function makeConstantIndentReindenter(
+	fileLines: readonly string[],
+	matchLine: number,
+	targetIndentStyle: IGuessedIndentation,
+) {
+	const matchedLineIndent = computeIndentLevel2(fileLines[matchLine], targetIndentStyle.tabSize);
+	const indentation = getIndentationChar(targetIndentStyle).repeat(matchedLineIndent);
+
+	return (line: string) => {
+		const nonWhitespace = firstNonWhitespaceIndex(line);
+		return nonWhitespace === -1 ? line : indentation + line.slice(nonWhitespace);
+	};
 }
 
 // -----------------------------------------------------------------------------
