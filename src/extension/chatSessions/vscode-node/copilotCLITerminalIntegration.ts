@@ -16,6 +16,7 @@ import * as path from '../../../util/vs/base/common/path';
 
 //@ts-ignore
 import powershellScript from './copilotCLIShim.ps1';
+import { IEnvService } from '../../../platform/env/common/envService';
 
 const COPILOT_CLI_SHIM_JS = 'copilotCLIShim.js';
 const COPILOT_CLI_COMMAND = 'copilot';
@@ -37,6 +38,7 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ITerminalService private readonly terminalService: ITerminalService,
+		@IEnvService private readonly envService: IEnvService,
 	) {
 		super();
 		this.initialization = this.initialize();
@@ -137,22 +139,45 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 
 	private getShellPathAndArgs(cliArgs: string[]): { shellPath: string; shellArgs: string[] } | undefined {
 		const configPlatform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux';
-		const defaultProfile = workspace.getConfiguration('terminal').get<string>(`integrated.defaultProfile.${configPlatform}`);
+		const defaultProfile = this.getDefaultShellProfile();
+		if (!defaultProfile) {
+			return;
+		}
+		const profile = workspace.getConfiguration('terminal').get<Record<string, { args: string[] }>>(`integrated.profiles.${configPlatform}`);
+		if (!profile || !profile[defaultProfile] || !Array.isArray(profile[defaultProfile].args)) {
+			return;
+		}
+		const shellArgs = profile[defaultProfile].args;
 		if (defaultProfile === 'zsh' && this.shellScriptPath) {
 			return {
 				shellPath: 'zsh',
-				shellArgs: ['-cil', quoteArgsForShell(this.shellScriptPath, cliArgs)]
+				shellArgs: [`-ci${shellArgs.includes('-l') ? 'l' : ''}`, quoteArgsForShell(this.shellScriptPath, cliArgs)]
 			};
 		} else if (defaultProfile === 'bash' && this.shellScriptPath) {
 			return {
 				shellPath: 'bash',
-				shellArgs: ['-lic', quoteArgsForShell(this.shellScriptPath, cliArgs)]
+				shellArgs: [`-${shellArgs.includes('-l') ? 'l' : ''}ic`, quoteArgsForShell(this.shellScriptPath, cliArgs)]
 			};
 		} else if (defaultProfile === 'pwsh' && this.powershellScriptPath && configPlatform !== 'windows') {
 			return {
 				shellPath: 'pwsh',
 				shellArgs: ['-File', this.powershellScriptPath, ...cliArgs]
 			};
+		}
+	}
+	private getDefaultShellProfile() {
+		const configPlatform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux';
+		const defaultProfile = workspace.getConfiguration('terminal').get<string | undefined>(`integrated.defaultProfile.${configPlatform}`);
+		if (defaultProfile) {
+			return defaultProfile;
+		}
+		const shell = this.envService.shell;
+		switch (configPlatform) {
+			case 'osx':
+			case 'linux':
+				return shell.includes('zsh') ? 'zsh' : shell.includes('bash') ? 'bash' : undefined;
+			case 'windows':
+				return shell.includes('pwsh') ? 'pwsh' : shell.includes('powershell') ? 'powershell' : undefined;
 		}
 	}
 }

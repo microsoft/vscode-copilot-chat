@@ -5,10 +5,33 @@
 
 import type { SDKEvent } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import type { ExtendedChatResponsePart } from 'vscode';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString } from '../../../../vscodeTypes';
+
+type ChatCompletionRole = 'system' | 'user' | 'assistant' | 'tool' | (string & {});
+
+interface ChatCompletionMessageFunctionCall {
+	name: string;
+	arguments?: string;
+}
+
+interface ChatCompletionMessageToolCallLike {
+	id?: string;
+	type?: string;
+	function?: ChatCompletionMessageFunctionCall;
+}
+
+interface ChatCompletionMessageParamLike {
+	role: ChatCompletionRole;
+	content?: unknown;
+	tool_calls?: readonly ChatCompletionMessageToolCallLike[];
+	tool_call_id?: string;
+}
+
+function isUserOrAssistantRole(role: ChatCompletionRole): role is 'user' | 'assistant' {
+	return role === 'user' || role === 'assistant';
+}
 
 /**
  * CopilotCLI tool names
@@ -51,12 +74,12 @@ function resolveContentToString(content: unknown): string {
  * Parse chat messages from the CopilotCLI SDK into SDKEvent format
  * Used when loading session history from disk
  */
-export function parseChatMessagesToEvents(chatMessages: readonly ChatCompletionMessageParam[]): SDKEvent[] {
+export function parseChatMessagesToEvents(chatMessages: readonly ChatCompletionMessageParamLike[]): SDKEvent[] {
 	const events: SDKEvent[] = [];
 
 	for (const msg of chatMessages) {
 		// Handle regular messages (user or assistant)
-		if (msg.role === 'user' || msg.role === 'assistant') {
+		if (isUserOrAssistantRole(msg.role)) {
 			if (msg.content) {
 				events.push({
 					type: 'message' as const,

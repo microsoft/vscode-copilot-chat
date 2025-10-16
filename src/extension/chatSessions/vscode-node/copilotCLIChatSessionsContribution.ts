@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { ChatExtendedRequestHandler } from 'vscode';
+import { ChatExtendedRequestHandler, l10n } from 'vscode';
 import { isLocation } from '../../../util/common/types';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -78,7 +78,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 	async provideChatSessionContent(copilotcliSessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
 		const existingSession = copilotcliSessionId && await this.sessionService.getSession(copilotcliSessionId, token);
 		const sdkSession = existingSession ? existingSession.sdkSession : undefined;
-		const chatMessages = sdkSession?.chatMessages || [];
+		const chatMessages = sdkSession ? await sdkSession.getChatMessages() : [];
 		const events = parseChatMessagesToEvents(chatMessages);
 
 		const history = existingSession ? buildChatHistoryFromEvents(events) : [];
@@ -214,15 +214,16 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 	}));
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.delete', async (sessionItem?: vscode.ChatSessionItem) => {
 		if (sessionItem?.id) {
+			const deleteLabel = l10n.t('Delete');
 			const result = await vscode.window.showWarningMessage(
-				`Are you sure you want to delete the session?`,
+				l10n.t('Are you sure you want to delete the session?'),
 				{ modal: true },
-				'Delete',
-				'Cancel'
+				deleteLabel
 			);
 
-			if (result === 'Delete') {
+			if (result === deleteLabel) {
 				await copilotCLISessionService.deleteSession(sessionItem.id);
+				copilotcliSessionItemProvider.refresh();
 			}
 		}
 	}));
