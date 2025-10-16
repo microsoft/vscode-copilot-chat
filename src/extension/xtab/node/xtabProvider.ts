@@ -9,7 +9,7 @@ import { ChatCompletionContentPartKind } from '@vscode/prompt-tsx/dist/base/outp
 import { FetchStreamSource } from '../../../platform/chat/common/chatMLFetcher';
 import { ChatFetchError, ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { toTextParts } from '../../../platform/chat/common/globalStringUtils';
-import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
+import { ConfigKey, ExperimentBasedConfig, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
 import { IDiffService } from '../../../platform/diff/common/diffService';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
 import { createProxyXtabEndpoint } from '../../../platform/endpoint/node/proxyXtabEndpoint';
@@ -31,6 +31,7 @@ import { OptionalChatRequestParams, Prediction } from '../../../platform/network
 import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { ISimulationTestContext } from '../../../platform/simulationTestContext/common/simulationTestContext';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { raceFilter } from '../../../util/common/async';
 import * as errors from '../../../util/common/errors';
@@ -107,6 +108,7 @@ export class XtabProvider implements IStatelessNextEditProvider {
 		@ILanguageContextProviderService private readonly langCtxService: ILanguageContextProviderService,
 		@ILanguageDiagnosticsService private readonly langDiagService: ILanguageDiagnosticsService,
 		@IIgnoreService private readonly ignoreService: IIgnoreService,
+		@ITelemetryService private readonly telemetryService: ITelemetryService
 	) {
 		this.delayer = new Delayer(this.configService, this.expService);
 		this.tracer = createTracer(['NES', 'XtabProvider'], (s) => this.logService.trace(s));
@@ -1019,20 +1021,62 @@ export class XtabProvider implements IStatelessNextEditProvider {
 			includePostScript: true,
 		};
 
-		const overridingModelConfig = this.configService.getConfig(ConfigKey.Internal.InlineEditsXtabProviderModelConfiguration);
-
-		if (overridingModelConfig) {
-			return {
-				...sourcedModelConfig,
-				modelName: overridingModelConfig.modelName,
-				promptingStrategy: overridingModelConfig.promptingStrategy,
-				currentFile: {
-					...sourcedModelConfig.currentFile,
-					includeTags: overridingModelConfig.includeTagsInCurrentFile,
-				},
-			};
+		const localOverridingModelConfig = this.configService.getConfig(ConfigKey.Internal.InlineEditsXtabProviderModelConfiguration);
+		if (localOverridingModelConfig) {
+			return XtabProvider.overrideModelConfig(sourcedModelConfig, localOverridingModelConfig);
 		}
+
+		const expBasedModelConfig = this.overrideByStringModelConfig(sourcedModelConfig, ConfigKey.Internal.InlineEditsXtabProviderModelConfigurationString);
+		if (expBasedModelConfig) {
+			return expBasedModelConfig;
+		}
+
+		const defaultModelConfig = this.overrideByStringModelConfig(sourcedModelConfig, ConfigKey.Internal.InlineEditsXtabProviderDefaultModelConfigurationString);
+		if (defaultModelConfig) {
+			return defaultModelConfig;
+		}
+
 		return sourcedModelConfig;
+	}
+
+	private overrideByStringModelConfig(originalModelConfig: ModelConfig, configKey: ExperimentBasedConfig<string | undefined>): ModelConfig | undefined {
+		const configString = this.configService.getExperimentBasedConfig(configKey, this.expService);
+		if (configString === undefined) {
+			return undefined;
+		}
+
+		let parsedConfig: xtabPromptOptions.ModelConfiguration | undefined;
+		try {
+			parsedConfig = JSON.parse(configString);
+		} catch (e: unknown) {
+			/* __GDPR__
+				"incorrectNesModelConfig" : {
+					"owner": "ulugbekna",
+					"comment": "Capture if model configuration string is invalid JSON.",
+					"configName": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Name of the configuration that failed to parse." },
+					"errorMessage": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error message from JSON.parse." }
+				}
+			*/
+			this.telemetryService.sendMSFTTelemetryEvent('incorrectNesModelConfig', { configName: configKey.id, errorMessage: errors.toString(errors.fromUnknown(e)) });
+		}
+
+		if (parsedConfig) {
+			return XtabProvider.overrideModelConfig(originalModelConfig, parsedConfig);
+		}
+
+		return undefined;
+	}
+
+	private static overrideModelConfig(modelConfig: ModelConfig, overridingConfig: xtabPromptOptions.ModelConfiguration): ModelConfig {
+		return {
+			...modelConfig,
+			modelName: overridingConfig.modelName,
+			promptingStrategy: overridingConfig.promptingStrategy,
+			currentFile: {
+				...modelConfig.currentFile,
+				includeTags: overridingConfig.includeTagsInCurrentFile,
+			},
+		};
 	}
 
 	private async predictNextCursorPosition(promptPieces: PromptPieces): Promise<Result</* zero-based line number */ number, Error>> {
