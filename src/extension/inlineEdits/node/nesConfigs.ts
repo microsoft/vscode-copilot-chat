@@ -5,6 +5,5 @@
 
 export interface INesConfigs {
 	isAsyncCompletions: boolean;
-	isRevisedCacheStrategy: boolean;
 	debounceUseCoreRequestTime: boolean;
 }

@@ -300,7 +300,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 	private determineNesConfigs(telemetryBuilder: LlmNESTelemetryBuilder, logContext: InlineEditRequestLogContext): INesConfigs {
 		const nesConfigs = {
 			isAsyncCompletions: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsAsyncCompletions, this._expService),
-			isRevisedCacheStrategy: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRevisedCacheStrategy, this._expService),
 			debounceUseCoreRequestTime: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounceUseCoreRequestTime, this._expService),
 		};
 

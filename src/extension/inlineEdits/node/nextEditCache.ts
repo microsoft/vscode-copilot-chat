@@ -226,9 +226,6 @@ class DocumentEditCache {
 			}
 			return cachedEdit;
 		}
-		if (!nesConfigs.isRevisedCacheStrategy) {
-			return undefined;
-		}
 		for (const cachedEdit of this._trackedCachedEdits) {
 			const rebased = this.tryRebaseCacheEntry(cachedEdit, currentDocumentContents, currentSelection, nesConfigs);
 			if (rebased) {
