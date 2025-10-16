@@ -33,7 +33,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseTextEditPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult, Position, Range, WorkspaceEdit } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
-import { ApplyPatchFormatInstructions } from '../../prompts/node/agent/agentInstructions';
+import { ApplyPatchFormatInstructions } from '../../prompts/node/agent/defaultAgentInstructions';
 import { PromptRenderer, renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { Tag } from '../../prompts/node/base/tag';
 import { processFullRewriteNotebook } from '../../prompts/node/codeMapper/codeMapper';
