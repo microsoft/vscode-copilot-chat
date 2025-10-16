@@ -100,12 +100,14 @@ export class InlineChat2Intent implements IIntent {
 			location: ChatLocation.Editor,
 			finishedCb: async (_text, _index, delta) => {
 
-				let didSeeEditTool = false;
+				let doneAfterToolCall = false;
 
 				if (isNonEmptyArray(delta.copilotToolCalls)) {
 					for (const toolCall of delta.copilotToolCalls) {
 
-						didSeeEditTool = didSeeEditTool || InlineChat2Intent._EDIT_TOOLS.has(toolCall.name);
+						doneAfterToolCall = doneAfterToolCall
+							|| InlineChat2Intent._EDIT_TOOLS.has(toolCall.name)
+							|| toolCall.name === INLINE_CHAT_EXIT_TOOL_NAME;
 
 						const validationResult = this._toolsService.validateToolInput(toolCall.name, toolCall.arguments);
 
@@ -136,7 +138,7 @@ export class InlineChat2Intent implements IIntent {
 					}
 				}
 
-				if (didSeeEditTool) {
+				if (doneAfterToolCall) {
 					return 1; // stop generating further
 				}
 
