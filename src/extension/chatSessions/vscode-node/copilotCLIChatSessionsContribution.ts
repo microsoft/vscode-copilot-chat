@@ -225,7 +225,7 @@ export class CopilotCLIChatSessionParticipant {
 		const allRefsTexts: string[] = [];
 		const prompt = request.prompt;
 		// TODO@rebornix: filter out implicit references for now. Will need to figure out how to support `<reminder>` without poluting user prompt
-		request.references.filter(ref => ref.id.startsWith('vscode.prompt.instructions')).forEach(ref => {
+		request.references.filter(ref => !ref.id.startsWith('vscode.prompt.instructions')).forEach(ref => {
 			const valueText = URI.isUri(ref.value) ?
 				ref.value.fsPath :
 				isLocation(ref.value) ?
