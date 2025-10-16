@@ -121,15 +121,14 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 		this.context.environmentVariableCollection.description = allDescriptions || 'Enables additional commands in the terminal.';
 
 		// Build combined path from all contributions
-		const allAppendPaths = Array.from(this.pathContributions.values()).filter(c => !c.prepend).map(c => c.path);
-		if (allAppendPaths.length) {
-			const pathVariableChange = path.delimiter + allAppendPaths.join(path.delimiter);
-			this.context.environmentVariableCollection.append(pathVariable, pathVariableChange);
-		}
-		const allPrependPaths = Array.from(this.pathContributions.values()).filter(c => c.prepend).map(c => c.path);
-		if (allPrependPaths.length) {
-			const pathVariableChange = allPrependPaths.join(path.delimiter) + path.delimiter;
+		// Since we cannot mix and match append/prepend, if there are any prepend paths, then prepend everything.
+		const allPaths = Array.from(this.pathContributions.values()).map(c => c.path);
+		if (Array.from(this.pathContributions.values()).some(c => c.prepend)) {
+			const pathVariableChange = allPaths.join(path.delimiter) + path.delimiter;
 			this.context.environmentVariableCollection.prepend(pathVariable, pathVariableChange);
+		} else {
+			const pathVariableChange = path.delimiter + allPaths.join(path.delimiter);
+			this.context.environmentVariableCollection.append(pathVariable, pathVariableChange);
 		}
 	}
 }
