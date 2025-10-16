@@ -4156,6 +4156,13 @@
 					}
 				}
 			}
+		],
+		"chatModes": [
+			{
+				"name": "Plan",
+				"path": "./assets/chatmodes/Plan.chatmode.md",
+				"description": "Researches a task to create multi-step plans"
+			}
 		]
 	},
 	"extensionPack": [
