@@ -103,7 +103,11 @@ export function parseChatMessagesToEvents(chatMessages: readonly ChatCompletionM
 
 export function stripReminders(text: string): string {
 	// Remove any <reminder> ... </reminder> blocks, including newlines
-	return text.replace(/<reminder>[\s\S]*?<\/reminder>\s*/g, '').trim();
+	// Also remove <current_datetime> ... </current_datetime> blocks
+	return text
+		.replace(/<reminder>[\s\S]*?<\/reminder>\s*/g, '')
+		.replace(/<current_datetime>[\s\S]*?<\/current_datetime>\s*/g, '')
+		.trim();
 }
 
 /**

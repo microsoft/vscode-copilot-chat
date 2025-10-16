@@ -107,7 +107,7 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 		if (shellIntegrationAvailable && terminal.shellIntegration) {
 			// TODO@rebornix fix in VS Code
 			await new Promise(resolve => setTimeout(resolve, 500)); // Wait a bit to ensure the terminal is ready
-			terminal.shellIntegration.executeCommand('copilot');
+			terminal.shellIntegration.executeCommand(command);
 		} else {
 			terminal.sendText(command);
 		}
@@ -224,7 +224,8 @@ export class CopilotCLIChatSessionParticipant {
 
 		const allRefsTexts: string[] = [];
 		const prompt = request.prompt;
-		request.references.forEach(ref => {
+		// TODO@rebornix: filter out implicit references for now. Will need to figure out how to support `<reminder>` without poluting user prompt
+		request.references.filter(ref => ref.id.startsWith('vscode.prompt.instructions')).forEach(ref => {
 			const valueText = URI.isUri(ref.value) ?
 				ref.value.fsPath :
 				isLocation(ref.value) ?
