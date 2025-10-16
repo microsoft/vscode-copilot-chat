@@ -165,7 +165,6 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.EditFile]: ToolCategory.Core,
 	[ToolName.CoreRunInTerminal]: ToolCategory.Core,
 	[ToolName.ListDirectory]: ToolCategory.Core,
-	[ToolName.Think]: ToolCategory.Core,
 	[ToolName.CoreGetTerminalOutput]: ToolCategory.Core,
 	[ToolName.CoreManageTodoList]: ToolCategory.Core,
 	[ToolName.MultiReplaceString]: ToolCategory.Core,
