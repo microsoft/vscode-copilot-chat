@@ -76,8 +76,8 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 				// @github/copilot has hardcoded: import{spawn}from"node-pty"
 				await ensureNodePtyShim(this.extensionContext.extensionPath, this.envService.appRoot);
 
-				const { SessionManager } = await import('@github/copilot/sdk');
-				this._sessionManager = new SessionManager({
+				const { internal } = await import('@github/copilot/sdk');
+				this._sessionManager = new internal.CLISessionManager({
 					logger: {
 						isDebug: () => false,
 						debug: (msg: string) => this.logService.debug(msg),
@@ -209,11 +209,14 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 			// Clean up local caches
 			this._sessions.delete(sessionId);
 			this._sessionWrappers.deleteAndDispose(sessionId);
+			this._onDidChangeSessions.fire();
 
 			return true;
 		} catch (error) {
 			this.logService.error(`Failed to delete session ${sessionId}: ${error}`);
 			return false;
+		} finally {
+
 		}
 	}
 
