@@ -31,6 +31,7 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 	declare _serviceBrand: undefined;
 	private readonly initialization: Promise<void>;
 	private shellScriptPath: string | undefined;
+	private powershellScriptPath: string | undefined;
 	constructor(
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
 		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
@@ -58,10 +59,10 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 		await fs.mkdir(storageLocation, { recursive: true });
 
 		if (process.platform === 'win32') {
-			const ps1Path = path.join(storageLocation, `${COPILOT_CLI_COMMAND}.ps1`);
-			await fs.writeFile(ps1Path, powershellScript);
+			this.shellScriptPath = path.join(storageLocation, `${COPILOT_CLI_COMMAND}.ps1`);
+			await fs.writeFile(this.shellScriptPath, powershellScript);
 			const copilotPowershellScript = `@echo off
-powershell -ExecutionPolicy Bypass -File "${ps1Path}" %*
+powershell -ExecutionPolicy Bypass -File "${this.shellScriptPath}" %*
 `;
 			await fs.writeFile(path.join(storageLocation, `${COPILOT_CLI_COMMAND}.bat`), copilotPowershellScript);
 		} else {
@@ -70,7 +71,9 @@ unset NODE_OPTIONS
 ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPILOT_CLI_SHIM_JS)}" "$@"`;
 			await fs.copyFile(path.join(__dirname, COPILOT_CLI_SHIM_JS), path.join(storageLocation, COPILOT_CLI_SHIM_JS));
 			this.shellScriptPath = path.join(storageLocation, COPILOT_CLI_COMMAND);
+			this.powershellScriptPath = path.join(storageLocation, `copilotCLIShim.ps1`);
 			await fs.writeFile(this.shellScriptPath, copilotShellScript);
+			await fs.writeFile(this.powershellScriptPath, powershellScript);
 			await fs.chmod(this.shellScriptPath, 0o750);
 		}
 	}
@@ -133,14 +136,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 	}
 
 	private getShellPathAndArgs(cliArgs: string[]): { shellPath: string; shellArgs: string[] } | undefined {
-		let configPlatform = '';
-		if (process.platform === 'win32') {
-			configPlatform = 'windows';
-		} else if (process.platform === 'darwin') {
-			configPlatform = 'osx';
-		} else if (process.platform === 'linux') {
-			configPlatform = 'linux';
-		}
+		const configPlatform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux';
 		const defaultProfile = workspace.getConfiguration('terminal').get<string>(`integrated.defaultProfile.${configPlatform}`);
 		if (defaultProfile === 'zsh' && this.shellScriptPath) {
 			return {
@@ -151,6 +147,11 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			return {
 				shellPath: 'bash',
 				shellArgs: ['-lic', quoteArgsForShell(this.shellScriptPath, cliArgs)]
+			};
+		} else if (defaultProfile === 'pwsh' && this.powershellScriptPath && configPlatform !== 'windows') {
+			return {
+				shellPath: 'pwsh',
+				shellArgs: ['-File', this.powershellScriptPath, ...cliArgs]
 			};
 		}
 	}

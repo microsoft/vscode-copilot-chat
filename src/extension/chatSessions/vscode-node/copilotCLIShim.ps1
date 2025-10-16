@@ -139,8 +139,17 @@ function Test-AndLaunchCopilot {
         }
     }
 
-    # Extract version number from output
-    $version = if ($versionOutput -match '[0-9]+\.[0-9]+\.[0-9]+') { $matches[0] } else { $null }
+    # Extract version number from output (search through all lines)
+    $version = $null
+    if ($versionOutput) {
+        foreach ($line in ($versionOutput -split "`n")) {
+            $trimmedLine = $line.Trim()
+            if ($trimmedLine -match '[0-9]+\.[0-9]+\.[0-9]+') {
+                $version = $matches[0]
+                break
+            }
+        }
+    }
 
     if (-not $version) {
         Write-Host "Error: Unable to parse copilot version from: $versionOutput"
