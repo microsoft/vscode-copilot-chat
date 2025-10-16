@@ -39,7 +39,6 @@ import { InlineEditLogger } from './parts/inlineEditLogger';
 import { IVSCodeObservableDocument } from './parts/vscodeWorkspace';
 import { toExternalRange } from './utils/translations';
 import { getNotebookId } from '../../../platform/notebook/common/helpers';
-import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 
 const learnMoreAction: Command = {
 	title: l10n.t('Learn More'),
@@ -120,7 +119,6 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
 		@INotebookService private readonly _notebookService: INotebookService,
 		@IWorkspaceService private readonly _workspaceService: IWorkspaceService,
-		@IAuthenticationService private readonly authenticationService: IAuthenticationService,
 	) {
 		this._tracer = createTracer(['NES', 'Provider'], (s) => this._logService.trace(s));
 		this._displayNextEditorNES = this._configurationService.getExperimentBasedConfig(ConfigKey.Internal.UseAlternativeNESNotebookFormat, this._expService);
@@ -154,12 +152,6 @@ export class InlineCompletionProviderImpl implements InlineCompletionItemProvide
 
 		if (!isInlineEditsEnabled && !serveAsCompletionsProvider) {
 			tracer.returns('inline edits disabled');
-			return undefined;
-		}
-
-		if (this.authenticationService.copilotToken?.isNoAuthUser) {
-			// TODO@bpasero revisit this in the future
-			tracer.returns('inline edits disabled for anonymous users');
 			return undefined;
 		}
 
@@ -611,6 +603,7 @@ function addNotebookTelemetry(document: TextDocument, position: Position, newTex
 	const isNextEditorRangeVisible = nextEditor && nextEditor.visibleRanges.some(range => range.contains(documents[0][1]));
 	const notebookId = getNotebookId(notebook);
 	const lineSuffix = `(${position.line}:${position.character})`;
+	const suggestionLineSuffix = `(->${documents[0][1].start.line}:${documents[0][1].start.character})`;
 	const getCellPrefix = (c: NotebookCell) => {
 		if (c === cell) {
 			return `*`;
@@ -622,7 +615,7 @@ function addNotebookTelemetry(document: TextDocument, position: Position, newTex
 	};
 	const lineCounts = notebook.getCells()
 		.filter(c => c.kind === NotebookCellKind.Code)
-		.map(c => `${getCellPrefix(c)}${c.document.lineCount}${c === cell ? lineSuffix : ''}`).join(',');
+		.map(c => `${getCellPrefix(c)}${c.document.lineCount}${c === cell ? lineSuffix : ''}${c.document === documents[0][0] ? suggestionLineSuffix : ''}`).join(',');
 	telemetryBuilder.
 		setNotebookCellMarkerIndex(cellMarkerIndex)
 		.setNotebookCellMarkerCount(cellMarkerCount)

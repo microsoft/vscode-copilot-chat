@@ -32,6 +32,73 @@ describe('get nuget MCP server info using fake CLI', { timeout: 30_000 }, () => 
 		nuget = new NuGetMcpSetup(logService, fetcherService, commandExecutor);
 	});
 
+	it('converts legacy schema version', async () => {
+		const manifest = {
+			"$schema": "https://modelcontextprotocol.io/schemas/draft/2025-07-09/server.json",
+			packages: [{ registry_name: 'nuget', name: 'MismatchId', version: '0.1.0' }]
+		};
+		const expected = {
+			"$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+			packages: [{ registry_name: 'nuget', name: 'CorrectId', version: '0.2.0' }],
+			"_meta": { "io.modelcontextprotocol.registry/official": {} }
+		};
+
+		const actual = nuget.prepareServerJson(manifest, "CorrectId", "0.2.0");
+
+		expect(actual).toEqual(expected);
+	});
+
+	it('handles original 2025-07-09 schema version', async () => {
+		const manifest = {
+			"$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+			packages: [{ registry_name: 'nuget', name: 'MismatchId', version: '0.1.0' }]
+		};
+		const expected = {
+			"$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+			packages: [{ registry_name: 'nuget', name: 'CorrectId', version: '0.2.0' }],
+			"_meta": { "io.modelcontextprotocol.registry/official": {} }
+		};
+
+		const actual = nuget.prepareServerJson(manifest, "CorrectId", "0.2.0");
+
+		expect(actual).toEqual(expected);
+	});
+
+	it('handles latest 2025-07-09 schema version', async () => {
+		const manifest = {
+			"$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+			packages: [{ registry_type: 'nuget', name: 'MismatchId', version: '0.1.0' }]
+		};
+		const expected = {
+			"$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+			packages: [{ registry_type: 'nuget', name: 'CorrectId', version: '0.2.0' }],
+			"_meta": { "io.modelcontextprotocol.registry/official": {} }
+		};
+
+		const actual = nuget.prepareServerJson(manifest, "CorrectId", "0.2.0");
+
+		expect(actual).toEqual(expected);
+	});
+
+	it('handles latest 2025-09-29 schema version', async () => {
+		const manifest = {
+			"$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+			packages: [{ registryType: 'nuget', name: 'MismatchId', version: '0.1.0' }]
+		};
+		const expected = {
+			server: {
+				"$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+				packages: [{ registryType: 'nuget', name: 'CorrectId', version: '0.2.0' }],
+				"_meta": {},
+			},
+			"_meta": { "io.modelcontextprotocol.registry/official": {} },
+		};
+
+		const actual = nuget.prepareServerJson(manifest, "CorrectId", "0.2.0");
+
+		expect(actual).toEqual(expected);
+	});
+
 	it('returns package metadata', async () => {
 		commandExecutor.fullCommandToResultMap.set(
 			'dotnet package search basetestpackage.DOTNETTOOL --source https://api.nuget.org/v3/index.json --prerelease --format json',

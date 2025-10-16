@@ -204,7 +204,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			}
 		}
 
-		if (this.props.endpoint.family.startsWith('claude-sonnet-4.5')) {
+		if (this.supportsClaudeAltPrompt(this.props.endpoint.family)) {
 			const promptType = this.configurationService.getExperimentBasedConfig(ConfigKey.ClaudeSonnet45AlternatePrompt, this.experimentationService);
 			switch (promptType) {
 				case 'v2':
@@ -235,6 +235,15 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			modelFamily={this.props.endpoint.family}
 			codesearchMode={this.props.codesearchMode}
 		/>;
+	}
+
+	private supportsClaudeAltPrompt(family: string): boolean {
+		if (!family.startsWith('claude-')) {
+			return false;
+		}
+
+		const excludedVersions = ['claude-3.5-sonnet', 'claude-3.7-sonnet', 'claude-sonnet-4'];
+		return !excludedVersions.includes(family);
 	}
 
 	private async getAgentCustomInstructions() {
@@ -424,6 +433,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<KeepGoingReminder modelFamily={this.props.endpoint.family} />
 						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint), hasMultiReplaceStringTool)}
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
+						{getFileCreationReminder(this.props.endpoint.family)}
 						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
 					</Tag>
 					{query && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
@@ -821,6 +831,13 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 	}
 }
 
+function getFileCreationReminder(modelFamily: string | undefined) {
+	if (modelFamily !== 'claude-sonnet-4.5') {
+		return;
+	}
+	return <>Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.<br /></>;
+}
+
 function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {
 	if (modelFamily === 'gpt-5-codex') {
 		return;
@@ -838,7 +855,7 @@ function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: b
 			<Tag name='importantReminders'>
 				Before starting a task, review and follow the guidance in &lt;responseModeHints&gt;, &lt;engineeringMindsetHints&gt;, and &lt;requirementsUnderstanding&gt;.<br />
 				{!isGpt5Mini && <>Start your response with a brief acknowledgement, followed by a concise high-level plan outlining your approach.<br /></>}
-				DO NOT state your identity or model name unless the user explicitly asks you to. <br />
+				Do NOT volunteer your model name unless the user explicitly asks you about it. <br />
 				{hasTodoTool && <>You MUST use the todo list tool to plan and track your progress. NEVER skip this step, and START with this step whenever the task is multi-step. This is essential for maintaining visibility and proper execution of large tasks.<br /></>}
 				{!hasTodoTool && <>Break down the request into clear, actionable steps and present them at the beginning of your response before proceeding with implementation. This helps maintain visibility and ensures all requirements are addressed systematically.<br /></>}
 				When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />

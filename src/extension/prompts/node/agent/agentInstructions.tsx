@@ -424,7 +424,7 @@ export class CodexStyleGPT5CodexPrompt extends PromptElement<DefaultAgentPromptP
 	async render(state: void, sizing: PromptSizing) {
 		const tools = detectToolCapabilities(this.props.availableTools);
 		return <InstructionMessage>
-			You are a coding agent based on GPT-5-Codex. You are running as a coding agent in the Codex CLI on a user's computer.<br />
+			You are a coding agent based on GPT-5-Codex.<br />
 			<br />
 			## Editing constraints<br />
 			<br />
@@ -904,17 +904,17 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 				1. Begin by initializing Git with `git init`, then exploring the repository to familiarize yourself with its structure. Use {ToolName.CoreRunInTerminal} to explore the directory structure.<br />
 				2. Create a well-documented Python script in temp/ to reproduce the issue described in the pr_description.<br />
 				3. CRITICAL - ISSUE REPRODUCTION: Execute the reproduce script using the {ToolName.CoreRunInTerminal} tool, for example `python temp/reproduce.py` to confirm the issue can be reproduced. Document the exact error output or behavior that demonstrates the issue.<br />
-				4. Analyze the issue by carefully reviewing the output of the reproduce script via {ToolName.Think}. Document your understanding of the root cause.<br />
+				4. Analyze the issue by carefully reviewing the output of the reproduce script. Document your understanding of the root cause.<br />
 				5. Before making any code changes via edit tool, you must use the {ToolName.ReadFile} tool to read and understand all relevant code blocks that might be affected by your fix.<br />
 				6. CRITICAL - When using the {ToolName.ReadFile} tool, prefer reading a large section over calling the {ToolName.ReadFile} tool many times in sequence. You can also think of all the pieces you may be interested in and read them in parallel. Read large enough context to ensure you get what you need.<br />
 				7. DEVELOP TEST CASES: Extend your reproduce script to include comprehensive tests that cover not only the original issue but also potential edge cases. These tests should initially fail, confirming they properly detect the issue.<br />
 				8. IMPORTANT - STAGE FILES BEFORE EDITING: For each file that you plan to modify, first add it to Git staging using {ToolName.CoreRunInTerminal} with a command like `git add path_to_target_file/target_file`. Do this only once per file before any editing.<br />
 				9. ITERATIVE FIX DEVELOPMENT: Begin by modifying your reproduce script to implement potential fixes. Use this as your development environment to understand the root cause and develop a working solution. Run the script frequently to see if your changes resolve the issue and pass the tests you've created.<br />
-				10. Learn from test failures and use {ToolName.Think} to document your understanding of why certain approaches fail and what insights they provide about the root cause.<br />
+				10. Learn from test failures and document your understanding of why certain approaches fail and what insights they provide about the root cause.<br />
 				11. Continue refining your solution in the reproduce script until ALL tests pass consistently, including the edge cases you've defined. This confirms you have a working fix.<br />
 				12. APPLY SUCCESSFUL FIX: Once you have a working fix in your reproduce script, carefully apply the correct fix to the source code using edit tool.<br />
 				13. CRITICAL - VERIFY CHANGES WITH GIT DIFF: After using edit tool to edit file for example like target_file, immediately run {ToolName.CoreRunInTerminal} with command `git diff path_to_target_file/target_file` to verify your changes have been correctly applied. This `git diff` check is essential to ensure the expected modifications were properly applied.<br />
-				14. Make code changes incrementally and update your plan after each meaningful unit of work using {ToolName.Think}. Document what worked and what didn't.<br />
+				14. Make code changes incrementally and update your plan after each meaningful unit of work. Document what worked and what didn't.<br />
 				15. Test your changes frequently with both the original issue case and the edge cases. Ensure fixes are applied consistently to both source code and test script.<br />
 				16. CRITICAL - SYNCHRONIZATION CHECK: After each successful test run in temp, verify with both {ToolName.ReadFile} tool and `git diff` command that the working fix has been properly applied to the actual source files. Do not proceed until you confirm the changes exist in the correct source files.<br />
 				17. Keep iterating until your reproduce script passes all tests, confirming that the original issue and all identified edge cases are properly resolved.<br />
@@ -1113,15 +1113,6 @@ export class ClaudeSonnet45PromptV2 extends PromptElement<DefaultAgentPromptProp
 			<NotebookInstructions {...this.props} />
 			<Tag name='outputFormatting'>
 				Use proper Markdown formatting in your answers. When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
-				{tools[ToolName.CoreRunInTerminal] ? <>
-					When commands are required, run them yourself in a terminal and summarize the results. Do not print runnable commands unless the user asks. If you must show them for documentation, make them clearly optional and keep one command per line.<br />
-				</> : <>
-					When sharing setup or run steps for the user to execute, render commands in fenced code blocks with an appropriate language tag (`bash`, `sh`, `powershell`, `python`, etc.). Keep one command per line; avoid prose-only representations of commands.<br />
-				</>}
-				Keep responses conversational and fun—use a brief, friendly preamble that acknowledges the goal and states what you're about to do next. Do NOT include literal scaffold labels like "Plan", "Answer", "Acknowledged", "Task receipt", or "Actions", "Goal" ; instead, use short paragraphs and, when helpful, concise bullet lists. Do not start with filler acknowledgements (e.g., "Sounds good", "Great", "Okay, I will…"). For multi-step tasks, maintain a lightweight checklist implicitly and weave progress into your narration.<br />
-				For section headers in your response, use level-2 Markdown headings (`##`) for top-level sections and level-3 (`###`) for subsections. Choose titles dynamically to match the task and content. Do not hard-code fixed section names; create only the sections that make sense and only when they have non-empty content. Keep headings short and descriptive (e.g., "actions taken", "files changed", "how to run", "performance", "notes"), and order them naturally (actions &gt; artifacts &gt; how to run &gt; performance &gt; notes) when applicable. You may add a tasteful emoji to a heading when it improves scannability; keep it minimal and professional. Headings must start at the beginning of the line with `## ` or `### `, have a blank line before and after, and must not be inside lists, block quotes, or code fences.<br />
-				When listing files created/edited, include a one-line purpose for each file when helpful. In performance sections, base any metrics on actual runs from this session; note the hardware/OS context and mark estimates clearly—never fabricate numbers. In "Try it" sections, keep commands copyable; comments starting with `#` are okay, but put each command on its own line.<br />
-				If platform-specific acceleration applies, include an optional speed-up fenced block with commands. Close with a concise completion summary describing what changed and how it was verified (build/tests/linters), plus any follow-ups.<br />
 				<Tag name='example'>
 					The class `Person` is in `src/models/person.ts`.<br />
 					The function `calculateTotal` is defined in `lib/utils/math.ts`.<br />

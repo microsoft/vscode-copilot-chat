@@ -283,7 +283,9 @@ function getErrorDetailsFromChatFetchErrorInner(fetchResult: ChatFetchError, cop
 			};
 		case ChatFetchResponseType.BadRequest:
 		case ChatFetchResponseType.Failed:
-			return { message: l10n.t(`Sorry, your request failed. Please try again. Request id: {0}\n\nReason: {1}`, fetchResult.requestId, fetchResult.reason) };
+			return fetchResult.serverRequestId
+				? { message: l10n.t(`Sorry, your request failed. Please try again.\n\nCopilot Request id: {0}\n\nGH Request Id: {1}\n\nReason: {2}`, fetchResult.requestId, fetchResult.serverRequestId, fetchResult.reason) }
+				: { message: l10n.t(`Sorry, your request failed. Please try again.\n\nCopilot Request id: {0}\n\nReason: {1}`, fetchResult.requestId, fetchResult.reason) };
 		case ChatFetchResponseType.NetworkError:
 			return { message: l10n.t(`Sorry, there was a network error. Please try again later. Request id: {0}\n\nReason: {1}`, fetchResult.requestId, fetchResult.reason) };
 		case ChatFetchResponseType.Filtered:

@@ -52,6 +52,21 @@ export interface ITerminalService {
 	 */
 	getLastCommandForTerminal(terminal: vscode.Terminal): vscode.TerminalExecutedCommand | undefined;
 
+	/**
+	 * Contributes a path to the terminal PATH environment variable.
+	 * @param contributor Unique identifier for the contributor
+	 * @param pathLocation The path to add to PATH
+	 * @param description Optional description for the PATH contribution
+	 * @param prepend Whether to prepend (true) or append (false) the path. Defaults to false (append).
+	 */
+	contributePath(contributor: string, pathLocation: string, description?: string, prepend?: boolean): void;
+
+	/**
+	 * Removes a path contribution from the terminal PATH environment variable.
+	 * @param contributor Unique identifier for the contributor
+	 */
+	removePathContribution(contributor: string): void;
+
 	readonly terminals: readonly vscode.Terminal[];
 }
 
@@ -133,6 +148,14 @@ export class NullTerminalService extends Disposable implements ITerminalService 
 
 	getLastCommandForTerminal(terminal: vscode.Terminal): vscode.TerminalExecutedCommand | undefined {
 		return undefined;
+	}
+
+	contributePath(contributor: string, pathLocation: string, description?: string): void {
+		// No-op for null service
+	}
+
+	removePathContribution(contributor: string): void {
+		// No-op for null service
 	}
 }
 export function isTerminalService(thing: any): thing is ITerminalService {
