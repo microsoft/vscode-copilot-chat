@@ -54,37 +54,3 @@ interface IEditTelemetryData {
 	eventName: string;
 	data: Record<string, unknown>;
 }
-
-type InlineCompletionEndOfLifeEvent = {
-	id: string;
-	extensionId: string;
-	extensionVersion: string;
-	shown: boolean;
-	shownDuration: number;
-	shownDurationUncollapsed: number;
-	timeUntilShown: number | undefined;
-	timeUntilProviderRequest: number;
-	timeUntilProviderResponse: number;
-	reason: 'accepted' | 'rejected' | 'ignored';
-	partiallyAccepted: number;
-	partiallyAcceptedCountSinceOriginal: number;
-	partiallyAcceptedRatioSinceOriginal: number;
-	partiallyAcceptedCharactersSinceOriginal: number;
-	preceeded: boolean;
-	requestReason: string;
-	languageId: string;
-	error: string | undefined;
-	typingInterval: number;
-	typingIntervalCharacterCount: number;
-	superseded: boolean;
-	editorType: string;
-	viewKind: string | undefined;
-	cursorColumnDistance: number | undefined;
-	cursorLineDistance: number | undefined;
-	lineCountOriginal: number | undefined;
-	lineCountModified: number | undefined;
-	characterCountOriginal: number | undefined;
-	characterCountModified: number | undefined;
-	disjointReplacements: number | undefined;
-	sameShapeReplacements: boolean | undefined;
-};
