@@ -57,8 +57,9 @@ export interface ITerminalService {
 	 * @param contributor Unique identifier for the contributor
 	 * @param pathLocation The path to add to PATH
 	 * @param description Optional description for the PATH contribution
+	 * @param prepend Whether to prepend (true) or append (false) the path. Defaults to false (append).
 	 */
-	contributePath(contributor: string, pathLocation: string, description?: string): void;
+	contributePath(contributor: string, pathLocation: string, description?: string, prepend?: boolean): void;
 
 	/**
 	 * Removes a path contribution from the terminal PATH environment variable.

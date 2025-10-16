@@ -49,12 +49,14 @@ export abstract class BaseOpenAICompatibleLMProvider implements BYOKModelProvide
 			if (models.error) {
 				throw models.error;
 			}
+			this._logService.trace(`Fetched ${models.data.length} models from ${this._name}`);
 			const modelList: BYOKKnownModels = {};
 			for (const model of models.data) {
 				if (this._knownModels && this._knownModels[model.id]) {
 					modelList[model.id] = this._knownModels[model.id];
 				}
 			}
+			this._logService.trace(`Filtered to ${Object.keys(modelList).length} known models for ${this._name}`);
 			return modelList;
 		} catch (error) {
 			throw new Error(error.message ? error.message : error);

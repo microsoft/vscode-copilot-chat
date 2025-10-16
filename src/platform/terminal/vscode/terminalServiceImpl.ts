@@ -14,7 +14,7 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 
 	declare readonly _serviceBrand: undefined;
 
-	private readonly pathContributions = new Map<string, { path: string; description?: string }>();
+	private readonly pathContributions = new Map<string, { path: string; description?: string; prepend: boolean }>();
 
 	constructor(
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
@@ -91,8 +91,8 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 		return getActiveTerminalShellType();
 	}
 
-	contributePath(contributor: string, pathLocation: string, description?: string): void {
-		this.pathContributions.set(contributor, { path: pathLocation, description });
+	contributePath(contributor: string, pathLocation: string, description?: string, prepend: boolean = false): void {
+		this.pathContributions.set(contributor, { path: pathLocation, description, prepend });
 		this.updateEnvironmentPath();
 	}
 
@@ -111,9 +111,6 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 			return;
 		}
 
-		// Build combined path from all contributions
-		const allPaths = Array.from(this.pathContributions.values()).map(c => c.path);
-		const pathVariableChange = path.delimiter + allPaths.join(path.delimiter);
 
 		// Build combined description
 		const allDescriptions = Array.from(this.pathContributions.values())
@@ -122,6 +119,17 @@ export class TerminalServiceImpl extends Disposable implements ITerminalService 
 			.join(' and ');
 
 		this.context.environmentVariableCollection.description = allDescriptions || 'Enables additional commands in the terminal.';
-		this.context.environmentVariableCollection.append(pathVariable, pathVariableChange);
+
+		// Build combined path from all contributions
+		const allAppendPaths = Array.from(this.pathContributions.values()).filter(c => !c.prepend).map(c => c.path);
+		if (allAppendPaths.length) {
+			const pathVariableChange = path.delimiter + allAppendPaths.join(path.delimiter);
+			this.context.environmentVariableCollection.append(pathVariable, pathVariableChange);
+		}
+		const allPrependPaths = Array.from(this.pathContributions.values()).filter(c => c.prepend).map(c => c.path);
+		if (allPrependPaths.length) {
+			const pathVariableChange = allPrependPaths.join(path.delimiter) + path.delimiter;
+			this.context.environmentVariableCollection.prepend(pathVariable, pathVariableChange);
+		}
 	}
 }

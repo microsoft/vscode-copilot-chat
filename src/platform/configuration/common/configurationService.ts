@@ -665,6 +665,7 @@ export namespace ConfigKey {
 		export const InlineEditsHideInternalInterface = defineValidatedSetting<boolean>('chat.advanced.inlineEdits.hideInternalInterface', vBoolean(), false, INTERNAL_RESTRICTED);
 		export const InlineEditsLogCancelledRequests = defineValidatedSetting<boolean>('chat.advanced.inlineEdits.logCancelledRequests', vBoolean(), false, INTERNAL_RESTRICTED);
 		export const InlineEditsUnification = defineExpSetting<boolean>('chat.advanced.inlineEdits.unification', false, INTERNAL_RESTRICTED);
+		export const InlineEditsTriggerOnEditorChange = defineExpSetting<boolean>('chat.advanced.inlineEdits.triggerOnEditorChange', { defaultValue: false, teamDefaultValue: true }, INTERNAL);
 		export const InlineEditsNextCursorPredictionEnabled = defineExpSetting<boolean>('chat.advanced.inlineEdits.nextCursorPrediction.enabled', { defaultValue: false, teamDefaultValue: true }, INTERNAL_RESTRICTED);
 		export const InlineEditsNextCursorPredictionModelName = defineExpSetting<string | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.modelName', { defaultValue: undefined, teamDefaultValue: "xtab-cursor-jump-v2" }, INTERNAL_RESTRICTED);
 		export const InlineEditsNextCursorPredictionUrl = defineValidatedSetting<string | undefined>('chat.advanced.inlineEdits.nextCursorPrediction.url', vString(), undefined, INTERNAL_RESTRICTED);
@@ -750,7 +751,6 @@ export namespace ConfigKey {
 		export const Gpt5AlternativePatch = defineExpSetting<boolean>('chat.advanced.gpt5AlternativePatch', false);
 	}
 
-	export const AgentThinkingTool = defineSetting<boolean>('chat.agent.thinkingTool', false);
 	/** Use the Responses API instead of Chat Completions when supported */
 	export const UseResponsesApi = defineExpSetting<boolean | undefined>('chat.useResponsesApi', true);
 	/** Configure reasoning effort sent to Responses API */
@@ -778,8 +778,6 @@ export namespace ConfigKey {
 	export const TypeScriptLanguageContextCacheTimeout = defineExpSetting<number>('chat.languageContext.typescript.cacheTimeout', 500);
 	export const TypeScriptLanguageContextFix = defineExpSetting<boolean>('chat.languageContext.fix.typescript.enabled', false);
 	export const TypeScriptLanguageContextInline = defineExpSetting<boolean>('chat.languageContext.inline.typescript.enabled', false);
-	/** Enables the start debugging intent */
-	export const StartDebuggingIntent = defineSetting('chat.startDebugging.enabled', true);
 	export const UseInstructionFiles = defineSetting('chat.codeGeneration.useInstructionFiles', true);
 	export const ReviewAgent = defineSetting('chat.reviewAgent.enabled', true);
 	export const CodeFeedback = defineSetting('chat.reviewSelection.enabled', true);

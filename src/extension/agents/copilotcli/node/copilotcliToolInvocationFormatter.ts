@@ -154,11 +154,12 @@ export function buildChatHistoryFromEvents(events: readonly SDKEvent[]): (ChatRe
 					);
 				}
 			} else {
+				// Update the pending tool invocation with the result
 				if (event.toolCallId) {
 					const invocation = pendingToolInvocations.get(event.toolCallId);
 					if (invocation) {
-						invocation.isConfirmed = true;
-						invocation.isError = event.result.resultType === 'failure' || event.result.resultType === 'denied';
+						invocation.isConfirmed = event.result.resultType !== 'rejected' && event.result.resultType !== 'denied';
+						invocation.isError = event.result.resultType === 'failure';
 						pendingToolInvocations.delete(event.toolCallId);
 					}
 				}
@@ -186,11 +187,11 @@ export function createCopilotCLIToolInvocation(
 	error?: string
 ): ChatToolInvocationPart | undefined {
 	const invocation = new ChatToolInvocationPart(toolName, toolCallId ?? '', false);
-	invocation.isConfirmed = true;
+	invocation.isConfirmed = resultType === 'success';
 	invocation.isComplete = true;
 
 	if (resultType) {
-		invocation.isError = resultType === 'failure' || resultType === 'denied';
+		invocation.isError = resultType === 'failure';
 	}
 
 	// Format based on tool name
