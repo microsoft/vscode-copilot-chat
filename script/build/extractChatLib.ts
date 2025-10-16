@@ -153,7 +153,10 @@ class ChatLibExtractor {
 		for (const line of lines) {
 			// Track block comments
 			if (line.trim().startsWith('/*')) {
-				inBlockComment = true;
+				// preserve pragmas in tsx files
+				if (!(filePath.endsWith('.tsx') && line.match(/\/\*\*\s+@jsxImportSource\s+\S+/))) {
+					inBlockComment = true;
+				}
 			}
 			if (inBlockComment) {
 				if (line.includes('*/')) {
@@ -199,7 +202,7 @@ class ChatLibExtractor {
 		// - export ... from './path'
 		// - export { ... } from './path'
 		// Updated regex to match all relative imports (including multiple ../ segments)
-		const relativeImportRegex = /(?:import|export)\s+(?:(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+)?['"](\.\.?\/[^'"]*)['"]/g;
+		const relativeImportRegex = /(?:import(?:\s+type)?|export)\s+(?:(?:\{[^}]*\}|\*(?:\s+as\s+\w+)?|\w+)\s+from\s+)?['"](\.\.?\/[^'"]*)['"]/g;
 		let match;
 
 		while ((match = relativeImportRegex.exec(activeContent)) !== null) {
@@ -213,7 +216,7 @@ class ChatLibExtractor {
 
 		// Also match path alias imports like: import ... from '#lib/...' or '#types'
 		// We need to resolve these to follow their dependencies
-		const aliasImportRegex = /(?:import|export)\s+(?:(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+)?['"]([#][^'"]*)['"]/g;
+		const aliasImportRegex = /(?:import(?:\s+type)?|export)\s+(?:(?:\{[^}]*\}|\*(?:\s+as\s+\w+)?|\w+)\s+from\s+)?['"]([#][^'"]*)['"]/g;
 
 		while ((match = aliasImportRegex.exec(activeContent)) !== null) {
 			const importPath = match[1];
@@ -221,6 +224,20 @@ class ChatLibExtractor {
 
 			if (resolvedPath) {
 				dependencies.push(resolvedPath);
+			}
+		}
+
+		// For tsx files process JSX imports as well
+		if (filePath.endsWith('.tsx')) {
+			const jsxRelativeImportRegex = /\/\*\*\s+@jsxImportSource\s+(\.\.?\/\S+)\s+\*\//g;
+
+			while ((match = jsxRelativeImportRegex.exec(activeContent)) !== null) {
+				const importPath = match[1];
+				const resolvedPath = this.resolveImportPath(filePath, path.join(importPath, 'jsx-runtime'));
+
+				if (resolvedPath) {
+					dependencies.push(resolvedPath);
+				}
 			}
 		}
 
