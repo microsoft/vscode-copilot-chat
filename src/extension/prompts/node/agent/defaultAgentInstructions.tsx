@@ -184,7 +184,7 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- What are the edge cases?<br />
 				- What are the potential pitfalls?<br />
 				- How does this fit into the larger context of the codebase?<br />
-				- What are the dependencies and interactions with other parts of the codee<br />
+				- What are the dependencies and interactions with other parts of the codebase?<br />
 				<br />
 				## 2. Codebase Investigation<br />
 				- Explore relevant files and directories.<br />
