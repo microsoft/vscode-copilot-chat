@@ -414,14 +414,12 @@ export class Parser {
 				targetIndentStyle.insertSpaces
 			);
 
-			let matchedLineIndent = 0;
-			let additionalIndentation: AdditionalIndentationDetails | undefined;
-			if (match.fuzz & Fuzz.IgnoredWhitespace) {
-				matchedLineIndent = computeIndentLevel2(fileLines[match.line], targetIndentStyle.tabSize);
-				additionalIndentation = new AdditionalIndentationDetails('', false);
-			}
+
+			const additionalIndentation = new AdditionalIndentationDetails('', false);
+			const matchedLineIndent = computeIndentLevel2(fileLines[match.line], targetIndentStyle.tabSize);
 
 			for (const ch of nextSection.chunks) {
+				console.log("Processing chunk with original index:", ch);
 				ch.origIndex += match.line;
 				if (match.fuzz & Fuzz.NormalizedExplicitNL) {
 					ch.insLines = ch.insLines.map(replace_explicit_nl);
@@ -446,14 +444,12 @@ export class Parser {
 	}
 
 
-	private updateIndentation(insLength: number, ins: string, srcIndentStyle: IGuessedIndentation, targetIndentStyle: IGuessedIndentation, matchedLineIndent: number, additionalIndentationDetails: AdditionalIndentationDetails | undefined): string {
+	private updateIndentation(insLength: number, ins: string, srcIndentStyle: IGuessedIndentation, targetIndentStyle: IGuessedIndentation, matchedLineIndent: number, additionalIndentationDetails: AdditionalIndentationDetails): string {
 		let result = ins;
 		let additionalIndentation = '';
-		// additionalIndentationDetails holds the cached additional indentation to apply to each line.
-		if (srcIndentStyle.insertSpaces === targetIndentStyle.insertSpaces && srcIndentStyle.tabSize < targetIndentStyle.tabSize) {
-			result = transformIndentation(ins, srcIndentStyle, targetIndentStyle);
-		}
-		if (additionalIndentationDetails && !additionalIndentationDetails.isAdditionalIndentationSet) {
+		result = transformIndentation(ins, srcIndentStyle, targetIndentStyle);
+		// additionalIndentationDetails holds the indentation of the first line of the context for each section('@@' in a patch).
+		if (!additionalIndentationDetails.isAdditionalIndentationSet) {
 			const insIndent = computeIndentLevel2(result, targetIndentStyle.tabSize);
 			additionalIndentationDetails.isAdditionalIndentationSet = true;
 			if (matchedLineIndent > insIndent) {
@@ -461,10 +457,8 @@ export class Parser {
 				additionalIndentationDetails.indentation = additionalIndentation;
 			}
 		} else {
-
-			additionalIndentation = additionalIndentationDetails?.indentation ?? '';
+			additionalIndentation = additionalIndentationDetails.indentation;
 		}
-
 		return additionalIndentation + result;
 	}
 
