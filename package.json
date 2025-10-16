@@ -3520,25 +3520,25 @@
 					},
 					"github.copilot.chat.advanced.inlineEdits.xtabProvider.nRecentlyViewedDocuments": {
 						"type": "number",
-						"default": {},
+						"default": 5,
 						"description": "Advanced setting for InlineEditsXtabNRecentlyViewedDocuments",
 						"advanced": true
 					},
 					"github.copilot.chat.advanced.inlineEdits.xtabProvider.recentlyViewedDocuments.maxTokens": {
 						"type": "number",
-						"default": {},
+						"default": 2000,
 						"description": "Advanced setting for InlineEditsXtabRecentlyViewedDocumentsMaxTokens",
 						"advanced": true
 					},
 					"github.copilot.chat.advanced.inlineEdits.xtabProvider.diffNEntries": {
 						"type": "number",
-						"default": {},
+						"default": 25,
 						"description": "Advanced setting for InlineEditsXtabDiffNEntries",
 						"advanced": true
 					},
 					"github.copilot.chat.advanced.inlineEdits.xtabProvider.diffMaxTokens": {
 						"type": "number",
-						"default": {},
+						"default": 1000,
 						"description": "Advanced setting for InlineEditsXtabDiffMaxTokens",
 						"advanced": true
 					},
@@ -3550,49 +3550,49 @@
 					},
 					"github.copilot.chat.advanced.inlineEdits.xtabProvider.includeViewedFiles": {
 						"type": "boolean",
-						"default": {},
+						"default": false,
 						"description": "Advanced setting for InlineEditsXtabIncludeViewedFiles",
 						"advanced": true
 					},
 					"github.copilot.chat.advanced.inlineEdits.xtabProvider.pageSize": {
 						"type": "number",
-						"default": {},
+						"default": 10,
 						"description": "Advanced setting for InlineEditsXtabPageSize",
 						"advanced": true
 					},
 					"github.copilot.chat.advanced.inlineEdits.xtabProvider.includeTagsInCurrentFile": {
 						"type": "boolean",
-						"default": {},
+						"default": true,
 						"description": "Advanced setting for InlineEditsXtabIncludeTagsInCurrentFile",
 						"advanced": true
 					},
 					"github.copilot.chat.advanced.inlineEdits.xtabProvider.currentFileMaxTokens": {
 						"type": "number",
-						"default": {},
+						"default": 2000,
 						"description": "Advanced setting for InlineEditsXtabCurrentFileMaxTokens",
 						"advanced": true
 					},
 					"github.copilot.chat.advanced.inlineEdits.xtabProvider.currentFile.prioritizeAboveCursor": {
 						"type": "boolean",
-						"default": {},
+						"default": false,
 						"description": "Advanced setting for InlineEditsXtabPrioritizeAboveCursor",
 						"advanced": true
 					},
 					"github.copilot.chat.advanced.inlineEdits.xtabProvider.diffOnlyForDocsInPrompt": {
 						"type": "boolean",
-						"default": {},
+						"default": false,
 						"description": "Advanced setting for InlineEditsXtabDiffOnlyForDocsInPrompt",
 						"advanced": true
 					},
 					"github.copilot.chat.advanced.inlineEdits.xtabProvider.diffUseRelativePaths": {
 						"type": "boolean",
-						"default": {},
+						"default": false,
 						"description": "Advanced setting for InlineEditsXtabDiffUseRelativePaths",
 						"advanced": true
 					},
 					"github.copilot.chat.advanced.inlineEdits.xtabProvider.nNonSignificantLinesToConverge": {
 						"type": "number",
-						"default": 4,
+						"default": 3,
 						"description": "Advanced setting for InlineEditsXtabNNonSignificantLinesToConverge",
 						"advanced": true
 					},
@@ -3604,19 +3604,23 @@
 					},
 					"github.copilot.chat.advanced.inlineEdits.xtabProvider.languageContext.enabled": {
 						"type": "boolean",
-						"default": {},
+						"default": false,
 						"description": "Advanced setting for InlineEditsXtabLanguageContextEnabled",
 						"advanced": true
 					},
 					"github.copilot.chat.advanced.inlineEdits.xtabProvider.languageContext.enabledLanguages": {
 						"type": "object",
-						"default": {},
+						"default": {
+							"prompt": true,
+							"instructions": true,
+							"chatmode": true
+						},
 						"description": "Advanced setting for InlineEditsXtabLanguageContextEnabledLanguages",
 						"advanced": true
 					},
 					"github.copilot.chat.advanced.inlineEdits.xtabProvider.languageContext.maxTokens": {
 						"type": "number",
-						"default": {},
+						"default": 2000,
 						"description": "Advanced setting for InlineEditsXtabLanguageContextMaxTokens",
 						"advanced": true
 					},
