@@ -803,7 +803,7 @@ class LogTreeFilters extends Disposable {
 
 	private isNesRequest(item: ChatRequestItem): boolean {
 		const debugName = item.info.entry.debugName.toLowerCase();
-		return debugName.startsWith('nes |') || debugName === 'xtabprovider';
+		return debugName.startsWith('nes |') || debugName === 'xtabprovider' || debugName.startsWith('nes.');
 	}
 
 	private setShown(name: string, value: boolean): void {

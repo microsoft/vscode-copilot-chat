@@ -8,7 +8,7 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { PullRequestSearchItem, SessionInfo } from './githubAPI';
-import { BaseOctoKitService, IOctoKitService, IOctoKitUser } from './githubService';
+import { BaseOctoKitService, IOctoKitService, IOctoKitUser, JobInfo, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
 	declare readonly _serviceBrand: undefined;
@@ -78,5 +78,33 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			authToken,
 		);
 		return response;
+	}
+
+	async getSessionInfo(sessionId: string): Promise<SessionInfo> {
+		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		if (!authToken) {
+			throw new Error('No authentication token available');
+		}
+		const response = await this.getSessionInfoWithToken(
+			sessionId,
+			authToken,
+		);
+		return response;
+	}
+
+	async postCopilotAgentJob(owner: string, name: string, apiVersion: string, payload: RemoteAgentJobPayload): Promise<RemoteAgentJobResponse> {
+		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		if (!authToken) {
+			throw new Error('No authentication token available');
+		}
+		return this.postCopilotAgentJobWithToken(owner, name, apiVersion, 'vscode-copilot-chat', payload, authToken);
+	}
+
+	async getJobByJobId(owner: string, repo: string, jobId: string, userAgent: string): Promise<JobInfo> {
+		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		if (!authToken) {
+			throw new Error('No authentication token available');
+		}
+		return this.getJobByJobIdWithToken(owner, repo, jobId, userAgent, authToken);
 	}
 }

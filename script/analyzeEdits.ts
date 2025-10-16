@@ -10,6 +10,9 @@ import * as readline from 'readline';
 // Edit tool names we're tracking
 const EDIT_TOOL_NAMES = ['insert_edit_into_file', 'replace_string_in_file', 'multi_replace_string_in_file', 'apply_patch'];
 
+// Tool names that indicate a continuation/retry attempt
+const CONTINUATION_TOOL_NAMES = ['read_file'];
+
 interface EditLogEntry {
 	timestamp: string;
 	requestId: string;
@@ -33,6 +36,8 @@ interface EditOperation {
 	originalInput: string;
 	healedInput?: string;
 	turnIndex: number;
+	isRetry: boolean;
+	retrySucceeded?: boolean;
 }
 
 interface ConversationAnalysis {
@@ -42,6 +47,9 @@ interface ConversationAnalysis {
 	successfulEdits: number;
 	failedEdits: number;
 	healedEdits: number;
+	successfulEditsWithRetries: number;
+	totalUniqueEdits: number;
+	modelName?: string;
 }
 
 interface RunAnalysis {
@@ -50,6 +58,9 @@ interface RunAnalysis {
 	totalEdits: number;
 	successRate: number;
 	healingRate: number;
+	successRateWithRetries: number;
+	totalUniqueEdits: number;
+	modelName?: string;
 }
 
 async function listRuns(amlOutPath: string): Promise<string[]> {
@@ -108,14 +119,14 @@ async function parseEditLogs(simLogPath: string): Promise<EditLogEntry[]> {
 				try {
 					const data = JSON.parse(jsonData);
 					// The data can be either an object or an array with one object
-					const entry = Array.isArray(data) ? data[0] : data;
-					if (entry && typeof entry === 'object') {
+					const entry = Array.isArray(data) ? data : [data];
+					if (entry && entry.length && entry[0]) {
 						editLogs.push({
 							timestamp,
-							requestId: entry.requestId ?? _requestId,
-							success: entry.success,
-							input: entry.input,
-							healed: entry.healed
+							requestId: entry[0].requestId ?? _requestId,
+							success: entry.every(e => e.success),
+							input: entry[0].input,
+							healed: entry[0].healed
 						});
 					}
 				} catch (e) {
@@ -144,8 +155,8 @@ async function parseToolCalls(simRequestsPath: string): Promise<ToolCall[]> {
 				const copilotFunctionCalls = request.response?.copilotFunctionCalls || [];
 
 				for (const call of copilotFunctionCalls) {
-					// The call.name directly contains the function name
-					if (call.name && EDIT_TOOL_NAMES.includes(call.name)) {
+					// Track ALL tool calls (edit tools + read_file for retry detection)
+					if (call.name) {
 						toolCalls.push({
 							toolName: call.name,
 							requestId: requestId || 'unknown'
@@ -168,29 +179,83 @@ async function analyzeConversation(conversationPath: string): Promise<Conversati
 	const editLogs = await parseEditLogs(simLogPath);
 	const toolCalls = await parseToolCalls(simRequestsPath);
 
+	// Extract model name from first request
+	let modelName: string | undefined;
+	try {
+		const content = await fs.readFile(simRequestsPath, 'utf-8');
+		const requests = JSON.parse(content);
+		if (Array.isArray(requests) && requests.length > 0) {
+			modelName = requests[0]?.model || requests[0]?.response?.model;
+		}
+	} catch (e) {
+		// Model name is optional
+	}
+
 	const edits: EditOperation[] = [];
 	let turnIndex = 0;
 
-	// Match sequentially: pair each tool call with the next edit log entry.
+	// Match edit tool calls to edit logs sequentially
+	let editLogIndex = 0;
 	for (let i = 0; i < toolCalls.length; i++) {
 		const toolCall = toolCalls[i];
-		const logEntry = editLogs[i];
-		if (logEntry) {
-			edits.push({
-				toolName: toolCall.toolName,
-				requestId: toolCall.requestId,
-				timestamp: logEntry.timestamp,
-				success: logEntry.success,
-				wasHealed: !!logEntry.healed && logEntry.healed !== logEntry.input,
-				originalInput: logEntry.input,
-				healedInput: logEntry.healed,
-				turnIndex: turnIndex++
-			});
+		if (!EDIT_TOOL_NAMES.includes(toolCall.toolName)) {
+			continue;
 		}
+
+		const logEntry = editLogs[editLogIndex++];
+		if (!logEntry) {
+			break;
+		}
+
+		// Detect retry pattern: failed edit -> continuation tool -> another edit
+		let isRetry = false;
+		let retrySucceeded: boolean | undefined;
+
+		if (!logEntry.success) {
+			// Look ahead to see if there's a continuation tool followed by another edit
+			let j = i + 1;
+			let foundContinuationTool = false;
+			while (j < toolCalls.length && j < i + 10) { // Look ahead max 10 calls
+				if (CONTINUATION_TOOL_NAMES.includes(toolCalls[j].toolName)) {
+					foundContinuationTool = true;
+				} else if (foundContinuationTool && EDIT_TOOL_NAMES.includes(toolCalls[j].toolName)) {
+					// Found a retry!
+					isRetry = true;
+					const retryLogEntry = editLogs[editLogIndex];
+					if (retryLogEntry) {
+						retrySucceeded = retryLogEntry.success;
+					}
+					break;
+				} else if (EDIT_TOOL_NAMES.includes(toolCalls[j].toolName)) {
+					// Another edit without continuation tool in between, not a retry
+					break;
+				}
+				j++;
+			}
+		}
+
+		edits.push({
+			toolName: toolCall.toolName,
+			requestId: toolCall.requestId,
+			timestamp: logEntry.timestamp,
+			success: logEntry.success,
+			wasHealed: !!logEntry.healed && logEntry.healed !== logEntry.input,
+			originalInput: logEntry.input,
+			healedInput: logEntry.healed,
+			turnIndex: turnIndex++,
+			isRetry,
+			retrySucceeded
+		});
 	}
 
 	const successfulEdits = edits.filter(e => e.success).length;
 	const healedEdits = edits.filter(e => e.wasHealed).length;
+
+	// Calculate success rate accounting for retries (final outcome only)
+	const editsWithRetries = edits.filter(e => !e.success && e.isRetry);
+	const retriedSuccesses = editsWithRetries.filter(e => e.retrySucceeded).length;
+	const successfulEditsWithRetries = successfulEdits + retriedSuccesses;
+	const totalUniqueEdits = edits.length - editsWithRetries.length + editsWithRetries.filter(e => e.retrySucceeded !== undefined).length;
 
 	return {
 		conversationPath,
@@ -198,7 +263,10 @@ async function analyzeConversation(conversationPath: string): Promise<Conversati
 		totalEdits: edits.length,
 		successfulEdits,
 		failedEdits: edits.length - successfulEdits,
-		healedEdits
+		healedEdits,
+		successfulEditsWithRetries,
+		totalUniqueEdits,
+		modelName
 	};
 }
 
@@ -226,17 +294,25 @@ async function analyzeRun(runId: string, basePath: string): Promise<RunAnalysis>
 	const totalEdits = conversations.reduce((sum, c) => sum + c.totalEdits, 0);
 	const totalSuccessful = conversations.reduce((sum, c) => sum + c.successfulEdits, 0);
 	const totalHealed = conversations.reduce((sum, c) => sum + c.healedEdits, 0);
+	const totalSuccessfulWithRetries = conversations.reduce((sum, c) => sum + c.successfulEditsWithRetries, 0);
+	const totalUniqueEdits = conversations.reduce((sum, c) => sum + c.totalUniqueEdits, 0);
+
+	// Get model name from first conversation that has one
+	const modelName = conversations.find(c => c.modelName)?.modelName;
 
 	return {
 		runId,
 		conversations,
 		totalEdits,
 		successRate: totalEdits > 0 ? totalSuccessful / totalEdits : 0,
-		healingRate: totalEdits > 0 ? totalHealed / totalEdits : 0
+		healingRate: totalEdits > 0 ? totalHealed / totalEdits : 0,
+		successRateWithRetries: totalUniqueEdits > 0 ? totalSuccessfulWithRetries / totalUniqueEdits : 0,
+		totalUniqueEdits,
+		modelName
 	};
 }
 
-function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: boolean = true): string {
+function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: boolean = true, includeRetries: boolean = false): string {
 	// Build Sankey data
 	const sankeyNodes: string[] = [];
 	const sankeyLinks: Array<{ source: number; target: number; value: number }> = [];
@@ -257,6 +333,35 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 	for (const conv of analysis.conversations) {
 		for (const edit of conv.edits) {
 			const toolNode = edit.toolName;
+
+			// Check if this is a failed edit with a retry
+			if (includeRetries && !edit.success && edit.isRetry && edit.retrySucceeded !== undefined) {
+				// Show full retry flow: Tool -> Failed -> read_file -> Retry Edit -> Final Result
+				if (showHealing && edit.wasHealed) {
+					const healedNode = 'Healed';
+					const failedNode = 'Failed (will retry)';
+					const readFileNode = 'read_file';
+					const retryEditNode = `${toolNode} (retry)`;
+					const finalResult = edit.retrySucceeded ? 'Success' : 'Failed';
+
+					flows.set(`${toolNode}->${healedNode}`, (flows.get(`${toolNode}->${healedNode}`) || 0) + 1);
+					flows.set(`${healedNode}->${failedNode}`, (flows.get(`${healedNode}->${failedNode}`) || 0) + 1);
+					flows.set(`${failedNode}->${readFileNode}`, (flows.get(`${failedNode}->${readFileNode}`) || 0) + 1);
+					flows.set(`${readFileNode}->${retryEditNode}`, (flows.get(`${readFileNode}->${retryEditNode}`) || 0) + 1);
+					flows.set(`${retryEditNode}->${finalResult}`, (flows.get(`${retryEditNode}->${finalResult}`) || 0) + 1);
+				} else {
+					const failedNode = 'Failed (will retry)';
+					const readFileNode = 'read_file';
+					const retryEditNode = `${toolNode} (retry)`;
+					const finalResult = edit.retrySucceeded ? 'Success' : 'Failed';
+
+					flows.set(`${toolNode}->${failedNode}`, (flows.get(`${toolNode}->${failedNode}`) || 0) + 1);
+					flows.set(`${failedNode}->${readFileNode}`, (flows.get(`${failedNode}->${readFileNode}`) || 0) + 1);
+					flows.set(`${readFileNode}->${retryEditNode}`, (flows.get(`${readFileNode}->${retryEditNode}`) || 0) + 1);
+					flows.set(`${retryEditNode}->${finalResult}`, (flows.get(`${retryEditNode}->${finalResult}`) || 0) + 1);
+				}
+				continue;
+			}
 
 			if (showHealing && edit.wasHealed) {
 				// Tool -> Healed -> Success/Fail
@@ -295,7 +400,9 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 			timestamp: edit.timestamp,
 			success: edit.success,
 			wasHealed: edit.wasHealed,
-			turnIndex: edit.turnIndex
+			turnIndex: edit.turnIndex,
+			isRetry: edit.isRetry,
+			retrySucceeded: edit.retrySucceeded
 		}))
 	);
 
@@ -304,7 +411,7 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Edit Analysis - Run ${analysis.runId}</title>
+	<title>Run ${analysis.runId}${analysis.modelName ? ' - ' + analysis.modelName : ''}</title>
 	<script src="https://unpkg.com/d3@7/dist/d3.min.js"></script>
 	<script src="https://unpkg.com/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
 	<style>
@@ -469,7 +576,7 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 </head>
 <body>
 	<div class="container">
-		<h1>🔧 Edit Analysis - Run ${analysis.runId}</h1>
+		<h1>🔧 Run ${analysis.runId}${analysis.modelName ? ' - ' + analysis.modelName : ''}</h1>
 		<p style="color: #666; margin: 5px 0 0 0;">Analysis of edit tool operations and success rates</p>
 
 		<div class="stats">
@@ -479,7 +586,7 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 			</div>
 			<div class="stat-card" style="border-left-color: #2da44e;">
 				<div class="stat-label">Success Rate</div>
-				<div class="stat-value">${(analysis.successRate * 100).toFixed(1)}%</div>
+				<div class="stat-value" id="success-rate-value">${(analysis.successRate * 100).toFixed(1)}%</div>
 			</div>
 			<div class="stat-card" style="border-left-color: #fb8500;">
 				<div class="stat-label">Healing Rate</div>
@@ -496,6 +603,10 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 				<input type="checkbox" id="showHealing" ${showHealing ? 'checked' : ''}>
 				Show healing as separate step in diagram
 			</label>
+			<label style="margin-left: 20px;">
+				<input type="checkbox" id="includeRetries" ${includeRetries ? 'checked' : ''}>
+				Include retries (show re-evaluate → retry flows)
+			</label>
 		</div>
 
 		<div id="sankey-diagram"></div>
@@ -511,6 +622,7 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 						<th>Timestamp</th>
 						<th>Status</th>
 						<th>Healed</th>
+						<th>Retry</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -522,6 +634,7 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 							<td style="color: #666; font-size: 12px;">${row.timestamp}</td>
 							<td><span class="badge ${row.success ? 'badge-success' : 'badge-failed'}">${row.success ? '✓ Success' : '✗ Failed'}</span></td>
 							<td>${row.wasHealed ? '<span class="badge badge-healed">Healed</span>' : '-'}</td>
+							<td>${row.isRetry ? (row.retrySucceeded === true ? '<span class="badge badge-success">✓ Retry Success</span>' : row.retrySucceeded === false ? '<span class="badge badge-failed">✗ Retry Failed</span>' : '<span class="badge" style="background: #e3e3e3; color: #666;">Retry Pending</span>') : '-'}</td>
 						</tr>
 					`).join('')}
 				</tbody>
@@ -534,8 +647,14 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 			nodes: ${JSON.stringify(sankeyNodes.map(name => ({ name })))},
 			links: ${JSON.stringify(sankeyLinks)}
 		};
+		const analysisData = {
+			successRate: ${analysis.successRate},
+			successRateWithRetries: ${analysis.successRateWithRetries},
+			totalEdits: ${analysis.totalEdits},
+			totalUniqueEdits: ${analysis.totalUniqueEdits}
+		};
 
-		function drawSankey(showHealing) {
+		function drawSankey(showHealing, includeRetries) {
 			// Clear previous diagram
 			d3.select('#sankey-diagram').html('');
 
@@ -557,6 +676,35 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 
 			for (const edit of allEdits) {
 				const toolNode = edit.toolName;
+
+				// Check if this is a failed edit with a retry
+				if (includeRetries && !edit.success && edit.isRetry && edit.retrySucceeded !== undefined) {
+					// Show full retry flow: Tool -> Failed -> read_file -> Retry Edit -> Final Result
+					if (showHealing && edit.wasHealed) {
+						const healedNode = 'Healed';
+						const failedNode = 'Failed (will retry)';
+						const readFileNode = 'read_file';
+						const retryEditNode = toolNode + ' (retry)';
+						const finalResult = edit.retrySucceeded ? 'Success' : 'Failed';
+
+						flows.set(toolNode + '->' + healedNode, (flows.get(toolNode + '->' + healedNode) || 0) + 1);
+						flows.set(healedNode + '->' + failedNode, (flows.get(healedNode + '->' + failedNode) || 0) + 1);
+						flows.set(failedNode + '->' + readFileNode, (flows.get(failedNode + '->' + readFileNode) || 0) + 1);
+						flows.set(readFileNode + '->' + retryEditNode, (flows.get(readFileNode + '->' + retryEditNode) || 0) + 1);
+						flows.set(retryEditNode + '->' + finalResult, (flows.get(retryEditNode + '->' + finalResult) || 0) + 1);
+					} else {
+						const failedNode = 'Failed (will retry)';
+						const readFileNode = 'read_file';
+						const retryEditNode = toolNode + ' (retry)';
+						const finalResult = edit.retrySucceeded ? 'Success' : 'Failed';
+
+						flows.set(toolNode + '->' + failedNode, (flows.get(toolNode + '->' + failedNode) || 0) + 1);
+						flows.set(failedNode + '->' + readFileNode, (flows.get(failedNode + '->' + readFileNode) || 0) + 1);
+						flows.set(readFileNode + '->' + retryEditNode, (flows.get(readFileNode + '->' + retryEditNode) || 0) + 1);
+						flows.set(retryEditNode + '->' + finalResult, (flows.get(retryEditNode + '->' + finalResult) || 0) + 1);
+					}
+					continue;
+				}
 
 				if (showHealing && edit.wasHealed) {
 					const healedNode = 'Healed';
@@ -602,8 +750,8 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 			});
 
 			const colorScale = d3.scaleOrdinal()
-				.domain(['insert_edit_into_file', 'replace_string_in_file', 'multi_replace_string_in_file', 'apply_patch', 'Healed', 'Success', 'Failed', 'Success (healed)', 'Failed (healed)'])
-				.range(['#0969da', '#1f883d', '#8250df', '#fb8500', '#fbbf24', '#2da44e', '#d1242f', '#22c55e', '#ef4444']);
+				.domain(['insert_edit_into_file', 'replace_string_in_file', 'multi_replace_string_in_file', 'apply_patch', 'Healed', 'read_file', 'Failed (will retry)', 'Success', 'Failed', 'Success (healed)', 'Failed (healed)'])
+				.range(['#0969da', '#1f883d', '#8250df', '#fb8500', '#fbbf24', '#a855f7', '#ff9800', '#2da44e', '#d1242f', '#22c55e', '#ef4444']);
 
 			// Links
 			svg.append('g')
@@ -644,11 +792,24 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 		}
 
 		// Initial draw
-		drawSankey(${showHealing});
+		drawSankey(${showHealing}, ${includeRetries});
+
+		// Update success rate display
+		function updateSuccessRate(includeRetries) {
+			const rate = includeRetries ? analysisData.successRateWithRetries : analysisData.successRate;
+			document.getElementById('success-rate-value').textContent = (rate * 100).toFixed(1) + '%';
+		}
 
 		// Handle checkbox change
 		document.getElementById('showHealing').addEventListener('change', (e) => {
-			drawSankey(e.target.checked);
+			const includeRetries = document.getElementById('includeRetries').checked;
+			drawSankey(e.target.checked, includeRetries);
+		});
+
+		document.getElementById('includeRetries').addEventListener('change', (e) => {
+			const showHealing = document.getElementById('showHealing').checked;
+			drawSankey(showHealing, e.target.checked);
+			updateSuccessRate(e.target.checked);
 		});
 
 		// Redraw on window resize
@@ -656,7 +817,9 @@ function generateHTML(analysis: RunAnalysis, outputPath: string, showHealing: bo
 		window.addEventListener('resize', () => {
 			clearTimeout(resizeTimer);
 			resizeTimer = setTimeout(() => {
-				drawSankey(document.getElementById('showHealing').checked);
+				const showHealing = document.getElementById('showHealing').checked;
+				const includeRetries = document.getElementById('includeRetries').checked;
+				drawSankey(showHealing, includeRetries);
 			}, 250);
 		});
 	</script>
