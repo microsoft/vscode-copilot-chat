@@ -26,7 +26,6 @@ import { CachedFunction } from '../../../util/vs/base/common/cache';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { BugIndicatingError } from '../../../util/vs/base/common/errors';
 import { Disposable, DisposableStore, IDisposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
-import { LRUCache } from '../../../util/vs/base/common/map';
 import { mapObservableArrayCached, runOnChange } from '../../../util/vs/base/common/observable';
 import { assertType } from '../../../util/vs/base/common/types';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
@@ -65,7 +64,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	private readonly _rejectionCollector = this._register(new RejectionCollector(this._workspace, s => this._logService.trace(s)));
 	private readonly _nextEditCache: NextEditCache;
-	private readonly _recentlyShownCache = new RecentlyShownCache();
 
 	private _pendingStatelessNextEditRequest: StatelessNextEditRequest<CachedOrRebasedEdit> | null = null;
 
@@ -173,7 +171,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 		const nesConfigs = this.determineNesConfigs(telemetryBuilder, logContext);
 
-		const recentlyShownCachedEdit = this._recentlyShownCache.get(docId, documentAtInvocationTime);
 		const cachedEdit = this._nextEditCache.lookupNextEdit(docId, documentAtInvocationTime, doc.selection.get(), nesConfigs);
 
 		if (cachedEdit?.rejected) {
@@ -193,20 +190,7 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		let isRebasedCachedEdit = false;
 		let isSubsequentCachedEdit = false;
 
-		if (recentlyShownCachedEdit) {
-			tracer.trace('using recently shown cached edit');
-			edit = recentlyShownCachedEdit[0];
-			req = recentlyShownCachedEdit[1];
-			logContext.setIsCachedResult(req.log);
-			currentDocument = documentAtInvocationTime;
-			telemetryBuilder.setHeaderRequestId(req.headerRequestId);
-			telemetryBuilder.setIsFromCache();
-			// TODO
-			// telemetryBuilder.setSubsequentEditOrder(cachedEdit.subsequentN);
-			// back-date the recording bookmark of the cached edit to the bookmark of the original request.
-			logContext.recordingBookmark = req.log.recordingBookmark;
-
-		} else if (cachedEdit) {
+		if (cachedEdit) {
 			tracer.trace('using cached edit');
 			edit = cachedEdit.rebasedEdit || cachedEdit.edit;
 			isRebasedCachedEdit = !!cachedEdit.rebasedEdit;
@@ -297,11 +281,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		const showRangePreference = this._statelessNextEditProvider.showNextEditPreference ?? ShowNextEditPreference.AroundEdit;
 		const nextEditResult = new NextEditResult(logContext.requestId, req, { edit, showRangePreference, documentBeforeEdits: currentDocument, targetDocumentId });
 
-		if (nesConfigs.isRecentlyShownCacheEnabled && !edit.isEmpty) {
-			tracer.trace('edit is not neutral');
-			this._recentlyShownCache.add(targetDocumentId, currentDocument, [edit, req]);
-		}
-
 		telemetryBuilder.setHasNextEdit(true);
 
 		const delay = this.computeMinimumResponseDelay({ triggerTime, isRebasedCachedEdit, isSubsequentCachedEdit }, tracer);
@@ -323,7 +302,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 			isAsyncCompletions: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsAsyncCompletions, this._expService),
 			isRevisedCacheStrategy: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRevisedCacheStrategy, this._expService),
 			isCacheTracksRejections: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheTracksRejections, this._expService),
-			isRecentlyShownCacheEnabled: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsRecentlyShownCacheEnabled, this._expService),
 			debounceUseCoreRequestTime: this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsDebounceUseCoreRequestTime, this._expService),
 		};
 
@@ -754,7 +732,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 		if (shownDuration > 1000 && suggestion.result) {
 			// we can argue that the user had the time to review this
 			// so it wasn't an accidental rejection
-			this._recentlyShownCache.remove(suggestion.result.edit);
 			this._rejectionCollector.reject(docId, suggestion.result.edit);
 			if (this._configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsCacheTracksRejections, this._expService)) {
 				this._nextEditCache.rejectedNextEdit(suggestion.source.headerRequestId);
@@ -777,7 +754,6 @@ export class NextEditProvider extends Disposable implements INextEditProvider<Ne
 
 	public clearCache() {
 		this._nextEditCache.clear();
-		this._recentlyShownCache.clear();
 		this._rejectionCollector.clear();
 	}
 }
@@ -796,36 +772,5 @@ export class NextEditFetchRequest {
 		public readonly log: InlineEditRequestLogContext,
 		public readonly providerRequestStartDateTime: number | undefined,
 	) {
-	}
-}
-
-class RecentlyShownCache {
-	private readonly _cache = new LRUCache<string, [StringReplacement, NextEditFetchRequest]>(10);
-
-	add(docId: DocumentId, documentBeforeEdits: StringText, edit: [StringReplacement, NextEditFetchRequest]) {
-		const key = this._key(docId, documentBeforeEdits);
-		this._cache.set(key, edit);
-	}
-
-	get(docId: DocumentId, documentContent: StringText): [StringReplacement, NextEditFetchRequest] | undefined {
-		const key = this._key(docId, documentContent);
-		return this._cache.get(key);
-	}
-
-	remove(edit: StringReplacement): void {
-		for (const entry of this._cache) {
-			if (entry[1][0] === edit) {
-				this._cache.delete(entry[0]);
-				break;
-			}
-		}
-	}
-
-	clear() {
-		this._cache.clear();
-	}
-
-	private _key(docId: DocumentId, documentContent: StringText) {
-		return docId.uri + ';' + documentContent.value;
 	}
 }
