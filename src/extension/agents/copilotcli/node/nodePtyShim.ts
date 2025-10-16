@@ -6,7 +6,7 @@
 import { promises as fs } from 'fs';
 import * as path from 'path';
 
-let shimCreated: Promise<void> | undefined = undefined;
+let shimCreated = false;
 
 /**
  * Creates a node-pty ESM shim that @github/copilot can import.
@@ -21,14 +21,9 @@ let shimCreated: Promise<void> | undefined = undefined;
  */
 export async function ensureNodePtyShim(extensionPath: string, vscodeAppRoot: string): Promise<void> {
 	if (shimCreated) {
-		return shimCreated;
+		return;
 	}
 
-	shimCreated = _ensureNodePtyShim(extensionPath, vscodeAppRoot);
-	return shimCreated;
-}
-
-async function _ensureNodePtyShim(extensionPath: string, vscodeAppRoot: string): Promise<void> {
 	const nodePtyDir = path.join(extensionPath, 'node_modules', 'node-pty');
 	const vscodeNodePtyPath = path.join(vscodeAppRoot, 'node_modules', 'node-pty', 'lib', 'index.js');
 
@@ -75,6 +70,7 @@ export default nodePty;
 `;
 		await fs.writeFile(path.join(nodePtyDir, 'index.mjs'), indexMjs);
 
+		shimCreated = true;
 	} catch (error) {
 		console.warn('Failed to create node-pty shim:', error);
 		throw error;
