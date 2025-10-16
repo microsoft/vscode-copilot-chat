@@ -188,49 +188,49 @@ suite('applyPatch parser', () => {
 		]);
 	});
 
-	// it('tolerates missing hunk line addition', () => {
-	// 	// We observe that sometimes 4.1 omits the operation for outdented lines.
-	// 	// We attempt to fix this automatica,,y
-	// 	const input = [
-	// 		'*** Begin Patch',
-	// 		'*** Update File: a.txt',
-	// 		'@@',
-	// 		'-world',
-	// 		'+',
-	// 		'def greet():',
-	// 		'+  print("Hello, world!")',
-	// 		'*** End Patch'
-	// 	].join('\n');
+	it('tolerates missing hunk line addition', () => {
+		// We observe that sometimes 4.1 omits the operation for outdented lines.
+		// We attempt to fix this automatica,,y
+		const input = [
+			'*** Begin Patch',
+			'*** Update File: a.txt',
+			'@@',
+			'-world',
+			'+',
+			'def greet():',
+			'+  print("Hello, world!")',
+			'*** End Patch'
+		].join('\n');
 
-	// 	expect(text_to_patch(input, {
-	// 		'a.txt': new StringTextDocumentWithLanguageId('hello\nworld', 'text/plain')
-	// 	})).toMatchInlineSnapshot(`
-	// 		[
-	// 		  {
-	// 		    "actions": {
-	// 		      "a.txt": {
-	// 		        "chunks": [
-	// 		          {
-	// 		            "delLines": [
-	// 		              "world",
-	// 		            ],
-	// 		            "insLines": [
-	// 		              "",
-	// 		              "def greet():",
-	// 		              "	print("Hello, world!")",
-	// 		            ],
-	// 		            "origIndex": 1,
-	// 		          },
-	// 		        ],
-	// 		        "movePath": undefined,
-	// 		        "type": "update",
-	// 		      },
-	// 		    },
-	// 		  },
-	// 		  64,
-	// 		]
-	// 	`);
-	// });
+		expect(text_to_patch(input, {
+			'a.txt': new StringTextDocumentWithLanguageId('hello\nworld', 'text/plain')
+		})).toMatchInlineSnapshot(`
+			[
+			  {
+			    "actions": {
+			      "a.txt": {
+			        "chunks": [
+			          {
+			            "delLines": [
+			              "world",
+			            ],
+			            "insLines": [
+			              "",
+			              "def greet():",
+			              "	print("Hello, world!")",
+			            ],
+			            "origIndex": 1,
+			          },
+			        ],
+			        "movePath": undefined,
+			        "type": "update",
+			      },
+			    },
+			  },
+			  64,
+			]
+		`);
+	});
 
 	it('tolerate to extra whitespace in delimited sections', () => {
 		const input = `*** Begin Patch\n*** Update File: a.txt\n@@\n-world\n+world hello\n\n@@\n-hello\n+hello world\n*** End Patch`;
