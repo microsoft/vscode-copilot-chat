@@ -135,8 +135,6 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 			toolName,
 			event.data.toolCallId,
 			{}, // We don't have the args in the result event
-			// event.data.result.resultType,
-			// event.data.result.error
 		);
 	}
 	if (invocation) {
@@ -158,16 +156,11 @@ export function createCopilotCLIToolInvocation(
 	toolName: string,
 	toolCallId: string | undefined,
 	args: unknown,
-	resultType?: 'success' | 'failure' | 'rejected' | 'denied',
-	error?: string
 ): ChatToolInvocationPart | undefined {
 	const invocation = new ChatToolInvocationPart(toolName, toolCallId ?? '', false);
-	invocation.isConfirmed = resultType === 'success';
+	invocation.isConfirmed = false;
 	invocation.isComplete = true;
 
-	if (resultType) {
-		invocation.isError = resultType === 'failure';
-	}
 
 	// Format based on tool name
 	if (toolName === CopilotCLIToolNames.StrReplaceEditor) {
