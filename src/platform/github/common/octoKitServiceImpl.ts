@@ -89,6 +89,9 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			sessionId,
 			authToken,
 		);
+		if (typeof response === 'string') {
+			return JSON.parse(response) as SessionInfo;
+		}
 		return response;
 	}
 
