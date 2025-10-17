@@ -3112,7 +3112,7 @@
 					},
 					"github.copilot.chat.executePrompt.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.executePrompt.enabled%",
 						"tags": [
 							"experimental"
