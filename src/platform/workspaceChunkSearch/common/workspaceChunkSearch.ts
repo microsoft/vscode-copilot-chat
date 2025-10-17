@@ -71,6 +71,7 @@ export interface StrategySearchSizing {
 
 export interface WorkspaceChunkSearchOptions {
 	readonly globPatterns?: GlobIncludeOptions;
+	readonly enableRerank?: boolean;
 }
 
 export interface StrategySearchResult {
