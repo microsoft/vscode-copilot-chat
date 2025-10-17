@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { ILogService } from '../../../platform/log/common/logService';
+import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { equals as arraysEqual } from '../../../util/vs/base/common/arrays';
 import { Lazy } from '../../../util/vs/base/common/lazy';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -91,7 +92,7 @@ export class ToolsService extends BaseToolsService {
 		throw new Error('This method for tests only');
 	}
 
-	getEnabledTools(request: vscode.ChatRequest, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[] {
+	getEnabledTools(request: vscode.ChatRequest, endpoint: IChatEndpoint, filter?: (tool: vscode.LanguageModelToolInformation) => boolean | undefined): vscode.LanguageModelToolInformation[] {
 		const toolMap = new Map(this.tools.map(t => [t.name, t]));
 
 		return this.tools
@@ -99,7 +100,7 @@ export class ToolsService extends BaseToolsService {
 				// Apply model-specific alternative if available via alternativeDefinition
 				const owned = this._copilotTools.value.get(getToolName(tool.name) as ToolName);
 				if (owned?.alternativeDefinition) {
-					const alternative = owned.alternativeDefinition(request.model);
+					const alternative = owned.alternativeDefinition(endpoint);
 					if (alternative) {
 						return alternative;
 					}

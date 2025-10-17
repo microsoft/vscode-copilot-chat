@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ToolName } from './toolNames';
@@ -54,10 +55,10 @@ export interface ICopilotTool<T> extends vscode.LanguageModelTool<T> {
 	 * parameters because the alternative definition will only be applied within
 	 * the Copilot extension, not other extensions' usages via `vscode.lm.tools`.
 	 *
-	 * @param modelInfo Optional information about the currently selected language model.
-	 *                  If provided, allows customizing the tool definition per model.
+	 * @param endpoint Optional information about the currently selected language model endpoint.
+	 *                 If provided, allows customizing the tool definition per endpoint.
 	 */
-	alternativeDefinition?(modelInfo?: vscode.LanguageModelChat): vscode.LanguageModelToolInformation | undefined;
+	alternativeDefinition?(endpoint?: IChatEndpoint): vscode.LanguageModelToolInformation | undefined;
 }
 
 

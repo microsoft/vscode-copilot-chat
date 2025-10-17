@@ -14,6 +14,7 @@ import { ToolsContribution } from '../../../src/extension/tools/vscode-node/tool
 import { ToolsService } from '../../../src/extension/tools/vscode-node/toolsService';
 import { packageJson } from '../../../src/platform/env/common/packagejson';
 import { ILogService } from '../../../src/platform/log/common/logService';
+import { IChatEndpoint } from '../../../src/platform/networking/common/networking';
 import { raceTimeout } from '../../../src/util/vs/base/common/async';
 import { CancellationError } from '../../../src/util/vs/base/common/errors';
 import { Iterable } from '../../../src/util/vs/base/common/iterator';
@@ -120,14 +121,14 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 		return undefined;
 	}
 
-	getEnabledTools(request: ChatRequest, filter?: (tool: LanguageModelToolInformation) => boolean | undefined): LanguageModelToolInformation[] {
+	getEnabledTools(request: ChatRequest, endpoint: IChatEndpoint, filter?: (tool: LanguageModelToolInformation) => boolean | undefined): LanguageModelToolInformation[] {
 		const packageJsonTools = getPackagejsonToolsForTest();
 		return this.tools
 			.map(tool => {
 				// Apply model-specific alternative if available via alternativeDefinition
 				const owned = this.copilotTools.get(getToolName(tool.name) as ToolName);
 				if (owned?.alternativeDefinition) {
-					const alternative = owned.alternativeDefinition(request.model);
+					const alternative = owned.alternativeDefinition(endpoint);
 					if (alternative) {
 						return alternative;
 					}
