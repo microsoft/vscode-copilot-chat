@@ -47,9 +47,9 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 			lookForTools.add(ToolName.CreateNewJupyterNotebook);
 		}
 
-		if (modelSupportsReplaceString(model)) {
+		if (await modelSupportsReplaceString(model)) {
 			lookForTools.add(ToolName.ReplaceString);
-			if (modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
+			if (await modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
 				lookForTools.add(ToolName.MultiReplaceString);
 			}
 		}
@@ -115,9 +115,8 @@ export class EditCode2IntentInvocation extends AgentIntentInvocation {
 		@ITelemetryService telemetryService: ITelemetryService,
 		@INotebookService notebookService: INotebookService,
 		@ILogService logService: ILogService,
-		@IExperimentationService experimentationService: IExperimentationService,
 	) {
-		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, logService, experimentationService);
+		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService, logService);
 	}
 
 	public override async getAvailableTools(): Promise<vscode.LanguageModelToolInformation[]> {

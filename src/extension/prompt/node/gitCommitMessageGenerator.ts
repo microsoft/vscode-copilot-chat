@@ -15,6 +15,7 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { GitCommitMessagePrompt } from '../../prompts/node/git/gitCommitMessagePrompt';
 import { RecentCommitMessages } from '../common/repository';
+import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 
 type ResponseFormat = 'noTextCodeBlock' | 'oneTextCodeBlock' | 'multipleTextCodeBlocks';
 
@@ -27,12 +28,13 @@ export class GitCommitMessageGenerator {
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@INotificationService private readonly notificationService: INotificationService,
 		@IInteractionService private readonly interactionService: IInteractionService,
+		@IAuthenticationService private readonly authService: IAuthenticationService,
 	) { }
 
 	async generateGitCommitMessage(changes: Diff[], recentCommitMessages: RecentCommitMessages, attemptCount: number, token: CancellationToken): Promise<string | undefined> {
 		const startTime = Date.now();
 
-		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-4o-mini');
+		const endpoint = await this.endpointProvider.getChatEndpoint('gpt-5-mini');
 		const promptRenderer = PromptRenderer.create(this.instantiationService, endpoint, GitCommitMessagePrompt, { changes, recentCommitMessages });
 		const prompt = await promptRenderer.render(undefined, undefined);
 
@@ -81,8 +83,8 @@ export class GitCommitMessageGenerator {
 			timeToComplete: Date.now() - startTime
 		});
 
-		if (fetchResult.type === ChatFetchResponseType.QuotaExceeded) {
-			await this.notificationService.showQuotaExceededDialog();
+		if (fetchResult.type === ChatFetchResponseType.QuotaExceeded || (fetchResult.type === ChatFetchResponseType.RateLimited && this.authService.copilotToken?.isNoAuthUser)) {
+			await this.notificationService.showQuotaExceededDialog({ isNoAuthUser: this.authService.copilotToken?.isNoAuthUser ?? false });
 			return undefined;
 		}
 

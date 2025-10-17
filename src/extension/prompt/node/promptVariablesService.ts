@@ -3,9 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { ChatPromptReference } from 'vscode';
+import type { ChatLanguageModelToolReference, ChatPromptReference } from 'vscode';
 import { createServiceIdentifier } from '../../../util/common/services';
-import { InternalToolReference } from '../common/intents';
 
 
 export const IPromptVariablesService = createServiceIdentifier<IPromptVariablesService>('IPromptVariablesService');
@@ -13,7 +12,7 @@ export const IPromptVariablesService = createServiceIdentifier<IPromptVariablesS
 export interface IPromptVariablesService {
 	readonly _serviceBrand: undefined;
 	resolveVariablesInPrompt(message: string, variables: readonly ChatPromptReference[]): Promise<{ message: string }>;
-	resolveToolReferencesInPrompt(message: string, toolReferences: readonly InternalToolReference[]): Promise<string>;
+	resolveToolReferencesInPrompt(message: string, toolReferences: readonly ChatLanguageModelToolReference[]): Promise<string>;
 }
 
 export class NullPromptVariablesService implements IPromptVariablesService {
@@ -23,7 +22,7 @@ export class NullPromptVariablesService implements IPromptVariablesService {
 		return { message };
 	}
 
-	async resolveToolReferencesInPrompt(message: string, toolReferences: readonly InternalToolReference[]): Promise<string> {
+	async resolveToolReferencesInPrompt(message: string, toolReferences: readonly ChatLanguageModelToolReference[]): Promise<string> {
 		return message;
 	}
 }

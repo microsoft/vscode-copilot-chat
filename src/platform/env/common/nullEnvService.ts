@@ -38,6 +38,10 @@ export class NullEnvService extends AbstractEnvService {
 		return undefined;
 	}
 
+	override get uiKind(): 'desktop' | 'web' {
+		return 'desktop';
+	}
+
 	override get uriScheme(): string {
 		return 'code-null';
 	}

@@ -6,6 +6,7 @@
 import type { TextEditor, Uri } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { IRunCommandExecutionService } from '../../../platform/commands/common/runCommandExecutionService';
+import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
 import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient';
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
@@ -30,6 +31,56 @@ import { FeedbackGenerator, FeedbackResult } from '../../prompt/node/feedbackGen
 import { CurrentChange, CurrentChangeInput } from '../../prompts/node/feedback/currentChange';
 import { githubReview } from './githubReviewAgent';
 
+
+export class ReviewSession {
+	constructor(
+		@IScopeSelector private readonly scopeSelector: IScopeSelector,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
+		@IReviewService private readonly reviewService: IReviewService,
+		@IAuthenticationService private readonly authService: IAuthenticationService,
+		@ILogService private readonly logService: ILogService,
+		@IGitExtensionService private readonly gitExtensionService: IGitExtensionService,
+		@IDomainService private readonly domainService: IDomainService,
+		@ICAPIClientService private readonly capiClientService: ICAPIClientService,
+		@IFetcherService private readonly fetcherService: IFetcherService,
+		@IEnvService private readonly envService: IEnvService,
+		@IIgnoreService private readonly ignoreService: IIgnoreService,
+		@ITabsAndEditorsService private readonly tabsAndEditorsService: ITabsAndEditorsService,
+		@IWorkspaceService private readonly workspaceService: IWorkspaceService,
+		@IRunCommandExecutionService private readonly commandService: IRunCommandExecutionService,
+		@INotificationService private readonly notificationService: INotificationService,
+		@ICustomInstructionsService private readonly customInstructionsService: ICustomInstructionsService,
+	) { }
+
+	async review(
+		group: 'selection' | 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
+		progressLocation: ProgressLocation,
+		cancellationToken?: CancellationToken
+	): Promise<FeedbackResult | undefined> {
+		return doReview(
+			this.scopeSelector,
+			this.instantiationService,
+			this.reviewService,
+			this.authService,
+			this.logService,
+			this.gitExtensionService,
+			this.capiClientService,
+			this.domainService,
+			this.fetcherService,
+			this.envService,
+			this.ignoreService,
+			this.tabsAndEditorsService,
+			this.workspaceService,
+			this.commandService,
+			this.notificationService,
+			this.customInstructionsService,
+			group,
+			progressLocation,
+			cancellationToken
+		);
+	}
+}
+
 function combineCancellationTokens(token1: CancellationToken, token2: CancellationToken): CancellationToken {
 	const combinedSource = new CancellationTokenSource();
 
@@ -52,7 +103,7 @@ function combineCancellationTokens(token1: CancellationToken, token2: Cancellati
 }
 
 let inProgress: CancellationTokenSource | undefined;
-export async function doReview(
+async function doReview(
 	scopeSelector: IScopeSelector,
 	instantiationService: IInstantiationService,
 	reviewService: IReviewService,
@@ -68,10 +119,18 @@ export async function doReview(
 	workspaceService: IWorkspaceService,
 	commandService: IRunCommandExecutionService,
 	notificationService: INotificationService,
+	customInstructionsService: ICustomInstructionsService,
 	group: 'selection' | 'index' | 'workingTree' | 'all' | { group: 'index' | 'workingTree'; file: Uri } | { repositoryRoot: string; commitMessages: string[]; patches: { patch: string; fileUri: string; previousFileUri?: string }[] },
 	progressLocation: ProgressLocation,
 	cancellationToken?: CancellationToken
 ): Promise<FeedbackResult | undefined> {
+
+	if (authService.copilotToken?.isNoAuthUser) {
+		// Review requires a logged in user, so best we can do is prompt them to sign in
+		await notificationService.showQuotaExceededDialog({ isNoAuthUser: true });
+		return undefined;
+	}
+
 	const editor = tabsAndEditorsService.activeTextEditor;
 	let selection = editor?.selection;
 	if (group === 'selection') {
@@ -119,8 +178,8 @@ export async function doReview(
 		let result: FeedbackResult;
 		try {
 			const copilotToken = await authService.getCopilotToken();
-			const canUseGitHubAgent = (group === 'index' || group === 'workingTree' || group === 'all' || typeof group === 'object') && copilotToken.isCopilotCodeReviewEnabled;
-			result = canUseGitHubAgent ? await githubReview(logService, gitExtensionService, authService, capiClientService, domainService, fetcherService, envService, ignoreService, workspaceService, group, progress, tokenSource.token) : await review(instantiationService, gitExtensionService, workspaceService, typeof group === 'object' && 'group' in group ? group.group : group, editor, progress, tokenSource.token);
+			const canUseGitHubAgent = copilotToken.isCopilotCodeReviewEnabled;
+			result = canUseGitHubAgent ? await githubReview(logService, gitExtensionService, authService, capiClientService, domainService, fetcherService, envService, ignoreService, workspaceService, customInstructionsService, group, editor, progress, tokenSource.token) : await review(instantiationService, gitExtensionService, workspaceService, typeof group === 'object' && 'group' in group ? group.group : group, editor, progress, tokenSource.token);
 		} catch (err) {
 			result = { type: 'error', reason: err.message, severity: err.severity };
 		} finally {

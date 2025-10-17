@@ -61,7 +61,7 @@ export class GitCommitMessagePrompt extends PromptElement<GitCommitMessagePrompt
 					</Tag>
 					<Tag priority={900} name='reminder'>
 						Now generate a commit messages that describe the CODE CHANGES.<br />
-						DO NOT COPY commits from RECENT COMMITS, but it as reference for the commit style.<br />
+						DO NOT COPY commits from RECENT COMMITS, but use it as reference for the commit style.<br />
 						ONLY return a single markdown code block, NO OTHER PROSE!<br />
 						<UnsafeCodeBlock languageId='text' code='commit message goes here' />
 					</Tag>

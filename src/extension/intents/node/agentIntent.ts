@@ -42,6 +42,7 @@ import { ICodeMapperService } from '../../prompts/node/codeMapper/codeMapperServ
 import { TemporalContextStats } from '../../prompts/node/inline/temporalContext';
 import { EditCodePrompt2 } from '../../prompts/node/panel/editCodePrompt2';
 import { ToolResultMetadata } from '../../prompts/node/panel/toolCalling';
+import { IEditToolLearningService } from '../../tools/common/editToolLearningService';
 import { ContributedToolName, ToolName } from '../../tools/common/toolNames';
 import { IToolsService } from '../../tools/common/toolsService';
 import { VirtualTool } from '../../tools/common/virtualTools/virtualTool';
@@ -59,51 +60,66 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 		const configurationService = accessor.get<IConfigurationService>(IConfigurationService);
 		const experimentationService = accessor.get<IExperimentationService>(IExperimentationService);
 		const endpointProvider = accessor.get<IEndpointProvider>(IEndpointProvider);
+		const editToolLearningService = accessor.get<IEditToolLearningService>(IEditToolLearningService);
 		const model = await endpointProvider.getChatEndpoint(request);
 
 		const allowTools: Record<string, boolean> = {};
-		allowTools[ToolName.EditFile] = true;
-		allowTools[ToolName.ReplaceString] = modelSupportsReplaceString(model);
-		allowTools[ToolName.ApplyPatch] = await modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
 
-		if (allowTools[ToolName.ApplyPatch] && modelCanUseApplyPatchExclusively(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.Gpt5ApplyPatchExclusively, experimentationService)) {
-			allowTools[ToolName.EditFile] = false;
-		}
+		const learned = editToolLearningService.getPreferredEndpointEditTool(model);
+		if (learned) { // a learning-enabled (BYOK) model, we should go with what it prefers
+			allowTools[ToolName.EditFile] = learned.includes(ToolName.EditFile);
+			allowTools[ToolName.ReplaceString] = learned.includes(ToolName.ReplaceString);
+			allowTools[ToolName.MultiReplaceString] = learned.includes(ToolName.MultiReplaceString);
+			allowTools[ToolName.ApplyPatch] = learned.includes(ToolName.ApplyPatch);
+		} else {
+			allowTools[ToolName.EditFile] = true;
+			allowTools[ToolName.ReplaceString] = await modelSupportsReplaceString(model);
+			allowTools[ToolName.ApplyPatch] = await modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
 
-		if (model.family === 'grok-code') {
-			const treatment = experimentationService.getTreatmentVariable<string>('copilotchat.hiddenModelBEditTool');
-			switch (treatment) {
-				case 'with_replace_string':
-					allowTools[ToolName.ReplaceString] = true;
-					allowTools[ToolName.MultiReplaceString] = configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceStringGrok, experimentationService);
-					allowTools[ToolName.EditFile] = true;
-					break;
-				case 'only_replace_string':
-					allowTools[ToolName.ReplaceString] = true;
-					allowTools[ToolName.MultiReplaceString] = configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceStringGrok, experimentationService);
-					allowTools[ToolName.EditFile] = false;
-					break;
-				case 'control':
-				default:
-					allowTools[ToolName.ReplaceString] = false;
-					allowTools[ToolName.EditFile] = true;
+			if (allowTools[ToolName.ApplyPatch] && modelCanUseApplyPatchExclusively(model)) {
+				allowTools[ToolName.EditFile] = false;
 			}
-		}
 
-		if (modelCanUseReplaceStringExclusively(model)) {
-			allowTools[ToolName.ReplaceString] = true;
-			allowTools[ToolName.EditFile] = false;
-		}
+			if (model.family === 'grok-code') {
+				const treatment = experimentationService.getTreatmentVariable<string>('copilotchat.hiddenModelBEditTool');
+				switch (treatment) {
+					case 'with_replace_string':
+						allowTools[ToolName.ReplaceString] = true;
+						allowTools[ToolName.MultiReplaceString] = configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceStringGrok, experimentationService);
+						allowTools[ToolName.EditFile] = true;
+						break;
+					case 'only_replace_string':
+						allowTools[ToolName.ReplaceString] = true;
+						allowTools[ToolName.MultiReplaceString] = configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceStringGrok, experimentationService);
+						allowTools[ToolName.EditFile] = false;
+						break;
+					case 'control':
+					default:
+						allowTools[ToolName.ReplaceString] = false;
+						allowTools[ToolName.EditFile] = true;
+				}
+			}
 
-		if (allowTools[ToolName.ReplaceString]) {
-			if (modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
-				allowTools[ToolName.MultiReplaceString] = true;
+			if (await modelCanUseReplaceStringExclusively(model)) {
+				allowTools[ToolName.ReplaceString] = true;
+				allowTools[ToolName.EditFile] = false;
+			}
+
+			if (allowTools[ToolName.ReplaceString]) {
+				if (await modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
+					allowTools[ToolName.MultiReplaceString] = true;
+				}
 			}
 		}
 
 		allowTools[ToolName.RunTests] = await testService.hasAnyTests();
 		allowTools[ToolName.CoreRunTask] = tasksService.getTasks().length > 0;
 
+		if (model.family === 'gpt-5-codex') {
+			allowTools[ToolName.CoreManageTodoList] = false;
+		}
+
+		allowTools[ToolName.EditFilesPlaceholder] = false;
 		if (request.tools.get(ContributedToolName.EditFilesPlaceholder) === false) {
 			allowTools[ToolName.ApplyPatch] = false;
 			allowTools[ToolName.EditFile] = false;
@@ -230,7 +246,6 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		@ITelemetryService telemetryService: ITelemetryService,
 		@INotebookService notebookService: INotebookService,
 		@ILogService private readonly logService: ILogService,
-		@IExperimentationService private readonly experimentationService: IExperimentationService,
 	) {
 		super(intent, location, endpoint, request, intentOptions, instantiationService, codeMapperService, envService, promptPathRepresentationService, endpointProvider, workspaceService, toolsService, configurationService, editLogService, commandService, telemetryService, notebookService);
 	}
@@ -267,7 +282,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 			Number.MAX_SAFE_INTEGER :
 			Math.floor((baseBudget - toolTokens) * 0.85);
 		const endpoint = toolTokens > 0 ? this.endpoint.cloneWithTokenOverride(safeBudget) : this.endpoint;
-		const summarizationEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.SummarizeAgentConversationHistory, this.experimentationService) && this.prompt === AgentPrompt;
+		const summarizationEnabled = this.configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory) && this.prompt === AgentPrompt;
 		this.logService.debug(`AgentIntent: rendering with budget=${safeBudget} (baseBudget: ${baseBudget}, toolTokens: ${toolTokens}), summarizationEnabled=${summarizationEnabled}`);
 		let result: RenderPromptResult;
 		const props: AgentPromptProps = {

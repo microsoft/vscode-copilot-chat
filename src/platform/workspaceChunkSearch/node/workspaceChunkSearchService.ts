@@ -19,6 +19,7 @@ import { Disposable, IDisposable } from '../../../util/vs/base/common/lifecycle'
 import { StopWatch } from '../../../util/vs/base/common/stopwatch';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatResponseProgressPart2 } from '../../../vscodeTypes';
+import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IAuthenticationChatUpgradeService } from '../../authentication/common/authenticationUpgrade';
 import { FileChunk, FileChunkAndScore } from '../../chunking/common/chunk';
 import { MAX_CHUNK_SIZE_TOKENS } from '../../chunking/node/naiveChunker';
@@ -33,7 +34,7 @@ import { ISimulationTestContext } from '../../simulationTestContext/common/simul
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../workspace/common/workspaceService';
-import { GithubAvailableEmbeddingTypesManager } from '../common/githubAvailableEmbeddingTypes';
+import { IGithubAvailableEmbeddingTypesService } from '../common/githubAvailableEmbeddingTypes';
 import { IWorkspaceChunkSearchStrategy, StrategySearchResult, StrategySearchSizing, WorkspaceChunkQuery, WorkspaceChunkQueryWithEmbeddings, WorkspaceChunkSearchOptions, WorkspaceChunkSearchStrategyId, WorkspaceSearchAlert } from '../common/workspaceChunkSearch';
 import { CodeSearchChunkSearch, CodeSearchRemoteIndexState } from './codeSearchChunkSearch';
 import { EmbeddingsChunkSearch, LocalEmbeddingsIndexState, LocalEmbeddingsIndexStatus } from './embeddingsChunkSearch';
@@ -114,20 +115,23 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 	readonly onDidChangeIndexState = this._onDidChangeIndexState.event;
 
 	private _impl: WorkspaceChunkSearchServiceImpl | undefined;
-	private readonly _availableEmbeddingTypes: GithubAvailableEmbeddingTypesManager;
 
 	constructor(
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@IGithubAvailableEmbeddingTypesService private readonly _availableEmbeddingTypes: IGithubAvailableEmbeddingTypesService,
 		@ILogService private readonly _logService: ILogService,
 	) {
 		super();
-
-		this._availableEmbeddingTypes = _instantiationService.createInstance(GithubAvailableEmbeddingTypesManager);
 
 		this.tryInit(true);
 	}
 
 	private async tryInit(silent: boolean): Promise<WorkspaceChunkSearchServiceImpl | undefined> {
+		if (!this._authenticationService.copilotToken || this._authenticationService.copilotToken.isNoAuthUser) {
+			return undefined;
+		}
+
 		if (this._impl) {
 			return this._impl;
 		}
@@ -161,7 +165,7 @@ export class WorkspaceChunkSearchService extends Disposable implements IWorkspac
 					repos: [],
 				},
 				localIndexState: {
-					status: LocalEmbeddingsIndexStatus.Unknown,
+					status: !this._authenticationService.copilotToken || this._authenticationService.copilotToken.isNoAuthUser ? LocalEmbeddingsIndexStatus.Disabled : LocalEmbeddingsIndexStatus.Unknown,
 					getState: async () => undefined,
 				}
 			};

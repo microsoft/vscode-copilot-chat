@@ -10,15 +10,19 @@ import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IGitService } from '../../../platform/git/common/gitService';
+import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITasksService } from '../../../platform/tasks/common/tasksService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
+import { ITerminalService } from '../../../platform/terminal/common/terminalService';
 import { assertNever } from '../../../util/vs/base/common/assert';
 import { CancellationTokenSource } from '../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatSessionsUriHandler, CustomUriHandler } from '../../chatSessions/vscode/chatSessionsUriHandler';
 import { EXTENSION_ID } from '../../common/constants';
 import { ILaunchConfigService, needsWorkspaceFolderForTaskError } from '../common/launchConfigService';
 import { CopilotDebugCommandSessionFactory } from '../node/copilotDebugCommandSessionFactory';
@@ -32,11 +36,11 @@ import powershellScript from '../node/copilotDebugWorker/copilotDebugWorker.ps1'
 
 // When enabled, holds the storage location of binaries for the PATH:
 const WAS_REGISTERED_STORAGE_KEY = 'copilot-chat.terminalToDebugging.registered';
-const PATH_VARIABLE = 'PATH';
 export const COPILOT_DEBUG_COMMAND = `copilot-debug`;
 const DEBUG_COMMAND_JS = 'copilotDebugCommand.js';
 
 export class CopilotDebugCommandContribution extends Disposable implements vscode.UriHandler {
+	private chatSessionsUriHandler: CustomUriHandler;
 	private registerSerializer: Promise<void>;
 
 	constructor(
@@ -48,6 +52,9 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 		@IAuthenticationService private readonly authService: IAuthenticationService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@ITasksService private readonly tasksService: ITasksService,
+		@ITerminalService private readonly terminalService: ITerminalService,
+		@IOctoKitService private readonly _octoKitService: IOctoKitService,
+		@IGitService private readonly _gitService: IGitService
 	) {
 		super();
 
@@ -64,6 +71,7 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 		}));
 
 		this.registerSerializer = this.registerEnvironment();
+		this.chatSessionsUriHandler = new ChatSessionsUriHandler(this._octoKitService, this._gitService);
 	}
 
 	private async ensureTask(workspaceFolder: URI | undefined, def: vscode.TaskDefinition, handle: CopilotDebugCommandHandle): Promise<boolean> {
@@ -92,6 +100,9 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 	}
 
 	handleUri(uri: vscode.Uri): vscode.ProviderResult<void> {
+		if (this.chatSessionsUriHandler.canHandleUri(uri)) {
+			return this.chatSessionsUriHandler.handleUri(uri);
+		}
 		const pipePath = process.platform === 'win32' ? '\\\\.\\pipe\\' + uri.path.slice(1) : uri.path;
 		const cts = new CancellationTokenSource();
 
@@ -212,24 +223,20 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 		if (!enabled) {
 			if (previouslyStoredAt) {
 				// 1. disabling an enabled state
-				this.context.environmentVariableCollection.delete(PATH_VARIABLE);
+				this.terminalService.removePathContribution('copilot-debug');
 				await fs.rm(previouslyStoredAt.location, { recursive: true, force: true });
 			}
 		} else if (!previouslyStoredAt) {
 			// 2. enabling a disabled state
 			await this.fillStoragePath(storageLocation);
+			this.terminalService.contributePath('copilot-debug', storageLocation, `Enables use of the \`${COPILOT_DEBUG_COMMAND}\` command in the terminal.`);
 		} else if (previouslyStoredAt.version !== versionNonce) {
 			// 3. upgrading the worker
 			await this.fillStoragePath(storageLocation);
-		}
-
-		const pathVariableChange = path.delimiter + storageLocation;
-		if (!enabled && this.context.environmentVariableCollection.get(PATH_VARIABLE)) {
-			this.context.environmentVariableCollection.delete(PATH_VARIABLE);
-		} else if (enabled && this.context.environmentVariableCollection.get(PATH_VARIABLE)?.value !== pathVariableChange) {
-			this.context.environmentVariableCollection.description = l10n.t`Enables use of the \`${COPILOT_DEBUG_COMMAND}\` command in the terminal.`;
-			this.context.environmentVariableCollection.delete(PATH_VARIABLE);
-			this.context.environmentVariableCollection.append(PATH_VARIABLE, pathVariableChange);
+			this.terminalService.contributePath('copilot-debug', storageLocation, `Enables use of the \`${COPILOT_DEBUG_COMMAND}\` command in the terminal.`);
+		} else if (enabled) {
+			// 4. already enabled and up to date, just ensure PATH contribution
+			this.terminalService.contributePath('copilot-debug', storageLocation, `Enables use of the \`${COPILOT_DEBUG_COMMAND}\` command in the terminal.`);
 		}
 
 		this.context.globalState.update(WAS_REGISTERED_STORAGE_KEY, enabled ? {

@@ -94,6 +94,8 @@ import { IMergeConflictService } from '../../git/common/mergeConflictService';
 import { MergeConflictServiceImpl } from '../../git/vscode/mergeConflictServiceImpl';
 import { ILaunchConfigService } from '../../onboardDebug/common/launchConfigService';
 import { LaunchConfigService } from '../../onboardDebug/vscode/launchConfigService';
+import { EditToolLearningService, IEditToolLearningService } from '../../tools/common/editToolLearningService';
+import { IToolEmbeddingsComputer, ToolEmbeddingsComputer } from '../../tools/common/virtualTools/toolEmbeddingsComputer';
 import { ToolGroupingService } from '../../tools/common/virtualTools/toolGroupingService';
 import { ToolGroupingCache } from '../../tools/common/virtualTools/virtualToolGroupCache';
 import { IToolGroupingCache, IToolGroupingService } from '../../tools/common/virtualTools/virtualToolTypes';
@@ -168,6 +170,8 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(IAuthenticationChatUpgradeService, new SyncDescriptor(AuthenticationChatUpgradeService));
 	builder.define(IEmbeddingsComputer, new SyncDescriptor(RemoteEmbeddingsComputer));
 	builder.define(IToolGroupingService, new SyncDescriptor(ToolGroupingService));
+	builder.define(IToolEmbeddingsComputer, new SyncDescriptor(ToolEmbeddingsComputer));
 	builder.define(IToolGroupingCache, new SyncDescriptor(ToolGroupingCache));
 	builder.define(IMergeConflictService, new SyncDescriptor(MergeConflictServiceImpl));
+	builder.define(IEditToolLearningService, new SyncDescriptor(EditToolLearningService));
 }

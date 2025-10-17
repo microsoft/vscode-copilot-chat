@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { expect, suite, test } from 'vitest';
+import { assert, expect, suite, test } from 'vitest';
 import { DocumentId } from '../../../../platform/inlineEdits/common/dataTypes/documentId';
 import { CurrentFileOptions, DEFAULT_OPTIONS } from '../../../../platform/inlineEdits/common/dataTypes/xtabPromptOptions';
 import { OffsetRange } from '../../../../util/vs/editor/common/core/ranges/offsetRange';
@@ -113,7 +113,7 @@ suite('Paged clipping - current file', () => {
 </area_around_code_to_edit>
 `.trim();
 
-		const { taggedCurrentFileContent } = createTaggedCurrentFileContentUsingPagedClipping(
+		const result = createTaggedCurrentFileContentUsingPagedClipping(
 			docLines.getLines(),
 			areaAroundCodeToEdit,
 			new OffsetRange(21, 26),
@@ -121,6 +121,8 @@ suite('Paged clipping - current file', () => {
 			10,
 			{ ...opts, maxTokens: 2000 }
 		);
+		assert(result.isOk());
+		const { taggedCurrentFileContent } = result.val;
 
 		expect(taggedCurrentFileContent).toMatchInlineSnapshot(`
 			"1
@@ -187,7 +189,7 @@ suite('Paged clipping - current file', () => {
 </area_around_code_to_edit>
 `.trim();
 
-		const { taggedCurrentFileContent } = createTaggedCurrentFileContentUsingPagedClipping(
+		const result = createTaggedCurrentFileContentUsingPagedClipping(
 			docLines.getLines(),
 			areaAroundCodeToEdit,
 			new OffsetRange(21, 26),
@@ -195,9 +197,11 @@ suite('Paged clipping - current file', () => {
 			10,
 			{ ...opts, maxTokens: 20 },
 		);
-
-		expect(taggedCurrentFileContent).toMatchInlineSnapshot(`
-			"21
+		expect(result).toMatchInlineSnapshot(`
+			ResultOk {
+			  "val": {
+			    "nLines": 6,
+			    "taggedCurrentFileContent": "21
 			<area_around_code_to_edit>
 			22
 			23
@@ -210,7 +214,9 @@ suite('Paged clipping - current file', () => {
 			27
 			28
 			29
-			30"
+			30",
+			  },
+			}
 		`);
 	});
 
@@ -230,7 +236,7 @@ suite('Paged clipping - current file', () => {
 </a>
 `.trim();
 
-		const { taggedCurrentFileContent } = createTaggedCurrentFileContentUsingPagedClipping(
+		const result = createTaggedCurrentFileContentUsingPagedClipping(
 			docLines.getLines(),
 			areaAroundCodeToEdit,
 			new OffsetRange(10, 14),
@@ -238,6 +244,8 @@ suite('Paged clipping - current file', () => {
 			10,
 			{ ...opts, maxTokens: 50 }
 		);
+		assert(result.isOk());
+		const { taggedCurrentFileContent } = result.val;
 
 		expect(taggedCurrentFileContent).toMatchInlineSnapshot(`
 			"<a>

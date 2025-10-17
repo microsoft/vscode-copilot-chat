@@ -136,9 +136,10 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			ignoreStatefulMarker: opts.ignoreStatefulMarker
 		});
 		let tokenCount = -1;
+		const streamRecorder = new FetchStreamRecorder(finishedCb);
+		const enableRetryOnError = opts.enableRetryOnError ?? opts.enableRetryOnFilter;
 		try {
 			let response: ChatResults | ChatRequestFailed | ChatRequestCanceled;
-			const streamRecorder = new FetchStreamRecorder(finishedCb);
 			const payloadValidationResult = isValidChatPayload(opts.messages, postOptions);
 			if (!payloadValidationResult.isValid) {
 				response = {
@@ -160,7 +161,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					postOptions.n,
 					userInitiatedRequest,
 					token,
-					telemetryProperties
+					telemetryProperties,
+					opts.useFetcher,
 				));
 				tokenCount = await chatEndpoint.acquireTokenizer().countMessagesTokens(messages);
 				const extensionId = source?.extensionId ?? EXTENSION_ID;
@@ -208,6 +210,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 									userInitiatedRequest: false, // do not mark the retry as user initiated
 									telemetryProperties: { ...telemetryProperties, retryAfterFilterCategory: result.category ?? 'uncategorized' },
 									enableRetryOnFilter: false,
+									enableRetryOnError,
 								}, token);
 
 								pendingLoggedChatRequest?.resolve(retryResult, streamRecorder.deltas);
@@ -235,6 +238,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						requestId: ourRequestId,
 						model: chatEndpoint.model,
 						apiType: chatEndpoint.apiType,
+						associatedRequestId: telemetryProperties.associatedRequestId,
+						...(telemetryProperties.retryAfterErrorCategory ? { retryAfterErrorCategory: telemetryProperties.retryAfterErrorCategory } : {}),
 						...(telemetryProperties.retryAfterFilterCategory ? { retryAfterFilterCategory: telemetryProperties.retryAfterFilterCategory } : {}),
 					}, {
 						totalTokenMax: chatEndpoint.modelMaxPromptTokens ?? -1,
@@ -258,12 +263,39 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		} catch (err: unknown) {
 			const timeToError = Date.now() - baseTelemetry.issuedTime;
 			const processed = this.processError(err, ourRequestId);
+			if (['darwin', 'linux'].includes(process.platform) && processed.type === ChatFetchResponseType.NetworkError && processed.reason.indexOf('net::ERR_NETWORK_CHANGED') !== -1) {
+
+				if (enableRetryOnError) {
+					this._logService.info('Retrying chat request with node-fetch after net::ERR_NETWORK_CHANGED error.');
+					streamRecorder.callback('', 0, { text: '', retryReason: 'network_error' });
+
+					// Retry with other fetchers
+					const retryResult = await this.fetchMany({
+						debugName: 'retry-error-' + debugName,
+						messages,
+						finishedCb,
+						location,
+						endpoint: chatEndpoint,
+						source,
+						requestOptions,
+						userInitiatedRequest: false, // do not mark the retry as user initiated
+						telemetryProperties: { ...telemetryProperties, retryAfterErrorCategory: 'electron-network-changed' },
+						enableRetryOnFilter: opts.enableRetryOnFilter,
+						enableRetryOnError: false,
+						useFetcher: 'node-fetch',
+					}, token);
+
+					pendingLoggedChatRequest?.resolve(retryResult, streamRecorder.deltas);
+					return retryResult;
+				}
+			}
 			if (processed.type === ChatFetchResponseType.Canceled) {
 				this._sendCancellationTelemetry({
 					source: telemetryProperties.messageSource ?? 'unknown',
 					requestId: ourRequestId,
 					model: chatEndpoint.model,
-					apiType: chatEndpoint.apiType
+					apiType: chatEndpoint.apiType,
+					associatedRequestId: telemetryProperties.associatedRequestId
 				}, {
 					totalTokenMax: chatEndpoint.modelMaxPromptTokens ?? -1,
 					promptTokenCount: tokenCount,
@@ -286,12 +318,14 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			source,
 			requestId,
 			model,
-			apiType
+			apiType,
+			associatedRequestId
 		}: {
 			source: string;
 			requestId: string;
 			model: string;
 			apiType: string | undefined;
+			associatedRequestId?: string;
 		},
 		{
 			totalTokenMax,
@@ -321,6 +355,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				"apiType": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "API type for the response- chat completions or responses" },
 				"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source for why the request was made" },
 				"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the request" },
+				"associatedRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Another request ID that this request is associated with (eg, the originating request of a summarization request)." },
 				"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
 				"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens", "isMeasurement": true },
 				"tokenCountMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum generated tokens", "isMeasurement": true },
@@ -329,6 +364,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				"timeToCancelled": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token", "isMeasurement": true },
 				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
+				"retryAfterErrorCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response failed and this is a retry attempt, this contains the error category." },
 				"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
 			}
 		*/
@@ -337,6 +373,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			source,
 			requestId,
 			model,
+			associatedRequestId,
 		}, {
 			totalTokenMax,
 			promptTokenCount,
@@ -370,6 +407,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				"apiType": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "API type for the response- chat completions or responses" },
 				"source": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Source for why the request was made" },
 				"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the request" },
+				"associatedRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Another request ID that this request is associated with (eg, the originating request of a summarization request)." },
 				"reasoningEffort": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning effort level" },
 				"reasoningSummary": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning summary level" },
 				"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
@@ -379,6 +417,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				"timeToFirstTokenEmitted": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to first token emitted (visible text)", "isMeasurement": true },
 				"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
 				"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
+				"retryAfterErrorCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response failed and this is a retry attempt, this contains the error category." },
 				"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
 			}
 		*/
@@ -391,6 +430,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			apiType: chatEndpointInfo.apiType,
 			reasoningEffort: requestBody.reasoning?.effort,
 			reasoningSummary: requestBody.reasoning?.summary,
+			associatedRequestId: telemetryProperties?.associatedRequestId,
+			...(telemetryProperties?.retryAfterErrorCategory ? { retryAfterErrorCategory: telemetryProperties.retryAfterErrorCategory } : {}),
 			...(telemetryProperties?.retryAfterFilterCategory ? { retryAfterFilterCategory: telemetryProperties.retryAfterFilterCategory } : {})
 		}, {
 			totalTokenMax: chatEndpointInfo.modelMaxPromptTokens ?? -1,
@@ -430,6 +471,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					"model": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Model selection for the response" },
 					"apiType": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "API type for the response- chat completions or responses" },
 					"requestId": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Id of the current turn request" },
+					"associatedRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Another request ID that this request is associated with (eg, the originating request of a summarization request)." },
 					"reasoningEffort": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning effort level" },
 					"reasoningSummary": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Reasoning summary level" },
 					"totalTokenMax": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Maximum total token window", "isMeasurement": true },
@@ -447,6 +489,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 					"timeToComplete": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time to complete the request", "isMeasurement": true },
 					"isVisionRequest": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Whether the request was for a vision model", "isMeasurement": true },
 					"isBYOK": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether the request was for a BYOK model", "isMeasurement": true },
+					"retryAfterErrorCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response failed and this is a retry attempt, this contains the error category." },
 					"retryAfterFilterCategory": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "If the response was filtered and this is a retry attempt, this contains the original filtered content category." }
 				}
 			*/
@@ -458,8 +501,10 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				model: chatEndpointInfo?.model,
 				apiType: chatEndpointInfo?.apiType,
 				requestId,
+				associatedRequestId: baseTelemetry?.properties.associatedRequestId,
 				reasoningEffort: requestBody.reasoning?.effort,
 				reasoningSummary: requestBody.reasoning?.summary,
+				...(baseTelemetry?.properties.retryAfterErrorCategory ? { retryAfterErrorCategory: baseTelemetry.properties.retryAfterErrorCategory } : {}),
 				...(baseTelemetry?.properties.retryAfterFilterCategory ? { retryAfterFilterCategory: baseTelemetry.properties.retryAfterFilterCategory } : {}),
 			}, {
 				totalTokenMax: chatEndpointInfo?.modelMaxPromptTokens ?? -1,
@@ -578,7 +623,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 	}
 
 	private processFailedResponse(response: ChatRequestFailed, requestId: string): ChatFetchError {
-		const serverRequestId = response.modelRequestId?.headerRequestId;
+		const serverRequestId = response.modelRequestId?.gitHubRequestId;
 		const reason = response.reason;
 		if (response.failKind === ChatFailKind.RateLimited) {
 			return { type: ChatFetchResponseType.RateLimited, reason, requestId, serverRequestId, retryAfter: response.data?.retryAfter, rateLimitKey: (response.data?.rateLimitKey || ''), capiError: response.data?.capiError };

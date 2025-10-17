@@ -29,7 +29,7 @@ import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { ICAPIClientService } from '../common/capiClient';
 import { IDomainService } from '../common/domainService';
-import { IChatModelInformation, ModelPolicy, ModelSupportedEndpoint } from '../common/endpointProvider';
+import { CustomModel, IChatModelInformation, ModelPolicy, ModelSupportedEndpoint } from '../common/endpointProvider';
 import { createResponsesRequestBody, processResponseFromChatEndpoint } from './responsesApi';
 
 // get ChatMaxNumTokens from config for experimentation
@@ -106,6 +106,7 @@ export async function defaultNonStreamChatResponseProcessor(response: Response, 
 		const message: Raw.AssistantChatMessage = choice.message;
 		const messageText = getTextPart(message.content);
 		const requestId = response.headers.get('X-Request-ID') ?? generateUuid();
+		const ghRequestId = response.headers.get('x-github-request-id') ?? '';
 
 
 		const completion: ChatCompletion = {
@@ -116,7 +117,7 @@ export async function defaultNonStreamChatResponseProcessor(response: Response, 
 			message: message,
 			usage: jsonResponse.usage,
 			tokens: [], // This is used for repetition detection so not super important to be accurate
-			requestId: { headerRequestId: requestId, completionId: jsonResponse.id, created: jsonResponse.created, deploymentId: '', serverExperiments: '' },
+			requestId: { headerRequestId: requestId, gitHubRequestId: ghRequestId, completionId: jsonResponse.id, created: jsonResponse.created, deploymentId: '', serverExperiments: '' },
 			telemetryData: telemetryData
 		};
 		const functionCall: ICopilotToolCall[] = [];
@@ -154,6 +155,7 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly isPremium?: boolean | undefined;
 	public readonly multiplier?: number | undefined;
 	public readonly restrictedToSkus?: string[] | undefined;
+	public readonly customModel?: CustomModel | undefined;
 
 	private readonly _supportsStreaming: boolean;
 	private _policyDetails: ModelPolicy | undefined;
@@ -192,6 +194,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		this.supportsPrediction = !!_modelMetadata.capabilities.supports.prediction;
 		this._supportsStreaming = !!_modelMetadata.capabilities.supports.streaming;
 		this._policyDetails = _modelMetadata.policy;
+		this.customModel = _modelMetadata.custom_model;
 	}
 
 	public get modelMaxPromptTokens(): number {
@@ -210,8 +213,19 @@ export class ChatEndpoint implements IChatEndpoint {
 	}
 
 	protected get useResponsesApi(): boolean {
+		if (this._modelMetadata.supported_endpoints
+			&& !this._modelMetadata.supported_endpoints.includes(ModelSupportedEndpoint.ChatCompletions)
+			&& this._modelMetadata.supported_endpoints.includes(ModelSupportedEndpoint.Responses)
+		) {
+			return true;
+		}
+
 		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseResponsesApi, this._expService);
 		return !!(enableResponsesApi && this._modelMetadata.supported_endpoints?.includes(ModelSupportedEndpoint.Responses));
+	}
+
+	public get degradationReason(): string | undefined {
+		return this._modelMetadata.warning_message;
 	}
 
 	public get policy(): 'enabled' | { terms: string } {

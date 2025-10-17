@@ -10,6 +10,7 @@ import { OffsetLineColumnConverter } from '../../../platform/editing/common/offs
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ISearchService } from '../../../platform/search/common/searchService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
+import { raceTimeoutAndCancellationError } from '../../../util/common/racePromise';
 import { asArray } from '../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { count } from '../../../util/vs/base/common/strings';
@@ -50,14 +51,37 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 		const askedForTooManyResults = options.input.maxResults && options.input.maxResults > MaxResultsCap;
 		const maxResults = Math.min(options.input.maxResults ?? 20, MaxResultsCap);
 		const isRegExp = options.input.isRegexp ?? true;
-		let results = await this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, token);
-		if (!results.length) {
-			results = await this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, token);
+		const queryIsValidRegex = this.isValidRegex(options.input.query);
+
+		// try find text with a timeout of 20s
+		const timeoutInMs = 20_000;
+
+		let results = await raceTimeoutAndCancellationError(
+			(searchToken) => this.searchAndCollectResults(options.input.query, isRegExp, patterns, maxResults, searchToken),
+			token,
+			timeoutInMs,
+			// embed message to give LLM hint about what to do next
+			`Timeout in searching text in files with ${isRegExp ? 'regex' : 'literal'} search, try a more specific search pattern or change regex/literal mode`
+		);
+
+		// If we still have no results, we need to try the opposite regex mode
+		if (!results.length && queryIsValidRegex) {
+			results = await raceTimeoutAndCancellationError(
+				(searchToken) => this.searchAndCollectResults(options.input.query, !isRegExp, patterns, maxResults, searchToken),
+				token,
+				timeoutInMs,
+				// embed message to give LLM hint about what to do next
+				`Find ${results.length} results in searching text in files with ${isRegExp ? 'regex' : 'literal'} search, and then another searching hits timeout in with ${!isRegExp ? 'regex' : 'literal'} search, try a more specific search pattern`
+			);
 		}
 
-		const result = new ExtendedLanguageModelToolResult([
-			new LanguageModelPromptTsxPart(
-				await renderPromptElementJSON(this.instantiationService, FindTextInFilesResult, { textResults: results, maxResults, askedForTooManyResults: Boolean(askedForTooManyResults) }, options.tokenizationOptions, token))]);
+		const prompt = await renderPromptElementJSON(this.instantiationService,
+			FindTextInFilesResult,
+			{ textResults: results, maxResults, askedForTooManyResults: Boolean(askedForTooManyResults) },
+			options.tokenizationOptions,
+			token);
+
+		const result = new ExtendedLanguageModelToolResult([new LanguageModelPromptTsxPart(prompt)]);
 		const textMatches = results.flatMap(r => {
 			if ('ranges' in r) {
 				return asArray(r.ranges).map(rangeInfo => new Location(r.uri, rangeInfo.sourceRange));
@@ -74,6 +98,15 @@ export class FindTextInFilesTool implements ICopilotTool<IFindTextInFilesToolPar
 
 		result.toolResultDetails = textMatches;
 		return result;
+	}
+
+	private isValidRegex(pattern: string): boolean {
+		try {
+			new RegExp(pattern);
+			return true;
+		} catch {
+			return false;
+		}
 	}
 
 	private async searchAndCollectResults(query: string, isRegExp: boolean, patterns: vscode.GlobPattern[] | undefined, maxResults: number, token: CancellationToken): Promise<vscode.TextSearchResult2[]> {

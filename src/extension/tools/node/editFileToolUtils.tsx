@@ -11,19 +11,20 @@ import { IConfigurationService } from '../../../platform/configuration/common/co
 import { ICustomInstructionsService } from '../../../platform/customInstructions/common/customInstructionsService';
 import { OffsetLineColumnConverter } from '../../../platform/editing/common/offsetLineColumnConverter';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IAlternativeNotebookContentService } from '../../../platform/notebook/common/alternativeContent';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import * as glob from '../../../util/vs/base/common/glob';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { Schemas } from '../../../util/vs/base/common/network';
-import { isWindows } from '../../../util/vs/base/common/platform';
+import { isMacintosh, isWindows } from '../../../util/vs/base/common/platform';
 import { extUriBiasedIgnorePathCase, normalizePath, relativePath } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
 import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { EndOfLine, MarkdownString, Position, Range, TextEdit } from '../../../vscodeTypes';
-import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
+import { EndOfLine, Position, Range, TextEdit } from '../../../vscodeTypes';
 
 // Simplified Hunk type for the patch
 interface Hunk {
@@ -349,42 +350,47 @@ function trySimilarityMatch(text: string, oldStr: string, newStr: string, eol: s
 		return { text, editPosition: [], type: 'none' };
 	}
 
-	let bestMatch = { index: -1, similarity: 0, length: 0 };
+	let bestMatch = { startLine: -1, startOffset: 0, oldLength: 0, similarity: 0 };
+	let startOffset = 0;
 
 	// Sliding window approach to find the best matching section
 	for (let i = 0; i <= lines.length - oldLines.length; i++) {
 		let totalSimilarity = 0;
+		let oldLength = 0;
 
 		// Calculate similarity for each line in the window
 		for (let j = 0; j < oldLines.length; j++) {
 			const similarity = calculateSimilarity(oldLines[j], lines[i + j]);
 			totalSimilarity += similarity;
+			oldLength += lines[i + j].length;
 		}
 
 		const avgSimilarity = totalSimilarity / oldLines.length;
 		if (avgSimilarity > threshold && avgSimilarity > bestMatch.similarity) {
-			bestMatch = { index: i, similarity: avgSimilarity, length: oldLines.length };
+			bestMatch = { startLine: i, startOffset, similarity: avgSimilarity, oldLength: oldLength + (oldLines.length - 1) * eol.length };
 		}
+
+		startOffset += lines[i].length + eol.length;
 	}
 
-	if (bestMatch.index !== -1) {
-		// Found a match with similarity above the threshold
-		const startIndex = bestMatch.index;
-
-		// Replace the matched section
-		const newLines = [...lines];
-		newLines.splice(startIndex, bestMatch.length, ...newStr.split(eol));
-
-		return {
-			text: newLines.join(eol),
-			type: 'similarity',
-			editPosition: [[startIndex, startIndex + bestMatch.length]],
-			similarity: bestMatch.similarity,
-			suggestion: `Used similarity matching (${(bestMatch.similarity * 100).toFixed(1)}% similar). Verify the replacement.`
-		};
+	if (bestMatch.startLine === -1) {
+		return { text, editPosition: [], type: 'none' };
 	}
 
-	return { text, editPosition: [], type: 'none' };
+	// Replace the matched section
+	const newLines = [
+		...lines.slice(0, bestMatch.startLine),
+		...newStr.split(eol),
+		...lines.slice(bestMatch.startLine + oldLines.length)
+	];
+
+	return {
+		text: newLines.join(eol),
+		type: 'similarity',
+		editPosition: [[bestMatch.startOffset, bestMatch.startOffset + bestMatch.oldLength]],
+		similarity: bestMatch.similarity,
+		suggestion: `Used similarity matching (${(bestMatch.similarity * 100).toFixed(1)}% similar). Verify the replacement.`
+	};
 }
 
 // Function to generate a simple patch
@@ -547,18 +553,23 @@ const ALWAYS_CHECKED_EDIT_PATTERNS: Readonly<Record<string, boolean>> = {
 	'**/.vscode/*.json': false,
 };
 
+const allPlatformPatterns = [homedir() + '/.*', homedir() + '/.*/**'];
+
 // Path prefixes under which confirmation is unconditionally required
 const platformConfirmationRequiredPaths = (
 	isWindows
-		? [process.env.APPDATA + '/**', process.env.LOCALAPPDATA + '/**', homedir() + '/.*', homedir() + '/.*/**']
-		: [homedir() + '/.*', homedir() + '/.*/**']
-).map(p => glob.parse(p));
+		? [process.env.APPDATA + '/**', process.env.LOCALAPPDATA + '/**']
+		: isMacintosh
+			? [homedir() + '/Library/**']
+			: []
+).concat(allPlatformPatterns).map(p => glob.parse(p));
 
 const enum ConfirmationCheckResult {
 	NoConfirmation,
+	NoPermissions,
 	Sensitive,
 	SystemFile,
-	OutsideWorkspace
+	OutsideWorkspace,
 }
 
 /**
@@ -568,18 +579,19 @@ const enum ConfirmationCheckResult {
 function makeUriConfirmationChecker(configuration: IConfigurationService, workspaceService: IWorkspaceService, customInstructionsService: ICustomInstructionsService) {
 	const patterns = configuration.getNonExtensionConfig<Record<string, boolean>>('chat.tools.edits.autoApprove');
 
-	const checks = new ResourceMap<{ pattern: glob.ParsedPattern; isApproved: boolean }[]>();
+	const checks = new ResourceMap<{ patterns: { pattern: glob.ParsedPattern; isApproved: boolean }[]; ignoreCasing: boolean }>();
 	const getPatterns = (wf: URI) => {
 		let arr = checks.get(wf);
 		if (arr) {
 			return arr;
 		}
 
-		arr = [];
+		const ignoreCasing = extUriBiasedIgnorePathCase.ignorePathCasing(wf);
+		arr = { patterns: [], ignoreCasing };
 		for (const obj of [patterns, ALWAYS_CHECKED_EDIT_PATTERNS]) {
 			if (obj) {
 				for (const [pattern, isApproved] of Object.entries(obj)) {
-					arr.push({ pattern: glob.parse({ base: wf.fsPath, pattern }), isApproved });
+					arr.patterns.push({ pattern: glob.parse({ base: wf.fsPath, pattern: ignoreCasing ? pattern.toLowerCase() : pattern }), isApproved });
 				}
 			}
 		}
@@ -595,13 +607,18 @@ function makeUriConfirmationChecker(configuration: IConfigurationService, worksp
 		}
 
 		let ok = true;
-		const fsPath = uri.fsPath;
+		let fsPath = uri.fsPath;
 
 		if (platformConfirmationRequiredPaths.some(p => p(fsPath))) {
 			return ConfirmationCheckResult.SystemFile;
 		}
 
-		for (const { pattern, isApproved } of getPatterns(workspaceFolder || URI.file('/'))) {
+		const { patterns, ignoreCasing } = getPatterns(workspaceFolder || URI.file('/'));
+		if (ignoreCasing) {
+			fsPath = fsPath.toLowerCase();
+		}
+
+		for (const { pattern, isApproved } of patterns) {
 			if (isApproved !== ok && pattern(fsPath)) {
 				ok = isApproved;
 			}
@@ -619,6 +636,9 @@ function makeUriConfirmationChecker(configuration: IConfigurationService, worksp
 					toCheck.push(URI.file(linked));
 				}
 			} catch (e) {
+				if ((e as NodeJS.ErrnoException).code === 'EPERM') {
+					return ConfirmationCheckResult.NoPermissions;
+				}
 				// Usually EPERM or ENOENT on the linkedFile
 			}
 		}
@@ -643,18 +663,23 @@ export async function createEditConfirmation(accessor: ServicesAccessor, uris: r
 		return '`' + (wf ? relativePath(wf, uri) : uri.fsPath) + '`';
 	}).join(', ');
 
+	let message: string;
+	if (needsConfirmation.some(r => r.reason === ConfirmationCheckResult.NoPermissions)) {
+		message = t`The model wants to edit files you don't have permission to modify (${fileParts}).`;
+	} else if (needsConfirmation.some(r => r.reason === ConfirmationCheckResult.Sensitive)) {
+		message = t`The model wants to edit sensitive files (${fileParts}).`;
+	} else if (needsConfirmation.some(r => r.reason === ConfirmationCheckResult.OutsideWorkspace)) {
+		message = t`The model wants to edit files outside of your workspace (${fileParts}).`;
+	} else {
+		message = t`The model wants to edit system files (${fileParts}).`;
+	}
+
 	return {
 		confirmationMessages: {
 			title: t('Allow edits to sensitive files?'),
-			message: new MarkdownString(
-				(needsConfirmation.some(r => r.reason === ConfirmationCheckResult.Sensitive)
-					? t`The model wants to edit sensitive files (${fileParts}).`
-					: needsConfirmation.some(r => r.reason === ConfirmationCheckResult.OutsideWorkspace)
-						? t`The model wants to edit files outside of your workspace (${fileParts}).`
-						: t`The model wants to edit system files (${fileParts}).`)
-				+ ' ' + t`Do you want to allow this?` + '\n\n' + asString()
-			),
-		}
+			message: message + ' ' + t`Do you want to allow this?` + '\n\n' + asString(),
+		},
+		presentation: 'hiddenAfterComplete'
 	};
 }
 
@@ -667,4 +692,13 @@ export function canExistingFileBeEdited(accessor: ServicesAccessor, uri: URI): P
 
 	const fileSystemService = accessor.get(IFileSystemService);
 	return fileSystemService.stat(uri).then(() => true, () => false);
+}
+
+
+export function logEditToolResult(logService: ILogService, requestId: string | undefined, ...opts: {
+	input: unknown;
+	success: boolean;
+	healed?: unknown | undefined;
+}[]) {
+	logService.debug(`[edit-tool:${requestId}] ${JSON.stringify(opts)}`);
 }

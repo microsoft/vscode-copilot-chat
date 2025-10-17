@@ -3,8 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { BasePromptElementProps, Chunk, Image, PromptElement, PromptPieceChild, PromptSizing, Raw, SystemMessage, TokenLimit, UserMessage } from '@vscode/prompt-tsx';
-import { isDefined } from '@vscode/test-electron/out/util';
+import { BasePromptElementProps, Chunk, Image, PromptElement, PromptPiece, PromptPieceChild, PromptSizing, Raw, SystemMessage, TokenLimit, UserMessage } from '@vscode/prompt-tsx';
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
@@ -21,6 +20,7 @@ import { ITasksService } from '../../../../platform/tasks/common/tasksService';
 import { IExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { basename } from '../../../../util/vs/base/common/path';
+import { isDefined } from '../../../../util/vs/base/common/types';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { ChatRequestEditedFileEventKind, Position, Range } from '../../../../vscodeTypes';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
@@ -45,7 +45,7 @@ import { UserPreferences } from '../panel/preferences';
 import { ChatToolCalls } from '../panel/toolCalling';
 import { MultirootWorkspaceStructure } from '../panel/workspace/workspaceStructure';
 import { AgentConversationHistory } from './agentConversationHistory';
-import { AlternateGPTPrompt, CodexStyleGPTPrompt, DefaultAgentPrompt, DefaultAgentPromptV2, SweBenchAgentPrompt } from './agentInstructions';
+import { AlternateGPTPrompt, ClaudeSonnet45PromptV2, CodexStyleGPT5CodexPrompt, CodexStyleGPTPrompt, DefaultAgentPrompt, DefaultAgentPromptV2, SweBenchAgentPrompt } from './agentInstructions';
 import { SummarizedConversationHistory } from './summarizedConversationHistory';
 
 export interface AgentPromptProps extends GenericBasePromptElementProps {
@@ -77,6 +77,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
+		@IPromptVariablesService private readonly promptVariablesService: IPromptVariablesService,
 		@IPromptEndpoint private readonly promptEndpoint: IPromptEndpoint,
 	) {
 		super(props);
@@ -105,7 +106,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		</>;
 		const baseInstructions = <>
 			{!omitBaseAgentInstructions && baseAgentInstructions}
-			{this.getAgentCustomInstructions()}
+			{await this.getAgentCustomInstructions()}
 			<UserMessage>
 				{await this.getOrCreateGlobalAgentContext(this.props.endpoint)}
 			</UserMessage>
@@ -141,6 +142,24 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	private getInstructions() {
 		if (this.configurationService.getConfig(ConfigKey.Internal.SweBenchAgentPrompt)) {
 			return <SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} />;
+		}
+
+		if (this.props.endpoint.family === 'gpt-5-codex') {
+			const promptType = this.configurationService.getExperimentBasedConfig(ConfigKey.Gpt5CodexAlternatePrompt, this.experimentationService);
+			switch (promptType) {
+				case 'codex':
+					return <CodexStyleGPT5CodexPrompt
+						availableTools={this.props.promptContext.tools?.availableTools}
+						modelFamily={this.props.endpoint.family}
+						codesearchMode={this.props.codesearchMode}
+					/>;
+				default:
+					return <DefaultAgentPrompt
+						availableTools={this.props.promptContext.tools?.availableTools}
+						modelFamily={this.props.endpoint.family}
+						codesearchMode={this.props.codesearchMode}
+					/>;
+			}
 		}
 
 		if (this.props.endpoint.family.startsWith('gpt-5')) {
@@ -185,6 +204,24 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			}
 		}
 
+		if (this.supportsClaudeAltPrompt(this.props.endpoint.family)) {
+			const promptType = this.configurationService.getExperimentBasedConfig(ConfigKey.ClaudeSonnet45AlternatePrompt, this.experimentationService);
+			switch (promptType) {
+				case 'v2':
+					return <ClaudeSonnet45PromptV2
+						availableTools={this.props.promptContext.tools?.availableTools}
+						modelFamily={this.props.endpoint.family}
+						codesearchMode={this.props.codesearchMode}
+					/>;
+				default:
+					return <DefaultAgentPrompt
+						availableTools={this.props.promptContext.tools?.availableTools}
+						modelFamily={this.props.endpoint.family}
+						codesearchMode={this.props.codesearchMode}
+					/>;
+			}
+		}
+
 		if (this.props.endpoint.family.startsWith('gpt-') && this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService)) {
 			return <AlternateGPTPrompt
 				availableTools={this.props.promptContext.tools?.availableTools}
@@ -200,26 +237,41 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		/>;
 	}
 
-	private getAgentCustomInstructions() {
+	private supportsClaudeAltPrompt(family: string): boolean {
+		if (!family.startsWith('claude-')) {
+			return false;
+		}
+
+		const excludedVersions = ['claude-3.5-sonnet', 'claude-3.7-sonnet', 'claude-sonnet-4'];
+		return !excludedVersions.includes(family);
+	}
+
+	private async getAgentCustomInstructions() {
 		const putCustomInstructionsInSystemMessage = this.configurationService.getConfig(ConfigKey.CustomInstructionsInSystemMessage);
-		const customInstructionsBody = <>
+		const customInstructionsBodyParts: PromptPiece[] = [];
+		customInstructionsBodyParts.push(
 			<CustomInstructions
 				languageId={undefined}
 				chatVariables={this.props.promptContext.chatVariables}
 				includeSystemMessageConflictWarning={!putCustomInstructionsInSystemMessage}
 				customIntroduction={putCustomInstructionsInSystemMessage ? '' : undefined} // If in system message, skip the "follow these user-provided coding instructions" intro
 			/>
-			{
-				this.props.promptContext.modeInstructions && <Tag name='customInstructions'>
+		);
+		if (this.props.promptContext.modeInstructions) {
+			const { content, toolReferences } = this.props.promptContext.modeInstructions;
+			const resolvedContent = toolReferences && toolReferences.length > 0 ? await this.promptVariablesService.resolveToolReferencesInPrompt(content, toolReferences) : content;
+
+			customInstructionsBodyParts.push(
+				<Tag name='customInstructions'>
 					Below are some additional instructions from the user.<br />
 					<br />
-					{this.props.promptContext.modeInstructions}
+					{resolvedContent}
 				</Tag>
-			}
-		</>;
+			);
+		}
 		return putCustomInstructionsInSystemMessage ?
-			<SystemMessage>{customInstructionsBody}</SystemMessage> :
-			<UserMessage>{customInstructionsBody}</UserMessage>;
+			<SystemMessage>{customInstructionsBodyParts}</SystemMessage> :
+			<UserMessage>{customInstructionsBodyParts}</UserMessage>;
 	}
 
 	private async getOrCreateGlobalAgentContext(endpoint: IChatEndpoint): Promise<PromptPieceChild[]> {
@@ -352,7 +404,8 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 		const hasEditFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
 		const hasEditNotebookTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditNotebook);
 		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreRunInTerminal);
-		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1' || this.props.endpoint.family.startsWith('gpt-5')) && this.props.chatVariables.hasVariables() ?
+		const isGpt5 = this.props.endpoint.family.startsWith('gpt-5') && this.props.endpoint.family !== 'gpt-5-codex';
+		const attachmentHint = (this.props.endpoint.family === 'gpt-4.1' || isGpt5) && this.props.chatVariables.hasVariables() ?
 			' (See <attachments> above for file contents. You may not need to search or read the file again.)'
 			: '';
 		const hasToolsToEditNotebook = hasCreateFileTool || hasEditNotebookTool || hasReplaceStringTool || hasApplyPatchTool || hasEditFileTool;
@@ -380,6 +433,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<KeepGoingReminder modelFamily={this.props.endpoint.family} />
 						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint), hasMultiReplaceStringTool)}
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
+						{getFileCreationReminder(this.props.endpoint.family)}
 						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
 					</Tag>
 					{query && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
@@ -712,7 +766,7 @@ export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringToo
 	if (hasReplaceStringTool) {
 		lines.push(<>
 			When using the {ToolName.ReplaceString} tool, include 3-5 lines of unchanged code before and after the string you want to replace, to make it unambiguous which part of the file should be edited.<br />
-			{hasMultiStringReplace && <>For maximum efficiency, whenever you plan to perform multiple independent edit operations, invoke them simultaneously using {ToolName.MultiReplaceString} tool rather than sequentially. This will greatly improve user's cost and time efficiency leading to a better user experience.<br /></>}
+			{hasMultiStringReplace && <>For maximum efficiency, whenever you plan to perform multiple independent edit operations, invoke them simultaneously using {ToolName.MultiReplaceString} tool rather than sequentially. This will greatly improve user's cost and time efficiency leading to a better user experience. Do not announce which tool you're using (for example, avoid saying "I'll implement all the changes using multi_replace_string_in_file").<br /></>}
 		</>);
 	}
 	if (hasEditFileTool && hasReplaceStringTool) {
@@ -754,6 +808,8 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 					You MUST plan extensively before each function call, and reflect extensively on the outcomes of the previous function calls. DO NOT do this entire process by making function calls only, as this can impair your ability to solve the problem and think insightfully.<br />
 					You are a highly capable and autonomous agent, and you can definitely solve this problem without needing to ask the user for further input.<br />
 				</>;
+			} else if (this.props.modelFamily === 'gpt-5-codex') {
+				return undefined;
 			} else if (this.props.modelFamily?.startsWith('gpt-5') === true) {
 				return <>
 					You are an agent—keep going until the user's query is completely resolved before ending your turn. ONLY stop if solved or genuinely blocked.<br />
@@ -775,7 +831,18 @@ export class KeepGoingReminder extends PromptElement<IKeepGoingReminderProps> {
 	}
 }
 
+function getFileCreationReminder(modelFamily: string | undefined) {
+	if (modelFamily !== 'claude-sonnet-4.5') {
+		return;
+	}
+	return <>Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.<br /></>;
+}
+
 function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {
+	if (modelFamily === 'gpt-5-codex') {
+		return;
+	}
+
 	const isGpt5Mini = modelFamily === 'gpt-5-mini';
 	return modelFamily?.startsWith('gpt-5') === true ?
 		<>
@@ -788,8 +855,8 @@ function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: b
 			<Tag name='importantReminders'>
 				Before starting a task, review and follow the guidance in &lt;responseModeHints&gt;, &lt;engineeringMindsetHints&gt;, and &lt;requirementsUnderstanding&gt;.<br />
 				{!isGpt5Mini && <>Start your response with a brief acknowledgement, followed by a concise high-level plan outlining your approach.<br /></>}
-				DO NOT state your identity or model name unless the user explicitly asks you to. <br />
-				{hasTodoTool && <>You MUST use the todo list tool to plan and track your progress. NEVER skip this step, and START with this step whenever the task is multi-step. This is essential for maintaining visibility and proper execution of large tasks. Follow the todoListToolInstructions strictly.<br /></>}
+				Do NOT volunteer your model name unless the user explicitly asks you about it. <br />
+				{hasTodoTool && <>You MUST use the todo list tool to plan and track your progress. NEVER skip this step, and START with this step whenever the task is multi-step. This is essential for maintaining visibility and proper execution of large tasks.<br /></>}
 				{!hasTodoTool && <>Break down the request into clear, actionable steps and present them at the beginning of your response before proceeding with implementation. This helps maintain visibility and ensures all requirements are addressed systematically.<br /></>}
 				When referring to a filename or symbol in the user's workspace, wrap it in backticks.<br />
 			</Tag>

@@ -451,7 +451,7 @@ export class NextEditProviderTelemetryBuilder extends Disposable {
 
 	constructor(
 		gitExtensionService: IGitExtensionService,
-		notebookService: INotebookService,
+		notebookService: INotebookService | undefined,
 		workspaceService: IWorkspaceService,
 		providerId: string,
 		doc: IObservableDocument,
@@ -819,7 +819,9 @@ export class TelemetrySender implements IDisposable {
 				"diagnosticAlternativeImportsCount": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Number of alternative imports for the diagnostic", "isMeasurement": true },
 				"diagnosticDistanceToUnknownDiagnostic": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Distance to the unknown diagnostic", "isMeasurement": true },
 				"diagnosticDistanceToAlternativeDiagnostic": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Distance to the alternative diagnostic", "isMeasurement": true },
-				"diagnosticHasAlternativeDiagnosticForSameRange": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether there is an alternative diagnostic for the same range", "isMeasurement": true }
+				"diagnosticHasAlternativeDiagnosticForSameRange": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Whether there is an alternative diagnostic for the same range", "isMeasurement": true },
+				"nextCursorLineDistance": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Distance from next cursor line to current cursor line: newCursorLineNumber - currentCursorLineNumber", "isMeasurement": true },
+				"nextCursorLineError": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Error in the predicted next cursor line" }
 			}
 		*/
 		this._sendTelemetryToBoth(
@@ -841,7 +843,8 @@ export class TelemetrySender implements IDisposable {
 				pickedNES,
 				notebookType,
 				notebookId,
-				notebookCellLines
+				notebookCellLines,
+				nextCursorLineError: telemetry.nextCursorLineError,
 			},
 			{
 				requestN,
@@ -895,7 +898,8 @@ export class TelemetrySender implements IDisposable {
 				diagnosticAlternativeImportsCount: diagnosticAlternativeImportsCount,
 				diagnosticDistanceToUnknownDiagnostic: diagnosticDistanceToUnknownDiagnostic,
 				diagnosticDistanceToAlternativeDiagnostic: diagnosticDistanceToAlternativeDiagnostic,
-				diagnosticHasAlternativeDiagnosticForSameRange: this._boolToNum(diagnosticHasAlternativeDiagnosticForSameRange)
+				diagnosticHasAlternativeDiagnosticForSameRange: this._boolToNum(diagnosticHasAlternativeDiagnosticForSameRange),
+				nextCursorLineDistance: telemetry.nextCursorLineDistance,
 			}
 		);
 	}

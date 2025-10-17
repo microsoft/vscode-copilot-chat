@@ -41,6 +41,15 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 			for (const model of response.data) {
 				if (this._knownModels && this._knownModels[model.id]) {
 					modelList[model.id] = this._knownModels[model.id];
+				} else {
+					// Mix in generic capabilities for models we don't know
+					modelList[model.id] = {
+						maxInputTokens: 100000,
+						maxOutputTokens: 16000,
+						name: model.display_name,
+						toolCalling: true,
+						vision: false
+					};
 				}
 			}
 			return modelList;
@@ -55,6 +64,24 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		if (this._apiKey) {
 			await this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, this._apiKey, BYOKAuthType.GlobalApiKey);
 		}
+	}
+
+	async updateAPIKeyViaCmd(envVarName: string, action: 'update' | 'remove' = 'update', modelId?: string): Promise<void> {
+		if (action === 'remove') {
+			this._apiKey = undefined;
+			await this._byokStorageService.deleteAPIKey(AnthropicLMProvider.providerName, this.authType, modelId);
+			this._logService.info(`BYOK: API key removed for provider ${AnthropicLMProvider.providerName}`);
+			return;
+		}
+
+		const apiKey = process.env[envVarName];
+		if (!apiKey) {
+			throw new Error(`BYOK: Environment variable ${envVarName} not found or empty for API key management`);
+		}
+
+		this._apiKey = apiKey;
+		await this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, apiKey, this.authType, modelId);
+		this._logService.info(`BYOK: API key updated for provider ${AnthropicLMProvider.providerName} from environment variable ${envVarName}`);
 	}
 
 	async provideLanguageModelChatInformation(options: { silent: boolean }, token: CancellationToken): Promise<LanguageModelChatInformation[]> {
@@ -128,7 +155,8 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 				input_schema: {
 					type: 'object',
 					properties: (tool.inputSchema as { properties?: Record<string, unknown> }).properties ?? {},
-					required: (tool.inputSchema as { required?: string[] }).required ?? []
+					required: (tool.inputSchema as { required?: string[] }).required ?? [],
+					$schema: (tool.inputSchema as { $schema?: unknown }).$schema
 				}
 			};
 		});
@@ -207,7 +235,6 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		let usage: APIUsage | undefined;
 
 		let hasText = false;
-		let firstTool = true;
 		for await (const chunk of stream) {
 			if (token.isCancellationRequested) {
 				break;
@@ -220,16 +247,11 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 
 			if (chunk.type === 'content_block_start') {
 				if ('content_block' in chunk && chunk.content_block.type === 'tool_use') {
-					if (hasText && firstTool) {
-						// Flush the linkifier stream otherwise it pauses before the tool call if the last word ends with a punctuation mark.
-						progress.report(new LanguageModelTextPart(' '));
-					}
 					pendingToolCall = {
 						toolId: chunk.content_block.id,
 						name: chunk.content_block.name,
 						jsonInput: ''
 					};
-					firstTool = false;
 				}
 				continue;
 			}

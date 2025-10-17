@@ -4,37 +4,77 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { IOctoKitService } from '../../../platform/github/common/githubService';
+import { OctoKitService } from '../../../platform/github/common/octoKitServiceImpl';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { ServiceCollection } from '../../../util/vs/platform/instantiation/common/serviceCollection';
 import { ClaudeAgentManager } from '../../agents/claude/node/claudeCodeAgent';
+import { ClaudeCodeSdkService, IClaudeCodeSdkService } from '../../agents/claude/node/claudeCodeSdkService';
 import { ClaudeCodeSessionService, IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSessionService';
+import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
+import { CopilotCLISessionService, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
+import { ILanguageModelServer, LanguageModelServer } from '../../agents/node/langModelServer';
 import { IExtensionContribution } from '../../common/contributions';
 import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProvider';
-import { ClaudeChatSessionItemProvider, ClaudeSessionDataStore } from './claudeChatSessionItemProvider';
+import { ClaudeChatSessionItemProvider } from './claudeChatSessionItemProvider';
+import { ClaudeChatSessionParticipant } from './claudeChatSessionParticipant';
+import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, registerCLIChatCommands } from './copilotCLIChatSessionsContribution';
+import { CopilotChatSessionsProvider } from './copilotChatSessionsProvider';
+import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 
 export class ChatSessionsContrib extends Disposable implements IExtensionContribution {
 	readonly id = 'chatSessions';
+	readonly claudeSessionType = 'claude-code';
+	readonly copilotcliSessionType = 'copilotcli';
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
 	) {
 		super();
-
 		const claudeAgentInstaService = instantiationService.createChild(
 			new ServiceCollection(
-				[IClaudeCodeSessionService, new SyncDescriptor(ClaudeCodeSessionService)]));
+				[IClaudeCodeSessionService, new SyncDescriptor(ClaudeCodeSessionService)],
+				[IClaudeCodeSdkService, new SyncDescriptor(ClaudeCodeSdkService)],
+				[ILanguageModelServer, new SyncDescriptor(LanguageModelServer)],
+			));
 
-		const sessionStore = claudeAgentInstaService.createInstance(ClaudeSessionDataStore);
-		const sessionItemProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionItemProvider, sessionStore));
-		this._register(vscode.chat.registerChatSessionItemProvider('claude-code', sessionItemProvider));
+		const sessionItemProvider = this._register(claudeAgentInstaService.createInstance(ClaudeChatSessionItemProvider));
+		this._register(vscode.chat.registerChatSessionItemProvider(this.claudeSessionType, sessionItemProvider));
 		this._register(vscode.commands.registerCommand('github.copilot.claude.sessions.refresh', () => {
 			sessionItemProvider.refresh();
 		}));
 
 		const claudeAgentManager = this._register(claudeAgentInstaService.createInstance(ClaudeAgentManager));
-		const chatSessionContentProvider = claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider, claudeAgentManager, sessionStore);
-		this._register(vscode.chat.registerChatSessionContentProvider('claude-code', chatSessionContentProvider));
+		const chatSessionContentProvider = claudeAgentInstaService.createInstance(ClaudeChatSessionContentProvider);
+		const claudeChatSessionParticipant = claudeAgentInstaService.createInstance(ClaudeChatSessionParticipant, this.claudeSessionType, claudeAgentManager, sessionItemProvider);
+		const chatParticipant = vscode.chat.createChatParticipant(this.claudeSessionType, claudeChatSessionParticipant.createHandler());
+		const copilotCLISessionService = claudeAgentInstaService.createInstance(CopilotCLISessionService);
+		this._register(vscode.chat.registerChatSessionContentProvider(this.claudeSessionType, chatSessionContentProvider, chatParticipant));
+
+		const copilotcliAgentInstaService = instantiationService.createChild(
+			new ServiceCollection(
+				[ICopilotCLISessionService, copilotCLISessionService],
+				[ILanguageModelServer, new SyncDescriptor(LanguageModelServer)],
+				[ICopilotCLITerminalIntegration, new SyncDescriptor(CopilotCLITerminalIntegration)],
+			));
+
+		const copilotcliSessionItemProvider = this._register(copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionItemProvider));
+		this._register(vscode.chat.registerChatSessionItemProvider(this.copilotcliSessionType, copilotcliSessionItemProvider));
+		const copilotcliAgentManager = this._register(copilotcliAgentInstaService.createInstance(CopilotCLIAgentManager));
+		const copilotcliChatSessionContentProvider = copilotcliAgentInstaService.createInstance(CopilotCLIChatSessionContentProvider, copilotcliAgentManager);
+		const copilotcliChatSessionParticipant = new CopilotCLIChatSessionParticipant(this.copilotcliSessionType, copilotcliAgentManager, copilotCLISessionService, copilotcliSessionItemProvider);
+		const copilotcliParticipant = vscode.chat.createChatParticipant(this.copilotcliSessionType, copilotcliChatSessionParticipant.createHandler());
+		this._register(vscode.chat.registerChatSessionContentProvider(this.copilotcliSessionType, copilotcliChatSessionContentProvider, copilotcliParticipant));
+		this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCLISessionService));
+
+		// Copilot sessions provider
+		const copilotAgentInstaService = instantiationService.createChild(new ServiceCollection(
+			[IOctoKitService, new SyncDescriptor(OctoKitService)],
+		));
+		const copilotSessionsProvider = this._register(copilotAgentInstaService.createInstance(CopilotChatSessionsProvider));
+		this._register(vscode.chat.registerChatSessionItemProvider(CopilotChatSessionsProvider.TYPE, copilotSessionsProvider));
+		this._register(vscode.chat.registerChatSessionContentProvider(CopilotChatSessionsProvider.TYPE, copilotSessionsProvider, undefined as any));
 	}
 }

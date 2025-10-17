@@ -17,7 +17,7 @@ import { IGitCommitMessageService } from '../../../platform/git/common/gitCommit
 import { ILogService } from '../../../platform/log/common/logService';
 import { ISettingsEditorSearchService } from '../../../platform/settingsEditor/common/settingsEditorSearchService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
-import { DeferredPromise } from '../../../util/vs/base/common/async';
+import { isUri } from '../../../util/common/types';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { DisposableStore, IDisposable, combinedDisposable } from '../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../util/vs/base/common/uri';
@@ -61,7 +61,6 @@ export class ConversationFeature implements IExtensionContribution {
 	private _settingsSearchProviderRegistered = false;
 
 	readonly id = 'conversationFeature';
-	readonly activationBlocker?: Promise<any>;
 
 	constructor(
 		@IInstantiationService private instantiationService: IInstantiationService,
@@ -86,25 +85,7 @@ export class ConversationFeature implements IExtensionContribution {
 		// Register Copilot token listener
 		this.registerCopilotTokenListener();
 
-		const activationBlockerDeferred = new DeferredPromise<void>();
-		this.activationBlocker = activationBlockerDeferred.p;
-		if (authenticationService.copilotToken) {
-			this.logService.debug(`ConversationFeature: Copilot token already available`);
-			this.activated = true;
-			activationBlockerDeferred.complete();
-		}
-
-		this._disposables.add(authenticationService.onDidAuthenticationChange(async () => {
-			const hasSession = !!authenticationService.copilotToken;
-			this.logService.debug(`ConversationFeature: onDidAuthenticationChange has token: ${hasSession}`);
-			if (hasSession) {
-				this.activated = true;
-			} else {
-				this.activated = false;
-			}
-
-			activationBlockerDeferred.complete();
-		}));
+		this.activated = true;
 	}
 
 	get enabled() {
@@ -161,6 +142,13 @@ export class ConversationFeature implements IExtensionContribution {
 			return;
 		} else {
 			this._searchProviderRegistered = true;
+
+			// Don't register for no auth user
+			if (this.authenticationService.copilotToken?.isNoAuthUser) {
+				this.logService.debug('ConversationFeature: Skipping search provider registration - no GitHub session available');
+				return;
+			}
+
 			return vscode.workspace.registerAITextSearchProvider('file', this.instantiationService.createInstance(SemanticSearchTextSearchProvider));
 		}
 	}
@@ -248,8 +236,9 @@ export class ConversationFeature implements IExtensionContribution {
 					repository.inputBox.value = commitMessage;
 				}
 			}),
-			vscode.commands.registerCommand('github.copilot.git.resolveMergeConflicts', async (...resourceStates: vscode.SourceControlResourceState[]) => {
-				await this.mergeConflictService.resolveMergeConflicts(resourceStates.map(r => r.resourceUri), undefined);
+			vscode.commands.registerCommand('github.copilot.git.resolveMergeConflicts', async (...resourceStates: (vscode.Uri | vscode.SourceControlResourceState)[]) => {
+				const resources = resourceStates.filter(r => !!r).map(r => isUri(r) ? r : r.resourceUri);
+				await this.mergeConflictService.resolveMergeConflicts(resources, undefined);
 			}),
 			vscode.commands.registerCommand('github.copilot.devcontainer.generateDevContainerConfig', async (args: DevContainerConfigGeneratorArguments, cancellationToken = new vscode.CancellationTokenSource().token) => {
 				return this.devContainerConfigurationService.generateConfiguration(args, cancellationToken);

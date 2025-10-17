@@ -32,7 +32,6 @@ export enum ToolName {
 	GetNotebookSummary = 'copilot_getNotebookSummary',
 	ReadCellOutput = 'read_notebook_cell_output',
 	InstallExtension = 'install_extension',
-	Think = 'think',
 	FetchWebPage = 'fetch_webpage',
 	FindTestFiles = 'test_search',
 	GetProjectSetupInfo = 'get_project_setup_info',
@@ -54,7 +53,6 @@ export enum ToolName {
 	ToolReplay = 'tool_replay',
 	EditFilesPlaceholder = 'edit_files',
 	ExecutePrompt = 'execute_prompt',
-	ExecuteTask = 'execute_task',
 	CoreConfirmationTool = 'vscode_get_confirmation'
 }
 
@@ -87,7 +85,6 @@ export enum ContributedToolName {
 	GetNotebookSummary = 'copilot_getNotebookSummary',
 	ReadCellOutput = 'copilot_readNotebookCellOutput',
 	InstallExtension = 'copilot_installExtension',
-	Think = 'copilot_think',
 	FetchWebPage = 'copilot_fetchWebPage',
 	FindTestFiles = 'copilot_findTestFiles',
 	GetProjectSetupInfo = 'copilot_getProjectSetupInfo',
@@ -100,8 +97,14 @@ export enum ContributedToolName {
 	ToolReplay = 'copilot_toolReplay',
 	EditFilesPlaceholder = 'copilot_editFiles',
 	ExecutePrompt = 'execute_prompt',
-	ExecuteTask = 'execute_task',
 }
+
+export const byokEditToolNamesToToolNames = {
+	'find-replace': ToolName.ReplaceString,
+	'multi-find-replace': ToolName.MultiReplaceString,
+	'apply-patch': ToolName.ApplyPatch,
+	'code-rewrite': ToolName.EditFile,
+} as const;
 
 const toolNameToContributedToolNames = new Map<ToolName, ContributedToolName>();
 const contributedToolNameToToolNames = new Map<ContributedToolName, ToolName>();

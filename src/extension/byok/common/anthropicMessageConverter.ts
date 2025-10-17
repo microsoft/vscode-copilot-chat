@@ -32,14 +32,16 @@ function apiContentToAnthropicContent(content: (LanguageModelTextPart | Language
 				});
 			}
 		} else if (part instanceof LanguageModelDataPart) {
-			convertedContent.push({
-				type: 'image',
-				source: {
-					type: 'base64',
-					data: Buffer.from(part.data).toString('base64'),
-					media_type: part.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp"
-				}
-			});
+			if (part.mimeType !== CustomDataPartMimeTypes.StatefulMarker) {
+				convertedContent.push({
+					type: 'image',
+					source: {
+						type: 'base64',
+						data: Buffer.from(part.data).toString('base64'),
+						media_type: part.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp"
+					}
+				});
+			}
 		} else if (part instanceof LanguageModelToolResultPart || part instanceof LanguageModelToolResultPart2) {
 			convertedContent.push({
 				type: 'tool_result',

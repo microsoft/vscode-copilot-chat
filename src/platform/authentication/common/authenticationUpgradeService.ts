@@ -68,7 +68,7 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 				return false;
 			}
 			// The user is not signed in at all
-			if (!this._authenticationService.getAnyGitHubSession({ silent: true })) {
+			if (!(await this._authenticationService.getAnyGitHubSession({ silent: true }))) {
 				reason = 'false - not signed in';
 				return false;
 			}
@@ -93,7 +93,7 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 		try {
 			await this._authenticationService.getPermissiveGitHubSession({
 				forceNewSession: {
-					detail: l10n.t('To get more relevant Copilot Chat results, we need permission to read the contents of your repository on GitHub.'),
+					detail: l10n.t('To get more relevant Chat results, we need permission to read the contents of your repository on GitHub.'),
 					learnMore: URI.parse('https://aka.ms/copilotRepoScope'),
 				},
 				clearSessionPreference: true
@@ -115,7 +115,7 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 		this.hasRequestedPermissiveSessionUpgrade = true;
 		stream.confirmation(
 			this._permissionRequest,
-			detail || l10n.t('To get more relevant Copilot Chat results, we need permission to read the contents of your repository on GitHub.'),
+			detail || l10n.t('To get more relevant Chat results, we need permission to read the contents of your repository on GitHub.'),
 			{ authPermissionPrompted: true, ...data },
 			[
 				this._permissionRequestGrant,
@@ -174,7 +174,8 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 				location2: request.location2,
 				model: request.model,
 				tools: new Map(),
-				id: request.id
+				id: request.id,
+				sessionId: '1'
 			};
 		} else {
 			// Something went wrong, history item was deleted or lost?
@@ -192,7 +193,8 @@ export class AuthenticationChatUpgradeService extends Disposable implements IAut
 				location2: request.location2,
 				model: request.model,
 				tools: new Map(),
-				id: request.id
+				id: request.id,
+				sessionId: '1'
 			};
 		}
 	}

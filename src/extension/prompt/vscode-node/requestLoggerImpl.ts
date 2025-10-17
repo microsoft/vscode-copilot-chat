@@ -5,7 +5,7 @@
 
 import { RequestMetadata, RequestType } from '@vscode/copilot-api';
 import { HTMLTracer, IChatEndpointInfo, RenderPromptResult } from '@vscode/prompt-tsx';
-import { CancellationToken, DocumentLink, DocumentLinkProvider, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult2, languages, Range, TextDocument, Uri, workspace } from 'vscode';
+import { CancellationToken, DocumentLink, DocumentLinkProvider, ExtendedLanguageModelToolResult, LanguageModelDataPart, LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult2, languages, Range, TextDocument, Uri, workspace } from 'vscode';
 import { ChatFetchResponseType } from '../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService, XTabProviderId } from '../../../platform/configuration/common/configurationService';
 import { IModelAPIResponse } from '../../../platform/endpoint/common/endpointProvider';
@@ -229,6 +229,7 @@ class LoggedToolCall implements ILoggedToolCall {
 		public readonly time: number,
 		public readonly thinking?: ThinkingData,
 		public readonly edits?: { path: string; edits: string }[],
+		public readonly toolMetadata?: unknown,
 	) { }
 
 	async toJSON(): Promise<object> {
@@ -256,7 +257,8 @@ class LoggedToolCall implements ILoggedToolCall {
 			time: new Date(this.time).toISOString(),
 			response: responseData,
 			thinking: thinking,
-			edits: this.edits ? this.edits.map(edit => ({ path: edit.path, edits: JSON.parse(edit.edits) })) : undefined
+			edits: this.edits ? this.edits.map(edit => ({ path: edit.path, edits: JSON.parse(edit.edits) })) : undefined,
+			toolMetadata: this.toolMetadata
 		};
 	}
 }
@@ -287,6 +289,8 @@ export class RequestLogger extends AbstractRequestLogger {
 
 				if (format === 'json') {
 					return this._renderToJson(entry);
+				} else if (format === 'rawrequest') {
+					return this._renderRawRequestToJson(entry);
 				} else {
 					// Existing markdown logic
 					switch (entry.kind) {
@@ -323,6 +327,8 @@ export class RequestLogger extends AbstractRequestLogger {
 
 	public override logToolCall(id: string, name: string, args: unknown, response: LanguageModelToolResult2, thinking?: ThinkingData): void {
 		const edits = this._workspaceEditRecorder?.getEditsAndReset();
+		// Extract toolMetadata from response if it exists
+		const toolMetadata = 'toolMetadata' in response ? (response as ExtendedLanguageModelToolResult).toolMetadata : undefined;
 		this._addEntry(new LoggedToolCall(
 			id,
 			name,
@@ -331,7 +337,8 @@ export class RequestLogger extends AbstractRequestLogger {
 			this.currentRequest,
 			Date.now(),
 			thinking,
-			edits
+			edits,
+			toolMetadata
 		));
 	}
 
@@ -519,9 +526,6 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(`# ${entry.debugName} - ${id}`);
 		result.push(``);
 
-		result.push(`## Metadata`);
-		result.push(`~~~`);
-
 		let prediction: string | undefined;
 		let tools;
 		const postOptions = entry.chatParams.postOptions && { ...entry.chatParams.postOptions };
@@ -533,6 +537,29 @@ export class RequestLogger extends AbstractRequestLogger {
 			tools = postOptions.tools;
 			postOptions.tools = undefined;
 		}
+
+		const hasMessages = 'messages' in entry.chatParams;
+		const hasPredictionSection = hasMessages && !!prediction;
+		const tocItems: string[] = [];
+		if (hasMessages) {
+			tocItems.push(`- [Request Messages](#request-messages)`);
+			tocItems.push(`  - [System](#system)`);
+			tocItems.push(`  - [User](#user)`);
+		}
+		if (hasPredictionSection) {
+			tocItems.push(`- [Prediction](#prediction)`);
+		}
+		tocItems.push(`- [Response](#response)`);
+
+		if (tocItems.length) {
+			for (const item of tocItems) {
+				result.push(item);
+			}
+			result.push(``);
+		}
+
+		result.push(`## Metadata`);
+		result.push(`~~~`);
 
 		if (typeof entry.chatEndpoint.urlOrRequestMetadata === 'string') {
 			result.push(`url              : ${entry.chatEndpoint.urlOrRequestMetadata}`);
@@ -613,6 +640,7 @@ export class RequestLogger extends AbstractRequestLogger {
 			result.push(this._renderStringMessageToMarkdown('assistant', entry.result.value));
 		} else if (entry.type === LoggedRequestKind.ChatMLFailure) {
 			result.push(``);
+			result.push(`<a id="response"></a>`);
 			if (entry.result.type === ChatFetchResponseType.Length) {
 				result.push(`## Response (truncated)`);
 				result.push(this._renderStringMessageToMarkdown('assistant', entry.result.truncatedValue));
@@ -621,9 +649,11 @@ export class RequestLogger extends AbstractRequestLogger {
 			}
 		} else if (entry.type === LoggedRequestKind.ChatMLCancelation) {
 			result.push(``);
+			result.push(`<a id="response"></a>`);
 			result.push(`## CANCELED`);
 		} else if (entry.type === LoggedRequestKind.CompletionFailure) {
 			result.push(``);
+			result.push(`<a id="response"></a>`);
 			const error = entry.result.type;
 			result.push(`## FAILED: ${error instanceof Error ? error.stack : safeStringify(error)}`);
 		}
@@ -684,5 +714,22 @@ export class RequestLogger extends AbstractRequestLogger {
 		result.push(this._renderMarkdownStyles());
 
 		return result.join('\n');
+	}
+
+	private _renderRawRequestToJson(entry: LoggedInfo): string {
+		if (entry.kind !== LoggedInfoKind.Request) {
+			return 'Not available';
+		}
+
+		const req = entry.entry;
+		if (req.type === LoggedRequestKind.MarkdownContentRequest || !('body' in req.chatParams) || !req.chatParams.body) {
+			return 'Not available';
+		}
+
+		try {
+			return JSON.stringify(req.chatParams.body, null, 2);
+		} catch (e) {
+			return `Failed to render body: ${e}`;
+		}
 	}
 }

@@ -21,7 +21,7 @@ import { IRequestLogger } from '../../requestLogger/node/requestLogger';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { ICAPIClientService } from '../common/capiClient';
-import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IModelAPIResponse, isChatModelInformation, isCompletionModelInformation } from '../common/endpointProvider';
+import { ChatEndpointFamily, IChatModelInformation, ICompletionModelInformation, IEmbeddingModelInformation, IModelAPIResponse, isChatModelInformation, isCompletionModelInformation, isEmbeddingModelInformation } from '../common/endpointProvider';
 import { getMaxPromptTokens } from './chatEndpoint';
 
 export interface IModelMetadataFetcher {
@@ -54,6 +54,12 @@ export interface IModelMetadataFetcher {
 	 * @returns The chat model information if found, otherwise undefined
 	 */
 	getChatModelFromApiModel(model: LanguageModelChat): Promise<IChatModelInformation | undefined>;
+
+	/**
+	 * Retrieves an embeddings model by its family name
+	 * @param family The family of the model to fetch
+	 */
+	getEmbeddingsModel(family: 'text-embedding-3-small'): Promise<IEmbeddingModelInformation>;
 }
 
 /**
@@ -115,8 +121,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		await this._taskSingler.getOrCreate(ModelMetadataFetcher.ALL_MODEL_KEY, this._fetchModels.bind(this));
 		const chatModels: IChatModelInformation[] = [];
 		for (const [, models] of this._familyMap) {
-			for (let model of models) {
-				model = await this._hydrateResolvedModel(model);
+			for (const model of models) {
 				if (isChatModelInformation(model)) {
 					chatModels.push(model);
 				}
@@ -163,8 +168,7 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		} else {
 			resolvedModel = this._familyMap.get(family)?.[0];
 		}
-		resolvedModel = await this._hydrateResolvedModel(resolvedModel);
-		if (!isChatModelInformation(resolvedModel)) {
+		if (!resolvedModel || !isChatModelInformation(resolvedModel)) {
 			throw new Error(`Unable to resolve chat model with family selection: ${family}`);
 		}
 		return resolvedModel;
@@ -185,9 +189,17 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 		if (!resolvedModel) {
 			return;
 		}
-		resolvedModel = await this._hydrateResolvedModel(resolvedModel);
 		if (!isChatModelInformation(resolvedModel)) {
 			throw new Error(`Unable to resolve chat model: ${apiModel.id},${apiModel.name},${apiModel.version},${apiModel.family}`);
+		}
+		return resolvedModel;
+	}
+
+	public async getEmbeddingsModel(family: 'text-embedding-3-small'): Promise<IEmbeddingModelInformation> {
+		await this._taskSingler.getOrCreate(ModelMetadataFetcher.ALL_MODEL_KEY, this._fetchModels.bind(this));
+		const resolvedModel = this._familyMap.get(family)?.[0];
+		if (!resolvedModel || !isEmbeddingModelInformation(resolvedModel)) {
+			throw new Error(`Unable to resolve embeddings model with family selection: ${family}`);
 		}
 		return resolvedModel;
 	}
@@ -251,7 +263,8 @@ export class ModelMetadataFetcher extends Disposable implements IModelMetadataFe
 
 			const data: IModelAPIResponse[] = (await response.json()).data;
 			this._requestLogger.logModelListCall(requestId, requestMetadata, data);
-			for (const model of data) {
+			for (let model of data) {
+				model = await this._hydrateResolvedModel(model);
 				const isCompletionModel = isCompletionModelInformation(model);
 				// The base model is whatever model is deemed "fallback" by the server
 				if (model.is_chat_fallback && !isCompletionModel) {

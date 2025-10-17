@@ -12,6 +12,7 @@ import { ChoiceLogProbs, FilterReason } from './openai';
 
 export interface RequestId {
 	headerRequestId: string;
+	gitHubRequestId: string;
 	completionId: string;
 	created: number;
 	serverExperiments: string;
@@ -21,6 +22,7 @@ export interface RequestId {
 export function getRequestId(response: Response, json?: any): RequestId {
 	return {
 		headerRequestId: response.headers.get('x-request-id') || '',
+		gitHubRequestId: response.headers.get('x-github-request-id') || '',
 		completionId: json && json.id ? json.id : '',
 		created: json && json.created ? json.created : 0,
 		serverExperiments: response.headers.get('X-Copilot-Experiment') || '',
@@ -138,7 +140,7 @@ export interface IResponseDelta {
 	_deprecatedCopilotFunctionCalls?: ICopilotFunctionCall[];
 	copilotConfirmation?: ICopilotConfirmation;
 	thinking?: ThinkingDelta | EncryptedThinkingDelta;
-	retryReason?: FilterReason;
+	retryReason?: FilterReason | 'network_error';
 	/** Marker for the current response, which should be presented in `IMakeChatRequestOptions` on the next call */
 	statefulMarker?: string;
 }
