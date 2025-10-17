@@ -224,7 +224,6 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 			const stream = await this._genAIClient.models.generateContentStream(params);
 
 			let usage: APIUsage | undefined;
-			let hasText = false;
 
 			for await (const chunk of stream) {
 				if (token.isCancellationRequested) {
@@ -249,7 +248,6 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 								progress.report(new LanguageModelThinkingPart(part.text));
 							} else if (part.text) {
 								progress.report(new LanguageModelTextPart(part.text));
-								hasText ||= part.text.length > 0;
 							} else if (part.functionCall && part.functionCall.name) {
 								// Generate a synthetic call id
 								const callId = `${part.functionCall.name}_${Date.now()}`;
