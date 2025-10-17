@@ -217,7 +217,7 @@ export class RepoInfoTelemetry {
 				};
 			}
 
-			const diffs = (await this._gitDiffService.getChangeDiffs(repoContext.rootUri, changes)).map(diff => {
+			const diffs = (await this._gitDiffService.getWorkingTreeDiffsFromRef(repoContext.rootUri, changes, upstreamCommit)).map(diff => {
 				return {
 					uri: diff.uri.toString(),
 					originalUri: diff.originalUri.toString(),
