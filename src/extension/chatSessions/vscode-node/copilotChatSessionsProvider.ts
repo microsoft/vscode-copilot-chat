@@ -606,19 +606,14 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			}
 			// Add a comment tagging @copilot with the user's prompt
 			const commentBody = `${this.COPILOT} ${userPrompt} \n\n --- \n\n ${summary ?? ''}`;
-			const commentResult = {
-				body: commentBody,
-				user: {
-					login: pr.author?.login
-				},
-				createdAt: new Date().toISOString()
-			};
+
+			const commentResult = await this._octoKitService.addPullRequestComment(pr.id, commentBody);
 			if (!commentResult) {
 				this.logService.error(`Failed to add comment to PR #${pullRequestNumber}`);
 				return;
 			}
 			// allow-any-unicode-next-line
-			return vscode.l10n.t('🚀 Follow-up comment added to [#{0}]({1})', pullRequestNumber, commentResult.body);
+			return vscode.l10n.t('🚀 Follow-up comment added to [#{0}]({1})', pullRequestNumber, commentResult.url);
 		} catch (err) {
 			this.logService.error(`Failed to add follow-up comment to PR #${pullRequestNumber}: ${err}`);
 			return;

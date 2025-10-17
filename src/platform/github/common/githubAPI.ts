@@ -62,6 +62,16 @@ export interface SessionInfo {
 	error: string | null;
 }
 
+export interface PullRequestComment {
+	id: string;
+	body: string;
+	createdAt: string;
+	author: {
+		login: string;
+	};
+	url: string;
+}
+
 export async function makeGitHubAPIRequest(
 	fetcherService: IFetcherService,
 	logService: ILogService,
@@ -209,4 +219,43 @@ export async function makeSearchGraphQLRequest(
 	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, query, token, variables);
 
 	return result ? result.data.search.nodes : [];
+}
+
+export async function addPullRequestCommentGraphQLRequest(
+	fetcherService: IFetcherService,
+	logService: ILogService,
+	telemetry: ITelemetryService,
+	host: string,
+	token: string | undefined,
+	pullRequestId: string,
+	commentBody: string,
+): Promise<PullRequestComment | null> {
+	const mutation = `
+		mutation AddPullRequestComment($pullRequestId: ID!, $body: String!) {
+			addComment(input: {subjectId: $pullRequestId, body: $body}) {
+				commentEdge {
+					node {
+						id
+						body
+						createdAt
+						author {
+							login
+						}
+						url
+					}
+				}
+			}
+		}
+	`;
+
+	logService.debug(`[GitHubAPI] Adding comment to pull request ${pullRequestId}`);
+
+	const variables = {
+		pullRequestId,
+		body: commentBody
+	};
+
+	const result = await makeGitHubGraphQLRequest(fetcherService, logService, telemetry, host, mutation, token, variables);
+
+	return result?.data?.addComment?.commentEdge?.node || null;
 }
