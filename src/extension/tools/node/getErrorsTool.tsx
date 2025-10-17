@@ -60,9 +60,7 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 			const isNotebook = this.notebookService.hasSupportedNotebooks(p.uri);
 			if (isNotebook) {
 				const diagnostics = this.getNotebookCellDiagnostics(p.uri);
-				if (diagnostics.length > 0) {
-					results.push({ uri: p.uri, diagnostics });
-				}
+				results.push({ uri: p.uri, diagnostics });
 			}
 
 			return !isNotebook;
@@ -72,21 +70,27 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 			return results;
 		}
 
+		const unmatchedPaths = new Set(nonNotebookPaths.map(p => p.uri));
+
 		// for non-notebooks, we get all diagnostics and filter down
 		for (const [resource, entries] of this.languageDiagnosticsService.getAllDiagnostics()) {
 			const pendingDiagnostics = entries.filter(d => d.severity <= DiagnosticSeverity.Warning);
-			if (pendingDiagnostics.length === 0) {
-				continue;
-			}
 
 			// find all path&range pairs and collect the ranges to further filter diagnostics
 			// if any path matches the resource without a range, take all diagnostics for that file
 			// otherwise, filter diagnostics to those intersecting one of the provided ranges
 			const ranges: Range[] = [];
 			let shouldTakeAll = false;
+			let foundMatch = false;
 			for (const path of nonNotebookPaths) {
 				// we support file or folder paths
 				if (isEqualOrParent(resource, path.uri)) {
+					foundMatch = true;
+
+					if (unmatchedPaths.has(path.uri)) {
+						unmatchedPaths.delete(path.uri);
+					}
+
 					if (path.range) {
 						ranges.push(path.range);
 					} else {
@@ -102,10 +106,14 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 				continue;
 			}
 
-			const diagnostics = pendingDiagnostics.filter(d => ranges.some(range => d.range.intersection(range)));
-			if (diagnostics.length > 0) {
+			if (foundMatch) {
+				const diagnostics = pendingDiagnostics.filter(d => ranges.some(range => d.range.intersection(range)));
 				results.push({ uri: resource, diagnostics });
 			}
+		}
+
+		for (const uri of unmatchedPaths) {
+			results.push({ uri, diagnostics: [] });
 		}
 
 		return results;

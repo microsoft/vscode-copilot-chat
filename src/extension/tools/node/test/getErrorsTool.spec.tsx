@@ -18,6 +18,7 @@ import { IInstantiationService } from '../../../../util/vs/platform/instantiatio
 import { DiagnosticSeverity, Range } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { DiagnosticToolOutput, GetErrorsTool } from '../getErrorsTool';
+import { toolResultToString } from './toolTestUtils';
 
 // Test the GetErrorsTool functionality
 suite('GetErrorsTool - Tool Invocation', () => {
@@ -31,6 +32,7 @@ suite('GetErrorsTool - Tool Invocation', () => {
 	const tsFile1 = URI.file('/test/workspace/src/file1.ts');
 	const tsFile2 = URI.file('/test/workspace/src/file2.ts');
 	const jsFile = URI.file('/test/workspace/lib/file.js');
+	const noErrorFile = URI.file('/test/workspace/src/noErrorFile.ts');
 
 	beforeEach(() => {
 		collection = createExtensionUnitTestingServices();
@@ -39,8 +41,9 @@ suite('GetErrorsTool - Tool Invocation', () => {
 		const tsDoc1 = createTextDocumentData(tsFile1, 'function test() {\n  const x = 1;\n  return x;\n}', 'ts').document;
 		const tsDoc2 = createTextDocumentData(tsFile2, 'interface User {\n  name: string;\n  age: number;\n}', 'ts').document;
 		const jsDoc = createTextDocumentData(jsFile, 'function legacy() {\n  var y = 2;\n  return y;\n}', 'js').document;
+		const noErrorDoc = createTextDocumentData(noErrorFile, '', 'ts').document;
 
-		collection.define(IWorkspaceService, new SyncDescriptor(TestWorkspaceService, [[workspaceFolder], [tsDoc1, tsDoc2, jsDoc]]));
+		collection.define(IWorkspaceService, new SyncDescriptor(TestWorkspaceService, [[workspaceFolder], [tsDoc1, tsDoc2, jsDoc, noErrorDoc]]));
 
 		// Set up diagnostics service
 		diagnosticsService = new TestLanguageDiagnosticsService();
@@ -130,27 +133,28 @@ suite('GetErrorsTool - Tool Invocation', () => {
 		]);
 	});
 
+	test('getDiagnostics - file with no diagnostics returns empty diagnostics array', () => {
+		const noErrorFile = URI.file('/test/workspace/src/noErrorFile.ts');
+		const results = getDiagnosticsFunc([{ uri: noErrorFile, range: undefined }]);
+
+		expect(results).toEqual([
+			{ uri: noErrorFile, diagnostics: [] }
+		]);
+	});
+
 	// Tool invocation tests
 	test('Tool invocation - with no filePaths aggregates all diagnostics and formats workspace message', async () => {
 		const result = await tool.invoke({ input: {} as any, toolInvocationToken: null! }, CancellationToken.None);
-		const msg = (result.toolResultMessage as any).value ?? result.toolResultMessage;
-		// 4 total (file1: 2, file2: 1, jsFile: 1) excluding the Information diagnostic
-		expect(msg).toContain('Checked workspace');
-		expect(msg).toContain('4 problems found');
-		expect(msg).toContain('/test/workspace/src/file1.ts');
-		expect(msg).toContain('/test/workspace/src/file2.ts');
-		expect(msg).toContain('/test/workspace/lib/file.js');
+		const msg = await toolResultToString(accessor, result);
+		expect(msg).toMatchSnapshot();
 	});
 
 	test('Tool invocation - with single filePath limits diagnostics and message to that file', async () => {
 		const pathRep = accessor.get(IPromptPathRepresentationService);
 		const filePath = pathRep.getFilePath(tsFile1);
 		const result = await tool.invoke({ input: { filePaths: [filePath] }, toolInvocationToken: null! }, CancellationToken.None);
-		const msg = (result.toolResultMessage as any).value ?? result.toolResultMessage;
-		expect(msg).toContain('Checked');
-		expect(msg).toContain('/test/workspace/src/file1.ts');
-		expect(msg).toContain('2 problems found'); // warning + error
-		expect(msg).not.toContain('/test/workspace/src/file2.ts');
+		const msg = await toolResultToString(accessor, result);
+		expect(msg).toMatchSnapshot();
 	});
 
 	test('Tool invocation - with folder path includes diagnostics from contained files', async () => {
@@ -158,13 +162,8 @@ suite('GetErrorsTool - Tool Invocation', () => {
 		const srcFolderUri = URI.file('/test/workspace/src');
 		const srcFolderPath = pathRep.getFilePath(srcFolderUri);
 		const result = await tool.invoke({ input: { filePaths: [srcFolderPath] }, toolInvocationToken: null! }, CancellationToken.None);
-		const msg = (result.toolResultMessage as any).value ?? result.toolResultMessage;
-		// folder contains file1 (2 diags) + file2 (1 diag) = 3
-		expect(msg).toContain('/test/workspace/src');
-		expect(msg).toContain('3 problems found');
-		expect(msg).toContain('/test/workspace/src/file1.ts');
-		expect(msg).toContain('/test/workspace/src/file2.ts');
-		expect(msg).not.toContain('/test/workspace/lib/file.js');
+		const msg = await toolResultToString(accessor, result);
+		expect(msg).toMatchSnapshot();
 	});
 
 	test('Tool invocation - with filePath and range filters diagnostics to that range', async () => {
@@ -180,9 +179,15 @@ suite('GetErrorsTool - Tool Invocation', () => {
 			toolInvocationToken: null!
 		}, CancellationToken.None);
 
-		const msg = (result.toolResultMessage as any).value ?? result.toolResultMessage;
-		// Expect only 1 problem (the warning on line 1)
-		expect(msg).toContain('1 problem found');
-		expect(msg).toContain('/test/workspace/src/file1.ts');
+		const msg = await toolResultToString(accessor, result);
+		expect(msg).toMatchSnapshot();
+	});
+
+	test('Tool invocation - filePath with no diagnostics still has a <errors> entry', async () => {
+		const pathRep = accessor.get(IPromptPathRepresentationService);
+		const filePath = pathRep.getFilePath(URI.file('/test/workspace/src/noErrorFile.ts'));
+		const result = await tool.invoke({ input: { filePaths: [filePath] }, toolInvocationToken: null! }, CancellationToken.None);
+		const msg = await toolResultToString(accessor, result);
+		expect(msg).toMatchSnapshot();
 	});
 });
