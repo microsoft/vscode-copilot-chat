@@ -427,7 +427,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 					const reranked = await this._rerankerService.rerank(queryString, filteredResult.result.chunks, token);
 					return {
 						chunks: reranked.slice(0, this.getMaxChunks(sizing)),
-						isFullWorkspace: false,
+						isFullWorkspace: filteredResult.result.isFullWorkspace,
 						alerts: filteredResult.result.alerts,
 						strategy: filteredResult.strategy,
 					};
