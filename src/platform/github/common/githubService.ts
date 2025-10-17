@@ -9,7 +9,7 @@ import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { makeGitHubAPIRequest, makeSearchGraphQLRequest, PullRequestSearchItem, SessionInfo } from './githubAPI';
+import { addPullRequestCommentGraphQLRequest, makeGitHubAPIRequest, makeSearchGraphQLRequest, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
 
 export type IGetRepositoryInfoResponseData = Endpoints["GET /repos/{owner}/{repo}"]["response"]["data"];
 
@@ -177,6 +177,11 @@ export interface IOctoKitService {
 	 * Gets a job by its job ID.
 	 */
 	getJobByJobId(owner: string, repo: string, jobId: string, userAgent: string): Promise<JobInfo>;
+
+	/**
+	 * Adds a comment to a pull request.
+	 */
+	addPullRequestComment(pullRequestId: string, commentBody: string): Promise<PullRequestComment | null>;
 }
 
 /**
@@ -228,5 +233,9 @@ export class BaseOctoKitService {
 
 	protected async getJobByJobIdWithToken(owner: string, repo: string, jobId: string, userAgent: string, token: string): Promise<JobInfo> {
 		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/v1/jobs/${owner}/${repo}/${jobId}`, 'GET', token, undefined, undefined, undefined, userAgent);
+	}
+
+	protected async addPullRequestCommentWithToken(pullRequestId: string, commentBody: string, token: string): Promise<PullRequestComment | null> {
+		return addPullRequestCommentGraphQLRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, pullRequestId, commentBody);
 	}
 }

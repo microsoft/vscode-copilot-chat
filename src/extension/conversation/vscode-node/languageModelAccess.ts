@@ -448,7 +448,19 @@ export class CopilotLanguageModelWrapper extends Disposable {
 	}
 
 	async provideLanguageModelResponse(endpoint: IChatEndpoint, messages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2>, options: vscode.ProvideLanguageModelChatResponseOptions, extensionId: string, progress: vscode.Progress<LMResponsePart>, token: vscode.CancellationToken): Promise<any> {
+		let thinkingActive = false;
 		const finishCallback: FinishedCallback = async (_text, index, delta): Promise<undefined> => {
+			if (delta.thinking) {
+				// Show thinking progress for unencrypted thinking deltas
+				if (!isEncryptedThinkingDelta(delta.thinking)) {
+					const text = delta.thinking.text ?? '';
+					progress.report(new vscode.LanguageModelThinkingPart(text, delta.thinking.id, delta.thinking.metadata));
+					thinkingActive = true;
+				}
+			} else if (thinkingActive) {
+				progress.report(new vscode.LanguageModelThinkingPart('', '', { vscode_reasoning_done: true }));
+				thinkingActive = false;
+			}
 			if (delta.text) {
 				progress.report(new vscode.LanguageModelTextPart(delta.text));
 			}
@@ -461,13 +473,6 @@ export class CopilotLanguageModelWrapper extends Disposable {
 						this._logService.error(err, `Got invalid JSON for tool call: ${call.arguments}`);
 						throw new Error('Invalid JSON for tool call');
 					}
-				}
-			}
-			if (delta.thinking) {
-				// Show thinking progress for unencrypted thinking deltas
-				if (!isEncryptedThinkingDelta(delta.thinking)) {
-					const text = delta.thinking.text ?? '';
-					progress.report(new vscode.LanguageModelThinkingPart(text, delta.thinking.id, delta.thinking.metadata));
 				}
 			}
 

@@ -209,6 +209,9 @@ export class CopilotCLISession extends Disposable {
 				} else {
 					invocation.isConfirmed = event.result.resultType !== 'rejected' && event.result.resultType !== 'denied';
 					invocation.isError = event.result.resultType === 'failure';
+					if (invocation.isError && event.result.error) {
+						invocation.invocationMessage = event.result.error;
+					}
 				}
 
 				if (invocation) {
