@@ -158,8 +158,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 	 */
 	private async _fetchToken(debugName: string, sessionToken: string | undefined, knownEndpoints: IChatEndpoint[]): Promise<CachedAutoToken> {
 		const startTime = Date.now();
-		// Add 3s delay to test slow latency
-		await new Promise(resolve => setTimeout(resolve, 3000));
+
 		const authToken = (await this._authService.getCopilotToken()).token;
 		const headers: Record<string, string> = {
 			'Content-Type': 'application/json',
