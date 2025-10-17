@@ -100,6 +100,7 @@ export class ChatSessionContentBuilder {
 	}
 
 	public async buildSessionHistory(
+		problemStatementPromise: Promise<string | undefined>,
 		sessions: SessionInfo[],
 		pullRequest: PullRequestSearchItem,
 		getLogsForSession: (id: string) => Promise<string>,
@@ -116,11 +117,11 @@ export class ChatSessionContentBuilder {
 		// Process all sessions concurrently while maintaining order
 		await Promise.all(
 			sortedSessions.map(async (session, sessionIndex) => {
-				const logs = await getLogsForSession(session.id);
+				const [logs, problemStatement] = await Promise.all([getLogsForSession(session.id), sessionIndex === 0 ? problemStatementPromise : Promise.resolve(undefined)]);
 				// Create response turn
 				const response = await this.createResponseTurn(pullRequest, logs, session);
 				history.push(new ChatRequestTurn2(
-					'',
+					problemStatement || '',
 					undefined, // command
 					[], // references
 					this.type,
