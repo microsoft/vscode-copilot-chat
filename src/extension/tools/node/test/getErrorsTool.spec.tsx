@@ -17,7 +17,7 @@ import { SyncDescriptor } from '../../../../util/vs/platform/instantiation/commo
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
 import { DiagnosticSeverity, Range } from '../../../../vscodeTypes';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
-import { DiagnosticToolOutput, GetErrorsTool } from '../getErrorsTool';
+import { GetErrorsTool } from '../getErrorsTool';
 import { toolResultToString } from './toolTestUtils';
 
 // Test the GetErrorsTool functionality
@@ -26,7 +26,6 @@ suite('GetErrorsTool - Tool Invocation', () => {
 	let collection: TestingServiceCollection;
 	let diagnosticsService: TestLanguageDiagnosticsService;
 	let tool: GetErrorsTool;
-	let getDiagnosticsFunc: (paths: { uri: URI; range: Range | undefined }[]) => { uri: URI; diagnostics: readonly DiagnosticToolOutput[] }[];
 
 	const workspaceFolder = URI.file('/test/workspace');
 	const tsFile1 = URI.file('/test/workspace/src/file1.ts');
@@ -55,8 +54,6 @@ suite('GetErrorsTool - Tool Invocation', () => {
 
 		// Create the tool instance
 		tool = accessor.get(IInstantiationService).createInstance(GetErrorsTool);
-		// Access the private method through reflection for testing
-		getDiagnosticsFunc = (tool as any).getDiagnostics.bind(tool);
 
 		// Add test diagnostics
 		diagnosticsService.setDiagnostics(tsFile1, [
@@ -108,13 +105,13 @@ suite('GetErrorsTool - Tool Invocation', () => {
 
 	test('getDiagnostics - returns empty when no paths provided', () => {
 		// Test getting all diagnostics
-		const allDiagnostics = getDiagnosticsFunc([]);
+		const allDiagnostics = tool.getDiagnostics([]);
 		expect(allDiagnostics).toEqual([]);
 	});
 
 	test('getDiagnostics - filters by file path', () => {
 		// Test with specific file path
-		const results = getDiagnosticsFunc([{ uri: tsFile1, range: undefined }]);
+		const results = tool.getDiagnostics([{ uri: tsFile1, range: undefined }]);
 
 		expect(results).toEqual([
 			{ uri: tsFile1, diagnostics: diagnosticsService.getDiagnostics(tsFile1).filter(d => d.severity <= DiagnosticSeverity.Warning) } // Should only include Warning and Error
@@ -124,7 +121,7 @@ suite('GetErrorsTool - Tool Invocation', () => {
 	test('getDiagnostics - filters by folder path', () => {
 		// Test with folder path
 		const srcFolder = URI.file('/test/workspace/src');
-		const results = getDiagnosticsFunc([{ uri: srcFolder, range: undefined }]);
+		const results = tool.getDiagnostics([{ uri: srcFolder, range: undefined }]);
 
 		// Should find diagnostics for files in the src folder
 		expect(results).toEqual([
@@ -136,7 +133,7 @@ suite('GetErrorsTool - Tool Invocation', () => {
 	test('getDiagnostics - filters by range', () => {
 		// Test with specific range that only covers line 1
 		const range = new Range(1, 0, 1, 10);
-		const results = getDiagnosticsFunc([{ uri: tsFile1, range }]);
+		const results = tool.getDiagnostics([{ uri: tsFile1, range }]);
 
 		expect(results).toEqual([
 			{ uri: tsFile1, diagnostics: diagnosticsService.getDiagnostics(tsFile1).filter(d => d.severity <= DiagnosticSeverity.Warning && d.range.intersection(range)) }
@@ -145,7 +142,7 @@ suite('GetErrorsTool - Tool Invocation', () => {
 
 	test('getDiagnostics - file with no diagnostics returns empty diagnostics array', () => {
 		const noErrorFile = URI.file('/test/workspace/src/noErrorFile.ts');
-		const results = getDiagnosticsFunc([{ uri: noErrorFile, range: undefined }]);
+		const results = tool.getDiagnostics([{ uri: noErrorFile, range: undefined }]);
 
 		expect(results).toEqual([
 			{ uri: noErrorFile, diagnostics: [] }
@@ -154,7 +151,7 @@ suite('GetErrorsTool - Tool Invocation', () => {
 
 	// Tool invocation tests
 	test('Tool invocation - with no filePaths aggregates all diagnostics and formats workspace message', async () => {
-		const result = await tool.invoke({ input: {} as any, toolInvocationToken: null! }, CancellationToken.None);
+		const result = await tool.invoke({ input: {}, toolInvocationToken: null! }, CancellationToken.None);
 		const msg = await toolResultToString(accessor, result);
 		expect(msg).toMatchSnapshot();
 	});
