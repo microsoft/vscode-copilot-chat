@@ -86,3 +86,23 @@ export async function getRepoId(gitService: IGitService): Promise<GithubRepoId |
 		return getGithubRepoIdFromFetchUrl(repo.remoteFetchUrls[0]);
 	}
 }
+
+export namespace SessionIdForPr {
+
+	const prefix = 'pull-session-by-index';
+
+	export function getId(prNumber: number, sessionIndex: number): string {
+		return `${prefix}-${prNumber}-${sessionIndex}`;
+	}
+
+	export function parse(id: string): { prNumber: number; sessionIndex: number } | undefined {
+		const match = id.match(new RegExp(`^${prefix}-(\\d+)-(\\d+)$`));
+		if (match) {
+			return {
+				prNumber: parseInt(match[1], 10),
+				sessionIndex: parseInt(match[2], 10)
+			};
+		}
+		return undefined;
+	}
+}

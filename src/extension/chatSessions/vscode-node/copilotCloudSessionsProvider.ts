@@ -14,7 +14,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { UriHandlerPaths, UriHandlers } from '../vscode/chatSessionsUriHandler';
-import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getRepoId, JOBS_API_VERSION, RemoteAgentResult, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
+import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getRepoId, JOBS_API_VERSION, RemoteAgentResult, SessionIdForPr, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
 import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
 
 type ConfirmationResult = { step: string; accepted: boolean; metadata?: CreatePromptMetadata /* | SomeOtherMetadata */ };
@@ -112,9 +112,23 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 	}
 
 	async provideChatSessionContent(sessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
-		const pr = await this.findPR(Number(sessionId));
+		const indexedSessionId = SessionIdForPr.parse(sessionId);
+		let pullRequestNumber: number | undefined;
+		if (indexedSessionId) {
+			pullRequestNumber = indexedSessionId.prNumber;
+		}
+		if (typeof pullRequestNumber === 'undefined') {
+			pullRequestNumber = parseInt(sessionId);
+			if (isNaN(pullRequestNumber)) {
+				this.logService.error(`Invalid pull request number: ${sessionId}`);
+				return this.createEmptySession();
+			}
+		}
+
+		const pr = await this.findPR(pullRequestNumber);
 		if (!pr) {
-			throw new Error(`Session not found for ID: ${sessionId}`);
+			this.logService.error(`Session not found for ID: ${sessionId}`);
+			return this.createEmptySession();
 		}
 		const sessions = await this._octoKitService.getCopilotSessionsForPR(pr.fullDatabaseId.toString());
 		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotChatSessionsProvider.TYPE, this._gitService);
@@ -122,6 +136,13 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		return {
 			history,
 			activeResponseCallback: undefined,
+			requestHandler: undefined
+		};
+	}
+
+	private createEmptySession(): vscode.ChatSession {
+		return {
+			history: [],
 			requestHandler: undefined
 		};
 	}

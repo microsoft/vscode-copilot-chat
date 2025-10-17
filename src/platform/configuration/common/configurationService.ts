@@ -736,6 +736,7 @@ export namespace ConfigKey {
 		export const OmitBaseAgentInstructions = defineSetting<boolean>('chat.advanced.omitBaseAgentInstructions', false, INTERNAL);
 
 		export const PromptFileContext = defineExpSetting<boolean>('chat.advanced.promptFileContextProvider.enabled', true);
+		export const DefaultToolsGrouped = defineExpSetting<boolean>('chat.advanced.tools.defaultToolsGrouped', false, INTERNAL);
 		export const VirtualToolEmbeddingRanking = defineExpSetting<boolean>('chat.advanced.virtualTools.embeddingRanking', false, INTERNAL);
 		export const MultiReplaceStringGrok = defineExpSetting<boolean>('chat.advanced.multiReplaceStringGrok.enabled', false, INTERNAL);
 
