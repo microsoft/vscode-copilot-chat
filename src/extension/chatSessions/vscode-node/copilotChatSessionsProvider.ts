@@ -126,7 +126,8 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 		const pr = await this.findPR(pullRequestNumber);
 		if (!pr) {
-			throw new Error(`Session not found for ID: ${sessionId}`);
+			this.logService.error(`Session not found for ID: ${sessionId}`);
+			return this.createEmptySession();
 		}
 		const sessions = await this._octoKitService.getCopilotSessionsForPR(pr.fullDatabaseId.toString());
 		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotChatSessionsProvider.TYPE, this._gitService);
