@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as pathLib from 'path';
 import * as vscode from 'vscode';
 import { ChatSessionItem } from 'vscode';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
@@ -115,7 +116,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			throw new Error(`Session not found for ID: ${sessionId}`);
 		}
 		const sessions = await this._octoKitService.getCopilotSessionsForPR(pr.fullDatabaseId.toString());
-		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotChatSessionsProvider.TYPE);
+		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotChatSessionsProvider.TYPE, this._gitService);
 		const history = await sessionContentBuilder.buildSessionHistory(sessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId));
 		return {
 			history,
@@ -183,8 +184,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			const result = await this.invokeRemoteAgent(
 				prompt,
 				[
-					// TODO: support file references
-					// this.extractFileReferences(references),
+					this.extractFileReferences(references),
 					history
 				].join('\n\n').trim(),
 				token,
@@ -328,6 +328,31 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		}
 	}
 
+	private extractFileReferences(references: readonly vscode.ChatPromptReference[] | undefined): string | undefined {
+		if (!references || references.length === 0) {
+			return;
+		}
+		// 'file:///Users/jospicer/dev/joshbot/.github/workflows/build-vsix.yml'  -> '.github/workflows/build-vsix.yml'
+		const parts: string[] = [];
+		for (const ref of references) {
+			if (ref.value instanceof vscode.Uri && ref.value.scheme === 'file') { // TODO: Add support for more kinds of references
+				const git = this._gitExtensionService.getExtensionApi();
+				const repositoryForFile = git?.getRepository(ref.value);
+				if (repositoryForFile) {
+					const relativePath = pathLib.relative(repositoryForFile.rootUri.fsPath, ref.value.fsPath);
+					parts.push(` - ${relativePath}`);
+				}
+			}
+		}
+
+		if (!parts.length) {
+			return;
+		}
+
+		parts.unshift('The user has attached the following files as relevant context:');
+		return parts.join('\n');
+	}
+
 	private async streamSessionLogs(stream: vscode.ChatResponseStream, pullRequest: PullRequestSearchItem, sessionId: string, token: vscode.CancellationToken): Promise<void> {
 		let lastLogLength = 0;
 		let lastProcessedLength = 0;
@@ -438,7 +463,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 
 			// Parse the new log content
-			const contentBuilder = new ChatSessionContentBuilder(CopilotChatSessionsProvider.TYPE);
+			const contentBuilder = new ChatSessionContentBuilder(CopilotChatSessionsProvider.TYPE, this._gitService);
 
 			const logChunks = contentBuilder.parseSessionLogs(newLogContent);
 			let hasStreamedContent = false;
