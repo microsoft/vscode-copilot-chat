@@ -163,10 +163,7 @@ export class CopilotCLISession extends Disposable {
 		this.logService.trace(`CopilotCLI Event: ${JSON.stringify(event, null, 2)}`);
 
 		switch (event.type) {
-			case 'assistant.turn_start': {
-				this._toolNames.clear();
-				break;
-			}
+			case 'assistant.turn_start':
 			case 'assistant.turn_end': {
 				this._toolNames.clear();
 				break;
