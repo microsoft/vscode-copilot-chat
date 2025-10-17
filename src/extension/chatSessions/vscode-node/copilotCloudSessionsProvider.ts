@@ -14,7 +14,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getAuthorDisplayName, getRepoId, JOBS_API_VERSION, RemoteAgentResult, SessionIdForPr, toOpenPullRequestWebviewUri, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
-import { ChatSessionContentBuilder } from './copilotChatSessionContentBuilder';
+import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
 
 type ConfirmationResult = { step: string; accepted: boolean; metadata?: CreatePromptMetadata /* | SomeOtherMetadata */ };
 
@@ -87,6 +87,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				const description = new vscode.MarkdownString(`[#${pr.number}](${uri.toString()} "${prLinkTitle}")`);
 				const session = {
 					id: pr.number.toString(),
+					resource: undefined,
 					label: pr.title,
 					status: this.getSessionState(pr.state),
 					description,
@@ -284,7 +285,14 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				return {};
 			}
 			// Tell UI to the new chat session
-			this._onDidCommitChatSession.fire({ original: context.chatSessionContext.chatSessionItem, modified: { id: String(number), label: `Pull Request ${number}` } });
+			this._onDidCommitChatSession.fire({
+				original: context.chatSessionContext.chatSessionItem,
+				modified: {
+					id: String(number),
+					resource: undefined,
+					label: `Pull Request ${number}`
+				}
+			});
 		} else if (context.chatSessionContext) {
 			/* Follow up to an existing coding agent session */
 			try {
