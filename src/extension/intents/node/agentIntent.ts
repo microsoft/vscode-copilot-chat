@@ -80,35 +80,17 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 				allowTools[ToolName.EditFile] = false;
 			}
 
-			if (model.family === 'grok-code') {
-				const treatment = experimentationService.getTreatmentVariable<string>('copilotchat.hiddenModelBEditTool');
-				switch (treatment) {
-					case 'with_replace_string':
-						allowTools[ToolName.ReplaceString] = true;
-						allowTools[ToolName.MultiReplaceString] = configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceStringGrok, experimentationService);
-						allowTools[ToolName.EditFile] = true;
-						break;
-					case 'only_replace_string':
-						allowTools[ToolName.ReplaceString] = true;
-						allowTools[ToolName.MultiReplaceString] = configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceStringGrok, experimentationService);
-						allowTools[ToolName.EditFile] = false;
-						break;
-					case 'control':
-					default:
-						allowTools[ToolName.ReplaceString] = false;
-						allowTools[ToolName.EditFile] = true;
-				}
-			}
-
 			if (await modelCanUseReplaceStringExclusively(model)) {
 				allowTools[ToolName.ReplaceString] = true;
 				allowTools[ToolName.EditFile] = false;
 			}
 
-			if (allowTools[ToolName.ReplaceString]) {
-				if (await modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
-					allowTools[ToolName.MultiReplaceString] = true;
-				}
+			if (allowTools[ToolName.ReplaceString] && await modelSupportsMultiReplaceString(model)) {
+				allowTools[ToolName.MultiReplaceString] = true;
+			}
+
+			if (model.family === 'grok-code' && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceStringGrok, experimentationService)) {
+				allowTools[ToolName.MultiReplaceString] = true;
 			}
 		}
 

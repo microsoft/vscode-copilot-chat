@@ -2332,7 +2332,6 @@
 				}
 			},
 			{
-				"title": "Preview",
 				"id": "preview",
 				"properties": {
 					"github.copilot.chat.reviewAgent.enabled": {
@@ -2449,7 +2448,6 @@
 				}
 			},
 			{
-				"title": "Experimental",
 				"id": "experimental",
 				"properties": {
 					"github.copilot.chat.imageUpload.enabled": {
@@ -3112,7 +3110,7 @@
 					},
 					"github.copilot.chat.executePrompt.enabled": {
 						"type": "boolean",
-						"default": false,
+						"default": true,
 						"markdownDescription": "%github.copilot.config.executePrompt.enabled%",
 						"tags": [
 							"experimental"
