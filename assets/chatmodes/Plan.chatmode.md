@@ -4,7 +4,7 @@ tools: ['search', 'github/github-mcp-server/get_issue', 'github/github-mcp-serve
 handoffs:
   - label: Start Implementation
     agent: agent
-    prompt: Start implemention
+    prompt: Start implementation
   - label: Open in Editor
     agent: agent
     prompt: Save the plan
