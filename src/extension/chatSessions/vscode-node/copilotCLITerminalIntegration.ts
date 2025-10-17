@@ -41,7 +41,7 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 		@IEnvService private readonly envService: IEnvService,
 	) {
 		super();
-		this.updateGHTokenInTerminalEnvVars();
+		void this.updateGHTokenInTerminalEnvVars().catch(console.error);
 		this.initialization = this.initialize();
 	}
 
@@ -62,13 +62,13 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 		await fs.mkdir(storageLocation, { recursive: true });
 
 		if (process.platform === 'win32') {
-			this.shellScriptPath = path.join(storageLocation, `${COPILOT_CLI_COMMAND}.ps1`);
-			this.powershellScriptPath = this.shellScriptPath;
-			await fs.writeFile(this.shellScriptPath, powershellScript);
+			this.powershellScriptPath = path.join(storageLocation, `${COPILOT_CLI_COMMAND}.ps1`);
+			await fs.writeFile(this.powershellScriptPath, powershellScript);
 			const copilotPowershellScript = `@echo off
-powershell -ExecutionPolicy Bypass -File "${this.shellScriptPath}" %*
+powershell -ExecutionPolicy Bypass -File "${this.powershellScriptPath}" %*
 `;
-			await fs.writeFile(path.join(storageLocation, `${COPILOT_CLI_COMMAND}.bat`), copilotPowershellScript);
+			this.shellScriptPath = path.join(storageLocation, `${COPILOT_CLI_COMMAND}.bat`);
+			await fs.writeFile(this.shellScriptPath, copilotPowershellScript);
 		} else {
 			const copilotShellScript = `#!/bin/sh
 unset NODE_OPTIONS
@@ -96,7 +96,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		await this.updateGHTokenInTerminalEnvVars();
 		await this.initialization;
 
-		const shellPathAndArgs = this.getShellInfo(cliArgs);
+		const shellPathAndArgs = await this.getShellInfo(cliArgs);
 		if (shellPathAndArgs) {
 			const options = getCommonTerminalOptions(name);
 			options.shellPath = shellPathAndArgs.shellPath;
@@ -144,7 +144,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		}
 	}
 
-	private getShellInfo(cliArgs: string[]): { shellPath: string; shellArgs: string[]; iconPath?: ThemeIcon } | undefined {
+	private async getShellInfo(cliArgs: string[]): Promise<{ shellPath: string; shellArgs: string[]; iconPath?: ThemeIcon } | undefined> {
 		const configPlatform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux';
 		const defaultProfile = this.getDefaultShellProfile();
 		if (!defaultProfile) {
@@ -164,7 +164,8 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			//
 		}
 		const shellArgs = Array.isArray(profile.args) ? profile.args : [];
-		const shellPath = ((Array.isArray(profile.path) && profile.path.length) ? profile.path[0] : !Array.isArray(profile.path) ? profile.path : undefined) || this.envService.shell;
+		const paths = profile.path ? (Array.isArray(profile.path) ? profile.path : [profile.path]) : [];
+		const shellPath = (await getFirstAvailablePath(paths)) || this.envService.shell;
 		if (defaultProfile === 'zsh' && this.shellScriptPath) {
 			return {
 				shellPath: shellPath || 'zsh',
@@ -190,14 +191,14 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 				iconPath
 			};
 		} else if (defaultProfile === 'Command Prompt' && this.shellScriptPath && configPlatform === 'windows') {
-			// return {
-			// 	shellPath: this.shellScriptPath,
-			// 	shellArgs: cliArgs,
-			// 	iconPath
-			// };
-			return;
+			return {
+				shellPath: shellPath || 'cmd.exe',
+				shellArgs: ['/c', this.shellScriptPath, ...cliArgs],
+				iconPath
+			};
 		}
 	}
+
 	private getDefaultShellProfile(): string | undefined {
 		const configPlatform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux';
 		const defaultProfile = workspace.getConfiguration('terminal').get<string | undefined>(`integrated.defaultProfile.${configPlatform}`);
@@ -238,3 +239,39 @@ function getCommonTerminalOptions(name: string): TerminalOptions {
 	};
 }
 
+const pathValidations = new Map<string, boolean>();
+async function getFirstAvailablePath(paths: string[]): Promise<string | undefined> {
+	for (const p of paths) {
+		// Sometimes we can have paths like `${env:HOME}\Systemycmd.exe` which need to be resolved
+		const resolvedPath = resolveEnvVariables(p);
+		if (pathValidations.get(resolvedPath) === true) {
+			return resolvedPath;
+		}
+		if (pathValidations.get(resolvedPath) === false) {
+			continue;
+		}
+		// Possible its just a command name without path
+		if (path.basename(p) === p) {
+			return p;
+		}
+		try {
+			const stat = await fs.stat(resolvedPath);
+			if (stat.isFile()) {
+				pathValidations.set(resolvedPath, true);
+				return resolvedPath;
+			}
+			pathValidations.set(resolvedPath, false);
+		} catch {
+			// Ignore errors and continue checking other paths
+			pathValidations.set(resolvedPath, false);
+		}
+	}
+	return undefined;
+}
+
+function resolveEnvVariables(value: string): string {
+	return value.replace(/\$\{env:([^}]+)\}/g, (match, envVarName) => {
+		const envValue = process.env[envVarName];
+		return envValue !== undefined ? envValue : match;
+	});
+}
