@@ -313,25 +313,6 @@ stderr: ${installResult.stderr}`);
 			this.logService.info(`NuGet package server.json has unrecognized schema version: '${manifest["$schema"]}'.`);
 		}
 
-		// provide empty publisher provided metadata to enable VS Code data mapping
-		if (!manifest["_meta"]) {
-			manifest["_meta"] = {};
-		}
-
-		// starting from 2025-09-29, the server.json schema root was changed to have a "server" property
-		if (manifest["$schema"] === MCP_SERVER_SCHEMA_2025_09_29) {
-			manifest = { server: manifest };
-		}
-
-		// provide empty registry metadata to enable VS Code data mapping
-		if (!manifest["_meta"]) {
-			manifest["_meta"] = {};
-		}
-
-		if (!manifest["_meta"]["io.modelcontextprotocol.registry/official"]) {
-			manifest["_meta"]["io.modelcontextprotocol.registry/official"] = {};
-		}
-
 		return manifest;
 	}
 
