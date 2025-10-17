@@ -5,6 +5,8 @@
 
 import { createServiceIdentifier } from '../../../util/common/services';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
+import { raceCancellationError } from '../../../util/vs/base/common/async';
+import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { FileChunkAndScore } from '../../chunking/common/chunk';
 import { ILogService } from '../../log/common/logService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
@@ -60,7 +62,9 @@ export class RerankerService implements IRerankerService {
 	}
 
 	async rerank(query: string, documents: readonly FileChunkAndScore[], token: CancellationToken): Promise<readonly FileChunkAndScore[]> {
-		if (!documents.length || !this.isAvailable || !this._endpoint) { return documents; }
+		if (!documents.length || !this.isAvailable || !this._endpoint) {
+			return documents;
+		}
 
 		const payload = {
 			query: buildQueryPrompt(query),
@@ -68,42 +72,51 @@ export class RerankerService implements IRerankerService {
 		};
 
 		try {
-			const controller = new AbortController();
-			if (token.isCancellationRequested) { throw new Error('cancelled'); }
-			const dispose = token.onCancellationRequested(() => controller.abort());
-			const response = await fetch(this._endpoint, {
+			const response = await raceCancellationError(fetch(this._endpoint, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(payload),
-				signal: controller.signal
-			});
-			dispose.dispose();
+				body: JSON.stringify(payload)
+			}), token);
+
 			if (!response.ok) {
-				this._logService.error(`RerankerService: request failed ${response.status}`);
+				this._logService.error(`RerankerService::rerank request failed. status=${response.status}`);
 				return this._fallback(documents);
 			}
-			const json = await response.json() as RemoteRerankResponse;
+
+			const json = await raceCancellationError(response.json() as Promise<RemoteRerankResponse>, token);
 			const results = json.results;
-			if (!Array.isArray(results) || !results.length) { return this._fallback(documents); }
+			if (!Array.isArray(results) || results.length === 0) {
+				return this._fallback(documents);
+			}
+
+			// Sort descending by relevance (higher score = more relevant). If scores missing, treat as 0.
 			const sorted = [...results].sort((a, b) => (b.relevance_score ?? 0) - (a.relevance_score ?? 0));
 			const used = new Set<number>();
 			const reordered: FileChunkAndScore[] = [];
-			for (const r of sorted) {
-				if (typeof r.index === 'number' && r.index >= 0 && r.index < documents.length && !used.has(r.index)) {
-					used.add(r.index);
-					reordered.push(documents[r.index]);
+			for (const entry of sorted) {
+				if (typeof entry.index === 'number' && entry.index >= 0 && entry.index < documents.length && !used.has(entry.index)) {
+					used.add(entry.index);
+					reordered.push(documents[entry.index]);
 				}
 			}
-			for (let i = 0; i < documents.length; i++) { if (!used.has(i)) { reordered.push(documents[i]); } }
+			// Preserve any documents that were not returned by the reranker (defensive)
+			for (let i = 0; i < documents.length; i++) {
+				if (!used.has(i)) {
+					reordered.push(documents[i]);
+				}
+			}
 			return reordered;
 		} catch (e) {
-			if (token.isCancellationRequested) { throw e; }
-			this._logService.error(e, 'RerankerService: exception, fallback ordering');
+			if (isCancellationError(e)) {
+				throw e;
+			}
+			this._logService.error(e, 'RerankerService::rerank exception, using fallback ordering');
 			return this._fallback(documents);
 		}
 	}
 
 	private _fallback(documents: readonly FileChunkAndScore[]): readonly FileChunkAndScore[] {
+		// If we have distance scores, order by descending similarity (higher distance.value assumed better)
 		if (documents.every(d => typeof d.distance !== 'undefined')) {
 			return [...documents].sort((a, b) => (b.distance!.value) - (a.distance!.value));
 		}
