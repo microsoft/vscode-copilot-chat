@@ -40,8 +40,6 @@ interface ConversationCacheEntry {
 	standby?: CachedAutoToken;
 }
 
-const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
-
 export const IAutomodeService = createServiceIdentifier<IAutomodeService>('IAutomodeService');
 
 export interface IAutomodeService {
@@ -111,7 +109,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 			return;
 		}
 
-		void this._taskSingler.getOrCreate('reserve', () => this._fetchToken(undefined, knownEndpoints))
+		void this._taskSingler.getOrCreate('reserve', () => this._fetchToken('reserve', undefined, knownEndpoints))
 			.then(token => {
 				this._reserveToken = token;
 			})
@@ -131,7 +129,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		}
 
 		const sessionHint = entry.standby?.sessionToken ?? entry.active?.sessionToken;
-		return this._taskSingler.getOrCreate(`active:${conversationId}`, () => this._fetchToken(sessionHint, knownEndpoints));
+		return this._taskSingler.getOrCreate(`active:${conversationId}`, () => this._fetchToken('active', sessionHint, knownEndpoints));
 	}
 
 	/**
@@ -139,7 +137,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 	 */
 	private _refreshStandbyInBackground(conversationId: string, entrySnapshot: ConversationCacheEntry, knownEndpoints: IChatEndpoint[]): void {
 		const sessionHint = entrySnapshot.standby?.sessionToken ?? entrySnapshot.active?.sessionToken;
-		void this._taskSingler.getOrCreate(`standby:${conversationId}`, () => this._fetchToken(sessionHint, knownEndpoints))
+		void this._taskSingler.getOrCreate(`standby:${conversationId}`, () => this._fetchToken('standby', sessionHint, knownEndpoints))
 			.then(token => {
 				const entry = this._autoModelCache.get(conversationId);
 				if (!entry) {
@@ -158,7 +156,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 	/**
 	 * Fetch a new token from the auto mode service.
 	 */
-	private async _fetchToken(sessionToken: string | undefined, knownEndpoints: IChatEndpoint[]): Promise<CachedAutoToken> {
+	private async _fetchToken(debugName: string, sessionToken: string | undefined, knownEndpoints: IChatEndpoint[]): Promise<CachedAutoToken> {
 		const startTime = Date.now();
 		// Add 3s delay to test slow latency
 		await new Promise(resolve => setTimeout(resolve, 3000));
@@ -181,7 +179,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		const data: AutoModeAPIResponse = await response.json() as AutoModeAPIResponse;
 		const selectedModel = knownEndpoints.find(e => e.model === data.selected_model) || knownEndpoints[0];
 		const autoEndpoint = new AutoChatEndpoint(selectedModel, this._chatMLFetcher, data.session_token, data.discounted_costs?.[selectedModel.model] || 0);
-		this._logService.info(`Fetched auto model in ${Date.now() - startTime}ms.`);
+		this._logService.trace(`Fetched auto model for ${debugName} in ${Date.now() - startTime}ms.`);
 		return {
 			endpoint: autoEndpoint,
 			expiration: data.expires_at * 1000,
@@ -215,7 +213,7 @@ export class AutomodeService extends Disposable implements IAutomodeService {
 		if (!token) {
 			return false;
 		}
-		return token.expiration - Date.now() <= TOKEN_REFRESH_BUFFER_MS;
+		return token.expiration - Date.now() <= 5 * 60 * 1000;
 	}
 }
 
