@@ -45,7 +45,9 @@ import { UserPreferences } from '../panel/preferences';
 import { ChatToolCalls } from '../panel/toolCalling';
 import { MultirootWorkspaceStructure } from '../panel/workspace/workspaceStructure';
 import { AgentConversationHistory } from './agentConversationHistory';
-import { AlternateGPTPrompt, ClaudeSonnet45PromptV2, CodexStyleGPT5CodexPrompt, CodexStyleGPTPrompt, DefaultAgentPrompt, DefaultAgentPromptV2, SweBenchAgentPrompt } from './agentInstructions';
+import './allAgentPrompts';
+import { AlternateGPTPrompt, DefaultAgentPrompt } from './defaultAgentInstructions';
+import { PromptRegistry } from './promptRegistry';
 import { SummarizedConversationHistory } from './summarizedConversationHistory';
 
 export interface AgentPromptProps extends GenericBasePromptElementProps {
@@ -140,87 +142,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	}
 
 	private getInstructions() {
-		if (this.configurationService.getConfig(ConfigKey.Internal.SweBenchAgentPrompt)) {
-			return <SweBenchAgentPrompt availableTools={this.props.promptContext.tools?.availableTools} modelFamily={this.props.endpoint.family} codesearchMode={undefined} />;
-		}
-
-		if (this.props.endpoint.family === 'gpt-5-codex') {
-			const promptType = this.configurationService.getExperimentBasedConfig(ConfigKey.Gpt5CodexAlternatePrompt, this.experimentationService);
-			switch (promptType) {
-				case 'codex':
-					return <CodexStyleGPT5CodexPrompt
-						availableTools={this.props.promptContext.tools?.availableTools}
-						modelFamily={this.props.endpoint.family}
-						codesearchMode={this.props.codesearchMode}
-					/>;
-				default:
-					return <DefaultAgentPrompt
-						availableTools={this.props.promptContext.tools?.availableTools}
-						modelFamily={this.props.endpoint.family}
-						codesearchMode={this.props.codesearchMode}
-					/>;
-			}
-		}
-
-		if (this.props.endpoint.family.startsWith('gpt-5')) {
-			const promptType = this.configurationService.getExperimentBasedConfig(ConfigKey.Gpt5AlternatePrompt, this.experimentationService);
-			switch (promptType) {
-				case 'codex':
-					return <CodexStyleGPTPrompt
-						availableTools={this.props.promptContext.tools?.availableTools}
-						modelFamily={this.props.endpoint.family}
-						codesearchMode={this.props.codesearchMode}
-					/>;
-				case 'v2':
-					return <DefaultAgentPromptV2
-						availableTools={this.props.promptContext.tools?.availableTools}
-						modelFamily={this.props.endpoint.family}
-						codesearchMode={this.props.codesearchMode}
-					/>;
-				default:
-					return <DefaultAgentPrompt
-						availableTools={this.props.promptContext.tools?.availableTools}
-						modelFamily={this.props.endpoint.family}
-						codesearchMode={this.props.codesearchMode}
-					/>;
-			}
-		}
-
-		if (this.props.endpoint.family.startsWith('grok-code')) {
-			const promptType = this.configurationService.getExperimentBasedConfig(ConfigKey.GrokCodeAlternatePrompt, this.experimentationService);
-			switch (promptType) {
-				case 'v2':
-					return <DefaultAgentPromptV2
-						availableTools={this.props.promptContext.tools?.availableTools}
-						modelFamily={this.props.endpoint.family}
-						codesearchMode={this.props.codesearchMode}
-					/>;
-				default:
-					return <DefaultAgentPrompt
-						availableTools={this.props.promptContext.tools?.availableTools}
-						modelFamily={this.props.endpoint.family}
-						codesearchMode={this.props.codesearchMode}
-					/>;
-			}
-		}
-
-		if (this.supportsClaudeAltPrompt(this.props.endpoint.family)) {
-			const promptType = this.configurationService.getExperimentBasedConfig(ConfigKey.ClaudeSonnet45AlternatePrompt, this.experimentationService);
-			switch (promptType) {
-				case 'v2':
-					return <ClaudeSonnet45PromptV2
-						availableTools={this.props.promptContext.tools?.availableTools}
-						modelFamily={this.props.endpoint.family}
-						codesearchMode={this.props.codesearchMode}
-					/>;
-				default:
-					return <DefaultAgentPrompt
-						availableTools={this.props.promptContext.tools?.availableTools}
-						modelFamily={this.props.endpoint.family}
-						codesearchMode={this.props.codesearchMode}
-					/>;
-			}
-		}
+		const modelFamily = this.props.endpoint.family ?? 'unknown';
 
 		if (this.props.endpoint.family.startsWith('gpt-') && this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService)) {
 			return <AlternateGPTPrompt
@@ -230,20 +152,25 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			/>;
 		}
 
-		return <DefaultAgentPrompt
-			availableTools={this.props.promptContext.tools?.availableTools}
-			modelFamily={this.props.endpoint.family}
-			codesearchMode={this.props.codesearchMode}
-		/>;
-	}
+		const agentPromptResolver = PromptRegistry.getPrompt(modelFamily);
+		if (agentPromptResolver) {
+			const resolver = this.instantiationService.createInstance(agentPromptResolver);
+			const PromptClass = resolver.resolvePrompt();
 
-	private supportsClaudeAltPrompt(family: string): boolean {
-		if (!family.startsWith('claude-')) {
-			return false;
+			if (PromptClass) {
+				return <PromptClass
+					availableTools={this.props.promptContext.tools?.availableTools}
+					modelFamily={modelFamily}
+					codesearchMode={this.props.codesearchMode}
+				/>;
+			}
 		}
 
-		const excludedVersions = ['claude-3.5-sonnet', 'claude-3.7-sonnet', 'claude-sonnet-4'];
-		return !excludedVersions.includes(family);
+		return <DefaultAgentPrompt
+			availableTools={this.props.promptContext.tools?.availableTools}
+			modelFamily={modelFamily}
+			codesearchMode={this.props.codesearchMode}
+		/>;
 	}
 
 	private async getAgentCustomInstructions() {

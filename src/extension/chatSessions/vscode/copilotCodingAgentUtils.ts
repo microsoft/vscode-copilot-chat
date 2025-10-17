@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { getGithubRepoIdFromFetchUrl, GithubRepoId, IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
 
 export const MAX_PROBLEM_STATEMENT_LENGTH = 30_000 - 50; // 50 character buffer
@@ -68,4 +69,20 @@ export function extractTitle(prompt: string, context: string | undefined): strin
 
 export function formatBodyPlaceholder(title: string | undefined): string {
 	return vscode.l10n.t('Coding agent has begun work on **{0}** and will update this pull request as work progresses.', title || vscode.l10n.t('your request'));
+}
+
+export async function getRepoId(gitService: IGitService): Promise<GithubRepoId | undefined> {
+	let timeout = 5000;
+	while (!gitService.isInitialized) {
+		await new Promise(resolve => setTimeout(resolve, 100));
+		timeout -= 100;
+		if (timeout <= 0) {
+			break;
+		}
+	}
+
+	const repo = gitService.activeRepository.get();
+	if (repo && repo.remoteFetchUrls?.[0]) {
+		return getGithubRepoIdFromFetchUrl(repo.remoteFetchUrls[0]);
+	}
 }

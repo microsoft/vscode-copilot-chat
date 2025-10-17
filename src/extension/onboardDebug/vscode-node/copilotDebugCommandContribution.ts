@@ -10,6 +10,8 @@ import * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IGitService } from '../../../platform/git/common/gitService';
+import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITasksService } from '../../../platform/tasks/common/tasksService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
@@ -20,6 +22,7 @@ import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { ChatSessionsUriHandler, CustomUriHandler } from '../../chatSessions/vscode/chatSessionsUriHandler';
 import { EXTENSION_ID } from '../../common/constants';
 import { ILaunchConfigService, needsWorkspaceFolderForTaskError } from '../common/launchConfigService';
 import { CopilotDebugCommandSessionFactory } from '../node/copilotDebugCommandSessionFactory';
@@ -37,6 +40,7 @@ export const COPILOT_DEBUG_COMMAND = `copilot-debug`;
 const DEBUG_COMMAND_JS = 'copilotDebugCommand.js';
 
 export class CopilotDebugCommandContribution extends Disposable implements vscode.UriHandler {
+	private chatSessionsUriHandler: CustomUriHandler;
 	private registerSerializer: Promise<void>;
 
 	constructor(
@@ -49,6 +53,8 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@ITasksService private readonly tasksService: ITasksService,
 		@ITerminalService private readonly terminalService: ITerminalService,
+		@IOctoKitService private readonly _octoKitService: IOctoKitService,
+		@IGitService private readonly _gitService: IGitService
 	) {
 		super();
 
@@ -65,6 +71,7 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 		}));
 
 		this.registerSerializer = this.registerEnvironment();
+		this.chatSessionsUriHandler = new ChatSessionsUriHandler(this._octoKitService, this._gitService);
 	}
 
 	private async ensureTask(workspaceFolder: URI | undefined, def: vscode.TaskDefinition, handle: CopilotDebugCommandHandle): Promise<boolean> {
@@ -93,6 +100,9 @@ export class CopilotDebugCommandContribution extends Disposable implements vscod
 	}
 
 	handleUri(uri: vscode.Uri): vscode.ProviderResult<void> {
+		if (this.chatSessionsUriHandler.canHandleUri(uri)) {
+			return this.chatSessionsUriHandler.handleUri(uri);
+		}
 		const pipePath = process.platform === 'win32' ? '\\\\.\\pipe\\' + uri.path.slice(1) : uri.path;
 		const cts = new CancellationTokenSource();
 

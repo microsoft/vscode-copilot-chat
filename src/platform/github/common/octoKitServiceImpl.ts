@@ -7,7 +7,7 @@ import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { PullRequestSearchItem, SessionInfo } from './githubAPI';
+import { PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
 import { BaseOctoKitService, IOctoKitService, IOctoKitUser, JobInfo, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
@@ -106,5 +106,13 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			throw new Error('No authentication token available');
 		}
 		return this.getJobByJobIdWithToken(owner, repo, jobId, userAgent, authToken);
+	}
+
+	async addPullRequestComment(pullRequestId: string, commentBody: string): Promise<PullRequestComment | null> {
+		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		if (!authToken) {
+			throw new Error('No authentication token available');
+		}
+		return this.addPullRequestCommentWithToken(pullRequestId, commentBody, authToken);
 	}
 }

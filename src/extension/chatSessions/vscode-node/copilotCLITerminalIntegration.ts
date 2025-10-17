@@ -7,6 +7,7 @@ import { promises as fs } from 'fs';
 import { TerminalOptions, ThemeIcon, ViewColumn, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ITerminalService } from '../../../platform/terminal/common/terminalService';
 import { createServiceIdentifier } from '../../../util/common/services';
@@ -16,7 +17,6 @@ import * as path from '../../../util/vs/base/common/path';
 
 //@ts-ignore
 import powershellScript from './copilotCLIShim.ps1';
-import { IEnvService } from '../../../platform/env/common/envService';
 
 const COPILOT_CLI_SHIM_JS = 'copilotCLIShim.js';
 const COPILOT_CLI_COMMAND = 'copilot';
@@ -41,6 +41,7 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 		@IEnvService private readonly envService: IEnvService,
 	) {
 		super();
+		void this.updateGHTokenInTerminalEnvVars().catch(console.error);
 		this.initialization = this.initialize();
 	}
 
@@ -61,12 +62,13 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 		await fs.mkdir(storageLocation, { recursive: true });
 
 		if (process.platform === 'win32') {
-			this.shellScriptPath = path.join(storageLocation, `${COPILOT_CLI_COMMAND}.ps1`);
-			await fs.writeFile(this.shellScriptPath, powershellScript);
+			this.powershellScriptPath = path.join(storageLocation, `${COPILOT_CLI_COMMAND}.ps1`);
+			await fs.writeFile(this.powershellScriptPath, powershellScript);
 			const copilotPowershellScript = `@echo off
-powershell -ExecutionPolicy Bypass -File "${this.shellScriptPath}" %*
+powershell -ExecutionPolicy Bypass -File "${this.powershellScriptPath}" %*
 `;
-			await fs.writeFile(path.join(storageLocation, `${COPILOT_CLI_COMMAND}.bat`), copilotPowershellScript);
+			this.shellScriptPath = path.join(storageLocation, `${COPILOT_CLI_COMMAND}.bat`);
+			await fs.writeFile(this.shellScriptPath, copilotPowershellScript);
 		} else {
 			const copilotShellScript = `#!/bin/sh
 unset NODE_OPTIONS
@@ -80,21 +82,26 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		}
 	}
 
-	public async openTerminal(name: string, cliArgs: string[] = []) {
+	private async updateGHTokenInTerminalEnvVars() {
 		const enabled = this.configurationService.getConfig(ConfigKey.Internal.CopilotCLIEnabled);
 		if (enabled) {
-			await this.initialization;
 			const session = await this._authenticationService.getAnyGitHubSession();
 			if (session) {
 				this.context.environmentVariableCollection.replace('GH_TOKEN', session.accessToken);
 			}
 		}
+	}
 
-		const shellPathAndArgs = this.getShellPathAndArgs(cliArgs);
+	public async openTerminal(name: string, cliArgs: string[] = []) {
+		await this.updateGHTokenInTerminalEnvVars();
+		await this.initialization;
+
+		const shellPathAndArgs = await this.getShellInfo(cliArgs);
 		if (shellPathAndArgs) {
 			const options = getCommonTerminalOptions(name);
 			options.shellPath = shellPathAndArgs.shellPath;
 			options.shellArgs = shellPathAndArgs.shellArgs;
+			options.iconPath = shellPathAndArgs.iconPath ?? options.iconPath;
 			const terminal = this.terminalService.createTerminal(options);
 			terminal.show();
 		} else {
@@ -137,47 +144,76 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		}
 	}
 
-	private getShellPathAndArgs(cliArgs: string[]): { shellPath: string; shellArgs: string[] } | undefined {
+	private async getShellInfo(cliArgs: string[]): Promise<{ shellPath: string; shellArgs: string[]; iconPath?: ThemeIcon } | undefined> {
 		const configPlatform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux';
 		const defaultProfile = this.getDefaultShellProfile();
 		if (!defaultProfile) {
 			return;
 		}
-		const profile = workspace.getConfiguration('terminal').get<Record<string, { args: string[] }>>(`integrated.profiles.${configPlatform}`);
-		if (!profile || !profile[defaultProfile] || !Array.isArray(profile[defaultProfile].args)) {
+		const profiles = workspace.getConfiguration('terminal').get<Record<string, { path: string; args?: string[]; icon?: string }>>(`integrated.profiles.${configPlatform}`);
+		const profile = profiles ? profiles[defaultProfile] : undefined;
+		if (!profile) {
 			return;
 		}
-		const shellArgs = profile[defaultProfile].args;
+		let iconPath: ThemeIcon | undefined = undefined;
+		try {
+			if (profile.icon) {
+				iconPath = new ThemeIcon(profile.icon);
+			}
+		} catch {
+			//
+		}
+		const shellArgs = Array.isArray(profile.args) ? profile.args : [];
+		const paths = profile.path ? (Array.isArray(profile.path) ? profile.path : [profile.path]) : [];
+		const shellPath = (await getFirstAvailablePath(paths)) || this.envService.shell;
 		if (defaultProfile === 'zsh' && this.shellScriptPath) {
 			return {
-				shellPath: 'zsh',
-				shellArgs: [`-ci${shellArgs.includes('-l') ? 'l' : ''}`, quoteArgsForShell(this.shellScriptPath, cliArgs)]
+				shellPath: shellPath || 'zsh',
+				shellArgs: [`-ci${shellArgs.includes('-l') ? 'l' : ''}`, quoteArgsForShell(this.shellScriptPath, cliArgs)],
+				iconPath
 			};
 		} else if (defaultProfile === 'bash' && this.shellScriptPath) {
 			return {
-				shellPath: 'bash',
-				shellArgs: [`-${shellArgs.includes('-l') ? 'l' : ''}ic`, quoteArgsForShell(this.shellScriptPath, cliArgs)]
+				shellPath: shellPath || 'bash',
+				shellArgs: [`-${shellArgs.includes('-l') ? 'l' : ''}ic`, quoteArgsForShell(this.shellScriptPath, cliArgs)],
+				iconPath
 			};
 		} else if (defaultProfile === 'pwsh' && this.powershellScriptPath && configPlatform !== 'windows') {
 			return {
-				shellPath: 'pwsh',
-				shellArgs: ['-File', this.powershellScriptPath, ...cliArgs]
+				shellPath: shellPath || 'pwsh',
+				shellArgs: ['-File', this.powershellScriptPath, ...cliArgs],
+				iconPath
+			};
+		} else if (defaultProfile === 'PowerShell' && this.powershellScriptPath && configPlatform === 'windows' && shellPath) {
+			return {
+				shellPath,
+				shellArgs: ['-File', this.powershellScriptPath, ...cliArgs],
+				iconPath
+			};
+		} else if (defaultProfile === 'Command Prompt' && this.shellScriptPath && configPlatform === 'windows') {
+			return {
+				shellPath: shellPath || 'cmd.exe',
+				shellArgs: ['/c', this.shellScriptPath, ...cliArgs],
+				iconPath
 			};
 		}
 	}
-	private getDefaultShellProfile() {
+
+	private getDefaultShellProfile(): string | undefined {
 		const configPlatform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux';
 		const defaultProfile = workspace.getConfiguration('terminal').get<string | undefined>(`integrated.defaultProfile.${configPlatform}`);
 		if (defaultProfile) {
-			return defaultProfile;
+			return defaultProfile === 'Windows PowerShell' ? 'PowerShell' : defaultProfile;
 		}
 		const shell = this.envService.shell;
 		switch (configPlatform) {
 			case 'osx':
-			case 'linux':
+			case 'linux': {
 				return shell.includes('zsh') ? 'zsh' : shell.includes('bash') ? 'bash' : undefined;
-			case 'windows':
-				return shell.includes('pwsh') ? 'pwsh' : shell.includes('powershell') ? 'powershell' : undefined;
+			}
+			case 'windows': {
+				return shell.includes('pwsh') ? 'PowerShell' : shell.includes('powershell') ? 'PowerShell' : undefined;
+			}
 		}
 	}
 }
@@ -203,3 +239,39 @@ function getCommonTerminalOptions(name: string): TerminalOptions {
 	};
 }
 
+const pathValidations = new Map<string, boolean>();
+async function getFirstAvailablePath(paths: string[]): Promise<string | undefined> {
+	for (const p of paths) {
+		// Sometimes we can have paths like `${env:HOME}\Systemycmd.exe` which need to be resolved
+		const resolvedPath = resolveEnvVariables(p);
+		if (pathValidations.get(resolvedPath) === true) {
+			return resolvedPath;
+		}
+		if (pathValidations.get(resolvedPath) === false) {
+			continue;
+		}
+		// Possible its just a command name without path
+		if (path.basename(p) === p) {
+			return p;
+		}
+		try {
+			const stat = await fs.stat(resolvedPath);
+			if (stat.isFile()) {
+				pathValidations.set(resolvedPath, true);
+				return resolvedPath;
+			}
+			pathValidations.set(resolvedPath, false);
+		} catch {
+			// Ignore errors and continue checking other paths
+			pathValidations.set(resolvedPath, false);
+		}
+	}
+	return undefined;
+}
+
+function resolveEnvVariables(value: string): string {
+	return value.replace(/\$\{env:([^}]+)\}/g, (match, envVarName) => {
+		const envValue = process.env[envVarName];
+		return envValue !== undefined ? envValue : match;
+	});
+}
