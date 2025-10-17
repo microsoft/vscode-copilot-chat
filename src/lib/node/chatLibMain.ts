@@ -62,6 +62,9 @@ import { SyncDescriptor } from '../../util/vs/platform/instantiation/common/desc
 import { IInstantiationService } from '../../util/vs/platform/instantiation/common/instantiation';
 import { eventPropertiesToSimpleObject } from '../../platform/telemetry/common/telemetryData';
 
+import { getInlineCompletions } from '../../extension/completions-core/lib/src/inlineCompletion';
+export { getInlineCompletions };
+
 /**
  * Log levels (taken from vscode.d.ts)
  */

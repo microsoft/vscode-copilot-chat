@@ -10,7 +10,21 @@
 		"declarationMap": true,
 		"types": [
 			"node"
-		]
+		],
+		"paths": {
+			"#lib/*": [
+				"./src/_internal/extension/completions-core/lib/src/*"
+			],
+			"#prompt/*": [
+				"./src/_internal/extension/completions-core/prompt/src/*"
+			],
+			"#bridge/*": [
+				"./src/_internal/extension/completions-core/bridge/src/*"
+			],
+			"#types": [
+				"./src/_internal/extension/completions-core/types/src"
+			]
+		}
 	},
 	"include": [
 		"src",
