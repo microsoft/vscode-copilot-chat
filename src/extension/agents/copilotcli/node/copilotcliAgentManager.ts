@@ -187,10 +187,7 @@ export class CopilotCLISession extends Disposable {
 			}
 
 			case 'tool.execution_complete': {
-				const responsePart = processToolExecutionComplete(event, this._toolNames, this._pendingToolInvocations);
-				if (responsePart) {
-					stream.push(responsePart);
-				}
+				processToolExecutionComplete(event, this._toolNames, this._pendingToolInvocations);
 
 				const toolName = this._toolNames.get(event.data.toolCallId) || '<unknown>';
 				const success = `success: ${event.data.success}`;

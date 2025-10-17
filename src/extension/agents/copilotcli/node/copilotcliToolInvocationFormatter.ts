@@ -81,10 +81,7 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 				break;
 			}
 			case 'tool.execution_complete': {
-				const responsePart = processToolExecutionComplete(event, toolNames, pendingToolInvocations);
-				if (responsePart && responsePart instanceof ChatResponseThinkingProgressPart) {
-					currentResponseParts.push(responsePart);
-				}
+				processToolExecutionComplete(event, toolNames, pendingToolInvocations);
 				break;
 			}
 		}
@@ -98,7 +95,7 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 	return turns;
 }
 
-export function processToolExecutionStart(event: ToolExecutionStartEvent, toolNames: Map<string, string>, pendingToolInvocations: Map<string, ChatToolInvocationPart>): ChatToolInvocationPart | undefined {
+export function processToolExecutionStart(event: ToolExecutionStartEvent, toolNames: Map<string, string>, pendingToolInvocations: Map<string, ChatToolInvocationPart | ChatResponseThinkingProgressPart>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	const toolInvocation = createCopilotCLIToolInvocation(
 		event.data.toolName,
 		event.data.toolCallId,
@@ -106,41 +103,21 @@ export function processToolExecutionStart(event: ToolExecutionStartEvent, toolNa
 	);
 	toolNames.set(event.data.toolCallId, event.data.toolName);
 	if (toolInvocation) {
-		toolInvocation.isConfirmed = false;
 		// Store pending invocation to update with result later
 		pendingToolInvocations.set(event.data.toolCallId, toolInvocation);
 	}
 	return toolInvocation;
 }
 
-export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, toolNames: Map<string, string>, pendingToolInvocations: Map<string, ChatToolInvocationPart>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
-	const toolName = toolNames.get(event.data.toolCallId);
-	if (toolName === CopilotCLIToolNames.Think) {
-		pendingToolInvocations.delete(event.data.toolCallId);
-		// TODO: @DonJayamanne verify this.
-		// .data.result.sessionLog
-		const sessionLog = event.data.result?.content;
-		if (sessionLog && typeof sessionLog === 'string') {
-			return new ChatResponseThinkingProgressPart(sessionLog);
-		}
-		return undefined;
-	}
-
-
-	let invocation = pendingToolInvocations.get(event.data.toolCallId);
+export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, toolNames: Map<string, string>, pendingToolInvocations: Map<string, ChatToolInvocationPart | ChatResponseThinkingProgressPart>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+	const invocation = pendingToolInvocations.get(event.data.toolCallId);
 	pendingToolInvocations.delete(event.data.toolCallId);
 
-	if (!invocation && toolName) {
-		invocation = createCopilotCLIToolInvocation(
-			toolName,
-			event.data.toolCallId,
-			{}, // We don't have the args in the result event
-		);
-	}
-	if (invocation) {
+	if (invocation && invocation instanceof ChatToolInvocationPart) {
+		invocation.isComplete = true;
+		invocation.isConfirmed = true; //!invocation.isError && event.data.success;
 		invocation.isError = !!event.data.error;
 		invocation.invocationMessage = event.data.error?.message || invocation.invocationMessage;
-		invocation.isConfirmed = true; //!invocation.isError && event.data.success;
 		// event.data.result.resultType !== 'rejected' && event.data.result.resultType !== 'denied';
 		if (!event.data.success && (event.data.error?.code === 'rejected' || event.data.error?.code === 'denied')) {
 			invocation.isConfirmed = false;
@@ -156,7 +133,17 @@ export function createCopilotCLIToolInvocation(
 	toolName: string,
 	toolCallId: string | undefined,
 	args: unknown,
-): ChatToolInvocationPart | undefined {
+): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+	if (toolName === CopilotCLIToolNames.Think) {
+		// TODO: @DonJayamanne verify this.
+		// .data.result.sessionLog
+		const thought = (args as { thought?: string })?.thought;
+		if (thought && typeof thought === 'string') {
+			return new ChatResponseThinkingProgressPart(thought);
+		}
+		return undefined;
+	}
+
 	const invocation = new ChatToolInvocationPart(toolName, toolCallId ?? '', false);
 	invocation.isConfirmed = false;
 	invocation.isComplete = true;
