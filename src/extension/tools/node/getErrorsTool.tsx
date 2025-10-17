@@ -70,7 +70,7 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 			return results;
 		}
 
-		const unmatchedPaths = new Set(nonNotebookPaths.map(p => p.uri));
+		const pendingMatchPaths = new Set(nonNotebookPaths.map(p => p.uri));
 
 		// for non-notebooks, we get all diagnostics and filter down
 		for (const [resource, entries] of this.languageDiagnosticsService.getAllDiagnostics()) {
@@ -87,8 +87,8 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 				if (isEqualOrParent(resource, path.uri)) {
 					foundMatch = true;
 
-					if (unmatchedPaths.has(path.uri)) {
-						unmatchedPaths.delete(path.uri);
+					if (pendingMatchPaths.has(path.uri)) {
+						pendingMatchPaths.delete(path.uri);
 					}
 
 					if (path.range) {
@@ -106,13 +106,14 @@ export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrors
 				continue;
 			}
 
-			if (foundMatch) {
+			if (foundMatch && ranges.length > 0) {
 				const diagnostics = pendingDiagnostics.filter(d => ranges.some(range => d.range.intersection(range)));
 				results.push({ uri: resource, diagnostics });
 			}
 		}
 
-		for (const uri of unmatchedPaths) {
+		// for any given paths that didn't match any files, return empty diagnostics for each of them
+		for (const uri of pendingMatchPaths) {
 			results.push({ uri, diagnostics: [] });
 		}
 

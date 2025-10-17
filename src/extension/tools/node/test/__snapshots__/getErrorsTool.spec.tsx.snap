@@ -7,6 +7,21 @@ No errors found
 "
 `;
 
+exports[`GetErrorsTool - Tool Invocation > Tool invocation - filePath with range has a <compileError> entry 1`] = `
+"<errors path="/test/workspace/eslint/eslint_unexpected_constant_condition_1.ts">
+This code at line 2
+\`\`\`
+  console.log("This is a constant condition");
+\`\`\`
+has the problem reported:
+<compileError>
+Unexpected constant condition.
+</compileError>
+
+</errors>
+"
+`;
+
 exports[`GetErrorsTool - Tool Invocation > Tool invocation - with filePath and range filters diagnostics to that range 1`] = `
 "<errors path="/test/workspace/src/file1.ts">
 This code at line 2
@@ -95,6 +110,17 @@ This code at line 2
 has the problem reported:
 <compileError>
 Use const instead of var
+</compileError>
+
+</errors>
+<errors path="/test/workspace/eslint/eslint_unexpected_constant_condition_1.ts">
+This code at line 2
+\`\`\`
+  console.log("This is a constant condition");
+\`\`\`
+has the problem reported:
+<compileError>
+Unexpected constant condition.
 </compileError>
 
 </errors>

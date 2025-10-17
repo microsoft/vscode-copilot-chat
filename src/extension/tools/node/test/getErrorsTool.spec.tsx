@@ -33,6 +33,7 @@ suite('GetErrorsTool - Tool Invocation', () => {
 	const tsFile2 = URI.file('/test/workspace/src/file2.ts');
 	const jsFile = URI.file('/test/workspace/lib/file.js');
 	const noErrorFile = URI.file('/test/workspace/src/noErrorFile.ts');
+	const eslintErrorFile = URI.file('/test/workspace/eslint/eslint_unexpected_constant_condition_1.ts');
 
 	beforeEach(() => {
 		collection = createExtensionUnitTestingServices();
@@ -42,8 +43,9 @@ suite('GetErrorsTool - Tool Invocation', () => {
 		const tsDoc2 = createTextDocumentData(tsFile2, 'interface User {\n  name: string;\n  age: number;\n}', 'ts').document;
 		const jsDoc = createTextDocumentData(jsFile, 'function legacy() {\n  var y = 2;\n  return y;\n}', 'js').document;
 		const noErrorDoc = createTextDocumentData(noErrorFile, '', 'ts').document;
+		const eslintErrorDoc = createTextDocumentData(eslintErrorFile, 'if (true) {\n  console.log("This is a constant condition");\n}', 'ts').document;
 
-		collection.define(IWorkspaceService, new SyncDescriptor(TestWorkspaceService, [[workspaceFolder], [tsDoc1, tsDoc2, jsDoc, noErrorDoc]]));
+		collection.define(IWorkspaceService, new SyncDescriptor(TestWorkspaceService, [[workspaceFolder], [tsDoc1, tsDoc2, jsDoc, noErrorDoc, eslintErrorDoc]]));
 
 		// Set up diagnostics service
 		diagnosticsService = new TestLanguageDiagnosticsService();
@@ -88,6 +90,14 @@ suite('GetErrorsTool - Tool Invocation', () => {
 				message: 'Use const instead of var',
 				range: new Range(1, 2, 1, 5),
 				severity: DiagnosticSeverity.Warning
+			}
+		]);
+
+		diagnosticsService.setDiagnostics(eslintErrorFile, [
+			{
+				message: 'Unexpected constant condition.',
+				range: new Range(1, 4, 1, 4),
+				severity: DiagnosticSeverity.Error
 			}
 		]);
 	});
@@ -185,8 +195,16 @@ suite('GetErrorsTool - Tool Invocation', () => {
 
 	test('Tool invocation - filePath with no diagnostics still has a <errors> entry', async () => {
 		const pathRep = accessor.get(IPromptPathRepresentationService);
-		const filePath = pathRep.getFilePath(URI.file('/test/workspace/src/noErrorFile.ts'));
+		const filePath = pathRep.getFilePath(noErrorFile);
 		const result = await tool.invoke({ input: { filePaths: [filePath] }, toolInvocationToken: null! }, CancellationToken.None);
+		const msg = await toolResultToString(accessor, result);
+		expect(msg).toMatchSnapshot();
+	});
+
+	test('Tool invocation - filePath with range has a <compileError> entry', async () => {
+		const pathRep = accessor.get(IPromptPathRepresentationService);
+		const filePath = pathRep.getFilePath(eslintErrorFile);
+		const result = await tool.invoke({ input: { filePaths: [filePath], ranges: [[1, 4, 1, 4]] }, toolInvocationToken: null! }, CancellationToken.None);
 		const msg = await toolResultToString(accessor, result);
 		expect(msg).toMatchSnapshot();
 	});
