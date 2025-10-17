@@ -160,7 +160,7 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 			this.stagedDeltasToApply = [];
 			this.currentStartStop = undefined;
 			this.nonReportedDeltas = [];
-			this.thinkingActive = false; // Reset thinking state on retry
+			this.thinkingActive = false;
 			if (delta.retryReason === FilterReason.Copyright) {
 				progress.clearToPreviousToolInvocation(ChatResponseClearToPreviousToolInvocationReason.CopyrightContentRetry);
 			} else {
