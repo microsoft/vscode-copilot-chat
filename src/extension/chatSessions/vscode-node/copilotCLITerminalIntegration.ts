@@ -41,6 +41,7 @@ export class CopilotCLITerminalIntegration extends Disposable implements ICopilo
 		@IEnvService private readonly envService: IEnvService,
 	) {
 		super();
+		this.updateGHTokenInTerminalEnvVars();
 		this.initialization = this.initialize();
 	}
 
@@ -81,15 +82,19 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 		}
 	}
 
-	public async openTerminal(name: string, cliArgs: string[] = []) {
+	private async updateGHTokenInTerminalEnvVars() {
 		const enabled = this.configurationService.getConfig(ConfigKey.Internal.CopilotCLIEnabled);
 		if (enabled) {
-			await this.initialization;
 			const session = await this._authenticationService.getAnyGitHubSession();
 			if (session) {
 				this.context.environmentVariableCollection.replace('GH_TOKEN', session.accessToken);
 			}
 		}
+	}
+
+	public async openTerminal(name: string, cliArgs: string[] = []) {
+		await this.updateGHTokenInTerminalEnvVars();
+		await this.initialization;
 
 		const shellPathAndArgs = this.getShellInfo(cliArgs);
 		if (shellPathAndArgs) {
