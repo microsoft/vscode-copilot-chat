@@ -37,7 +37,7 @@ import { commonPrefixLength, commonSuffixLength } from '../../src/util/vs/base/c
 import { URI } from '../../src/util/vs/base/common/uri';
 import { SyncDescriptor } from '../../src/util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../src/util/vs/platform/instantiation/common/instantiation';
-import { ChatLocation, ChatRequest, ChatRequestEditorData, ChatResponseMarkdownPart, ChatResponseNotebookEditPart, ChatResponseTextEditPart, Diagnostic, DiagnosticRelatedInformation, Location, NotebookRange, Range, Selection, TextEdit, Uri, WorkspaceEdit } from '../../src/vscodeTypes';
+import { ChatLocation, ChatRequest, ChatRequestEditorData, ChatResponseMarkdownPart, ChatResponseNotebookEditPart, ChatResponseTextEditPart, Diagnostic, DiagnosticRelatedInformation, LanguageModelToolResult, Location, NotebookRange, Range, Selection, TextEdit, Uri, WorkspaceEdit } from '../../src/vscodeTypes';
 import { SimulationExtHostToolsService } from '../base/extHostContext/simulationExtHostToolsService';
 import { SimulationWorkspaceExtHost } from '../base/extHostContext/simulationWorkspaceExtHost';
 import { SpyingChatMLFetcher } from '../base/spyingChatMLFetcher';
@@ -128,12 +128,13 @@ export async function simulateInlineChat3(
 	return simulateEditingScenario(testingServiceCollection, scenario, host);
 }
 
-export async function simulateInlineChat2(
+export async function simulateInlineChatIntent(
 	testingServiceCollection: TestingServiceCollection,
 	scenario: IScenario
 ): Promise<void> {
 
-	const overrideCommand = '/edit';
+	const overrideCommand = `/${Intent.InlineChat}`;
+
 	const ensureSlashEdit = (query: string) => {
 		return query.startsWith(overrideCommand) ? query : `${overrideCommand} ${query}`;
 	};
@@ -702,6 +703,21 @@ function setupTools(stream: vscode.ChatResponseStream, request: ChatRequest, acc
 	toolsService.addTestToolOverride(
 		editTool.info,
 		editTool);
+
+	toolsService.addTestToolOverride(
+		{
+			name: 'inline_chat_exit',
+			description: 'Moves the inline chat session to the richer panel chat which supports edits across files, creating new files, and multi-turn conversations between the user and the assistant.',
+			inputSchema: {},
+			source: undefined,
+			tags: [],
+		},
+		{
+			invoke() {
+				return new LanguageModelToolResult([]);
+			}
+		}
+	);
 }
 
 function computeMoreMinimalEdit(document: vscode.TextDocument, edit: vscode.TextEdit): vscode.TextEdit {

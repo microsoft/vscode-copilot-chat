@@ -8,7 +8,7 @@ import { TestingServiceCollection } from '../../src/platform/test/node/services'
 import { Selection } from '../../src/vscodeTypes';
 import { NonExtensionConfiguration, ssuite, stest } from '../base/stest';
 import { KnownDiagnosticProviders } from '../simulation/diagnosticProviders';
-import { simulateInlineChat, simulateInlineChat2 } from '../simulation/inlineChatSimulator';
+import { simulateInlineChat, simulateInlineChatIntent } from '../simulation/inlineChatSimulator';
 import { assertContainsAllSnippets, assertNoDiagnosticsAsync, assertNoElidedCodeComments, assertNoSyntacticDiagnosticsAsync, findTextBetweenMarkersFromTop } from '../simulation/outcomeValidators';
 import { simulatePanelCodeMapper } from '../simulation/panelCodeMapperSimulator';
 import { assertInlineEdit, assertInlineEditShape, assertNoOccurrence, assertOccursOnce, assertSomeStrings, extractInlineReplaceEdits, fromFixture, toFile } from '../simulation/stestUtil';
@@ -22,18 +22,25 @@ function executeEditTest(
 	if (strategy === EditTestStrategy.Inline) {
 		return simulateInlineChat(testingServiceCollection, scenario);
 	} else if (strategy === EditTestStrategy.Inline2) {
-		return simulateInlineChat2(testingServiceCollection, scenario);
+		return simulateInlineChatIntent(testingServiceCollection, scenario);
 	} else {
 		return simulatePanelCodeMapper(testingServiceCollection, scenario, strategy);
 	}
 }
 
-function forInlineAndInline2(callback: (strategy: EditTestStrategy, location: 'inline' | 'panel', variant: string | undefined, configurations?: NonExtensionConfiguration[]) => void): void {
+function forInlineAndInlineChatIntent(callback: (strategy: EditTestStrategy, location: 'inline' | 'panel', variant: string | undefined, configurations?: NonExtensionConfiguration[]) => void): void {
 	callback(EditTestStrategy.Inline, 'inline', '', undefined);
-	callback(EditTestStrategy.Inline2, 'inline', '-inline2', [['inlineChat.enableV2', true]]);
+	callback(EditTestStrategy.Inline2, 'inline', '-InlineChatIntent', [['inlineChat.enableV2', true]]);
 }
 
-forInlineAndInline2((strategy, location, variant, nonExtensionConfigurations) => {
+forInlineAndInlineChatIntent((strategy, location, variant, nonExtensionConfigurations) => {
+
+	function skipIfInlineChatIntent() {
+		if (variant === '-InlineChatIntent') {
+			assert.ok(false, 'SKIPPED');
+		}
+	}
+
 	ssuite({ title: `edit${variant}`, location }, () => {
 		stest({ description: 'Context Outline: TypeScript between methods', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
 			return executeEditTest(strategy, testingServiceCollection, {
@@ -138,6 +145,11 @@ forInlineAndInline2((strategy, location, variant, nonExtensionConfigurations) =>
 		});
 
 		stest({ description: 'issue #405: "make simpler" query is surprising', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
+
+			// SKIPPED because of the error below
+			// <NO REPLY> {"type":"failed","reason":"Request Failed: 400 {\"error\":{\"message\":\"prompt token count of 13613 exceeds the limit of 12288\",\"code\":\"model_max_prompt_tokens_exceeded\"}}\n","requestId":"2e91a4a5-366b-4cae-b9c8-cce59d06a7bb","serverRequestId":"EA6B:3DFF07:151BC22:18DE2D8:68F22ED4","isCacheHit":false,"copilotFunctionCalls":[]}
+			skipIfInlineChatIntent();
+
 			return executeEditTest(strategy, testingServiceCollection, {
 				files: [fromFixture('vscode/extHost.api.impl.ts')],
 				queries: [
@@ -252,6 +264,11 @@ forInlineAndInline2((strategy, location, variant, nonExtensionConfigurations) =>
 		});
 
 		stest({ description: 'issue #3759: add type', language: 'typescript', nonExtensionConfigurations }, (testingServiceCollection) => {
+
+			// SKIPPED because of the error below
+			// <NO REPLY> {"type":"failed","reason":"Request Failed: 400 {\"error\":{\"message\":\"prompt token count of 13613 exceeds the limit of 12288\",\"code\":\"model_max_prompt_tokens_exceeded\"}}\n","requestId":"2e91a4a5-366b-4cae-b9c8-cce59d06a7bb","serverRequestId":"EA6B:3DFF07:151BC22:18DE2D8:68F22ED4","isCacheHit":false,"copilotFunctionCalls":[]}
+			skipIfInlineChatIntent();
+
 			return executeEditTest(strategy, testingServiceCollection, {
 				files: [
 					fromFixture('edit-add-explicit-type-issue-3759/pullRequestModel.ts'),
