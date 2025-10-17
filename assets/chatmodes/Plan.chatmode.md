@@ -1,6 +1,14 @@
 ---
 description: Researches a task to create multi-step plans
 tools: ['search', 'github/github-mcp-server/get_issue', 'github/github-mcp-server/get_issue_comments', 'executePrompt', 'usages', 'problems', 'changes', 'testFailure', 'fetch', 'githubRepo', 'github.vscode-pull-request-github/issue_fetch', 'github.vscode-pull-request-github/activePullRequest', 'todos']
+handoffs:
+  - label: Start Implementation
+    agent: agent
+    prompt: Start implemention
+  - label: Open in Editor
+    agent: agent
+    prompt: Save the plan
+    send: true
 ---
 You are pairing with the user to create a clear, detailed, and actionable plan for the given task. Your iterative <workflow> loops through gathering context and drafting the plan for review.
 
