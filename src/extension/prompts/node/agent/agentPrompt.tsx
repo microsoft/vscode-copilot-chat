@@ -7,7 +7,7 @@ import { BasePromptElementProps, Chunk, Image, PromptElement, PromptPiece, Promp
 import type { ChatRequestEditedFileEvent, LanguageModelToolInformation, NotebookEditor, TaskDefinition, TextEditor } from 'vscode';
 import { ChatLocation } from '../../../../platform/chat/common/commonTypes';
 import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
-import { modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
+import { isHiddenModelById, modelNeedsStrongReplaceStringHint } from '../../../../platform/endpoint/common/chatModelCapabilities';
 import { CacheType } from '../../../../platform/endpoint/common/endpointTypes';
 import { IEnvService, OperatingSystem } from '../../../../platform/env/common/envService';
 import { getGitHubRepoInfoFromContext, IGitService } from '../../../../platform/git/common/gitService';
@@ -49,6 +49,7 @@ import './allAgentPrompts';
 import { AlternateGPTPrompt, DefaultAgentPrompt } from './defaultAgentInstructions';
 import { PromptRegistry } from './promptRegistry';
 import { SummarizedConversationHistory } from './summarizedConversationHistory';
+import { VSCModelUserMessage } from './vscModelPrompts';
 
 export interface AgentPromptProps extends GenericBasePromptElementProps {
 	readonly endpoint: IChatEndpoint;
@@ -86,7 +87,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const instructions = this.getInstructions();
+		const instructions = await this.getInstructions();
 
 		const omitBaseAgentInstructions = this.configurationService.getConfig(ConfigKey.Internal.OmitBaseAgentInstructions);
 		const baseAgentInstructions = <>
@@ -141,7 +142,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		}
 	}
 
-	private getInstructions() {
+	private async getInstructions() {
 		const modelFamily = this.props.endpoint.family ?? 'unknown';
 
 		if (this.props.endpoint.family.startsWith('gpt-') && this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService)) {
@@ -150,6 +151,22 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 				modelFamily={this.props.endpoint.family}
 				codesearchMode={this.props.codesearchMode}
 			/>;
+		}
+
+		if (await isHiddenModelById(this.props.endpoint)) {
+			// Try VSCModel prompt for hidden models
+			const hiddenModelPrompt = PromptRegistry.getPrompt('vscModel');
+			if (hiddenModelPrompt) {
+				const resolver = this.instantiationService.createInstance(hiddenModelPrompt);
+				const PromptClass = resolver.resolvePrompt();
+				if (PromptClass) {
+					return <PromptClass
+						availableTools={this.props.promptContext.tools?.availableTools}
+						modelFamily={modelFamily}
+						codesearchMode={this.props.codesearchMode}
+					/>;
+				}
+			}
 		}
 
 		const agentPromptResolver = PromptRegistry.getPrompt(this.props.endpoint.model ?? 'unknown');
@@ -323,6 +340,8 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 			this.logService.trace('Re-rendering historical user message');
 		}
 
+		const shouldIncludePreamble = await isHiddenModelById(this.props.endpoint);
+
 		const query = await this.promptVariablesService.resolveToolReferencesInPrompt(this.props.request, this.props.toolReferences ?? []);
 		const hasReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ReplaceString);
 		const hasMultiReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.MultiReplaceString);
@@ -363,6 +382,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						{getFileCreationReminder(this.props.endpoint.family)}
 						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
 					</Tag>
+					{shouldIncludePreamble && <VSCModelUserMessage />}
 					{query && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 				</UserMessage>
