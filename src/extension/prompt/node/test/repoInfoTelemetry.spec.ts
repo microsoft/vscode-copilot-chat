@@ -733,7 +733,7 @@ suite('RepoInfoTelemetry', () => {
 		}] as any);
 
 		// Mock git diff service to trigger file change during processing
-		vi.spyOn(gitDiffService, 'getChangeDiffs').mockImplementation(async () => {
+		vi.spyOn(gitDiffService, 'getWorkingTreeDiffsFromRef').mockImplementation(async () => {
 			// Simulate file change during diff processing
 			mockWatcher.triggerChange(URI.file('/test/repo/file.ts') as any);
 			return [{
@@ -846,7 +846,7 @@ suite('RepoInfoTelemetry', () => {
 
 		// Create a diff that exceeds 900KB when serialized to JSON
 		const largeDiff = 'x'.repeat(901 * 1024);
-		vi.spyOn(gitDiffService, 'getChangeDiffs').mockResolvedValue([{
+		vi.spyOn(gitDiffService, 'getWorkingTreeDiffsFromRef').mockResolvedValue([{
 			uri: URI.file('/test/repo/file.ts'),
 			originalUri: URI.file('/test/repo/file.ts'),
 			renameUri: undefined,
@@ -891,7 +891,7 @@ suite('RepoInfoTelemetry', () => {
 
 		// Create a diff that is within limits
 		const normalDiff = 'some normal diff content';
-		vi.spyOn(gitDiffService, 'getChangeDiffs').mockResolvedValue([{
+		vi.spyOn(gitDiffService, 'getWorkingTreeDiffsFromRef').mockResolvedValue([{
 			uri: URI.file('/test/repo/file.ts'),
 			originalUri: URI.file('/test/repo/file.ts'),
 			renameUri: undefined,
@@ -950,7 +950,7 @@ suite('RepoInfoTelemetry', () => {
 			}
 		] as any);
 
-		vi.spyOn(gitDiffService, 'getChangeDiffs').mockResolvedValue([
+		vi.spyOn(gitDiffService, 'getWorkingTreeDiffsFromRef').mockResolvedValue([
 			{
 				uri: URI.file('/test/repo/file1.ts'),
 				originalUri: URI.file('/test/repo/file1.ts'),
@@ -995,9 +995,9 @@ suite('RepoInfoTelemetry', () => {
 
 		const diffs = JSON.parse(call[1].diffsJSON);
 		assert.strictEqual(diffs.length, 3);
-		assert.strictEqual(diffs[0].status, Status.MODIFIED);
-		assert.strictEqual(diffs[1].status, Status.INDEX_ADDED);
-		assert.strictEqual(diffs[2].status, Status.DELETED);
+		assert.strictEqual(diffs[0].status, 'MODIFIED');
+		assert.strictEqual(diffs[1].status, 'INDEX_ADDED');
+		assert.strictEqual(diffs[2].status, 'DELETED');
 	});
 
 	test('should handle renamed files in diff', async () => {
@@ -1012,7 +1012,7 @@ suite('RepoInfoTelemetry', () => {
 			status: Status.INDEX_RENAMED
 		}] as any);
 
-		vi.spyOn(gitDiffService, 'getChangeDiffs').mockResolvedValue([{
+		vi.spyOn(gitDiffService, 'getWorkingTreeDiffsFromRef').mockResolvedValue([{
 			uri: URI.file('/test/repo/newname.ts'),
 			originalUri: URI.file('/test/repo/oldname.ts'),
 			renameUri: URI.file('/test/repo/newname.ts'),
@@ -1041,7 +1041,7 @@ suite('RepoInfoTelemetry', () => {
 
 		const diffs = JSON.parse(call[1].diffsJSON);
 		assert.strictEqual(diffs.length, 1);
-		assert.strictEqual(diffs[0].status, Status.INDEX_RENAMED);
+		assert.strictEqual(diffs[0].status, 'INDEX_RENAMED');
 		assert.ok(diffs[0].renameUri);
 	});
 
@@ -1205,7 +1205,7 @@ suite('RepoInfoTelemetry', () => {
 
 		// Create a diff that exceeds 900KB when serialized to JSON
 		const largeDiff = 'x'.repeat(901 * 1024);
-		vi.spyOn(gitDiffService, 'getChangeDiffs').mockResolvedValue([{
+		vi.spyOn(gitDiffService, 'getWorkingTreeDiffsFromRef').mockResolvedValue([{
 			uri: URI.file('/test/repo/file.ts'),
 			originalUri: URI.file('/test/repo/file.ts'),
 			renameUri: undefined,
@@ -1313,7 +1313,7 @@ suite('RepoInfoTelemetry', () => {
 			uri: 'file:///test/repo/file.ts',
 			originalUri: 'file:///test/repo/file.ts',
 			renameUri: undefined,
-			status: Status.MODIFIED,
+			status: 'MODIFIED',
 			diff: testDiff
 		}]);
 		const expectedSize = Buffer.byteLength(expectedDiffsJSON, 'utf8');
@@ -1364,7 +1364,7 @@ suite('RepoInfoTelemetry', () => {
 		}] as any);
 
 		// Mock diff service to throw error
-		vi.spyOn(gitDiffService, 'getChangeDiffs').mockRejectedValue(new Error('Diff processing error'));
+		vi.spyOn(gitDiffService, 'getWorkingTreeDiffsFromRef').mockRejectedValue(new Error('Diff processing error'));
 
 		const repoTelemetry = new RepoInfoTelemetry(
 			'test-message-id',
@@ -1478,8 +1478,8 @@ suite('RepoInfoTelemetry', () => {
 			diffs.length > 0 ? changes as any : []
 		);
 
-		// Mock getChangeDiffs to return Diff objects (Change + diff property)
-		vi.spyOn(gitDiffService, 'getChangeDiffs').mockResolvedValue(
+		// Mock getWorkingTreeDiffsFromRef to return Diff objects (Change + diff property)
+		vi.spyOn(gitDiffService, 'getWorkingTreeDiffsFromRef').mockResolvedValue(
 			diffs.map(d => ({
 				uri: URI.file(d.uri || '/test/repo/file.ts'),
 				originalUri: URI.file(d.originalUri || d.uri || '/test/repo/file.ts'),
