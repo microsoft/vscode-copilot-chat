@@ -21,7 +21,7 @@ import { ClaudeChatSessionContentProvider } from './claudeChatSessionContentProv
 import { ClaudeChatSessionItemProvider } from './claudeChatSessionItemProvider';
 import { ClaudeChatSessionParticipant } from './claudeChatSessionParticipant';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, registerCLIChatCommands } from './copilotCLIChatSessionsContribution';
-import { CopilotChatSessionsProvider } from './copilotChatSessionsProvider';
+import { CopilotChatSessionsProvider } from './copilotCloudSessionsProvider';
 import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 
 export class ChatSessionsContrib extends Disposable implements IExtensionContribution {
