@@ -37,6 +37,7 @@ export class ClaudeChatSessionItemProvider extends Disposable implements vscode.
 		const sessions = await this.claudeCodeSessionService.getAllSessions(token);
 		const diskSessions = sessions.map(session => ({
 			id: session.id,
+			resource: undefined,
 			label: session.label,
 			tooltip: `Claude Code session: ${session.label}`,
 			timing: {

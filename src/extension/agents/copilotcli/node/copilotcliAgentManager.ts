@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { AgentOptions, SDKEvent, Session } from '@github/copilot/sdk';
+import type { AgentOptions, ModelProvider, SDKEvent, Session } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { IEnvService } from '../../../../platform/env/common/envService';
@@ -41,6 +41,7 @@ export class CopilotCLIAgentManager extends Disposable {
 		request: vscode.ChatRequest,
 		context: vscode.ChatContext,
 		stream: vscode.ChatResponseStream,
+		modelId: ModelProvider | undefined,
 		token: vscode.CancellationToken
 	): Promise<{ copilotcliSessionId: string | undefined }> {
 		const sessionIdForLog = copilotcliSessionId ?? 'new';
@@ -57,7 +58,7 @@ export class CopilotCLIAgentManager extends Disposable {
 			this.sessionService.trackSessionWrapper(sdkSession.sessionId, session);
 		}
 
-		await session.invoke(request.prompt, request.toolInvocationToken, stream, token);
+		await session.invoke(request.prompt, request.toolInvocationToken, stream, modelId, token);
 
 		return { copilotcliSessionId: session.sessionId };
 	}
@@ -101,6 +102,7 @@ export class CopilotCLISession extends Disposable {
 		prompt: string,
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
+		modelId: ModelProvider | undefined,
 		token: vscode.CancellationToken
 	): Promise<void> {
 		if (this._store.isDisposed) {
@@ -111,7 +113,7 @@ export class CopilotCLISession extends Disposable {
 		const copilotToken = await this._authenticationService.getCopilotToken();
 
 		const options: AgentOptions = {
-			modelProvider: {
+			modelProvider: modelId ?? {
 				type: 'anthropic',
 				model: 'claude-sonnet-4.5',
 			},

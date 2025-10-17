@@ -87,6 +87,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				const description = new vscode.MarkdownString(`[#${pr.number}](${uri.toString()} "${prLinkTitle}")`);
 				const session = {
 					id: pr.number.toString(),
+					resource: undefined,
 					label: pr.title,
 					status: this.getSessionState(pr.state),
 					description,
@@ -255,7 +256,14 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				return {};
 			}
 			// Tell UI to the new chat session
-			this._onDidCommitChatSession.fire({ original: context.chatSessionContext.chatSessionItem, modified: { id: String(number), label: `Pull Request ${number}` } });
+			this._onDidCommitChatSession.fire({
+				original: context.chatSessionContext.chatSessionItem,
+				modified: {
+					id: String(number),
+					resource: undefined,
+					label: `Pull Request ${number}`
+				}
+			});
 		} else if (context.chatSessionContext) {
 			/* Follow up to an existing coding agent session */
 			try {

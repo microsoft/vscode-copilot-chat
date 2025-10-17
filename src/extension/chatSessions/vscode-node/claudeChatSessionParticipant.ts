@@ -36,7 +36,11 @@ export class ClaudeChatSessionParticipant {
 				const claudeSessionId = await create();
 				if (claudeSessionId) {
 					// Tell UI to replace with claude-backed session
-					this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { id: claudeSessionId, label: request.prompt ?? 'Claude Code' });
+					this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, {
+						id: claudeSessionId,
+						resource: undefined,
+						label: request.prompt ?? 'Claude Code'
+					});
 				}
 				return {};
 			}
