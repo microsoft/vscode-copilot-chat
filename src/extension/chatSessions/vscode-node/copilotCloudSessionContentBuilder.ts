@@ -2,8 +2,9 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-
+import * as pathLib from 'path';
 import { ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseMultiDiffPart, ChatResponseProgressPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatResult, ChatToolInvocationPart, MarkdownString, Uri } from 'vscode';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
 
 export interface SessionResponseLogChunk {
@@ -94,7 +95,9 @@ export interface ParsedToolCallDetails {
 export class ChatSessionContentBuilder {
 	constructor(
 		private type: string,
-	) { }
+		@IGitService private readonly _gitService: IGitService,
+	) {
+	}
 
 	public async buildSessionHistory(
 		sessions: SessionInfo[],
@@ -300,8 +303,8 @@ export class ChatSessionContentBuilder {
 			if (toolDetails.toolSpecificData) {
 				if (StrReplaceEditorToolData.is(toolDetails.toolSpecificData)) {
 					if ((toolDetails.toolSpecificData.command === 'view' || toolDetails.toolSpecificData.command === 'edit') && toolDetails.toolSpecificData.fileLabel) {
-						// TODO: handle file paths correctly
-						const uri = Uri.file(toolDetails.toolSpecificData.fileLabel);
+						const currentRepository = this._gitService.activeRepository.get();
+						const uri = currentRepository?.rootUri ? Uri.file(pathLib.join(currentRepository.rootUri.fsPath, toolDetails.toolSpecificData.fileLabel)) : Uri.file(toolDetails.toolSpecificData.fileLabel);
 						toolPart.invocationMessage = new MarkdownString(`${toolPart.toolName} [](${uri.toString()})` + (toolDetails.toolSpecificData?.viewRange ? `, lines ${toolDetails.toolSpecificData.viewRange?.start} to ${toolDetails.toolSpecificData.viewRange?.end}` : ''));
 						toolPart.invocationMessage.supportHtml = true;
 						toolPart.pastTenseMessage = new MarkdownString(`${toolPart.toolName} [](${uri.toString()})` + (toolDetails.toolSpecificData?.viewRange ? `, lines ${toolDetails.toolSpecificData.viewRange?.start} to ${toolDetails.toolSpecificData.viewRange?.end}` : ''));
