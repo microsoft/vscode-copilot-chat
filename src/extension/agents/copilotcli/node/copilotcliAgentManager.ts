@@ -168,6 +168,7 @@ export class CopilotCLISession extends Disposable {
 				this._toolNames.clear();
 				break;
 			}
+
 			case 'assistant.message': {
 				if (event.data.content.length) {
 					stream.markdown(event.data.content);
