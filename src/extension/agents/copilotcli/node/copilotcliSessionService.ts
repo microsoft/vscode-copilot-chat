@@ -154,6 +154,10 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 		const sessionManager = await this.getSessionManager();
 
 		if (sessionId) {
+			if (this._sessions.has(sessionId)) {
+				return this._sessions.get(sessionId)!.sdkSession;
+			}
+
 			try {
 				const sdkSession = await sessionManager.getSession(sessionId);
 
