@@ -7,6 +7,7 @@ import { createServiceIdentifier } from '../../../util/common/services';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { FileChunkAndScore } from '../../chunking/common/chunk';
 import { ILogService } from '../../log/common/logService';
+import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
 
 export const IRerankerService = createServiceIdentifier<IRerankerService>('IRerankerService');
 
@@ -16,9 +17,12 @@ export interface IRerankerService {
 	 * Re-rank a list of file chunks for a natural language query.
 	 */
 	rerank(query: string, documents: readonly FileChunkAndScore[], token: CancellationToken): Promise<readonly FileChunkAndScore[]>;
+	/**
+	 * Whether the remote reranker endpoint is available
+	 */
+	readonly isAvailable: boolean;
 }
 
-const RERANKER_ENDPOINT = '';
 
 interface RemoteRerankResultEntry {
 	readonly index: number;
@@ -42,10 +46,21 @@ function wrapDocument(text: string): string {
 export class RerankerService implements IRerankerService {
 	declare readonly _serviceBrand: undefined;
 
-	constructor(@ILogService private readonly _logService: ILogService) { }
+	constructor(
+		@ILogService private readonly _logService: ILogService,
+		@IExperimentationService private readonly _expService: IExperimentationService
+	) { }
+
+	private get _endpoint(): string | undefined {
+		return this._expService.getTreatmentVariable<string>('rerankEndpointUrl')?.trim();
+	}
+
+	get isAvailable(): boolean {
+		return !!this._endpoint;
+	}
 
 	async rerank(query: string, documents: readonly FileChunkAndScore[], token: CancellationToken): Promise<readonly FileChunkAndScore[]> {
-		if (!documents.length) { return documents; }
+		if (!documents.length || !this.isAvailable || !this._endpoint) { return documents; }
 
 		const payload = {
 			query: buildQueryPrompt(query),
@@ -56,7 +71,7 @@ export class RerankerService implements IRerankerService {
 			const controller = new AbortController();
 			if (token.isCancellationRequested) { throw new Error('cancelled'); }
 			const dispose = token.onCancellationRequested(() => controller.abort());
-			const response = await fetch(RERANKER_ENDPOINT, {
+			const response = await fetch(this._endpoint, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(payload),

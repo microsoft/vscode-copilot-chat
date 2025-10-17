@@ -421,7 +421,7 @@ class WorkspaceChunkSearchServiceImpl extends Disposable implements IWorkspaceCh
 			};
 
 			// If explicit rerank is enabled, use the remote reranker
-			if (options.enableRerank) {
+			if (options.enableRerank && this._rerankerService.isAvailable) {
 				try {
 					const queryString = await query.resolveQuery(token);
 					const reranked = await this._rerankerService.rerank(queryString, filteredResult.result.chunks, token);
