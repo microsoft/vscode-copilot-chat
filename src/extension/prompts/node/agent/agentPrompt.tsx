@@ -332,16 +332,32 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const frozenContent = this.props.turn?.getMetadata(RenderedUserMessageMetadata)?.renderedUserMessage;
-		if (frozenContent) {
-			return <FrozenContentUserMessage frozenContent={frozenContent} enableCacheBreakpoints={this.props.enableCacheBreakpoints} />;
+		const { isHiddenModelA } = await import('../../../../platform/endpoint/common/chatModelCapabilities');
+		const frozenMetadata = this.props.turn?.getMetadata(RenderedUserMessageMetadata);
+		if (frozenMetadata) {
+			// Only validate hidden status if we have modelFamily cached
+			// Otherwise, always use frozen content to maintain backward compatibility
+			if (frozenMetadata.modelFamily) {
+				// Only re-render if switching FROM hidden TO non-hidden (to remove VSCModelUserMessage preamble)
+				// When switching from non-hidden to hidden, keep the old messages as-is (no preamble needed in history)
+				const currentIsHidden = await isHiddenModelA(this.props.endpoint);
+				const cachedIsHidden = await isHiddenModelA({ family: frozenMetadata.modelFamily } as IChatEndpoint);
+				// Use frozen content unless switching from hidden to non-hidden
+				if (!cachedIsHidden || currentIsHidden) {
+					// Same status or switching from non-hidden to hidden: use frozen content
+					return <FrozenContentUserMessage frozenContent={frozenMetadata.renderedUserMessage} enableCacheBreakpoints={this.props.enableCacheBreakpoints} />;
+				}
+				// Switching from hidden to non-hidden: fall through to re-render to remove preamble
+			} else {
+				// No modelFamily cached, use frozen content as-is (backward compatibility)
+				return <FrozenContentUserMessage frozenContent={frozenMetadata.renderedUserMessage} enableCacheBreakpoints={this.props.enableCacheBreakpoints} />;
+			}
 		}
 
 		if (this.props.isHistorical) {
 			this.logService.trace('Re-rendering historical user message');
 		}
 
-		const { isHiddenModelA } = await import('../../../../platform/endpoint/common/chatModelCapabilities');
 		const shouldIncludePreamble = await isHiddenModelA(this.props.endpoint);
 
 		const query = await this.promptVariablesService.resolveToolReferencesInPrompt(this.props.request, this.props.toolReferences ?? []);
