@@ -4,18 +4,16 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { ChatExtendedRequestHandler } from 'vscode';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ChatExtendedRequestHandler, l10n } from 'vscode';
 import { isLocation } from '../../../util/common/types';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../util/vs/base/common/uri';
 import { localize } from '../../../util/vs/nls';
-import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
 import { ExtendedChatRequest, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { buildChatHistoryFromEvents, parseChatMessagesToEvents, stripReminders } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
-import { CopilotBundledCLITerminalIntegration, CopilotExternalCLINodeTerminalIntegration, CopilotExternalCLIScriptsTerminalIntegration, ICopilotBundledCLITerminalIntegration } from './copilotCLITerminalIntegration';
+import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 
 export class CopilotCLIChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
 	private readonly _onDidChangeChatSessionItems = this._register(new Emitter<void>());
@@ -23,20 +21,15 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	private readonly _onDidCommitChatSessionItem = this._register(new Emitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>());
 	public readonly onDidCommitChatSessionItem: Event<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }> = this._onDidCommitChatSessionItem.event;
-	private readonly _terminalIntegration: ICopilotBundledCLITerminalIntegration;
 	constructor(
 		@ICopilotCLISessionService private readonly copilotcliSessionService: ICopilotCLISessionService,
-		@IInstantiationService private readonly instantiationService: IInstantiationService,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@ICopilotCLITerminalIntegration private readonly terminalIntegration: ICopilotCLITerminalIntegration,
 	) {
 		super();
-
+		this._register(this.terminalIntegration);
 		this._register(this.copilotcliSessionService.onDidChangeSessions(() => {
 			this.refresh();
 		}));
-
-		const cliIntegration = this.configurationService.getConfig(ConfigKey.Internal.CopilotCLIKind);
-		this._terminalIntegration = cliIntegration === 'bundled' ? this.instantiationService.createInstance(CopilotBundledCLITerminalIntegration) : (cliIntegration === 'node' ? this.instantiationService.createInstance(CopilotExternalCLINodeTerminalIntegration) : this.instantiationService.createInstance(CopilotExternalCLIScriptsTerminalIntegration));
 	}
 
 	public refresh(): void {
@@ -65,59 +58,13 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 	public async createCopilotCLITerminal(): Promise<void> {
 		// TODO@rebornix should be set by CLI
 		const terminalName = process.env.COPILOTCLI_TERMINAL_TITLE || 'Copilot CLI';
-		await this.createAndExecuteInTerminal(terminalName, 'copilot');
+		await this.terminalIntegration.openTerminal(terminalName);
 	}
 
 	public async resumeCopilotCLISessionInTerminal(sessionItem: vscode.ChatSessionItem): Promise<void> {
 		const terminalName = sessionItem.label || sessionItem.id;
-		const command = `copilot --resume ${sessionItem.id}`;
-		await this.createAndExecuteInTerminal(terminalName, command);
-	}
-
-
-	private async createAndExecuteInTerminal(terminalName: string, command: string): Promise<void> {
-		const existingTerminal = vscode.window.terminals.find(t => t.name === terminalName);
-		if (existingTerminal) {
-			existingTerminal.show();
-			return;
-		}
-
-
-		const terminal = await this._terminalIntegration.createTerminal({
-			name: terminalName,
-			iconPath: new vscode.ThemeIcon('terminal'),
-			location: { viewColumn: vscode.ViewColumn.Active }
-		});
-
-		// Wait for shell integration to be available
-		const shellIntegrationTimeout = 3000;
-		let shellIntegrationAvailable = false;
-
-		const integrationPromise = new Promise<void>((resolve) => {
-			const disposable = vscode.window.onDidChangeTerminalShellIntegration(e => {
-				if (e.terminal === terminal && e.shellIntegration) {
-					shellIntegrationAvailable = true;
-					disposable.dispose();
-					resolve();
-				}
-			});
-
-			setTimeout(() => {
-				disposable.dispose();
-				resolve();
-			}, shellIntegrationTimeout);
-		});
-
-		terminal.show();
-		await integrationPromise;
-
-		if (shellIntegrationAvailable && terminal.shellIntegration) {
-			// TODO@rebornix fix in VS Code
-			await new Promise(resolve => setTimeout(resolve, 500)); // Wait a bit to ensure the terminal is ready
-			terminal.shellIntegration.executeCommand('copilot');
-		} else {
-			terminal.sendText(command);
-		}
+		const cliArgs = ['--resume', sessionItem.id];
+		await this.terminalIntegration.openTerminal(terminalName, cliArgs);
 	}
 }
 
@@ -131,7 +78,7 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 	async provideChatSessionContent(copilotcliSessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
 		const existingSession = copilotcliSessionId && await this.sessionService.getSession(copilotcliSessionId, token);
 		const sdkSession = existingSession ? existingSession.sdkSession : undefined;
-		const chatMessages = sdkSession?.chatMessages || [];
+		const chatMessages = sdkSession ? await sdkSession.getChatMessages() : [];
 		const events = parseChatMessagesToEvents(chatMessages);
 
 		const history = existingSession ? buildChatHistoryFromEvents(events) : [];
@@ -231,7 +178,8 @@ export class CopilotCLIChatSessionParticipant {
 
 		const allRefsTexts: string[] = [];
 		const prompt = request.prompt;
-		request.references.forEach(ref => {
+		// TODO@rebornix: filter out implicit references for now. Will need to figure out how to support `<reminder>` without poluting user prompt
+		request.references.filter(ref => !ref.id.startsWith('vscode.prompt.instructions')).forEach(ref => {
 			const valueText = URI.isUri(ref.value) ?
 				ref.value.fsPath :
 				isLocation(ref.value) ?
@@ -266,15 +214,16 @@ export function registerCLIChatCommands(copilotcliSessionItemProvider: CopilotCL
 	}));
 	disposableStore.add(vscode.commands.registerCommand('github.copilot.cli.sessions.delete', async (sessionItem?: vscode.ChatSessionItem) => {
 		if (sessionItem?.id) {
+			const deleteLabel = l10n.t('Delete');
 			const result = await vscode.window.showWarningMessage(
-				`Are you sure you want to delete the session?`,
+				l10n.t('Are you sure you want to delete the session?'),
 				{ modal: true },
-				'Delete',
-				'Cancel'
+				deleteLabel
 			);
 
-			if (result === 'Delete') {
+			if (result === deleteLabel) {
 				await copilotCLISessionService.deleteSession(sessionItem.id);
+				copilotcliSessionItemProvider.refresh();
 			}
 		}
 	}));

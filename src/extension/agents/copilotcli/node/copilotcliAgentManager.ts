@@ -13,11 +13,11 @@ import { IWorkspaceService } from '../../../../platform/workspace/common/workspa
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelTextPart } from '../../../../vscodeTypes';
+import { ChatResponseThinkingProgressPart, LanguageModelTextPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ICopilotCLISessionService } from './copilotcliSessionService';
-import { createCopilotCLIToolInvocation, PermissionRequest } from './copilotcliToolInvocationFormatter';
+import { CopilotCLIToolNames, createCopilotCLIToolInvocation, PermissionRequest } from './copilotcliToolInvocationFormatter';
 import { ensureNodePtyShim } from './nodePtyShim';
 
 export class CopilotCLIAgentManager extends Disposable {
@@ -187,6 +187,15 @@ export class CopilotCLISession extends Disposable {
 			}
 			case 'tool_result': {
 				const toolCallId = event.toolCallId;
+
+				if (event.toolName === CopilotCLIToolNames.Think) {
+					const sessionLog = event.result.sessionLog;
+					if (sessionLog && typeof sessionLog === 'string') {
+						stream.push(new ChatResponseThinkingProgressPart(sessionLog));
+					}
+					break;
+				}
+
 				let invocation = toolCallId ? this._pendingToolInvocations.get(toolCallId) : undefined;
 
 				if (!invocation) {
@@ -200,6 +209,9 @@ export class CopilotCLISession extends Disposable {
 				} else {
 					invocation.isConfirmed = event.result.resultType !== 'rejected' && event.result.resultType !== 'denied';
 					invocation.isError = event.result.resultType === 'failure';
+					if (invocation.isError && event.result.error) {
+						invocation.invocationMessage = event.result.error;
+					}
 				}
 
 				if (invocation) {

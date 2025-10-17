@@ -5,17 +5,41 @@
 
 import type { SDKEvent } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import type { ExtendedChatResponsePart } from 'vscode';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString } from '../../../../vscodeTypes';
+import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString } from '../../../../vscodeTypes';
+
+type ChatCompletionRole = 'system' | 'user' | 'assistant' | 'tool' | (string & {});
+
+interface ChatCompletionMessageFunctionCall {
+	name: string;
+	arguments?: string;
+}
+
+interface ChatCompletionMessageToolCallLike {
+	id?: string;
+	type?: string;
+	function?: ChatCompletionMessageFunctionCall;
+}
+
+interface ChatCompletionMessageParamLike {
+	role: ChatCompletionRole;
+	content?: unknown;
+	tool_calls?: readonly ChatCompletionMessageToolCallLike[];
+	tool_call_id?: string;
+}
+
+function isUserOrAssistantRole(role: ChatCompletionRole): role is 'user' | 'assistant' {
+	return role === 'user' || role === 'assistant';
+}
 
 /**
  * CopilotCLI tool names
  */
-const enum CopilotCLIToolNames {
+export const enum CopilotCLIToolNames {
 	StrReplaceEditor = 'str_replace_editor',
-	Bash = 'bash'
+	Bash = 'bash',
+	Think = 'think'
 }
 
 interface StrReplaceEditorArgs {
@@ -50,12 +74,12 @@ function resolveContentToString(content: unknown): string {
  * Parse chat messages from the CopilotCLI SDK into SDKEvent format
  * Used when loading session history from disk
  */
-export function parseChatMessagesToEvents(chatMessages: readonly ChatCompletionMessageParam[]): SDKEvent[] {
+export function parseChatMessagesToEvents(chatMessages: readonly ChatCompletionMessageParamLike[]): SDKEvent[] {
 	const events: SDKEvent[] = [];
 
 	for (const msg of chatMessages) {
 		// Handle regular messages (user or assistant)
-		if (msg.role === 'user' || msg.role === 'assistant') {
+		if (isUserOrAssistantRole(msg.role)) {
 			if (msg.content) {
 				events.push({
 					type: 'message' as const,
@@ -103,7 +127,11 @@ export function parseChatMessagesToEvents(chatMessages: readonly ChatCompletionM
 
 export function stripReminders(text: string): string {
 	// Remove any <reminder> ... </reminder> blocks, including newlines
-	return text.replace(/<reminder>[\s\S]*?<\/reminder>\s*/g, '').trim();
+	// Also remove <current_datetime> ... </current_datetime> blocks
+	return text
+		.replace(/<reminder>[\s\S]*?<\/reminder>\s*/g, '')
+		.replace(/<current_datetime>[\s\S]*?<\/current_datetime>\s*/g, '')
+		.trim();
 }
 
 /**
@@ -145,13 +173,22 @@ export function buildChatHistoryFromEvents(events: readonly SDKEvent[]): (ChatRe
 				currentResponseParts.push(toolInvocation);
 			}
 		} else if (event.type === 'tool_result') {
-			// Update the pending tool invocation with the result
-			if (event.toolCallId) {
-				const invocation = pendingToolInvocations.get(event.toolCallId);
-				if (invocation) {
-					invocation.isConfirmed = event.result.resultType !== 'rejected' && event.result.resultType !== 'denied';
-					invocation.isError = event.result.resultType === 'failure';
-					pendingToolInvocations.delete(event.toolCallId);
+			if (event.toolName === CopilotCLIToolNames.Think) {
+				const sessionLog = event.result.sessionLog;
+				if (sessionLog && typeof sessionLog === 'string') {
+					currentResponseParts.push(
+						new ChatResponseThinkingProgressPart(sessionLog)
+					);
+				}
+			} else {
+				// Update the pending tool invocation with the result
+				if (event.toolCallId) {
+					const invocation = pendingToolInvocations.get(event.toolCallId);
+					if (invocation) {
+						invocation.isConfirmed = event.result.resultType !== 'rejected' && event.result.resultType !== 'denied';
+						invocation.isError = event.result.resultType === 'failure';
+						pendingToolInvocations.delete(event.toolCallId);
+					}
 				}
 			}
 			// Tool results themselves are not displayed - they update the invocation state

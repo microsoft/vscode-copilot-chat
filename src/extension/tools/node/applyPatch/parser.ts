@@ -392,21 +392,16 @@ export class Parser {
 				}
 			}
 			this.fuzz += match.fuzz;
-
 			const srcIndentStyle = guessIndentation(
 				nextSection.chunks.flatMap(c => c.insLines).concat(nextSection.nextChunkContext),
 				targetIndentStyle.tabSize,
 				targetIndentStyle.insertSpaces
 			);
 
-			let additionalIndentation = '';
-			if (match.fuzz & Fuzz.IgnoredWhitespace) {
-				const matchedLineIndent = computeIndentLevel2(fileLines[match.line], targetIndentStyle.tabSize);
-				const contextLineIndent = computeIndentLevel2(nextSection.nextChunkContext[0], targetIndentStyle.tabSize);
-				if (matchedLineIndent > contextLineIndent) {
-					additionalIndentation = getIndentationChar(targetIndentStyle).repeat(matchedLineIndent - contextLineIndent);
-				}
-			}
+			const matchedLineIndent = computeIndentLevel2(fileLines[match.line], targetIndentStyle.tabSize);
+			const srcLineIndent = nextSection.nextChunkContext && nextSection.nextChunkContext.length > 0 ?
+				computeIndentLevel2(replace_explicit_tabs(replace_explicit_nl(nextSection.nextChunkContext[0])), srcIndentStyle.tabSize) : 0;
+			const additionalIndentation = getIndentationChar(targetIndentStyle).repeat(Math.max(0, matchedLineIndent - srcLineIndent));
 
 			for (const ch of nextSection.chunks) {
 				ch.origIndex += match.line;

@@ -9,7 +9,7 @@ import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { makeGitHubAPIRequest, makeSearchGraphQLRequest, PullRequestSearchItem, SessionInfo } from './githubAPI';
+import { addPullRequestCommentGraphQLRequest, makeGitHubAPIRequest, makeSearchGraphQLRequest, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
 
 export type IGetRepositoryInfoResponseData = Endpoints["GET /repos/{owner}/{repo}"]["response"]["data"];
 
@@ -24,6 +24,34 @@ export type GithubRepositoryItem = {
 	html_url: string;
 	type: 'file' | 'dir';
 };
+
+export interface JobInfo {
+	job_id: string;
+	session_id: string;
+	problem_statement: string;
+	content_filter_mode?: string;
+	status: string;
+	result?: string;
+	actor: {
+		id: number;
+		login: string;
+	};
+	created_at: string;
+	updated_at: string;
+	pull_request: {
+		id: number;
+		number: number;
+	};
+	workflow_run?: {
+		id: number;
+	};
+	error?: {
+		message: string;
+	};
+	event_type?: string;
+	event_url?: string;
+	event_identifiers?: string[];
+}
 
 export interface IGithubRepositoryService {
 
@@ -76,6 +104,30 @@ export interface IOctoKitPullRequestInfo {
 	};
 }
 
+export interface RemoteAgentJobResponse {
+	job_id: string;
+	session_id: string;
+	actor: {
+		id: number;
+		login: string;
+	};
+	created_at: string;
+	updated_at: string;
+}
+
+export interface RemoteAgentJobPayload {
+	problem_statement: string;
+	event_type: string;
+	pull_request?: {
+		title?: string;
+		body_placeholder?: string;
+		body_suffix?: string;
+		base_ref?: string;
+		head_ref?: string;
+	};
+	run_name?: string;
+}
+
 export interface IOctoKitService {
 
 	_serviceBrand: undefined;
@@ -105,6 +157,31 @@ export interface IOctoKitService {
 	 * Returns the logs for a specific Copilot session.
 	 */
 	getSessionLogs(sessionId: string): Promise<string>;
+
+	/**
+	 * Returns the information for a specific Copilot session.
+	 */
+	getSessionInfo(sessionId: string): Promise<SessionInfo>;
+
+	/**
+	 * Posts a new Copilot agent job.
+	 */
+	postCopilotAgentJob(
+		owner: string,
+		name: string,
+		apiVersion: string,
+		payload: RemoteAgentJobPayload,
+	): Promise<RemoteAgentJobResponse>;
+
+	/**
+	 * Gets a job by its job ID.
+	 */
+	getJobByJobId(owner: string, repo: string, jobId: string, userAgent: string): Promise<JobInfo>;
+
+	/**
+	 * Adds a comment to a pull request.
+	 */
+	addPullRequestComment(pullRequestId: string, commentBody: string): Promise<PullRequestComment | null>;
 }
 
 /**
@@ -144,5 +221,21 @@ export class BaseOctoKitService {
 
 	protected async getSessionLogsWithToken(sessionId: string, token: string) {
 		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/sessions/${sessionId}/logs`, 'GET', token, undefined, undefined, 'text');
+	}
+
+	protected async getSessionInfoWithToken(sessionId: string, token: string) {
+		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/sessions/${sessionId}`, 'GET', token, undefined, undefined, 'text');
+	}
+
+	protected async postCopilotAgentJobWithToken(owner: string, name: string, apiVersion: string, userAgent: string, payload: RemoteAgentJobPayload, token: string): Promise<RemoteAgentJobResponse> {
+		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/${apiVersion}/jobs/${owner}/${name}`, 'POST', token, payload, undefined, undefined, userAgent);
+	}
+
+	protected async getJobByJobIdWithToken(owner: string, repo: string, jobId: string, userAgent: string, token: string): Promise<JobInfo> {
+		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/v1/jobs/${owner}/${repo}/${jobId}`, 'GET', token, undefined, undefined, undefined, userAgent);
+	}
+
+	protected async addPullRequestCommentWithToken(pullRequestId: string, commentBody: string, token: string): Promise<PullRequestComment | null> {
+		return addPullRequestCommentGraphQLRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, pullRequestId, commentBody);
 	}
 }

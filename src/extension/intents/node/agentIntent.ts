@@ -117,7 +117,6 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 
 		if (model.family === 'gpt-5-codex') {
 			allowTools[ToolName.CoreManageTodoList] = false;
-			allowTools[ToolName.Think] = false;
 		}
 
 		allowTools[ToolName.EditFilesPlaceholder] = false;

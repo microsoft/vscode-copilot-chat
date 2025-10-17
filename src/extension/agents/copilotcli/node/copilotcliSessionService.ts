@@ -76,8 +76,8 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 				// @github/copilot has hardcoded: import{spawn}from"node-pty"
 				await ensureNodePtyShim(this.extensionContext.extensionPath, this.envService.appRoot);
 
-				const { SessionManager } = await import('@github/copilot/sdk');
-				this._sessionManager = new SessionManager({
+				const { internal } = await import('@github/copilot/sdk');
+				this._sessionManager = new internal.CLISessionManager({
 					logger: {
 						isDebug: () => false,
 						debug: (msg: string) => this.logService.debug(msg),
@@ -154,6 +154,10 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 		const sessionManager = await this.getSessionManager();
 
 		if (sessionId) {
+			if (this._sessions.has(sessionId)) {
+				return this._sessions.get(sessionId)!.sdkSession;
+			}
+
 			try {
 				const sdkSession = await sessionManager.getSession(sessionId);
 
@@ -209,6 +213,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 			// Clean up local caches
 			this._sessions.delete(sessionId);
 			this._sessionWrappers.deleteAndDispose(sessionId);
+			this._onDidChangeSessions.fire();
 
 			return true;
 		} catch (error) {
@@ -219,7 +224,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 
 	private async _generateSessionLabel(sdkSession: Session, prompt: string | undefined): Promise<string> {
 		try {
-			const chatMessages = sdkSession.chatMessages;
+			const chatMessages = await sdkSession.getChatMessages();
 
 			// Find the first user message
 			const firstUserMessage = chatMessages.find(msg => msg.role === 'user');

@@ -235,7 +235,6 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 		let usage: APIUsage | undefined;
 
 		let hasText = false;
-		let firstTool = true;
 		for await (const chunk of stream) {
 			if (token.isCancellationRequested) {
 				break;
@@ -248,16 +247,11 @@ export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatI
 
 			if (chunk.type === 'content_block_start') {
 				if ('content_block' in chunk && chunk.content_block.type === 'tool_use') {
-					if (hasText && firstTool) {
-						// Flush the linkifier stream otherwise it pauses before the tool call if the last word ends with a punctuation mark.
-						progress.report(new LanguageModelTextPart(' '));
-					}
 					pendingToolCall = {
 						toolId: chunk.content_block.id,
 						name: chunk.content_block.name,
 						jsonInput: ''
 					};
-					firstTool = false;
 				}
 				continue;
 			}

@@ -4,205 +4,48 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { promises as fs } from 'fs';
-import * as vscode from 'vscode';
+import { TerminalOptions, ThemeIcon, ViewColumn, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { ITerminalService } from '../../../platform/terminal/common/terminalService';
+import { createServiceIdentifier } from '../../../util/common/services';
+import { disposableTimeout } from '../../../util/vs/base/common/async';
+import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import * as path from '../../../util/vs/base/common/path';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 
-export interface ICopilotBundledCLITerminalIntegration {
-	createTerminal(options: vscode.TerminalOptions): Promise<vscode.Terminal>;
+//@ts-ignore
+import powershellScript from './copilotCLIShim.ps1';
+
+const COPILOT_CLI_SHIM_JS = 'copilotCLIShim.js';
+const COPILOT_CLI_COMMAND = 'copilot';
+
+export interface ICopilotCLITerminalIntegration extends Disposable {
+	readonly _serviceBrand: undefined;
+	openTerminal(name: string, cliArgs?: string[]): Promise<void>;
 }
 
-export class CopilotBundledCLITerminalIntegration implements ICopilotBundledCLITerminalIntegration {
-	private readonly completedSetup: Promise<void>;
+export const ICopilotCLITerminalIntegration = createServiceIdentifier<ICopilotCLITerminalIntegration>('ICopilotCLITerminalIntegration');
+
+export class CopilotCLITerminalIntegration extends Disposable implements ICopilotCLITerminalIntegration {
+	declare _serviceBrand: undefined;
+	private readonly initialization: Promise<void>;
+	private shellScriptPath: string | undefined;
+	private powershellScriptPath: string | undefined;
 	constructor(
 		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
+		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ITerminalService private readonly terminalService: ITerminalService,
-		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
-
-	) {
-		this.completedSetup = this.setupCopilotCLIPath();
-	}
-
-	private async setupCopilotCLIPath(): Promise<void> {
-		const enabled = this.configurationService.getConfig(ConfigKey.Internal.CopilotCLIEnabled);
-		if (!enabled) {
-			return;
-		}
-		const globalStorageUri = this.context.globalStorageUri;
-		if (!globalStorageUri) {
-			// globalStorageUri is not available in extension tests
-			return;
-		}
-
-		const storageLocation = path.join(globalStorageUri.fsPath, 'copilotCli');
-		const copilotPackageIndexJs = path.join(this.context.extensionPath, 'node_modules', '@github', 'copilot', 'index.js');
-
-		try {
-			await fs.access(copilotPackageIndexJs);
-			await fs.mkdir(storageLocation, { recursive: true });
-
-			// Note: node-pty shim is created in agent manager before first SDK import
-			// This allows @github/copilot to import node-pty before extension activation
-
-			if (process.platform === 'win32') {
-				// Windows: Create batch file
-				const batPath = path.join(storageLocation, 'copilot.bat');
-				const batScript = `@echo off\nnode "${copilotPackageIndexJs}" %*`;
-				await fs.writeFile(batPath, batScript);
-			} else {
-				// Unix: Create shell script
-				const shPath = path.join(storageLocation, 'copilot');
-				const shScript = `#!/bin/sh\nnode "${copilotPackageIndexJs}" "$@"`;
-				await fs.writeFile(shPath, shScript);
-				await fs.chmod(shPath, 0o755);
-			}
-
-			// Contribute the storage location to PATH
-			this.terminalService.contributePath('copilot-cli', storageLocation, 'Enables use of the `copilot` command in the terminal.');
-		} catch {
-			// @github/copilot package not found, no need to add to PATH
-		}
-	}
-
-	public async createTerminal(options: vscode.TerminalOptions) {
-		const enabled = this.configurationService.getConfig(ConfigKey.Internal.CopilotCLIEnabled);
-		if (enabled) {
-			await this.completedSetup;
-			const session = await this._authenticationService.getAnyGitHubSession();
-			if (session) {
-				this.context.environmentVariableCollection.replace('GH_TOKEN', session.accessToken);
-			}
-		}
-
-		return vscode.window.createTerminal(options);
-	}
-}
-
-// * Note that the possible values for shells are currently defined as any of the following (from vscode.d.ts):
-// * 'bash', 'cmd', 'csh', 'fish', 'gitbash', 'julia', 'ksh', 'node', 'nu', 'pwsh', 'python',
-// * 'sh', 'wsl', 'zsh'.
-// Here w have a list of the shells and default is `bash`
-// This is a mapping of the files that need to be copied for each shell into the storage folder with the name of the shell.
-const scriptLocations = [
-	{
-		shell: 'pwsh',
-		files: {
-			'copilot.ps1': 'copilot.ps1',
-			'copilot.pwsh': 'copilot.pwsh',
-			'copilot.cmd': 'copilot.cmd'
-		}
-	},
-	{
-		shell: 'fish',
-		files: {
-			'copilot': 'copilot.fish'
-		}
-	},
-	{
-		shell: 'cmd',
-		files: {
-			'copilot.cmd': 'copilot.cmd',
-			'copilot.ps1': 'copilot.ps1'
-		}
-	},
-	{
-		shell: 'nu',
-		files: {
-			'copilot': 'copilot.nu'
-		}
-	},
-	{
-		shell: 'csh',
-		files: {
-			'copilot': 'copilot.csh'
-		}
-	},
-	{
-		shell: 'bash',
-		files: {
-			'copilot': 'copilot.sh'
-		}
-	},
-];
-
-
-export class CopilotExternalCLINodeTerminalIntegration implements ICopilotBundledCLITerminalIntegration {
-	private readonly completedSetup: Promise<void>;
-	constructor(
-		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
-		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
-	) {
-		this.completedSetup = this.setupCopilotCLIPath();
-	}
-
-	private async setupCopilotCLIPath(): Promise<void> {
-		const enabled = this.configurationService.getConfig(ConfigKey.Internal.CopilotCLIEnabled);
-		if (!enabled) {
-			return;
-		}
-		const globalStorageUri = this.context.globalStorageUri;
-		if (!globalStorageUri) {
-			// globalStorageUri is not available in extension tests
-			return;
-		}
-
-		const storageLocation = path.join(globalStorageUri.fsPath, 'copilotCli', 'node');
-		const scriptLocation = path.join(this.context.extensionPath, 'resources', 'scripts');
-
-		await fs.mkdir(storageLocation, { recursive: true });
-
-		// Copy the scripts to the storage location
-		const sourcePath = path.join(scriptLocation, 'copilot');
-		const targetPath = path.join(storageLocation, 'copilot');
-		await fs.copyFile(sourcePath, targetPath);
-		if (process.platform !== 'win32') {
-			await fs.chmod(targetPath, 0o755);
-		}
-	}
-
-	public async createTerminal(options: vscode.TerminalOptions) {
-		const enabled = this.configurationService.getConfig(ConfigKey.Internal.CopilotCLIEnabled);
-		if (enabled) {
-			await this.completedSetup;
-			const session = await this._authenticationService.getAnyGitHubSession();
-			if (session) {
-				this.context.environmentVariableCollection.replace('GH_TOKEN', session.accessToken);
-			}
-
-			const globalStorageUri = this.context.globalStorageUri;
-			if (globalStorageUri) {
-				// Figure out the default shell (look at the settings for default profile)
-				// If extensions create terminals, then this might not work as expected as the shell might be different
-				// from the default one.
-				// However this is a best effort attempt.
-				// If we cannot figure out the shell, we will add bash scripts to the PATH
-				const storageLocation = path.join(globalStorageUri.fsPath, 'copilotCli', 'node');
-				this.context.environmentVariableCollection.prepend('PATH', `${storageLocation}${path.delimiter}`);
-			}
-		}
-
-		return vscode.window.createTerminal(options);
-	}
-}
-
-export class CopilotExternalCLIScriptsTerminalIntegration implements ICopilotBundledCLITerminalIntegration {
-	private readonly completedSetup: Promise<void>;
-	constructor(
-		@IVSCodeExtensionContext private readonly context: IVSCodeExtensionContext,
-		@IAuthenticationService private readonly _authenticationService: IAuthenticationService,
-		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IEnvService private readonly envService: IEnvService,
 	) {
-		this.completedSetup = this.setupCopilotCLIPath();
+		super();
+		void this.updateGHTokenInTerminalEnvVars().catch(console.error);
+		this.initialization = this.initialize();
 	}
 
-	private async setupCopilotCLIPath(): Promise<void> {
+	private async initialize(): Promise<void> {
 		const enabled = this.configurationService.getConfig(ConfigKey.Internal.CopilotCLIEnabled);
 		if (!enabled) {
 			return;
@@ -214,61 +57,221 @@ export class CopilotExternalCLIScriptsTerminalIntegration implements ICopilotBun
 		}
 
 		const storageLocation = path.join(globalStorageUri.fsPath, 'copilotCli');
-		const scriptLocation = path.join(this.context.extensionPath, 'resources', 'scripts');
+		this.terminalService.contributePath('copilot-cli', storageLocation, 'Enables use of the `copilot` command in the terminal.', true);
 
 		await fs.mkdir(storageLocation, { recursive: true });
-		await Promise.all(scriptLocations.map(scripts => fs.mkdir(path.join(storageLocation, scripts.shell), { recursive: true })));
 
-		// Copy the scripts to the storage location
-		await Promise.all(scriptLocations.map(async scripts => {
-			await Promise.all(Object.entries(scripts.files).map(async ([targetFile, sourceFile]) => {
-				const sourcePath = path.join(scriptLocation, sourceFile);
-				const targetPath = path.join(storageLocation, scripts.shell, targetFile);
-				await fs.copyFile(sourcePath, targetPath);
-				if (process.platform !== 'win32') {
-					await fs.chmod(targetPath, 0o755);
-				}
-			}));
-		}));
+		if (process.platform === 'win32') {
+			this.powershellScriptPath = path.join(storageLocation, `${COPILOT_CLI_COMMAND}.ps1`);
+			await fs.writeFile(this.powershellScriptPath, powershellScript);
+			const copilotPowershellScript = `@echo off
+powershell -ExecutionPolicy Bypass -File "${this.powershellScriptPath}" %*
+`;
+			this.shellScriptPath = path.join(storageLocation, `${COPILOT_CLI_COMMAND}.bat`);
+			await fs.writeFile(this.shellScriptPath, copilotPowershellScript);
+		} else {
+			const copilotShellScript = `#!/bin/sh
+unset NODE_OPTIONS
+ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPILOT_CLI_SHIM_JS)}" "$@"`;
+			await fs.copyFile(path.join(__dirname, COPILOT_CLI_SHIM_JS), path.join(storageLocation, COPILOT_CLI_SHIM_JS));
+			this.shellScriptPath = path.join(storageLocation, COPILOT_CLI_COMMAND);
+			this.powershellScriptPath = path.join(storageLocation, `copilotCLIShim.ps1`);
+			await fs.writeFile(this.shellScriptPath, copilotShellScript);
+			await fs.writeFile(this.powershellScriptPath, powershellScript);
+			await fs.chmod(this.shellScriptPath, 0o750);
+		}
 	}
 
-	public async createTerminal(options: vscode.TerminalOptions) {
+	private async updateGHTokenInTerminalEnvVars() {
 		const enabled = this.configurationService.getConfig(ConfigKey.Internal.CopilotCLIEnabled);
 		if (enabled) {
-			await this.completedSetup;
 			const session = await this._authenticationService.getAnyGitHubSession();
 			if (session) {
 				this.context.environmentVariableCollection.replace('GH_TOKEN', session.accessToken);
 			}
+		}
+	}
 
-			const globalStorageUri = this.context.globalStorageUri;
-			if (globalStorageUri) {
-				// Figure out the default shell (look at the settings for default profile)
-				// If extensions create terminals, then this might not work as expected as the shell might be different
-				// from the default one.
-				// However this is a best effort attempt.
-				// If we cannot figure out the shell, we will add bash scripts to the PATH
-				const storageLocation = path.join(globalStorageUri.fsPath, 'copilotCli', this.getDefaultShell());
-				this.context.environmentVariableCollection.prepend('PATH', `${storageLocation}${path.delimiter}`);
+	public async openTerminal(name: string, cliArgs: string[] = []) {
+		await this.updateGHTokenInTerminalEnvVars();
+		await this.initialization;
+
+		const shellPathAndArgs = await this.getShellInfo(cliArgs);
+		if (shellPathAndArgs) {
+			const options = getCommonTerminalOptions(name);
+			options.shellPath = shellPathAndArgs.shellPath;
+			options.shellArgs = shellPathAndArgs.shellArgs;
+			options.iconPath = shellPathAndArgs.iconPath ?? options.iconPath;
+			const terminal = this.terminalService.createTerminal(options);
+			terminal.show();
+		} else {
+			await this.openTerminalAndSendCommand(name, cliArgs);
+		}
+	}
+
+	private async openTerminalAndSendCommand(name: string, cliArgs: string[] = []) {
+		const options = getCommonTerminalOptions(name);
+		const terminal = this._register(this.terminalService.createTerminal(options));
+		terminal.show();
+
+		// Wait for shell integration to be available
+		const shellIntegrationTimeout = 3000;
+		let shellIntegrationAvailable = false;
+		const integrationPromise = new Promise<void>((resolve) => {
+			const disposable = this._register(this.terminalService.onDidChangeTerminalShellIntegration(e => {
+				if (e.terminal === terminal && e.shellIntegration) {
+					shellIntegrationAvailable = true;
+					disposable.dispose();
+					resolve();
+				}
+			}));
+
+			this._register(disposableTimeout(() => {
+				disposable.dispose();
+				resolve();
+			}, shellIntegrationTimeout));
+		});
+
+		await integrationPromise;
+
+		const command = `${COPILOT_CLI_COMMAND} ${cliArgs.join(' ')}`;
+		if (shellIntegrationAvailable && terminal.shellIntegration) {
+			// TODO@rebornix fix in VS Code
+			await new Promise<void>(resolve => this._register(disposableTimeout(resolve, 500))); // Wait a bit to ensure the terminal is ready
+			terminal.shellIntegration.executeCommand(command);
+		} else {
+			terminal.sendText(command);
+		}
+	}
+
+	private async getShellInfo(cliArgs: string[]): Promise<{ shellPath: string; shellArgs: string[]; iconPath?: ThemeIcon } | undefined> {
+		const configPlatform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux';
+		const defaultProfile = this.getDefaultShellProfile();
+		if (!defaultProfile) {
+			return;
+		}
+		const profiles = workspace.getConfiguration('terminal').get<Record<string, { path: string; args?: string[]; icon?: string }>>(`integrated.profiles.${configPlatform}`);
+		const profile = profiles ? profiles[defaultProfile] : undefined;
+		if (!profile) {
+			return;
+		}
+		let iconPath: ThemeIcon | undefined = undefined;
+		try {
+			if (profile.icon) {
+				iconPath = new ThemeIcon(profile.icon);
+			}
+		} catch {
+			//
+		}
+		const shellArgs = Array.isArray(profile.args) ? profile.args : [];
+		const paths = profile.path ? (Array.isArray(profile.path) ? profile.path : [profile.path]) : [];
+		const shellPath = (await getFirstAvailablePath(paths)) || this.envService.shell;
+		if (defaultProfile === 'zsh' && this.shellScriptPath) {
+			return {
+				shellPath: shellPath || 'zsh',
+				shellArgs: [`-ci${shellArgs.includes('-l') ? 'l' : ''}`, quoteArgsForShell(this.shellScriptPath, cliArgs)],
+				iconPath
+			};
+		} else if (defaultProfile === 'bash' && this.shellScriptPath) {
+			return {
+				shellPath: shellPath || 'bash',
+				shellArgs: [`-${shellArgs.includes('-l') ? 'l' : ''}ic`, quoteArgsForShell(this.shellScriptPath, cliArgs)],
+				iconPath
+			};
+		} else if (defaultProfile === 'pwsh' && this.powershellScriptPath && configPlatform !== 'windows') {
+			return {
+				shellPath: shellPath || 'pwsh',
+				shellArgs: ['-File', this.powershellScriptPath, ...cliArgs],
+				iconPath
+			};
+		} else if (defaultProfile === 'PowerShell' && this.powershellScriptPath && configPlatform === 'windows' && shellPath) {
+			return {
+				shellPath,
+				shellArgs: ['-File', this.powershellScriptPath, ...cliArgs],
+				iconPath
+			};
+		} else if (defaultProfile === 'Command Prompt' && this.shellScriptPath && configPlatform === 'windows') {
+			return {
+				shellPath: shellPath || 'cmd.exe',
+				shellArgs: ['/c', this.shellScriptPath, ...cliArgs],
+				iconPath
+			};
+		}
+	}
+
+	private getDefaultShellProfile(): string | undefined {
+		const configPlatform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux';
+		const defaultProfile = workspace.getConfiguration('terminal').get<string | undefined>(`integrated.defaultProfile.${configPlatform}`);
+		if (defaultProfile) {
+			return defaultProfile === 'Windows PowerShell' ? 'PowerShell' : defaultProfile;
+		}
+		const shell = this.envService.shell;
+		switch (configPlatform) {
+			case 'osx':
+			case 'linux': {
+				return shell.includes('zsh') ? 'zsh' : shell.includes('bash') ? 'bash' : undefined;
+			}
+			case 'windows': {
+				return shell.includes('pwsh') ? 'PowerShell' : shell.includes('powershell') ? 'PowerShell' : undefined;
 			}
 		}
-
-		return vscode.window.createTerminal(options);
 	}
+}
 
-	private getDefaultShell(): string {
-		const defaultPlatformShell = process.platform === 'win32' ? 'pwsh' : 'bash';
-		const platform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux';
-		const setting = `integrated.defaultProfile.${platform}`;
-		const shell = vscode.workspace.getConfiguration('terminal').get<string>(setting) ?? this.envService.shell ?? (process.platform === 'win32' ? 'pwsh' : 'bash');
-
-		if (scriptLocations.some(s => s.shell === shell)) {
-			return shell;
+function quoteArgsForShell(shellScript: string, args: string[]): string {
+	const escapeArg = (arg: string): string => {
+		// If argument contains spaces, quotes, or special characters, wrap in quotes and escape internal quotes
+		if (/[\s"'$`\\|&;()<>]/.test(arg)) {
+			return `"${arg.replace(/["\\]/g, '\\$&')}"`;
 		}
-		if (scriptLocations.some(s => s.shell === this.envService.shell)) {
-			return shell;
-		}
+		return arg;
+	};
 
-		return defaultPlatformShell;
+	const escapedArgs = args.map(escapeArg);
+	return `${escapeArg(shellScript)} ${escapedArgs.join(' ')}`;
+}
+
+function getCommonTerminalOptions(name: string): TerminalOptions {
+	return {
+		name,
+		iconPath: new ThemeIcon('terminal'),
+		location: { viewColumn: ViewColumn.Active }
+	};
+}
+
+const pathValidations = new Map<string, boolean>();
+async function getFirstAvailablePath(paths: string[]): Promise<string | undefined> {
+	for (const p of paths) {
+		// Sometimes we can have paths like `${env:HOME}\Systemycmd.exe` which need to be resolved
+		const resolvedPath = resolveEnvVariables(p);
+		if (pathValidations.get(resolvedPath) === true) {
+			return resolvedPath;
+		}
+		if (pathValidations.get(resolvedPath) === false) {
+			continue;
+		}
+		// Possible its just a command name without path
+		if (path.basename(p) === p) {
+			return p;
+		}
+		try {
+			const stat = await fs.stat(resolvedPath);
+			if (stat.isFile()) {
+				pathValidations.set(resolvedPath, true);
+				return resolvedPath;
+			}
+			pathValidations.set(resolvedPath, false);
+		} catch {
+			// Ignore errors and continue checking other paths
+			pathValidations.set(resolvedPath, false);
+		}
 	}
+	return undefined;
+}
+
+function resolveEnvVariables(value: string): string {
+	return value.replace(/\$\{env:([^}]+)\}/g, (match, envVarName) => {
+		const envValue = process.env[envVarName];
+		return envValue !== undefined ? envValue : match;
+	});
 }
