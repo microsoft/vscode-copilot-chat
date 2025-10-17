@@ -12,6 +12,30 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceFileIndex } from '../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
 
+// Create a mapping for the git status enum to put the actual status string in telemetry
+// The enum is a const enum and part of the public git extension API, so the order should stay stable
+const STATUS_TO_STRING: Record<number, string> = {
+	0: 'INDEX_MODIFIED',
+	1: 'INDEX_ADDED',
+	2: 'INDEX_DELETED',
+	3: 'INDEX_RENAMED',
+	4: 'INDEX_COPIED',
+	5: 'MODIFIED',
+	6: 'DELETED',
+	7: 'UNTRACKED',
+	8: 'IGNORED',
+	9: 'INTENT_TO_ADD',
+	10: 'INTENT_TO_RENAME',
+	11: 'TYPE_CHANGED',
+	12: 'ADDED_BY_US',
+	13: 'ADDED_BY_THEM',
+	14: 'DELETED_BY_US',
+	15: 'DELETED_BY_THEM',
+	16: 'BOTH_ADDED',
+	17: 'BOTH_DELETED',
+	18: 'BOTH_MODIFIED',
+};
+
 // Max telemetry payload size is 1MB, we add shared properties in further code and JSON structure overhead to that
 // so check our diff JSON size against 900KB to be conservative with space
 const MAX_DIFFS_JSON_SIZE = 900 * 1024;
@@ -222,7 +246,7 @@ export class RepoInfoTelemetry {
 					uri: diff.uri.toString(),
 					originalUri: diff.originalUri.toString(),
 					renameUri: diff.renameUri?.toString(),
-					status: diff.status,
+					status: STATUS_TO_STRING[diff.status] ?? `UNKNOWN_${diff.status}`,
 					diff: diff.diff,
 				};
 			});
