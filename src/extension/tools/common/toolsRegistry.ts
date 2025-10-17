@@ -49,13 +49,17 @@ export interface ICopilotTool<T> extends vscode.LanguageModelTool<T> {
 
 	/**
 	 * Optionally get a programmatic override for the LM tool information. This
-	 * can be driven by EXP for example. ⚠️ A tool using an alternative
-	 * definition MUST still accept its default parameters because the
-	 * alternative definition will only be applied within the Copilot extension,
-	 * not other extensions' usages via `vscode.lm.tools`.
+	 * can be driven by EXP for example, or customized based on the current model.
+	 * ⚠️ A tool using an alternative definition MUST still accept its default
+	 * parameters because the alternative definition will only be applied within
+	 * the Copilot extension, not other extensions' usages via `vscode.lm.tools`.
+	 *
+	 * @param modelInfo Optional information about the currently selected language model.
+	 *                  If provided, allows customizing the tool definition per model.
 	 */
-	alternativeDefinition?(): vscode.LanguageModelToolInformation | undefined;
+	alternativeDefinition?(modelInfo?: vscode.LanguageModelChat): vscode.LanguageModelToolInformation | undefined;
 }
+
 
 export interface ICopilotToolCtor {
 	readonly toolName: ToolName;

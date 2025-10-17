@@ -122,7 +122,19 @@ export class SimulationExtHostToolsService extends BaseToolsService implements I
 
 	getEnabledTools(request: ChatRequest, filter?: (tool: LanguageModelToolInformation) => boolean | undefined): LanguageModelToolInformation[] {
 		const packageJsonTools = getPackagejsonToolsForTest();
-		return this.tools.filter(tool => filter?.(tool) ?? (!this._disabledTools.has(getToolName(tool.name)) && packageJsonTools.has(tool.name)));
+		return this.tools
+			.map(tool => {
+				// Apply model-specific alternative if available via alternativeDefinition
+				const owned = this.copilotTools.get(getToolName(tool.name) as ToolName);
+				if (owned?.alternativeDefinition) {
+					const alternative = owned.alternativeDefinition(request.model);
+					if (alternative) {
+						return alternative;
+					}
+				}
+				return tool;
+			})
+			.filter(tool => filter?.(tool) ?? (!this._disabledTools.has(getToolName(tool.name)) && packageJsonTools.has(tool.name)));
 	}
 
 	addTestToolOverride(info: LanguageModelToolInformation, tool: LanguageModelTool<unknown>): void {
