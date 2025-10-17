@@ -72,6 +72,10 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		super();
 	}
 
+	public refresh(): void {
+		this._onDidChangeChatSessionItems.fire();
+	}
+
 	async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
 		if (this.chatSessionItemsPromise) {
 			return this.chatSessionItemsPromise;
