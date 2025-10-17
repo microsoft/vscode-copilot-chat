@@ -20,7 +20,7 @@ export class LanguageModelProxyContrib extends Disposable implements IExtensionC
 	) {
 		super();
 
-		const providerDisposable = new MutableDisposable<vscode.Disposable>();
+		const providerDisposable = this._register(new MutableDisposable<vscode.Disposable>());
 		const updateRegistration = () => {
 			const token = authenticationService.copilotToken;
 			// if (token?.sku === '') { // ??
