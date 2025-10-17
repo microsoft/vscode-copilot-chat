@@ -17,6 +17,7 @@ import { buildChatHistoryFromEvents, parseChatMessagesToEvents, stripReminders }
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 
 // Track model selections per session
+// TODO@rebornix: we should have proper storage for the session model preference (revisit with API)
 const _sessionModel: Map<string, vscode.LanguageModelChatInformation | undefined> = new Map();
 
 /**
