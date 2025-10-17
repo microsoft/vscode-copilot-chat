@@ -88,10 +88,6 @@ export const getAgentTools = (instaService: IInstantiationService, request: vsco
 			if (allowTools[ToolName.ReplaceString] && await modelSupportsMultiReplaceString(model)) {
 				allowTools[ToolName.MultiReplaceString] = true;
 			}
-
-			if (model.family === 'grok-code' && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceStringGrok, experimentationService)) {
-				allowTools[ToolName.MultiReplaceString] = true;
-			}
 		}
 
 		allowTools[ToolName.RunTests] = await testService.hasAnyTests();
