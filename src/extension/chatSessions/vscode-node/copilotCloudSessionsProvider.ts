@@ -14,7 +14,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { UriHandlerPaths, UriHandlers } from '../vscode/chatSessionsUriHandler';
 import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getRepoId, JOBS_API_VERSION, RemoteAgentResult, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
-import { ChatSessionContentBuilder } from './copilotChatSessionContentBuilder';
+import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
 
 type ConfirmationResult = { step: string; accepted: boolean; metadata?: CreatePromptMetadata /* | SomeOtherMetadata */ };
 
