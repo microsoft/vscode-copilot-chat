@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { AgentOptions, SDKEvent, Session } from '@github/copilot/sdk';
+import type { AgentOptions, Session, SessionEvent } from '@github/copilot/sdk';
 import type * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { IEnvService } from '../../../../platform/env/common/envService';
@@ -13,11 +13,11 @@ import { IWorkspaceService } from '../../../../platform/workspace/common/workspa
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseThinkingProgressPart, LanguageModelTextPart } from '../../../../vscodeTypes';
+import { LanguageModelTextPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ICopilotCLISessionService } from './copilotcliSessionService';
-import { CopilotCLIToolNames, createCopilotCLIToolInvocation, PermissionRequest } from './copilotcliToolInvocationFormatter';
+import { PermissionRequest, processToolExecutionComplete, processToolExecutionStart } from './copilotcliToolInvocationFormatter';
 import { ensureNodePtyShim } from './nodePtyShim';
 
 export class CopilotCLIAgentManager extends Disposable {
@@ -86,7 +86,7 @@ export class CopilotCLISession extends Disposable {
 		super.dispose();
 	}
 
-	async *query(prompt: string, options: AgentOptions): AsyncGenerator<SDKEvent> {
+	async *query(prompt: string, options: AgentOptions): AsyncGenerator<SessionEvent> {
 		// Ensure node-pty shim exists before importing SDK
 		// @github/copilot has hardcoded: import{spawn}from"node-pty"
 		await ensureNodePtyShim(this.extensionContext.extensionPath, this.envService.appRoot);
@@ -154,83 +154,66 @@ export class CopilotCLISession extends Disposable {
 		}
 	}
 
+	private _toolNames = new Map<string, string>();
 	private async _processEvent(
-		event: SDKEvent,
+		event: SessionEvent,
 		stream: vscode.ChatResponseStream,
 		toolInvocationToken: vscode.ChatParticipantToolToken
 	): Promise<void> {
 		this.logService.trace(`CopilotCLI Event: ${JSON.stringify(event, null, 2)}`);
 
 		switch (event.type) {
-			case 'thinking':
-				// Progress indication
-				stream.progress(event.content);
+			case 'assistant.turn_start': {
+				this._toolNames.clear();
 				break;
-
-			case 'message':
-				if (event.role === 'assistant') {
-					stream.markdown(event.content);
-				}
+			}
+			case 'assistant.turn_end': {
+				this._toolNames.clear();
 				break;
-
-			case 'tool_use': {
-				const pendingInvocation = createCopilotCLIToolInvocation(
-					event.toolName,
-					event.toolCallId,
-					event.args
-				);
-
-				if (pendingInvocation && event.toolCallId) {
-					this._pendingToolInvocations.set(event.toolCallId, pendingInvocation);
+			}
+			case 'assistant.message': {
+				if (event.data.content.length) {
+					stream.markdown(event.data.content);
 				}
 				break;
 			}
-			case 'tool_result': {
-				const toolCallId = event.toolCallId;
 
-				if (event.toolName === CopilotCLIToolNames.Think) {
-					const sessionLog = event.result.sessionLog;
-					if (sessionLog && typeof sessionLog === 'string') {
-						stream.push(new ChatResponseThinkingProgressPart(sessionLog));
-					}
-					break;
+			case 'tool.execution_start': {
+				const responsepart = processToolExecutionStart(event, this._toolNames, this._pendingToolInvocations);
+				if (responsepart) {
+					stream.push(responsepart);
+					const toolName = this._toolNames.get(event.data.toolCallId) || '<unknown>';
+					this.logService.trace(`Tool ${toolName} (started)`);
 				}
-
-				let invocation = toolCallId ? this._pendingToolInvocations.get(toolCallId) : undefined;
-
-				if (!invocation) {
-					invocation = createCopilotCLIToolInvocation(
-						event.toolName,
-						toolCallId,
-						{}, // We don't have the args in the result event
-						event.result.resultType,
-						event.result.error
-					);
-				} else {
-					invocation.isConfirmed = event.result.resultType !== 'rejected' && event.result.resultType !== 'denied';
-					invocation.isError = event.result.resultType === 'failure';
-					if (invocation.isError && event.result.error) {
-						invocation.invocationMessage = event.result.error;
-					}
-				}
-
-				if (invocation) {
-					stream.push(invocation);
-				}
-
-				if (toolCallId) {
-					this._pendingToolInvocations.delete(toolCallId);
-				}
-
-				this.logService.trace(`Tool ${event.toolName} result: ${event.result.resultType}`);
 				break;
 			}
 
-			case 'error':
-				this.logService.error(`CopilotCLI error: ${event.error.message}`);
-				stream.markdown(`\n\n❌ Error: ${event.error.message}`);
+			case 'tool.execution_complete': {
+				const responsePart = processToolExecutionComplete(event, this._toolNames, this._pendingToolInvocations);
+				if (responsePart) {
+					stream.push(responsePart);
+				}
+
+				const toolName = this._toolNames.get(event.data.toolCallId) || '<unknown>';
+				const success = `success: ${event.data.success}`;
+				const error = event.data.error ? `error: ${event.data.error.code},${event.data.error.message}` : '';
+				const result = event.data.result ? `result: ${event.data.result?.content}` : '';
+				const parts = [success, error, result].filter(part => part.length > 0).join(', ');
+				this.logService.trace(`Tool ${toolName}, ${parts}`);
 				break;
+			}
+
+			case 'session.error': {
+				this.logService.error(`CopilotCLI error: (${event.data.errorType}), ${event.data.message}`);
+				stream.markdown(`\n\n❌ Error: ${event.data.message}`);
+				break;
+			}
 		}
+
+		// case 'thinking':
+		// 	// Progress indication
+		// 	stream.progress(event.content);
+		// 	break;
 	}
 
 	private async requestPermission(

@@ -12,7 +12,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { localize } from '../../../util/vs/nls';
 import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
 import { ExtendedChatRequest, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
-import { buildChatHistoryFromEvents, parseChatMessagesToEvents, stripReminders } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
+import { buildChatHistoryFromEvents, stripReminders } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 
 export class CopilotCLIChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
@@ -76,12 +76,9 @@ export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionC
 	) { }
 
 	async provideChatSessionContent(copilotcliSessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
-		const existingSession = copilotcliSessionId && await this.sessionService.getSession(copilotcliSessionId, token);
-		const sdkSession = existingSession ? existingSession.sdkSession : undefined;
-		const chatMessages = sdkSession ? await sdkSession.getChatMessages() : [];
-		const events = parseChatMessagesToEvents(chatMessages);
-
-		const history = existingSession ? buildChatHistoryFromEvents(events) : [];
+		const existingSession = await this.sessionService.getSession(copilotcliSessionId, token);
+		const events = await existingSession?.sdkSession.getEvents();
+		const history = buildChatHistoryFromEvents(events || []);
 
 		// Check if there's a pending request for this new session
 		const pendingRequest = this.sessionService.getPendingRequest(copilotcliSessionId);

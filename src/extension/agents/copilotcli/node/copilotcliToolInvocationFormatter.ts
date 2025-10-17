@@ -3,35 +3,11 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { SDKEvent } from '@github/copilot/sdk';
+import type { SessionEvent, ToolExecutionCompleteEvent, ToolExecutionStartEvent } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
 import type { ExtendedChatResponsePart } from 'vscode';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString } from '../../../../vscodeTypes';
-
-type ChatCompletionRole = 'system' | 'user' | 'assistant' | 'tool' | (string & {});
-
-interface ChatCompletionMessageFunctionCall {
-	name: string;
-	arguments?: string;
-}
-
-interface ChatCompletionMessageToolCallLike {
-	id?: string;
-	type?: string;
-	function?: ChatCompletionMessageFunctionCall;
-}
-
-interface ChatCompletionMessageParamLike {
-	role: ChatCompletionRole;
-	content?: unknown;
-	tool_calls?: readonly ChatCompletionMessageToolCallLike[];
-	tool_call_id?: string;
-}
-
-function isUserOrAssistantRole(role: ChatCompletionRole): role is 'user' | 'assistant' {
-	return role === 'user' || role === 'assistant';
-}
 
 /**
  * CopilotCLI tool names
@@ -59,72 +35,6 @@ interface BashArgs {
 	async?: boolean;
 }
 
-function resolveContentToString(content: unknown): string {
-	if (typeof content === 'string') {
-		return content;
-	} else if (Array.isArray(content)) {
-		return content.map(part => resolveContentToString(part)).join('');
-	} else if (content && typeof content === 'object' && 'text' in content && typeof content.text === 'string') {
-		return content.text;
-	}
-	return '';
-}
-
-/**
- * Parse chat messages from the CopilotCLI SDK into SDKEvent format
- * Used when loading session history from disk
- */
-export function parseChatMessagesToEvents(chatMessages: readonly ChatCompletionMessageParamLike[]): SDKEvent[] {
-	const events: SDKEvent[] = [];
-
-	for (const msg of chatMessages) {
-		// Handle regular messages (user or assistant)
-		if (isUserOrAssistantRole(msg.role)) {
-			if (msg.content) {
-				events.push({
-					type: 'message' as const,
-					content: resolveContentToString(msg.content),
-					role: msg.role
-				});
-			}
-
-			// Handle tool calls in assistant messages
-			if (msg.role === 'assistant' && msg.tool_calls && Array.isArray(msg.tool_calls)) {
-				for (const toolCall of msg.tool_calls) {
-					if (toolCall.type === 'function' && toolCall.function) {
-						events.push({
-							type: 'tool_use' as const,
-							toolName: toolCall.function.name,
-							args: toolCall.function.arguments ? JSON.parse(toolCall.function.arguments) : {},
-							toolCallId: toolCall.id
-						});
-					}
-				}
-			}
-		}
-
-		// Handle tool results
-		if (msg.role === 'tool') {
-			events.push({
-				type: 'tool_result' as const,
-				toolName: 'unknown', // Tool name isn't in the message, would need to match with tool_call_id
-				result: {
-					textResultForLlm: resolveContentToString(msg.content),
-					resultType: 'success',
-					toolTelemetry: {
-						properties: {},
-						restrictedProperties: {},
-						metrics: {}
-					}
-				},
-				toolCallId: msg.tool_call_id
-			});
-		}
-	}
-
-	return events;
-}
-
 export function stripReminders(text: string): string {
 	// Remove any <reminder> ... </reminder> blocks, including newlines
 	// Also remove <current_datetime> ... </current_datetime> blocks
@@ -138,60 +48,45 @@ export function stripReminders(text: string): string {
  * Build chat history from SDK events for VS Code chat session
  * Converts SDKEvents into ChatRequestTurn2 and ChatResponseTurn2 objects
  */
-export function buildChatHistoryFromEvents(events: readonly SDKEvent[]): (ChatRequestTurn2 | ChatResponseTurn2)[] {
+export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (ChatRequestTurn2 | ChatResponseTurn2)[] {
 	const turns: (ChatRequestTurn2 | ChatResponseTurn2)[] = [];
 	let currentResponseParts: ExtendedChatResponsePart[] = [];
 	const pendingToolInvocations = new Map<string, ChatToolInvocationPart>();
+	const toolNames = new Map<string, string>();
 
 	for (const event of events) {
-		if (event.type === 'message') {
-			if (event.role === 'user') {
+		switch (event.type) {
+			case 'user.message': {
 				// Flush any pending response parts before adding user message
 				if (currentResponseParts.length > 0) {
 					turns.push(new ChatResponseTurn2(currentResponseParts, {}, ''));
 					currentResponseParts = [];
 				}
-				turns.push(new ChatRequestTurn2(stripReminders(event.content || ''), undefined, [], '', [], undefined));
-			} else if (event.role === 'assistant' && event.content) {
-				currentResponseParts.push(
-					new ChatResponseMarkdownPart(new MarkdownString(event.content))
-				);
+				turns.push(new ChatRequestTurn2(stripReminders(event.data.content || ''), undefined, [], '', [], undefined));
+				break;
 			}
-		} else if (event.type === 'tool_use') {
-			// Use the formatter to create properly formatted tool invocation
-			const toolInvocation = createCopilotCLIToolInvocation(
-				event.toolName,
-				event.toolCallId,
-				event.args
-			);
-			if (toolInvocation) {
-				toolInvocation.isConfirmed = false;
-				// Store pending invocation to update with result later
-				if (event.toolCallId) {
-					pendingToolInvocations.set(event.toolCallId, toolInvocation);
-				}
-				currentResponseParts.push(toolInvocation);
-			}
-		} else if (event.type === 'tool_result') {
-			if (event.toolName === CopilotCLIToolNames.Think) {
-				const sessionLog = event.result.sessionLog;
-				if (sessionLog && typeof sessionLog === 'string') {
+			case 'assistant.message': {
+				if (event.data.content) {
 					currentResponseParts.push(
-						new ChatResponseThinkingProgressPart(sessionLog)
+						new ChatResponseMarkdownPart(new MarkdownString(event.data.content))
 					);
 				}
-			} else {
-				// Update the pending tool invocation with the result
-				if (event.toolCallId) {
-					const invocation = pendingToolInvocations.get(event.toolCallId);
-					if (invocation) {
-						invocation.isConfirmed = event.result.resultType !== 'rejected' && event.result.resultType !== 'denied';
-						invocation.isError = event.result.resultType === 'failure';
-						pendingToolInvocations.delete(event.toolCallId);
-					}
-				}
+				break;
 			}
-			// Tool results themselves are not displayed - they update the invocation state
+			case 'tool.execution_start': {
+				const responsePart = processToolExecutionStart(event, toolNames, pendingToolInvocations);
+				if (responsePart) {
+					currentResponseParts.push(responsePart);
+				}
+				break;
+			}
+			case 'tool.execution_complete': {
+				const responsePart = processToolExecutionComplete(event, toolNames, pendingToolInvocations);
+				if (responsePart && responsePart instanceof ChatResponseThinkingProgressPart) {
+					currentResponseParts.push(responsePart);
+				}
+				break;
+			}
 		}
 	}
 
@@ -203,6 +98,59 @@ export function buildChatHistoryFromEvents(events: readonly SDKEvent[]): (ChatRe
 	return turns;
 }
 
+export function processToolExecutionStart(event: ToolExecutionStartEvent, toolNames: Map<string, string>, pendingToolInvocations: Map<string, ChatToolInvocationPart>): ChatToolInvocationPart | undefined {
+	const toolInvocation = createCopilotCLIToolInvocation(
+		event.data.toolName,
+		event.data.toolCallId,
+		event.data.arguments
+	);
+	toolNames.set(event.data.toolCallId, event.data.toolName);
+	if (toolInvocation) {
+		toolInvocation.isConfirmed = false;
+		// Store pending invocation to update with result later
+		pendingToolInvocations.set(event.data.toolCallId, toolInvocation);
+	}
+	return toolInvocation;
+}
+
+export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, toolNames: Map<string, string>, pendingToolInvocations: Map<string, ChatToolInvocationPart>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+	const toolName = toolNames.get(event.data.toolCallId);
+	if (toolName === CopilotCLIToolNames.Think) {
+		pendingToolInvocations.delete(event.data.toolCallId);
+		// TODO: @DonJayamanne verify this.
+		// .data.result.sessionLog
+		const sessionLog = event.data.result?.content;
+		if (sessionLog && typeof sessionLog === 'string') {
+			return new ChatResponseThinkingProgressPart(sessionLog);
+		}
+		return undefined;
+	}
+
+
+	let invocation = pendingToolInvocations.get(event.data.toolCallId);
+	pendingToolInvocations.delete(event.data.toolCallId);
+
+	if (!invocation && toolName) {
+		invocation = createCopilotCLIToolInvocation(
+			toolName,
+			event.data.toolCallId,
+			{}, // We don't have the args in the result event
+			// event.data.result.resultType,
+			// event.data.result.error
+		);
+	}
+	if (invocation) {
+		invocation.isError = !!event.data.error;
+		invocation.invocationMessage = event.data.error?.message || invocation.invocationMessage;
+		invocation.isConfirmed = true; //!invocation.isError && event.data.success;
+		// event.data.result.resultType !== 'rejected' && event.data.result.resultType !== 'denied';
+		if (!event.data.success && (event.data.error?.code === 'rejected' || event.data.error?.code === 'denied')) {
+			invocation.isConfirmed = false;
+		}
+	}
+
+	return invocation;
+}
 /**
  * Creates a formatted tool invocation part for CopilotCLI tools
  */
