@@ -49,12 +49,13 @@ export class PseudoStopStartResponseProcessor implements IResponseProcessor {
 
 	protected applyDeltaToProgress(delta: IResponseDelta, progress: ChatResponseStream) {
 		if (delta.thinking) {
+			// Don't send parts that are only encrypted content
 			if (!isEncryptedThinkingDelta(delta.thinking) || delta.thinking.text) {
 				progress.thinkingProgress(delta.thinking);
 				this.thinkingActive = true;
 			}
 		} else if (this.thinkingActive) {
-			progress.thinkingProgress({ id: '', text: '', metadata: { vscode_thinking_done: true } });
+			progress.thinkingProgress({ id: '', text: '', metadata: { vscode_reasoning_done: true } });
 			this.thinkingActive = false;
 		}
 

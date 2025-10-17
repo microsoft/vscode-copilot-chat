@@ -414,13 +414,14 @@ export class CopilotLanguageModelWrapper extends Disposable {
 		let thinkingActive = false;
 		const finishCallback: FinishedCallback = async (_text, index, delta): Promise<undefined> => {
 			if (delta.thinking) {
+				// Show thinking progress for unencrypted thinking deltas
 				if (!isEncryptedThinkingDelta(delta.thinking)) {
 					const text = delta.thinking.text ?? '';
 					progress.report(new vscode.LanguageModelThinkingPart(text, delta.thinking.id, delta.thinking.metadata));
 					thinkingActive = true;
 				}
 			} else if (thinkingActive) {
-				progress.report(new vscode.LanguageModelThinkingPart('', '', { vscode_thinking_done: true }));
+				progress.report(new vscode.LanguageModelThinkingPart('', '', { vscode_reasoning_done: true }));
 				thinkingActive = false;
 			}
 			if (delta.text) {
