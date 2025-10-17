@@ -6,7 +6,6 @@
 import { createServiceIdentifier } from '../../../util/common/services';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { raceCancellationError } from '../../../util/vs/base/common/async';
-import { isCancellationError } from '../../../util/vs/base/common/errors';
 import { FileChunkAndScore } from '../../chunking/common/chunk';
 import { ILogService } from '../../log/common/logService';
 import { IExperimentationService } from '../../telemetry/common/nullExperimentationService';
@@ -80,13 +79,13 @@ export class RerankerService implements IRerankerService {
 
 			if (!response.ok) {
 				this._logService.error(`RerankerService::rerank request failed. status=${response.status}`);
-				return this._fallback(documents);
+				throw new Error(`Reranker request failed with status ${response.status}`);
 			}
 
 			const json = await raceCancellationError(response.json() as Promise<RemoteRerankResponse>, token);
 			const results = json.results;
 			if (!Array.isArray(results) || results.length === 0) {
-				return this._fallback(documents);
+				throw new Error('Reranker returned no results');
 			}
 
 			// Sort descending by relevance (higher score = more relevant). If scores missing, treat as 0.
@@ -107,19 +106,8 @@ export class RerankerService implements IRerankerService {
 			}
 			return reordered;
 		} catch (e) {
-			if (isCancellationError(e)) {
-				throw e;
-			}
-			this._logService.error(e, 'RerankerService::rerank exception, using fallback ordering');
-			return this._fallback(documents);
+			this._logService.error(e, 'RerankerService::rerank exception');
+			throw e;
 		}
-	}
-
-	private _fallback(documents: readonly FileChunkAndScore[]): readonly FileChunkAndScore[] {
-		// If we have distance scores, order by descending similarity (higher distance.value assumed better)
-		if (documents.every(d => typeof d.distance !== 'undefined')) {
-			return [...documents].sort((a, b) => (b.distance!.value) - (a.distance!.value));
-		}
-		return documents;
 	}
 }
