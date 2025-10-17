@@ -117,3 +117,13 @@ export async function toOpenPullRequestWebviewUri(params: {
 	const extensionId = UriHandlers[UriHandlerPaths.External_OpenPullRequestWebview];
 	return await vscode.env.asExternalUri(vscode.Uri.from({ scheme: vscode.env.uriScheme, authority: extensionId, path: UriHandlerPaths.External_OpenPullRequestWebview, query }));
 }
+
+export function getAuthorDisplayName(author: { login: string } | null): string {
+	if (!author) {
+		return 'Unknown';
+	}
+	if (author.login.startsWith('copilot')) {
+		return 'Copilot';
+	}
+	return author.login;
+}

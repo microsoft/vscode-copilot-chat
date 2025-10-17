@@ -13,7 +13,7 @@ import { IOctoKitService, JobInfo, RemoteAgentJobPayload } from '../../../platfo
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getRepoId, JOBS_API_VERSION, RemoteAgentResult, SessionIdForPr, toOpenPullRequestWebviewUri, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
+import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getAuthorDisplayName, getRepoId, JOBS_API_VERSION, RemoteAgentResult, SessionIdForPr, toOpenPullRequestWebviewUri, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
 import { ChatSessionContentBuilder } from './copilotChatSessionContentBuilder';
 
 type ConfirmationResult = { step: string; accepted: boolean; metadata?: CreatePromptMetadata /* | SomeOtherMetadata */ };
@@ -254,7 +254,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 							}
 
 							const uri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: pullRequest.number });
-							const card = new vscode.ChatResponsePullRequestPart(uri, pullRequest.title, pullRequest.body, pullRequest.author?.login || 'Unknown', `#${pullRequest.number}`);
+							const card = new vscode.ChatResponsePullRequestPart(uri, pullRequest.title, pullRequest.body, getAuthorDisplayName(pullRequest.author), `#${pullRequest.number}`);
 							stream.push(card);
 							stream.markdown(vscode.l10n.t('GitHub Copilot coding agent has begun working on your request. Follow its progress in the associated chat and pull request.'));
 							vscode.window.showChatSession(CopilotChatSessionsProvider.TYPE, String(number), { viewColumn: vscode.ViewColumn.Active });
