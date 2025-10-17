@@ -357,7 +357,10 @@ export class DefaultIntentRequestHandler {
 					...chatResult?.metadata,
 					...codeBlocks,
 					...summarizedConversationHistory && { summary: summarizedConversationHistory },
-					...renderedUserMessageMetadata,
+					...renderedUserMessageMetadata && {
+						renderedUserMessage: renderedUserMessageMetadata.renderedUserMessage,
+						modelFamily: renderedUserMessageMetadata.modelFamily,
+					},
 					...globalContextMetadata,
 				} satisfies Partial<IResultMetadata>,
 			} : chatResult;

@@ -6,17 +6,17 @@
 import { PromptReference, Raw } from '@vscode/prompt-tsx';
 import type { ChatRequest, ChatRequestEditedFileEvent, ChatResponseStream, ChatResult, LanguageModelToolResult } from 'vscode';
 import { FilterReason } from '../../../platform/networking/common/openai';
+import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { isLocation, toLocation } from '../../../util/common/types';
 import { ResourceMap } from '../../../util/vs/base/common/map';
 import { assertType } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
+import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { Location, Range } from '../../../vscodeTypes';
 import { InternalToolReference, IToolCallRound } from '../common/intents';
 import { ChatVariablesCollection } from './chatVariablesCollection';
 import { ToolCallRound } from './toolCallRound';
-import { ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 export { PromptReference } from '@vscode/prompt-tsx';
 
 export enum TurnStatus {
@@ -334,6 +334,8 @@ export interface IResultMetadata {
 	renderedUserMessage?: Raw.ChatCompletionContentPart[];
 	renderedGlobalContext?: Raw.ChatCompletionContentPart[];
 	globalContextCacheKey?: string;
+	/** Model family used when rendering the user message, for cache invalidation */
+	modelFamily?: string;
 	command?: string;
 	filterCategory?: FilterReason;
 
@@ -360,6 +362,7 @@ export interface ICopilotChatResult extends ChatResult {
 export class RenderedUserMessageMetadata {
 	constructor(
 		readonly renderedUserMessage: Raw.ChatCompletionContentPart[],
+		readonly modelFamily?: string,
 	) { }
 }
 
