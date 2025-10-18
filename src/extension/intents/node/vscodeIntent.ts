@@ -51,7 +51,7 @@ class VSCodeIntentInvocation extends RendererIntentInvocation implements IIntent
 	}
 
 	getAvailableTools(): vscode.LanguageModelToolInformation[] | Promise<vscode.LanguageModelToolInformation[]> | undefined {
-		return this.toolsService.getEnabledTools(this.request, tool =>
+		return this.toolsService.getEnabledTools(this.request, this.endpoint, tool =>
 			tool.name === 'vscode_searchExtensions_internal' ||
 			tool.name === ToolName.VSCodeAPI
 		);
