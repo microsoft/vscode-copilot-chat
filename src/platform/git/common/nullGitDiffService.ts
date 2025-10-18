@@ -11,4 +11,8 @@ export class NullGitDiffService implements IGitDiffService {
 	async getChangeDiffs(): Promise<Diff[]> {
 		return [];
 	}
+
+	async getWorkingTreeDiffsFromRef(): Promise<Diff[]> {
+		return [];
+	}
 }
