@@ -1752,25 +1752,25 @@
 			},
 			{
 				"command": "github.copilot.cli.sessions.refresh",
-				"title": "Refresh Copilot CLI Sessions",
+				"title": "Refresh Copilot CLI Agent Sessions",
 				"icon": "$(refresh)",
 				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.cli.sessions.delete",
-				"title": "Delete Copilot CLI Session",
+				"title": "Delete Copilot CLI Agent Session",
 				"icon": "$(close)",
 				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.cli.sessions.resumeInTerminal",
-				"title": "Resume Session in Terminal",
+				"title": "Resume Agent Session in Terminal",
 				"icon": "$(terminal)",
 				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.cli.sessions.newTerminalSession",
-				"title": "New Session in Terminal",
+				"title": "New Agent Session in Terminal",
 				"icon": "$(terminal)",
 				"category": "Copilot CLI"
 			},
@@ -4075,8 +4075,12 @@
 			{
 				"type": "claude-code",
 				"name": "claude",
-				"displayName": "Claude Code",
-				"description": "The Claude Code agent",
+				"displayName": "Claude Code CLI Agent",
+				"icon": "$(sparkle)",
+				"welcomeTitle": "Claude Code Agent",
+				"welcomeMessage": "Run tasks in the background",
+                "inputPlaceholder": "Enter your task for the Claude Code Agent",
+				"description": "The Claude Code Agent works on your local machine",
 				"when": "config.github.copilot.chat.advanced.claudeCode.enabled",
 				"capabilities": {
 					"supportsFileAttachments": true,
@@ -4107,9 +4111,13 @@
 			},
 			{
 				"type": "copilotcli",
-				"name": "copilotcli",
-				"displayName": "Copilot CLI",
-				"description": "The Copilot CLI agent",
+				"name": "GitHub Copilot CLI Agent",
+				"displayName": "GitHub Copilot CLI Agent",
+				"icon": "$(copilot)",
+				"welcomeTitle": "GitHub Copilot CLI Agent",
+				"welcomeMessage": "Run tasks in the background",
+                "inputPlaceholder": "Enter your task for the Copilot CLI Agent",
+				"description": "The Copilot CLI Agent works on your local machine",
 				"when": "config.github.copilot.chat.advanced.copilotCLI.enabled",
 				"capabilities": {
 					"supportsFileAttachments": true,
@@ -4118,9 +4126,13 @@
 			},
 			{
 				"type": "copilot-cloud-agent",
-				"name": "copilot",
-				"displayName": "GitHub Copilot cloud agent",
-				"description": "Delegate tasks to the GitHub Copilot coding agent. The agent works asynchronously to implement changes, iterates via chat, and can create or update pull requests as needed.",
+				"name": "GitHub Copilot Cloud Agent",
+				"displayName": "GitHub Copilot Cloud Agent",
+				"icon": "$(cloud)",
+				"welcomeTitle": "GitHub Copilot Cloud Agent",
+				"welcomeMessage": "Delegate tasks to the cloud",
+                "inputPlaceholder": "Enter your task for the Copilot Cloud Agent",
+				"description": "Delegate tasks to the GitHub Copilot Cloud Agent. The agent works asynchronously in the cloud to implement changes, iterates via chat, and can create or update pull requests as needed.",
 				"when": "config.github.copilot.chat.advanced.copilotCodingAgent.enabled",
 				"capabilities": {
 					"supportsFileAttachments": true
