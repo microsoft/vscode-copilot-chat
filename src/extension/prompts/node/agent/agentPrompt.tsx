@@ -49,6 +49,7 @@ import './allAgentPrompts';
 import { AlternateGPTPrompt, DefaultAgentPrompt } from './defaultAgentInstructions';
 import { PromptRegistry } from './promptRegistry';
 import { SummarizedConversationHistory } from './summarizedConversationHistory';
+import { VSCModelUserMessage } from './vscModelPrompts';
 
 export interface AgentPromptProps extends GenericBasePromptElementProps {
 	readonly endpoint: IChatEndpoint;
@@ -86,7 +87,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const instructions = this.getInstructions();
+		const instructions = await this.getInstructions();
 
 		const omitBaseAgentInstructions = this.configurationService.getConfig(ConfigKey.Internal.OmitBaseAgentInstructions);
 		const baseAgentInstructions = <>
@@ -141,7 +142,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 		}
 	}
 
-	private getInstructions() {
+	private async getInstructions() {
 		const modelFamily = this.props.endpoint.family ?? 'unknown';
 
 		if (this.props.endpoint.family.startsWith('gpt-') && this.configurationService.getExperimentBasedConfig(ConfigKey.EnableAlternateGptPrompt, this.experimentationService)) {
@@ -150,6 +151,23 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 				modelFamily={this.props.endpoint.family}
 				codesearchMode={this.props.codesearchMode}
 			/>;
+		}
+
+		const { isHiddenModelA } = await import('../../../../platform/endpoint/common/chatModelCapabilities');
+		if (await isHiddenModelA(this.props.endpoint)) {
+			// Try VSCModel prompt for hidden models
+			const hiddenModelPrompt = PromptRegistry.getPrompt('vscModel');
+			if (hiddenModelPrompt) {
+				const resolver = this.instantiationService.createInstance(hiddenModelPrompt);
+				const PromptClass = resolver.resolvePrompt();
+				if (PromptClass) {
+					return <PromptClass
+						availableTools={this.props.promptContext.tools?.availableTools}
+						modelFamily={modelFamily}
+						codesearchMode={this.props.codesearchMode}
+					/>;
+				}
+			}
 		}
 
 		const agentPromptResolver = PromptRegistry.getPrompt(modelFamily);
@@ -314,14 +332,33 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const frozenContent = this.props.turn?.getMetadata(RenderedUserMessageMetadata)?.renderedUserMessage;
-		if (frozenContent) {
-			return <FrozenContentUserMessage frozenContent={frozenContent} enableCacheBreakpoints={this.props.enableCacheBreakpoints} />;
+		const { isHiddenModelA } = await import('../../../../platform/endpoint/common/chatModelCapabilities');
+		const frozenMetadata = this.props.turn?.getMetadata(RenderedUserMessageMetadata);
+		if (frozenMetadata) {
+			// Only validate hidden status if we have modelFamily cached
+			// Otherwise, always use frozen content to maintain backward compatibility
+			if (frozenMetadata.modelFamily) {
+				// Only re-render if switching FROM hidden TO non-hidden (to remove VSCModelUserMessage preamble)
+				// When switching from non-hidden to hidden, keep the old messages as-is (no preamble needed in history)
+				const currentIsHidden = await isHiddenModelA(this.props.endpoint);
+				const cachedIsHidden = await isHiddenModelA({ family: frozenMetadata.modelFamily } as IChatEndpoint);
+				// Use frozen content unless switching from hidden to non-hidden
+				if (!cachedIsHidden || currentIsHidden) {
+					// Same status or switching from non-hidden to hidden: use frozen content
+					return <FrozenContentUserMessage frozenContent={frozenMetadata.renderedUserMessage} enableCacheBreakpoints={this.props.enableCacheBreakpoints} />;
+				}
+				// Switching from hidden to non-hidden: fall through to re-render to remove preamble
+			} else {
+				// No modelFamily cached, use frozen content as-is (backward compatibility)
+				return <FrozenContentUserMessage frozenContent={frozenMetadata.renderedUserMessage} enableCacheBreakpoints={this.props.enableCacheBreakpoints} />;
+			}
 		}
 
 		if (this.props.isHistorical) {
 			this.logService.trace('Re-rendering historical user message');
 		}
+
+		const shouldIncludePreamble = await isHiddenModelA(this.props.endpoint);
 
 		const query = await this.promptVariablesService.resolveToolReferencesInPrompt(this.props.request, this.props.toolReferences ?? []);
 		const hasReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ReplaceString);
@@ -363,6 +400,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						{getFileCreationReminder(this.props.endpoint.family)}
 						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
 					</Tag>
+					{shouldIncludePreamble && <VSCModelUserMessage />}
 					{query && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 				</UserMessage>

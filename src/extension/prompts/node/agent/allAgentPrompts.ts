@@ -7,4 +7,5 @@ import './claudeSonnet45Prompts';
 import './gpt5CodexPrompts';
 import './gpt5Prompts';
 import './grokCodeFastPrompts';
+import './vscModelPrompts';
 
