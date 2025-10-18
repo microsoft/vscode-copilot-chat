@@ -58,6 +58,7 @@ export class CopilotCLIAgentManager extends Disposable {
 			this.sessionService.trackSessionWrapper(sdkSession.sessionId, session);
 		}
 
+		this.sessionService.setPendingRequest(session.sessionId);
 		await session.invoke(request.prompt, request.toolInvocationToken, stream, modelId, token);
 
 		return { copilotcliSessionId: session.sessionId };

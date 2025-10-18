@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Session, SessionManager } from '@github/copilot/sdk';
-import type { CancellationToken, ChatContext, ChatRequest, ChatSessionStatus } from 'vscode';
+import type { CancellationToken, ChatRequest, ChatSessionStatus } from 'vscode';
 import { IEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -44,8 +44,8 @@ export interface ICopilotCLISessionService {
 	findSessionWrapper<T extends IDisposable>(sessionId: string): T | undefined;
 
 	// Pending request tracking (for untitled sessions)
-	setPendingRequest(sessionId: string, request: ExtendedChatRequest, context: ChatContext): void;
-	getPendingRequest(sessionId: string): { request: ExtendedChatRequest; context: ChatContext } | undefined;
+	setPendingRequest(sessionId: string): void;
+	isPendingRequest(sessionId: string): boolean;
 	clearPendingRequest(sessionId: string): void;
 }
 
@@ -57,7 +57,8 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 	private _sessionManager: SessionManager | undefined;
 	private _sessionWrappers = new DisposableMap<string, IDisposable>();
 	private _sessions = new Map<string, ICopilotCLISession>();
-	private _pendingRequests = new Map<string, { request: any; context: any }>();
+	private _pendingRequests = new Set<string>();
+
 
 	private readonly _onDidChangeSessions = new Emitter<void>();
 	public readonly onDidChangeSessions = this._onDidChangeSessions.event;
@@ -255,12 +256,12 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 		return `Session ${sdkSession.sessionId.slice(0, 8)}`;
 	}
 
-	public setPendingRequest(sessionId: string, request: ExtendedChatRequest, context: ChatContext): void {
-		this._pendingRequests.set(sessionId, { request, context });
+	public setPendingRequest(sessionId: string): void {
+		this._pendingRequests.add(sessionId);
 	}
 
-	public getPendingRequest(sessionId: string): { request: ExtendedChatRequest; context: ChatContext } | undefined {
-		return this._pendingRequests.get(sessionId);
+	public isPendingRequest(sessionId: string): boolean {
+		return this._pendingRequests.has(sessionId);
 	}
 
 	public clearPendingRequest(sessionId: string): void {
