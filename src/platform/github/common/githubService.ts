@@ -179,6 +179,11 @@ export interface IOctoKitService {
 	getJobByJobId(owner: string, repo: string, jobId: string, userAgent: string): Promise<JobInfo>;
 
 	/**
+	 * Gets a job by session ID
+	 */
+	getJobBySessionId(owner: string, repo: string, sessionId: string, userAgent: string): Promise<JobInfo>;
+
+	/**
 	 * Adds a comment to a pull request.
 	 */
 	addPullRequestComment(pullRequestId: string, commentBody: string): Promise<PullRequestComment | null>;
@@ -233,6 +238,10 @@ export class BaseOctoKitService {
 
 	protected async getJobByJobIdWithToken(owner: string, repo: string, jobId: string, userAgent: string, token: string): Promise<JobInfo> {
 		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/v1/jobs/${owner}/${repo}/${jobId}`, 'GET', token, undefined, undefined, undefined, userAgent);
+	}
+
+	protected async getJobBySessionIdWithToken(owner: string, repo: string, sessionId: string, userAgent: string, token: string): Promise<JobInfo> {
+		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/v1/jobs/${owner}/${repo}/session/${sessionId}`, 'GET', token, undefined, undefined, undefined, userAgent);
 	}
 
 	protected async addPullRequestCommentWithToken(pullRequestId: string, commentBody: string, token: string): Promise<PullRequestComment | null> {
