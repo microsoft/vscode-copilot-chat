@@ -46,7 +46,7 @@ export interface ICommentResult {
 export class CopilotChatSessionsProvider extends Disposable implements vscode.ChatSessionContentProvider, vscode.ChatSessionItemProvider {
 	public static readonly TYPE = 'copilot-cloud-agent';
 	private readonly DELEGATE_MODAL_DETAILS = vscode.l10n.t('The agent will work asynchronously to create a pull request with your requested changes.');
-	private readonly COPILOT = '@copilot';
+	private readonly COPILOT = 'GitHub Copilot Cloud Agent';
 
 	private readonly _onDidChangeChatSessionItems = this._register(new vscode.EventEmitter<void>());
 	public onDidChangeChatSessionItems = this._onDidChangeChatSessionItems.event;
