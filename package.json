@@ -2198,6 +2198,11 @@
 				"command": "github.copilot.chat.manageBYOKAPIKey",
 				"title": "Manage Bring Your Own Key API Key",
 				"enablement": "false"
+			},
+			{
+				"command": "github.copilot.cloud.sessions.refresh",
+				"title": "%github.copilot.command.refreshCopilotAgentSessions%",
+				"icon": "$(refresh)"
 			}
 		],
 		"configuration": [
@@ -3466,6 +3471,11 @@
 					"command": "github.copilot.debug.showChatLogView",
 					"when": "view == workbench.panel.chat.view.copilot",
 					"group": "3_show"
+				},
+				{
+					"command": "github.copilot.cloud.sessions.refresh",
+					"when": "view == workbench.view.chat.sessions.copilot-cloud-agent",
+					"group": "navigation@1"
 				}
 			],
 			"view/item/context": [

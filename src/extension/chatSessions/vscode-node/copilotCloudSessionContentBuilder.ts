@@ -2,10 +2,13 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+
 import * as pathLib from 'path';
+import * as vscode from 'vscode';
 import { ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseMultiDiffPart, ChatResponseProgressPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatResult, ChatToolInvocationPart, MarkdownString, Uri } from 'vscode';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
+import { getAuthorDisplayName, toOpenPullRequestWebviewUri } from '../vscode/copilotCodingAgentUtils';
 
 export interface SessionResponseLogChunk {
 	choices: Array<{
@@ -119,7 +122,6 @@ export class ChatSessionContentBuilder {
 			sortedSessions.map(async (session, sessionIndex) => {
 				const [logs, problemStatement] = await Promise.all([getLogsForSession(session.id), sessionIndex === 0 ? problemStatementPromise : Promise.resolve(undefined)]);
 				// Create response turn
-				const response = await this.createResponseTurn(pullRequest, logs, session);
 				history.push(new ChatRequestTurn2(
 					problemStatement || '',
 					undefined, // command
@@ -128,6 +130,17 @@ export class ChatSessionContentBuilder {
 					[], // toolReferences
 					[]
 				));
+				// Create the PR card right after problem statement
+				if (sessionIndex === 0 && pullRequest.author) {
+					const uri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: pullRequest.number });
+					const plaintextBody = pullRequest.body;
+
+					const card = new vscode.ChatResponsePullRequestPart(uri, pullRequest.title, plaintextBody, getAuthorDisplayName(pullRequest.author), `#${pullRequest.number}`);
+					const cardTurn = new vscode.ChatResponseTurn2([card], {}, this.type);
+					history.push(cardTurn);
+				}
+
+				const response = await this.createResponseTurn(pullRequest, logs, session);
 				if (response) {
 					history.push(response);
 				}

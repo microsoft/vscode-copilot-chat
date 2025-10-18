@@ -302,5 +302,6 @@
 	"github.copilot.config.responsesApiReasoningSummary": "Sets the reasoning summary style used for the Responses API. Requires `#github.copilot.chat.useResponsesApi#`.",
 	"github.copilot.config.executePrompt.enabled": "The executePrompt tool enables the agent to execute tasks in a separate, isolated context.",
 	"github.copilot.config.completionsFetcher": "Sets the fetcher used for the inline completions.",
-	"github.copilot.config.nesFetcher": "Sets the fetcher used for the next edit suggestions."
+	"github.copilot.config.nesFetcher": "Sets the fetcher used for the next edit suggestions.",
+	"github.copilot.command.refreshCopilotAgentSessions": "Refresh Copilot Agent Sessions"
 }

@@ -6,6 +6,7 @@
 import * as vscode from 'vscode';
 import { getGithubRepoIdFromFetchUrl, GithubRepoId, IGitService } from '../../../platform/git/common/gitService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { UriHandlerPaths, UriHandlers } from './chatSessionsUriHandler';
 
 export const MAX_PROBLEM_STATEMENT_LENGTH = 30_000 - 50; // 50 character buffer
 export const CONTINUE_TRUNCATION = vscode.l10n.t('Continue with truncation');
@@ -105,4 +106,24 @@ export namespace SessionIdForPr {
 		}
 		return undefined;
 	}
+}
+
+export async function toOpenPullRequestWebviewUri(params: {
+	owner: string;
+	repo: string;
+	pullRequestNumber: number;
+}): Promise<vscode.Uri> {
+	const query = JSON.stringify(params);
+	const extensionId = UriHandlers[UriHandlerPaths.External_OpenPullRequestWebview];
+	return await vscode.env.asExternalUri(vscode.Uri.from({ scheme: vscode.env.uriScheme, authority: extensionId, path: UriHandlerPaths.External_OpenPullRequestWebview, query }));
+}
+
+export function getAuthorDisplayName(author: { login: string } | null): string {
+	if (!author) {
+		return 'Unknown';
+	}
+	if (author.login.startsWith('copilot')) {
+		return 'Copilot';
+	}
+	return author.login;
 }

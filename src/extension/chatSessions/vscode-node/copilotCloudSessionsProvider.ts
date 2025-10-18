@@ -13,8 +13,7 @@ import { IOctoKitService, JobInfo, RemoteAgentJobPayload } from '../../../platfo
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
-import { UriHandlerPaths, UriHandlers } from '../vscode/chatSessionsUriHandler';
-import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getRepoId, JOBS_API_VERSION, RemoteAgentResult, SessionIdForPr, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
+import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getAuthorDisplayName, getRepoId, JOBS_API_VERSION, RemoteAgentResult, SessionIdForPr, toOpenPullRequestWebviewUri, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
 import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
 
 type ConfirmationResult = { step: string; accepted: boolean; metadata?: CreatePromptMetadata /* | SomeOtherMetadata */ };
@@ -72,6 +71,10 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		super();
 	}
 
+	public refresh(): void {
+		this._onDidChangeChatSessionItems.fire();
+	}
+
 	async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
 		if (this.chatSessionItemsPromise) {
 			return this.chatSessionItemsPromise;
@@ -83,7 +86,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			}
 			const pullRequests = await this._octoKitService.getCopilotPullRequestsForUser(repoId.org, repoId.repo);
 			const sessionItems = await Promise.all(pullRequests.map(async pr => {
-				const uri = await this.toOpenPullRequestWebviewUri({ owner: pr.repository.owner.login, repo: pr.repository.name, pullRequestNumber: pr.number });
+				const uri = await toOpenPullRequestWebviewUri({ owner: pr.repository.owner.login, repo: pr.repository.name, pullRequestNumber: pr.number });
 				const prLinkTitle = vscode.l10n.t('Open pull request in VS Code');
 				const description = new vscode.MarkdownString(`[#${pr.number}](${uri.toString()} "${prLinkTitle}")`);
 				const session = {
@@ -198,16 +201,6 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		}
 	}
 
-	private async toOpenPullRequestWebviewUri(params: {
-		owner: string;
-		repo: string;
-		pullRequestNumber: number;
-	}): Promise<vscode.Uri> {
-		const query = JSON.stringify(params);
-		const extensionId = UriHandlers[UriHandlerPaths.External_OpenPullRequestWebview];
-		return await vscode.env.asExternalUri(vscode.Uri.from({ scheme: vscode.env.uriScheme, authority: extensionId, path: UriHandlerPaths.External_OpenPullRequestWebview, query }));
-	}
-
 	private async chatParticipantImpl(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken) {
 		const startSession = async (source: string, prompt: string, history?: string, references?: readonly vscode.ChatPromptReference[]) => {
 			/* __GDPR__
@@ -265,11 +258,9 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 								return {};
 							}
 
-							// TODO: handle card
-							// const uri = await this.toOpenPullRequestWebviewUri({ owner: pullRequest.remote.owner, repo: pullRequest.remote.repositoryName, pullRequestNumber: pullRequest.number });
-							// const plaintextBody = marked.parse(pullRequest.body, { renderer: new PlainTextRenderer(true), smartypants: true }).trim();
-							// const card = new vscode.ChatResponsePullRequestPart(uri, pullRequest.title, plaintextBody, pullRequest.author.specialDisplayName ?? pullRequest.author.login, `#${pullRequest.number}`);
-							// stream.push(card);
+							const uri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: pullRequest.number });
+							const card = new vscode.ChatResponsePullRequestPart(uri, pullRequest.title, pullRequest.body, getAuthorDisplayName(pullRequest.author), `#${pullRequest.number}`);
+							stream.push(card);
 							stream.markdown(vscode.l10n.t('GitHub Copilot coding agent has begun working on your request. Follow its progress in the associated chat and pull request.'));
 							vscode.window.showChatSession(CopilotChatSessionsProvider.TYPE, String(number), { viewColumn: vscode.ViewColumn.Active });
 							break;
@@ -836,7 +827,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			}
 			const htmlUrl = pullRequest.url;
 
-			const webviewUri = await this.toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: number });
+			const webviewUri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: number });
 			const prLlmString = `The remote agent has begun work and has created a pull request. Details about the pull request are being shown to the user. If the user wants to track progress or iterate on the agent's work, they should use the pull request.`;
 
 			chatStream?.progress(vscode.l10n.t('Attaching to session'));
