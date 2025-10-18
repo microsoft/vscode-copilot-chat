@@ -75,7 +75,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		));
 		const copilotSessionsProvider = this._register(copilotAgentInstaService.createInstance(CopilotChatSessionsProvider));
 		this._register(vscode.chat.registerChatSessionItemProvider(CopilotChatSessionsProvider.TYPE, copilotSessionsProvider));
-		this._register(vscode.chat.registerChatSessionContentProvider(CopilotChatSessionsProvider.TYPE, copilotSessionsProvider, undefined as any));
+		this._register(vscode.chat.registerChatSessionContentProvider(CopilotChatSessionsProvider.TYPE, copilotSessionsProvider, copilotSessionsProvider.chatParticipant, { supportsInterruptions: true }));
 		this._register(vscode.commands.registerCommand('github.copilot.cloud.sessions.refresh', () => {
 			copilotSessionsProvider.refresh();
 		}));

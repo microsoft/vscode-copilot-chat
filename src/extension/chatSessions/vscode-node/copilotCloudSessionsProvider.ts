@@ -89,11 +89,16 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				const uri = await toOpenPullRequestWebviewUri({ owner: pr.repository.owner.login, repo: pr.repository.name, pullRequestNumber: pr.number });
 				const prLinkTitle = vscode.l10n.t('Open pull request in VS Code');
 				const description = new vscode.MarkdownString(`[#${pr.number}](${uri.toString()} "${prLinkTitle}")`);
+
+				// Fetch sessions to determine actual status
+				const sessions = await this._octoKitService.getCopilotSessionsForPR(pr.fullDatabaseId.toString());
+				const status = this.getSessionStatusFromSessions(sessions);
+
 				const session = {
 					id: pr.number.toString(),
 					resource: undefined,
 					label: pr.title,
-					status: this.getSessionState(pr.state),
+					status,
 					description,
 					timing: {
 						startTime: new Date(pr.updatedAt).getTime(),
@@ -159,7 +164,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		const history = await sessionContentBuilder.buildSessionHistory(getProblemStatement(sessions), sessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId));
 		return {
 			history,
-			activeResponseCallback: undefined,
+			activeResponseCallback: this.findActiveResponseCallback(sessions, pr),
 			requestHandler: undefined
 		};
 	}
@@ -181,6 +186,28 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 		const url = `https://github.com/copilot/tasks/pull/${pr.id}`;
 		await vscode.env.openExternal(vscode.Uri.parse(url));
+	}
+
+	private findActiveResponseCallback(
+		sessions: SessionInfo[],
+		pr: PullRequestSearchItem
+	): ((stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => Thenable<void>) | undefined {
+		// Only the latest in-progress session gets activeResponseCallback
+		const inProgressSession = sessions
+			.slice()
+			.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+			.find(session => session.state === 'in_progress');
+
+		if (inProgressSession) {
+			return this.createActiveResponseCallback(pr, inProgressSession.id);
+		}
+		return undefined;
+	}
+
+	private createActiveResponseCallback(pr: PullRequestSearchItem, sessionId: string): (stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => Thenable<void> {
+		return async (stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => {
+			return this.streamSessionLogs(stream, pr, sessionId, token);
+		};
 	}
 
 	private createEmptySession(): vscode.ChatSession {
@@ -209,12 +236,25 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		return pr;
 	}
 
-	private getSessionState(state: string): vscode.ChatSessionStatus {
-		switch (state) {
+	private getSessionStatusFromSessions(sessions: SessionInfo[]): vscode.ChatSessionStatus {
+		if (!sessions || sessions.length === 0) {
+			return vscode.ChatSessionStatus.Completed;
+		}
+
+		// Find the most recent session by sorting by created_at
+		const mostRecentSession = sessions
+			.slice()
+			.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+
+		// Map session state to ChatSessionStatus
+		switch (mostRecentSession.state) {
 			case 'failed':
 				return vscode.ChatSessionStatus.Failed;
-			case 'in_progress': case 'queued':
+			case 'in_progress':
+			case 'queued':
 				return vscode.ChatSessionStatus.InProgress;
+			case 'completed':
+				return vscode.ChatSessionStatus.Completed;
 			default:
 				return vscode.ChatSessionStatus.Completed;
 		}
