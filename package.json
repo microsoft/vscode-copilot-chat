@@ -4079,7 +4079,7 @@
 				"icon": "$(sparkle)",
 				"welcomeTitle": "Claude Code Agent",
 				"welcomeMessage": "Run tasks in the background",
-                "inputPlaceholder": "Enter your task for the Claude Code Agent",
+				"inputPlaceholder": "Enter your task for the Claude Code Agent",
 				"description": "The Claude Code Agent works on your local machine",
 				"when": "config.github.copilot.chat.advanced.claudeCode.enabled",
 				"capabilities": {
@@ -4116,7 +4116,7 @@
 				"icon": "$(copilot)",
 				"welcomeTitle": "GitHub Copilot CLI Agent",
 				"welcomeMessage": "Run tasks in the background",
-                "inputPlaceholder": "Enter your task for the Copilot CLI Agent",
+				"inputPlaceholder": "Enter your task for the Copilot CLI Agent",
 				"description": "The Copilot CLI Agent works on your local machine",
 				"when": "config.github.copilot.chat.advanced.copilotCLI.enabled",
 				"capabilities": {
@@ -4131,7 +4131,7 @@
 				"icon": "$(cloud)",
 				"welcomeTitle": "GitHub Copilot Cloud Agent",
 				"welcomeMessage": "Delegate tasks to the cloud",
-                "inputPlaceholder": "Enter your task for the Copilot Cloud Agent",
+				"inputPlaceholder": "Enter your task for the Copilot Cloud Agent",
 				"description": "Delegate tasks to the GitHub Copilot Cloud Agent. The agent works asynchronously in the cloud to implement changes, iterates via chat, and can create or update pull requests as needed.",
 				"when": "config.github.copilot.chat.advanced.copilotCodingAgent.enabled",
 				"capabilities": {
