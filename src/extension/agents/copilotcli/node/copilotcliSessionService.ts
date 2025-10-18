@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type { Session, SessionManager } from '@github/copilot/sdk';
+import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import type { CancellationToken, ChatRequest, ChatSessionStatus } from 'vscode';
 import { IEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
@@ -18,6 +19,7 @@ export interface ICopilotCLISession {
 	readonly id: string;
 	readonly sdkSession: Session;
 	readonly label: string;
+	readonly isEmpty: boolean;
 	readonly timestamp: Date;
 }
 
@@ -113,13 +115,15 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 						if (!sdkSession) {
 							throw new Error(`Session ${metadata.sessionId} not found`);
 						}
-
-						const label = await this._generateSessionLabel(sdkSession, undefined);
+						const chatMessages = await sdkSession.getChatMessages();
+						const noUserMessages = !chatMessages.find(message => message.role === 'user');
+						const label = await this._generateSessionLabel(sdkSession.sessionId, chatMessages, undefined);
 						return {
 							id: metadata.sessionId,
 							sdkSession,
 							label,
-							timestamp: metadata.startTime
+							timestamp: metadata.startTime,
+							isEmpty: noUserMessages
 						};
 					} catch (error) {
 						this.logService.warn(`Failed to load session ${metadata.sessionId}: ${error}`);
@@ -173,12 +177,15 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 		const sdkSession = await sessionManager.createSession();
 
 		// Cache the new session immediately
-		const label = await this._generateSessionLabel(sdkSession, prompt);
+		const chatMessages = await sdkSession.getChatMessages();
+		const noUserMessages = !chatMessages.find(message => message.role === 'user');
+		const label = await this._generateSessionLabel(sdkSession.sessionId, chatMessages, prompt);
 		const newSession: ICopilotCLISession = {
 			id: sdkSession.sessionId,
 			sdkSession,
 			label,
-			timestamp: new Date()
+			timestamp: new Date(),
+			isEmpty: noUserMessages
 		};
 		this._sessions.set(sdkSession.sessionId, newSession);
 
@@ -223,10 +230,8 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 		}
 	}
 
-	private async _generateSessionLabel(sdkSession: Session, prompt: string | undefined): Promise<string> {
+	private async _generateSessionLabel(sessionId: string, chatMessages: readonly ChatCompletionMessageParam[], prompt: string | undefined): Promise<string> {
 		try {
-			const chatMessages = await sdkSession.getChatMessages();
-
 			// Find the first user message
 			const firstUserMessage = chatMessages.find(msg => msg.role === 'user');
 			if (firstUserMessage && firstUserMessage.content) {
@@ -249,11 +254,11 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 				return prompt.trim().length > 50 ? prompt.trim().substring(0, 47) + '...' : prompt.trim();
 			}
 		} catch (error) {
-			this.logService.warn(`Failed to generate session label for ${sdkSession.sessionId}: ${error}`);
+			this.logService.warn(`Failed to generate session label for ${sessionId}: ${error}`);
 		}
 
 		// Fallback to session ID
-		return `Session ${sdkSession.sessionId.slice(0, 8)}`;
+		return `Session ${sessionId.slice(0, 8)}`;
 	}
 
 	public setPendingRequest(sessionId: string): void {
