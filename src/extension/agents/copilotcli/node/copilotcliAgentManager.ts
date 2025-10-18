@@ -13,7 +13,7 @@ import { IWorkspaceService } from '../../../../platform/workspace/common/workspa
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelTextPart } from '../../../../vscodeTypes';
+import { ChatResponseThinkingProgressPart, LanguageModelTextPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ICopilotCLISessionService } from './copilotcliSessionService';
@@ -180,18 +180,18 @@ export class CopilotCLISession extends Disposable {
 			}
 
 			case 'tool.execution_start': {
-				const responsepart = processToolExecutionStart(event, this._toolNames, this._pendingToolInvocations);
-				if (responsepart) {
-					stream.push(responsepart);
-					const toolName = this._toolNames.get(event.data.toolCallId) || '<unknown>';
-					this.logService.trace(`Tool ${toolName} (started)`);
+				const responsePart = processToolExecutionStart(event, this._toolNames, this._pendingToolInvocations);
+				if (responsePart instanceof ChatResponseThinkingProgressPart) {
+					stream.push(responsePart);
 				}
+				const toolName = this._toolNames.get(event.data.toolCallId) || '<unknown>';
+				this.logService.trace(`Start Tool ${toolName}`);
 				break;
 			}
 
 			case 'tool.execution_complete': {
-				const responsePart = processToolExecutionComplete(event, this._toolNames, this._pendingToolInvocations);
-				if (responsePart) {
+				const responsePart = processToolExecutionComplete(event, this._pendingToolInvocations);
+				if (responsePart && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
 					stream.push(responsePart);
 				}
 
@@ -200,7 +200,7 @@ export class CopilotCLISession extends Disposable {
 				const error = event.data.error ? `error: ${event.data.error.code},${event.data.error.message}` : '';
 				const result = event.data.result ? `result: ${event.data.result?.content}` : '';
 				const parts = [success, error, result].filter(part => part.length > 0).join(', ');
-				this.logService.trace(`Tool ${toolName}, ${parts}`);
+				this.logService.trace(`Complete Tool ${toolName}, ${parts}`);
 				break;
 			}
 
@@ -210,11 +210,6 @@ export class CopilotCLISession extends Disposable {
 				break;
 			}
 		}
-
-		// case 'thinking':
-		// 	// Progress indication
-		// 	stream.progress(event.content);
-		// 	break;
 	}
 
 	private async requestPermission(

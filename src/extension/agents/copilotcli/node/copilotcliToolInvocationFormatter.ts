@@ -75,14 +75,14 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 			}
 			case 'tool.execution_start': {
 				const responsePart = processToolExecutionStart(event, toolNames, pendingToolInvocations);
-				if (responsePart) {
+				if (responsePart instanceof ChatResponseThinkingProgressPart) {
 					currentResponseParts.push(responsePart);
 				}
 				break;
 			}
 			case 'tool.execution_complete': {
-				const responsePart = processToolExecutionComplete(event, toolNames, pendingToolInvocations);
-				if (responsePart) {
+				const responsePart = processToolExecutionComplete(event, pendingToolInvocations);
+				if (responsePart && !(responsePart instanceof ChatResponseThinkingProgressPart)) {
 					currentResponseParts.push(responsePart);
 				}
 				break;
@@ -109,14 +109,10 @@ export function processToolExecutionStart(event: ToolExecutionStartEvent, toolNa
 		// Store pending invocation to update with result later
 		pendingToolInvocations.set(event.data.toolCallId, toolInvocation);
 	}
-	// TODO: @DonJayamanne This descision should be made based on caller's need
-	if (toolInvocation instanceof ChatResponseThinkingProgressPart) {
-		return toolInvocation;
-	}
-	return undefined;
+	return toolInvocation;
 }
 
-export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, toolNames: Map<string, string>, pendingToolInvocations: Map<string, ChatToolInvocationPart | ChatResponseThinkingProgressPart>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
+export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, pendingToolInvocations: Map<string, ChatToolInvocationPart | ChatResponseThinkingProgressPart>): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	const invocation = pendingToolInvocations.get(event.data.toolCallId);
 	pendingToolInvocations.delete(event.data.toolCallId);
 
@@ -124,11 +120,10 @@ export function processToolExecutionComplete(event: ToolExecutionCompleteEvent, 
 		invocation.isComplete = true;
 		invocation.isError = !!event.data.error;
 		invocation.invocationMessage = event.data.error?.message || invocation.invocationMessage;
-		// event.data.result.resultType !== 'rejected' && event.data.result.resultType !== 'denied';
 		if (!event.data.success && (event.data.error?.code === 'rejected' || event.data.error?.code === 'denied')) {
 			invocation.isConfirmed = false;
 		} else {
-			invocation.isConfirmed = true; //!invocation.isError && event.data.success;
+			invocation.isConfirmed = true;
 		}
 	}
 
@@ -144,8 +139,6 @@ export function createCopilotCLIToolInvocation(
 	args: unknown,
 ): ChatToolInvocationPart | ChatResponseThinkingProgressPart | undefined {
 	if (toolName === CopilotCLIToolNames.Think) {
-		// TODO: @DonJayamanne verify this.
-		// .data.result.sessionLog
 		const thought = (args as { thought?: string })?.thought;
 		if (thought && typeof thought === 'string') {
 			return new ChatResponseThinkingProgressPart(thought);
@@ -156,7 +149,6 @@ export function createCopilotCLIToolInvocation(
 	const invocation = new ChatToolInvocationPart(toolName, toolCallId ?? '', false);
 	invocation.isConfirmed = false;
 	invocation.isComplete = false;
-
 
 	// Format based on tool name
 	if (toolName === CopilotCLIToolNames.StrReplaceEditor) {
