@@ -480,6 +480,18 @@ exports[`SSEProcessor > real world snapshots > single tool call > finishedCallba
 		"index": 0,
 		"delta": {
 			"text": "",
+			"beginToolCalls": [
+				{
+					"name": "copilot_searchCodebase"
+				}
+			]
+		}
+	},
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
 			"copilotToolCalls": [
 				{
 					"name": "copilot_searchCodebase",
@@ -520,6 +532,18 @@ exports[`SSEProcessor > real world snapshots > single tool call with annotations
 
 exports[`SSEProcessor > real world snapshots > single tool call with annotations attached > finishedCallback chunks 1`] = `
 "[
+	{
+		"text": "",
+		"index": 0,
+		"delta": {
+			"text": "",
+			"beginToolCalls": [
+				{
+					"name": "insert_edit_into_file"
+				}
+			]
+		}
+	},
 	{
 		"text": "",
 		"index": 0,
