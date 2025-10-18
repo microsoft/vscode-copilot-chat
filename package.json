@@ -414,7 +414,7 @@
 					"type": "object",
 					"properties": {
 						"filePaths": {
-							"description": "The absolute paths to the files to check for errors. Omit 'filePaths' when retrieving all errors.",
+							"description": "The absolute paths to the files or folders to check for errors. Omit 'filePaths' when retrieving all errors.",
 							"type": "array",
 							"items": {
 								"type": "string"
