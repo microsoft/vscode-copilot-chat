@@ -79,5 +79,8 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		this._register(vscode.commands.registerCommand('github.copilot.cloud.sessions.refresh', () => {
 			copilotSessionsProvider.refresh();
 		}));
+		this._register(vscode.commands.registerCommand('github.copilot.cloud.sessions.openInBrowser', async (chatSessionItem: vscode.ChatSessionItem) => {
+			copilotSessionsProvider.openSessionsInBrowser(chatSessionItem);
+		}));
 	}
 }

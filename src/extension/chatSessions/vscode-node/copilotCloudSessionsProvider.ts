@@ -164,6 +164,25 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		};
 	}
 
+	async openSessionsInBrowser(chatSessionItem: vscode.ChatSessionItem): Promise<void> {
+		const prNumber = parseInt(chatSessionItem.id, 10);
+		if (isNaN(prNumber)) {
+			vscode.window.showErrorMessage(vscode.l10n.t('Invalid pull request number: {0}', chatSessionItem.id));
+			this.logService.error(`Invalid pull request number: ${chatSessionItem.id}`);
+			return;
+		}
+
+		const pr = await this.findPR(prNumber);
+		if (!pr) {
+			vscode.window.showErrorMessage(vscode.l10n.t('Could not find pull request #{0}', prNumber));
+			this.logService.error(`Could not find pull request #${prNumber}`);
+			return;
+		}
+
+		const url = `https://github.com/copilot/tasks/pull/${pr.id}`;
+		await vscode.env.openExternal(vscode.Uri.parse(url));
+	}
+
 	private createEmptySession(): vscode.ChatSession {
 		return {
 			history: [],

@@ -303,5 +303,6 @@
 	"github.copilot.config.executePrompt.enabled": "The executePrompt tool enables the agent to execute tasks in a separate, isolated context.",
 	"github.copilot.config.completionsFetcher": "Sets the fetcher used for the inline completions.",
 	"github.copilot.config.nesFetcher": "Sets the fetcher used for the next edit suggestions.",
-	"github.copilot.command.refreshCopilotAgentSessions": "Refresh Copilot Agent Sessions"
+	"github.copilot.command.refreshCopilotAgentSessions": "Refresh Copilot Agent Sessions",
+	"github.copilot.command.openCopilotAgentSessionsInBrowser": "Open in browser"
 }

@@ -2203,6 +2203,11 @@
 				"command": "github.copilot.cloud.sessions.refresh",
 				"title": "%github.copilot.command.refreshCopilotAgentSessions%",
 				"icon": "$(refresh)"
+			},
+			{
+				"command": "github.copilot.cloud.sessions.openInBrowser",
+				"title": "%github.copilot.command.openCopilotAgentSessionsInBrowser%",
+				"icon": "$(link-external)"
 			}
 		],
 		"configuration": [
@@ -3439,6 +3444,14 @@
 				{
 					"command": "github.copilot.cli.sessions.newTerminalSession",
 					"when": "false"
+				},
+				{
+					"command": "github.copilot.cloud.sessions.refresh",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.cloud.sessions.openInBrowser",
+					"when": "false"
 				}
 			],
 			"view/title": [
@@ -3751,6 +3764,16 @@
 					"command": "github.copilot.cli.sessions.newTerminalSession",
 					"when": "view == workbench.view.chat.sessions.copilotcli",
 					"group": "submenu"
+				},
+				{
+					"command": "github.copilot.cli.sessions.refresh",
+					"when": "view == workbench.view.chat.sessions.copilotcli",
+					"group": "navigation@1"
+				},
+				{
+					"command": "github.copilot.cloud.sessions.openInBrowser",
+					"when": "chatSessionType == copilot-cloud-agent",
+					"group": "context"
 				}
 			]
 		},
