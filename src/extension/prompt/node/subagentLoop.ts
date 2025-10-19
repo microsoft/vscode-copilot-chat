@@ -18,23 +18,23 @@ import { IToolCallingLoopOptions, ToolCallingLoop, ToolCallingLoopFetchOptions }
 import { AgentPrompt } from '../../prompts/node/agent/agentPrompt';
 import { PromptRenderer } from '../../prompts/node/base/promptRenderer';
 import { ToolName } from '../../tools/common/toolNames';
+import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 import { ChatVariablesCollection } from '../common/chatVariablesCollection';
 import { IBuildPromptContext } from '../common/intents';
 import { IBuildPromptResult } from './intents';
-import { normalizeToolSchema } from '../../tools/common/toolSchemaNormalizer';
 
-export interface IExecutePromptToolCallingLoopOptions extends IToolCallingLoopOptions {
+export interface ISubagentToolCallingLoopOptions extends IToolCallingLoopOptions {
 	request: ChatRequest;
 	location: ChatLocation;
 	promptText: string;
 }
 
-export class ExecutePromptToolCallingLoop extends ToolCallingLoop<IExecutePromptToolCallingLoopOptions> {
+export class SubagentToolCallingLoop extends ToolCallingLoop<ISubagentToolCallingLoopOptions> {
 
-	public static readonly ID = 'executePromptTool';
+	public static readonly ID = 'subagent';
 
 	constructor(
-		options: IExecutePromptToolCallingLoopOptions,
+		options: ISubagentToolCallingLoopOptions,
 		@IInstantiationService private readonly instantiationService: IInstantiationService,
 		@ILogService logService: ILogService,
 		@IRequestLogger requestLogger: IRequestLogger,
@@ -85,7 +85,7 @@ export class ExecutePromptToolCallingLoop extends ToolCallingLoop<IExecutePrompt
 	}
 
 	protected async getAvailableTools(): Promise<LanguageModelToolInformation[]> {
-		const excludedTools = new Set([ToolName.ExecutePrompt, ToolName.CoreManageTodoList]);
+		const excludedTools = new Set([ToolName.RunSubagent, ToolName.CoreManageTodoList]);
 		return (await getAgentTools(this.instantiationService, this.options.request))
 			.filter(tool => !excludedTools.has(tool.name as ToolName))
 			// TODO can't do virtual tools at this level
@@ -95,7 +95,7 @@ export class ExecutePromptToolCallingLoop extends ToolCallingLoop<IExecutePrompt
 	protected async fetch({ messages, finishedCb, requestOptions }: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
 		const endpoint = await this.getEndpoint(this.options.request);
 		return endpoint.makeChatRequest2({
-			debugName: ExecutePromptToolCallingLoop.ID,
+			debugName: SubagentToolCallingLoop.ID,
 			messages,
 			finishedCb,
 			location: this.options.location,
@@ -114,7 +114,7 @@ export class ExecutePromptToolCallingLoop extends ToolCallingLoop<IExecutePrompt
 			userInitiatedRequest: false,
 			telemetryProperties: {
 				messageId: randomUUID(),
-				messageSource: ExecutePromptToolCallingLoop.ID
+				messageSource: SubagentToolCallingLoop.ID
 			},
 		}, token);
 	}

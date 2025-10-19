@@ -65,7 +65,7 @@ export enum ToolName {
 	CoreRunTest = 'runTests',
 	ToolReplay = 'tool_replay',
 	EditFilesPlaceholder = 'edit_files',
-	ExecutePrompt = 'execute_prompt',
+	RunSubagent = 'runSubagent',
 	CoreConfirmationTool = 'vscode_get_confirmation'
 }
 
@@ -109,7 +109,6 @@ export enum ContributedToolName {
 	RunVscodeCmd = 'copilot_runVscodeCommand',
 	ToolReplay = 'copilot_toolReplay',
 	EditFilesPlaceholder = 'copilot_editFiles',
-	ExecutePrompt = 'execute_prompt',
 }
 
 export const byokEditToolNamesToToolNames = {
@@ -171,6 +170,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.FindFiles]: ToolCategory.Core,
 	[ToolName.CreateDirectory]: ToolCategory.Core,
 	[ToolName.ReadProjectStructure]: ToolCategory.Core,
+	[ToolName.RunSubagent]: ToolCategory.Core,
 
 	// already enabled only when tasks are enabled
 	[ToolName.CoreRunTask]: ToolCategory.Core,
@@ -218,7 +218,6 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	// Other tools - categorize appropriately
 	[ToolName.UpdateUserPreferences]: ToolCategory.VSCodeInteraction,
 	[ToolName.ToolReplay]: ToolCategory.RedundantButSpecific,
-	[ToolName.ExecutePrompt]: ToolCategory.RedundantButSpecific,
 	[ToolName.CoreConfirmationTool]: ToolCategory.VSCodeInteraction,
 } as const;
 

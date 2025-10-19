@@ -9,7 +9,7 @@ import './createDirectoryTool';
 import './createFileTool';
 import './docTool';
 import './editNotebookTool';
-import './executePromptTool';
+import './runSubagentTool';
 import './findFilesTool';
 import './findTestsFilesTool';
 import './findTextInFilesTool';

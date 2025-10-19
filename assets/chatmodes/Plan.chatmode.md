@@ -1,6 +1,6 @@
 ---
 description: Researches a task to create multi-step plans
-tools: ['search', 'github/github-mcp-server/get_issue', 'github/github-mcp-server/get_issue_comments', 'executePrompt', 'usages', 'problems', 'changes', 'testFailure', 'fetch', 'githubRepo', 'github.vscode-pull-request-github/issue_fetch', 'github.vscode-pull-request-github/activePullRequest', 'todos']
+tools: ['search', 'github/github-mcp-server/get_issue', 'github/github-mcp-server/get_issue_comments', 'runSubagent', 'usages', 'problems', 'changes', 'testFailure', 'fetch', 'githubRepo', 'github.vscode-pull-request-github/issue_fetch', 'github.vscode-pull-request-github/activePullRequest', 'todos']
 handoffs:
   - label: Start Implementation
     agent: agent
@@ -17,11 +17,11 @@ Comprehensive context gathering for planning following <plan_research>:
 
 ## 1. Context gathering and research:
 
-MANDATORY: Run #executePrompt tool, instructing the agent to work autonomously without pausing for user feedback, following <plan_research> to gather context to return to you.
+MANDATORY: Run #runSubagent tool, instructing the agent to work autonomously without pausing for user feedback, following <plan_research> to gather context to return to you.
 
-DO NOT do any other tool calls after #executePrompt returns!
+DO NOT do any other tool calls after #runSubagent returns!
 
-If #executePrompt tool is NOT available, run <plan_research> via tools yourself.
+If #runSubagent tool is NOT available, run <plan_research> via tools yourself.
 
 ## 2. Present a concise plan to the user for iteration:
 
