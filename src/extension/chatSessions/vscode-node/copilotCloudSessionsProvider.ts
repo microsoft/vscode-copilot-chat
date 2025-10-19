@@ -806,31 +806,54 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			autoPushAndCommit &&
 			((currentRepository?.changes?.workingTree && currentRepository.changes.workingTree.length > 0) || (currentRepository?.changes?.indexChanges && currentRepository.changes.indexChanges.length > 0));
 		if (hasChanges) {
-			// TODO: support pending changes
-			// if (!CopilotRemoteAgentConfig.getAutoCommitAndPushEnabled()) {
-			// 	return { error: vscode.l10n.t('Uncommitted changes detected. Please commit or stash your changes before starting the remote agent. Enable \'{0}\' to push your changes automatically.', CODING_AGENT_AUTO_COMMIT_AND_PUSH), state: 'error' };
-			// }
-			// try {
-			// 	chatStream?.progress(vscode.l10n.t('Waiting for local changes'));
-			// 	head_ref = await this.gitOperationsManager.commitAndPushChanges(repoInfo);
-			// } catch (error) {
-			// 	return { error: vscode.l10n.t('Failed to commit and push changes. Please try again later.'), innerError: error.message, state: 'error' };
-			// }
+			this.logService.warn('Blocking coding agent invocation due to uncommitted changes in the workspace.');
+			return {
+				error: vscode.l10n.t('Uncommitted changes detected. Please commit, stash, or discard your changes before delegating work to the coding agent.'),
+				state: 'error'
+			};
 		}
 
-		// try {
-		// 	if (!(await ghRepository.hasBranch(base_ref))) {
-		// 		if (!CopilotRemoteAgentConfig.getAutoCommitAndPushEnabled()) {
-		// 			// We won't auto-push a branch if the user has disabled the setting
-		// 			return { error: vscode.l10n.t('The branch \'{0}\' does not exist on the remote repository \'{1}/{2}\'. Please create the remote branch first.', base_ref, owner, repo), state: 'error' };
-		// 		}
-		// 		// Push the branch
-		// 		Logger.appendLine(`Base ref needs to exist on remote.  Auto pushing base_ref '${base_ref}' to remote repository '${owner}/${repo}'`, CopilotRemoteAgentManager.ID);
-		// 		await repository.push(remote.remoteName, base_ref, true);
-		// 	}
-		// } catch (error) {
-		// 	return { error: vscode.l10n.t('Failed to configure base branch \'{0}\' does not exist on the remote repository \'{1}/{2}\'. Please create the remote branch first.', base_ref, owner, repo), state: 'error' };
-		// }
+		const remoteName =
+			repo?.state.HEAD?.upstream?.remote ??
+			currentRepository?.upstreamRemote ??
+			repo?.state.remotes?.[0]?.name;
+
+		if (repo && remoteName && base_ref) {
+			try {
+				const remoteBranches = await repo.getBranches({ remote: true });
+				const expectedRemoteBranch = `${remoteName}/${base_ref}`;
+				const alternateNames = new Set<string>([
+					expectedRemoteBranch,
+					`refs/remotes/${expectedRemoteBranch}`,
+					base_ref
+				]);
+				const hasRemoteBranch = remoteBranches.some(branch => {
+					if (!branch.name) {
+						return false;
+					}
+					if (branch.remote && branch.remote !== remoteName) {
+						return false;
+					}
+					const candidateName = branch.remote ? `${branch.remote}/${branch.name}` : branch.name;
+					return alternateNames.has(candidateName);
+				});
+
+				if (!hasRemoteBranch) {
+					this.logService.warn(`Base branch '${expectedRemoteBranch}' not found on remote.`);
+					return {
+						error: vscode.l10n.t('The branch \'{0}\' does not exist on remote \'{1}\'. Please push the branch and try again.', base_ref, remoteName),
+						state: 'error'
+					};
+				}
+			} catch (error) {
+				this.logService.error(`Failed to verify remote branch for coding agent: ${error instanceof Error ? error.message : String(error)}`);
+				return {
+					error: vscode.l10n.t('Unable to verify that branch \'{0}\' exists on remote \'{1}\'. Please ensure the remote branch is available and try again.', base_ref, remoteName),
+					innerError: error instanceof Error ? error.message : undefined,
+					state: 'error'
+				};
+			}
+		}
 
 		const title = extractTitle(prompt, problemContext);
 		const { problemStatement, isTruncated } = truncatePrompt(this.logService, prompt, problemContext);
@@ -904,4 +927,3 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		}
 	}
 }
-
