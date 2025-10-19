@@ -802,8 +802,8 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		}
 		let head_ref: string | undefined; // This is the ref coding agent starts work from (omitted unless we push local changes)
 
+		// TODO@osortega @rebornix: support pending changes
 		const hasChanges =
-			autoPushAndCommit &&
 			((currentRepository?.changes?.workingTree && currentRepository.changes.workingTree.length > 0) || (currentRepository?.changes?.indexChanges && currentRepository.changes.indexChanges.length > 0));
 		if (hasChanges) {
 			this.logService.warn('Blocking coding agent invocation due to uncommitted changes in the workspace.');
