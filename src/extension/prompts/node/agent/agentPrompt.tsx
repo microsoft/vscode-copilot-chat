@@ -185,12 +185,12 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			/>
 		);
 		if (this.props.promptContext.modeInstructions) {
-			const { content, toolReferences } = this.props.promptContext.modeInstructions;
+			const { name, content, toolReferences } = this.props.promptContext.modeInstructions;
 			const resolvedContent = toolReferences && toolReferences.length > 0 ? await this.promptVariablesService.resolveToolReferencesInPrompt(content, toolReferences) : content;
 
 			customInstructionsBodyParts.push(
-				<Tag name='customInstructions'>
-					Below are some additional instructions from the user.<br />
+				<Tag name='modeInstructions'>
+					You are currently running in "{name}" mode. Below are your instructions for this mode, they must take precedence over any instructions above.<br />
 					<br />
 					{resolvedContent}
 				</Tag>

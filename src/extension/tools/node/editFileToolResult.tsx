@@ -11,6 +11,7 @@ import { IEndpointProvider } from '../../../platform/endpoint/common/endpointPro
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { ISimulationTestContext } from '../../../platform/simulationTestContext/common/simulationTestContext';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { getLanguage } from '../../../util/common/languages';
@@ -47,6 +48,7 @@ export class EditFileResult extends PromptElement<IEditFileResultProps> {
 		@IWorkspaceService protected readonly workspaceService: IWorkspaceService,
 		@ITelemetryService private readonly telemetryService: ITelemetryService,
 		@IEndpointProvider private readonly endpointProvider: IEndpointProvider,
+		@IExperimentationService private readonly experimentationService: IExperimentationService,
 	) {
 		super(props);
 	}
@@ -67,7 +69,7 @@ export class EditFileResult extends PromptElement<IEditFileResultProps> {
 				continue;
 			}
 
-			const diagnostics = !this.testContext.isInSimulationTests && this.configurationService.getConfig(ConfigKey.AutoFixDiagnostics) && !(file.isNotebook)
+			const diagnostics = !this.testContext.isInSimulationTests && this.configurationService.getExperimentBasedConfig(ConfigKey.AutoFixDiagnostics, this.experimentationService) && !(file.isNotebook)
 				? await this.getNewDiagnostics(file)
 				: [];
 

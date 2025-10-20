@@ -165,12 +165,12 @@
 				}
 			},
 			{
-				"name": "execute_prompt",
-				"toolReferenceName": "executePrompt",
-				"displayName": "Execute Prompt",
-				"when": "config.github.copilot.chat.executePrompt.enabled",
+				"name": "runSubagent",
+				"toolReferenceName": "runSubagent",
+				"displayName": "%copilot.tools.runSubagent.name%",
 				"canBeReferencedInPrompt": true,
-				"modelDescription": "Launch a new agent to handle complex, multi-step tasks autonomously. This tool is good at researching complex questions, searching for code, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries, use this agent to perform the search for you.\n\n- When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result.\n - Each agent invocation is stateless. You will not be able to send additional messages to the agent, nor will the agent be able to communicate with you outside of its final report. Therefore, your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.\n - The agent's outputs should generally be trusted\n - Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent",
+				"userDescription": "%copilot.tools.runSubagent.description%",
+				"modelDescription": "Launch a new agent to handle complex, multi-step tasks autonomously. This tool is good at researching complex questions, searching for code, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries, use this agent to perform the search for you.\n\n- Agents do not run async or in the background, you will wait for the agent's result.\n- When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result.\n - Each agent invocation is stateless. You will not be able to send additional messages to the agent, nor will the agent be able to communicate with you outside of its final report. Therefore, your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.\n - The agent's outputs should generally be trusted\n - Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent",
 				"tags": [],
 				"inputSchema": {
 					"type": "object",
@@ -1752,25 +1752,25 @@
 			},
 			{
 				"command": "github.copilot.cli.sessions.refresh",
-				"title": "Refresh Copilot CLI Sessions",
+				"title": "Refresh Copilot CLI Agent Sessions",
 				"icon": "$(refresh)",
 				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.cli.sessions.delete",
-				"title": "Delete Copilot CLI Session",
+				"title": "Delete Copilot CLI Agent Session",
 				"icon": "$(close)",
 				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.cli.sessions.resumeInTerminal",
-				"title": "Resume Session in Terminal",
+				"title": "Resume Agent Session in Terminal",
 				"icon": "$(terminal)",
 				"category": "Copilot CLI"
 			},
 			{
 				"command": "github.copilot.cli.sessions.newTerminalSession",
-				"title": "New Session in Terminal",
+				"title": "New Agent Session in Terminal",
 				"icon": "$(terminal)",
 				"category": "Copilot CLI"
 			},
@@ -2198,6 +2198,16 @@
 				"command": "github.copilot.chat.manageBYOKAPIKey",
 				"title": "Manage Bring Your Own Key API Key",
 				"enablement": "false"
+			},
+			{
+				"command": "github.copilot.cloud.sessions.refresh",
+				"title": "%github.copilot.command.refreshCopilotAgentSessions%",
+				"icon": "$(refresh)"
+			},
+			{
+				"command": "github.copilot.cloud.sessions.openInBrowser",
+				"title": "%github.copilot.command.openCopilotAgentSessionsInBrowser%",
+				"icon": "$(link-external)"
 			}
 		],
 		"configuration": [
@@ -2317,7 +2327,10 @@
 					"github.copilot.chat.agent.autoFix": {
 						"type": "boolean",
 						"default": true,
-						"description": "%github.copilot.config.autoFix%"
+						"description": "%github.copilot.config.autoFix%",
+						"tags": [
+							"onExp"
+						]
 					},
 					"github.copilot.chat.customInstructionsInSystemMessage": {
 						"type": "boolean",
@@ -3042,19 +3055,6 @@
 						],
 						"description": "%github.copilot.config.gpt5AlternatePrompt%"
 					},
-					"github.copilot.chat.gpt5CodexAlternatePrompt": {
-						"type": "string",
-						"default": "codex",
-						"tags": [
-							"experimental",
-							"onExp"
-						],
-						"enum": [
-							"default",
-							"codex"
-						],
-						"description": "%github.copilot.config.gpt5CodexAlternatePrompt%"
-					},
 					"github.copilot.chat.grokCodeAlternatePrompt": {
 						"type": "string",
 						"default": "default",
@@ -3106,14 +3106,6 @@
 						"enum": [
 							"off",
 							"detailed"
-						]
-					},
-					"github.copilot.chat.executePrompt.enabled": {
-						"type": "boolean",
-						"default": true,
-						"markdownDescription": "%github.copilot.config.executePrompt.enabled%",
-						"tags": [
-							"experimental"
 						]
 					},
 					"github.copilot.chat.completionsFetcher": {
@@ -3434,6 +3426,14 @@
 				{
 					"command": "github.copilot.cli.sessions.newTerminalSession",
 					"when": "false"
+				},
+				{
+					"command": "github.copilot.cloud.sessions.refresh",
+					"when": "false"
+				},
+				{
+					"command": "github.copilot.cloud.sessions.openInBrowser",
+					"when": "false"
 				}
 			],
 			"view/title": [
@@ -3466,6 +3466,11 @@
 					"command": "github.copilot.debug.showChatLogView",
 					"when": "view == workbench.panel.chat.view.copilot",
 					"group": "3_show"
+				},
+				{
+					"command": "github.copilot.cloud.sessions.refresh",
+					"when": "view == workbench.view.chat.sessions.copilot-cloud-agent",
+					"group": "navigation@1"
 				}
 			],
 			"view/item/context": [
@@ -3741,6 +3746,16 @@
 					"command": "github.copilot.cli.sessions.newTerminalSession",
 					"when": "view == workbench.view.chat.sessions.copilotcli",
 					"group": "submenu"
+				},
+				{
+					"command": "github.copilot.cli.sessions.refresh",
+					"when": "view == workbench.view.chat.sessions.copilotcli",
+					"group": "navigation@1"
+				},
+				{
+					"command": "github.copilot.cloud.sessions.openInBrowser",
+					"when": "chatSessionType == copilot-cloud-agent",
+					"group": "context"
 				}
 			]
 		},
@@ -4075,8 +4090,12 @@
 			{
 				"type": "claude-code",
 				"name": "claude",
-				"displayName": "Claude Code",
-				"description": "The Claude Code agent",
+				"displayName": "Claude Code CLI Agent",
+				"icon": "$(sparkle)",
+				"welcomeTitle": "Claude Code Agent",
+				"welcomeMessage": "Run local background tasks",
+				"inputPlaceholder": "Describe your task, type `#` for adding context",
+				"description": "The Claude Code Agent works on your local machine",
 				"when": "config.github.copilot.chat.advanced.claudeCode.enabled",
 				"capabilities": {
 					"supportsFileAttachments": true,
@@ -4107,9 +4126,13 @@
 			},
 			{
 				"type": "copilotcli",
-				"name": "copilotcli",
-				"displayName": "Copilot CLI",
-				"description": "The Copilot CLI agent",
+				"name": "GitHub Copilot CLI Agent",
+				"displayName": "GitHub Copilot CLI Agent",
+				"icon": "$(copilot)",
+				"welcomeTitle": "GitHub Copilot CLI Agent",
+				"welcomeMessage": "Run local background tasks",
+				"inputPlaceholder": "Describe your task, type `#` for adding context",
+				"description": "The Copilot CLI Agent works on your local machine",
 				"when": "config.github.copilot.chat.advanced.copilotCLI.enabled",
 				"capabilities": {
 					"supportsFileAttachments": true,
@@ -4118,9 +4141,13 @@
 			},
 			{
 				"type": "copilot-cloud-agent",
-				"name": "copilot",
-				"displayName": "GitHub Copilot cloud agent",
-				"description": "Delegate tasks to the GitHub Copilot coding agent. The agent works asynchronously to implement changes, iterates via chat, and can create or update pull requests as needed.",
+				"name": "GitHub Copilot Cloud Agent",
+				"displayName": "GitHub Copilot Cloud Agent",
+				"icon": "$(cloud)",
+				"welcomeTitle": "GitHub Copilot Cloud Agent",
+				"welcomeMessage": "Delegate tasks to the cloud",
+				"inputPlaceholder": "Describe your task, type `#` for adding context",
+				"description": "Delegate tasks to the GitHub Copilot Cloud Agent. The agent works asynchronously in the cloud to implement changes, iterates via chat, and can create or update pull requests as needed.",
 				"when": "config.github.copilot.chat.advanced.copilotCodingAgent.enabled",
 				"capabilities": {
 					"supportsFileAttachments": true
@@ -4312,7 +4339,7 @@
 	"dependencies": {
 		"@anthropic-ai/claude-code": "^1.0.120",
 		"@anthropic-ai/sdk": "^0.63.0",
-		"@github/copilot": "^0.0.342",
+		"@github/copilot": "^0.0.343",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",

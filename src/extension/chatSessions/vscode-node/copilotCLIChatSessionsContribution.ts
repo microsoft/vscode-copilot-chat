@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, l10n } from 'vscode';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { isLocation } from '../../../util/common/types';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
@@ -12,8 +13,40 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { localize } from '../../../util/vs/nls';
 import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
 import { ExtendedChatRequest, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
-import { buildChatHistoryFromEvents, parseChatMessagesToEvents, stripReminders } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
+import { buildChatHistoryFromEvents } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
+
+const MODELS_OPTION_ID = 'model';
+
+// Track model selections per session
+// TODO@rebornix: we should have proper storage for the session model preference (revisit with API)
+const _sessionModel: Map<string, vscode.ChatSessionProviderOptionItem | undefined> = new Map();
+
+/**
+ * Convert a model ID to a ModelProvider object for the Copilot CLI SDK
+ */
+function getModelProvider(modelId: string | undefined): { type: 'anthropic' | 'openai'; model: string } | undefined {
+	if (!modelId) {
+		return undefined;
+	}
+
+	// Map model IDs to their provider and model name
+	if (modelId.startsWith('claude-')) {
+		return {
+			type: 'anthropic',
+			model: modelId
+		};
+	} else if (modelId.startsWith('gpt-')) {
+		return {
+			type: 'openai',
+			model: modelId
+		};
+	}
+
+	return undefined;
+}
+
+const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
 
 export class CopilotCLIChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
 	private readonly _onDidChangeChatSessionItems = this._register(new Emitter<void>());
@@ -42,8 +75,9 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 
 	public async provideChatSessionItems(token: vscode.CancellationToken): Promise<vscode.ChatSessionItem[]> {
 		const sessions = await this.copilotcliSessionService.getAllSessions(token);
-		const diskSessions = sessions.map(session => ({
+		const diskSessions = sessions.filter(session => !this.copilotcliSessionService.isPendingRequest(session.id) && !session.isEmpty).map(session => ({
 			id: session.id,
+			resource: undefined,
 			label: session.label,
 			tooltip: `Copilot CLI session: ${session.label}`,
 			timing: {
@@ -69,57 +103,81 @@ export class CopilotCLIChatSessionItemProvider extends Disposable implements vsc
 }
 
 export class CopilotCLIChatSessionContentProvider implements vscode.ChatSessionContentProvider {
+	private readonly availableModels: vscode.ChatSessionProviderOptionItem[] = [
+		{
+			id: 'claude-sonnet-4.5',
+			name: 'Claude Sonnet 4.5'
+		},
+		{
+			id: 'claude-sonnet-4',
+			name: 'Claude Sonnet 4'
+		},
+		{
+			id: 'gpt-5',
+			name: 'GPT-5'
+		}
+	];
+
+	private get defaultModel(): vscode.ChatSessionProviderOptionItem {
+		return this.availableModels[0];
+	}
 
 	constructor(
-		private readonly copilotcliAgentManager: CopilotCLIAgentManager,
+		@IVSCodeExtensionContext private readonly extensionContext: IVSCodeExtensionContext,
 		@ICopilotCLISessionService private readonly sessionService: ICopilotCLISessionService,
 	) { }
 
 	async provideChatSessionContent(copilotcliSessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
-		const existingSession = copilotcliSessionId && await this.sessionService.getSession(copilotcliSessionId, token);
-		const sdkSession = existingSession ? existingSession.sdkSession : undefined;
-		const chatMessages = sdkSession ? await sdkSession.getChatMessages() : [];
-		const events = parseChatMessagesToEvents(chatMessages);
-
-		const history = existingSession ? buildChatHistoryFromEvents(events) : [];
-
-		// Check if there's a pending request for this new session
-		const pendingRequest = this.sessionService.getPendingRequest(copilotcliSessionId);
-
-		const activeResponseCallback = pendingRequest
-			? async (stream: vscode.ChatResponseStream, token: vscode.CancellationToken) => {
-				this.sessionService.clearPendingRequest(copilotcliSessionId);
-				this.sessionService.setSessionStatus(copilotcliSessionId, vscode.ChatSessionStatus.InProgress);
-				await this.copilotcliAgentManager.handleRequest(
-					copilotcliSessionId,
-					pendingRequest.request,
-					pendingRequest.context,
-					stream,
-					token
-				);
-				this.sessionService.setSessionStatus(copilotcliSessionId, vscode.ChatSessionStatus.Completed);
-			}
-			: undefined;
-
-		// If there's a pending request, add it to the history as the first request turn
-		if (pendingRequest) {
-			const request = pendingRequest.request;
-			const requestTurn = new vscode.ChatRequestTurn2(
-				stripReminders(request.prompt),
-				undefined,
-				[...request.references],
-				'',
-				[],
-				undefined
-			);
-			history.push(requestTurn);
+		if (!_sessionModel.get(copilotcliSessionId)) {
+			// Get the user's preferred model from global state, default to claude-sonnet-4.5
+			const preferredModelId = this.extensionContext.globalState.get<string>(COPILOT_CLI_MODEL_MEMENTO_KEY, this.defaultModel.id);
+			const preferredModel = this.availableModels.find(m => m.id === preferredModelId) ?? this.defaultModel; // fallback to claude-sonnet-4.5
+			_sessionModel.set(copilotcliSessionId, preferredModel);
 		}
+
+		const existingSession = await this.sessionService.getSession(copilotcliSessionId, token);
+		const events = await existingSession?.sdkSession.getEvents();
+		const history = buildChatHistoryFromEvents(events || []);
 
 		return {
 			history,
-			activeResponseCallback,
+			activeResponseCallback: undefined,
 			requestHandler: undefined,
+			options: {
+				[MODELS_OPTION_ID]: _sessionModel.get(copilotcliSessionId)?.id ?? this.defaultModel.id
+			}
 		};
+	}
+
+	async provideChatSessionProviderOptions(): Promise<vscode.ChatSessionProviderOptions> {
+		return {
+			optionGroups: [
+				{
+					id: MODELS_OPTION_ID,
+					name: 'Model',
+					description: 'Select the language model to use',
+					items: this.availableModels
+				}
+			]
+		};
+	}
+
+	// Handle option changes for a session (store current state in a map)
+	provideHandleOptionsChange(sessionId: string, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, token: vscode.CancellationToken): void {
+		for (const update of updates) {
+			if (update.optionId === MODELS_OPTION_ID) {
+				if (typeof update.value === 'undefined') {
+					_sessionModel.set(sessionId, undefined);
+				} else {
+					const model = this.availableModels.find(m => m.id === update.value);
+					_sessionModel.set(sessionId, model);
+					// Persist the user's choice to global state
+					if (model) {
+						this.extensionContext.globalState.update(COPILOT_CLI_MODEL_MEMENTO_KEY, model.id);
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -143,25 +201,21 @@ export class CopilotCLIChatSessionParticipant {
 		const { chatSessionContext } = context;
 		if (chatSessionContext) {
 			if (chatSessionContext.isUntitled) {
-				// Create a new session (just get the session ID, don't run the request yet)
-				const newSdkSession = await this.sessionService.getOrCreateSDKSession(undefined, processedRequest.prompt);
-				const copilotcliSessionId = newSdkSession?.sessionId;
+				const { copilotcliSessionId } = await this.copilotcliAgentManager.handleRequest(undefined, processedRequest, context, stream, undefined, token);
 				if (!copilotcliSessionId) {
 					stream.warning(localize('copilotcli.failedToCreateSession', "Failed to create a new CopilotCLI session."));
 					return {};
 				}
-
-				// Store the pending request that will be executed by activeResponseCallback
-				this.sessionService.setPendingRequest(copilotcliSessionId, processedRequest, context);
-
-				// Immediately swap to the new session (this will trigger provideChatSessionContent)
-				this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { id: copilotcliSessionId, label: processedRequest.prompt ?? 'CopilotCLI' });
+				if (copilotcliSessionId) {
+					this.sessionItemProvider.swap(chatSessionContext.chatSessionItem, { id: copilotcliSessionId, resource: undefined, label: processedRequest.prompt ?? 'CopilotCLI' });
+					this.sessionService.clearPendingRequest(copilotcliSessionId);
+				}
 				return {};
 			}
 
 			const { id } = chatSessionContext.chatSessionItem;
 			this.sessionService.setSessionStatus(id, vscode.ChatSessionStatus.InProgress);
-			await this.copilotcliAgentManager.handleRequest(id, processedRequest, context, stream, token);
+			await this.copilotcliAgentManager.handleRequest(id, processedRequest, context, stream, getModelProvider(_sessionModel.get(id)?.id), token);
 			this.sessionService.setSessionStatus(id, vscode.ChatSessionStatus.Completed);
 			return {};
 		}

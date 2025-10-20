@@ -111,6 +111,14 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		return this.getJobByJobIdWithToken(owner, repo, jobId, userAgent, authToken);
 	}
 
+	async getJobBySessionId(owner: string, repo: string, sessionId: string, userAgent: string): Promise<JobInfo> {
+		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		if (!authToken) {
+			throw new Error('No authentication token available');
+		}
+		return this.getJobBySessionIdWithToken(owner, repo, sessionId, userAgent, authToken);
+	}
+
 	async addPullRequestComment(pullRequestId: string, commentBody: string): Promise<PullRequestComment | null> {
 		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
 		if (!authToken) {

@@ -796,11 +796,11 @@ When generating code, please follow these user provided coding instructions. You
 <instructions>
 This is a test custom instruction file
 </instructions>
-<customInstructions>
-Below are some additional instructions from the user.
+<modeInstructions>
+You are currently running in "Plan" mode. Below are your instructions for this mode, they must take precedence over any instructions above.
 
 custom mode instructions
-</customInstructions>
+</modeInstructions>
 
 
 [copilot_cache_control: { type: 'ephemeral' }]
@@ -2092,11 +2092,11 @@ When generating code, please follow these user provided coding instructions. You
 <instructions>
 This is a test custom instruction file
 </instructions>
-<customInstructions>
-Below are some additional instructions from the user.
+<modeInstructions>
+You are currently running in "Plan" mode. Below are your instructions for this mode, they must take precedence over any instructions above.
 
 custom mode instructions
-</customInstructions>
+</modeInstructions>
 
 
 [copilot_cache_control: { type: 'ephemeral' }]
@@ -3805,11 +3805,11 @@ When generating code, please follow these user provided coding instructions. You
 <instructions>
 This is a test custom instruction file
 </instructions>
-<customInstructions>
-Below are some additional instructions from the user.
+<modeInstructions>
+You are currently running in "Plan" mode. Below are your instructions for this mode, they must take precedence over any instructions above.
 
 custom mode instructions
-</customInstructions>
+</modeInstructions>
 
 
 [copilot_cache_control: { type: 'ephemeral' }]

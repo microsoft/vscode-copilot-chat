@@ -12,6 +12,7 @@ export interface IVirtualToolMetadata {
 	wasEmbeddingsMatched?: boolean;
 	wasExpandedByDefault?: boolean;
 	canBeCollapsed?: boolean;
+	possiblePrefix?: string;
 }
 
 export class VirtualTool {

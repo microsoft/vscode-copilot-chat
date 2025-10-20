@@ -536,12 +536,6 @@ async function fetchWithInstrumentation(
 
 		logService.debug(`request.response: [${stringifyUrlOrRequestMetadata(chatEndpoint.urlOrRequestMetadata)}], took ${totalTimeMs} ms`);
 
-		if (request.messages) {
-			logService.debug(`messages: ${JSON.stringify(request.messages)}`);
-		} else if (request.input) {
-			logService.debug(`input: ${JSON.stringify(request.input)}`);
-		}
-
 		telemetryService.sendGHTelemetryEvent('request.response', telemetryData.properties, telemetryData.measurements);
 
 		return response;
