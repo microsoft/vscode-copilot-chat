@@ -4098,8 +4098,7 @@
 				"description": "The Claude Code Agent works on your local machine",
 				"when": "config.github.copilot.chat.advanced.claudeCode.enabled",
 				"capabilities": {
-					"supportsFileAttachments": true,
-					"supportsToolAttachments": false
+					"supportsFileAttachments": true
 				},
 				"commands": [
 					{
@@ -4136,8 +4135,7 @@
 				"when": "config.github.copilot.chat.advanced.copilotCLI.enabled",
 				"capabilities": {
 					"supportsFileAttachments": true,
-					"supportsProblemAttachments": true,
-					"supportsToolAttachments": false
+					"supportsProblemAttachments": true
 				}
 			},
 			{
