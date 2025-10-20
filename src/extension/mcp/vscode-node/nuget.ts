@@ -11,6 +11,7 @@ import { IFetcherService } from '../../../platform/networking/common/fetcherServ
 import { randomPath } from '../../../util/vs/base/common/extpath';
 import { localize } from '../../../util/vs/nls';
 import { ValidatePackageErrorType, ValidatePackageResult } from './commands';
+import { McpServerSchemaVersion_v2025_07_09 } from './mapping/mcpGalleryService';
 import { CommandExecutor, ICommandExecutor } from './util';
 
 interface NuGetServiceIndexResponse {
@@ -38,8 +39,6 @@ interface DotnetCli {
 }
 
 const MCP_SERVER_SCHEMA_2025_07_09_GH = "https://modelcontextprotocol.io/schemas/draft/2025-07-09/server.json";
-const MCP_SERVER_SCHEMA_2025_07_09 = "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json";
-const MCP_SERVER_SCHEMA_2025_09_29 = "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json";
 
 export class NuGetMcpSetup {
 	constructor(
@@ -305,12 +304,7 @@ stderr: ${installResult.stderr}`);
 
 		// the original .NET MCP server project template used a schema URL that is deprecated
 		if (manifest["$schema"] === MCP_SERVER_SCHEMA_2025_07_09_GH) {
-			manifest["$schema"] = MCP_SERVER_SCHEMA_2025_07_09;
-		}
-
-		if (manifest["$schema"] !== MCP_SERVER_SCHEMA_2025_07_09
-			&& manifest["$schema"] !== MCP_SERVER_SCHEMA_2025_09_29) {
-			this.logService.info(`NuGet package server.json has unrecognized schema version: '${manifest["$schema"]}'.`);
+			manifest["$schema"] = McpServerSchemaVersion_v2025_07_09.SCHEMA;
 		}
 
 		return manifest;
