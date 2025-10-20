@@ -49,7 +49,6 @@ import './allAgentPrompts';
 import { AlternateGPTPrompt, DefaultAgentPrompt } from './defaultAgentInstructions';
 import { PromptRegistry } from './promptRegistry';
 import { SummarizedConversationHistory } from './summarizedConversationHistory';
-import { VSCModelUserMessage } from './vscModelPrompts';
 
 export interface AgentPromptProps extends GenericBasePromptElementProps {
 	readonly endpoint: IChatEndpoint;
@@ -338,8 +337,8 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 			// Only validate hidden status if we have modelId cached
 			// Otherwise, always use frozen content to maintain backward compatibility
 			if (frozenMetadata.modelId) {
-				// Only re-render if switching FROM hidden TO non-hidden (to remove VSCModelUserMessage preamble)
-				// When switching from non-hidden to hidden, keep the old messages as-is (no preamble needed in history)
+				// Check if we need to re-render due to hidden status change
+				// Only re-render if switching FROM hidden TO non-hidden (to remove getVSCModelReminder)
 				const currentIsHidden = await isHiddenModelByModelId(this.props.endpoint);
 				const cachedIsHidden = await isHiddenModelByModelId({ model: frozenMetadata.modelId } as IChatEndpoint);
 				// Use frozen content unless switching from hidden to non-hidden
@@ -399,8 +398,8 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
 						{getFileCreationReminder(this.props.endpoint.family)}
 						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
+						{getVSCModelReminder(shouldIncludePreamble)}
 					</Tag>
-					{shouldIncludePreamble && <VSCModelUserMessage />}
 					{query && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 				</UserMessage>
@@ -801,6 +800,20 @@ function getFileCreationReminder(modelFamily: string | undefined) {
 		return;
 	}
 	return <>Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.<br /></>;
+}
+
+function getVSCModelReminder(isHiddenModel: boolean) {
+	if (!isHiddenModel) {
+		return;
+	}
+
+	return <>
+		Follow the guidance in &lt;preamble_instructions&gt; from the system prompt.<br />
+		You MUST preface each tool call batch with a brief status update.<br />
+		Focus on findings and next steps. Vary your openings—avoid repeating "I'll" or "I will" consecutively.<br />
+		When you have a finding, be enthusiastic and specific (2 sentences). Otherwise, state your next action only (1 sentence).<br />
+		Don't over-express your thought in preamble, do not use preamble to think or reason. This is a strict and strong requirement.<br />
+	</>;
 }
 
 function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {
