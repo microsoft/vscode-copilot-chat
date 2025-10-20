@@ -40,8 +40,6 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 		const toolsService = accessor.get<IToolsService>(IToolsService);
 		const endpointProvider = accessor.get<IEndpointProvider>(IEndpointProvider);
 		const notebookService = accessor.get<INotebookService>(INotebookService);
-		const configurationService = accessor.get<IConfigurationService>(IConfigurationService);
-		const experimentationService = accessor.get<IExperimentationService>(IExperimentationService);
 		const model = await endpointProvider.getChatEndpoint(request);
 		const lookForTools = new Set<string>([ToolName.EditFile]);
 
@@ -51,7 +49,7 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 
 		if (await modelSupportsReplaceString(model)) {
 			lookForTools.add(ToolName.ReplaceString);
-			if (await modelSupportsMultiReplaceString(model) && configurationService.getExperimentBasedConfig(ConfigKey.Internal.MultiReplaceString, experimentationService)) {
+			if (await modelSupportsMultiReplaceString(model)) {
 				lookForTools.add(ToolName.MultiReplaceString);
 			}
 		}

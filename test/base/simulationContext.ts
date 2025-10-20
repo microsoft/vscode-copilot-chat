@@ -197,7 +197,6 @@ export async function createSimulationAccessor(
 				new Map<ExperimentBasedConfig<ExperimentBasedConfigType> | Config<any>, unknown>([
 					[ConfigKey.UseProjectTemplates, false],
 					[ConfigKey.SummarizeAgentConversationHistory, opts.summarizeHistory],
-					[ConfigKey.Internal.SweBenchAgentPrompt, opts.swebenchPrompt],
 					...currentTestRunInfo.test.configurations?.map<[ExperimentBasedConfig<ExperimentBasedConfigType> | Config<any>, unknown]>(c => [c.key, c.value]) ?? [],
 					...configs,
 				]),
