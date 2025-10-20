@@ -44,6 +44,7 @@ export interface ICommentResult {
 }
 
 const AGENTS_OPTION_GROUP_ID = 'agents';
+const DEFAULT_AGENT_ID = '___vscode_default___';
 
 export class CopilotChatSessionsProvider extends Disposable implements vscode.ChatSessionContentProvider, vscode.ChatSessionItemProvider {
 	public static readonly TYPE = 'copilot-cloud-agent';
@@ -62,7 +63,6 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 	public chatParticipant = vscode.chat.createChatParticipant(CopilotChatSessionsProvider.TYPE, async (request, context, stream, token) =>
 		await this.chatParticipantImpl(request, context, stream, token)
 	);
-
 
 	constructor(
 		@IOctoKitService private readonly _octoKitService: IOctoKitService,
@@ -87,7 +87,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		try {
 			const customAgents = await this._octoKitService.getCustomAgents(repoId.org, repoId.repo);
 			const agentItems: vscode.ChatSessionProviderOptionItem[] = [
-				{ id: 'default', name: vscode.l10n.t('Default Agent') },
+				{ id: DEFAULT_AGENT_ID, name: vscode.l10n.t('Default Agent') },
 				...customAgents.map(agent => ({
 					id: agent.name,
 					name: agent.display_name || agent.name
@@ -177,7 +177,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			pullRequestNumber = parseInt(sessionId);
 			if (isNaN(pullRequestNumber)) {
 				this.logService.error(`Invalid pull request number: ${sessionId}`);
-				return this.createEmptySession();
+				return this.createEmptySession(sessionId);
 			}
 		}
 
@@ -214,12 +214,12 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		const selectedAgent =
 			// Local cache of session -> custom agent
 			this.sessionAgentMap.get(sessionId)
-			// Query for the sub agent (if any) that this session originally used
-			|| undefined; // TODO: fix
+			// Query for the sub-agent that the remote reports for this session
+			|| undefined; /* TODO: Needs API to support this. */
 
 		return {
 			history,
-			options: selectedAgent ? { agents: selectedAgent } : undefined, // TODO: VS Code behavior change needed. If options not provided here, hide UI selector
+			options: selectedAgent ? { [AGENTS_OPTION_GROUP_ID]: selectedAgent } : undefined,
 			activeResponseCallback: this.findActiveResponseCallback(sessions, pr),
 			requestHandler: undefined
 		};
@@ -266,9 +266,18 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		};
 	}
 
-	private createEmptySession(): vscode.ChatSession {
+	private createEmptySession(sessionId?: string): vscode.ChatSession {
 		return {
 			history: [],
+			...(sessionId && sessionId.startsWith('untitled-')
+				? {
+					options: {
+						[AGENTS_OPTION_GROUP_ID]:
+							this.sessionAgentMap.get(sessionId)
+							?? (this.sessionAgentMap.set(sessionId, DEFAULT_AGENT_ID), DEFAULT_AGENT_ID)
+					}
+				}
+				: {}),
 			requestHandler: undefined
 		};
 	}
@@ -938,7 +947,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		const payload: RemoteAgentJobPayload = {
 			problem_statement: problemStatement,
 			event_type: 'visual_studio_code_remote_agent_tool_invoked',
-			...(customAgentName && { custom_agent: customAgentName }),
+			...(customAgentName && customAgentName !== DEFAULT_AGENT_ID && { custom_agent: customAgentName }),
 			pull_request: {
 				title,
 				body_placeholder: formatBodyPlaceholder(title),
