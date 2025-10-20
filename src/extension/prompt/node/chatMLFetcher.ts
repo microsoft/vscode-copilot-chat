@@ -200,6 +200,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 								// Retry with augmented messages
 								const retryResult = await this.fetchMany({
+									...opts,
 									debugName: 'retry-' + debugName,
 									messages: augmentedMessages,
 									finishedCb,
@@ -271,6 +272,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 					// Retry with other fetchers
 					const retryResult = await this.fetchMany({
+						...opts,
 						debugName: 'retry-error-' + debugName,
 						messages,
 						finishedCb,
