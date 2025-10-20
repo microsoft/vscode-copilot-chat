@@ -11,6 +11,7 @@ import { ICAPIClientService } from '../../../platform/endpoint/common/capiClient
 import { IDomainService } from '../../../platform/endpoint/common/domainService';
 import { IChatModelInformation } from '../../../platform/endpoint/common/endpointProvider';
 import { ChatEndpoint } from '../../../platform/endpoint/node/chatEndpoint';
+import { isScenarioAutomation } from '../../../platform/env/common/envService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAiFunctionTool } from '../../../platform/networking/common/fetch';
 import { IFetcherService } from '../../../platform/networking/common/fetcherService';
@@ -171,8 +172,11 @@ export class OpenAIEndpoint extends ChatEndpoint {
 
 			const lowerKey = key.toLowerCase();
 			if (OpenAIEndpoint._reservedHeaders.has(lowerKey)) {
-				this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' attempted to override reserved header '${key}', skipping.`);
-				continue;
+				// Allow 'authorization' header only in scenario automation mode
+				if (lowerKey !== 'authorization' || !isScenarioAutomation) {
+					this.logService.warn(`[OpenAIEndpoint] Model '${this.modelMetadata.id}' attempted to set reserved header '${key}', skipping.`);
+					continue;
+				}
 			}
 
 			// Check for pattern-based forbidden headers
@@ -304,6 +308,10 @@ export class OpenAIEndpoint extends ChatEndpoint {
 			headers['Authorization'] = `Bearer ${this._apiKey}`;
 		}
 		for (const [key, value] of Object.entries(this._customHeaders)) {
+			// Remove default Authorization header if custom authorization header is provided
+			if (key.toLowerCase() === 'authorization') {
+				delete headers['Authorization'];
+			}
 			headers[key] = value;
 		}
 		return headers;
