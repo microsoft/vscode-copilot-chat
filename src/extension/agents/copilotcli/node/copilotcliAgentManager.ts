@@ -44,6 +44,7 @@ export class CopilotCLIAgentManager extends Disposable {
 		modelId: ModelProvider | undefined,
 		token: vscode.CancellationToken
 	): Promise<{ copilotcliSessionId: string | undefined }> {
+		const isNewSession = !copilotcliSessionId;
 		const sessionIdForLog = copilotcliSessionId ?? 'new';
 		this.logService.trace(`[CopilotCLIAgentManager] Handling request for sessionId=${sessionIdForLog}.`);
 
@@ -58,7 +59,10 @@ export class CopilotCLIAgentManager extends Disposable {
 			this.sessionService.trackSessionWrapper(sdkSession.sessionId, session);
 		}
 
-		this.sessionService.setPendingRequest(session.sessionId);
+		if (isNewSession) {
+			this.sessionService.setPendingRequest(session.sessionId);
+		}
+
 		await session.invoke(request.prompt, request.toolInvocationToken, stream, modelId, token);
 
 		return { copilotcliSessionId: session.sessionId };
