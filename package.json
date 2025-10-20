@@ -4182,10 +4182,10 @@
 				}
 			}
 		],
-		"chatModes": [
+		"chatAgents": [
 			{
 				"name": "Plan",
-				"path": "./assets/chatmodes/Plan.chatmode.md",
+				"path": "./assets/agents/Plan.vscode-agent.md",
 				"description": "Researches a task to create multi-step plans"
 			}
 		]
