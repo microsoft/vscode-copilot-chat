@@ -5,7 +5,6 @@
 
 import * as pathLib from 'path';
 import * as vscode from 'vscode';
-import { ChatSessionItem } from 'vscode';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
@@ -49,13 +48,11 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 	private readonly COPILOT = 'GitHub Copilot Cloud Agent';
 
 	private readonly _onDidChangeChatSessionItems = this._register(new vscode.EventEmitter<void>());
-	public onDidChangeChatSessionItems = this._onDidChangeChatSessionItems.event;
+	public readonly onDidChangeChatSessionItems = this._onDidChangeChatSessionItems.event;
 	private readonly _onDidCommitChatSessionItem = this._register(new vscode.EventEmitter<{ original: vscode.ChatSessionItem; modified: vscode.ChatSessionItem }>());
-	public onDidCommitChatSessionItem = this._onDidCommitChatSessionItem.event;
+	public readonly onDidCommitChatSessionItem = this._onDidCommitChatSessionItem.event;
 	private chatSessions: Map<number, PullRequestSearchItem> = new Map();
 	private chatSessionItemsPromise: Promise<vscode.ChatSessionItem[]> | undefined;
-	private readonly _onDidCommitChatSession = this._register(new vscode.EventEmitter<{ original: ChatSessionItem; modified: ChatSessionItem }>());
-	readonly onDidCommitChatSession = this._onDidCommitChatSession.event;
 	public chatParticipant = vscode.chat.createChatParticipant(CopilotChatSessionsProvider.TYPE, async (request, context, stream, token) =>
 		await this.chatParticipantImpl(request, context, stream, token)
 	);
@@ -348,7 +345,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				return {};
 			}
 			// Tell UI to the new chat session
-			this._onDidCommitChatSession.fire({
+			this._onDidCommitChatSessionItem.fire({
 				original: context.chatSessionContext.chatSessionItem,
 				modified: {
 					id: String(number),
