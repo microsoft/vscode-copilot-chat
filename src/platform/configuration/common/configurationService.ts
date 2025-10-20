@@ -754,6 +754,10 @@ export namespace ConfigKey {
 	/** Configure reasoning summary style sent to Responses API */
 	export const ResponsesApiReasoningSummary = defineExpSetting<'off' | 'detailed'>('chat.responsesApiReasoningSummary', 'detailed');
 	export const EnableChatImageUpload = defineExpSetting<boolean>('chat.imageUpload.enabled', true);
+	/** Enable extended thinking for Anthropic models that support it */
+	export const EnableAnthropicThinking = defineExpSetting<boolean>('chat.anthropic.thinking.enabled', true);
+	/** Maximum thinking tokens for Anthropic extended thinking. If set, overrides the default calculation. */
+	export const MaxAnthropicThinkingTokens = defineSetting<number | null>('chat.anthropic.thinking.maxTokens', null);
 
 	/** Add context from recently used files */
 	export const TemporalContextInlineChatEnabled = defineExpSetting<boolean>('chat.editor.temporalContext.enabled', false);

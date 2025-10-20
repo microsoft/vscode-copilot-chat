@@ -3108,6 +3108,29 @@
 							"detailed"
 						]
 					},
+					"github.copilot.chat.anthropic.thinking.enabled": {
+						"type": "boolean",
+						"default": false,
+						"markdownDescription": "%github.copilot.config.anthropic.thinking.enabled%",
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
+					"github.copilot.chat.anthropic.thinking.maxTokens": {
+						"type": [
+							"number",
+							"null"
+						],
+						"default": null,
+						"markdownDescription": "%github.copilot.config.anthropic.thinking.maxTokens%",
+						"minimum": 1024,
+						"maximum": 32000,
+						"tags": [
+							"experimental",
+							"onExp"
+						]
+					},
 					"github.copilot.chat.completionsFetcher": {
 						"type": [
 							"string",

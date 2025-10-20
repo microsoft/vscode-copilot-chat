@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscodeTypes from '../../../../vscodeTypes';
+import { LanguageModelThinkingPart } from '../../../../vscodeTypes';
 import { CancellationTokenSource } from '../../../vs/base/common/cancellation';
 import { Emitter as EventEmitter } from '../../../vs/base/common/event';
 import { URI as Uri } from '../../../vs/base/common/uri';
@@ -101,6 +102,7 @@ const shim: typeof vscodeTypes = {
 	ChatResponsePullRequestPart,
 	LanguageModelTextPart2,
 	LanguageModelDataPart2,
+	LanguageModelThinkingPart,
 	LanguageModelPartAudience,
 	ChatResponseThinkingProgressPart,
 	LanguageModelToolCallPart,
