@@ -360,6 +360,7 @@ export class DefaultIntentRequestHandler {
 					...renderedUserMessageMetadata && {
 						renderedUserMessage: renderedUserMessageMetadata.renderedUserMessage,
 						modelFamily: renderedUserMessageMetadata.modelFamily,
+						modelId: renderedUserMessageMetadata.modelId,
 					},
 					...globalContextMetadata,
 				} satisfies Partial<IResultMetadata>,

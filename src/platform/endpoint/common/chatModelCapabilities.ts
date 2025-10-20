@@ -27,9 +27,24 @@ const HIDDEN_MODEL_A_HASHES = [
 	'6b0f165d0590bf8d508540a796b4fda77bf6a0a4ed4e8524d5451b1913100a95'
 ];
 
+const HIDDEN_MODEL_A_ID_HASHES = [
+	'7b667eee9b3517fb9aae7061617fd9cec524859fcd6a20a605bfb142a6b0f14e',
+	'e7cfc1a7adaf9e419044e731b7a9e21940a5280a438b472db0c46752dd70eab3',
+	'878722e35e24b005604c37aa5371ae100e82465fbfbdf6fe3c1fdaf7c92edc96',
+];
+
+function getModelId(model: LanguageModelChat | IChatEndpoint): string {
+	return 'id' in model ? model.id : model.model;
+}
+
 export async function isHiddenModelA(model: LanguageModelChat | IChatEndpoint) {
 	const h = await getSha256Hash(model.family);
 	return HIDDEN_MODEL_A_HASHES.includes(h);
+}
+
+export async function isHiddenModelByModelId(model: LanguageModelChat | IChatEndpoint) {
+	const h = await getSha256Hash(getModelId(model));
+	return HIDDEN_MODEL_A_ID_HASHES.includes(h);
 }
 
 export async function isHiddenModelB(model: LanguageModelChat | IChatEndpoint) {

@@ -336,6 +336,8 @@ export interface IResultMetadata {
 	globalContextCacheKey?: string;
 	/** Model family used when rendering the user message, for cache invalidation */
 	modelFamily?: string;
+	/** Model ID used when rendering the user message, for cache invalidation */
+	modelId?: string;
 	command?: string;
 	filterCategory?: FilterReason;
 
@@ -363,6 +365,7 @@ export class RenderedUserMessageMetadata {
 	constructor(
 		readonly renderedUserMessage: Raw.ChatCompletionContentPart[],
 		readonly modelFamily?: string,
+		readonly modelId?: string,
 	) { }
 }
 

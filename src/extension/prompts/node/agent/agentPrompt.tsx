@@ -153,8 +153,8 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			/>;
 		}
 
-		const { isHiddenModelA } = await import('../../../../platform/endpoint/common/chatModelCapabilities');
-		if (await isHiddenModelA(this.props.endpoint)) {
+		const { isHiddenModelByModelId } = await import('../../../../platform/endpoint/common/chatModelCapabilities');
+		if (await isHiddenModelByModelId(this.props.endpoint)) {
 			// Try VSCModel prompt for hidden models
 			const hiddenModelPrompt = PromptRegistry.getPrompt('vscModel');
 			if (hiddenModelPrompt) {
@@ -332,16 +332,16 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const { isHiddenModelA } = await import('../../../../platform/endpoint/common/chatModelCapabilities');
+		const { isHiddenModelByModelId } = await import('../../../../platform/endpoint/common/chatModelCapabilities');
 		const frozenMetadata = this.props.turn?.getMetadata(RenderedUserMessageMetadata);
 		if (frozenMetadata) {
-			// Only validate hidden status if we have modelFamily cached
+			// Only validate hidden status if we have modelId cached
 			// Otherwise, always use frozen content to maintain backward compatibility
-			if (frozenMetadata.modelFamily) {
+			if (frozenMetadata.modelId) {
 				// Only re-render if switching FROM hidden TO non-hidden (to remove VSCModelUserMessage preamble)
 				// When switching from non-hidden to hidden, keep the old messages as-is (no preamble needed in history)
-				const currentIsHidden = await isHiddenModelA(this.props.endpoint);
-				const cachedIsHidden = await isHiddenModelA({ family: frozenMetadata.modelFamily } as IChatEndpoint);
+				const currentIsHidden = await isHiddenModelByModelId(this.props.endpoint);
+				const cachedIsHidden = await isHiddenModelByModelId({ model: frozenMetadata.modelId } as IChatEndpoint);
 				// Use frozen content unless switching from hidden to non-hidden
 				if (!cachedIsHidden || currentIsHidden) {
 					// Same status or switching from non-hidden to hidden: use frozen content
@@ -349,7 +349,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 				}
 				// Switching from hidden to non-hidden: fall through to re-render to remove preamble
 			} else {
-				// No modelFamily cached, use frozen content as-is (backward compatibility)
+				// No modelId cached, use frozen content as-is (backward compatibility)
 				return <FrozenContentUserMessage frozenContent={frozenMetadata.renderedUserMessage} enableCacheBreakpoints={this.props.enableCacheBreakpoints} />;
 			}
 		}
@@ -358,7 +358,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 			this.logService.trace('Re-rendering historical user message');
 		}
 
-		const shouldIncludePreamble = await isHiddenModelA(this.props.endpoint);
+		const shouldIncludePreamble = await isHiddenModelByModelId(this.props.endpoint);
 
 		const query = await this.promptVariablesService.resolveToolReferencesInPrompt(this.props.request, this.props.toolReferences ?? []);
 		const hasReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ReplaceString);
