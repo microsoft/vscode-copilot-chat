@@ -201,7 +201,7 @@ export class CopilotToken {
 	}
 
 	isFcv1(): boolean {
-		return !!this.tokenMap.get('fcv1');
+		return this.tokenMap.get('fcv1') === '1';
 	}
 }
 
