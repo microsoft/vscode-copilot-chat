@@ -299,7 +299,8 @@ export class BaseOctoKitService {
 	}
 
 	protected async getCustomAgentsWithToken(owner: string, repo: string, token: string): Promise<GetCustomAgentsResponse> {
-		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/custom-agents/${owner}/${repo}`, 'GET', token, undefined, undefined, 'json', 'vscode-copilot-chat');
+		const queryParams = '?exclude_invalid_config=true';
+		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/custom-agents/${owner}/${repo}${queryParams}`, 'GET', token, undefined, undefined, 'json', 'vscode-copilot-chat');
 	}
 
 	protected async getCustomAgentDetailsWithToken(owner: string, repo: string, agentName: string, token: string, version?: string): Promise<CustomAgentDetails | undefined> {
