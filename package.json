@@ -3055,19 +3055,6 @@
 						],
 						"description": "%github.copilot.config.gpt5AlternatePrompt%"
 					},
-					"github.copilot.chat.gpt5CodexAlternatePrompt": {
-						"type": "string",
-						"default": "codex",
-						"tags": [
-							"experimental",
-							"onExp"
-						],
-						"enum": [
-							"default",
-							"codex"
-						],
-						"description": "%github.copilot.config.gpt5CodexAlternatePrompt%"
-					},
 					"github.copilot.chat.grokCodeAlternatePrompt": {
 						"type": "string",
 						"default": "default",
