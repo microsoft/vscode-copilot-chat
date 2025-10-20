@@ -35,19 +35,24 @@ function translateToGithubProperties(data: Record<string, unknown>, githubRepo: 
 	return data;
 }
 
-function dataToPropsAndMeasurements(data: Record<string, unknown>): { properties: Record<string, string>; measurements: Record<string, number> } {
-	const properties: Record<string, string> = {};
+function dataToPropsAndMeasurements(data: Record<string, unknown>): { properties: Record<string, string | ITrustedTelemetryValue<string>>; measurements: Record<string, number> } {
+	const properties: Record<string, string | ITrustedTelemetryValue<string>> = {};
 	const measurements: Record<string, number> = {};
 	for (const [key, value] of Object.entries(data)) {
 		if (typeof value === 'number') {
 			measurements[key] = value;
 		} else if (typeof value === 'boolean') {
 			measurements[key] = value ? 1 : 0;
-		} else if (typeof value === 'string') {
-			properties[key] = value;
+		} else {
+			properties[key] = value as string | ITrustedTelemetryValue<string>;
 		}
 	}
 	return { properties, measurements };
+}
+
+interface ITrustedTelemetryValue<T extends string | number | boolean = string | number | boolean> {
+	value: T;
+	isTrustedTelemetryValue: boolean;
 }
 
 interface IEditTelemetryData {
