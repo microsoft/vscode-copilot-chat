@@ -755,7 +755,7 @@ export namespace ConfigKey {
 	export const ResponsesApiReasoningSummary = defineExpSetting<'off' | 'detailed'>('chat.responsesApiReasoningSummary', 'detailed');
 	export const EnableChatImageUpload = defineExpSetting<boolean>('chat.imageUpload.enabled', true);
 	/** Enable extended thinking for Anthropic models that support it */
-	export const EnableAnthropicThinking = defineExpSetting<boolean>('chat.anthropic.thinking.enabled', true);
+	export const EnableAnthropicThinking = defineExpSetting<boolean>('chat.anthropic.thinking.enabled', false);
 	/** Maximum thinking tokens for Anthropic extended thinking. If set, overrides the default calculation. */
 	export const MaxAnthropicThinkingTokens = defineSetting<number | null>('chat.anthropic.thinking.maxTokens', null);
 
