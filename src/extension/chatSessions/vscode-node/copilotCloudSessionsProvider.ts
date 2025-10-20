@@ -303,7 +303,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 					case 'create':
 						{
 							if (!data.accepted) {
-								stream.markdown(vscode.l10n.t('Coding agent request cancelled.'));
+								stream.markdown(vscode.l10n.t('Cloud agent request cancelled.'));
 								return {};
 							}
 							const { prompt, history, references } = data.metadata as CreatePromptMetadata;
@@ -320,7 +320,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 							const uri = await toOpenPullRequestWebviewUri({ owner: pullRequest.repository.owner.login, repo: pullRequest.repository.name, pullRequestNumber: pullRequest.number });
 							const card = new vscode.ChatResponsePullRequestPart(uri, pullRequest.title, pullRequest.body, getAuthorDisplayName(pullRequest.author), `#${pullRequest.number}`);
 							stream.push(card);
-							stream.markdown(vscode.l10n.t('GitHub Copilot coding agent has begun working on your request. Follow its progress in the associated chat and pull request.'));
+							stream.markdown(vscode.l10n.t('GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.'));
 							vscode.window.showChatSession(CopilotChatSessionsProvider.TYPE, String(number), { viewColumn: vscode.ViewColumn.Active });
 							break;
 						}
@@ -337,7 +337,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		}
 
 		if (context.chatSessionContext?.isUntitled) {
-			/* Generate new coding agent session from an 'untitled' session */
+			/* Generate new cloud agent session from an 'untitled' session */
 			const number = await startSession(
 				'untitledChatSession',
 				context.chatSummary?.prompt ?? request.prompt,
@@ -357,7 +357,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				}
 			});
 		} else if (context.chatSessionContext) {
-			/* Follow up to an existing coding agent session */
+			/* Follow up to an existing cloud agent session */
 			try {
 				if (token.isCancellationRequested) {
 					return {};
@@ -366,7 +366,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				// Validate user input
 				const userPrompt = request.prompt;
 				if (!userPrompt || userPrompt.trim().length === 0) {
-					stream.markdown(vscode.l10n.t('Please provide a message for the coding agent.'));
+					stream.markdown(vscode.l10n.t('Please provide a message for the cloud agent.'));
 					return {};
 				}
 
@@ -378,7 +378,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 					return {};
 				}
 
-				stream.progress(vscode.l10n.t('Delegating request to coding agent'));
+				stream.progress(vscode.l10n.t('Delegating request to cloud agent'));
 
 				const result = await this.addFollowUpToExistingPR(pullRequest.number, userPrompt);
 				if (!result) {
@@ -399,7 +399,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				}
 
 				// Stream the new session logs
-				stream.markdown(vscode.l10n.t('Coding agent has begun work on your request'));
+				stream.markdown(vscode.l10n.t('Cloud agent has begun work on your request'));
 				stream.markdown('\n\n');
 
 				await this.streamSessionLogs(stream, pullRequest, newSession.id, token);
@@ -413,7 +413,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		} else {
 			/* @copilot invoked from a 'normal' chat or 'cloud button' */
 			stream.confirmation(
-				vscode.l10n.t('Delegate to coding agent'),
+				vscode.l10n.t('Delegate to cloud agent'),
 				this.DELEGATE_MODAL_DETAILS,
 				{
 					step: 'create',
@@ -709,7 +709,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				}
 				const inProgressSession = await this.waitForQueuedToInProgress(newSession.id, token);
 				if (!inProgressSession) {
-					stream.markdown(vscode.l10n.t('Timed out waiting for coding agent to begin work. Please try again shortly.'));
+					stream.markdown(vscode.l10n.t('Timed out waiting for cloud agent to begin work. Please try again shortly.'));
 					return;
 				}
 				return inProgressSession;
@@ -718,7 +718,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			await new Promise(resolve => setTimeout(resolve, pollInterval));
 		}
 
-		stream.markdown(vscode.l10n.t('Timed out waiting for the coding agent to respond. The agent may still be processing your request.'));
+		stream.markdown(vscode.l10n.t('Timed out waiting for the cloud agent to respond. The agent may still be processing your request.'));
 		return;
 	}
 
@@ -800,15 +800,15 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		if (!base_ref) {
 			return { error: vscode.l10n.t('Unable to determine the current branch.'), state: 'error' };
 		}
-		let head_ref: string | undefined; // This is the ref coding agent starts work from (omitted unless we push local changes)
+		let head_ref: string | undefined; // This is the ref cloud agent starts work from (omitted unless we push local changes)
 
 		// TODO@osortega @rebornix: support pending changes
 		const hasChanges =
 			((currentRepository?.changes?.workingTree && currentRepository.changes.workingTree.length > 0) || (currentRepository?.changes?.indexChanges && currentRepository.changes.indexChanges.length > 0));
 		if (hasChanges) {
-			this.logService.warn('Blocking coding agent invocation due to uncommitted changes in the workspace.');
+			this.logService.warn('Blocking cloud agent invocation due to uncommitted changes in the workspace.');
 			return {
-				error: vscode.l10n.t('Uncommitted changes detected. Please commit, stash, or discard your changes before delegating work to the coding agent.'),
+				error: vscode.l10n.t('Uncommitted changes detected. Please commit, stash, or discard your changes before delegating work to the cloud agent.'),
 				state: 'error'
 			};
 		}
@@ -846,7 +846,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 					};
 				}
 			} catch (error) {
-				this.logService.error(`Failed to verify remote branch for coding agent: ${error instanceof Error ? error.message : String(error)}`);
+				this.logService.error(`Failed to verify remote branch for cloud agent: ${error instanceof Error ? error.message : String(error)}`);
 				return {
 					error: vscode.l10n.t('Unable to verify that branch \'{0}\' exists on remote \'{1}\'. Please ensure the remote branch is available and try again.', base_ref, remoteName),
 					innerError: error instanceof Error ? error.message : undefined,
@@ -861,7 +861,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		if (isTruncated) {
 			chatStream?.progress(vscode.l10n.t('Truncating context'));
 			const truncationResult = await vscode.window.showWarningMessage(
-				vscode.l10n.t('Prompt size exceeded'), { modal: true, detail: vscode.l10n.t('Your prompt will be truncated to fit within coding agent\'s context window. This may affect the quality of the response.') }, CONTINUE_TRUNCATION);
+				vscode.l10n.t('Prompt size exceeded'), { modal: true, detail: vscode.l10n.t('Your prompt will be truncated to fit within cloud agent\'s context window. This may affect the quality of the response.') }, CONTINUE_TRUNCATION);
 			const userCancelled = token?.isCancellationRequested || !truncationResult || truncationResult !== CONTINUE_TRUNCATION;
 			/* __GDPR__
 				"copilot.codingAgent.truncation" : {
@@ -889,7 +889,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		};
 
 		try {
-			chatStream?.progress(vscode.l10n.t('Delegating to coding agent'));
+			chatStream?.progress(vscode.l10n.t('Delegating to cloud agent'));
 			const response = await this._octoKitService.postCopilotAgentJob(repoId.org, repoId.repo, JOBS_API_VERSION, payload);
 
 			// For v1 API, we need to fetch the job details to get the PR info
@@ -923,7 +923,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				sessionId: response.session_id
 			};
 		} catch (error) {
-			return { error: vscode.l10n.t('Failed delegating to coding agent. Please try again later.'), innerError: error.message, state: 'error' };
+			return { error: vscode.l10n.t('Failed delegating to cloud agent. Please try again later.'), innerError: error.message, state: 'error' };
 		}
 	}
 }
