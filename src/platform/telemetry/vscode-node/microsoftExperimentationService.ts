@@ -127,10 +127,11 @@ class GithubAccountFilterProvider implements IExperimentationFilterProvider {
 	constructor(private _userInfoStore: UserInfoStore, private _logService: ILogService) { }
 
 	getFilters(): Map<string, any> {
-		this._logService.trace(`[GithubAccountFilterProvider]::getFilters SKU: ${this._userInfoStore.sku}, Internal Org: ${this._userInfoStore.internalOrg}`);
+		this._logService.trace(`[GithubAccountFilterProvider]::getFilters SKU: ${this._userInfoStore.sku}, Internal Org: ${this._userInfoStore.internalOrg}, IsFcv1: ${this._userInfoStore.isFcv1}`);
 		const filters = new Map<string, any>();
 		filters.set('X-GitHub-Copilot-SKU', this._userInfoStore.sku);
 		filters.set('X-Microsoft-Internal-Org', this._userInfoStore.internalOrg);
+		filters.set('X-GitHub-Copilot-IsFcv1', this._userInfoStore.isFcv1);
 		return filters;
 	}
 
@@ -142,17 +143,6 @@ class DevDeviceIdFilterProvider implements IExperimentationFilterProvider {
 	getFilters(): Map<string, any> {
 		const filters = new Map<string, any>();
 		filters.set('X-VSCode-DevDeviceId', this._devDeviceId);
-		return filters;
-	}
-}
-
-class Fcv1FilterProvider implements IExperimentationFilterProvider {
-	constructor(private _userInfoStore: UserInfoStore, private _logService: ILogService) { }
-
-	getFilters(): Map<string, boolean | undefined> {
-		this._logService.trace(`[Fcv1FilterProvider]::getFilters IsFcv1: ${this._userInfoStore.isFcv1}`);
-		const filters = new Map<string, boolean | undefined>();
-		filters.set('X-GitHub-Copilot-IsFcv1', this._userInfoStore.isFcv1);
 		return filters;
 	}
 }
@@ -186,7 +176,6 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 				// The callback is called in super ctor. At that time, self/this is not initialized yet (but also, no filter could have been possibly set).
 				new CopilotCompletionsFilterProvider(() => self?.getCompletionsFilters() ?? new Map(), logService),
 				new DevDeviceIdFilterProvider(vscode.env.devDeviceId),
-				new Fcv1FilterProvider(userInfoStore, logService),
 			);
 		};
 
