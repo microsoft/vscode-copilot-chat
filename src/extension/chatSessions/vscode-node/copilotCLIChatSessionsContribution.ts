@@ -6,10 +6,8 @@
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, l10n } from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { isLocation } from '../../../util/common/types';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
-import { URI } from '../../../util/vs/base/common/uri';
 import { localize } from '../../../util/vs/nls';
 import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
 import { ExtendedChatRequest, ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
@@ -226,35 +224,11 @@ export class CopilotCLIChatSessionParticipant {
 	}
 
 	private resolvePrompt(request: vscode.ChatRequest): string {
-		if (request.prompt.startsWith('/')) {
-			return request.prompt; // likely a slash command, don't modify
-		}
-
-		const allRefsTexts: string[] = [];
-		const prompt = request.prompt;
-		// TODO@rebornix: filter out implicit references for now. Will need to figure out how to support `<reminder>` without poluting user prompt
-		request.references.filter(ref => !ref.id.startsWith('vscode.prompt.instructions')).forEach(ref => {
-			const valueText = URI.isUri(ref.value) ?
-				ref.value.fsPath :
-				isLocation(ref.value) ?
-					`${ref.value.uri.fsPath}:${ref.value.range.start.line + 1}` :
-					undefined;
-			if (valueText) {
-				// Keep the original prompt untouched, just collect resolved paths
-				const variableText = ref.range ? prompt.substring(ref.range[0], ref.range[1]) : undefined;
-				if (variableText) {
-					allRefsTexts.push(`- ${variableText} → ${valueText}`);
-				} else {
-					allRefsTexts.push(`- ${valueText}`);
-				}
-			}
-		});
-
-		if (allRefsTexts.length > 0) {
-			return `<reminder>\nThe user provided the following references:\n${allRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</reminder>\n\n${prompt}`;
-		}
-
-		return prompt;
+		// Return the original prompt unmodified
+		// References are already available in request.references and can be accessed by the SDK
+		// We filter out implicit references (vscode.prompt.instructions.*) but don't need to 
+		// modify the user's prompt text itself
+		return request.prompt;
 	}
 }
 

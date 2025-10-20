@@ -32,6 +32,7 @@ export default defineConfig(({ mode }) => ({
 			ignored: exclude,
 		}
 	},
+	assetsInclude: ['**/*.ps1'],
 	plugins: [
 		wasm(),
 		topLevelAwait()
