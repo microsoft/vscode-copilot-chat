@@ -35,4 +35,29 @@ export class LanguageFeaturesServiceImpl implements ILanguageFeaturesService {
 	getDiagnostics(uri: vscode.Uri): vscode.Diagnostic[] {
 		return vscode.languages.getDiagnostics(uri);
 	}
+
+	async prepareTypeHierarchy(uri: vscode.Uri, position: vscode.Position): Promise<vscode.TypeHierarchyItem[]> {
+		const result = await vscode.commands.executeCommand<vscode.TypeHierarchyItem[]>(
+			'vscode.prepareTypeHierarchy',
+			uri,
+			position
+		);
+		return result ?? [];
+	}
+
+	async getTypeHierarchySupertypes(item: vscode.TypeHierarchyItem): Promise<vscode.TypeHierarchyItem[]> {
+		const result = await vscode.commands.executeCommand<vscode.TypeHierarchyItem[]>(
+			'vscode.provideSupertypes',
+			item
+		);
+		return result ?? [];
+	}
+
+	async getTypeHierarchySubtypes(item: vscode.TypeHierarchyItem): Promise<vscode.TypeHierarchyItem[]> {
+		const result = await vscode.commands.executeCommand<vscode.TypeHierarchyItem[]>(
+			'vscode.provideSubtypes',
+			item
+		);
+		return result ?? [];
+	}
 }

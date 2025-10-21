@@ -244,6 +244,56 @@
 				}
 			},
 			{
+				"name": "copilot_getTypeHierarchy",
+				"toolReferenceName": "typeHierarchy",
+				"displayName": "Get Type Hierarchy",
+				"icon": "$(type-hierarchy)",
+				"canBeReferencedInPrompt": true,
+				"userDescription": "Get the type hierarchy (supertypes and subtypes) for a symbol at a given location",
+				"modelDescription": "Get the type hierarchy (supertypes and subtypes) for a symbol at a given location. Use this tool when you need to understand class inheritance, interface implementations, or the type relationships of a symbol in the codebase. This is particularly useful for understanding object-oriented code structure and finding all related types.",
+				"tags": [
+					"vscode_codesearch"
+				],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"uri": {
+							"type": "string",
+							"description": "The file URI"
+						},
+						"position": {
+							"type": "object",
+							"properties": {
+								"line": {
+									"type": "number"
+								},
+								"character": {
+									"type": "number"
+								}
+							},
+							"required": [
+								"line",
+								"character"
+							]
+						},
+						"includeSupertypes": {
+							"type": "boolean",
+							"description": "Include parent types/interfaces",
+							"default": true
+						},
+						"includeSubtypes": {
+							"type": "boolean",
+							"description": "Include derived types/implementations",
+							"default": true
+						}
+					},
+					"required": [
+						"uri",
+						"position"
+					]
+				}
+			},
+			{
 				"name": "copilot_getVSCodeAPI",
 				"toolReferenceName": "vscodeAPI",
 				"displayName": "%copilot.tools.getVSCodeAPI.name%",

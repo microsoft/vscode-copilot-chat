@@ -17,6 +17,9 @@ export interface ILanguageFeaturesService {
 	getWorkspaceSymbols(query: string): Promise<vscode.SymbolInformation[]>;
 	getDocumentSymbols(uri: vscode.Uri): Promise<vscode.DocumentSymbol[]>;
 	getDiagnostics(uri: vscode.Uri): vscode.Diagnostic[];
+	prepareTypeHierarchy(uri: vscode.Uri, position: vscode.Position): Promise<vscode.TypeHierarchyItem[]>;
+	getTypeHierarchySupertypes(item: vscode.TypeHierarchyItem): Promise<vscode.TypeHierarchyItem[]>;
+	getTypeHierarchySubtypes(item: vscode.TypeHierarchyItem): Promise<vscode.TypeHierarchyItem[]>;
 }
 
 export class NoopLanguageFeaturesService implements ILanguageFeaturesService {
@@ -38,6 +41,15 @@ export class NoopLanguageFeaturesService implements ILanguageFeaturesService {
 	}
 	getDiagnostics(uri: vscode.Uri): vscode.Diagnostic[] {
 		return [];
+	}
+	prepareTypeHierarchy(uri: vscode.Uri, position: vscode.Position): Promise<vscode.TypeHierarchyItem[]> {
+		return Promise.resolve([]);
+	}
+	getTypeHierarchySupertypes(item: vscode.TypeHierarchyItem): Promise<vscode.TypeHierarchyItem[]> {
+		return Promise.resolve([]);
+	}
+	getTypeHierarchySubtypes(item: vscode.TypeHierarchyItem): Promise<vscode.TypeHierarchyItem[]> {
+		return Promise.resolve([]);
 	}
 }
 
