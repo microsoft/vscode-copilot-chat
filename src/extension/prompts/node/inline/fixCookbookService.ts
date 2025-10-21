@@ -30,7 +30,7 @@ export type ManualSuggestedFix = {
 	additionalContext?: ContextLocation;
 };
 
-export class FixCookbookService {
+export class FixCookbookService implements IFixCookbookService {
 	readonly _serviceBrand: undefined;
 	constructor(
 		@ITelemetryService private readonly telemetryService: ITelemetryService

@@ -61,7 +61,7 @@ export class InlineChat2Prompt extends PromptElement<InlineChat2PromptProps> {
 				</SystemMessage>
 				<UserMessage>
 					<WorkingSet flexGrow={1} priority={950} workingSet={workingSet} />
-					<ChatVariables flexGrow={3} priority={898} chatVariables={variables} />
+					<ChatVariables flexGrow={3} priority={898} chatVariables={variables} useFixCookbook={true} />
 					<Tag name='reminder'>
 						If there is a user selection, focus on it, and try to make changes to the selected code and its context.<br />
 						If there is no user selection, make changes or write new code anywhere in the file.<br />
