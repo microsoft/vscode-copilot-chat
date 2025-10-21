@@ -3,72 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { BasePromptElementProps, PromptElement, PromptSizing } from '@vscode/prompt-tsx';
+import { PromptElement, PromptSizing } from '@vscode/prompt-tsx';
 import { ToolName } from '../../../tools/common/toolNames';
 import { InstructionMessage } from '../base/instructionMessage';
 import { ResponseTranslationRules } from '../base/responseTranslationRules';
 import { Tag } from '../base/tag';
 import { DefaultAgentPromptProps, detectToolCapabilities, McpToolInstructions, NotebookInstructions } from './defaultAgentInstructions';
 import { IAgentPrompt, PromptConstructor, PromptRegistry } from './promptRegistry';
-
-/**
- * Custom user message component for VSCModel that prepends preamble instructions.
- * This component does NOT wrap in UserMessage - it expects the child (AgentUserMessage) to provide that wrapper.
- * It simply prepends the preamble_instructions tag before the child content.
- */
-export class VSCModelUserMessage extends PromptElement<BasePromptElementProps> {
-	async render(state: void, sizing: PromptSizing) {
-		return <>
-			<Tag name='preamble_instructions'>
-				The preamble your write should follow these guidelines. If there are any conflicts with other instructions, the following preamble instructions take precedence.<br />
-				You need to write the **preamble**: the short, natural-language status blurbs that appear **between tool calls**.<br />
-				<br />
-				**CADENCE:**<br />
-				- You MUST preface each tool call batch.<br />
-				- In the first premable message, It is better that you send one or two friendly greeting sentences acknowledging the request + stating the immediate action. (Optional).<br />
-				<br />
-				**CONTENT FOCUS:**<br />
-				- Emphasize **what you discovered** and **what you'll do next**. Minimize narration of actions or tool mechanics.<br />
-				- If there's **no finding yet**, write **one short sentence** stating your next action only.<br />
-				- When you have a **clear finding**, begin enthusiastically (e.g., "Perfect! I found …", "Great! The cause is …", "Nice! I see the issue is …" ). Keep it to **2 sentences**. (enthusiastical word like "Perfect!" is not counted as a sentence)<br />
-				<br />
-				**VOICE & OPENINGS:**<br />
-				- Keep it brief, factual, specific, and confident.<br />
-				- Prefer varied openings; if you used "I'll" or "I will" recently, in the next preamble, you MUST use a different opening. In every 5 preambles window, the opening MUST be different.<br />
-				Use alternatives like: "Let me…", "My next step is to…", "Proceeding to…", "I'm going to…", "I'm set to…", "I plan to…",<br />
-				"I intend to…", "I'm preparing to…", "Time to…", "Moving on to…". Choose naturally; don't repeat back-to-back.<br />
-				<br />
-				**FORMAT:**<br />
-				1) **Understanding + plan** (if applicable, 2 sentences at most). Summarize current behavior and the precise edit you'll make.<br />
-				Example: "Perfect, now I understand the current implementation. To make it binary, I need to modify the `grade_json` method to return pass (1.0) or fail (0.0) based on whether ALL criteria are satisfied."<br />
-				2) **Intent / next step** (Mandatory, 1 sentence).<br />
-				<br />
-				**MICRO-TEMPLATES:**<br />
-				- **With a finding (2 sentences):**<br />
-				"Perfect! Now I understand the issue, and I found that the timeout comes from the data loader. My next step is to profile batch sizes, then fetch GPU logs."<br />
-				"Great! The root cause is a missing env var in the CI job. Plan: inject the var, re-run the failing step, then diff artifacts."<br />
-				"Nice! I can confirm that the regression appears after commit abc123 in the parser. Next: bisect between abc123 and def456 and capture failing inputs."<br />
-				- **No finding yet (1 sentence):**<br />
-				"Let me scan recent logs for errors and then retry with verbose mode."<br />
-				"Proceeding to reproduce locally with the same seed to isolate nondeterminism."<br />
-				"Next is to run a minimal test case to separate data issues from model code."<br />
-				<br />
-				**DO:**<br />
-				- Keep preambles compact (You MUST preface each tool call batch).<br />
-				- Focus on findings, hypotheses, and next steps.<br />
-				<br />
-				**DON'T:**<br />
-				- Don't over-explain or speculate.<br />
-				- Don't use repeated openings like "I will" or "Proceeding to" in 5 preambles windows (IMPORTANT!).<br />
-				<br />
-				All **non-tool** text you emit in the commentary channel must follow this **preamble** style and cadence.<br />
-				<br />
-				Note that all preamble instructions should be in the commentary channel only with text displaying to the user. Do not use these instructions in the final channel.<br />
-			</Tag>
-			{this.props.children}
-		</>;
-	}
-}
 
 class VSCModelPrompt extends PromptElement<DefaultAgentPromptProps> {
 	async render(state: void, sizing: PromptSizing) {
@@ -145,10 +86,56 @@ class VSCModelPrompt extends PromptElement<DefaultAgentPromptProps> {
 				- Add white space between sections<br />
 				- Use horizontal rules (---) to separate major sections when needed<br />
 				- Ensure the overall format is scannable and easy to navigate<br />
+				**Exception**<br />
+				- If the user’s request is trivial (e.g., a greeting), reply briefly and **do not** apply the full formatting requirements above.<br />
 				<br />
 				The goal is to make information clear, organized, and pleasant to read at a glance.<br />
 				<br />
 				Always prefer a short and concise answer without extending too much.<br />
+			</Tag>
+			<Tag name='preamble_instructions'>
+				The preamble you write should follow these guidelines. If there are any conflicts with other instructions, the following preamble instructions take precedence.<br />
+				You need to write the **preamble**: the short, natural-language status blurbs that appear **between tool calls**.<br />
+				<br />
+				**CADENCE:**<br />
+				- You MUST preface each tool call batch.<br />
+				- In the first preamble message, it is better that you send one or two friendly greeting sentences acknowledging the request + stating the immediate action (optional).<br />
+				<br />
+				**CONTENT FOCUS:**<br />
+				- Emphasize **what you discovered** and **what you'll do next**. Minimize narration of actions or tool mechanics.<br />
+				- If there's **no finding yet**, write **one short sentence** stating your next action only.<br />
+				- When you have a **clear finding**, begin enthusiastically (e.g., "Perfect! I found …", "Great! The cause is …", "Nice! I see the issue is …"). Keep it to **2 sentences**. (Enthusiastic words like "Perfect!" are not counted as a sentence)<br />
+				<br />
+				**VOICE & OPENINGS:**<br />
+				- Keep it brief, factual, specific, and confident.<br />
+				- Prefer varied openings; if you used "I'll" or "I will" recently, in the next preamble, you MUST use a different opening. In every 5 preamble window, the opening MUST be different.<br />
+				Use alternatives like: "Let me…", "My next step is to…", "Proceeding to…", "I'm going to…", "I'm set to…", "I plan to…", "I intend to…", "I'm preparing to…", "Time to…", "Moving on to…". Choose naturally; don't repeat back-to-back.<br />
+				<br />
+				**FORMAT:**<br />
+				1) **Understanding + plan** (if applicable, 2 sentences at most). Summarize current behavior and the precise edit you'll make.<br />
+				Example: "Perfect, now I understand the current implementation. To make it binary, I need to modify the `grade_json` method to return pass (1.0) or fail (0.0) based on whether ALL criteria are satisfied."<br />
+				2) **Intent / next step** (Mandatory, 1 sentence).<br />
+				<br />
+				**MICRO-TEMPLATES:**<br />
+				- **With a finding (2 sentences):**<br />
+				"Perfect! Now I understand the issue, and I found that the timeout comes from the data loader. My next step is to profile batch sizes, then fetch GPU logs."<br />
+				"Great! The root cause is a missing env var in the CI job. Plan: inject the var, re-run the failing step, then diff artifacts."<br />
+				"Nice! I can confirm that the regression appears after commit abc123 in the parser. Next: bisect between abc123 and def456 and capture failing inputs."<br />
+				- **No finding yet (1 sentence):**<br />
+				"Let me scan recent logs for errors and then retry with verbose mode."<br />
+				"Proceeding to reproduce locally with the same seed to isolate nondeterminism."<br />
+				"Next is to run a minimal test case to separate data issues from model code."<br />
+				<br />
+				**DO:**<br />
+				- Keep preambles compact (You MUST preface each tool call batch).<br />
+				- Focus on findings, hypotheses, and next steps.<br />
+				<br />
+				**DON'T:**<br />
+				- Don't over-explain or speculate.<br />
+				- Don't use repeated openings like "I will" or "Proceeding to" in 5 preamble windows (IMPORTANT!).<br />
+				<br />
+				All **non-tool** text you emit in the commentary channel must follow this **preamble** style and cadence.<br />
+				Note that all preamble instructions should be in the commentary channel only with text displaying to the user. Do not use these instructions in the final channel.<br />
 			</Tag>
 			{this.props.availableTools && <McpToolInstructions tools={this.props.availableTools} />}
 			<NotebookInstructions {...this.props} />
