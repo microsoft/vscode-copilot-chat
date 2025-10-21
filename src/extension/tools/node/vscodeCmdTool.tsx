@@ -10,6 +10,7 @@ import { ILogService } from '../../../platform/log/common/logService';
 import { IWorkbenchService } from '../../../platform/workbench/common/workbenchService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
+import { commandUri } from '../../linkify/common/commands';
 import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
 
