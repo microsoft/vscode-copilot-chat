@@ -246,7 +246,7 @@ export class CopilotCLIChatSessionParticipant {
 							3: 'hint'
 						};
 						const severity = severityMap[diagnostic.severity] ?? 'error';
-						const code = (typeof diagnostic.code === 'object' && !!diagnostic.code) ? diagnostic.code.value : diagnostic.code;
+						const code = (typeof diagnostic.code === 'object' && diagnostic.code !== null) ? diagnostic.code.value : diagnostic.code;
 						const codeStr = code ? ` [${code}]` : '';
 						const line = diagnostic.range.start.line + 1;
 						diagnosticTexts.push(`- ${severity}${codeStr} at ${uri.fsPath}:${line}: ${diagnostic.message}`);
