@@ -126,4 +126,20 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		}
 		return this.addPullRequestCommentWithToken(pullRequestId, commentBody, authToken);
 	}
+
+	async getAllOpenSessions(nwo: string): Promise<SessionInfo[]> {
+		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		if (!authToken) {
+			return [];
+		}
+		return this.getAllOpenSessionsWithToken(nwo, authToken);
+	}
+
+	async getPullRequestFromGlobalId(globalId: string): Promise<PullRequestSearchItem | null> {
+		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		if (!authToken) {
+			throw new Error('No authentication token available');
+		}
+		return this.getPullRequestFromSessionWithToken(globalId, authToken);
+	}
 }

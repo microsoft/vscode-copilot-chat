@@ -9,7 +9,7 @@ import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
-import { addPullRequestCommentGraphQLRequest, makeGitHubAPIRequest, makeSearchGraphQLRequest, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
+import { addPullRequestCommentGraphQLRequest, getPullRequestFromGlobalId, makeGitHubAPIRequest, makeGitHubAPIRequestWithPagination, makeSearchGraphQLRequest, PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
 
 export type IGetRepositoryInfoResponseData = Endpoints["GET /repos/{owner}/{repo}"]["response"]["data"];
 
@@ -88,20 +88,6 @@ export interface IOctoKitSessionInfo {
 	workflow_run_id: number;
 	last_updated_at: string;
 	created_at: string;
-}
-
-export interface IOctoKitPullRequestInfo {
-	number: number;
-	title: string;
-	additions: number;
-	deletions: number;
-	headRepository: {
-		name: string;
-		owner: {
-			login: string;
-		};
-		url: string;
-	};
 }
 
 export interface RemoteAgentJobResponse {
@@ -187,6 +173,16 @@ export interface IOctoKitService {
 	 * Adds a comment to a pull request.
 	 */
 	addPullRequestComment(pullRequestId: string, commentBody: string): Promise<PullRequestComment | null>;
+
+	/**
+	 * Gets all open Copilot sessions.
+	 */
+	getAllOpenSessions(nwo: string): Promise<SessionInfo[]>;
+
+	/**
+	 * Gets pull request from global id.
+	 */
+	getPullRequestFromGlobalId(globalId: string): Promise<PullRequestSearchItem | null>;
 }
 
 /**
@@ -246,5 +242,13 @@ export class BaseOctoKitService {
 
 	protected async addPullRequestCommentWithToken(pullRequestId: string, commentBody: string, token: string): Promise<PullRequestComment | null> {
 		return addPullRequestCommentGraphQLRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, pullRequestId, commentBody);
+	}
+
+	protected async getAllOpenSessionsWithToken(nwo: string, token: string): Promise<SessionInfo[]> {
+		return makeGitHubAPIRequestWithPagination(this._fetcherService, this._logService, `https://api.githubcopilot.com`, 'agents/sessions', nwo, token);
+	}
+
+	protected async getPullRequestFromSessionWithToken(globalId: string, token: string): Promise<PullRequestSearchItem | null> {
+		return getPullRequestFromGlobalId(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, globalId);
 	}
 }
