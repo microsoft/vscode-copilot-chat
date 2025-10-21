@@ -890,6 +890,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 		try {
 			chatStream?.progress(vscode.l10n.t('Delegating to cloud agent'));
+			this.logService.trace(`Invoking cloud agent job with payload: ${JSON.stringify(payload)}`);
 			const response = await this._octoKitService.postCopilotAgentJob(repoId.org, repoId.repo, JOBS_API_VERSION, payload);
 
 			// For v1 API, we need to fetch the job details to get the PR info
