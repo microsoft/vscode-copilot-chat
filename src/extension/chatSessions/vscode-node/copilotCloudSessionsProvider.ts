@@ -81,24 +81,46 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			if (!repoId) {
 				return [];
 			}
-			const pullRequests = await this._octoKitService.getCopilotPullRequestsForUser(repoId.org, repoId.repo);
-			const sessionItems = await Promise.all(pullRequests.map(async pr => {
-				const uri = await toOpenPullRequestWebviewUri({ owner: pr.repository.owner.login, repo: pr.repository.name, pullRequestNumber: pr.number });
+
+			const sessions = await this._octoKitService.getAllOpenSessions(`${repoId.org}/${repoId.repo}`);
+
+			// Group sessions by resource_id and keep only the latest per resource_id
+			const latestSessionsMap = new Map<number, SessionInfo>();
+			for (const session of sessions) {
+				const existing = latestSessionsMap.get(session.resource_id);
+				if (!existing || this.shouldPushSession(session, existing)) {
+					latestSessionsMap.set(session.resource_id, session);
+				}
+			}
+
+			// Fetch PRs for all unique resource_global_ids in parallel
+			const uniqueGlobalIds = new Set(Array.from(latestSessionsMap.values()).map(s => s.resource_global_id));
+			const prFetches = Array.from(uniqueGlobalIds).map(async globalId => {
+				const pr = await this._octoKitService.getPullRequestFromGlobalId(globalId);
+				return { globalId, pr };
+			});
+			const prResults = await Promise.all(prFetches);
+			const prMap = new Map(prResults.filter(r => r.pr).map(r => [r.globalId, r.pr!]));
+
+			// Create session items from latest sessions
+			const sessionItems = await Promise.all(Array.from(latestSessionsMap.values()).map(async sessionItem => {
+				const pr = prMap.get(sessionItem.resource_global_id);
+				if (!pr) {
+					return undefined;
+				}
+
+				const uri = await toOpenPullRequestWebviewUri({ owner: repoId.org, repo: repoId.repo, pullRequestNumber: pr.number });
 				const prLinkTitle = vscode.l10n.t('Open pull request in VS Code');
 				const description = new vscode.MarkdownString(`[#${pr.number}](${uri.toString()} "${prLinkTitle}")`);
-
-				// Fetch sessions to determine actual status
-				const sessions = await this._octoKitService.getCopilotSessionsForPR(pr.fullDatabaseId.toString());
-				const status = this.getSessionStatusFromSessions(sessions);
 
 				const session = {
 					id: pr.number.toString(),
 					resource: undefined,
 					label: pr.title,
-					status,
+					status: this.getSessionStatusFromSession(sessionItem),
 					description,
 					timing: {
-						startTime: new Date(pr.updatedAt).getTime(),
+						startTime: new Date(sessionItem.last_updated_at).getTime(),
 					},
 					statistics: {
 						insertions: pr.additions,
@@ -109,11 +131,20 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				this.chatSessions.set(pr.number, pr);
 				return session;
 			}));
-			return sessionItems;
+			return sessionItems.filter(item => item !== undefined);
 		})().finally(() => {
 			this.chatSessionItemsPromise = undefined;
 		});
 		return this.chatSessionItemsPromise;
+	}
+
+	private shouldPushSession(sessionItem: SessionInfo, existing: SessionInfo | undefined): boolean {
+		if (!existing) {
+			return true;
+		}
+		const existingDate = new Date(existing.last_updated_at);
+		const newDate = new Date(sessionItem.last_updated_at);
+		return newDate > existingDate;
 	}
 
 	async provideChatSessionContent(sessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
@@ -233,18 +264,9 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		return pr;
 	}
 
-	private getSessionStatusFromSessions(sessions: SessionInfo[]): vscode.ChatSessionStatus {
-		if (!sessions || sessions.length === 0) {
-			return vscode.ChatSessionStatus.Completed;
-		}
-
-		// Find the most recent session by sorting by created_at
-		const mostRecentSession = sessions
-			.slice()
-			.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-
+	private getSessionStatusFromSession(session: SessionInfo): vscode.ChatSessionStatus {
 		// Map session state to ChatSessionStatus
-		switch (mostRecentSession.state) {
+		switch (session.state) {
 			case 'failed':
 				return vscode.ChatSessionStatus.Failed;
 			case 'in_progress':
