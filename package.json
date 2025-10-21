@@ -4184,7 +4184,7 @@
 		"chatAgents": [
 			{
 				"name": "Plan",
-				"path": "./assets/agents/Plan.vscode-agent.md",
+				"path": "./assets/agents/Plan.agent.md",
 				"description": "Researches a task to create multi-step plans"
 			}
 		]
