@@ -45,16 +45,10 @@ export class ToolGrouping implements IToolGrouping {
 		}
 	}
 
-	public get isEnabled() {
-		return this._tools.length >= computeToolGroupingMinThreshold(this._experimentationService, this._configurationService).get();
-	}
-
 	constructor(
 		private _tools: readonly LanguageModelToolInformation[],
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-		@ITelemetryService private readonly _telemetryService: ITelemetryService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IExperimentationService private readonly _experimentationService: IExperimentationService
+		@ITelemetryService private readonly _telemetryService: ITelemetryService
 	) {
 		this._root.isExpanded = true;
 	}

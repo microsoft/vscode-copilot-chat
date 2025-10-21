@@ -8,11 +8,11 @@
 import { assert } from '../../../../base/common/assert';
 import { splitLines } from '../../../../base/common/strings';
 import { Position } from '../position';
-import { PositionOffsetTransformer } from './positionToOffsetImpl';
 import { Range } from '../range';
 import { LineRange } from '../ranges/lineRange';
-import { TextLength } from './textLength';
 import { OffsetRange } from '../ranges/offsetRange';
+import { TextLength } from './textLength';
+import { PositionOffsetTransformer } from './positionToOffsetImpl';
 
 export abstract class AbstractText {
 	abstract getValueOfRange(range: Range): string;
@@ -123,5 +123,10 @@ export class StringText extends AbstractText {
 
 	get length(): TextLength {
 		return this._t.textLength;
+	}
+
+	// Override the getTransformer method to return the cached transformer
+	override getTransformer() {
+		return this._t;
 	}
 }

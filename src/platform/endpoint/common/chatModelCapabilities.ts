@@ -70,14 +70,14 @@ export function modelPrefersJsonNotebookRepresentation(model: LanguageModelChat 
  * Model supports replace_string_in_file as an edit tool.
  */
 export async function modelSupportsReplaceString(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || model.family.includes('gemini') || model.family.includes('grok-code') || await isHiddenModelB(model);
+	return model.family.includes('gemini') || model.family.includes('grok-code') || await modelSupportsMultiReplaceString(model);
 }
 
 /**
  * Model supports multi_replace_string_in_file as an edit tool.
  */
 export async function modelSupportsMultiReplaceString(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
-	return await modelSupportsReplaceString(model) && !model.family.includes('gemini') && !model.family.includes('grok-code');
+	return model.family.startsWith('claude') || model.family.startsWith('Anthropic') || await isHiddenModelB(model);
 }
 
 /**

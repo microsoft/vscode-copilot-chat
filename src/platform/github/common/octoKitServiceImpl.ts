@@ -8,7 +8,7 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
-import { BaseOctoKitService, IOctoKitService, IOctoKitUser, JobInfo, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
+import { BaseOctoKitService, CustomAgentDetails, CustomAgentListItem, IOctoKitService, IOctoKitUser, JobInfo, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
 	declare readonly _serviceBrand: undefined;
@@ -111,11 +111,39 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 		return this.getJobByJobIdWithToken(owner, repo, jobId, userAgent, authToken);
 	}
 
+	async getJobBySessionId(owner: string, repo: string, sessionId: string, userAgent: string): Promise<JobInfo> {
+		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		if (!authToken) {
+			throw new Error('No authentication token available');
+		}
+		return this.getJobBySessionIdWithToken(owner, repo, sessionId, userAgent, authToken);
+	}
+
 	async addPullRequestComment(pullRequestId: string, commentBody: string): Promise<PullRequestComment | null> {
 		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
 		if (!authToken) {
 			throw new Error('No authentication token available');
 		}
 		return this.addPullRequestCommentWithToken(pullRequestId, commentBody, authToken);
+	}
+
+	async getCustomAgents(owner: string, repo: string): Promise<CustomAgentListItem[]> {
+		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		if (!authToken) {
+			return [];
+		}
+		const { agents } = await this.getCustomAgentsWithToken(owner, repo, authToken);
+		if (!Array.isArray(agents)) {
+			return [];
+		}
+		return agents;
+	}
+
+	async getCustomAgentDetails(owner: string, repo: string, agentName: string, version?: string): Promise<CustomAgentDetails | undefined> {
+		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		if (!authToken) {
+			return undefined;
+		}
+		return this.getCustomAgentDetailsWithToken(owner, repo, agentName, authToken, version);
 	}
 }

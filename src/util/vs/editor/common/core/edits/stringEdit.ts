@@ -11,6 +11,7 @@ import { StringText } from '../text/abstractText';
 import { BaseEdit, BaseReplacement } from './edit';
 
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export abstract class BaseStringEdit<T extends BaseStringReplacement<T> = BaseStringReplacement<any>, TEdit extends BaseStringEdit<T, TEdit> = BaseStringEdit<any, any>> extends BaseEdit<T, TEdit> {
 	get TReplacement(): T {
 		throw new Error('TReplacement is not defined for BaseStringEdit');
@@ -22,6 +23,7 @@ export abstract class BaseStringEdit<T extends BaseStringReplacement<T> = BaseSt
 		}
 		let result = edits[0];
 		for (let i = 1; i < edits.length; i++) {
+			// eslint-disable-next-line local/code-no-any-casts, @typescript-eslint/no-explicit-any
 			result = result.compose(edits[i]) as any;
 		}
 		return result;
@@ -171,11 +173,11 @@ export abstract class BaseStringEdit<T extends BaseStringReplacement<T> = BaseSt
 		return e.toEdit();
 	}
 
-	removeCommonSuffixAndPrefix(source: string): TEdit {
+	public removeCommonSuffixAndPrefix(source: string): TEdit {
 		return this._createNew(this.replacements.map(e => e.removeCommonSuffixAndPrefix(source))).normalize();
 	}
 
-	applyOnText(docContents: StringText): StringText {
+	public applyOnText(docContents: StringText): StringText {
 		return new StringText(this.apply(docContents.value));
 	}
 
@@ -190,6 +192,7 @@ export abstract class BaseStringEdit<T extends BaseStringReplacement<T> = BaseSt
 	}
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export abstract class BaseStringReplacement<T extends BaseStringReplacement<T> = BaseStringReplacement<any>> extends BaseReplacement<T> {
 	constructor(
 		range: OffsetRange,
@@ -201,7 +204,7 @@ export abstract class BaseStringReplacement<T extends BaseStringReplacement<T> =
 	getNewLength(): number { return this.newText.length; }
 
 	override toString(): string {
-		return `${this.replaceRange} -> "${this.newText}"`;
+		return `${this.replaceRange} -> ${JSON.stringify(this.newText)}`;
 	}
 
 	replace(str: string): string {
@@ -523,8 +526,14 @@ export class AnnotatedStringEdit<T extends IEditData<T>> extends BaseStringEdit<
 		return new AnnotatedStringEdit<T>(replacements);
 	}
 
-	toStringEdit(): StringEdit {
-		return new StringEdit(this.replacements.map(e => new StringReplacement(e.replaceRange, e.newText)));
+	public toStringEdit(filter?: (replacement: AnnotatedStringReplacement<T>) => boolean): StringEdit {
+		const newReplacements: StringReplacement[] = [];
+		for (const r of this.replacements) {
+			if (!filter || filter(r)) {
+				newReplacements.push(new StringReplacement(r.replaceRange, r.newText));
+			}
+		}
+		return new StringEdit(newReplacements);
 	}
 }
 

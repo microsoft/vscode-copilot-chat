@@ -28,6 +28,7 @@ export interface PullRequestSearchItem {
 	deletions: number;
 	fullDatabaseId: number;
 	headRefOid: number;
+	body: string;
 }
 
 export interface PullRequestSearchResult {
@@ -198,6 +199,7 @@ export async function makeSearchGraphQLRequest(
 							}
 							name
 						}
+						body
 					}
 				}
 				pageInfo {

@@ -445,11 +445,13 @@ export class SSEProcessor {
 
 					let handled = true;
 					if (choice.delta?.tool_calls) {
-						if (!this.toolCalls.hasToolCalls() && solution.text.length > 0) {
+						if (!this.toolCalls.hasToolCalls()) {
 							const firstToolName = choice.delta.tool_calls.at(0)?.function?.name;
 							if (firstToolName) {
-								// Flush the linkifier stream. See #16465
-								solution.append({ index: 0, delta: { content: ' ' } });
+								if (solution.text.length) {
+									// Flush the linkifier stream. See #16465
+									solution.append({ index: 0, delta: { content: ' ' } });
+								}
 								await emitSolution({ beginToolCalls: [{ name: firstToolName }] });
 							}
 						}

@@ -199,6 +199,10 @@ export class CopilotToken {
 	isExpandedClientSideIndexingEnabled(): boolean {
 		return this._info.blackbird_clientside_indexing === true;
 	}
+
+	isFcv1(): boolean {
+		return this.tokenMap.get('fcv1') === '1';
+	}
 }
 
 /**
