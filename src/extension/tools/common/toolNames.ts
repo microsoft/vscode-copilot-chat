@@ -66,7 +66,8 @@ export enum ToolName {
 	ToolReplay = 'tool_replay',
 	EditFilesPlaceholder = 'edit_files',
 	RunSubagent = 'runSubagent',
-	CoreConfirmationTool = 'vscode_get_confirmation'
+	CoreConfirmationTool = 'vscode_get_confirmation',
+	CoreTerminalConfirmationTool = 'vscode_get_terminal_confirmation'
 }
 
 export enum ContributedToolName {
@@ -219,6 +220,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.UpdateUserPreferences]: ToolCategory.VSCodeInteraction,
 	[ToolName.ToolReplay]: ToolCategory.RedundantButSpecific,
 	[ToolName.CoreConfirmationTool]: ToolCategory.VSCodeInteraction,
+	[ToolName.CoreTerminalConfirmationTool]: ToolCategory.VSCodeInteraction,
 } as const;
 
 
