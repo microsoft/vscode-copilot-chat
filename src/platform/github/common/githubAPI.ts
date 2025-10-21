@@ -326,7 +326,7 @@ export async function makeGitHubAPIRequestWithPagination(
 	let page = 1;
 	do {
 		const response = await fetcherService.fetch(
-			`${host}/${path}?page_size=${page_size}&page_number=${page}&resource_state=draft&repo_nwo=${nwo}`, //TODO: is open right?
+			`${host}/${path}?page_size=${page_size}&page_number=${page}&resource_state=draft,open&repo_nwo=${nwo}`,
 			{
 				headers: {
 					Authorization: `Bearer ${token}`,
