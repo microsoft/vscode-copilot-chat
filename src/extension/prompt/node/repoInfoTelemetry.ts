@@ -8,6 +8,7 @@ import { IFileSystemService } from '../../../platform/filesystem/common/fileSyst
 import { IGitDiffService } from '../../../platform/git/common/gitDiffService';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { getOrderedRepoInfosFromContext, IGitService, normalizeFetchUrl } from '../../../platform/git/common/gitService';
+import { Change } from '../../../platform/git/vscode/git';
 import { ILogService } from '../../../platform/log/common/logService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IWorkspaceFileIndex } from '../../../platform/workspaceChunkSearch/node/workspaceFileIndex';
@@ -216,7 +217,29 @@ export class RepoInfoTelemetry {
 				diffSizeBytes: 0, // Will be updated
 			};
 
-			const changes = await this._gitService.diffWith(repoContext.rootUri, upstreamCommit);
+			// Combine our diff against the upstream commit with untracked changes, and working tree changes
+			// A change like a new file could end up in either the untracked or working tree changes and won't be in the diffWith.
+			const diffChanges = await this._gitService.diffWith(repoContext.rootUri, upstreamCommit) ?? [];
+
+			const changeMap = new Map<string, Change>();
+
+			// Prority to the diffWith changes, then working tree changes, then untracked changes.
+			for (const change of diffChanges) {
+				changeMap.set(change.uri.toString(), change);
+			}
+			for (const change of repository.state.workingTreeChanges) {
+				if (!changeMap.has(change.uri.toString())) {
+					changeMap.set(change.uri.toString(), change);
+				}
+			}
+			for (const change of repository.state.untrackedChanges) {
+				if (!changeMap.has(change.uri.toString())) {
+					changeMap.set(change.uri.toString(), change);
+				}
+			}
+
+			const changes = Array.from(changeMap.values());
+
 			if (!changes || changes.length === 0) {
 				return {
 					properties: { ...baseProperties, diffsJSON: undefined, result: 'noChanges' },
