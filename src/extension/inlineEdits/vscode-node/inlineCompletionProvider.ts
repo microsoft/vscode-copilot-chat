@@ -93,7 +93,7 @@ function isLlmCompletionInfo(item: NesCompletionInfo): item is LlmCompletionInfo
 	return item.source === 'provider';
 }
 
-const GoToNextEdit = l10n.t('Go To inline suggestion');
+const GoToNextEdit = l10n.t('Go To Inline Suggestion');
 
 
 export class InlineCompletionProviderImpl implements InlineCompletionItemProvider {
