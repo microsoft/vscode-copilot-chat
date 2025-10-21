@@ -349,6 +349,7 @@ export interface API {
 	registerPostCommitCommandsProvider(provider: PostCommitCommandsProvider): Disposable;
 	registerPushErrorHandler(handler: PushErrorHandler): Disposable;
 	registerBranchProtectionProvider(root: Uri, provider: BranchProtectionProvider): Disposable;
+	clone(uri: Uri, options?: CloneOptions): Promise<Repository | null>;
 }
 
 export interface GitExtension {

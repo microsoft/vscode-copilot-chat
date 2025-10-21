@@ -82,5 +82,13 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		this._register(vscode.commands.registerCommand('github.copilot.cloud.sessions.openInBrowser', async (chatSessionItem: vscode.ChatSessionItem) => {
 			copilotSessionsProvider.openSessionsInBrowser(chatSessionItem);
 		}));
+
+		// // Check for pending chat sessions and handle ChatSessionsUriHandler
+		// const chatSessionsUriHandler = copilotAgentInstaService.createInstance(ChatSessionsUriHandler);
+		// this._register(chatSessionsUriHandler);
+		// // Check for pending sessions when the contribution is initialized
+		// chatSessionsUriHandler.checkAndOpenPendingSession().catch((err: unknown) => {
+		// 	console.error('Failed to check for pending chat sessions:', err);
+		// });
 	}
 }
