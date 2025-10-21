@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+// Copied from https://github.com/microsoft/vscode/blob/1e756bc17d2b848060522228b98bb3815e2bdb6d/src/vs/platform/mcp/common/mcpPlatformTypes.ts
+
 import { IStringDictionary } from '../../../../util/vs/base/common/collections';
 
 export interface IMcpDevModeConfig {
