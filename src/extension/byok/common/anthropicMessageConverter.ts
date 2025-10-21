@@ -13,11 +13,10 @@ function apiContentToAnthropicContent(content: (LanguageModelTextPart | Language
 	const convertedContent: ContentBlockParam[] = [];
 	for (const part of content) {
 		if (part instanceof LanguageModelThinkingPart) {
-			const signature = part.metadata?.signature ?? '';
 			convertedContent.push({
 				type: 'thinking',
 				thinking: Array.isArray(part.value) ? part.value.join('') : part.value,
-				signature: signature,
+				signature: part.metadata?.signature ?? '',
 			});
 		} else if (part instanceof LanguageModelToolCallPart) {
 			convertedContent.push({
