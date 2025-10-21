@@ -271,7 +271,7 @@ class GrokCodeFastAgentPromptV2 extends PromptElement<DefaultAgentPromptProps> {
 }
 
 class GrokCodeFastPromptResolver implements IAgentPrompt {
-	static readonly modelFamilies = ['grok-code'];
+	static readonly models = ['grok-code'];
 
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,
