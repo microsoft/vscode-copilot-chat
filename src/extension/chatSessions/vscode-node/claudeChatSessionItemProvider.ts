@@ -13,6 +13,9 @@ import { IClaudeCodeSessionService } from '../../agents/claude/node/claudeCodeSe
  * Reads sessions from ~/.claude/projects/<folder-slug>/, where each file name is a session id (GUID).
  */
 export class ClaudeChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
+
+	public static claudeSessionType = 'claude-code';
+
 	private readonly _onDidChangeChatSessionItems = this._register(new Emitter<void>());
 	public readonly onDidChangeChatSessionItems: Event<void> = this._onDidChangeChatSessionItems.event;
 

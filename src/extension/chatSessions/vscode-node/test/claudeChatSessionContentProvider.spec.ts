@@ -105,10 +105,11 @@ describe('ChatSessionContentProvider', () => {
 		it('returns empty history when no existing session', async () => {
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(undefined);
 
-			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
+			const sessionUri = createClaudeSessionUri('test-session');
+			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
 
 			expect(result.history).toEqual([]);
-			expect(mockSessionService.getSession).toHaveBeenCalledWith('test-session', CancellationToken.None);
+			expect(mockSessionService.getSession).toHaveBeenCalledWith(sessionUri, CancellationToken.None);
 		});
 
 		it('converts user messages to ChatRequestTurn2', async () => {
@@ -126,8 +127,8 @@ describe('ChatSessionContentProvider', () => {
 			};
 
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
-
-			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
+			const sessionUri = createClaudeSessionUri('test-session');
+			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
 
 			expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
 				[
@@ -166,7 +167,8 @@ describe('ChatSessionContentProvider', () => {
 
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
 
-			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
+			const sessionUri = createClaudeSessionUri('test-session');
+			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
 
 			expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
 				[
@@ -212,7 +214,8 @@ describe('ChatSessionContentProvider', () => {
 
 			vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
 
-			const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
+			const sessionUri = createClaudeSessionUri('test-session');
+			const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
 
 			expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
 				[
@@ -266,7 +269,8 @@ describe('ChatSessionContentProvider', () => {
 
 		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
 
-		const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
+		const sessionUri = createClaudeSessionUri('test-session');
+		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
 
 		expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
 			[
@@ -347,7 +351,8 @@ describe('ChatSessionContentProvider', () => {
 
 		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
 
-		const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
+		const sessionUri = createClaudeSessionUri('test-session');
+		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
 
 		expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
 			[
@@ -400,7 +405,8 @@ describe('ChatSessionContentProvider', () => {
 
 		vi.mocked(mockSessionService.getSession).mockResolvedValue(mockSession as any);
 
-		const result = await provider.provideChatSessionContent('test-session', CancellationToken.None);
+		const sessionUri = createClaudeSessionUri('test-session');
+		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
 
 		expect(mapHistoryForSnapshot(result.history)).toMatchInlineSnapshot(`
 			[
@@ -433,7 +439,13 @@ describe('ChatSessionContentProvider', () => {
 		));
 		const provider = childInstantiationService.createInstance(ClaudeChatSessionContentProvider);
 
-		const result = await provider.provideChatSessionContent('4c289ca8-f8bb-4588-8400-88b78beb784d', CancellationToken.None);
+		const sessionUri = createClaudeSessionUri('4c289ca8-f8bb-4588-8400-88b78beb784d');
+		const result = await provider.provideChatSessionContent(sessionUri, CancellationToken.None);
 		expect(mapHistoryForSnapshot(result.history)).toMatchSnapshot();
 	});
 });
+
+
+function createClaudeSessionUri(id: string): URI {
+	return URI.parse(`claude-code:/${id}`);
+}
