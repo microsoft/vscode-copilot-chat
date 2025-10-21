@@ -87,6 +87,9 @@ export class CopilotCLIAgentManager extends Disposable {
 			if (ref.value instanceof ChatReferenceDiagnostic) {
 				// Handle diagnostic reference
 				for (const [uri, diagnostics] of ref.value.diagnostics) {
+					if (uri.scheme !== 'file') {
+						continue;
+					}
 					for (const diagnostic of diagnostics) {
 						const severityMap: { [key: number]: string } = {
 							0: 'error',
@@ -103,10 +106,12 @@ export class CopilotCLIAgentManager extends Disposable {
 					}
 				}
 			} else {
-				const filePath = URI.isUri(ref.value) ? ref.value.fsPath : isLocation(ref.value) ? ref.value.uri.fsPath : undefined;
-				if (filePath) {
-					files.push({ path: filePath, name: ref.name || path.basename(filePath) });
+				const uri = URI.isUri(ref.value) ? ref.value : isLocation(ref.value) ? ref.value.uri : undefined;
+				if (!uri || uri.scheme !== 'file') {
+					return;
 				}
+				const filePath = uri.fsPath;
+				files.push({ path: filePath, name: ref.name || path.basename(filePath) });
 				const valueText = URI.isUri(ref.value) ?
 					ref.value.fsPath :
 					isLocation(ref.value) ?
