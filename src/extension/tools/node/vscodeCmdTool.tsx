@@ -54,9 +54,10 @@ class VSCodeCmdTool implements vscode.LanguageModelTool<IVSCodeCmdToolToolInput>
 			throw new Error('Command ID undefined');
 		}
 
-		const query = encodeURIComponent(JSON.stringify([[commandId]]));
-		const markdownString = new MarkdownString(l10n.t(`Copilot will execute the [{0}](command:workbench.action.quickOpen?{1}) command.`, options.input.name, query));
-		markdownString.isTrusted = { enabledCommands: [commandId] };
+		const quickOpenCommand = 'workbench.action.quickOpen';
+		const commandStr = commandUri(quickOpenCommand, [">" + options.input.name]);
+		const markdownString = new MarkdownString(l10n.t(`Copilot will execute the [{0}]({1}) command.`, options.input.name, commandStr));
+		markdownString.isTrusted = { enabledCommands: [quickOpenCommand] };
 		return {
 			invocationMessage: l10n.t`Running command \`${options.input.name}\``,
 			confirmationMessages: {
