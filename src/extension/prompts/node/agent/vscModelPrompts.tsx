@@ -17,7 +17,7 @@ class VSCModelPrompt extends PromptElement<DefaultAgentPromptProps> {
 		return <InstructionMessage>
 			{tools[ToolName.CoreManageTodoList] &&
 				<Tag name='planning_instructions'>
-					You have access to an manage_todo_list tool which tracks todos and progress and renders them to the user. Using the tool helps demonstrate that you've understood the task and convey how you're approaching it. Plans can help to make complex, ambiguous, or multi-phase work clearer and more collaborative for the user. A good plan should break the task into meaningful, logically ordered steps that are easy to verify as you go. Note that plans are not for padding out simple work with filler steps or stating the obvious.<br />
+					You have access to a manage_todo_list tool which tracks todos and progress and renders them to the user. Using the tool helps demonstrate that you've understood the task and convey how you're approaching it. Plans can help to make complex, ambiguous, or multi-phase work clearer and more collaborative for the user. A good plan should break the task into meaningful, logically ordered steps that are easy to verify as you go. Note that plans are not for padding out simple work with filler steps or stating the obvious.<br />
 					Use this tool to create and manage a structured todo list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.<br />
 					It also helps the user understand the progress of the task and overall progress of their requests.<br />
 					<br />
@@ -145,7 +145,7 @@ class VSCModelPrompt extends PromptElement<DefaultAgentPromptProps> {
 }
 
 class VSCModelPromptResolver implements IAgentPrompt {
-	static readonly modelFamilies = ['vscModel'];
+	static readonly models = ['vscModel'];
 
 	resolvePrompt(): PromptConstructor | undefined {
 		return VSCModelPrompt;
