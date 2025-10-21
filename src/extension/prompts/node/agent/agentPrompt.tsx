@@ -152,23 +152,9 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			/>;
 		}
 
-		if (await isHiddenModelById(this.props.endpoint)) {
-			// Try VSCModel prompt for hidden models
-			const hiddenModelPrompt = PromptRegistry.getPrompt('vscModel');
-			if (hiddenModelPrompt) {
-				const resolver = this.instantiationService.createInstance(hiddenModelPrompt);
-				const PromptClass = resolver.resolvePrompt();
-				if (PromptClass) {
-					return <PromptClass
-						availableTools={this.props.promptContext.tools?.availableTools}
-						modelFamily={modelFamily}
-						codesearchMode={this.props.codesearchMode}
-					/>;
-				}
-			}
-		}
-
-		const agentPromptResolver = PromptRegistry.getPrompt(this.props.endpoint.model ?? 'unknown');
+		// Try VSCModel prompt for hidden models, otherwise use model-specific prompt
+		const modelKey = await isHiddenModelById(this.props.endpoint) ? 'vscModel' : this.props.endpoint.model ?? 'unknown';
+		const agentPromptResolver = PromptRegistry.getPrompt(modelKey);
 		if (agentPromptResolver) {
 			const resolver = this.instantiationService.createInstance(agentPromptResolver);
 			const PromptClass = resolver.resolvePrompt();
@@ -794,7 +780,7 @@ function getVSCModelReminder(isHiddenModel: boolean) {
 		You MUST preface each tool call batch with a brief status update.<br />
 		Focus on findings and next steps. Vary your openings—avoid repeating "I'll" or "I will" consecutively.<br />
 		When you have a finding, be enthusiastic and specific (2 sentences). Otherwise, state your next action only (1 sentence).<br />
-		Don't over-express your thought in preamble, do not use preamble to think or reason. This is a strict and strong requirement.<br />
+		Don't over-express your thoughts in preamble, do not use preamble to think or reason. This is a strict and strong requirement.<br />
 	</>;
 }
 
