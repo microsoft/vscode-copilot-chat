@@ -362,6 +362,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
 						{getFileCreationReminder(this.props.endpoint.family)}
 						{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
+						{getVSCModelReminder(shouldIncludePreamble)}
 					</Tag>
 					{query && <Tag name={shouldUseUserQuery ? 'user_query' : 'userRequest'} priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
@@ -763,6 +764,20 @@ function getFileCreationReminder(modelFamily: string | undefined) {
 		return;
 	}
 	return <>Do NOT create a new markdown file to document each change or summarize your work unless specifically requested by the user.<br /></>;
+}
+
+function getVSCModelReminder(isHiddenModel: boolean) {
+	if (!isHiddenModel) {
+		return;
+	}
+
+	return <>
+		Follow the guidance in &lt;preamble_instructions&gt; from the system prompt.<br />
+		You MUST preface each tool call batch with a brief status update.<br />
+		Focus on findings and next steps. Vary your openings—avoid repeating "I'll" or "I will" consecutively.<br />
+		When you have a finding, be enthusiastic and specific (2 sentences). Otherwise, state your next action only (1 sentence).<br />
+		Don't over-express your thought in preamble, do not use preamble to think or reason. This is a strict and strong requirement.<br />
+	</>;
 }
 
 function getExplanationReminder(modelFamily: string | undefined, hasTodoTool?: boolean) {
