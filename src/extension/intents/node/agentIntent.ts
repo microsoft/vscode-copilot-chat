@@ -322,7 +322,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		if (lastMessage?.role === Raw.ChatRole.User) {
 			const currentTurn = promptContext.conversation?.getLatestTurn();
 			if (currentTurn && !currentTurn.getMetadata(RenderedUserMessageMetadata)) {
-				currentTurn.setMetadata(new RenderedUserMessageMetadata(lastMessage.content));
+				currentTurn.setMetadata(new RenderedUserMessageMetadata(lastMessage.content, endpoint.family));
 			}
 		}
 

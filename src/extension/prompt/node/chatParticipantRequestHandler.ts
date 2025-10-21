@@ -434,7 +434,7 @@ function createTurnFromVSCodeChatHistoryTurns(
 		currentTurn.setMetadata(new GlobalContextMessageMetadata(turnMetadata?.renderedGlobalContext, cacheKey));
 	}
 	if (turnMetadata?.renderedUserMessage) {
-		currentTurn.setMetadata(new RenderedUserMessageMetadata(turnMetadata.renderedUserMessage));
+		currentTurn.setMetadata(new RenderedUserMessageMetadata(turnMetadata.renderedUserMessage, turnMetadata.modelFamily));
 	}
 
 	return currentTurn;
