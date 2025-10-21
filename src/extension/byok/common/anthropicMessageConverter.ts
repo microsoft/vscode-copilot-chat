@@ -217,6 +217,12 @@ export function anthropicMessagesToRawMessages(messages: MessageParam[], system:
 				} else if (block.type === 'image') {
 					pushImage(block);
 					pushCache(block);
+				} else if (block.type === 'thinking') {
+					// Include thinking content for logging
+					content.push({
+						type: Raw.ChatCompletionContentPartKind.Text,
+						text: `[THINKING: ${block.thinking}]`
+					});
 				} else if (block.type === 'tool_use') {
 					// tool_use appears in assistant messages; represent as toolCalls on assistant message
 					toolCalls ??= [];
