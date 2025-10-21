@@ -218,7 +218,7 @@ export class RepoInfoTelemetry {
 			};
 
 			// Combine our diff against the upstream commit with untracked changes, and working tree changes
-			// A change like a new file could end up in either the untracked or working tree changes and won't be in the diffWith.
+			// A change like a new untracked file could end up in either the untracked or working tree changes and won't be in the diffWith.
 			const diffChanges = await this._gitService.diffWith(repoContext.rootUri, upstreamCommit) ?? [];
 
 			const changeMap = new Map<string, Change>();
