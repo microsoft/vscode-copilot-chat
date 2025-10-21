@@ -4136,6 +4136,7 @@
 				"when": "config.github.copilot.chat.advanced.copilotCLI.enabled",
 				"capabilities": {
 					"supportsFileAttachments": true,
+					"supportsProblemAttachments": true,
 					"supportsToolAttachments": false
 				}
 			},

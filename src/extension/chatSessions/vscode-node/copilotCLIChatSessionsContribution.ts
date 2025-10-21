@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
-import { ChatExtendedRequestHandler, l10n } from 'vscode';
+import { ChatExtendedRequestHandler, ChatReferenceDiagnostic, l10n } from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { isLocation } from '../../../util/common/types';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
@@ -231,27 +231,55 @@ export class CopilotCLIChatSessionParticipant {
 		}
 
 		const allRefsTexts: string[] = [];
+		const diagnosticTexts: string[] = [];
 		const prompt = request.prompt;
 		// TODO@rebornix: filter out implicit references for now. Will need to figure out how to support `<reminder>` without poluting user prompt
 		request.references.filter(ref => !ref.id.startsWith('vscode.prompt.instructions')).forEach(ref => {
-			const valueText = URI.isUri(ref.value) ?
-				ref.value.fsPath :
-				isLocation(ref.value) ?
-					`${ref.value.uri.fsPath}:${ref.value.range.start.line + 1}` :
-					undefined;
-			if (valueText) {
-				// Keep the original prompt untouched, just collect resolved paths
-				const variableText = ref.range ? prompt.substring(ref.range[0], ref.range[1]) : undefined;
-				if (variableText) {
-					allRefsTexts.push(`- ${variableText} → ${valueText}`);
-				} else {
-					allRefsTexts.push(`- ${valueText}`);
+			if (ref.value instanceof ChatReferenceDiagnostic) {
+				// Handle diagnostic reference
+				for (const [uri, diagnostics] of ref.value.diagnostics) {
+					for (const diagnostic of diagnostics) {
+						const severityMap: { [key: number]: string } = {
+							0: 'error',
+							1: 'warning',
+							2: 'info',
+							3: 'hint'
+						};
+						const severity = severityMap[diagnostic.severity] ?? 'error';
+						const code = (typeof diagnostic.code === 'object' && !!diagnostic.code) ? diagnostic.code.value : diagnostic.code;
+						const codeStr = code ? ` [${code}]` : '';
+						const line = diagnostic.range.start.line + 1;
+						diagnosticTexts.push(`- ${severity}${codeStr} at ${uri.fsPath}:${line}: ${diagnostic.message}`);
+					}
+				}
+			} else {
+				const valueText = URI.isUri(ref.value) ?
+					ref.value.fsPath :
+					isLocation(ref.value) ?
+						`${ref.value.uri.fsPath}:${ref.value.range.start.line + 1}` :
+						undefined;
+				if (valueText) {
+					// Keep the original prompt untouched, just collect resolved paths
+					const variableText = ref.range ? prompt.substring(ref.range[0], ref.range[1]) : undefined;
+					if (variableText) {
+						allRefsTexts.push(`- ${variableText} → ${valueText}`);
+					} else {
+						allRefsTexts.push(`- ${valueText}`);
+					}
 				}
 			}
 		});
 
+		const reminderParts: string[] = [];
 		if (allRefsTexts.length > 0) {
-			return `<reminder>\nThe user provided the following references:\n${allRefsTexts.join('\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</reminder>\n\n${prompt}`;
+			reminderParts.push(`The user provided the following references:\n${allRefsTexts.join('\n')}`);
+		}
+		if (diagnosticTexts.length > 0) {
+			reminderParts.push(`The user provided the following diagnostics:\n${diagnosticTexts.join('\n')}`);
+		}
+
+		if (reminderParts.length > 0) {
+			return `<reminder>\n${reminderParts.join('\n\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</reminder>\n\n${prompt}`;
 		}
 
 		return prompt;
