@@ -75,7 +75,7 @@ export class InlineEditRequestLogContext {
 		}
 
 		if (this._diagnosticsResultEdit) {
-			lines.push(`## Proposed diagnostics edits ${this._nesTypePicked === 'diagnostics' ? '(Picked)' : '(Not Picked)'}`);
+			lines.push(`## Proposed diagnostics suggestion ${this._nesTypePicked === 'diagnostics' ? '(Picked)' : '(Not Picked)'}`);
 			lines.push("<details open><summary>Edit</summary>\n");
 			lines.push("``` patch");
 			lines.push(this._diagnosticsResultEdit.toString());
@@ -84,7 +84,7 @@ export class InlineEditRequestLogContext {
 		}
 
 		if (this._resultEdit) {
-			lines.push(`## Proposed next edits ${isCachedStr}`);
+			lines.push(`## Proposed inline suggestion ${isCachedStr}`);
 			lines.push("<details open><summary>Edit</summary>\n");
 			lines.push("``` patch");
 			lines.push(this._resultEdit.toString());

@@ -42,8 +42,10 @@ import { addLogger, setLogObservableFn } from './logging/logging';
 import { ConsoleObservableLogger, logObservableToConsole } from './logging/consoleObservableLogger';
 import { DevToolsLogger } from './logging/debugger/devToolsLogger';
 import { env } from '../process';
+import { _setDebugGetDependencyGraph } from './observables/baseObservable';
+import { debugGetDependencyGraph } from './logging/debugGetDependencyGraph';
 
-
+_setDebugGetDependencyGraph(debugGetDependencyGraph);
 setLogObservableFn(logObservableToConsole);
 
 // Remove "//" in the next line to enable logging

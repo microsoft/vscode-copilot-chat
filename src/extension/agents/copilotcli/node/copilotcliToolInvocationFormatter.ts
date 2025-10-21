@@ -5,9 +5,9 @@
 
 import type { SessionEvent, ToolExecutionCompleteEvent, ToolExecutionStartEvent } from '@github/copilot/sdk';
 import * as l10n from '@vscode/l10n';
-import type { ExtendedChatResponsePart } from 'vscode';
+import type { ChatPromptReference, ExtendedChatResponsePart } from 'vscode';
 import { URI } from '../../../../util/vs/base/common/uri';
-import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString } from '../../../../vscodeTypes';
+import { ChatRequestTurn2, ChatResponseMarkdownPart, ChatResponseThinkingProgressPart, ChatResponseTurn2, ChatToolInvocationPart, MarkdownString, Uri } from '../../../../vscodeTypes';
 
 /**
  * CopilotCLI tool names
@@ -62,7 +62,14 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 					turns.push(new ChatResponseTurn2(currentResponseParts, {}, ''));
 					currentResponseParts = [];
 				}
-				turns.push(new ChatRequestTurn2(stripReminders(event.data.content || ''), undefined, [], '', [], undefined));
+				// TODO @DonJayamanne Temporary work around until we get the zod types.
+				type Attachment = {
+					path: string;
+					type: "file" | "directory";
+					displayName: string;
+				};
+				const references: ChatPromptReference[] = ((event.data.attachments || []) as Attachment[]).map(attachment => ({ id: attachment.path, name: attachment.displayName, value: Uri.file(attachment.path) } as ChatPromptReference));
+				turns.push(new ChatRequestTurn2(stripReminders(event.data.content || ''), undefined, references, '', [], undefined));
 				break;
 			}
 			case 'assistant.message': {

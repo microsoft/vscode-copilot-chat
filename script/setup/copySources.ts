@@ -160,6 +160,7 @@ async function doIt(filepaths: string[]) {
 			'vs/base/common/themables.ts',
 			'vs/base/common/uri.ts',
 			'vs/base/common/uuid.ts',
+			'vs/base/common/yaml.ts',
 			'vs/editor/common/core/ranges/offsetRange.ts',
 			'vs/editor/common/core/wordHelper.ts',
 			'vs/editor/common/model/prefixSumComputer.ts',

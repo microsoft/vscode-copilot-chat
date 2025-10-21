@@ -112,6 +112,37 @@ export interface RemoteAgentJobPayload {
 		head_ref?: string;
 	};
 	run_name?: string;
+	custom_agent?: string;
+}
+
+interface GetCustomAgentsResponse {
+	agents: CustomAgentListItem[];
+}
+
+export interface CustomAgentListItem {
+	name: string;
+	repo_owner_id: number;
+	repo_owner: string;
+	repo_id: number;
+	repo_name: string;
+	display_name: string;
+	description: string;
+	tools: string[];
+	version: string;
+}
+
+export interface CustomAgentDetails extends CustomAgentListItem {
+	prompt: string;
+	'mcp-servers'?: {
+		[serverName: string]: {
+			type: string;
+			command?: string;
+			args?: string[];
+			tools?: string[];
+			env?: { [key: string]: string };
+			headers?: { [key: string]: string };
+		};
+	};
 }
 
 export interface IOctoKitService {
@@ -183,6 +214,25 @@ export interface IOctoKitService {
 	 * Gets pull request from global id.
 	 */
 	getPullRequestFromGlobalId(globalId: string): Promise<PullRequestSearchItem | null>;
+
+	/**
+	 * Gets the list of custom agents available for a repository.
+	 * This includes both repo-level and org/enterprise-level custom agents.
+	 * @param owner The repository owner
+	 * @param repo The repository name
+	 * @returns An array of custom agent list items with basic metadata
+	 */
+	getCustomAgents(owner: string, repo: string): Promise<CustomAgentListItem[]>;
+
+	/**
+	 * Gets the full details of a specific custom agent, including its prompt.
+	 * @param owner The repository owner
+	 * @param repo The repository name
+	 * @param agentName The name of the custom agent
+	 * @param version Optional git ref (branch, tag, or commit SHA) to fetch from. Defaults to the default branch.
+	 * @returns The custom agent details or undefined if not found
+	 */
+	getCustomAgentDetails(owner: string, repo: string, agentName: string, version?: string): Promise<CustomAgentDetails | undefined>;
 }
 
 /**
@@ -250,5 +300,15 @@ export class BaseOctoKitService {
 
 	protected async getPullRequestFromSessionWithToken(globalId: string, token: string): Promise<PullRequestSearchItem | null> {
 		return getPullRequestFromGlobalId(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, token, globalId);
+	}
+
+	protected async getCustomAgentsWithToken(owner: string, repo: string, token: string): Promise<GetCustomAgentsResponse> {
+		const queryParams = '?exclude_invalid_config=true';
+		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/custom-agents/${owner}/${repo}${queryParams}`, 'GET', token, undefined, undefined, 'json', 'vscode-copilot-chat');
+	}
+
+	protected async getCustomAgentDetailsWithToken(owner: string, repo: string, agentName: string, token: string, version?: string): Promise<CustomAgentDetails | undefined> {
+		const queryParams = version ? `?version=${encodeURIComponent(version)}` : '';
+		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/custom-agents/${owner}/${repo}/${agentName}${queryParams}`, 'GET', token, undefined, undefined, 'json', 'vscode-copilot-chat');
 	}
 }

@@ -8,17 +8,19 @@ import { BasePromptElementProps, PromptElement, PromptElementProps } from '@vsco
 import type * as vscode from 'vscode';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
 import { ILogService } from '../../../platform/log/common/logService';
+import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { IPromptPathRepresentationService } from '../../../platform/prompts/common/promptPathRepresentationService';
 import { IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { getLanguage } from '../../../util/common/languages';
+import { findNotebook } from '../../../util/common/notebooks';
 import { isLocation } from '../../../util/common/types';
 import { coalesce } from '../../../util/vs/base/common/arrays';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
+import { isEqualOrParent } from '../../../util/vs/base/common/resources';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
 import { DiagnosticSeverity, ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, MarkdownString, Range } from '../../../vscodeTypes';
-import { findDiagnosticForSelectionAndPrompt } from '../../context/node/resolvers/fixSelection';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { Tag } from '../../prompts/node/base/tag';
@@ -26,8 +28,6 @@ import { DiagnosticContext, Diagnostics } from '../../prompts/node/inline/diagno
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { checkCancellation, formatUriForFileWidget, resolveToolInputPath } from './toolUtils';
-import { INotebookService } from '../../../platform/notebook/common/notebookService';
-import { findNotebook } from '../../../util/common/notebooks';
 
 interface IGetErrorsParams {
 	// Note that empty array is not the same as absence; empty array
@@ -38,7 +38,7 @@ interface IGetErrorsParams {
 	ranges?: ([a: number, b: number, c: number, d: number] | undefined)[];
 }
 
-class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams> {
+export class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams> {
 	public static readonly toolName = ToolName.GetErrors;
 
 	constructor(
@@ -52,33 +52,94 @@ class GetErrorsTool extends Disposable implements ICopilotTool<IGetErrorsParams>
 		super();
 	}
 
+	/**
+	 * Get diagnostics for the given paths and optional ranges.
+	 * Note - This is made public for testing purposes only.
+	 */
+	public getDiagnostics(paths: { uri: URI; range: Range | undefined }[]): Array<{ uri: URI; diagnostics: vscode.Diagnostic[] }> {
+		const results: Array<{ uri: URI; diagnostics: vscode.Diagnostic[] }> = [];
+
+		// for notebooks, we need to find the cell matching the range and get diagnostics for that cell
+		const nonNotebookPaths = paths.filter(p => {
+			const isNotebook = this.notebookService.hasSupportedNotebooks(p.uri);
+			if (isNotebook) {
+				const diagnostics = this.getNotebookCellDiagnostics(p.uri);
+				results.push({ uri: p.uri, diagnostics });
+			}
+
+			return !isNotebook;
+		});
+
+		if (nonNotebookPaths.length === 0) {
+			return results;
+		}
+
+		const pendingMatchPaths = new Set(nonNotebookPaths.map(p => p.uri));
+
+		// for non-notebooks, we get all diagnostics and filter down
+		for (const [resource, entries] of this.languageDiagnosticsService.getAllDiagnostics()) {
+			const pendingDiagnostics = entries.filter(d => d.severity <= DiagnosticSeverity.Warning);
+
+			// find all path&range pairs and collect the ranges to further filter diagnostics
+			// if any path matches the resource without a range, take all diagnostics for that file
+			// otherwise, filter diagnostics to those intersecting one of the provided ranges
+			const ranges: Range[] = [];
+			let shouldTakeAll = false;
+			let foundMatch = false;
+			for (const path of nonNotebookPaths) {
+				// we support file or folder paths
+				if (isEqualOrParent(resource, path.uri)) {
+					foundMatch = true;
+
+					if (pendingMatchPaths.has(path.uri)) {
+						pendingMatchPaths.delete(path.uri);
+					}
+
+					if (path.range) {
+						ranges.push(path.range);
+					} else {
+						// no range, so all diagnostics for this file
+						shouldTakeAll = true;
+						break;
+					}
+				}
+			}
+
+			if (shouldTakeAll) {
+				results.push({ uri: resource, diagnostics: pendingDiagnostics });
+				continue;
+			}
+
+			if (foundMatch && ranges.length > 0) {
+				const diagnostics = pendingDiagnostics.filter(d => ranges.some(range => d.range.intersection(range)));
+				results.push({ uri: resource, diagnostics });
+			}
+		}
+
+		// for any given paths that didn't match any files, return empty diagnostics for each of them
+		for (const uri of pendingMatchPaths) {
+			results.push({ uri, diagnostics: [] });
+		}
+
+		return results;
+	}
+
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IGetErrorsParams>, token: CancellationToken) {
 		const getAll = () => this.languageDiagnosticsService.getAllDiagnostics()
 			.map(d => ({ uri: d[0], diagnostics: d[1].filter(e => e.severity <= DiagnosticSeverity.Warning) }))
 			// filter any documents w/o warnings or errors
 			.filter(d => d.diagnostics.length > 0);
 
-		const getSome = (filePaths: string[]) => filePaths.map((filePath, i) => {
-			const uri = resolveToolInputPath(filePath, this.promptPathRepresentationService);
-			const range = options.input.ranges?.[i];
-			if (!uri) {
-				throw new Error(`Invalid input path ${filePath}`);
-			}
+		const getSome = (filePaths: string[]) =>
+			this.getDiagnostics(filePaths.map((filePath, i) => {
+				const uri = resolveToolInputPath(filePath, this.promptPathRepresentationService);
+				const range = options.input.ranges?.[i];
+				if (!uri) {
+					throw new Error(`Invalid input path ${filePath}`);
+				}
 
-			let diagnostics: vscode.Diagnostic[] = [];
-			if (this.notebookService.hasSupportedNotebooks(uri)) {
-				diagnostics = this.getNotebookCellDiagnostics(uri);
-			} else {
-				diagnostics = range
-					? findDiagnosticForSelectionAndPrompt(this.languageDiagnosticsService, uri, new Range(...range), undefined)
-					: this.languageDiagnosticsService.getDiagnostics(uri);
-			}
-
-			return {
-				diagnostics: diagnostics.filter(d => d.severity <= DiagnosticSeverity.Warning),
-				uri,
-			};
-		});
+				return { uri, range: range ? new Range(...range) : undefined };
+			}));
 
 		const ds = options.input.filePaths?.length ? getSome(options.input.filePaths) : getAll();
 

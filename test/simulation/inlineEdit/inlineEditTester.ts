@@ -13,7 +13,6 @@ import { DebugRecorder } from '../../../src/extension/inlineEdits/node/debugReco
 import { NextEditProvider } from '../../../src/extension/inlineEdits/node/nextEditProvider';
 import { NextEditProviderTelemetryBuilder } from '../../../src/extension/inlineEdits/node/nextEditProviderTelemetry';
 import { NextEditResult } from '../../../src/extension/inlineEdits/node/nextEditResult';
-import { ServerPoweredInlineEditProvider } from '../../../src/extension/inlineEdits/node/serverPoweredInlineEditProvider';
 import { ConfigKey, IConfigurationService } from '../../../src/platform/configuration/common/configurationService';
 import { IGitExtensionService } from '../../../src/platform/git/common/gitExtensionService';
 import { DocumentId } from '../../../src/platform/inlineEdits/common/dataTypes/documentId';
@@ -28,6 +27,7 @@ import { NesXtabHistoryTracker } from '../../../src/platform/inlineEdits/common/
 import { INotebookService } from '../../../src/platform/notebook/common/notebookService';
 import { IExperimentationService } from '../../../src/platform/telemetry/common/nullExperimentationService';
 import { TestingServiceCollection } from '../../../src/platform/test/node/services';
+import { IWorkspaceService } from '../../../src/platform/workspace/common/workspaceService';
 import { TaskQueue } from '../../../src/util/common/async';
 import { getLanguageForResource } from '../../../src/util/common/languages';
 import { CachedFunction } from '../../../src/util/vs/base/common/cache';
@@ -46,8 +46,6 @@ import { ISerializedFileEdit, ISerializedNesUserEditsHistory, NES_LOG_CONTEXT_TA
 import { ITestInformation } from '../testInformation';
 import { IInlineEditBaseFile, ILoadedFile } from './fileLoading';
 import { inlineEditScoringService } from './inlineEditScoringService';
-import { SpyingServerPoweredNesProvider } from './spyingServerPoweredNesProvider';
-import { IWorkspaceService } from '../../../src/platform/workspace/common/workspaceService';
 
 export interface IInlineEditTest {
 	recentEdit: IInlineEditTestDocument | IInlineEditTestDocument[];
@@ -161,10 +159,7 @@ export class InlineEditTester {
 		}
 
 		const nextEditProviderId = configService.getExperimentBasedConfig(ConfigKey.Internal.InlineEditsProviderId, expService);
-		const statelessNextEditProvider =
-			nextEditProviderId === ServerPoweredInlineEditProvider.ID
-				? instaService.createInstance(SpyingServerPoweredNesProvider)
-				: createNextEditProvider(nextEditProviderId, instaService);
+		const statelessNextEditProvider = createNextEditProvider(nextEditProviderId, instaService);
 		const nextEditProvider = instaService.createInstance(NextEditProvider, workspace, statelessNextEditProvider, historyContextProvider, nesXtabHistoryTracker, debugRecorder);
 
 		const historyContext = historyContextProvider.getHistoryContext(docId)!;
