@@ -197,6 +197,19 @@ For comprehensive information about the project architecture, coding standards, 
 
 Understanding these guidelines is crucial for making effective contributions to the GitHub Copilot Chat extension.
 
+#### Additional Architecture Documentation
+
+For detailed technical documentation, see the `docs/` directory:
+
+* [ARCHITECTURE-DIAGRAMS.md](docs/ARCHITECTURE-DIAGRAMS.md) - High-level architecture overview
+* [TECHNICAL-OVERVIEW.md](docs/TECHNICAL-OVERVIEW.md) - Technical implementation details
+* [LANGUAGE-SERVICES-INTERACTION.md](docs/LANGUAGE-SERVICES-INTERACTION.md) - How the extension integrates with VS Code's language servers and diagnostics
+* [LSP-TOOLS-GAP-ANALYSIS.md](docs/LSP-TOOLS-GAP-ANALYSIS.md) - LSP capabilities not yet exposed as tools and implementation guidance
+* [LSP-COMMANDS-VERIFICATION.md](docs/LSP-COMMANDS-VERIFICATION.md) - Verification that all LSP capabilities are exposed as VS Code commands
+* [AGENT-MODE.md](docs/AGENT-MODE.md) - Agent mode architecture and workflows
+* [INTENT-ORCHESTRATION.md](docs/INTENT-ORCHESTRATION.md) - Intent detection and orchestration
+* [tools.md](docs/tools.md) - Language model tools system
+
 ### Layers
 
 Like in VS Code we organize our source code into layers and folders. Understand a "layer" as runtime target which is defined by the ambient APIs that you can use. We have these layers:
