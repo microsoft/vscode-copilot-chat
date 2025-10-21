@@ -326,15 +326,6 @@ export class CopilotCLISession extends Disposable {
 
 	private getConfirmationToolParams(permissionRequest: Record<string, unknown>): { tool: string; input: unknown } {
 		if (permissionRequest.kind === 'shell') {
-			// return {
-			// 	tool: ToolName.CoreConfirmationTool,
-			// 	input: {
-			// 		title: permissionRequest.intention || 'Copilot CLI Permission Request',
-			// 		message: permissionRequest.fullCommandText || `\`\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
-			// 		confirmationType: 'terminal',
-			// 		terminalCommand: permissionRequest.fullCommandText as string | undefined
-			// 	}
-			// };
 			return {
 				tool: ToolName.CoreTerminalConfirmationTool, input: {
 					message: permissionRequest.intent || permissionRequest.fullCommandText || `\`\`\`\n${JSON.stringify(permissionRequest, null, 2)}\n\`\`\``,
