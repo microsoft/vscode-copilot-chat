@@ -280,3 +280,7 @@ export const isAndroid = !!(userAgent && userAgent.indexOf('Android') >= 0);
 export function isBigSurOrNewer(osVersion: string): boolean {
 	return parseFloat(osVersion) >= 20;
 }
+
+export function isTahoeOrNewer(osVersion: string): boolean {
+	return parseFloat(osVersion) >= 25;
+}
