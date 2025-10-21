@@ -1445,6 +1445,8 @@ suite('RepoInfoTelemetry', () => {
 					pushUrl: remoteUrl,
 					isReadOnly: false,
 				}],
+				workingTreeChanges: [],
+				untrackedChanges: [],
 			},
 		};
 
