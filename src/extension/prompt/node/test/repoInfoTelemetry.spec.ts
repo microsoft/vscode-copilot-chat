@@ -1045,6 +1045,124 @@ suite('RepoInfoTelemetry', () => {
 		assert.ok(diffs[0].renameUri);
 	});
 
+	test('should include untracked files from both workingTreeChanges and untrackedChanges', async () => {
+		setupInternalUser();
+		mockGitServiceWithRepository();
+
+		// Mock git extension with untracked files in both workingTreeChanges and untrackedChanges
+		const mockRepo = {
+			getMergeBase: vi.fn(),
+			getBranchBase: vi.fn(),
+			state: {
+				HEAD: {
+					upstream: {
+						commit: 'abc123',
+						remote: 'origin',
+					},
+				},
+				remotes: [{
+					name: 'origin',
+					fetchUrl: 'https://github.com/microsoft/vscode.git',
+					pushUrl: 'https://github.com/microsoft/vscode.git',
+					isReadOnly: false,
+				}],
+				workingTreeChanges: [{
+					uri: URI.file('/test/repo/filea.txt'),
+					originalUri: URI.file('/test/repo/filea.txt'),
+					renameUri: undefined,
+					status: Status.UNTRACKED
+				}],
+				untrackedChanges: [{
+					uri: URI.file('/test/repo/fileb.txt'),
+					originalUri: URI.file('/test/repo/fileb.txt'),
+					renameUri: undefined,
+					status: Status.UNTRACKED
+				}],
+			},
+		};
+
+		mockRepo.getMergeBase.mockImplementation(async (ref1: string, ref2: string) => {
+			if (ref1 === 'HEAD' && ref2 === '@{upstream}') {
+				return 'abc123';
+			}
+			return undefined;
+		});
+
+		mockRepo.getBranchBase.mockResolvedValue(undefined);
+
+		const mockApi = {
+			getRepository: () => mockRepo,
+		};
+		vi.spyOn(gitExtensionService, 'getExtensionApi').mockReturnValue(mockApi as any);
+
+		// Mock diffWith to return one modified file
+		vi.spyOn(gitService, 'diffWith').mockResolvedValue([{
+			uri: URI.file('/test/repo/modified.ts'),
+			originalUri: URI.file('/test/repo/modified.ts'),
+			renameUri: undefined,
+			status: Status.MODIFIED
+		}] as any);
+
+		// Mock diff service to return all three files
+		vi.spyOn(gitDiffService, 'getWorkingTreeDiffsFromRef').mockResolvedValue([
+			{
+				uri: URI.file('/test/repo/modified.ts'),
+				originalUri: URI.file('/test/repo/modified.ts'),
+				renameUri: undefined,
+				status: Status.MODIFIED,
+				diff: 'modified content'
+			},
+			{
+				uri: URI.file('/test/repo/filea.txt'),
+				originalUri: URI.file('/test/repo/filea.txt'),
+				renameUri: undefined,
+				status: Status.UNTRACKED,
+				diff: 'new file a'
+			},
+			{
+				uri: URI.file('/test/repo/fileb.txt'),
+				originalUri: URI.file('/test/repo/fileb.txt'),
+				renameUri: undefined,
+				status: Status.UNTRACKED,
+				diff: 'new file b'
+			}
+		]);
+
+		const repoTelemetry = new RepoInfoTelemetry(
+			'test-message-id',
+			telemetryService,
+			gitService,
+			gitDiffService,
+			gitExtensionService,
+			copilotTokenStore,
+			logService,
+			fileSystemService,
+			workspaceFileIndex
+		);
+
+		await repoTelemetry.sendBeginTelemetryIfNeeded();
+
+		// Assert: success with all three files in telemetry
+		assert.strictEqual((telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls.length, 1);
+		const call = (telemetryService.sendInternalMSFTTelemetryEvent as any).mock.calls[0];
+		assert.strictEqual(call[1].result, 'success');
+
+		const diffs = JSON.parse(call[1].diffsJSON);
+		assert.strictEqual(diffs.length, 3, 'Should include 1 modified file + 2 untracked files');
+
+		// Verify all three files are present
+		const uris = diffs.map((d: any) => d.uri);
+		assert.ok(uris.includes('file:///test/repo/modified.ts'), 'Should include modified file');
+		assert.ok(uris.includes('file:///test/repo/filea.txt'), 'Should include filea.txt from workingTreeChanges');
+		assert.ok(uris.includes('file:///test/repo/fileb.txt'), 'Should include fileb.txt from untrackedChanges');
+
+		// Verify statuses
+		const fileaEntry = diffs.find((d: any) => d.uri === 'file:///test/repo/filea.txt');
+		const filebEntry = diffs.find((d: any) => d.uri === 'file:///test/repo/fileb.txt');
+		assert.strictEqual(fileaEntry.status, 'UNTRACKED');
+		assert.strictEqual(filebEntry.status, 'UNTRACKED');
+	});
+
 	// ========================================
 	// Measurements Tests
 	// ========================================
