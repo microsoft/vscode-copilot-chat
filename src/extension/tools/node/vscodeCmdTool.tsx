@@ -56,7 +56,7 @@ class VSCodeCmdTool implements vscode.LanguageModelTool<IVSCodeCmdToolToolInput>
 		}
 
 		const quickOpenCommand = 'workbench.action.quickOpen';
-		const commandStr = commandUri(quickOpenCommand, [">" + options.input.name]);
+		const commandStr = commandUri(quickOpenCommand, [">" + commandId]);
 		const markdownString = new MarkdownString(l10n.t(`Copilot will execute the [{0}]({1}) command.`, options.input.name, commandStr));
 		markdownString.isTrusted = { enabledCommands: [quickOpenCommand] };
 		return {
