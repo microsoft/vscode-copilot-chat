@@ -34,11 +34,14 @@ extends:
             displayName: 🛠 Install Node.js (22.x)
 
           - bash: npm ci && npm run extract-chat-lib && rm -rf node_modules
+            displayName: 📂 Extract chat-lib
 
           - script: npm ci
+            displayName: 📦 Install chat-lib dependencies
             workingDirectory: chat-lib
 
           - script: npm run build
+            displayName: 🔨 Build chat-lib
             workingDirectory: chat-lib
         testPlatforms:
           - name: Linux
@@ -50,14 +53,18 @@ extends:
         workingDirectory: chat-lib
         testSteps:
           - bash: npm ci && npm run extract-chat-lib && rm -rf node_modules
+            displayName: 📂 Extract chat-lib
 
           - script: npm ci
+            displayName: 📦 Install chat-lib dependencies
             workingDirectory: chat-lib
 
           - script: npm run build
+            displayName: 🔨 Build chat-lib
             workingDirectory: chat-lib
 
           - script: npm test
+            displayName: 🧪 Run chat-lib tests
             workingDirectory: chat-lib
         # ${{ if or(eq(parameters.nextVersion, 'prerelease'), and(in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI'), eq(variables['Build.SourceBranch'], 'refs/heads/main'))) }}:
         ${{ if eq(parameters.nextVersion, 'prerelease') }}:

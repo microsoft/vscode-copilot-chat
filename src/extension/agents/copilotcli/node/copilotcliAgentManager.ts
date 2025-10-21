@@ -3,17 +3,21 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import type { AgentOptions, ModelProvider, Session, SessionEvent } from '@github/copilot/sdk';
+import type { AgentOptions, Attachment, ModelProvider, Session, SessionEvent } from '@github/copilot/sdk';
+import * as fs from 'fs/promises';
 import type * as vscode from 'vscode';
 import { IAuthenticationService } from '../../../../platform/authentication/common/authentication';
 import { IEnvService } from '../../../../platform/env/common/envService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { ILogService } from '../../../../platform/log/common/logService';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
+import { isLocation } from '../../../../util/common/types';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
 import { Disposable } from '../../../../util/vs/base/common/lifecycle';
+import * as path from '../../../../util/vs/base/common/path';
+import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponseThinkingProgressPart, LanguageModelTextPart } from '../../../../vscodeTypes';
+import { ChatReferenceDiagnostic, ChatResponseThinkingProgressPart, LanguageModelTextPart } from '../../../../vscodeTypes';
 import { ToolName } from '../../../tools/common/toolNames';
 import { IToolsService } from '../../../tools/common/toolsService';
 import { ICopilotCLISessionService } from './copilotcliSessionService';
@@ -48,13 +52,14 @@ export class CopilotCLIAgentManager extends Disposable {
 		const sessionIdForLog = copilotcliSessionId ?? 'new';
 		this.logService.trace(`[CopilotCLIAgentManager] Handling request for sessionId=${sessionIdForLog}.`);
 
+		const { prompt, attachments } = await this.resolvePrompt(request);
 		// Check if we already have a session wrapper
 		let session = copilotcliSessionId ? this.sessionService.findSessionWrapper<CopilotCLISession>(copilotcliSessionId) : undefined;
 
 		if (session) {
 			this.logService.trace(`[CopilotCLIAgentManager] Reusing CopilotCLI session ${copilotcliSessionId}.`);
 		} else {
-			const sdkSession = await this.sessionService.getOrCreateSDKSession(copilotcliSessionId, request.prompt);
+			const sdkSession = await this.sessionService.getOrCreateSDKSession(copilotcliSessionId, prompt);
 			session = this.instantiationService.createInstance(CopilotCLISession, sdkSession);
 			this.sessionService.trackSessionWrapper(sdkSession.sessionId, session);
 		}
@@ -63,9 +68,90 @@ export class CopilotCLIAgentManager extends Disposable {
 			this.sessionService.setPendingRequest(session.sessionId);
 		}
 
-		await session.invoke(request.prompt, request.toolInvocationToken, stream, modelId, token);
+		await session.invoke(prompt, attachments, request.toolInvocationToken, stream, modelId, token);
 
 		return { copilotcliSessionId: session.sessionId };
+	}
+
+	private async resolvePrompt(request: vscode.ChatRequest): Promise<{ prompt: string; attachments: Attachment[] }> {
+		if (request.prompt.startsWith('/')) {
+			return { prompt: request.prompt, attachments: [] }; // likely a slash command, don't modify
+		}
+
+		const attachments: Attachment[] = [];
+		const allRefsTexts: string[] = [];
+		const diagnosticTexts: string[] = [];
+		const files: { path: string; name: string }[] = [];
+		// TODO@rebornix: filter out implicit references for now. Will need to figure out how to support `<reminder>` without poluting user prompt
+		request.references.filter(ref => !ref.id.startsWith('vscode.prompt.instructions')).forEach(ref => {
+			if (ref.value instanceof ChatReferenceDiagnostic) {
+				// Handle diagnostic reference
+				for (const [uri, diagnostics] of ref.value.diagnostics) {
+					for (const diagnostic of diagnostics) {
+						const severityMap: { [key: number]: string } = {
+							0: 'error',
+							1: 'warning',
+							2: 'info',
+							3: 'hint'
+						};
+						const severity = severityMap[diagnostic.severity] ?? 'error';
+						const code = (typeof diagnostic.code === 'object' && diagnostic.code !== null) ? diagnostic.code.value : diagnostic.code;
+						const codeStr = code ? ` [${code}]` : '';
+						const line = diagnostic.range.start.line + 1;
+						diagnosticTexts.push(`- ${severity}${codeStr} at ${uri.fsPath}:${line}: ${diagnostic.message}`);
+						files.push({ path: uri.fsPath, name: path.basename(uri.fsPath) });
+					}
+				}
+			} else {
+				const filePath = URI.isUri(ref.value) ? ref.value.fsPath : isLocation(ref.value) ? ref.value.uri.fsPath : undefined;
+				if (filePath) {
+					files.push({ path: filePath, name: ref.name || path.basename(filePath) });
+				}
+				const valueText = URI.isUri(ref.value) ?
+					ref.value.fsPath :
+					isLocation(ref.value) ?
+						`${ref.value.uri.fsPath}:${ref.value.range.start.line + 1}` :
+						undefined;
+				if (valueText && ref.range) {
+					// Keep the original prompt untouched, just collect resolved paths
+					const variableText = request.prompt.substring(ref.range[0], ref.range[1]);
+					allRefsTexts.push(`- ${variableText} → ${valueText}`);
+				}
+			}
+		});
+
+		await Promise.all(files.map(async (file) => {
+			try {
+				const stat = await fs.stat(file.path);
+				const type = stat.isDirectory() ? 'directory' : stat.isFile() ? 'file' : undefined;
+				if (!type) {
+					this.logService.error(`[CopilotCLIAgentManager] Ignoring attachment as its not a file/directory (${file.path})`);
+					return;
+				}
+				attachments.push({
+					type,
+					displayName: file.name,
+					path: file.path
+				});
+			} catch (error) {
+				this.logService.error(`[CopilotCLIAgentManager] Failed to attach ${file.path}: ${error}`);
+			}
+		}));
+
+		const reminderParts: string[] = [];
+		if (allRefsTexts.length > 0) {
+			reminderParts.push(`The user provided the following references:\n${allRefsTexts.join('\n')}`);
+		}
+		if (diagnosticTexts.length > 0) {
+			reminderParts.push(`The user provided the following diagnostics:\n${diagnosticTexts.join('\n')}`);
+		}
+
+		let prompt = request.prompt;
+		if (reminderParts.length > 0) {
+			prompt = `<reminder>\n${reminderParts.join('\n\n')}\n\nIMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</reminder>\n\n${prompt}`;
+		}
+
+		return { prompt, attachments };
 	}
 }
 
@@ -92,7 +178,7 @@ export class CopilotCLISession extends Disposable {
 		super.dispose();
 	}
 
-	async *query(prompt: string, options: AgentOptions): AsyncGenerator<SessionEvent> {
+	async *query(prompt: string, attachments: Attachment[], options: AgentOptions): AsyncGenerator<SessionEvent> {
 		// Ensure node-pty shim exists before importing SDK
 		// @github/copilot has hardcoded: import{spawn}from"node-pty"
 		await ensureNodePtyShim(this.extensionContext.extensionPath, this.envService.appRoot);
@@ -100,11 +186,12 @@ export class CopilotCLISession extends Disposable {
 		// Dynamically import the SDK
 		const { Agent } = await import('@github/copilot/sdk');
 		const agent = new Agent(options);
-		yield* agent.query(prompt);
+		yield* agent.query(prompt, attachments);
 	}
 
 	public async invoke(
 		prompt: string,
+		attachments: Attachment[],
 		toolInvocationToken: vscode.ChatParticipantToolToken,
 		stream: vscode.ChatResponseStream,
 		modelId: ModelProvider | undefined,
@@ -148,7 +235,7 @@ export class CopilotCLISession extends Disposable {
 		};
 
 		try {
-			for await (const event of this.query(prompt, options)) {
+			for await (const event of this.query(prompt, attachments, options)) {
 				if (token.isCancellationRequested) {
 					break;
 				}
