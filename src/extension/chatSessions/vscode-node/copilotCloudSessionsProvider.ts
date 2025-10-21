@@ -5,6 +5,7 @@
 
 import * as pathLib from 'path';
 import * as vscode from 'vscode';
+import { Uri } from 'vscode';
 import { IGitExtensionService } from '../../../platform/git/common/gitExtensionService';
 import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
@@ -56,7 +57,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 	public readonly onDidCommitChatSessionItem = this._onDidCommitChatSessionItem.event;
 	private chatSessions: Map<number, PullRequestSearchItem> = new Map();
 	private chatSessionItemsPromise: Promise<vscode.ChatSessionItem[]> | undefined;
-	private sessionAgentMap: Map<string, string> = new Map();
+	private sessionAgentMap: Map<Uri, string> = new Map();
 	public chatParticipant = vscode.chat.createChatParticipant(CopilotChatSessionsProvider.TYPE, async (request, context, stream, token) =>
 		await this.chatParticipantImpl(request, context, stream, token)
 	);
@@ -106,15 +107,15 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		}
 	}
 
-	provideHandleOptionsChange(sessionId: string, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, token: vscode.CancellationToken): void {
+	provideHandleOptionsChange(resource: Uri, updates: ReadonlyArray<vscode.ChatSessionOptionUpdate>, token: vscode.CancellationToken): void {
 		for (const update of updates) {
 			if (update.optionId === AGENTS_OPTION_GROUP_ID) {
 				if (update.value) {
-					this.sessionAgentMap.set(sessionId, update.value);
-					this.logService.info(`Agent changed for session ${sessionId}: ${update.value}`);
+					this.sessionAgentMap.set(resource, update.value);
+					this.logService.info(`Agent changed for session ${resource}: ${update.value}`);
 				} else {
-					this.sessionAgentMap.delete(sessionId);
-					this.logService.info(`Agent cleared for session ${sessionId}`);
+					this.sessionAgentMap.delete(resource);
+					this.logService.info(`Agent cleared for session ${resource}`);
 				}
 			}
 		}
@@ -140,8 +141,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				const status = this.getSessionStatusFromSessions(sessions);
 
 				const session = {
-					id: pr.number.toString(),
-					resource: undefined,
+					resource: vscode.Uri.from({ scheme: CopilotChatSessionsProvider.TYPE, path: '/' + pr.number }),
 					label: pr.title,
 					status,
 					description,
@@ -164,17 +164,17 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		return this.chatSessionItemsPromise;
 	}
 
-	async provideChatSessionContent(sessionId: string, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
-		const indexedSessionId = SessionIdForPr.parse(sessionId);
+	async provideChatSessionContent(resource: Uri, token: vscode.CancellationToken): Promise<vscode.ChatSession> {
+		const indexedSessionId = SessionIdForPr.parse(resource);
 		let pullRequestNumber: number | undefined;
 		if (indexedSessionId) {
 			pullRequestNumber = indexedSessionId.prNumber;
 		}
 		if (typeof pullRequestNumber === 'undefined') {
-			pullRequestNumber = parseInt(sessionId);
+			pullRequestNumber = parseInt(resource.path.slice(1));
 			if (isNaN(pullRequestNumber)) {
-				this.logService.error(`Invalid pull request number: ${sessionId}`);
-				return this.createEmptySession(sessionId);
+				this.logService.error(`Invalid pull request number: ${resource}`);
+				return this.createEmptySession(resource);
 			}
 		}
 
@@ -201,8 +201,8 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			return prompt.replace(/@copilot\s*/gi, '').trim();
 		};
 		if (!pr) {
-			this.logService.error(`Session not found for ID: ${sessionId}`);
-			return this.createEmptySession();
+			this.logService.error(`Session not found for ID: ${resource}`);
+			return this.createEmptySession(resource);
 		}
 		const sessions = await this._octoKitService.getCopilotSessionsForPR(pr.fullDatabaseId.toString());
 		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotChatSessionsProvider.TYPE, this._gitService);
@@ -210,7 +210,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 		const selectedAgent =
 			// Local cache of session -> custom agent
-			this.sessionAgentMap.get(sessionId)
+			this.sessionAgentMap.get(resource)
 			// Query for the sub-agent that the remote reports for this session
 			|| undefined; /* TODO: Needs API to support this. */
 
@@ -223,10 +223,11 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 	}
 
 	async openSessionsInBrowser(chatSessionItem: vscode.ChatSessionItem): Promise<void> {
-		const prNumber = parseInt(chatSessionItem.id, 10);
-		if (isNaN(prNumber)) {
-			vscode.window.showErrorMessage(vscode.l10n.t('Invalid pull request number: {0}', chatSessionItem.id));
-			this.logService.error(`Invalid pull request number: ${chatSessionItem.id}`);
+		const session = SessionIdForPr.parse(chatSessionItem.resource);
+		const prNumber = session?.prNumber;
+		if (typeof prNumber === 'undefined' || isNaN(prNumber)) {
+			vscode.window.showErrorMessage(vscode.l10n.t('Invalid pull request number: {0}', chatSessionItem.resource));
+			this.logService.error(`Invalid pull request number: ${chatSessionItem.resource}`);
 			return;
 		}
 
@@ -263,15 +264,16 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		};
 	}
 
-	private createEmptySession(sessionId?: string): vscode.ChatSession {
+	private createEmptySession(resource: Uri): vscode.ChatSession {
+		const sessionId = resource ? resource.path.slice(1) : undefined;
 		return {
 			history: [],
 			...(sessionId && sessionId.startsWith('untitled-')
 				? {
 					options: {
 						[AGENTS_OPTION_GROUP_ID]:
-							this.sessionAgentMap.get(sessionId)
-							?? (this.sessionAgentMap.set(sessionId, DEFAULT_AGENT_ID), DEFAULT_AGENT_ID)
+							this.sessionAgentMap.get(resource)
+							?? (this.sessionAgentMap.set(resource, DEFAULT_AGENT_ID), DEFAULT_AGENT_ID)
 					}
 				}
 				: {}),
@@ -401,7 +403,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 		if (context.chatSessionContext?.isUntitled) {
 			/* Generate new cloud agent session from an 'untitled' session */
-			const selectedAgent = this.sessionAgentMap.get(context.chatSessionContext.chatSessionItem.id);
+			const selectedAgent = this.sessionAgentMap.get(context.chatSessionContext.chatSessionItem.resource);
 			const number = await startSession(
 				'untitledChatSession',
 				context.chatSummary?.prompt ?? request.prompt,
@@ -416,8 +418,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			this._onDidCommitChatSessionItem.fire({
 				original: context.chatSessionContext.chatSessionItem,
 				modified: {
-					id: String(number),
-					resource: undefined,
+					resource: vscode.Uri.from({ scheme: CopilotChatSessionsProvider.TYPE, path: '/' + number }),
 					label: `Pull Request ${number}`
 				}
 			});
@@ -436,10 +437,13 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				}
 
 				stream.progress(vscode.l10n.t('Preparing'));
-
-				const pullRequest = await this.findPR(parseInt(context.chatSessionContext.chatSessionItem.id, 10));
+				const session = SessionIdForPr.parse(context.chatSessionContext.chatSessionItem.resource);
+				if (!session?.prNumber) {
+					return {};
+				}
+				const pullRequest = await this.findPR(session.prNumber);
 				if (!pullRequest) {
-					stream.warning(vscode.l10n.t('Could not find the associated pull request {0} for this chat session.', context.chatSessionContext.chatSessionItem.id));
+					stream.warning(vscode.l10n.t('Could not find the associated pull request {0} for this chat session.', context.chatSessionContext.chatSessionItem.resource));
 					return {};
 				}
 
