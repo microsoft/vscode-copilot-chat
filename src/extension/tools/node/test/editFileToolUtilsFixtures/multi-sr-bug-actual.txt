@@ -113,12 +113,10 @@ export class ChatEditingSession extends Disposable implements IChatEditingSessio
 	 */
 	private readonly _initialFileContents = new ResourceMap<string>();
 
-	private readonly _entriesObs = observableValue<readonly IModifiedFileEntryInternal[]>(this, []);
+	private readonly _entriesOb	private readonly _entriesObs = observableValue<readonly IModifiedFileEntryInternal[]>(this, []);
 	public get entries(): IObservable<readonly IModifiedFileEntry[]> {
 		return this._entriesObs;
-	}
-
-	private _editorPane: MultiDiffEditor | undefined;
+	}iDiffEditor | undefined;
 
 	get state(): IObservable<ChatEditingSessionState> {
 		return this._state;
