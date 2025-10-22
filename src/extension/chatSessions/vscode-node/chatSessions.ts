@@ -136,6 +136,11 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 					copilotSessionsProvider.openSessionsInBrowser(chatSessionItem);
 				})
 			);
+			this.copilotCloudRegistrations.add(
+				vscode.commands.registerCommand('github.copilot.cloud.sessions.installPRExtension', async () => {
+					await vscode.commands.executeCommand('workbench.extensions.installExtension', 'GitHub.vscode-pull-request-github');
+				})
+			);
 
 			return copilotSessionsProvider;
 		} else if (!enabled && this.copilotCloudRegistrations) {

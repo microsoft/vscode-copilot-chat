@@ -2207,6 +2207,11 @@
 				"command": "github.copilot.cloud.sessions.openInBrowser",
 				"title": "%github.copilot.command.openCopilotAgentSessionsInBrowser%",
 				"icon": "$(link-external)"
+			},
+			{
+				"command": "github.copilot.cloud.sessions.installPRExtension",
+				"title": "Install GitHub Pull Request Extension",
+				"icon": "$(extensions)"
 			}
 		],
 		"configuration": [
@@ -3456,6 +3461,10 @@
 				{
 					"command": "github.copilot.cloud.sessions.openInBrowser",
 					"when": "false"
+				},
+				{
+					"command": "github.copilot.cloud.sessions.installPRExtension",
+					"when": "false"
 				}
 			],
 			"view/title": [
@@ -3778,6 +3787,13 @@
 					"command": "github.copilot.cloud.sessions.openInBrowser",
 					"when": "chatSessionType == copilot-cloud-agent",
 					"group": "context"
+				}
+			],
+			"chat/multiDiff/context": [
+				{
+					"command": "github.copilot.cloud.sessions.installPRExtension",
+					"when": "chatSessionType == copilot-cloud-agent && !github.copilot.prExtensionInstalled",
+					"group": "inline@1"
 				}
 			]
 		},
