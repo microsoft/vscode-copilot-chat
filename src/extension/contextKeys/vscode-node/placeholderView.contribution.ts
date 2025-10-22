@@ -38,9 +38,9 @@ export class PlaceholderViewContribution extends Disposable {
 		const extensionId = typedArgs.agent === 'codex' ?
 			'openai.chatgpt' : undefined;
 		if (extensionId) {
-			const installArgs = [extensionId, { enable: true, installPreReleaseVersion: insiders ? true : false }];
+			const installArgs = [extensionId, { enable: true, installPreReleaseVersion: insiders }];
 			await this._commandService.executeCommand('workbench.extensions.installExtension', ...installArgs);
-			await this._commandService.executeCommand('chatgpt.newCodexPanel', ...installArgs);
+			await this._commandService.executeCommand('chatgpt.newCodexPanel');
 		}
 	}
 }
