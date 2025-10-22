@@ -11,7 +11,7 @@ import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/d
 import { IConfigurationService } from '../../configuration/common/configurationService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IDomainService } from '../../endpoint/common/domainService';
-import { IEnvService, isByokOnlyModeForced } from '../../env/common/envService';
+import { IEnvService } from '../../env/common/envService';
 import { BaseOctoKitService, VSCodeTeamId } from '../../github/common/githubService';
 import { NullBaseOctoKitService } from '../../github/common/nullOctokitServiceImpl';
 import { ILogService } from '../../log/common/logService';
@@ -21,27 +21,16 @@ import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { CopilotToken, CopilotUserInfo, ExtendedTokenInfo, TokenInfo, TokenInfoOrError, containsInternalOrg } from '../common/copilotToken';
 import { CheckCopilotToken, ICopilotTokenManager, NotGitHubLoginFailed, nowSeconds } from '../common/copilotTokenManager';
 
-export const tokenErrorString = `Tests: either GITHUB_PAT, GITHUB_OAUTH_TOKEN, or GITHUB_OAUTH_TOKEN+VSCODE_COPILOT_CHAT_TOKEN, or VSCODE_COPILOT_CHAT_FORCE_BYOK_ONLY_MODE must be set. Run "npm run get_token" to get credentials.`;
-
 export function getStaticGitHubToken() {
-	if (isByokOnlyModeForced) {
-		return undefined;
-	}
 	if (process.env.GITHUB_PAT) {
 		return process.env.GITHUB_PAT;
 	}
 	if (process.env.GITHUB_OAUTH_TOKEN) {
 		return process.env.GITHUB_OAUTH_TOKEN;
 	}
-	throw new Error(tokenErrorString);
 }
 
 export function getOrCreateTestingCopilotTokenManager(): SyncDescriptor<ICopilotTokenManager & CheckCopilotToken> {
-	if (isByokOnlyModeForced) {
-		const deviceId = generateUuid();
-		return new SyncDescriptor(CopilotTokenManagerFromDeviceId, [deviceId]);
-	}
-
 	if (process.env.VSCODE_COPILOT_CHAT_TOKEN) {
 		return new SyncDescriptor(StaticExtendedTokenInfoCopilotTokenManager, [process.env.VSCODE_COPILOT_CHAT_TOKEN]);
 	}
@@ -54,7 +43,7 @@ export function getOrCreateTestingCopilotTokenManager(): SyncDescriptor<ICopilot
 		return new SyncDescriptor(FixedCopilotTokenManager, [process.env.GITHUB_PAT]);
 	}
 
-	throw new Error(tokenErrorString);
+	return new SyncDescriptor(CopilotTokenManagerFromDeviceId, [generateUuid()]);
 }
 
 //TODO: Move this to common

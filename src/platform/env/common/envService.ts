@@ -140,4 +140,3 @@ export abstract class AbstractEnvService implements IEnvService {
 // FIXME: This needs to be used in locations where the EnvService is not yet available, so it's
 //        not part of the env service itself.
 export const isScenarioAutomation = env['IS_SCENARIO_AUTOMATION'] === '1';
-export const isByokOnlyModeForced = env['VSCODE_COPILOT_CHAT_FORCE_BYOK_ONLY_MODE'] === '1';

@@ -148,7 +148,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	}
 
 	if (isScenarioAutomation) {
-		builder.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [getStaticGitHubToken]));
+		builder.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [getStaticGitHubToken()]));
 	} else {
 		builder.define(IAuthenticationService, new SyncDescriptor(AuthenticationService));
 	}

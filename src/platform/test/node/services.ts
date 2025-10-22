@@ -196,7 +196,7 @@ export function _createBaselineServices(): TestingServiceCollection {
 	// Notifications from the monolith when fetching a token can trigger behaviour that require these objects.
 	testingServiceCollection.define(IUrlOpener, new SyncDescriptor(NullUrlOpener));
 	testingServiceCollection.define(ICopilotTokenManager, new SyncDescriptor(SimulationTestCopilotTokenManager));
-	testingServiceCollection.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [getStaticGitHubToken]));
+	testingServiceCollection.define(IAuthenticationService, new SyncDescriptor(StaticGitHubAuthenticationService, [getStaticGitHubToken()]));
 	testingServiceCollection.define(IHeaderContributors, new SyncDescriptor(HeaderContributors));
 
 	testingServiceCollection.define(IConversationOptions, new SyncDescriptor(class implements IConversationOptions {
