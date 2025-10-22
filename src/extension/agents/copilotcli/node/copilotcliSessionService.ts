@@ -13,6 +13,7 @@ import { createServiceIdentifier } from '../../../../util/common/services';
 import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableMap, IDisposable } from '../../../../util/vs/base/common/lifecycle';
 import { stripReminders } from './copilotcliToolInvocationFormatter';
+import { getCopilotLogger } from './logger';
 import { ensureNodePtyShim } from './nodePtyShim';
 
 export interface ICopilotCLISession {
@@ -81,17 +82,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 
 				const { internal } = await import('@github/copilot/sdk');
 				this._sessionManager = new internal.CLISessionManager({
-					logger: {
-						isDebug: () => false,
-						debug: (msg: string) => this.logService.debug(msg),
-						log: (msg: string) => this.logService.trace(msg),
-						info: (msg: string) => this.logService.info(msg),
-						notice: (msg: string | Error) => this.logService.info(typeof msg === 'string' ? msg : msg.message),
-						warning: (msg: string | Error) => this.logService.warn(typeof msg === 'string' ? msg : msg.message),
-						error: (msg: string | Error) => this.logService.error(typeof msg === 'string' ? msg : msg.message),
-						startGroup: () => { },
-						endGroup: () => { }
-					}
+					logger: getCopilotLogger(this.logService)
 				});
 			} catch (error) {
 				this.logService.error(`Failed to initialize SessionManager: ${error}`);
