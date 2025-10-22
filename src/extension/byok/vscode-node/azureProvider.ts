@@ -11,14 +11,16 @@ import { IBYOKStorageService } from './byokStorageService';
 import { CustomOAIBYOKModelProvider, hasExplicitApiPath } from './customOAIProvider';
 
 export function resolveAzureUrl(modelId: string, url: string): string {
+	// The fully resolved url was already passed in
 	if (hasExplicitApiPath(url)) {
 		return url;
 	}
 
+	// Remove the trailing slash
 	if (url.endsWith('/')) {
 		url = url.slice(0, -1);
 	}
-
+	// if url ends with `/v1` remove it
 	if (url.endsWith('/v1')) {
 		url = url.slice(0, -3);
 	}
