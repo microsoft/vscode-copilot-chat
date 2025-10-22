@@ -186,17 +186,8 @@ export class InlineChat2Intent implements IIntent {
 		const exitTool = this._toolsService.getTool(INLINE_CHAT_EXIT_TOOL_NAME);
 		assertType(exitTool);
 
-		const inlineChatToolFilter = new Set<string>([
-			// -- editing
-			...InlineChat2Intent._EDIT_TOOLS,
-			// -- getting errors
-			// ToolName.GetErrors,
-			// -- TODO@jrieken SLASH commands
-		]);
-
-
 		const agentTools = await getAgentTools(this._instantiationService, request);
-		const inlineChatTools = agentTools.filter(tool => inlineChatToolFilter.has(tool.name));
+		const inlineChatTools = agentTools.filter(tool => InlineChat2Intent._EDIT_TOOLS.has(tool.name));
 
 		return [exitTool, ...inlineChatTools];
 	}

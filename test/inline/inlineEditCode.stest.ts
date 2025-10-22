@@ -21,7 +21,7 @@ function executeEditTest(
 ): Promise<void> {
 	if (strategy === EditTestStrategy.Inline) {
 		return simulateInlineChat(testingServiceCollection, scenario);
-	} else if (strategy === EditTestStrategy.Inline2) {
+	} else if (strategy === EditTestStrategy.Inline2 || strategy === EditTestStrategy.InlineChatIntent2) {
 		return simulateInlineChatIntent(testingServiceCollection, scenario);
 	} else {
 		return simulatePanelCodeMapper(testingServiceCollection, scenario, strategy);
@@ -30,7 +30,7 @@ function executeEditTest(
 
 function forInlineAndInlineChatIntent(callback: (strategy: EditTestStrategy, location: 'inline' | 'panel', variant: string | undefined, configurations?: NonExtensionConfiguration[]) => void): void {
 	callback(EditTestStrategy.Inline, 'inline', '', undefined);
-	callback(EditTestStrategy.Inline2, 'inline', '-InlineChatIntent', [['inlineChat.enableV2', true]]);
+	callback(EditTestStrategy.InlineChatIntent2, 'inline', '-InlineChatIntent', [['inlineChat.enableV2', true], ['chat.agent.autoFix', false]]);
 }
 
 forInlineAndInlineChatIntent((strategy, location, variant, nonExtensionConfigurations) => {

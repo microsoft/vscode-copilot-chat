@@ -7,12 +7,12 @@ import { Intent } from '../../src/extension/common/constants';
 import '../../src/extension/intents/node/allIntents';
 import { ssuite, stest } from '../base/stest';
 import { KnownDiagnosticProviders } from '../simulation/diagnosticProviders';
-import { forInlineAndInline2, simulateInlineChatWithStrategy } from '../simulation/inlineChatSimulator';
+import { forInlineAndInlineChatIntent, simulateInlineChatWithStrategy } from '../simulation/inlineChatSimulator';
 import { assertLessDiagnosticsAsync, assertNoDiagnosticsAsync, getWorkspaceDiagnostics } from '../simulation/outcomeValidators';
 import { assertConversationalOutcome, assertInlineEdit, assertNoOccurrence, assertOccursOnce, fromFixture, toFile } from '../simulation/stestUtil';
 
 
-forInlineAndInline2((strategy, nonExtensionConfigurations, suffix) => {
+forInlineAndInlineChatIntent((strategy, nonExtensionConfigurations, suffix) => {
 
 	ssuite({ title: `fix${suffix}`, subtitle: 'ruff', location: 'inline' }, () => {
 		stest({ description: "Ruff(E231) Missing whitespace after ':'", language: 'python', nonExtensionConfigurations }, (testingServiceCollection) => {
