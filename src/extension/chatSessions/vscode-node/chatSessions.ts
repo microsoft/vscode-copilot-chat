@@ -34,7 +34,6 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 
 	private copilotCloudRegistrations: DisposableStore | undefined;
 	private copilotAgentInstaService: IInstantiationService | undefined;
-	private copilotSessionsProvider: CopilotChatSessionsProvider | undefined;
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
@@ -67,7 +66,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		));
 
 		// Register or unregister based on initial configuration and changes
-		this.updateCopilotCloudRegistration();
+		const copilotSessionsProvider = this.updateCopilotCloudRegistration();
 		this._register(this.configurationService.onDidChangeConfiguration(e => {
 			if (e.affectsConfiguration(ConfigKey.Internal.CopilotCloudEnabled.fullyQualifiedId)) {
 				this.updateCopilotCloudRegistration();
@@ -96,7 +95,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			copilotcliAgentManager,
 			copilotCLISessionService,
 			copilotcliSessionItemProvider,
-			this.copilotSessionsProvider,
+			copilotSessionsProvider,
 			summarizer
 		);
 		const copilotcliParticipant = vscode.chat.createChatParticipant(this.copilotcliSessionType, copilotcliChatSessionParticipant.createHandler());
@@ -104,7 +103,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		this._register(registerCLIChatCommands(copilotcliSessionItemProvider, copilotCLISessionService));
 	}
 
-	private updateCopilotCloudRegistration(): void {
+	private updateCopilotCloudRegistration() {
 		if (!this.copilotAgentInstaService) {
 			return;
 		}
@@ -113,36 +112,36 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		if (enabled && !this.copilotCloudRegistrations) {
 			// Register the Copilot Cloud chat participant
 			this.copilotCloudRegistrations = new DisposableStore();
-			this.copilotSessionsProvider = this.copilotCloudRegistrations.add(
+			const copilotSessionsProvider = this.copilotCloudRegistrations.add(
 				this.copilotAgentInstaService.createInstance(CopilotChatSessionsProvider)
 			);
 			this.copilotCloudRegistrations.add(
-				vscode.chat.registerChatSessionItemProvider(CopilotChatSessionsProvider.TYPE, this.copilotSessionsProvider)
+				vscode.chat.registerChatSessionItemProvider(CopilotChatSessionsProvider.TYPE, copilotSessionsProvider)
 			);
 			this.copilotCloudRegistrations.add(
 				vscode.chat.registerChatSessionContentProvider(
 					CopilotChatSessionsProvider.TYPE,
-					this.copilotSessionsProvider,
-					this.copilotSessionsProvider.chatParticipant,
+					copilotSessionsProvider,
+					copilotSessionsProvider.chatParticipant,
 					{ supportsInterruptions: true }
 				)
 			);
 			this.copilotCloudRegistrations.add(
 				vscode.commands.registerCommand('github.copilot.cloud.sessions.refresh', () => {
-					this.copilotSessionsProvider?.refresh();
+					copilotSessionsProvider.refresh();
 				})
 			);
 			this.copilotCloudRegistrations.add(
 				vscode.commands.registerCommand('github.copilot.cloud.sessions.openInBrowser', async (chatSessionItem: vscode.ChatSessionItem) => {
-					this.copilotSessionsProvider?.openSessionsInBrowser(chatSessionItem);
+					copilotSessionsProvider.openSessionsInBrowser(chatSessionItem);
 				})
 			);
 
+			return copilotSessionsProvider;
 		} else if (!enabled && this.copilotCloudRegistrations) {
 			// Unregister the Copilot Cloud chat participant
 			this.copilotCloudRegistrations.dispose();
 			this.copilotCloudRegistrations = undefined;
-			this.copilotSessionsProvider = undefined;
 		}
 	}
 }
