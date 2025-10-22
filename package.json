@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.106.0",
+		"vscode": "^1.106.0-20251022",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -1696,6 +1696,11 @@
 				"view": "debug",
 				"when": "github.copilot-chat.activated",
 				"contents": "%github.copilot.viewsWelcome.debug%"
+			},
+			{
+				"view": "codex-placeholder",
+				"when": "true",
+				"contents": "%github.copilot.viewsWelcome.codexPlaceholder%"
 			}
 		],
 		"chatViewsWelcome": [
@@ -3906,6 +3911,14 @@
 					"name": "Language Context Inspector",
 					"icon": "$(inspect)",
 					"when": "github.copilot.chat.showContextInspectorView"
+				}
+			],
+			"agentSessions": [
+				{
+					"id": "codex-placeholder",
+					"name": "OpenAI Codex Agent",
+					"when": "github.copilot.chat.codex.notInstalled && config.chat.experimental.codex.enabled",
+					"icon": "$(file)"
 				}
 			]
 		},
