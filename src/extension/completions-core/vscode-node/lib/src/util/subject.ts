@@ -6,14 +6,14 @@
 /**
  * Observer interface for the Subject.
  */
-interface Observer<T> {
+export interface Observer<T> {
 	next: (value: T) => void;
 	complete?: () => void;
 	error?: (err: unknown) => void;
 }
 
 /** A simple implementation of an observable Subject.  */
-class Subject<T> {
+export class Subject<T> {
 	private observers = new Set<Observer<T>>();
 
 	constructor() { }
