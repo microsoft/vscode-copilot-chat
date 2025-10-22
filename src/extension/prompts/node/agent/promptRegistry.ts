@@ -4,31 +4,41 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { PromptElement } from '@vscode/prompt-tsx';
+import type { IChatEndpoint } from '../../../../platform/networking/common/networking';
 import { DefaultAgentPromptProps } from './defaultAgentInstructions';
 
 export type PromptConstructor = new (props: DefaultAgentPromptProps, ...args: any[]) => PromptElement<DefaultAgentPromptProps>;
 
 export interface IAgentPrompt {
-	resolvePrompt(): PromptConstructor | undefined;
+	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined;
 }
 
 export interface IAgentPromptCtor {
-	readonly models: readonly string[];
+	readonly familyPrefixes: readonly string[];
 	new(...args: any[]): IAgentPrompt;
 }
 
+export type AgentPromptClass = IAgentPromptCtor & (new (...args: any[]) => IAgentPrompt);
+
 export const PromptRegistry = new class {
-	private promptMap = new Map<string, IAgentPromptCtor>();
+	private familyPrefixList: { prefix: string; prompt: IAgentPromptCtor }[] = [];
 
 	registerPrompt(prompt: IAgentPromptCtor): void {
-		for (const model of prompt.models) {
-			this.promptMap.set(model, prompt);
+		for (const prefix of prompt.familyPrefixes) {
+			this.familyPrefixList.push({ prefix, prompt });
 		}
 	}
 
 	getPrompt(
-		model: string
+		endpoint: IChatEndpoint
 	): IAgentPromptCtor | undefined {
-		return this.promptMap.get(model);
+		// Check family prefix match
+		for (const { prefix, prompt } of this.familyPrefixList) {
+			if (endpoint.family.startsWith(prefix)) {
+				return prompt;
+			}
+		}
+
+		return undefined;
 	}
 }();
