@@ -4159,8 +4159,15 @@
 				"when": "config.github.copilot.chat.advanced.copilotCLI.enabled",
 				"capabilities": {
 					"supportsFileAttachments": true,
-					"supportsProblemAttachments": true
-				}
+					"supportsProblemAttachments": true,
+					"supportsToolAttachments": false
+				},
+				"commands": [
+					{
+						"name": "push",
+						"description": "Delegate chat session to cloud agent and create associated PR"
+					}
+				]
 			},
 			{
 				"type": "copilot-cloud-agent",
@@ -4363,7 +4370,7 @@
 	"dependencies": {
 		"@anthropic-ai/claude-code": "^1.0.120",
 		"@anthropic-ai/sdk": "^0.63.0",
-		"@github/copilot": "^0.0.343",
+		"@github/copilot": "^0.0.348",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",

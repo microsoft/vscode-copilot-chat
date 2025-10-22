@@ -3,12 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Disposable } from 'vscode';
 import { CopilotToken } from '../../../lib/src/auth/copilotTokenManager';
 import { onCopilotToken } from '../../../lib/src/auth/copilotTokenNotifier';
 import type { Context } from '../../../lib/src/context';
 import { codeReferenceLogger } from '../../../lib/src/snippy/logger';
-import { isRunningInTest } from '../../../lib/src/testing/runtimeMode';
-import { Disposable } from 'vscode';
+import { isRunningInTest } from '../../../lib/src/util/runtimeMode';
 import { registerCodeRefEngagementTracker } from './codeReferenceEngagementTracker';
 
 export class CodeReference {

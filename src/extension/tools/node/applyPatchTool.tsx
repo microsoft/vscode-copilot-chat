@@ -342,12 +342,8 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 				} else {
 					this._promptContext.stream.markdown('\n```\n');
 					this._promptContext.stream.codeblockUri(notebookUri || uri, true);
-					// TODO@joyceerhl hack: when an array of text edits for a single URI
-					// are pushed in a single textEdit call, the edits are not applied
-					const edits = Array.isArray(textEdit) ? textEdit : [textEdit];
-					for (const textEdit of edits) {
-						responseStream.textEdit(uri, textEdit);
-					}
+
+					responseStream.textEdit(uri, textEdit);
 					responseStream.textEdit(uri, true);
 					this._promptContext.stream.markdown('\n' + '```\n');
 				}

@@ -22,7 +22,7 @@ import { Features } from '../experiments/features';
 import { LRUCacheMap } from '../helpers/cache';
 import { logger } from '../logger';
 import { TelemetryWithExp } from '../telemetry';
-import { isDebugEnabled, isRunningInSimulation } from '../testing/runtimeMode';
+import { isDebugEnabled, isRunningInSimulation } from '../util/runtimeMode';
 import { isArrayOfT, resolveAll } from './asyncUtils';
 import { fillInCppVSCodeActiveExperiments } from './contextProviderRegistryCpp';
 import { fillInCSharpActiveExperiments } from './contextProviderRegistryCSharp';

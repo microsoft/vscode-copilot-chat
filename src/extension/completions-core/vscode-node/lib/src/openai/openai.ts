@@ -3,13 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
+import { DEFAULT_MAX_COMPLETION_LENGTH } from '../../../prompt/src/prompt';
 import { Context } from '../context';
 import { logger } from '../logger';
-import { CopilotNamedAnnotationList } from './stream';
 import { TelemetryWithExp, logEngineCompletion } from '../telemetry';
-import { isRunningInTest } from '../testing/runtimeMode';
-import { DEFAULT_MAX_COMPLETION_LENGTH } from '../../../prompt/src/prompt';
-import { generateUuid } from '../../../../../../util/vs/base/common/uuid';
+import { isRunningInTest } from '../util/runtimeMode';
+import { CopilotNamedAnnotationList } from './stream';
 
 export { FinishedCallback, getRequestId } from './fetch';
 
