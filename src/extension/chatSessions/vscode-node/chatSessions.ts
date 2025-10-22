@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IEnvService } from '../../../platform/env/common/envService';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { OctoKitService } from '../../../platform/github/common/octoKitServiceImpl';
 import { Disposable, DisposableStore } from '../../../util/vs/base/common/lifecycle';
@@ -39,6 +40,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IEnvService private readonly envService: IEnvService,
 	) {
 		super();
 		const claudeAgentInstaService = instantiationService.createChild(
@@ -141,7 +143,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				vscode.commands.registerCommand('github.copilot.cloud.sessions.installPRExtension', async () => {
 					try {
 						// Install pre-release version if running VS Code Insiders
-						const isInsiders = vscode.version.includes('insider');
+						const isInsiders = this.envService.getEditorInfo().version.includes('insider');
 						const installOptions = { enable: true, installPreReleaseVersion: isInsiders };
 						await vscode.commands.executeCommand('workbench.extensions.installExtension', GHPR_EXTENSION_ID, installOptions);
 
