@@ -73,10 +73,10 @@ import { FullRecentEditsProvider, RecentEditsProvider } from './lib/src/prompt/r
 import { CompositeRelatedFilesProvider } from './lib/src/prompt/similarFiles/compositeRelatedFilesProvider';
 import { RelatedFilesProvider } from './lib/src/prompt/similarFiles/relatedFiles';
 import { TelemetryUserConfig } from './lib/src/telemetry';
-import { RuntimeMode } from './lib/src/test/runtimeMode';
 import { TextDocumentManager } from './lib/src/textDocumentManager';
 import { UrlOpener } from './lib/src/util/opener';
 import { PromiseQueue } from './lib/src/util/promiseQueue';
+import { RuntimeMode } from './lib/src/util/runtimeMode';
 
 const bridges: any[] = [];
 

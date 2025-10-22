@@ -8,7 +8,7 @@ import { DEFAULT_MAX_COMPLETION_LENGTH } from '../../../prompt/src/prompt';
 import { Context } from '../context';
 import { logger } from '../logger';
 import { TelemetryWithExp, logEngineCompletion } from '../telemetry';
-import { isRunningInTest } from '../test/runtimeMode';
+import { isRunningInTest } from '../util/runtimeMode';
 import { CopilotNamedAnnotationList } from './stream';
 
 export { FinishedCallback, getRequestId } from './fetch';

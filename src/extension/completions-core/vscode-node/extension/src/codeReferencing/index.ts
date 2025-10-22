@@ -8,7 +8,7 @@ import { CopilotToken } from '../../../lib/src/auth/copilotTokenManager';
 import { onCopilotToken } from '../../../lib/src/auth/copilotTokenNotifier';
 import type { Context } from '../../../lib/src/context';
 import { codeReferenceLogger } from '../../../lib/src/snippy/logger';
-import { isRunningInTest } from '../../../lib/src/test/runtimeMode';
+import { isRunningInTest } from '../../../lib/src/util/runtimeMode';
 import { registerCodeRefEngagementTracker } from './codeReferenceEngagementTracker';
 
 export class CodeReference {

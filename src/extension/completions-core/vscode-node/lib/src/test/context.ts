@@ -57,8 +57,8 @@ import { TelemetryReporters, TelemetryUserConfig } from '../telemetry';
 import { TextDocumentManager } from '../textDocumentManager';
 import { UrlOpener } from '../util/opener';
 import { PromiseQueue } from '../util/promiseQueue';
+import { RuntimeMode } from '../util/runtimeMode';
 import { NoFetchFetcher } from './fetcher';
-import { RuntimeMode } from './runtimeMode';
 import { TestNotificationSender, TestUrlOpener } from './testHelpers';
 import { TestTextDocumentManager } from './textDocument';
 
