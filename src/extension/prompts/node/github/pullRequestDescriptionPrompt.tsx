@@ -108,7 +108,7 @@ class GitHubPullRequestUserMessage extends PromptElement<GitHubPullRequestUserMe
 						{this.props.template}<br />
 						```<br />
 					</>
-				) : null}
+				) : ''}
 				Based on the git patches and on the git commit messages above, the title and description of the pull request should be:<br />
 			</>
 		);
