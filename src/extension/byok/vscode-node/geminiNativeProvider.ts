@@ -173,6 +173,7 @@ export class GeminiNativeBYOKLMProvider implements BYOKModelProvider<LanguageMod
 				requestId,
 				serverRequestId: requestId,
 				usage: result.usage,
+				resolvedModel: model.id,
 				value: ['value'],
 			}, wrappedProgress.items.map((i): IResponseDelta => {
 				return {
