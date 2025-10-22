@@ -4,36 +4,32 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { IChatModelInformation, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { BYOKModelCapabilities } from '../common/byokProvider';
 import { IBYOKStorageService } from './byokStorageService';
 import { CustomOAIBYOKModelProvider } from './customOAIProvider';
 
 export function resolveAzureUrl(modelId: string, url: string): string {
-	// The fully resolved url was already passed in
-	if (url.includes('/chat/completions')) {
-		return url;
+	let cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+
+	if (cleanUrl.includes('/responses') || cleanUrl.includes('/chat/completions')) {
+		return cleanUrl;
 	}
 
-	// Remove the trailing slash
-	if (url.endsWith('/')) {
-		url = url.slice(0, -1);
-	}
-	// if url ends with `/v1` remove it
-	if (url.endsWith('/v1')) {
-		url = url.slice(0, -3);
+	if (cleanUrl.endsWith('/v1')) {
+		cleanUrl = cleanUrl.slice(0, -3);
 	}
 
-	if (url.includes('models.ai.azure.com') || url.includes('inference.ml.azure.com')) {
-		return `${url}/v1/chat/completions`;
-	} else if (url.includes('openai.azure.com')) {
-		return `${url}/openai/deployments/${modelId}/chat/completions?api-version=2025-01-01-preview`;
-	} else {
-		throw new Error(`Unrecognized Azure deployment URL: ${url}`);
+	if (cleanUrl.includes('models.ai.azure.com') || cleanUrl.includes('inference.ml.azure.com')) {
+		return `${cleanUrl}/v1/chat/completions`;
 	}
+
+	if (cleanUrl.includes('openai.azure.com')) {
+		return `${cleanUrl}/openai/deployments/${modelId}/chat/completions?api-version=2025-01-01-preview`;
+	}
+
+	throw new Error(`Unrecognized Azure deployment URL: ${cleanUrl}`);
 }
 
 export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
@@ -41,17 +37,17 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 
 	constructor(
 		byokStorageService: IBYOKStorageService,
-		@IConfigurationService protected override readonly _configurationService: IConfigurationService,
+		@IConfigurationService configurationService: IConfigurationService,
 		@ILogService logService: ILogService,
 		@IInstantiationService instantiationService: IInstantiationService,
-		@IExperimentationService private readonly _expService: IExperimentationService
+		@IExperimentationService experimentationService: IExperimentationService
 	) {
 		super(
 			byokStorageService,
-			_configurationService,
+			configurationService,
 			logService,
 			instantiationService,
-			_expService
+			experimentationService
 		);
 		// Override the instance properties
 		this.providerName = AzureBYOKModelProvider.providerName;
@@ -65,16 +61,4 @@ export class AzureBYOKModelProvider extends CustomOAIBYOKModelProvider {
 		return resolveAzureUrl(modelId, url);
 	}
 
-	protected override async getModelInfo(modelId: string, apiKey: string | undefined, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
-		const modelInfo = await super.getModelInfo(modelId, apiKey, modelCapabilities);
-		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseResponsesApi, this._expService);
-		if (enableResponsesApi) {
-			modelInfo.supported_endpoints = [
-				ModelSupportedEndpoint.ChatCompletions,
-				ModelSupportedEndpoint.Responses
-			];
-		}
-
-		return modelInfo;
-	}
 }

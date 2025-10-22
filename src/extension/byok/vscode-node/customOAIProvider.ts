@@ -5,7 +5,7 @@
 
 import { CancellationToken, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelResponsePart2, Progress, ProvideLanguageModelChatResponseOptions, QuickPickItem, window } from 'vscode';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { EndpointEditToolName, IChatModelInformation, isEndpointEditToolName } from '../../../platform/endpoint/common/endpointProvider';
+import { EndpointEditToolName, IChatModelInformation, isEndpointEditToolName, ModelSupportedEndpoint } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
@@ -17,24 +17,21 @@ import { promptForAPIKey } from './byokUIService';
 import { CustomOAIModelConfigurator } from './customOAIModelConfigurator';
 
 export function resolveCustomOAIUrl(modelId: string, url: string): string {
-	// The fully resolved url was already passed in
-	if (url.includes('/chat/completions')) {
-		return url;
+	let cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+
+	if (cleanUrl.includes('/responses') || cleanUrl.includes('/chat/completions')) {
+		return cleanUrl;
 	}
 
-	// Remove the trailing slash
-	if (url.endsWith('/')) {
-		url = url.slice(0, -1);
+	if (cleanUrl.endsWith('/v1')) {
+		cleanUrl = cleanUrl.slice(0, -3);
 	}
 
-	// Check if URL already contains any version pattern like /v1, /v2, etc
-	const versionPattern = /\/v\d+$/;
-	if (versionPattern.test(url)) {
-		return `${url}/chat/completions`;
-	}
+	return `${cleanUrl}/v1/chat/completions`;
+}
 
-	// For standard OpenAI-compatible endpoints, just append the standard path
-	return `${url}/v1/chat/completions`;
+function hasExplicitApiPath(url: string): boolean {
+	return url.includes('/responses') || url.includes('/chat/completions');
 }
 
 interface CustomOAIModelInfo extends LanguageModelChatInformation {
@@ -69,7 +66,15 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 	}
 
 	protected async getModelInfo(modelId: string, apiKey: string | undefined, modelCapabilities?: BYOKModelCapabilities): Promise<IChatModelInformation> {
-		return resolveModelInfo(modelId, this.providerName, undefined, modelCapabilities);
+		const modelInfo = await resolveModelInfo(modelId, this.providerName, undefined, modelCapabilities);
+		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseResponsesApi, this._experimentationService);
+		if (enableResponsesApi) {
+			modelInfo.supported_endpoints = [
+				ModelSupportedEndpoint.ChatCompletions,
+				ModelSupportedEndpoint.Responses
+			];
+		}
+		return modelInfo;
 	}
 
 	private getUserModelConfig(): Record<string, { name: string; url: string; toolCalling: boolean; vision: boolean; maxInputTokens: number; maxOutputTokens: number; requiresAPIKey: boolean; thinking?: boolean; editTools?: EndpointEditToolName[]; requestHeaders?: Record<string, string> }> {
@@ -85,10 +90,19 @@ export class CustomOAIBYOKModelProvider implements BYOKModelProvider<CustomOAIMo
 	private async getAllModels(): Promise<BYOKKnownModels> {
 		const modelConfig = this.getUserModelConfig();
 		const models: BYOKKnownModels = {};
+		const enableResponsesApi = this._configurationService.getExperimentBasedConfig(ConfigKey.UseResponsesApi, this._experimentationService);
+
 		for (const [modelId, modelInfo] of Object.entries(modelConfig)) {
+			let resolvedUrl = this.resolveUrl(modelId, modelInfo.url);
+
+			// If user didn't specify explicit endpoint and Responses API is enabled, use Responses API
+			if (!hasExplicitApiPath(modelInfo.url) && enableResponsesApi && resolvedUrl.includes('/chat/completions')) {
+				resolvedUrl = resolvedUrl.replace('/chat/completions', '/responses');
+			}
+
 			models[modelId] = {
 				name: modelInfo.name,
-				url: this.resolveUrl(modelId, modelInfo.url),
+				url: resolvedUrl,
 				toolCalling: modelInfo.toolCalling,
 				vision: modelInfo.vision,
 				maxInputTokens: modelInfo.maxInputTokens,
