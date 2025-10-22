@@ -381,6 +381,7 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 
 		const completion: ChatCompletion = {
 			message: completionMessage,
+			model: this.model,
 			choiceIndex: 0,
 			requestId,
 			tokens: [],

@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { DEFAULT_ELISION_MARKER, getAvailableNodeId, NodeCostFunction } from './utils';
 import { PriorityQueue } from '../../util/priorityQueue';
+import { DEFAULT_ELISION_MARKER, getAvailableNodeId, NodeCostFunction } from './utils';
 
 export type NodeId = number;
 
@@ -70,7 +70,7 @@ export interface RenderNode extends IVirtualNode {
 	requireRenderedChild: boolean;
 }
 
-function createRenderNode(partial: Partial<RenderNode>): RenderNode {
+export function createRenderNode(partial: Partial<RenderNode>): RenderNode {
 	const node: RenderNode = {
 		id: partial.id ?? getAvailableNodeId(),
 		text: partial.text ?? new Array((partial.children?.length ?? 0) + 1).fill(''),
@@ -94,7 +94,7 @@ function isRenderedChildRequired(node: RenderNode): boolean {
 	return node.requireRenderedChild || (node.rectifiedWeight ?? node.weight) > node.weight;
 }
 
-function rectifiedValue(node: RenderNode): number {
+export function rectifiedValue(node: RenderNode): number {
 	return (node.rectifiedWeight ?? node.weight) / Math.max(node.cost, 1);
 }
 

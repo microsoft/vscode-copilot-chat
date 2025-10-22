@@ -350,6 +350,9 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 
 				files.push({ uri, isNotebook: !!notebookUri, existingDiagnostics, operation: resourceToOperation.get(uri) ?? ActionType.UPDATE });
 			}
+			if (healed && files.length) {
+				files[0].healed = healed;
+			}
 
 			timeout(2000).then(() => {
 				// The tool can't wait for edits to be applied, so just wait before starting the survival tracker.
@@ -397,7 +400,7 @@ export class ApplyPatchTool implements ICopilotTool<IApplyPatchToolParams> {
 					await renderPromptElementJSON(
 						this.instantiationService,
 						EditFileResult,
-						{ files, diagnosticsTimeout: 2000, toolName: ToolName.ApplyPatch, requestId: options.chatRequestId, model: options.model, healed },
+						{ files, diagnosticsTimeout: 2000, toolName: ToolName.ApplyPatch, requestId: options.chatRequestId, model: options.model },
 						options.tokenizationOptions ?? {
 							tokenBudget: 1000,
 							countTokens: (t) => Promise.resolve(t.length * 3 / 4)

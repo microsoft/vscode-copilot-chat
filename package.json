@@ -23,7 +23,7 @@
 	"icon": "assets/copilot.png",
 	"pricing": "Trial",
 	"engines": {
-		"vscode": "^1.106.0",
+		"vscode": "^1.106.0-20251022",
 		"npm": ">=9.0.0",
 		"node": ">=22.14.0"
 	},
@@ -1696,6 +1696,11 @@
 				"view": "debug",
 				"when": "github.copilot-chat.activated",
 				"contents": "%github.copilot.viewsWelcome.debug%"
+			},
+			{
+				"view": "codex-placeholder",
+				"when": "true",
+				"contents": "%github.copilot.viewsWelcome.codexPlaceholder%"
 			}
 		],
 		"chatViewsWelcome": [
@@ -3907,6 +3912,14 @@
 					"icon": "$(inspect)",
 					"when": "github.copilot.chat.showContextInspectorView"
 				}
+			],
+			"agentSessions": [
+				{
+					"id": "codex-placeholder",
+					"name": "OpenAI Codex Agent",
+					"when": "github.copilot.chat.codex.notInstalled && config.chat.experimental.codex.enabled",
+					"icon": "$(file)"
+				}
 			]
 		},
 		"viewsContainers": {
@@ -4148,7 +4161,7 @@
 			},
 			{
 				"type": "copilotcli",
-				"name": "copilotcli",
+				"name": "cli",
 				"displayName": "GitHub Copilot CLI Agent",
 				"icon": "$(copilot)",
 				"welcomeTitle": "GitHub Copilot CLI Agent",
@@ -4171,7 +4184,7 @@
 			},
 			{
 				"type": "copilot-cloud-agent",
-				"name": "copilot-cloud-agent",
+				"name": "cloud",
 				"displayName": "GitHub Copilot Cloud Agent",
 				"icon": "$(cloud)",
 				"welcomeTitle": "GitHub Copilot Cloud Agent",
@@ -4370,7 +4383,7 @@
 	"dependencies": {
 		"@anthropic-ai/claude-code": "^1.0.120",
 		"@anthropic-ai/sdk": "^0.63.0",
-		"@github/copilot": "^0.0.343",
+		"@github/copilot": "^0.0.348",
 		"@google/genai": "^1.22.0",
 		"@humanwhocodes/gitignore-to-minimatch": "1.0.2",
 		"@microsoft/tiktokenizer": "^1.0.10",

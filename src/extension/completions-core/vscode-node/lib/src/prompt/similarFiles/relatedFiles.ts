@@ -25,7 +25,7 @@ interface RelatedFilesTextDocument {
 	readonly detectedLanguageId: string;
 }
 
-type RelatedFilesResponseEntry = {
+export type RelatedFilesResponseEntry = {
 	type: NeighboringFileType;
 	uris: string[];
 };
@@ -47,7 +47,7 @@ type RelatedFiles = {
 	traits: RelatedFileTrait[];
 };
 
-type RelatedFilesType = Map<NeighboringFileType, Map<string, string>>;
+export type RelatedFilesType = Map<NeighboringFileType, Map<string, string>>;
 
 export const EmptyRelatedFilesResponse: RelatedFilesResponse = { entries: [], traits: [] };
 
@@ -60,7 +60,7 @@ type TimestampEntry = { timestamp: number; retryCount: number };
 // A map with an expiration time for each key. Keys are removed upon get() time.
 // Note: the size() function is not being used, but if it does, be aware that it is
 // counting expired keys. This ensures a constant time execution time.
-class PromiseExpirationCacheMap<T> extends LRUCacheMap<string, Promise<T>> {
+export class PromiseExpirationCacheMap<T> extends LRUCacheMap<string, Promise<T>> {
 	// Hold the time an entry is cached the first time. The entries in this map are only removed
 	// upon a get() call when the eviction time elapsed.
 	_cacheTimestamps: Map<string, TimestampEntry> = new Map();
