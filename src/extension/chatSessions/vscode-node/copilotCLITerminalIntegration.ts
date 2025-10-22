@@ -195,7 +195,6 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 	}
 
 	private async getShellInfo(cliArgs: string[]): Promise<IShellInfo | undefined> {
-		window.showInformationMessage(cliArgs.join(' '));
 		const configPlatform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux';
 		const defaultProfile = this.getDefaultShellProfile();
 		if (!defaultProfile) {
