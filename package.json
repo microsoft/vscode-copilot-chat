@@ -4158,8 +4158,15 @@
 				"when": "config.github.copilot.chat.advanced.copilotCLI.enabled",
 				"capabilities": {
 					"supportsFileAttachments": true,
-					"supportsProblemAttachments": true
-				}
+					"supportsProblemAttachments": true,
+					"supportsToolAttachments": false
+				},
+				"commands": [
+					{
+						"name": "push",
+						"description": "Push changes to remote repository with AI-generated PR"
+					}
+				]
 			},
 			{
 				"type": "copilot-cloud-agent",

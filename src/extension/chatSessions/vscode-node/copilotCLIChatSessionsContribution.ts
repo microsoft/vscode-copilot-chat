@@ -12,7 +12,9 @@ import { localize } from '../../../util/vs/nls';
 import { CopilotCLIAgentManager } from '../../agents/copilotcli/node/copilotcliAgentManager';
 import { ICopilotCLISessionService } from '../../agents/copilotcli/node/copilotcliSessionService';
 import { buildChatHistoryFromEvents } from '../../agents/copilotcli/node/copilotcliToolInvocationFormatter';
+import { ChatSummarizerProvider } from '../../prompt/node/summarizer';
 import { ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
+import { CopilotChatSessionsProvider } from './copilotCloudSessionsProvider';
 
 const MODELS_OPTION_ID = 'model';
 
@@ -45,6 +47,18 @@ function getModelProvider(modelId: string | undefined): { type: 'anthropic' | 'o
 }
 
 const COPILOT_CLI_MODEL_MEMENTO_KEY = 'github.copilot.cli.sessionModel';
+
+/**
+ * Escape XML special characters
+ */
+function escapeXml(text: string): string {
+	return text
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&apos;');
+}
 
 export class CopilotCLIChatSessionItemProvider extends Disposable implements vscode.ChatSessionItemProvider {
 	private readonly _onDidChangeChatSessionItems = this._register(new Emitter<void>());
@@ -185,6 +199,8 @@ export class CopilotCLIChatSessionParticipant {
 		private readonly copilotcliAgentManager: CopilotCLIAgentManager,
 		private readonly sessionService: ICopilotCLISessionService,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
+		private readonly cloudSessionProvider: CopilotChatSessionsProvider,
+		private readonly summarizer: ChatSummarizerProvider
 	) { }
 
 	createHandler(): ChatExtendedRequestHandler {
@@ -208,6 +224,37 @@ export class CopilotCLIChatSessionParticipant {
 			}
 
 			const { id } = chatSessionContext.chatSessionItem;
+
+			if (request.prompt.startsWith('/push')) {
+				const history = await this.summarizer.provideChatSummary(context, token);
+				const prompt = request.prompt.substring('/push'.length).trim();
+				const prInfo = await this.cloudSessionProvider.createDelegatedChatSession({
+					prompt,
+					history
+				}, stream, token);
+				const session = await this.sessionService.getSession(id, token);
+				if (session && prInfo) {
+					// Add user message event
+					session.sdkSession.addEvent({
+						type: 'user.message',
+						data: {
+							content: request.prompt
+						}
+					});
+					// Add assistant message event with embedded PR metadata
+					const assistantMessage = `GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.\n<pr_metadata uri="${prInfo.uri}" title="${escapeXml(prInfo.title)}" description="${escapeXml(prInfo.description)}" author="${escapeXml(prInfo.author)}" linkTag="${escapeXml(prInfo.linkTag)}"/>`;
+					session.sdkSession.addEvent({
+						type: 'assistant.message',
+						data: {
+							messageId: `msg_${Date.now()}`,
+							content: assistantMessage
+						}
+					});
+				}
+				return {};
+
+			}
+
 			this.sessionService.setSessionStatus(id, vscode.ChatSessionStatus.InProgress);
 			await this.copilotcliAgentManager.handleRequest(id, request, context, stream, getModelProvider(_sessionModel.get(id)?.id), token);
 			this.sessionService.setSessionStatus(id, vscode.ChatSessionStatus.Completed);
