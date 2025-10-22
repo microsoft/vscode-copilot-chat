@@ -6,12 +6,11 @@
 import { RequestType } from '@vscode/copilot-api';
 import { Emitter } from '../../../util/vs/base/common/event';
 import { Disposable, toDisposable } from '../../../util/vs/base/common/lifecycle';
-import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { SyncDescriptor } from '../../../util/vs/platform/instantiation/common/descriptors';
 import { IConfigurationService } from '../../configuration/common/configurationService';
 import { ICAPIClientService } from '../../endpoint/common/capiClient';
 import { IDomainService } from '../../endpoint/common/domainService';
-import { IEnvService } from '../../env/common/envService';
+import { IEnvService, isScenarioAutomation } from '../../env/common/envService';
 import { BaseOctoKitService, VSCodeTeamId } from '../../github/common/githubService';
 import { NullBaseOctoKitService } from '../../github/common/nullOctokitServiceImpl';
 import { ILogService } from '../../log/common/logService';
@@ -21,6 +20,8 @@ import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { CopilotToken, CopilotUserInfo, ExtendedTokenInfo, TokenInfo, TokenInfoOrError, containsInternalOrg } from '../common/copilotToken';
 import { CheckCopilotToken, ICopilotTokenManager, NotGitHubLoginFailed, nowSeconds } from '../common/copilotTokenManager';
 
+export const tokenErrorString = `Tests: either GITHUB_PAT, GITHUB_OAUTH_TOKEN, or GITHUB_OAUTH_TOKEN+VSCODE_COPILOT_CHAT_TOKEN must be set unless running from an IS_SCENARIO_AUTOMATION environment. Run "npm run get_token" to get credentials.`;
+
 export function getStaticGitHubToken() {
 	if (process.env.GITHUB_PAT) {
 		return process.env.GITHUB_PAT;
@@ -28,9 +29,16 @@ export function getStaticGitHubToken() {
 	if (process.env.GITHUB_OAUTH_TOKEN) {
 		return process.env.GITHUB_OAUTH_TOKEN;
 	}
+
+	// In automation scenarios, NoAuth/BYOK-only scenarios are expected to not have any tokens set.
+	if (isScenarioAutomation) {
+		return undefined;
+	}
+
+	throw new Error(tokenErrorString);
 }
 
-export function getOrCreateTestingCopilotTokenManager(): SyncDescriptor<ICopilotTokenManager & CheckCopilotToken> {
+export function getOrCreateTestingCopilotTokenManager(deviceId: string): SyncDescriptor<ICopilotTokenManager & CheckCopilotToken> {
 	if (process.env.VSCODE_COPILOT_CHAT_TOKEN) {
 		return new SyncDescriptor(StaticExtendedTokenInfoCopilotTokenManager, [process.env.VSCODE_COPILOT_CHAT_TOKEN]);
 	}
@@ -43,7 +51,12 @@ export function getOrCreateTestingCopilotTokenManager(): SyncDescriptor<ICopilot
 		return new SyncDescriptor(FixedCopilotTokenManager, [process.env.GITHUB_PAT]);
 	}
 
-	return new SyncDescriptor(CopilotTokenManagerFromDeviceId, [generateUuid()]);
+	// In automation scenarios, NoAuth/BYOK-only scenarios are expected to not have any tokens set.
+	if (isScenarioAutomation) {
+		return new SyncDescriptor(CopilotTokenManagerFromDeviceId, [deviceId]);
+	}
+
+	throw new Error(tokenErrorString);
 }
 
 //TODO: Move this to common
