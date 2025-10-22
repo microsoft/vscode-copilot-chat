@@ -6,6 +6,7 @@
 import * as vscode from 'vscode';
 import { ChatExtendedRequestHandler, l10n } from 'vscode';
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { IGitService } from '../../../platform/git/common/gitService';
 import { Emitter, Event } from '../../../util/vs/base/common/event';
 import { Disposable, DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
 import { localize } from '../../../util/vs/nls';
@@ -200,7 +201,8 @@ export class CopilotCLIChatSessionParticipant {
 		private readonly sessionService: ICopilotCLISessionService,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
 		private readonly cloudSessionProvider: CopilotChatSessionsProvider,
-		private readonly summarizer: ChatSummarizerProvider
+		private readonly summarizer: ChatSummarizerProvider,
+		@IGitService private readonly gitService: IGitService
 	) { }
 
 	createHandler(): ChatExtendedRequestHandler {
@@ -226,30 +228,24 @@ export class CopilotCLIChatSessionParticipant {
 			const { id } = chatSessionContext.chatSessionItem;
 
 			if (request.prompt.startsWith('/push')) {
+				// Check for uncommitted changes
+				const currentRepository = this.gitService.activeRepository.get();
+				const hasChanges =
+					((currentRepository?.changes?.workingTree && currentRepository.changes.workingTree.length > 0) ||
+						(currentRepository?.changes?.indexChanges && currentRepository.changes.indexChanges.length > 0));
+
+				if (hasChanges) {
+					stream.warning(localize('copilotcli.uncommittedChanges', "You have uncommitted changes in your workspace. The cloud agent will start from the last committed state. Consider committing your changes first if you want to include them."));
+				}
+
 				const history = await this.summarizer.provideChatSummary(context, token);
 				const prompt = request.prompt.substring('/push'.length).trim();
 				const prInfo = await this.cloudSessionProvider.createDelegatedChatSession({
 					prompt,
 					history
 				}, stream, token);
-				const session = await this.sessionService.getSession(id, token);
-				if (session && prInfo) {
-					// Add user message event
-					session.sdkSession.addEvent({
-						type: 'user.message',
-						data: {
-							content: request.prompt
-						}
-					});
-					// Add assistant message event with embedded PR metadata
-					const assistantMessage = `GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.\n<pr_metadata uri="${prInfo.uri}" title="${escapeXml(prInfo.title)}" description="${escapeXml(prInfo.description)}" author="${escapeXml(prInfo.author)}" linkTag="${escapeXml(prInfo.linkTag)}"/>`;
-					session.sdkSession.addEvent({
-						type: 'assistant.message',
-						data: {
-							messageId: `msg_${Date.now()}`,
-							content: assistantMessage
-						}
-					});
+				if (prInfo) {
+					await this.recordPushToSession(id, request.prompt, prInfo, token);
 				}
 				return {};
 
@@ -264,6 +260,36 @@ export class CopilotCLIChatSessionParticipant {
 		stream.markdown(localize('copilotcli.viaAtCopilotcli', "Start a new CopilotCLI session"));
 		stream.button({ command: `workbench.action.chat.openNewSessionEditor.${this.sessionType}`, title: localize('copilotcli.startNewSession', "Start Session") });
 		return {};
+	}
+
+	private async recordPushToSession(
+		sessionId: string,
+		userPrompt: string,
+		prInfo: { uri: string; title: string; description: string; author: string; linkTag: string },
+		token: vscode.CancellationToken
+	): Promise<void> {
+		const session = await this.sessionService.getSession(sessionId, token);
+		if (!session) {
+			return;
+		}
+
+		// Add user message event
+		session.sdkSession.addEvent({
+			type: 'user.message',
+			data: {
+				content: userPrompt
+			}
+		});
+
+		// Add assistant message event with embedded PR metadata
+		const assistantMessage = `GitHub Copilot cloud agent has begun working on your request. Follow its progress in the associated chat and pull request.\n<pr_metadata uri="${prInfo.uri}" title="${escapeXml(prInfo.title)}" description="${escapeXml(prInfo.description)}" author="${escapeXml(prInfo.author)}" linkTag="${escapeXml(prInfo.linkTag)}"/>`;
+		session.sdkSession.addEvent({
+			type: 'assistant.message',
+			data: {
+				messageId: `msg_${Date.now()}`,
+				content: assistantMessage
+			}
+		});
 	}
 }
 
