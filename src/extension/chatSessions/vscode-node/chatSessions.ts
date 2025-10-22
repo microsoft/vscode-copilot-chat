@@ -89,13 +89,16 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 	}
 
 	private updateCopilotCloudRegistration(): void {
+		if (!this.copilotAgentInstaService) {
+			return;
+		}
 		const enabled = this.configurationService.getConfig(ConfigKey.Internal.CopilotCloudEnabled);
 
 		if (enabled && !this.copilotCloudRegistrations) {
 			// Register the Copilot Cloud chat participant
 			this.copilotCloudRegistrations = new DisposableStore();
 			const copilotSessionsProvider = this.copilotCloudRegistrations.add(
-				this.copilotAgentInstaService!.createInstance(CopilotChatSessionsProvider)
+				this.copilotAgentInstaService.createInstance(CopilotChatSessionsProvider)
 			);
 			this.copilotCloudRegistrations.add(
 				vscode.chat.registerChatSessionItemProvider(CopilotChatSessionsProvider.TYPE, copilotSessionsProvider)
@@ -118,7 +121,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 					copilotSessionsProvider.openSessionsInBrowser(chatSessionItem);
 				})
 			);
-			this._register(this.copilotCloudRegistrations);
+
 		} else if (!enabled && this.copilotCloudRegistrations) {
 			// Unregister the Copilot Cloud chat participant
 			this.copilotCloudRegistrations.dispose();
