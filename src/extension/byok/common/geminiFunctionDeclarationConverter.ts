@@ -30,8 +30,12 @@ function mapType(jsonType: string): Type {
 			return Type.STRING;
 		case "number":
 			return Type.NUMBER;
+		case "integer":
+			return Type.INTEGER;
 		case "boolean":
 			return Type.BOOLEAN;
+		case "null":
+			return Type.NULL;
 		default:
 			throw new Error(`Unsupported type: ${jsonType}`);
 	}
