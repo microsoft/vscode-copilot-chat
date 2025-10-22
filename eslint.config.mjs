@@ -38,7 +38,7 @@ export default tseslint.config(
 			'**/*.{js,jsx,mjs,cjs,ts,tsx}',
 		],
 		ignores: [
-			'./src/extension/completions-core/**/*'
+			'./src/extension/completions-core/**/testdata/*'
 		],
 		languageOptions: {
 			parser: tsParser,
