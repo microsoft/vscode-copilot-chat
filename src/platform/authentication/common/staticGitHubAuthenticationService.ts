@@ -13,7 +13,7 @@ import { ICopilotTokenStore } from './copilotTokenStore';
 
 export class StaticGitHubAuthenticationService extends BaseAuthenticationService {
 	constructor(
-		gitHubToken: string | undefined,
+		private readonly tokenProvider: { (): string } | undefined,
 		@ILogService logService: ILogService,
 		@ICopilotTokenStore tokenStore: ICopilotTokenStore,
 		@ICopilotTokenManager tokenManager: ICopilotTokenManager,
@@ -21,9 +21,10 @@ export class StaticGitHubAuthenticationService extends BaseAuthenticationService
 	) {
 		super(logService, tokenStore, tokenManager, configurationService);
 
-		this._anyGitHubSession = gitHubToken ? {
-			get id() { return gitHubToken; },
-			get accessToken() { return gitHubToken; },
+		const that = this;
+		this._anyGitHubSession = tokenProvider ? {
+			get id() { return that.tokenProvider!(); },
+			get accessToken() { return that.tokenProvider!(); },
 			scopes: GITHUB_SCOPE_USER_EMAIL,
 			account: {
 				id: 'user',
@@ -31,9 +32,9 @@ export class StaticGitHubAuthenticationService extends BaseAuthenticationService
 			}
 		} : undefined;
 
-		this._permissiveGitHubSession = gitHubToken ? {
-			get id() { return gitHubToken; },
-			get accessToken() { return gitHubToken; },
+		this._permissiveGitHubSession = tokenProvider ? {
+			get id() { return that.tokenProvider!(); },
+			get accessToken() { return that.tokenProvider!(); },
 			scopes: GITHUB_SCOPE_ALIGNED,
 			account: {
 				id: 'user',

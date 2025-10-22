@@ -41,7 +41,7 @@ suite('AuthenticationService', function () {
 			accessor.get(IEnvService)
 		);
 		authenticationService = new StaticGitHubAuthenticationService(
-			testToken,
+			() => testToken,
 			accessor.get(ILogService),
 			accessor.get(ICopilotTokenStore),
 			copilotTokenManager,
