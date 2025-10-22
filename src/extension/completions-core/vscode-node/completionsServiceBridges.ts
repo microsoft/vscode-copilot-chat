@@ -2,11 +2,34 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import { env, UIKind } from 'vscode';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
+import { ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
+import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
+import { ILogService } from '../../../platform/log/common/logService';
+import { IFetcherService } from '../../../platform/networking/common/fetcherService';
+import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
+import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
+import { URI } from '../../../util/vs/base/common/uri';
+import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
+import { VSCodeWorkspace } from '../../inlineEdits/vscode-node/parts/vscodeWorkspace';
 import { CompletionsAuthenticationServiceBridge } from './bridge/src/completionsAuthenticationServiceBridge';
+import { CompletionsCapiBridge } from './bridge/src/completionsCapiBridge';
 import { CompletionsEndpointProviderBridge } from './bridge/src/completionsEndpointProviderBridge';
 import { CompletionsExperimentationServiceBridge } from './bridge/src/completionsExperimentationServiceBridge';
 import { CompletionsIgnoreServiceBridge } from './bridge/src/completionsIgnoreServiceBridge';
 import { CompletionsTelemetryServiceBridge } from './bridge/src/completionsTelemetryServiceBridge';
+import { CodeReference } from './extension/src/codeReferencing';
+import { LoggingCitationManager } from './extension/src/codeReferencing/citationManager';
+import { VSCodeConfigProvider, VSCodeEditorInfo } from './extension/src/config';
+import { contextProviderMatch } from './extension/src/contextProviderMatch';
+import { Extension } from './extension/src/extensionContext';
+import { CopilotExtensionStatus } from './extension/src/extensionStatus';
+import { extensionFileSystem } from './extension/src/fileSystem';
+import { registerGhostTextDependencies } from './extension/src/ghostText/ghostText';
+import { CopilotStatusBar } from './extension/src/statusBar';
+import { ExtensionTextDocumentManager } from './extension/src/textDocumentManager';
 import { CopilotTokenManager } from './lib/src/auth/copilotTokenManager';
 import { CitationManager } from './lib/src/citationManager';
 import { CompletionNotifier } from './lib/src/completionNotifier';
@@ -50,33 +73,10 @@ import { FullRecentEditsProvider, RecentEditsProvider } from './lib/src/prompt/r
 import { CompositeRelatedFilesProvider } from './lib/src/prompt/similarFiles/compositeRelatedFilesProvider';
 import { RelatedFilesProvider } from './lib/src/prompt/similarFiles/relatedFiles';
 import { TelemetryUserConfig } from './lib/src/telemetry';
-import { RuntimeMode } from './lib/src/testing/runtimeMode';
 import { TextDocumentManager } from './lib/src/textDocumentManager';
 import { UrlOpener } from './lib/src/util/opener';
 import { PromiseQueue } from './lib/src/util/promiseQueue';
-import { env, UIKind } from 'vscode';
-import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
-import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
-import { ObservableWorkspace } from '../../../platform/inlineEdits/common/observableWorkspace';
-import { ILanguageContextProviderService } from '../../../platform/languageContextProvider/common/languageContextProviderService';
-import { ILogService } from '../../../platform/log/common/logService';
-import { IFetcherService } from '../../../platform/networking/common/fetcherService';
-import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
-import { DisposableStore, IDisposable } from '../../../util/vs/base/common/lifecycle';
-import { URI } from '../../../util/vs/base/common/uri';
-import { IInstantiationService, ServicesAccessor } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { VSCodeWorkspace } from '../../inlineEdits/vscode-node/parts/vscodeWorkspace';
-import { CodeReference } from './extension/src/codeReferencing';
-import { LoggingCitationManager } from './extension/src/codeReferencing/citationManager';
-import { VSCodeConfigProvider, VSCodeEditorInfo } from './extension/src/config';
-import { contextProviderMatch } from './extension/src/contextProviderMatch';
-import { Extension } from './extension/src/extensionContext';
-import { CopilotExtensionStatus } from './extension/src/extensionStatus';
-import { extensionFileSystem } from './extension/src/fileSystem';
-import { registerGhostTextDependencies } from './extension/src/ghostText/ghostText';
-import { CopilotStatusBar } from './extension/src/statusBar';
-import { ExtensionTextDocumentManager } from './extension/src/textDocumentManager';
-import { CompletionsCapiBridge } from './bridge/src/completionsCapiBridge';
+import { RuntimeMode } from './lib/src/util/runtimeMode';
 
 const bridges: any[] = [];
 

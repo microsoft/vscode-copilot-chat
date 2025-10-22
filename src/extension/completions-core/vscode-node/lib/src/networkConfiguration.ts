@@ -7,7 +7,7 @@ import { CopilotToken } from './auth/copilotTokenManager';
 import { getLastCopilotToken } from './auth/copilotTokenNotifier';
 import { ConfigKey, ConfigKeyType, getConfig, isProduction } from './config';
 import { Context } from './context';
-import { isRunningInTest } from './testing/runtimeMode';
+import { isRunningInTest } from './util/runtimeMode';
 import { joinPath } from './util/uri';
 
 type ServiceEndpoints = {

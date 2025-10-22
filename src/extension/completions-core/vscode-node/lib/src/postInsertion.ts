@@ -17,9 +17,9 @@ import { fetchCitations } from './snippy/handlePostInsertion';
 import { editDistance, lexEditDistance } from './suggestions/editDistance';
 import { SuggestionStatus, computeCompletionText } from './suggestions/partialSuggestions';
 import { TelemetryStore, TelemetryWithExp, telemetry, telemetryCatch } from './telemetry';
-import { isRunningInTest } from './testing/runtimeMode';
 import { TextDocumentManager } from './textDocumentManager';
 import { PromiseQueue } from './util/promiseQueue';
+import { isRunningInTest } from './util/runtimeMode';
 
 const postInsertionLogger = new Logger('postInsertion');
 

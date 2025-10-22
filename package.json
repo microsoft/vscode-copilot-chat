@@ -4159,8 +4159,15 @@
 				"when": "config.github.copilot.chat.advanced.copilotCLI.enabled",
 				"capabilities": {
 					"supportsFileAttachments": true,
-					"supportsProblemAttachments": true
-				}
+					"supportsProblemAttachments": true,
+					"supportsToolAttachments": false
+				},
+				"commands": [
+					{
+						"name": "push",
+						"description": "Delegate chat session to cloud agent and create associated PR"
+					}
+				]
 			},
 			{
 				"type": "copilot-cloud-agent",
