@@ -365,8 +365,8 @@ class MutableContextProviderRegistry extends CoreContextProviderRegistry {
 		this._providers.push(provider);
 	}
 
-	override unregisterContextProvider(_providerId: string) {
-		throw new Error(`Should not be call. Use ILanguageContextProviderService`);
+	override unregisterContextProvider(providerId: string) {
+		this._providers = this._providers.filter(p => p.id !== providerId);
 	}
 
 	override get providers() {
