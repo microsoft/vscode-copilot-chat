@@ -14,9 +14,9 @@ import { ILogService } from '../../../log/common/logService';
 import { IFetcherService } from '../../../networking/common/fetcherService';
 import { ITelemetryService } from '../../../telemetry/common/telemetry';
 import { createPlatformServices } from '../../../test/node/services';
-import { StaticGitHubAuthenticationService } from '../../common/staticGitHubAuthenticationService';
 import { CopilotToken } from '../../common/copilotToken';
 import { ICopilotTokenStore } from '../../common/copilotTokenStore';
+import { StaticGitHubAuthenticationService } from '../../common/staticGitHubAuthenticationService';
 import { FixedCopilotTokenManager } from '../../node/copilotTokenManager';
 
 suite('AuthenticationService', function () {
@@ -41,7 +41,7 @@ suite('AuthenticationService', function () {
 			accessor.get(IEnvService)
 		);
 		authenticationService = new StaticGitHubAuthenticationService(
-			() => testToken,
+			testToken,
 			accessor.get(ILogService),
 			accessor.get(ICopilotTokenStore),
 			copilotTokenManager,
