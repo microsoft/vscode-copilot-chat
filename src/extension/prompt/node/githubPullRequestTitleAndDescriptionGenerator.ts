@@ -132,6 +132,7 @@ export class GitHubPullRequestTitleAndDescriptionGenerator implements TitleAndDe
 			splitOnLines = splitOnPlus[0].split('\n');
 		} else if (splitOnPlus.length > 1) {
 			if (hasTemplate) {
+				// When using a template, keep description whitespace as-is.
 				splitOnLines = splitOnPlus;
 			} else {
 				const descriptionLines = splitOnPlus.slice(1).map(line => line.split('\n')).flat().filter(s => s.trim().length > 0);
