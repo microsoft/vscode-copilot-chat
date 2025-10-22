@@ -74,7 +74,7 @@ export class PullRequestFileChangesService implements IPullRequestFileChangesSer
 			}
 
 			const title = `Changes in Pull Request #${pullRequest.number}`;
-			return new vscode.ChatResponseMultiDiffPart(diffEntries, title);
+			return new vscode.ChatResponseMultiDiffPart(diffEntries, title, true /* readOnly */);
 		} catch (error) {
 			this.logService.error(`Failed to get file changes multi diff part: ${error}`);
 			return undefined;
