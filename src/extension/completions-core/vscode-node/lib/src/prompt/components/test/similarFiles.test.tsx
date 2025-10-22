@@ -16,11 +16,11 @@ import { SimilarFiles } from '../../../prompt/components/similarFiles';
 import { CodeSnippetWithId, TraitWithId } from '../../../prompt/contextProviders/contextItemSchemas';
 import { NeighborSource } from '../../../prompt/similarFiles/neighborFiles';
 import { RelatedFilesProvider, RelatedFileTrait } from '../../../prompt/similarFiles/relatedFiles';
-import { MockTraitsProvider } from '../../../prompt/testing/relatedFiles';
-import { createCompletionRequestData } from '../../../testing/completionsPrompt';
-import { createLibTestingContext } from '../../../testing/context';
-import { querySnapshot } from '../../../testing/snapshot';
-import { createTextDocument, TestTextDocumentManager } from '../../../testing/textDocument';
+import { MockTraitsProvider } from '../../../prompt/test/relatedFiles';
+import { createCompletionRequestData } from '../../../test/completionsPrompt';
+import { createLibTestingContext } from '../../../test/context';
+import { querySnapshot } from '../../../test/snapshot';
+import { createTextDocument, TestTextDocumentManager } from '../../../test/textDocument';
 import { TextDocumentManager } from '../../../textDocumentManager';
 
 suite('Similar Files', function () {

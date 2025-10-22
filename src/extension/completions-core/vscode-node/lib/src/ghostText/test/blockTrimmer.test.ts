@@ -2,6 +2,10 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import assert from 'assert';
+import dedent from 'ts-dedent';
+import { createTextDocument } from '../../test/textDocument';
+import { TextDocumentManager } from '../../textDocumentManager';
 import {
 	BlockPositionType,
 	BlockTrimmer,
@@ -9,10 +13,6 @@ import {
 	TerseBlockTrimmer,
 	VerboseBlockTrimmer,
 } from '../blockTrimmer';
-import { createTextDocument } from '../../testing/textDocument';
-import { TextDocumentManager } from '../../textDocumentManager';
-import assert from 'assert';
-import dedent from 'ts-dedent';
 const x = TextDocumentManager;
 console.log(x);
 

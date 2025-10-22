@@ -46,7 +46,7 @@ import {
 	telemetrizePromptLength,
 	telemetry,
 } from '../telemetry';
-import { isRunningInTest, shouldFailForDebugPurposes } from '../testing/runtimeMode';
+import { isRunningInTest, shouldFailForDebugPurposes } from '../test/runtimeMode';
 import { IPosition, LocationFactory, TextDocumentContents } from '../textDocument';
 import { delay } from '../util/async';
 import { AsyncCompletionManager } from './asyncCompletions';

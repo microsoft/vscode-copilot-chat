@@ -7,20 +7,20 @@
 
 import { Context } from '../../../context';
 import { CompletionRequestData } from '../../completionsPromptFactory/componentsCompletionsPromptFactory';
-import { CodeSnippets } from '../codeSnippets';
 import { CodeSnippetWithId } from '../../contextProviders/contextItemSchemas';
+import { CodeSnippets } from '../codeSnippets';
 
-import { TelemetryWithExp } from '../../../telemetry';
-import { createLibTestingContext } from '../../../testing/context';
-import { querySnapshot } from '../../../testing/snapshot';
-import { createTextDocument, TestTextDocumentManager } from '../../../testing/textDocument';
-import { TextDocumentManager } from '../../../textDocumentManager';
-import { PromptSnapshotNode } from '../../../../../prompt/src/components/components';
-import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
-import { extractNodesWitPath } from '../../../../../prompt/src/test/components/testHelpers';
 import * as assert from 'assert';
 import dedent from 'ts-dedent';
 import { CancellationTokenSource } from 'vscode-languageserver-protocol';
+import { PromptSnapshotNode } from '../../../../../prompt/src/components/components';
+import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
+import { extractNodesWitPath } from '../../../../../prompt/src/test/components/testHelpers';
+import { TelemetryWithExp } from '../../../telemetry';
+import { createLibTestingContext } from '../../../test/context';
+import { querySnapshot } from '../../../test/snapshot';
+import { createTextDocument, TestTextDocumentManager } from '../../../test/textDocument';
+import { TextDocumentManager } from '../../../textDocumentManager';
 
 suite('Code Snippets Component', function () {
 	let ctx: Context;

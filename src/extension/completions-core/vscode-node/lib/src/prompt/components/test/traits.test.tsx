@@ -16,9 +16,9 @@ import { CompletionRequestData } from '../../../prompt/completionsPromptFactory/
 import { Traits } from '../../../prompt/components/traits';
 import { TraitWithId } from '../../../prompt/contextProviders/contextItemSchemas';
 import { TelemetryWithExp } from '../../../telemetry';
-import { createLibTestingContext } from '../../../testing/context';
-import { querySnapshot } from '../../../testing/snapshot';
-import { createTextDocument } from '../../../testing/textDocument';
+import { createLibTestingContext } from '../../../test/context';
+import { querySnapshot } from '../../../test/snapshot';
+import { createTextDocument } from '../../../test/textDocument';
 
 suite('Traits component', function () {
 	let ctx: Context;

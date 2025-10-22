@@ -2,7 +2,12 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import assert from 'assert';
 import { Context } from '../../context';
+import { TelemetryWithExp } from '../../telemetry';
+import { createLibTestingContext } from '../../test/context';
+import { withInMemoryTelemetry } from '../../test/telemetry';
+import { createTextDocument } from '../../test/textDocument';
 import { CopilotCompletion } from '../copilotCompletion';
 import { ResultType } from '../ghostText';
 import {
@@ -13,11 +18,6 @@ import {
 	rejectLastShown,
 	setLastShown,
 } from '../last';
-import { TelemetryWithExp } from '../../telemetry';
-import { createLibTestingContext } from '../../testing/context';
-import { withInMemoryTelemetry } from '../../testing/telemetry';
-import { createTextDocument } from '../../testing/textDocument';
-import assert from 'assert';
 
 suite('Isolated LastGhostText tests', function () {
 	let ctx: Context;

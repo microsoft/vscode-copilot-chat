@@ -3,9 +3,9 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Language, LanguageDetection, languageDetection } from '../languageDetection';
-import { createTextDocument } from '../../testing/textDocument';
 import * as assert from 'assert';
+import { createTextDocument } from '../../test/textDocument';
+import { Language, LanguageDetection, languageDetection } from '../languageDetection';
 
 suite('language detection', function () {
 	test('reuse languages for untitled documents', function () {

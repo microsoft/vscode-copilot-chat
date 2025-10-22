@@ -10,10 +10,10 @@ import dedent from 'ts-dedent';
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
 import { Context } from '../../../context';
 import { CurrentFile } from '../../../prompt/components/currentFile';
-import { createCompletionRequestData } from '../../../testing/completionsPrompt';
-import { createLibTestingContext } from '../../../testing/context';
-import { querySnapshot } from '../../../testing/snapshot';
-import { createTextDocument } from '../../../testing/textDocument';
+import { createCompletionRequestData } from '../../../test/completionsPrompt';
+import { createLibTestingContext } from '../../../test/context';
+import { querySnapshot } from '../../../test/snapshot';
+import { createTextDocument } from '../../../test/textDocument';
 
 suite('Completions Prompt Renderer', function () {
 	let ctx: Context;

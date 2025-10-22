@@ -3,14 +3,14 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import assert from 'assert';
 import { Context } from '../../../context';
+import { createLibTestingContext } from '../../../test/context';
 import { ResolvedContextItem } from '../../contextProviderRegistry';
+import { ContextProviderStatistics } from '../../contextProviderStatistics';
+import { TestContextProviderStatistics } from '../../test/contextProviderStatistics';
 import { TraitWithId } from './../contextItemSchemas';
 import { getTraitsFromContextItems } from './../traits';
-import { ContextProviderStatistics } from '../../contextProviderStatistics';
-import { TestContextProviderStatistics } from '../../testing/contextProviderStatistics';
-import { createLibTestingContext } from '../../../testing/context';
-import assert from 'assert';
 
 suite('traitsContextProvider', function () {
 	let ctx: Context;

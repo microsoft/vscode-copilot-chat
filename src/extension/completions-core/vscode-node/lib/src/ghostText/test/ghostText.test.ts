@@ -2,35 +2,35 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-import { CompletionState, createCompletionState } from '../../completionState';
-import { ConfigKey, InMemoryConfigProvider } from '../../config';
-import { Context } from '../../context';
-import { AsyncCompletionManager } from '../asyncCompletions';
-import { CompletionsCache } from '../completionsCache';
-import { CurrentGhostText } from '../current';
-import { getGhostText, GetNetworkCompletionsType, GhostCompletion, ResultType } from '../ghostText';
-import { mkBasicResultTelemetry } from '../telemetry';
-import { Fetcher, Response } from '../../networking';
-import { LiveOpenAIFetcher, OpenAIFetcher } from '../../openai/fetch';
-import { fakeAPIChoice, fakeAPIChoiceFromCompletion } from '../../openai/fetch.fake';
-import { APIChoice } from '../../openai/openai';
-import { CompletionsPromptFactory } from '../../prompt/completionsPromptFactory/completionsPromptFactory';
-import { extractPrompt, PromptResponsePresent, trimLastLine } from '../../prompt/prompt';
-import { getGhostTextInternal } from '../../prompt/testing/prompt';
-import { TelemetryWithExp } from '../../telemetry';
-import { createLibTestingContext } from '../../testing/context';
-import { createFakeCompletionResponse, fakeCodeReference, NoFetchFetcher, StaticFetcher } from '../../testing/fetcher';
-import { withInMemoryTelemetry } from '../../testing/telemetry';
-import { createTextDocument } from '../../testing/textDocument';
-import { ITextDocument, LocationFactory } from '../../textDocument';
-import { Deferred } from '../../util/async';
-import { initializeTokenizers } from '../../../../prompt/src/tokenization';
 import assert from 'assert';
 import { Position } from 'shiki/core';
 import dedent from 'ts-dedent';
 import type { CancellationToken } from 'vscode';
 import { CancellationTokenSource } from 'vscode-languageserver-protocol';
 import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
+import { initializeTokenizers } from '../../../../prompt/src/tokenization';
+import { CompletionState, createCompletionState } from '../../completionState';
+import { ConfigKey, InMemoryConfigProvider } from '../../config';
+import { Context } from '../../context';
+import { Fetcher, Response } from '../../networking';
+import { LiveOpenAIFetcher, OpenAIFetcher } from '../../openai/fetch';
+import { fakeAPIChoice, fakeAPIChoiceFromCompletion } from '../../openai/fetch.fake';
+import { APIChoice } from '../../openai/openai';
+import { CompletionsPromptFactory } from '../../prompt/completionsPromptFactory/completionsPromptFactory';
+import { extractPrompt, PromptResponsePresent, trimLastLine } from '../../prompt/prompt';
+import { getGhostTextInternal } from '../../prompt/test/prompt';
+import { TelemetryWithExp } from '../../telemetry';
+import { createLibTestingContext } from '../../test/context';
+import { createFakeCompletionResponse, fakeCodeReference, NoFetchFetcher, StaticFetcher } from '../../test/fetcher';
+import { withInMemoryTelemetry } from '../../test/telemetry';
+import { createTextDocument } from '../../test/textDocument';
+import { ITextDocument, LocationFactory } from '../../textDocument';
+import { Deferred } from '../../util/async';
+import { AsyncCompletionManager } from '../asyncCompletions';
+import { CompletionsCache } from '../completionsCache';
+import { CurrentGhostText } from '../current';
+import { getGhostText, GetNetworkCompletionsType, GhostCompletion, ResultType } from '../ghostText';
+import { mkBasicResultTelemetry } from '../telemetry';
 
 // Unit tests for ghostText that do not require network connectivity. For other
 // tests, see lib/e2e/src/ghostText.test.ts.

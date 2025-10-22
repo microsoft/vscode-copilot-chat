@@ -3,12 +3,12 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as assert from 'assert';
 import { Context } from '../../context';
 import { ExpTreatmentVariables } from '../../experiments/expConfig';
-import { getEngineRequestInfo } from '../config';
 import { TelemetryWithExp } from '../../telemetry';
-import { createLibTestingContext } from '../../testing/context';
-import * as assert from 'assert';
+import { createLibTestingContext } from '../../test/context';
+import { getEngineRequestInfo } from '../config';
 
 suite('OpenAI Config Tests', function () {
 	let ctx: Context;

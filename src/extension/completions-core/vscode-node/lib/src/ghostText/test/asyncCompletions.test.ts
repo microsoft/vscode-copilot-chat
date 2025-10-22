@@ -2,21 +2,21 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
+import * as assert from 'node:assert';
+import sinon from 'sinon';
+import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
+import { CancellationTokenSource } from '../../../../types/src';
 import { Context } from '../../context';
 import { Features } from '../../experiments/features';
-import { AsyncCompletionManager } from './../asyncCompletions';
-import { ResultType } from '../ghostText';
-import { GhostTextResultWithTelemetry, mkBasicResultTelemetry } from './../telemetry';
 import { fakeAPIChoice } from '../../openai/fetch.fake';
 import { APIChoice } from '../../openai/openai';
 import { Prompt } from '../../prompt/prompt';
 import { TelemetryWithExp } from '../../telemetry';
-import { createLibTestingContext } from '../../testing/context';
+import { createLibTestingContext } from '../../test/context';
 import { delay } from '../../util/async';
-import { CancellationTokenSource } from '../../../../types/src';
-import * as assert from 'node:assert';
-import sinon from 'sinon';
-import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
+import { ResultType } from '../ghostText';
+import { AsyncCompletionManager } from './../asyncCompletions';
+import { GhostTextResultWithTelemetry, mkBasicResultTelemetry } from './../telemetry';
 
 suite('AsyncCompletionManager', function () {
 	let ctx: Context;

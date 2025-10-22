@@ -16,9 +16,9 @@ import { CompletionsPromptRenderOptions } from '../../../prompt/components/compl
 import { BeforeCursor, CurrentFile } from '../../../prompt/components/currentFile';
 import { SplitContextPromptRenderer } from '../../../prompt/components/splitContextPromptRenderer';
 import { CodeSnippetWithId, TraitWithId } from '../../../prompt/contextProviders/contextItemSchemas';
-import { createCompletionRequestData } from '../../../testing/completionsPrompt';
-import { createLibTestingContext } from '../../../testing/context';
-import { createTextDocument } from '../../../testing/textDocument';
+import { createCompletionRequestData } from '../../../test/completionsPrompt';
+import { createLibTestingContext } from '../../../test/context';
+import { createTextDocument } from '../../../test/textDocument';
 
 const MyNestedComponent = () => {
 	return (

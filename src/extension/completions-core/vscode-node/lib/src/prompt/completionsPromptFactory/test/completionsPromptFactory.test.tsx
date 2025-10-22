@@ -5,10 +5,34 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource ../../../../../prompt/jsx-runtime/ */
 
+import * as assert from 'assert';
+import * as sinon from 'sinon';
+import dedent from 'ts-dedent';
+import { CancellationTokenSource, Position } from 'vscode-languageserver-protocol';
+import { MutableObservableWorkspace, ObservableWorkspace } from '../../../../../../../../platform/inlineEdits/common/observableWorkspace';
+import { ComponentContext, PromptElementProps, Text } from '../../../../../prompt/src/components/components';
+import { Dispatch, StateUpdater } from '../../../../../prompt/src/components/hooks';
+import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
+import { DEFAULT_MAX_COMPLETION_LENGTH } from '../../../../../prompt/src/prompt';
+import { getTokenizer, TokenizerName } from '../../../../../prompt/src/tokenization';
+import { CodeSnippet, ContextProvider, SupportedContextItem, Trait } from '../../../../../types/src';
 import { createCompletionState } from '../../../completionState';
 import { ConfigKey, InMemoryConfigProvider } from '../../../config';
 import { Context } from '../../../context';
 import { Features } from '../../../experiments/features';
+import { TelemetryWithExp } from '../../../telemetry';
+import { createLibTestingContext } from '../../../test/context';
+import { withInMemoryTelemetry } from '../../../test/telemetry';
+import { createTextDocument, TestTextDocumentManager } from '../../../test/textDocument';
+import { ITextDocument } from '../../../textDocument';
+import { TextDocumentManager } from '../../../textDocumentManager';
+import { CompletionsContext } from '../../components/completionsContext';
+import { ContextProviderBridge } from '../../components/contextProviderBridge';
+import { CurrentFile } from '../../components/currentFile';
+import { ContextProviderRegistry, ContextProviderTelemetry } from '../../contextProviderRegistry';
+import { _contextTooShort, _promptCancelled, _promptError } from '../../prompt';
+import { FullRecentEditsProvider, RecentEditsProvider } from '../../recentEdits/recentEditsProvider';
+import { NeighborSource } from '../../similarFiles/neighborFiles';
 import {
 	CompletionsPromptFactory,
 	createCompletionsPromptFactory,
@@ -19,30 +43,6 @@ import {
 	isCompletionRequestData,
 	PromptOrdering,
 } from '../componentsCompletionsPromptFactory';
-import { CompletionsContext } from '../../components/completionsContext';
-import { ContextProviderBridge } from '../../components/contextProviderBridge';
-import { CurrentFile } from '../../components/currentFile';
-import { ContextProviderRegistry, ContextProviderTelemetry } from '../../contextProviderRegistry';
-import { _contextTooShort, _promptCancelled, _promptError } from '../../prompt';
-import { FullRecentEditsProvider, RecentEditsProvider } from '../../recentEdits/recentEditsProvider';
-import { NeighborSource } from '../../similarFiles/neighborFiles';
-import { TelemetryWithExp } from '../../../telemetry';
-import { createLibTestingContext } from '../../../testing/context';
-import { withInMemoryTelemetry } from '../../../testing/telemetry';
-import { createTextDocument, TestTextDocumentManager } from '../../../testing/textDocument';
-import { ITextDocument } from '../../../textDocument';
-import { TextDocumentManager } from '../../../textDocumentManager';
-import { ComponentContext, PromptElementProps, Text } from '../../../../../prompt/src/components/components';
-import { Dispatch, StateUpdater } from '../../../../../prompt/src/components/hooks';
-import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
-import { DEFAULT_MAX_COMPLETION_LENGTH } from '../../../../../prompt/src/prompt';
-import { getTokenizer, TokenizerName } from '../../../../../prompt/src/tokenization';
-import { CodeSnippet, ContextProvider, SupportedContextItem, Trait } from '../../../../../types/src';
-import * as assert from 'assert';
-import * as sinon from 'sinon';
-import dedent from 'ts-dedent';
-import { CancellationTokenSource, Position } from 'vscode-languageserver-protocol';
-import { MutableObservableWorkspace, ObservableWorkspace } from '../../../../../../../../platform/inlineEdits/common/observableWorkspace';
 
 suite('Completions Prompt Factory', function () {
 	let telemetryData: TelemetryWithExp;

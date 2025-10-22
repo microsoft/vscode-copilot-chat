@@ -3,13 +3,13 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as assert from 'assert';
 import { Context } from '../../context';
-import { Features } from './../features';
 import { extractRepoInfoInBackground } from '../../prompt/repository';
 import { TelemetryData } from '../../telemetry';
-import { createLibTestingContext } from '../../testing/context';
+import { createLibTestingContext } from '../../test/context';
 import { makeFsUri } from '../../util/uri';
-import * as assert from 'assert';
+import { Features } from './../features';
 
 suite('updateExPValuesAndAssignments', function () {
 	let ctx: Context;

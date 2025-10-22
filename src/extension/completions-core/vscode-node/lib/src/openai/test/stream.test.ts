@@ -7,8 +7,8 @@ import * as assert from 'assert';
 import { Context } from '../../context';
 import { asyncIterableToArray } from '../../helpers/iterableHelpers';
 import { TelemetryWithExp } from '../../telemetry';
-import { createLibTestingContext } from '../../testing/context';
-import { createFakeStreamResponse } from '../../testing/fetcher';
+import { createLibTestingContext } from '../../test/context';
+import { createFakeStreamResponse } from '../../test/fetcher';
 import { CopilotConfirmation, CopilotError, CopilotReference, RequestDelta } from '../fetch';
 import {
 	CopilotAnnotation,

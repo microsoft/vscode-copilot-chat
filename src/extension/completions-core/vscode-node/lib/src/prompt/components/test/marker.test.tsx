@@ -10,10 +10,10 @@ import dedent from 'ts-dedent';
 import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
 import { Context } from '../../../context';
 import { DocumentMarker } from '../../../prompt/components/marker';
-import { createCompletionRequestData } from '../../../testing/completionsPrompt';
-import { createLibTestingContext } from '../../../testing/context';
-import { querySnapshot } from '../../../testing/snapshot';
-import { createTextDocument, InMemoryNotebookDocument, TestTextDocumentManager } from '../../../testing/textDocument';
+import { createCompletionRequestData } from '../../../test/completionsPrompt';
+import { createLibTestingContext } from '../../../test/context';
+import { querySnapshot } from '../../../test/snapshot';
+import { createTextDocument, InMemoryNotebookDocument, TestTextDocumentManager } from '../../../test/textDocument';
 import { TextDocumentManager } from '../../../textDocumentManager';
 
 suite('Document Marker', function () {

@@ -5,22 +5,22 @@
 /** @jsxRuntime automatic */
 /** @jsxImportSource ../../../../../prompt/jsx-runtime/ */
 
+import * as assert from 'assert';
+import { CancellationTokenSource, Position } from 'vscode-languageserver-protocol';
+import { Chunk, PromptElementProps, PromptSnapshotNode, Text } from '../../../../../prompt/src/components/components';
+import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
+import { TokenizerName } from '../../../../../prompt/src/tokenization';
 import { Context } from '../../../context';
+import { createCompletionRequestData } from '../../../test/completionsPrompt';
+import { createLibTestingContext } from '../../../test/context';
+import { createTextDocument } from '../../../test/textDocument';
+import { CodeSnippetWithId, TraitWithId } from '../../contextProviders/contextItemSchemas';
 import { CompletionsContext, StableCompletionsContext } from '../completionsContext';
 import {
 	CompletionsPromptRenderer,
 	CompletionsPromptRenderOptions,
 } from '../completionsPromptRenderer';
 import { CurrentFile } from '../currentFile';
-import { CodeSnippetWithId, TraitWithId } from '../../contextProviders/contextItemSchemas';
-import { createCompletionRequestData } from '../../../testing/completionsPrompt';
-import { createLibTestingContext } from '../../../testing/context';
-import { createTextDocument } from '../../../testing/textDocument';
-import { Chunk, PromptElementProps, PromptSnapshotNode, Text } from '../../../../../prompt/src/components/components';
-import { VirtualPrompt } from '../../../../../prompt/src/components/virtualPrompt';
-import { TokenizerName } from '../../../../../prompt/src/tokenization';
-import * as assert from 'assert';
-import { CancellationTokenSource, Position } from 'vscode-languageserver-protocol';
 
 const MyNestedComponent = () => {
 	return (

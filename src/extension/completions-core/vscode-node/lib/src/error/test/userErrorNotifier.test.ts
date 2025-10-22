@@ -3,15 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as assert from 'assert';
 import { Context } from '../../context';
-import { UserErrorNotifier } from './../userErrorNotifier';
 import { LogLevel, LogTarget } from '../../logger';
 import { NotificationSender } from '../../notificationSender';
-import { createLibTestingContext } from '../../testing/context';
-import { TestLogTarget } from '../../testing/loggerHelpers';
-import { TestNotificationSender, TestUrlOpener } from '../../testing/testHelpers';
+import { createLibTestingContext } from '../../test/context';
+import { TestLogTarget } from '../../test/loggerHelpers';
+import { TestNotificationSender, TestUrlOpener } from '../../test/testHelpers';
 import { UrlOpener } from '../../util/opener';
-import * as assert from 'assert';
+import { UserErrorNotifier } from './../userErrorNotifier';
 
 suite('Translate errors for end-users', function () {
 	const expectedErrorMessage = `Your proxy connection requires a trusted certificate. Please make sure the proxy certificate and any issuers are configured correctly and trusted by your operating system.`;

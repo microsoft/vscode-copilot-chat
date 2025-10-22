@@ -9,8 +9,8 @@ import { Fetcher } from '../../networking';
 import { CompletionResults, CopilotUiKind, LiveOpenAIFetcher, OpenAIFetcher } from '../../openai/fetch';
 import { APIChoice } from '../../openai/openai';
 import { TelemetryWithExp } from '../../telemetry';
-import { createLibTestingContext } from '../../testing/context';
-import { createFakeCompletionResponse, fakeCodeReference, StaticFetcher } from '../../testing/fetcher';
+import { createLibTestingContext } from '../../test/context';
+import { createFakeCompletionResponse, fakeCodeReference, StaticFetcher } from '../../test/fetcher';
 import { StreamedCompletionSplitter } from '../streamedCompletionSplitter';
 
 suite('StreamedCompletionSplitter', function () {

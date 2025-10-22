@@ -3,22 +3,22 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import assert from 'assert';
+import os from 'os';
 import { CopilotContentExclusionManager } from '../../../contentExclusion/contentExclusionManager';
 import { Context } from '../../../context';
 import { FileSystem } from '../../../fileSystem';
-import { ResolvedContextItem } from '../../contextProviderRegistry';
-import { getCodeSnippetsFromContextItems } from '../codeSnippets';
-import { CodeSnippetWithId } from '../contextItemSchemas';
-import { ContextProviderStatistics } from '../../contextProviderStatistics';
-import { TestContextProviderStatistics } from '../../testing/contextProviderStatistics';
-import { createLibTestingContext } from '../../../testing/context';
-import { FakeFileSystem } from '../../../testing/filesystem';
-import { BlockingContentExclusionManager } from '../../../testing/testContentExclusion';
-import { SimpleTestTextDocumentManager, TestTextDocumentManager } from '../../../testing/textDocument';
+import { createLibTestingContext } from '../../../test/context';
+import { FakeFileSystem } from '../../../test/filesystem';
+import { BlockingContentExclusionManager } from '../../../test/testContentExclusion';
+import { SimpleTestTextDocumentManager, TestTextDocumentManager } from '../../../test/textDocument';
 import { TextDocumentIdentifier, TextDocumentValidation } from '../../../textDocument';
 import { TextDocumentManager } from '../../../textDocumentManager';
-import assert from 'assert';
-import os from 'os';
+import { ResolvedContextItem } from '../../contextProviderRegistry';
+import { ContextProviderStatistics } from '../../contextProviderStatistics';
+import { TestContextProviderStatistics } from '../../test/contextProviderStatistics';
+import { getCodeSnippetsFromContextItems } from '../codeSnippets';
+import { CodeSnippetWithId } from '../contextItemSchemas';
 
 suite('codeSnippetsContextProvider', function () {
 	let ctx: Context;

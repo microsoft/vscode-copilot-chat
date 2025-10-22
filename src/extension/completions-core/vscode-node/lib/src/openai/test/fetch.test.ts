@@ -3,9 +3,18 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import * as assert from 'assert';
+import * as Sinon from 'sinon';
+import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
+import { CancellationTokenSource } from '../../../../types/src';
 import { CopilotTokenManager } from '../../auth/copilotTokenManager';
 import { Context } from '../../context';
 import { Fetcher, FetchOptions, Response } from '../../networking';
+import { StatusChangedEvent, StatusReporter } from '../../progress';
+import { TelemetryWithExp } from '../../telemetry';
+import { createLibTestingContext } from '../../test/context';
+import { createFakeResponse, createFakeStreamResponse, StaticFetcher } from '../../test/fetcher';
+import { withInMemoryTelemetry } from '../../test/telemetry';
 import {
 	CMDQuotaExceeded,
 	CompletionParams,
@@ -15,15 +24,6 @@ import {
 	sanitizeRequestOptionTelemetry
 } from '../fetch';
 import { ErrorReturningFetcher, SyntheticCompletions } from '../fetch.fake';
-import { StatusChangedEvent, StatusReporter } from '../../progress';
-import { TelemetryWithExp } from '../../telemetry';
-import { createLibTestingContext } from '../../testing/context';
-import { createFakeResponse, createFakeStreamResponse, StaticFetcher } from '../../testing/fetcher';
-import { withInMemoryTelemetry } from '../../testing/telemetry';
-import { CancellationTokenSource } from '../../../../types/src';
-import * as assert from 'assert';
-import * as Sinon from 'sinon';
-import { generateUuid } from '../../../../../../../util/vs/base/common/uuid';
 
 suite('"Fetch" unit tests', function () {
 	let ctx: Context;
