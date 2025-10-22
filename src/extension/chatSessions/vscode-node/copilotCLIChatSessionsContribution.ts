@@ -200,7 +200,7 @@ export class CopilotCLIChatSessionParticipant {
 		private readonly copilotcliAgentManager: CopilotCLIAgentManager,
 		private readonly sessionService: ICopilotCLISessionService,
 		private readonly sessionItemProvider: CopilotCLIChatSessionItemProvider,
-		private readonly cloudSessionProvider: CopilotChatSessionsProvider,
+		private readonly cloudSessionProvider: CopilotChatSessionsProvider | undefined,
 		private readonly summarizer: ChatSummarizerProvider,
 		@IGitService private readonly gitService: IGitService
 	) { }
@@ -228,6 +228,11 @@ export class CopilotCLIChatSessionParticipant {
 			const { id } = chatSessionContext.chatSessionItem;
 
 			if (request.prompt.startsWith('/push')) {
+				if (!this.cloudSessionProvider) {
+					stream.warning(localize('copilotcli.missingCloudAgent', "No cloud agent available"));
+					return {};
+				}
+
 				// Check for uncommitted changes
 				const currentRepository = this.gitService.activeRepository.get();
 				const hasChanges =

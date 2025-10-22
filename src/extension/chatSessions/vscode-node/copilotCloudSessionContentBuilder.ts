@@ -9,6 +9,7 @@ import { ChatRequestTurn, ChatRequestTurn2, ChatResponseMarkdownPart, ChatRespon
 import { IGitService } from '../../../platform/git/common/gitService';
 import { PullRequestSearchItem, SessionInfo } from '../../../platform/github/common/githubAPI';
 import { getAuthorDisplayName, toOpenPullRequestWebviewUri } from '../vscode/copilotCodingAgentUtils';
+import { IPullRequestFileChangesService } from './pullRequestFileChangesService';
 
 export interface SessionResponseLogChunk {
 	choices: Array<{
@@ -99,6 +100,7 @@ export class ChatSessionContentBuilder {
 	constructor(
 		private type: string,
 		@IGitService private readonly _gitService: IGitService,
+		@IPullRequestFileChangesService private readonly _prFileChangesService: IPullRequestFileChangesService,
 	) {
 	}
 
@@ -186,11 +188,10 @@ export class ChatSessionContentBuilder {
 			}
 
 			if (session.state === 'completed' || session.state === 'failed' /** session can fail with proposed changes */) {
-				// TODO: we don't have a way to render multidiff yet
-				// const fileChangesPart = await this.getFileChangesMultiDiffPart(pullRequest);
-				// if (fileChangesPart) {
-				// 	responseParts.push(fileChangesPart);
-				// }
+				const multiDiffPart = await this._prFileChangesService.getFileChangesMultiDiffPart(pullRequest);
+				if (multiDiffPart) {
+					responseParts.push(multiDiffPart);
+				}
 			}
 
 			if (responseParts.length > 0) {

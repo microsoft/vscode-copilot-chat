@@ -8,7 +8,7 @@ import { ILogService } from '../../log/common/logService';
 import { IFetcherService } from '../../networking/common/fetcherService';
 import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { PullRequestComment, PullRequestSearchItem, SessionInfo } from './githubAPI';
-import { BaseOctoKitService, CustomAgentDetails, CustomAgentListItem, IOctoKitService, IOctoKitUser, JobInfo, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
+import { BaseOctoKitService, CustomAgentDetails, CustomAgentListItem, IOctoKitService, IOctoKitUser, JobInfo, PullRequestFile, RemoteAgentJobPayload, RemoteAgentJobResponse } from './githubService';
 
 export class OctoKitService extends BaseOctoKitService implements IOctoKitService {
 	declare readonly _serviceBrand: undefined;
@@ -161,5 +161,13 @@ export class OctoKitService extends BaseOctoKitService implements IOctoKitServic
 			return undefined;
 		}
 		return this.getCustomAgentDetailsWithToken(owner, repo, agentName, authToken, version);
+	}
+
+	async getPullRequestFiles(owner: string, repo: string, pullNumber: number): Promise<PullRequestFile[]> {
+		const authToken = (await this._authService.getAnyGitHubSession())?.accessToken;
+		if (!authToken) {
+			return [];
+		}
+		return this.getPullRequestFilesWithToken(owner, repo, pullNumber, authToken);
 	}
 }
