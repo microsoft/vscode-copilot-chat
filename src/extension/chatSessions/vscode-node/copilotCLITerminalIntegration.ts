@@ -107,9 +107,8 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 	}
 
 	public async openTerminal(name: string, cliArgs: string[] = []) {
-		const [shellPathAndArgs, shouldUsePythonTerminal] = await Promise.all([
+		const [shellPathAndArgs] = await Promise.all([
 			this.getShellInfo(cliArgs),
-			this.pythonTerminalService.shouldUsePythonTerminal(),
 			this.updateGHTokenInTerminalEnvVars(),
 			this.initialization
 		]);
@@ -119,7 +118,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			options.iconPath = shellPathAndArgs.iconPath ?? options.iconPath;
 		}
 
-		if (shouldUsePythonTerminal && shellPathAndArgs) {
+		if (shellPathAndArgs) {
 			const terminal = await this.pythonTerminalService.createTerminal(options);
 			if (terminal) {
 				this._register(terminal);
@@ -129,7 +128,7 @@ ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(storageLocation, COPIL
 			}
 		}
 
-		if (shouldUsePythonTerminal || !shellPathAndArgs) {
+		if (!shellPathAndArgs) {
 			const terminal = this._register(this.terminalService.createTerminal(options));
 			const command = this.buildCommandForTerminal(terminal, COPILOT_CLI_COMMAND, cliArgs);
 			await this.sendCommandToTerminal(terminal, command);

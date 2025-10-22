@@ -22,13 +22,13 @@ export class PythonTerminalService {
 		return extension.exports;
 	}
 
-	private async getPythonEnvironmentForWorkspace() {
-		const workspaceUri = vscode.workspace.workspaceFolders?.length ? vscode.workspace.workspaceFolders[0].uri : undefined;
-		if (!workspaceUri) {
-			return;
-		}
-
+	public async createTerminal(options: vscode.TerminalOptions) {
 		try {
+			const workspaceUri = vscode.workspace.workspaceFolders?.length ? vscode.workspace.workspaceFolders[0].uri : undefined;
+			if (!workspaceUri) {
+				return;
+			}
+
 			const api = await this.getEnvExtApi();
 			if (!api) {
 				return;
@@ -37,27 +37,7 @@ export class PythonTerminalService {
 			if (!env || !env.sysPrefix.toLowerCase().startsWith(workspaceUri.fsPath.toLowerCase())) {
 				return;
 			}
-			return { api, env };
-		} catch (ex) {
-			this.logService.error('Failed to get Python environment', ex.toString());
-		}
-
-	}
-	public async shouldUsePythonTerminal(): Promise<boolean> {
-		const info = await this.getPythonEnvironmentForWorkspace();
-		return !!info;
-	}
-
-	public async createTerminal(options: vscode.TerminalOptions) {
-		const info = await this.getPythonEnvironmentForWorkspace();
-		if (!info) {
-			return;
-		}
-
-		try {
-			const terminal = await info.api.createTerminal(info.env, { ...options, hideFromUser: true });
-			terminal.show();
-			return terminal;
+			return await api.createTerminal(env, options);
 		} catch (ex) {
 			this.logService.error('Failed to create terminal with Python environment', ex.toString());
 		}
