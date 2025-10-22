@@ -694,7 +694,7 @@ class OpenAIPromptResolver implements IAgentPrompt {
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 	) { }
 
-	static readonly familyPrefixes = ['gpt', 'o4-mini', 'o3-mini', 'OpenAI',];
+	static readonly familyPrefixes = ['gpt', 'o4-mini', 'o3-mini', 'OpenAI'];
 
 	resolvePrompt(endpoint: IChatEndpoint): PromptConstructor | undefined {
 
