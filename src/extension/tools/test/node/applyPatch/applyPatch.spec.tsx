@@ -47,7 +47,7 @@ suite('ApplyPatch Tool', () => {
 
 		const input: IApplyPatchToolParams = JSON.parse(`{
   "explanation": "Condense the offSide language array and includes check into a single line.",
-  "input": "*** Begin Patch\\n*** Update File: ${path}\\n@@\\n-\\tconst offSide = [\\n-\\t\\t'clojure',\\n-\\t\\t'coffeescript',\\n-\\t\\t'fsharp',\\n-\\t\\t'latex',\\n-\\t\\t'markdown',\\n-\\t\\t'pug',\\n-\\t\\t'python',\\n-\\t\\t'sql',\\n-\\t\\t'yaml',\\n-\\t].includes(languageId.toLowerCase());\\n+\\tconst offSide = ['clojure','coffeescript','fsharp','latex','markdown','pug','python','sql','yaml'].includes(languageId.toLowerCase());\\n*** End Patch\\n"
+  "input": "*** Begin Patch\\n*** Update File: ${path.replaceAll('\\', '\\\\')}\\n@@\\n-\\tconst offSide = [\\n-\\t\\t'clojure',\\n-\\t\\t'coffeescript',\\n-\\t\\t'fsharp',\\n-\\t\\t'latex',\\n-\\t\\t'markdown',\\n-\\t\\t'pug',\\n-\\t\\t'python',\\n-\\t\\t'sql',\\n-\\t\\t'yaml',\\n-\\t].includes(languageId.toLowerCase());\\n+\\tconst offSide = ['clojure','coffeescript','fsharp','latex','markdown','pug','python','sql','yaml'].includes(languageId.toLowerCase());\\n*** End Patch\\n"
 }`);
 
 		const tool = accessor.get(IInstantiationService).createInstance(ApplyPatchTool);
