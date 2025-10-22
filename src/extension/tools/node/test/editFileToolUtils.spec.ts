@@ -352,4 +352,31 @@ describe('replace_string_in_file - applyEdit', () => {
 			applyTextEdits(input.join('\r\n'), workspaceEdit.entries()[0][1])
 		).toBe(output);
 	});
+
+	test('sequential edits to same file - second edit should use updated state', async () => {
+		// This test simulates the issue where multiple replace_string_in_file calls
+		// to the same file should process edits based on the state after previous edits
+		setText('interface TypeOfMap {\n\tstring: string;\n\tnumber: number;\n\tboolean: boolean;\n\tobject: object;\n\tnull: null;\n}\n\nclass TypeofValidator<TKey extends keyof TypeOfMap> implements IValidator<TypeOfMap[TKey]> {\n\tconstructor(private readonly type: TKey) { }\n\n\tvalidate(content: unknown): { content: TypeOfMap[TKey]; error: undefined } | { content: undefined; error: ValidationError } {');
+
+		// First edit: add ValidatorBase class
+		const result1 = await doApplyEdit(
+			'interface TypeOfMap {',
+			'export abstract class ValidatorBase<T> implements IValidator<T> {\n\tabstract validate(content: unknown): { content: T; error: undefined } | { content: undefined; error: ValidationError };\n\n\tabstract toSchema(): IJSONSchema;\n\n\tvalidateOrThrow(content: unknown): T {\n\t\tconst result = this.validate(content);\n\t\tif (result.error) {\n\t\t\tthrow new Error(result.error.message);\n\t\t}\n\t\treturn result.content;\n\t}\n}\n\ninterface TypeOfMap {'
+		);
+
+		// Update the document text to reflect the first edit
+		setText(result1.updatedFile);
+
+		// Second edit: update TypeofValidator to extend ValidatorBase
+		// This oldString should match the state AFTER the first edit
+		const result2 = await doApplyEdit(
+			'class TypeofValidator<TKey extends keyof TypeOfMap> implements IValidator<TypeOfMap[TKey]> {\n\tconstructor(private readonly type: TKey) { }\n\n\tvalidate(content: unknown): { content: TypeOfMap[TKey]; error: undefined } | { content: undefined; error: ValidationError } {',
+			'class TypeofValidator<TKey extends keyof TypeOfMap> extends ValidatorBase<TypeOfMap[TKey]> {\n\tconstructor(private readonly type: TKey) {\n\t\tsuper();\n\t}\n\n\tvalidate(content: unknown): { content: TypeOfMap[TKey]; error: undefined } | { content: undefined; error: ValidationError } {'
+		);
+
+		// Verify the second edit was applied correctly
+		expect(result2.updatedFile).toContain('extends ValidatorBase<TypeOfMap[TKey]>');
+		expect(result2.updatedFile).toContain('super();');
+		expect(result2.updatedFile).toContain('export abstract class ValidatorBase<T>');
+	});
 });

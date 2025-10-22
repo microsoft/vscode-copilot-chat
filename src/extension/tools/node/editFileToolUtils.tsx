@@ -413,7 +413,8 @@ export async function applyEdit(
 	workspaceService: IWorkspaceService,
 	notebookService: INotebookService,
 	alternativeNotebookContent: IAlternativeNotebookContentService,
-	languageModel: LanguageModelChat | undefined
+	languageModel: LanguageModelChat | undefined,
+	overrideDocumentText?: string
 
 ): Promise<{ patch: Hunk[]; updatedFile: string; edits: TextEdit[] }> {
 	let originalFile: string;
@@ -422,13 +423,25 @@ export async function applyEdit(
 	const filePath = uri.toString();
 
 	try {
-		// Use VS Code workspace API to get the document content
-		const document = notebookService.hasSupportedNotebooks(uri) ?
-			await workspaceService.openNotebookDocumentAndSnapshot(uri, alternativeNotebookContent.getFormat(languageModel)) :
-			await workspaceService.openTextDocumentAndSnapshot(uri);
-		originalFile = document.getText();
+		// Use VS Code workspace API to get the document content, or use override if provided
+		let eol: string;
+		let document: TextDocumentSnapshot | NotebookDocumentSnapshot;
 
-		const eol = document instanceof TextDocumentSnapshot && document.eol === EndOfLine.CRLF ? '\r\n' : '\n';
+		if (overrideDocumentText !== undefined) {
+			// Create a temporary document snapshot with the override text
+			document = await (notebookService.hasSupportedNotebooks(uri) ?
+				workspaceService.openNotebookDocumentAndSnapshot(uri, alternativeNotebookContent.getFormat(languageModel)) :
+				workspaceService.openTextDocumentAndSnapshot(uri));
+			originalFile = overrideDocumentText;
+			eol = document instanceof TextDocumentSnapshot && document.eol === EndOfLine.CRLF ? '\r\n' : '\n';
+		} else {
+			document = notebookService.hasSupportedNotebooks(uri) ?
+				await workspaceService.openNotebookDocumentAndSnapshot(uri, alternativeNotebookContent.getFormat(languageModel)) :
+				await workspaceService.openTextDocumentAndSnapshot(uri);
+			originalFile = document.getText();
+			eol = document instanceof TextDocumentSnapshot && document.eol === EndOfLine.CRLF ? '\r\n' : '\n';
+		}
+
 		old_string = old_string.replace(/\r?\n/g, eol);
 		new_string = new_string.replace(/\r?\n/g, eol);
 

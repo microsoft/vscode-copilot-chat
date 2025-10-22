@@ -9,7 +9,7 @@ import { URI } from '../../../util/vs/base/common/uri';
 import { CellOrNotebookEdit } from '../../prompts/node/codeMapper/codeMapper';
 import { ToolName } from '../common/toolNames';
 import { ToolRegistry } from '../common/toolsRegistry';
-import { AbstractReplaceStringTool } from './abstractReplaceStringTool';
+import { AbstractReplaceStringTool, IPrepareEdit } from './abstractReplaceStringTool';
 import { IReplaceStringToolParams } from './replaceStringTool';
 import { resolveToolInputPath } from './toolUtils';
 
@@ -30,7 +30,32 @@ export class MultiReplaceStringTool extends AbstractReplaceStringTool<IMultiRepl
 			throw new Error('Invalid input, no replacements array');
 		}
 
-		const prepared = await Promise.all(options.input.replacements.map(r => this.prepareEditsForFile(options, r, token)));
+		// Group replacements by file URI to process same-file edits sequentially
+		const replacementsByUri = new ResourceMap<IReplaceStringToolParams[]>();
+		for (const replacement of options.input.replacements) {
+			const uri = resolveToolInputPath(replacement.filePath, this.promptPathRepresentationService);
+			let group = replacementsByUri.get(uri);
+			if (!group) {
+				group = [];
+				replacementsByUri.set(uri, group);
+			}
+			group.push(replacement);
+		}
+
+		// Process each file's replacements sequentially, maintaining updated text state
+		const prepared: IPrepareEdit[] = [];
+		for (const [uri, replacements] of replacementsByUri.entries()) {
+			let currentText: string | undefined;
+			for (const replacement of replacements) {
+				const preparedEdit = await this.prepareEditsForFile(options, replacement, token, currentText);
+				prepared.push(preparedEdit);
+
+				// Update currentText for next edit on this file (only for successful text edits)
+				if (preparedEdit.generatedEdit.success && preparedEdit.updatedText) {
+					currentText = preparedEdit.updatedText;
+				}
+			}
+		}
 
 		let successes = 0;
 		let failures = 0;

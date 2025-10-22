@@ -53,6 +53,7 @@ export interface IPrepareEdit {
 	healed?: IAbstractReplaceStringInput;
 	input: IAbstractReplaceStringInput;
 	generatedEdit: { success: true; textEdits: vscode.TextEdit[]; notebookEdits?: CellOrNotebookEdit[] } | { success: false; errorMessage: string };
+	updatedText?: string; // The text after applying this edit (only for successful text edits)
 }
 
 
@@ -84,7 +85,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 
 	protected abstract urisForInput(input: T): readonly URI[];
 
-	protected async prepareEditsForFile(options: vscode.LanguageModelToolInvocationOptions<T>, input: IAbstractReplaceStringInput, token: vscode.CancellationToken): Promise<IPrepareEdit> {
+	protected async prepareEditsForFile(options: vscode.LanguageModelToolInvocationOptions<T>, input: IAbstractReplaceStringInput, token: vscode.CancellationToken, currentText?: string): Promise<IPrepareEdit> {
 		const uri = resolveToolInputPath(input.filePath, this.promptPathRepresentationService);
 		try {
 			await this.instantiationService.invokeFunction(accessor => assertFileNotContentExcluded(accessor, uri));
@@ -109,6 +110,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 					? { success: false, errorMessage: `File does not exist: ${input.filePath}. Use the ${ToolName.CreateFile} tool to create it, or correct your filepath.` }
 					: { success: true, textEdits: [TextEdit.insert(new ExtPosition(0, 0), input.newString)] },
 				input,
+				updatedText: input.oldString ? undefined : input.newString,
 			};
 		}
 
@@ -123,7 +125,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 				throw new NoChangeError('Input and output are identical', input.filePath);
 			}
 
-			const { updatedFile, edits } = await this.generateEdit(uri, document, options, input, didHealRef, token);
+			const { updatedFile, edits } = await this.generateEdit(uri, document, options, input, didHealRef, token, currentText);
 			let notebookEdits: (vscode.NotebookEdit | [URI, vscode.TextEdit[]])[] | undefined;
 			if (document instanceof NotebookDocumentSnapshot) {
 				const telemetryOptions: NotebookEditGenerationTelemtryOptions = {
@@ -136,8 +138,8 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 				sendEditNotebookTelemetry(this.telemetryService, this.endpointProvider, 'stringReplace', document.uri, this._promptContext.requestId, options.model ?? this._promptContext.request?.model);
 			}
 
-			void this.sendReplaceTelemetry('success', options, input, document.getText(), isNotebook, !!didHealRef.healed);
-			return { document, uri, input, healed: didHealRef.healed, generatedEdit: { success: true, textEdits: edits, notebookEdits } };
+			void this.sendReplaceTelemetry('success', options, input, currentText ?? document.getText(), isNotebook, !!didHealRef.healed);
+			return { document, uri, input, healed: didHealRef.healed, generatedEdit: { success: true, textEdits: edits, notebookEdits }, updatedText: notebookEdits ? undefined : updatedFile };
 		} catch (error) {
 			// Enhanced error message with more helpful details
 			let errorMessage = 'String replacement failed: ';
@@ -160,7 +162,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 				errorMessage += `${error.message}`;
 			}
 
-			void this.sendReplaceTelemetry(outcome, options, input, document.getText(), isNotebook, !!didHealRef.healed);
+			void this.sendReplaceTelemetry(outcome, options, input, currentText ?? document.getText(), isNotebook, !!didHealRef.healed);
 
 			return { document, uri, input, healed: didHealRef.healed, generatedEdit: { success: false, errorMessage } };
 		}
@@ -279,11 +281,14 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		]);
 	}
 
-	private async generateEdit(uri: URI, document: TextDocumentSnapshot | NotebookDocumentSnapshot, options: vscode.LanguageModelToolInvocationOptions<T>, input: IAbstractReplaceStringInput, didHealRef: { healed?: IAbstractReplaceStringInput }, token: vscode.CancellationToken) {
+	private async generateEdit(uri: URI, document: TextDocumentSnapshot | NotebookDocumentSnapshot, options: vscode.LanguageModelToolInvocationOptions<T>, input: IAbstractReplaceStringInput, didHealRef: { healed?: IAbstractReplaceStringInput }, token: vscode.CancellationToken, currentText?: string) {
 		const filePath = this.promptPathRepresentationService.getFilePath(document.uri);
 		const eol = document instanceof TextDocumentSnapshot && document.eol === EndOfLine.CRLF ? '\r\n' : '\n';
 		const oldString = removeLeadingFilepathComment(input.oldString, document.languageId, filePath).replace(/\r?\n/g, eol);
 		const newString = removeLeadingFilepathComment(input.newString, document.languageId, filePath).replace(/\r?\n/g, eol);
+
+		// Use currentText if provided (for subsequent edits to the same file), otherwise use document text
+		const documentText = currentText ?? document.getText();
 
 		// Apply the edit using the improved applyEdit function that uses VS Code APIs
 		let updatedFile: string;
@@ -296,7 +301,8 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 				this.workspaceService,
 				this.notebookService,
 				this.alternativeNotebookContent,
-				this._promptContext?.request?.model
+				this._promptContext?.request?.model,
+				documentText
 			);
 			updatedFile = result.updatedFile;
 			edits = result.edits;
@@ -316,7 +322,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 			try {
 				healed = await healReplaceStringParams(
 					options.model,
-					document.getText(),
+					documentText,
 					{
 						explanation: options.input.explanation,
 						filePath: filePath,
@@ -345,7 +351,8 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 					this.workspaceService,
 					this.notebookService,
 					this.alternativeNotebookContent,
-					this._promptContext?.request?.model
+					this._promptContext?.request?.model,
+					documentText
 				);
 				updatedFile = result.updatedFile;
 				edits = result.edits;
