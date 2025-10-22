@@ -46,7 +46,7 @@ export function getAllRecentEditsByTimestamp(map: RecentEditMap): RecentEdit[] {
  * Find the first/last differing line indices.
  * Returns null if the two are identical.
  */
-function findChangeSpan(
+export function findChangeSpan(
 	prevLines: string[],
 	newLines: string[]
 ): { start: number; endPrev: number; endNew: number } | null {
@@ -71,7 +71,7 @@ function findChangeSpan(
 /**
  * Collect everything needed to render a single diff in any format.
  */
-function getDiff(
+export function getDiff(
 	file: string,
 	prevLines: string[],
 	newLines: string[],
@@ -109,7 +109,7 @@ function measureDiffSize(hunk: DiffHunk): number {
 /**
  * Turn a DiffHunk into a standard unified diff string.
  */
-function unifiedDiff(
+export function unifiedDiff(
 	hunk: DiffHunk,
 	removeDeletedLines: boolean = false,
 	insertionsBeforeDeletions: boolean = false,
@@ -168,7 +168,7 @@ function aidersDiff(hunk: DiffHunk, removeDeletedLines = false): string {
 /**
  * Turn a DiffHunk into a plain english find/replace string
  */
-function findReplaceDiff(hunk: DiffHunk, removeDeletedLines = false): string {
+export function findReplaceDiff(hunk: DiffHunk, removeDeletedLines = false): string {
 	const { before, removed, added, after } = hunk;
 	const removedWithWarning = removeDeletedLines
 		? ['...']
@@ -215,7 +215,7 @@ function applyEditsToLines(lines: string[], edits: RecentEdit[]): string[] {
  * @param editMergeLineDistance - The maximum number of lines between edits to consider them adjacent.
  * @returns `true` if the edits overlap or are within the specified line distance; otherwise, `false`.
  */
-function editsOverlap(incoming: RecentEdit, last: RecentEdit, editMergeLineDistance: number): boolean {
+export function editsOverlap(incoming: RecentEdit, last: RecentEdit, editMergeLineDistance: number): boolean {
 	const { added } = last.diff;
 	const lastStart = last.startLine;
 	const lastEnd = last.startLine + added.length;
@@ -230,7 +230,7 @@ function editsOverlap(incoming: RecentEdit, last: RecentEdit, editMergeLineDista
 /**
  * Add an incoming hunk, coalesce overlaps, and immediately trim+rebase if needed.
  */
-function updateEdits(
+export function updateEdits(
 	originalContent: string,
 	existing: RecentEdit[],
 	incoming: RecentEdit,
@@ -276,7 +276,7 @@ function updateEdits(
 }
 
 /** Build the incoming edit object */
-function buildIncomingEdit(
+export function buildIncomingEdit(
 	file: string,
 	prevLines: string[],
 	nextLines: string[],
@@ -301,7 +301,7 @@ function buildIncomingEdit(
 /**
  * Trim old files from the state.
  */
-function trimOldFilesFromState(state: RecentEditMap, maxFiles: number): RecentEditMap {
+export function trimOldFilesFromState(state: RecentEditMap, maxFiles: number): RecentEditMap {
 	const newState = { ...state };
 
 	const modifiedFilesInOrder = Object.entries(state)
