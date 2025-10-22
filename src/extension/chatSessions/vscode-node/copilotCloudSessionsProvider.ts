@@ -889,15 +889,80 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		}
 		let head_ref: string | undefined; // This is the ref cloud agent starts work from (omitted unless we push local changes)
 
-		// TODO@osortega @rebornix: support pending changes
+		// Check for uncommitted changes and prompt user
 		const hasChanges =
 			((currentRepository?.changes?.workingTree && currentRepository.changes.workingTree.length > 0) || (currentRepository?.changes?.indexChanges && currentRepository.changes.indexChanges.length > 0));
 		if (hasChanges) {
-			this.logService.warn('Blocking cloud agent invocation due to uncommitted changes in the workspace.');
-			return {
-				error: vscode.l10n.t('Uncommitted changes detected. Please commit, stash, or discard your changes before delegating work to the cloud agent.'),
-				state: 'error'
-			};
+			this.logService.warn('Uncommitted changes detected in the workspace.');
+
+			const COMMIT_AND_CONTINUE = vscode.l10n.t('Commit and Continue');
+			const CANCEL = vscode.l10n.t('Cancel');
+
+			const userChoice = await vscode.window.showWarningMessage(
+				vscode.l10n.t('Uncommitted changes detected'),
+				{
+					modal: true,
+					detail: vscode.l10n.t('The cloud agent requires a clean working state. You can commit your changes and continue, or cancel the request.')
+				},
+				COMMIT_AND_CONTINUE,
+				CANCEL
+			);
+
+			/* __GDPR__
+				"copilot.codingAgent.uncommittedChanges" : {
+					"userChoice" : { "classification": "SystemMetaData", "purpose": "FeatureInsight" }
+				}
+			*/
+			this.telemetry.sendTelemetryEvent('copilot.codingAgent.uncommittedChanges', { microsoft: true, github: false }, {
+				userChoice: userChoice === COMMIT_AND_CONTINUE ? 'commit' : 'cancel',
+			});
+
+			if (userChoice !== COMMIT_AND_CONTINUE) {
+				this.logService.info('User cancelled cloud agent invocation due to uncommitted changes.');
+				return {
+					error: vscode.l10n.t('Request cancelled.'),
+					state: 'error'
+				};
+			}
+
+			// User chose to commit and continue
+			try {
+				chatStream?.progress(vscode.l10n.t('Committing local changes'));
+
+				// Stage all changes (working tree and index)
+				const allChangedPaths = [
+					...(currentRepository.changes?.workingTree?.map(c => c.uri.fsPath) ?? []),
+					...(currentRepository.changes?.indexChanges?.map(c => c.uri.fsPath) ?? [])
+				];
+
+				if (allChangedPaths.length > 0) {
+					await repo.add(allChangedPaths);
+				}
+
+				// Commit with a meaningful message
+				const commitMessage = vscode.l10n.t('WIP: Changes for cloud agent task');
+				await repo.commit(commitMessage, { all: true });
+
+				this.logService.info('Successfully committed local changes.');
+
+				// Push changes to remote
+				chatStream?.progress(vscode.l10n.t('Pushing changes to remote'));
+				const remoteName = repo?.state.HEAD?.upstream?.remote ?? currentRepository?.upstreamRemote ?? repo?.state.remotes?.[0]?.name;
+				if (remoteName) {
+					await repo.push(remoteName, base_ref);
+					this.logService.info(`Successfully pushed changes to remote ${remoteName}/${base_ref}`);
+					head_ref = base_ref; // Set head_ref since we pushed local changes
+				} else {
+					this.logService.warn('No remote found to push changes to.');
+				}
+			} catch (error) {
+				this.logService.error(`Failed to commit and push changes: ${error}`);
+				return {
+					error: vscode.l10n.t('Failed to commit and push changes. Please commit manually and try again.'),
+					innerError: error instanceof Error ? error.message : String(error),
+					state: 'error'
+				};
+			}
 		}
 
 		const remoteName =
