@@ -8,6 +8,7 @@ import { CHAT_MODEL, IConfigurationService } from '../../../platform/configurati
 import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
+import { modelShouldUseReplaceStringHealing } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
@@ -176,7 +177,7 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 		const fileResults: IEditedFile[] = [];
 		const existingDiagnosticMap = new ResourceMap<vscode.Diagnostic[]>();
 
-		for (const { document, uri, generatedEdit } of edits) {
+		for (const { document, uri, generatedEdit, healed } of edits) {
 			if (document && !existingDiagnosticMap.has(document.uri)) {
 				existingDiagnosticMap.set(document.uri, this.languageDiagnosticsService.getDiagnostics(document.uri));
 			}
@@ -255,7 +256,13 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 					});
 				});
 
-				fileResults.push({ operation: ActionType.UPDATE, uri, isNotebook, existingDiagnostics });
+				fileResults.push({
+					operation: ActionType.UPDATE,
+					uri,
+					isNotebook,
+					existingDiagnostics,
+					healed: healed ? JSON.stringify({ oldString: healed.oldString, newString: healed.newString }, null, 2) : undefined
+				});
 			}
 
 			this._promptContext.stream.markdown('\n```\n');
@@ -307,10 +314,11 @@ export abstract class AbstractReplaceStringTool<T extends { explanation: string 
 			}
 			this.recordEditSuccess(options, false);
 
-			if (this.experimentationService.getTreatmentVariable<boolean>('copilotchat.disableReplaceStringHealing') === true) {
-				throw e; // failsafe for next release.
+			const shouldSkipHealingForNotExplicitlyEnabled = this.experimentationService.getTreatmentVariable<boolean>('copilotchat.disableReplaceStringHealing') === true;
+			const canHeal = shouldSkipHealingForNotExplicitlyEnabled ? options.model && modelShouldUseReplaceStringHealing(options.model) : true;
+			if (!canHeal) {
+				throw e;
 			}
-
 
 			let healed: CorrectedEditResult;
 			try {
