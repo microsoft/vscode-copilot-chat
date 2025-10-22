@@ -262,8 +262,25 @@ export class CopilotCLIChatSessionParticipant {
 			return {};
 		}
 
-		stream.markdown(localize('copilotcli.viaAtCopilotcli', "Start a new CopilotCLI session"));
-		stream.button({ command: `workbench.action.chat.openNewSessionEditor.${this.sessionType}`, title: localize('copilotcli.startNewSession', "Start Session") });
+		/* Invoked from a 'normal' chat or 'cloud button' without CLI session context */
+		// Handle confirmation data
+		return await this.handlePushConfirmationData(request, context, stream, token);
+	}
+
+	private async handlePushConfirmationData(
+		request: vscode.ChatRequest,
+		context: vscode.ChatContext,
+		stream: vscode.ChatResponseStream,
+		token: vscode.CancellationToken
+	): Promise<vscode.ChatResult | void> {
+		const prompt = request.prompt;
+		const history = context.chatSummary?.history;
+
+		const requestPrompt = history ? `${prompt}\n**Summary**\n${history}` : prompt;
+		const sdkSession = await this.sessionService.getOrCreateSDKSession(undefined, requestPrompt);
+
+		await vscode.window.showChatSession(this.sessionType, sdkSession.sessionId, { viewColumn: vscode.ViewColumn.Active });
+		await vscode.commands.executeCommand('workbench.action.chat.submit', { inputValue: requestPrompt });
 		return {};
 	}
 

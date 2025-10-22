@@ -4167,7 +4167,7 @@
 				"welcomeTitle": "GitHub Copilot CLI Agent",
 				"welcomeMessage": "Run local background tasks",
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
-				"order": 1,
+				"order": 2,
 				"description": "The Copilot CLI Agent works on your local machine",
 				"when": "config.github.copilot.chat.advanced.copilotCLI.enabled",
 				"capabilities": {
@@ -4177,7 +4177,7 @@
 				},
 				"commands": [
 					{
-						"name": "push",
+						"name": "delegate",
 						"description": "Delegate chat session to cloud agent and create associated PR"
 					}
 				]
@@ -4190,7 +4190,7 @@
 				"welcomeTitle": "GitHub Copilot Cloud Agent",
 				"welcomeMessage": "Delegate tasks to the cloud",
 				"inputPlaceholder": "Describe your task, type `#` for adding context",
-				"order": 2,
+				"order": 1,
 				"description": "Delegate tasks to the GitHub Copilot Cloud Agent. The agent works asynchronously in the cloud to implement changes, iterates via chat, and can create or update pull requests as needed.",
 				"when": "config.github.copilot.chat.advanced.copilotCodingAgent.enabled",
 				"capabilities": {
