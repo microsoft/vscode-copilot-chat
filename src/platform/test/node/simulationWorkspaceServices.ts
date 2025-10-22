@@ -135,7 +135,7 @@ export class SimulationLanguageDiagnosticsService extends AbstractLanguageDiagno
 	override onDidChangeDiagnostics: vscode.Event<vscode.DiagnosticChangeEvent> = this.workspace.onDidChangeDiagnostics;
 	override getDiagnostics: (resource: vscode.Uri) => vscode.Diagnostic[] = this.workspace.getDiagnostics.bind(this.workspace);
 	override getAllDiagnostics(): [vscode.Uri, vscode.Diagnostic[]][] {
-		return [];
+		return this.workspace.getAllDiagnostics();
 	}
 }
 

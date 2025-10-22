@@ -118,11 +118,23 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 						const chatMessages = await sdkSession.getChatMessages();
 						const noUserMessages = !chatMessages.find(message => message.role === 'user');
 						const label = await this._generateSessionLabel(sdkSession.sessionId, chatMessages, undefined);
+
+						// Get timestamp from last SDK event, or fallback to metadata.startTime
+						const sdkEvents = sdkSession.getEvents();
+						const lastEventWithTimestamp = [...sdkEvents].reverse().find(event =>
+							event.type !== 'session.import_legacy'
+							&& event.type !== 'session.start'
+							&& 'timestamp' in event
+						);
+						const timestamp = lastEventWithTimestamp && 'timestamp' in lastEventWithTimestamp
+							? new Date(lastEventWithTimestamp.timestamp)
+							: metadata.startTime;
+
 						return {
 							id: metadata.sessionId,
 							sdkSession,
 							label,
-							timestamp: metadata.startTime,
+							timestamp,
 							isEmpty: noUserMessages
 						};
 					} catch (error) {
@@ -184,7 +196,7 @@ export class CopilotCLISessionService implements ICopilotCLISessionService {
 			id: sdkSession.sessionId,
 			sdkSession,
 			label,
-			timestamp: new Date(),
+			timestamp: sdkSession.startTime,
 			isEmpty: noUserMessages
 		};
 		this._sessions.set(sdkSession.sessionId, newSession);

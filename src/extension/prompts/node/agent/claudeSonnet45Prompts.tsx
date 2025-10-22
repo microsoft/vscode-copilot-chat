@@ -111,7 +111,7 @@ class ClaudeSonnet45PromptV2 extends PromptElement<DefaultAgentPromptProps> {
 }
 
 class ClaudeSonnet45PromptResolver implements IAgentPrompt {
-	static readonly modelFamilies = ['claude-sonnet-4.5', 'claude-haiku-4.5'];
+	static readonly models = ['claude-sonnet-4.5', 'claude-haiku-4.5'];
 
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,

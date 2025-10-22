@@ -161,7 +161,7 @@ suite('anthropicMessagesToRawMessages', function () {
 		expect(result).toMatchSnapshot();
 	});
 
-	test('ignores thinking blocks', function () {
+	test('includes thinking blocks in conversion to raw messages', function () {
 		const messages: MessageParam[] = [
 			{
 				role: 'assistant',

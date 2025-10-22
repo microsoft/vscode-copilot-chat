@@ -152,7 +152,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			/>;
 		}
 
-		const agentPromptResolver = PromptRegistry.getPrompt(modelFamily);
+		const agentPromptResolver = PromptRegistry.getPrompt(this.props.endpoint.model ?? 'unknown');
 		if (agentPromptResolver) {
 			const resolver = this.instantiationService.createInstance(agentPromptResolver);
 			const PromptClass = resolver.resolvePrompt();

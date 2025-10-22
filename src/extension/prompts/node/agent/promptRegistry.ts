@@ -13,7 +13,7 @@ export interface IAgentPrompt {
 }
 
 export interface IAgentPromptCtor {
-	readonly modelFamilies: readonly string[];
+	readonly models: readonly string[];
 	new(...args: any[]): IAgentPrompt;
 }
 
@@ -21,14 +21,14 @@ export const PromptRegistry = new class {
 	private promptMap = new Map<string, IAgentPromptCtor>();
 
 	registerPrompt(prompt: IAgentPromptCtor): void {
-		for (const modelFamily of prompt.modelFamilies) {
-			this.promptMap.set(modelFamily, prompt);
+		for (const model of prompt.models) {
+			this.promptMap.set(model, prompt);
 		}
 	}
 
 	getPrompt(
-		modelFamily: string
+		model: string
 	): IAgentPromptCtor | undefined {
-		return this.promptMap.get(modelFamily);
+		return this.promptMap.get(model);
 	}
 }();

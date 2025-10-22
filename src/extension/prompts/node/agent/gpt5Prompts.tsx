@@ -516,7 +516,7 @@ class CodexStyleGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 
 class Gpt5PromptResolver implements IAgentPrompt {
 	static readonly promptId = 'gpt-5';
-	static readonly modelFamilies = ['gpt-5', 'gpt-5-mini'];
+	static readonly models = ['gpt-5', 'gpt-5-mini'];
 
 	constructor(
 		@IConfigurationService private readonly configurationService: IConfigurationService,

@@ -85,7 +85,7 @@ class CodexStyleGPT5CodexPrompt extends PromptElement<DefaultAgentPromptProps> {
 }
 
 class Gpt5CodexPromptResolver implements IAgentPrompt {
-	static readonly modelFamilies = ['gpt-5-codex'];
+	static readonly models = ['gpt-5-codex'];
 
 	resolvePrompt(): PromptConstructor | undefined {
 		return CodexStyleGPT5CodexPrompt;
