@@ -145,6 +145,16 @@ export interface CustomAgentDetails extends CustomAgentListItem {
 	};
 }
 
+export interface PullRequestFile {
+	filename: string;
+	status: 'added' | 'removed' | 'modified' | 'renamed' | 'copied' | 'changed' | 'unchanged';
+	additions: number;
+	deletions: number;
+	changes: number;
+	patch?: string;
+	previous_filename?: string;
+}
+
 export interface IOctoKitService {
 
 	_serviceBrand: undefined;
@@ -233,6 +243,15 @@ export interface IOctoKitService {
 	 * @returns The custom agent details or undefined if not found
 	 */
 	getCustomAgentDetails(owner: string, repo: string, agentName: string, version?: string): Promise<CustomAgentDetails | undefined>;
+
+	/**
+	 * Gets the list of files changed in a pull request.
+	 * @param owner The repository owner
+	 * @param repo The repository name
+	 * @param pullNumber The pull request number
+	 * @returns An array of changed files with their metadata
+	 */
+	getPullRequestFiles(owner: string, repo: string, pullNumber: number): Promise<PullRequestFile[]>;
 }
 
 /**
@@ -310,5 +329,10 @@ export class BaseOctoKitService {
 	protected async getCustomAgentDetailsWithToken(owner: string, repo: string, agentName: string, token: string, version?: string): Promise<CustomAgentDetails | undefined> {
 		const queryParams = version ? `?version=${encodeURIComponent(version)}` : '';
 		return makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, 'https://api.githubcopilot.com', `agents/swe/custom-agents/${owner}/${repo}/${agentName}${queryParams}`, 'GET', token, undefined, undefined, 'json', 'vscode-copilot-chat');
+	}
+
+	protected async getPullRequestFilesWithToken(owner: string, repo: string, pullNumber: number, token: string): Promise<PullRequestFile[]> {
+		const result = await makeGitHubAPIRequest(this._fetcherService, this._logService, this._telemetryService, this._capiClientService.dotcomAPIURL, `repos/${owner}/${repo}/pulls/${pullNumber}/files`, 'GET', token, undefined, '2022-11-28');
+		return result || [];
 	}
 }

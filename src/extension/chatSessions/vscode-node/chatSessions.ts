@@ -23,6 +23,7 @@ import { ClaudeChatSessionParticipant } from './claudeChatSessionParticipant';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, registerCLIChatCommands } from './copilotCLIChatSessionsContribution';
 import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotChatSessionsProvider } from './copilotCloudSessionsProvider';
+import { IPullRequestFileChangesService, PullRequestFileChangesService } from './pullRequestFileChangesService';
 
 export class ChatSessionsContrib extends Disposable implements IExtensionContribution {
 	readonly id = 'chatSessions';
@@ -72,6 +73,7 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 		// Copilot sessions provider
 		const copilotAgentInstaService = instantiationService.createChild(new ServiceCollection(
 			[IOctoKitService, new SyncDescriptor(OctoKitService)],
+			[IPullRequestFileChangesService, new SyncDescriptor(PullRequestFileChangesService)],
 		));
 		const copilotSessionsProvider = this._register(copilotAgentInstaService.createInstance(CopilotChatSessionsProvider));
 		this._register(vscode.chat.registerChatSessionItemProvider(CopilotChatSessionsProvider.TYPE, copilotSessionsProvider));

@@ -14,6 +14,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { body_suffix, CONTINUE_TRUNCATION, extractTitle, formatBodyPlaceholder, getAuthorDisplayName, getRepoId, JOBS_API_VERSION, RemoteAgentResult, SessionIdForPr, toOpenPullRequestWebviewUri, truncatePrompt } from '../vscode/copilotCodingAgentUtils';
 import { ChatSessionContentBuilder } from './copilotCloudSessionContentBuilder';
+import { IPullRequestFileChangesService } from './pullRequestFileChangesService';
 
 type ConfirmationResult = { step: string; accepted: boolean; metadata?: CreatePromptMetadata /* | SomeOtherMetadata */ };
 
@@ -66,7 +67,8 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 		@IGitService private readonly _gitService: IGitService,
 		@ITelemetryService private readonly telemetry: ITelemetryService,
 		@ILogService private readonly logService: ILogService,
-		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService
+		@IGitExtensionService private readonly _gitExtensionService: IGitExtensionService,
+		@IPullRequestFileChangesService private readonly _prFileChangesService: IPullRequestFileChangesService,
 	) {
 		super();
 	}
@@ -236,7 +238,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			return this.createEmptySession();
 		}
 		const sessions = await this._octoKitService.getCopilotSessionsForPR(pr.fullDatabaseId.toString());
-		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotChatSessionsProvider.TYPE, this._gitService);
+		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotChatSessionsProvider.TYPE, this._gitService, this._prFileChangesService);
 		const history = await sessionContentBuilder.buildSessionHistory(getProblemStatement(sessions), sessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId));
 
 		const selectedAgent =
@@ -555,13 +557,11 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 				}
 				isCompleted = true;
 
-				// TODO: support file changes
-				// await pullRequest.getFileChangesInfo();
-				// const multiDiffPart = await this.getFileChangesMultiDiffPart(pullRequest);
-				// if (multiDiffPart) {
-				// 	stream.push(multiDiffPart);
-				// }
-
+				this.logService.info(`Session completed, attempting to get file changes for PR #${pullRequest.number}`);
+				const multiDiffPart = await this._prFileChangesService.getFileChangesMultiDiffPart(pullRequest);
+				if (multiDiffPart) {
+					stream.push(multiDiffPart);
+				}
 				resolve();
 			};
 
@@ -650,7 +650,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 
 
 			// Parse the new log content
-			const contentBuilder = new ChatSessionContentBuilder(CopilotChatSessionsProvider.TYPE, this._gitService);
+			const contentBuilder = new ChatSessionContentBuilder(CopilotChatSessionsProvider.TYPE, this._gitService, this._prFileChangesService);
 
 			const logChunks = contentBuilder.parseSessionLogs(newLogContent);
 			let hasStreamedContent = false;
