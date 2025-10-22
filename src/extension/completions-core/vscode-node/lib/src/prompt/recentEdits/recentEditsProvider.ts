@@ -3,6 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IObservableDocument, ObservableWorkspace } from '../../../../../../../platform/inlineEdits/common/observableWorkspace';
+import { autorunWithChanges } from '../../../../../../../platform/inlineEdits/common/utils/observable';
+import { Disposable } from '../../../../../../../util/vs/base/common/lifecycle';
+import { mapObservableArrayCached } from '../../../../../../../util/vs/base/common/observableInternal';
 import { Context } from '../../context';
 import {
 	getAllRecentEditsByTimestamp,
@@ -11,10 +15,6 @@ import {
 	recentEditsReducer,
 	summarizeEdit,
 } from './recentEditsReducer';
-import { IObservableDocument, ObservableWorkspace } from '../../../../../../../platform/inlineEdits/common/observableWorkspace';
-import { autorunWithChanges } from '../../../../../../../platform/inlineEdits/common/utils/observable';
-import { Disposable } from '../../../../../../../util/vs/base/common/lifecycle';
-import { mapObservableArrayCached } from '../../../../../../../util/vs/base/common/observableInternal';
 
 export abstract class RecentEditsProvider extends Disposable {
 	abstract isEnabled(): boolean;
@@ -50,7 +50,7 @@ export interface RecentEditsConfig {
 	maxLinesPerEdit: number;
 }
 
-const RECENT_EDITS_DEFAULT_CONFIG: RecentEditsConfig = {
+const RECENT_EDITS_DEFAULT_CONFIG: RecentEditsConfig = Object.freeze({
 	maxFiles: 20,
 	maxEdits: 8,
 	diffContextLines: 3,
@@ -63,7 +63,7 @@ const RECENT_EDITS_DEFAULT_CONFIG: RecentEditsConfig = {
 	appendNoReplyMarker: true,
 	activeDocDistanceLimitFromCursor: 100,
 	maxLinesPerEdit: 10,
-};
+});
 
 export class FullRecentEditsProvider extends RecentEditsProvider {
 	private _started: boolean = false;
@@ -74,7 +74,7 @@ export class FullRecentEditsProvider extends RecentEditsProvider {
 
 	constructor(
 		private readonly ctx: Context,
-		private readonly _config: RecentEditsConfig = RECENT_EDITS_DEFAULT_CONFIG
+		private readonly _config: RecentEditsConfig = Object.assign({}, RECENT_EDITS_DEFAULT_CONFIG)
 	) {
 		super();
 	}
