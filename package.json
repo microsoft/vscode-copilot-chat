@@ -4148,7 +4148,7 @@
 			},
 			{
 				"type": "copilotcli",
-				"name": "copilotcli",
+				"name": "cli",
 				"displayName": "GitHub Copilot CLI Agent",
 				"icon": "$(copilot)",
 				"welcomeTitle": "GitHub Copilot CLI Agent",
@@ -4171,7 +4171,7 @@
 			},
 			{
 				"type": "copilot-cloud-agent",
-				"name": "copilot-cloud-agent",
+				"name": "cloud",
 				"displayName": "GitHub Copilot Cloud Agent",
 				"icon": "$(cloud)",
 				"welcomeTitle": "GitHub Copilot Cloud Agent",
