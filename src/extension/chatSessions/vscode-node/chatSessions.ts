@@ -25,6 +25,7 @@ import { ClaudeChatSessionParticipant } from './claudeChatSessionParticipant';
 import { CopilotCLIChatSessionContentProvider, CopilotCLIChatSessionItemProvider, CopilotCLIChatSessionParticipant, registerCLIChatCommands } from './copilotCLIChatSessionsContribution';
 import { CopilotCLITerminalIntegration, ICopilotCLITerminalIntegration } from './copilotCLITerminalIntegration';
 import { CopilotChatSessionsProvider } from './copilotCloudSessionsProvider';
+import { GHPR_EXTENSION_ID } from '../vscode/chatSessionsUriHandler';
 import { IPullRequestFileChangesService, PullRequestFileChangesService } from './pullRequestFileChangesService';
 
 export class ChatSessionsContrib extends Disposable implements IExtensionContribution {
@@ -138,7 +139,12 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			);
 			this.copilotCloudRegistrations.add(
 				vscode.commands.registerCommand('github.copilot.cloud.sessions.installPRExtension', async () => {
-					await vscode.commands.executeCommand('workbench.extensions.installExtension', 'GitHub.vscode-pull-request-github');
+					try {
+						await vscode.commands.executeCommand('workbench.extensions.installExtension', GHPR_EXTENSION_ID);
+						vscode.window.showInformationMessage(vscode.l10n.t('GitHub Pull Request extension installed successfully.'));
+					} catch (error) {
+						vscode.window.showErrorMessage(vscode.l10n.t('Failed to install GitHub Pull Request extension: {0}', error instanceof Error ? error.message : String(error)));
+					}
 				})
 			);
 

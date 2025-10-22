@@ -14,6 +14,7 @@ import { ITelemetryService } from '../../../platform/telemetry/common/telemetry'
 import { TelemetryData } from '../../../platform/telemetry/common/telemetryData';
 import { Disposable } from '../../../util/vs/base/common/lifecycle';
 import { autorun } from '../../../util/vs/base/common/observableInternal';
+import { GHPR_EXTENSION_ID } from '../../chatSessions/vscode/chatSessionsUriHandler';
 
 const welcomeViewContextKeys = {
 	Activated: 'github.copilot-chat.activated',
@@ -35,8 +36,6 @@ const previewFeaturesDisabledContextKey = 'github.copilot.previewFeaturesDisable
 const debugContextKey = 'github.copilot.chat.debug';
 
 const prExtensionInstalledContextKey = 'github.copilot.prExtensionInstalled';
-
-const GHPR_EXTENSION_ID = 'GitHub.vscode-pull-request-github';
 
 export class ContextKeysContribution extends Disposable {
 

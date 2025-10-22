@@ -10,7 +10,7 @@ import { encodeBase64, VSBuffer } from '../../../util/vs/base/common/buffer';
 import { EXTENSION_ID } from '../../common/constants';
 import { getRepoId } from './copilotCodingAgentUtils';
 
-const GHPR_EXTENSION_ID = 'GitHub.vscode-pull-request-github';
+export const GHPR_EXTENSION_ID = 'GitHub.vscode-pull-request-github';
 export enum UriHandlerPaths {
 	OpenSession = '/openAgentSession',
 	External_OpenPullRequestWebview = '/open-pull-request-webview',
