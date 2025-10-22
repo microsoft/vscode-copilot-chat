@@ -158,6 +158,8 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 							elapsed += pollInterval;
 						}
 						if (extension) {
+							// Manually update the context key to immediately hide the button
+							await vscode.commands.executeCommand('setContext', 'github.copilot.prExtensionInstalled', true);
 							vscode.window.showInformationMessage(vscode.l10n.t('GitHub Pull Request extension installed successfully.'));
 						} else {
 							vscode.window.showWarningMessage(vscode.l10n.t('GitHub Pull Request extension is taking longer than expected to install.'));
