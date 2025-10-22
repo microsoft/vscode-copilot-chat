@@ -11,7 +11,7 @@ import { TextDocumentManager } from './textDocumentManager';
  * A map from the string representation of a document URI to its last access time in ms since the
  * epoch.
  */
-const accessTimes = new LRUCacheMap<string, number>();
+export const accessTimes = new LRUCacheMap<string, number>();
 
 /**
  * Returns a copy of `docs` sorted by access time, from most to least recent.

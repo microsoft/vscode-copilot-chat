@@ -244,7 +244,7 @@ Return ONLY the corrected target snippet in the specified JSON format with the k
 `.trim();
 
 	try {
-		const result = await getJsonResponse(healEndpoint, prompt, oldString_CORRECTION_SCHEMA, token);
+		const result = await getJsonResponse(healEndpoint, prompt, oldString_CORRECTION_SCHEMA, { corrected_target_snippet: '<corrected target snippet here>' }, token);
 		if (
 			result &&
 			typeof result.corrected_target_snippet === 'string' &&
@@ -314,7 +314,7 @@ Return ONLY the corrected string in the specified JSON format with the key 'corr
   `.trim();
 
 	try {
-		const result = await getJsonResponse(endpoint, prompt, newString_CORRECTION_SCHEMA, token);
+		const result = await getJsonResponse(endpoint, prompt, newString_CORRECTION_SCHEMA, { corrected_newString: '<corrected newString here>' }, token);
 		if (
 			result &&
 			typeof result.corrected_newString === 'string' &&
@@ -369,7 +369,7 @@ Return ONLY the corrected string in the specified JSON format with the key 'corr
   `.trim();
 
 	try {
-		const result = await getJsonResponse(geminiClient, prompt, CORRECT_newString_ESCAPING_SCHEMA, token);
+		const result = await getJsonResponse(geminiClient, prompt, CORRECT_newString_ESCAPING_SCHEMA, { corrected_newString_escaping: '<corrected newString here>' }, token);
 		if (
 			result &&
 			typeof result.corrected_newString_escaping === 'string' &&
@@ -396,12 +396,14 @@ const CORRECT_STRING_ESCAPING_SCHEMA: ObjectJsonSchema = {
 	required: ['corrected_string_escaping'],
 };
 
-async function getJsonResponse(endpoint: IChatEndpoint, prompt: string, schema: ObjectJsonSchema, token: CancellationToken) {
+async function getJsonResponse(endpoint: IChatEndpoint, prompt: string, schema: ObjectJsonSchema, example: object, token: CancellationToken) {
 	prompt += `\n\nYour response must follow the JSON format:
 
 	\`\`\`
 ${JSON.stringify(schema, null, 2)}
 \`\`\`
+
+For example: ${JSON.stringify(example)}
 `.trim();
 
 	const contents: Raw.ChatMessage[] = [
@@ -415,7 +417,7 @@ ${JSON.stringify(schema, null, 2)}
 		messages: contents,
 		finishedCb: undefined,
 		location: ChatLocation.Other,
-		enableRetryOnFilter: true
+		enableRetryOnFilter: true,
 	}, token);
 
 	if (result.type !== ChatFetchResponseType.Success) {
@@ -457,7 +459,7 @@ Return ONLY the corrected string in the specified JSON format with the key 'corr
 
 
 	try {
-		const result = await getJsonResponse(endpoint, prompt, CORRECT_STRING_ESCAPING_SCHEMA, token);
+		const result = await getJsonResponse(endpoint, prompt, CORRECT_STRING_ESCAPING_SCHEMA, { corrected_string_escaping: '<corrected string here>' }, token);
 
 		if (
 			result &&

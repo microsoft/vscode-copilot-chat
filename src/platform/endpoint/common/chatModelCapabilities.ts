@@ -89,6 +89,14 @@ export async function modelCanUseReplaceStringExclusively(model: LanguageModelCh
 }
 
 /**
+ * We should attempt to automatically heal incorrect edits the model may emit.
+ * @note whether this is respected is currently controlled via EXP
+ */
+export function modelShouldUseReplaceStringHealing(model: LanguageModelChat | IChatEndpoint) {
+	return model.family.includes('gemini');
+}
+
+/**
  * The model can accept image urls as the `image_url` parameter in mcp tool results.
  */
 export async function modelCanUseMcpResultImageURL(model: LanguageModelChat | IChatEndpoint): Promise<boolean> {
