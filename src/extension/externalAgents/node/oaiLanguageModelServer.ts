@@ -263,7 +263,7 @@ class StreamingPassThroughEndpoint implements IChatEndpoint {
 	private getUserAgent(incomingUserAgent: string): string {
 		const slashIndex = incomingUserAgent.indexOf('/');
 		if (slashIndex === -1) {
-			return this.userAgentPrefix;
+			return `${this.userAgentPrefix}/${incomingUserAgent}`;
 		}
 
 		return `${this.userAgentPrefix}${incomingUserAgent.substring(slashIndex)}`;
