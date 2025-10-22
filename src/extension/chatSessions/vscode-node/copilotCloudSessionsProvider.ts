@@ -244,8 +244,15 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 			return this.createEmptySession();
 		}
 		const sessions = await this._octoKitService.getCopilotSessionsForPR(pr.fullDatabaseId.toString());
+		const sortedSessions = sessions
+			.filter((session, index, array) =>
+				array.findIndex(s => s.id === session.id) === index
+			)
+			.slice().sort((a, b) =>
+				new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+			);
 		const sessionContentBuilder = new ChatSessionContentBuilder(CopilotChatSessionsProvider.TYPE, this._gitService, this._prFileChangesService);
-		const history = await sessionContentBuilder.buildSessionHistory(getProblemStatement(sessions), sessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId));
+		const history = await sessionContentBuilder.buildSessionHistory(getProblemStatement(sortedSessions), sortedSessions, pr, (sessionId: string) => this._octoKitService.getSessionLogs(sessionId));
 
 		const selectedAgent =
 			// Local cache of session -> custom agent
