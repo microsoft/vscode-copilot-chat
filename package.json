@@ -5,7 +5,6 @@
 	"version": "0.33.0",
 	"build": "1",
 	"internalAIKey": "1058ec22-3c95-4951-8443-f26c1f325911",
-	"completionsCore": "5d3a8d1e6a1a301b322ec7992f6322a6a63b046d",
 	"completionsCoreVersion": "1.378.1798",
 	"internalLargeStorageAriaKey": "ec712b3202c5462fb6877acae7f1f9d7-c19ad55e-3e3c-4f99-984b-827f6d95bd9e-6917",
 	"ariaKey": "0c6ae279ed8443289764825290e4f9e2-1a736e7c-1324-4338-be46-fc2a58ae4d14-7255",
@@ -4262,8 +4261,8 @@
 		"create_venv": "tsx script/setup/createVenv.mts",
 		"package": "vsce package",
 		"web": "vscode-test-web --headless --extensionDevelopmentPath=. .",
-		"test:prompt": "mocha \"src/extension/completions-core/prompt/**/test/**/*.test.{ts,tsx}\"",
-		"test:completions-core": "tsx src/extension/completions-core/extension/test/runTest.ts"
+		"test:prompt": "mocha \"src/extension/completions-core/vscode-node/prompt/**/test/**/*.test.{ts,tsx}\"",
+		"test:completions-core": "tsx src/extension/completions-core/vscode-node/extension/test/runTest.ts"
 	},
 	"devDependencies": {
 		"@azure/identity": "4.9.1",
