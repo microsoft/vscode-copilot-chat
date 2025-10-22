@@ -137,7 +137,7 @@ async function validateVersion(version: string) {
 
 	// In vscode we use `--clear` to indicate that the terminal should be cleared before running the command
 	// Used when launching terminal in editor view (for best possible UX, so it doesn't look like a terminal)
-	if (args.length && args[0] === '--clear') {
+	if (args[0] === '--clear') {
 		console.clear();
 		args.shift();
 	}
