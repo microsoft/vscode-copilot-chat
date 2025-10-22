@@ -121,7 +121,7 @@ export class ChatSessionContentBuilder {
 
 				// Create request turn
 				turns.push(new ChatRequestTurn2(
-					problemStatement || '',
+					problemStatement || session.name,
 					undefined, // command
 					[], // references
 					this.type,
