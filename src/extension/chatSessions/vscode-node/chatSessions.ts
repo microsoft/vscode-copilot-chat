@@ -140,7 +140,10 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 			this.copilotCloudRegistrations.add(
 				vscode.commands.registerCommand('github.copilot.cloud.sessions.installPRExtension', async () => {
 					try {
-						await vscode.commands.executeCommand('workbench.extensions.installExtension', GHPR_EXTENSION_ID);
+						// Install pre-release version if running VS Code Insiders
+						const isInsiders = vscode.version.includes('insider');
+						const installOptions = { enable: true, installPreReleaseVersion: isInsiders };
+						await vscode.commands.executeCommand('workbench.extensions.installExtension', GHPR_EXTENSION_ID, installOptions);
 
 						// Wait for the extension to be available after installation
 						const maxWaitTime = 5000; // 5 seconds
