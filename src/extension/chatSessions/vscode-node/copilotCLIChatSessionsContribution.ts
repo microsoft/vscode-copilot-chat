@@ -227,7 +227,7 @@ export class CopilotCLIChatSessionParticipant {
 
 			const { id } = chatSessionContext.chatSessionItem;
 
-			if (request.prompt.startsWith('/push')) {
+			if (request.prompt.startsWith('/delegate')) {
 				if (!this.cloudSessionProvider) {
 					stream.warning(localize('copilotcli.missingCloudAgent', "No cloud agent available"));
 					return {};
@@ -244,7 +244,7 @@ export class CopilotCLIChatSessionParticipant {
 				}
 
 				const history = await this.summarizer.provideChatSummary(context, token);
-				const prompt = request.prompt.substring('/push'.length).trim();
+				const prompt = request.prompt.substring('/delegate'.length).trim();
 				const prInfo = await this.cloudSessionProvider.createDelegatedChatSession({
 					prompt,
 					history
