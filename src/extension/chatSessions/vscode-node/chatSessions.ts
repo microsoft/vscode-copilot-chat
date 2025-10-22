@@ -141,7 +141,27 @@ export class ChatSessionsContrib extends Disposable implements IExtensionContrib
 				vscode.commands.registerCommand('github.copilot.cloud.sessions.installPRExtension', async () => {
 					try {
 						await vscode.commands.executeCommand('workbench.extensions.installExtension', GHPR_EXTENSION_ID);
-						vscode.window.showInformationMessage(vscode.l10n.t('GitHub Pull Request extension installed successfully.'));
+
+						// Wait for the extension to be available after installation
+						const maxWaitTime = 5000; // 5 seconds
+						const pollInterval = 100; // 100ms
+						let elapsed = 0;
+						let extension: vscode.Extension<any> | undefined;
+
+						while (elapsed < maxWaitTime) {
+							extension = vscode.extensions.getExtension(GHPR_EXTENSION_ID);
+							if (extension) {
+								break;
+							}
+							await new Promise(resolve => setTimeout(resolve, pollInterval));
+							elapsed += pollInterval;
+						}
+
+						if (extension) {
+							vscode.window.showInformationMessage(vscode.l10n.t('GitHub Pull Request extension installed successfully.'));
+						} else {
+							vscode.window.showWarningMessage(vscode.l10n.t('GitHub Pull Request extension installation initiated. Please wait for it to complete.'));
+						}
 					} catch (error) {
 						vscode.window.showErrorMessage(vscode.l10n.t('Failed to install GitHub Pull Request extension: {0}', error instanceof Error ? error.message : String(error)));
 					}
