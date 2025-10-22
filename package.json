@@ -4164,7 +4164,7 @@
 				"commands": [
 					{
 						"name": "push",
-						"description": "Push changes to remote repository with AI-generated PR"
+						"description": "Delegate chat session to cloud agent and create associated PR"
 					}
 				]
 			},
