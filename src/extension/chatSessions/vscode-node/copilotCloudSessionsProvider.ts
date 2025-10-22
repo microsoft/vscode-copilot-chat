@@ -183,6 +183,7 @@ export class CopilotChatSessionsProvider extends Disposable implements vscode.Ch
 						deletions: pr.deletions
 					},
 					fullDatabaseId: pr.fullDatabaseId.toString(),
+					pullRequestDetails: pr,
 				};
 				this.chatSessions.set(pr.number, pr);
 				return session;
