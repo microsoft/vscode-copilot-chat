@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { promises as fs } from 'fs';
-import { Terminal, TerminalOptions, ThemeIcon, ViewColumn, window, workspace } from 'vscode';
+import { Terminal, TerminalOptions, ThemeIcon, ViewColumn, workspace } from 'vscode';
 import { IAuthenticationService } from '../../../platform/authentication/common/authentication';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEnvService } from '../../../platform/env/common/envService';
