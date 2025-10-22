@@ -17,20 +17,27 @@ import { promptForAPIKey } from './byokUIService';
 import { CustomOAIModelConfigurator } from './customOAIModelConfigurator';
 
 export function resolveCustomOAIUrl(modelId: string, url: string): string {
-	let cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url;
-
-	if (cleanUrl.includes('/responses') || cleanUrl.includes('/chat/completions')) {
-		return cleanUrl;
+	// The fully resolved url was already passed in
+	if (hasExplicitApiPath(url)) {
+		return url;
 	}
 
-	if (cleanUrl.endsWith('/v1')) {
-		cleanUrl = cleanUrl.slice(0, -3);
+	// Remove the trailing slash
+	if (url.endsWith('/')) {
+		url = url.slice(0, -1);
 	}
 
-	return `${cleanUrl}/v1/chat/completions`;
+	// Check if URL already contains any version pattern like /v1, /v2, etc
+	const versionPattern = /\/v\d+$/;
+	if (versionPattern.test(url)) {
+		return `${url}/chat/completions`;
+	}
+
+	// For standard OpenAI-compatible endpoints, just append the standard path
+	return `${url}/v1/chat/completions`;
 }
 
-function hasExplicitApiPath(url: string): boolean {
+export function hasExplicitApiPath(url: string): boolean {
 	return url.includes('/responses') || url.includes('/chat/completions');
 }
 
