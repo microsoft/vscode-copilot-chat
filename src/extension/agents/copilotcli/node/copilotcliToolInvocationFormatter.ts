@@ -120,8 +120,6 @@ export function buildChatHistoryFromEvents(events: readonly SessionEvent[]): (Ch
 						currentResponseParts.push(
 							new ChatResponseMarkdownPart(new MarkdownString(cleanedContent))
 						);
-					} else {
-						currentResponseParts.push(new ChatResponseMarkdownPart(new MarkdownString(event.data.content)));
 					}
 				}
 				break;
