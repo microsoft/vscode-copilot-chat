@@ -52,7 +52,6 @@ import { ISimulationTestContext, NulSimulationTestContext } from '../../platform
 import { ISnippyService, NullSnippyService } from '../../platform/snippy/common/snippyService';
 import { IExperimentationService, NullExperimentationService } from '../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService, TelemetryDestination, TelemetryEventMeasurements, TelemetryEventProperties } from '../../platform/telemetry/common/telemetry';
-import { eventPropertiesToSimpleObject } from '../../platform/telemetry/common/telemetryData';
 import { ITokenizerProvider, TokenizerProvider } from '../../platform/tokenizer/node/tokenizer';
 import { IWorkspaceService, NullWorkspaceService } from '../../platform/workspace/common/workspaceService';
 import { InstantiationServiceBuilder } from '../../util/common/services';
@@ -61,6 +60,7 @@ import { Disposable } from '../../util/vs/base/common/lifecycle';
 import { generateUuid } from '../../util/vs/base/common/uuid';
 import { SyncDescriptor } from '../../util/vs/platform/instantiation/common/descriptors';
 import { IInstantiationService } from '../../util/vs/platform/instantiation/common/instantiation';
+import { eventPropertiesToSimpleObject } from '../../platform/telemetry/common/telemetryData';
 
 /**
  * Log levels (taken from vscode.d.ts)
