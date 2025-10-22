@@ -10,21 +10,21 @@ import { IInstantiationService } from '../../../util/vs/platform/instantiation/c
 import { IExtensionContribution } from '../../common/contributions';
 import { LanguageModelProxyProvider } from '../node/modelProxyProvider';
 import { Event } from '../../../util/vs/base/common/event';
+import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
 
 export class LanguageModelProxyContrib extends Disposable implements IExtensionContribution {
 	readonly id = 'LanguageModelProxy';
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
-		@IAuthenticationService authenticationService: IAuthenticationService
+		@IAuthenticationService authenticationService: IAuthenticationService,
+		@IConfigurationService configurationService: IConfigurationService,
 	) {
 		super();
 
 		const providerDisposable = this._register(new MutableDisposable<vscode.Disposable>());
 		const updateRegistration = () => {
 			const token = authenticationService.copilotToken;
-			// if (token?.sku === '') { // ??
-			// }
 
 			if (!providerDisposable.value && token) {
 				providerDisposable.value = vscode.lm.registerLanguageModelProxyProvider(instantiationService.createInstance(LanguageModelProxyProvider));
@@ -33,6 +33,8 @@ export class LanguageModelProxyContrib extends Disposable implements IExtensionC
 			}
 		};
 
-		this._register(Event.runAndSubscribe(authenticationService.onDidAuthenticationChange, updateRegistration));
+		if (configurationService.getNonExtensionConfig('chat.experimental.codex.enabled')) {
+			this._register(Event.runAndSubscribe(authenticationService.onDidAuthenticationChange, updateRegistration));
+		}
 	}
 }
