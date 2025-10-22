@@ -101,11 +101,11 @@ interface LexGenerator {
 	(s: string): Generator<string, void, unknown>;
 }
 
-function emptyLexDictionary(): LexDictionary {
+export function emptyLexDictionary(): LexDictionary {
 	return new Map();
 }
 
-function reverseLexDictionary(d: LexDictionary): string[] {
+export function reverseLexDictionary(d: LexDictionary): string[] {
 	const lookup = new Array<string>(d.size);
 	for (const [lexeme, idx] of d) {
 		lookup[idx] = lexeme;
@@ -120,7 +120,7 @@ function reverseLexDictionary(d: LexDictionary): string[] {
  *  2. A sequence of spaces
  *  3. Any other single Unicode code point
  */
-function* lexGeneratorWords(s: string): Generator<string, void, unknown> {
+export function* lexGeneratorWords(s: string): Generator<string, void, unknown> {
 	let buffer = '';
 	enum State {
 		Word,
@@ -160,7 +160,7 @@ function* lexGeneratorWords(s: string): Generator<string, void, unknown> {
  *   - an array of (lexeme ids, lexeme starting offset within `s`),
  *   - the updated dictionary.
  */
-function lexicalAnalyzer(
+export function lexicalAnalyzer(
 	s: string,
 	d: LexDictionary,
 	lexGenerator: LexGenerator,
