@@ -105,10 +105,19 @@ class ChatParticipants implements IDisposable {
 		this._disposables.add(this.registerNotebookEditorDefaultAgent());
 		this._disposables.add(this.registerNotebookDefaultAgent());
 		this._disposables.add(this.registerWorkspaceAgent());
+		this._disposables.add(this.registerAiWebBrowserAgent());
 		this._disposables.add(this.registerVSCodeAgent());
 		this._disposables.add(this.registerTerminalAgent());
 		this._disposables.add(this.registerTerminalPanelAgent());
 		this._disposables.add(this.registerReplayAgent());
+	}
+
+	private registerAiWebBrowserAgent(): IDisposable {
+		const agentName = 'aiWebBrowser';
+		const aiAgent = this.createAgent(agentName, Intent.Unknown);
+		aiAgent.iconPath = new vscode.ThemeIcon('browser');
+		aiAgent.helpTextPrefix = vscode.l10n.t('Use this agent to perform web searches and summarize web content.');
+		return aiAgent;
 	}
 
 	private createAgent(name: string, defaultIntentIdOrGetter: IntentOrGetter, options?: { id?: string }): vscode.ChatParticipant {
